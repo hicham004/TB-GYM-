@@ -1,0 +1,29 @@
+{
+  "name": "Exercise",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Exercise name"
+    },
+    "category_id": {
+      "type": "string",
+      "description": "Reference to ExerciseCategory"
+    },
+    "video_url": {
+      "type": "string",
+      "description": "Uploaded video file URL"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional exercise description"
+    },
+    "thumbnail_url": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "category_id"
+  ]
+}

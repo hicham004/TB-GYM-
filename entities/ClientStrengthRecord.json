@@ -1,0 +1,30 @@
+{
+  "name": "ClientStrengthRecord",
+  "type": "object",
+  "properties": {
+    "client_id": {
+      "type": "string",
+      "description": "User ID of the client"
+    },
+    "exercise_id": {
+      "type": "string",
+      "description": "Reference to Exercise entity"
+    },
+    "exercise_title": {
+      "type": "string"
+    },
+    "one_rm_kg": {
+      "type": "number",
+      "description": "1 Rep Max in kg"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "client_id",
+    "exercise_id",
+    "exercise_title",
+    "one_rm_kg"
+  ]
+}

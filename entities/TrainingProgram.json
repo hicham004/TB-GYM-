@@ -1,0 +1,49 @@
+{
+  "name": "TrainingProgram",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "num_weeks": {
+      "type": "number",
+      "default": 4
+    },
+    "num_days_per_week": {
+      "type": "number",
+      "default": 5
+    },
+    "assigned_client_id": {
+      "type": "string",
+      "description": "User ID of assigned client"
+    },
+    "admin_notes": {
+      "type": "string"
+    },
+    "client_notes": {
+      "type": "string"
+    },
+    "visibility_mode": {
+      "type": "string",
+      "enum": [
+        "progressive",
+        "full"
+      ],
+      "default": "progressive",
+      "description": "Progressive = weeks unlock over time; Full = all weeks visible immediately"
+    },
+    "unlocked_weeks": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "List of manually unlocked week numbers (coach override)"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

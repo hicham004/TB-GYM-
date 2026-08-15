@@ -1,0 +1,41 @@
+{
+  "name": "WeightLog",
+  "type": "object",
+  "properties": {
+    "client_id": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "weight_kg": {
+      "type": "number"
+    },
+    "note": {
+      "type": "string"
+    },
+    "body_fat_pct": {
+      "type": "number",
+      "description": "Optional body fat percentage"
+    },
+    "waist_cm": {
+      "type": "number",
+      "description": "Waist circumference in cm"
+    },
+    "chest_cm": {
+      "type": "number"
+    },
+    "hip_cm": {
+      "type": "number"
+    },
+    "steps": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "client_id",
+    "weight_kg",
+    "date"
+  ]
+}

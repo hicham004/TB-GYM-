@@ -1,0 +1,44 @@
+{
+  "name": "DietDayLog",
+  "type": "object",
+  "properties": {
+    "client_id": {
+      "type": "string"
+    },
+    "diet_plan_id": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "meal_logs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "meal_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ate_it",
+              "ate_half",
+              "replaced_it",
+              "ate_something_else",
+              "skipped"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "client_id",
+    "date"
+  ]
+}

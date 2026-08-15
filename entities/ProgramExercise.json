@@ -1,0 +1,58 @@
+{
+  "name": "ProgramExercise",
+  "type": "object",
+  "properties": {
+    "program_id": {
+      "type": "string"
+    },
+    "exercise_id": {
+      "type": "string",
+      "description": "Reference to Exercise entity"
+    },
+    "exercise_title": {
+      "type": "string"
+    },
+    "week": {
+      "type": "number"
+    },
+    "day": {
+      "type": "number"
+    },
+    "order": {
+      "type": "number",
+      "description": "Order within the day"
+    },
+    "sets": {
+      "type": "number"
+    },
+    "reps": {
+      "type": "string",
+      "description": "Reps (can be range like 8-12)"
+    },
+    "rpe": {
+      "type": "number",
+      "description": "RPE 0-10 with 0.5 increments"
+    },
+    "rir": {
+      "type": "number",
+      "description": "Reps In Reserve"
+    },
+    "one_rm": {
+      "type": "number",
+      "description": "1 Rep Max in kg — used for auto weight calculation"
+    },
+    "weight_lifted": {
+      "type": "number",
+      "description": "Weight in kg"
+    },
+    "completed": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "program_id",
+    "week",
+    "day"
+  ]
+}

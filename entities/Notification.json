@@ -1,0 +1,36 @@
+{
+  "name": "Notification",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "payment_warning",
+        "payment_overdue",
+        "program_ending",
+        "program_ended",
+        "coach_update",
+        "new_message",
+        "general"
+      ]
+    },
+    "read": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "user_id",
+    "title",
+    "message"
+  ]
+}

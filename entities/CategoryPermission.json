@@ -1,0 +1,22 @@
+{
+  "name": "CategoryPermission",
+  "type": "object",
+  "properties": {
+    "client_id": {
+      "type": "string",
+      "description": "User ID of the client"
+    },
+    "category_id": {
+      "type": "string",
+      "description": "Reference to ExerciseCategory"
+    },
+    "allowed": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "client_id",
+    "category_id"
+  ]
+}

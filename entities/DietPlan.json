@@ -1,0 +1,57 @@
+{
+  "name": "DietPlan",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "assigned_client_id": {
+      "type": "string"
+    },
+    "total_daily_calories": {
+      "type": "number"
+    },
+    "total_daily_protein": {
+      "type": "number"
+    },
+    "total_daily_carbs": {
+      "type": "number"
+    },
+    "total_daily_fats": {
+      "type": "number"
+    },
+    "meals": {
+      "type": "array",
+      "description": "List of meal references with timing",
+      "items": {
+        "type": "object",
+        "properties": {
+          "meal_id": {
+            "type": "string"
+          },
+          "meal_name": {
+            "type": "string"
+          },
+          "time_label": {
+            "type": "string"
+          },
+          "calories": {
+            "type": "number"
+          },
+          "protein": {
+            "type": "number"
+          },
+          "carbs": {
+            "type": "number"
+          },
+          "fats": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

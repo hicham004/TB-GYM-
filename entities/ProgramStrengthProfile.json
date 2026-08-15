@@ -1,0 +1,31 @@
+{
+  "name": "ProgramStrengthProfile",
+  "type": "object",
+  "properties": {
+    "program_id": {
+      "type": "string",
+      "description": "Reference to TrainingProgram"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Reference to User (client)"
+    },
+    "exercise_id": {
+      "type": "string",
+      "description": "Reference to Exercise"
+    },
+    "exercise_title": {
+      "type": "string"
+    },
+    "one_rm_kg": {
+      "type": "number",
+      "description": "1 Rep Max in kg for this specific program"
+    }
+  },
+  "required": [
+    "program_id",
+    "client_id",
+    "exercise_id",
+    "one_rm_kg"
+  ]
+}

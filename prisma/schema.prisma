@@ -1,0 +1,406 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model AccessRequest {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  full_name   String
+  email       String
+  phone       String?
+  message     String?
+  status      String   @default("pending")
+  reviewed_by String?
+  reviewed_at String?
+
+  @@index([email])
+  @@index([status])
+  @@index([created_date])
+}
+
+model CategoryPermission {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  client_id   String
+  category_id String
+  allowed     Boolean @default(true)
+
+  @@index([client_id])
+  @@index([category_id])
+  @@index([client_id, category_id])
+}
+
+model ChatMessage {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  client_id   String
+  sender_role String?
+  sender_name String?
+  message     String
+  context     String?
+
+  @@index([client_id])
+  @@index([created_date])
+}
+
+model ClientInvitation {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  full_name              String?
+  email                  String
+  phone                  String?
+  date_of_birth          String?
+  height_cm              Float?
+  weight_kg              Float?
+  starting_weight_kg     Float?
+  goal                   String?
+  medical_conditions     String?
+  allergies              String?
+  program_name           String?
+  program_duration_weeks Int?    @default(4)
+  program_start_date     String?
+  program_end_date       String?
+  payment_due_date       String?
+  payment_status         String  @default("not_paid")
+  welcome_message        String?
+  status                 String  @default("pending")
+
+  @@index([email])
+  @@index([status])
+  @@index([created_date])
+}
+
+model ClientStrengthRecord {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  client_id      String
+  exercise_id    String
+  exercise_title String
+  one_rm_kg      Float
+  notes          String?
+
+  @@index([client_id])
+  @@index([exercise_id])
+  @@index([client_id, exercise_id])
+}
+
+model ClientSubscription {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  client_id             String
+  client_name           String?
+  client_email          String?
+  start_date            String
+  end_date              String?
+  duration_weeks        Int     @default(12)
+  total_fee             Float?
+  amount_paid           Float   @default(0)
+  status                String  @default("active")
+  payment_reminder_sent Boolean @default(false)
+  renewal_reminder_sent Boolean @default(false)
+  notes                 String?
+
+  @@index([client_id])
+  @@index([status])
+  @@index([end_date])
+}
+
+model DayNote {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  program_id  String
+  client_id   String
+  week        Int
+  day         Int
+  coach_note  String?
+  client_note String?
+
+  @@index([program_id])
+  @@index([client_id])
+  @@index([program_id, week, day])
+}
+
+model DietDayLog {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  client_id    String
+  diet_plan_id String?
+  date         String
+  meal_logs    String?
+
+  @@index([client_id])
+  @@index([diet_plan_id])
+  @@index([date])
+  @@index([client_id, date])
+}
+
+model DietPlan {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  name                 String
+  assigned_client_id   String?
+  total_daily_calories Float?
+  total_daily_protein  Float?
+  total_daily_carbs    Float?
+  total_daily_fats     Float?
+  meals                String?
+
+  @@index([assigned_client_id])
+  @@index([created_date])
+}
+
+model Exercise {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  title         String
+  category_id   String
+  video_url     String?
+  description   String?
+  thumbnail_url String?
+
+  @@index([category_id])
+  @@index([title])
+  @@index([created_date])
+}
+
+model ExerciseCategory {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  name String
+  icon String?
+
+  @@index([name])
+}
+
+model Meal {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  name              String
+  category          String  @default("Lunch")
+  custom_category   String?
+  calories          Float?
+  protein           Float?
+  carbs             Float?
+  fats              Float?
+  fiber             Float?
+  sodium            Float?
+  servings          Float?  @default(1)
+  prep_time_minutes Int?
+  cook_time_minutes Int?
+  weight_mode       String  @default("raw")
+  ingredients       String?
+  preparation_steps String?
+  cooking_tips      String?
+  image_url         String?
+  source_url        String?
+  tags              String?
+
+  @@index([category])
+  @@index([name])
+  @@index([created_date])
+}
+
+model Notification {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  user_id String
+  title   String
+  message String
+  type    String?
+  read    Boolean @default(false)
+
+  @@index([user_id])
+  @@index([read])
+  @@index([created_date])
+}
+
+model ProgramCycle {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  client_id             String
+  program_name          String
+  start_date            String
+  end_date              String?
+  duration_weeks        Int?
+  payment_due_date      String?
+  payment_status        String  @default("not_paid")
+  status                String  @default("active")
+  assigned_program_id   String?
+  notes                 String?
+  payment_reminder_sent Boolean @default(false)
+  renewal_reminder_sent Boolean @default(false)
+
+  @@index([client_id])
+  @@index([assigned_program_id])
+  @@index([status])
+  @@index([payment_status])
+}
+
+model ProgramExercise {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  program_id      String
+  exercise_id     String?
+  exercise_title  String?
+  week            Int
+  day             Int
+  order           Int?
+  sets            Int?
+  reps            String?
+  rpe             Float?
+  rir             Float?
+  one_rm          Float?
+  weight_lifted   Float?
+  completed       Boolean @default(false)
+
+  @@index([program_id])
+  @@index([exercise_id])
+  @@index([program_id, week, day])
+}
+
+model ProgramStrengthProfile {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  program_id     String
+  client_id      String
+  exercise_id    String
+  exercise_title String?
+  one_rm_kg      Float
+
+  @@index([program_id])
+  @@index([client_id])
+  @@index([exercise_id])
+  @@index([program_id, client_id, exercise_id])
+}
+
+model TrainingProgram {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  name               String
+  description        String?
+  num_weeks          Int     @default(4)
+  num_days_per_week  Int     @default(5)
+  assigned_client_id String?
+  admin_notes        String?
+  client_notes       String?
+  visibility_mode    String  @default("progressive")
+  unlocked_weeks     String?
+
+  @@index([assigned_client_id])
+  @@index([created_date])
+}
+
+model WeightLog {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  client_id    String
+  date         String
+  weight_kg    Float
+  note         String?
+  body_fat_pct Float?
+  waist_cm     Float?
+  chest_cm     Float?
+  hip_cm       Float?
+  steps        Int?
+
+  @@index([client_id])
+  @@index([date])
+  @@index([client_id, date])
+}
+
+model User {
+  id           String   @id @default(uuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  created_by   String?
+
+  full_name              String?
+  email                  String  @unique
+  role                   String  @default("client")
+  password_hash          String?
+  phone                  String?
+  date_of_birth          String?
+  height_cm              Float?
+  weight_kg              Float?
+  starting_weight_kg     Float?
+  target_weight_kg       Float?
+  goal                   String?
+  medical_conditions     String?
+  allergies              String?
+  payment_status         String  @default("not_paid")
+  payment_due_date       String?
+  program_start_date     String?
+  program_end_date       String?
+  account_start_date     String?
+  assigned_program_id    String?
+  assigned_diet_plan_id  String?
+  welcome_message        String?
+  is_blocked             Boolean @default(false)
+  is_deleted             Boolean @default(false)
+  deleted_at             String?
+  can_edit_weight_lifted Boolean @default(true)
+  can_edit_rpe           Boolean @default(false)
+  can_edit_rir           Boolean @default(false)
+
+  @@index([role])
+  @@index([payment_status])
+  @@index([is_deleted])
+}

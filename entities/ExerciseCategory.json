@@ -1,0 +1,17 @@
+{
+  "name": "ExerciseCategory",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Category name (e.g., Chest, Back, Legs)"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Icon name for the category"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

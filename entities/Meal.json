@@ -1,0 +1,121 @@
+{
+  "name": "Meal",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Breakfast",
+        "Lunch",
+        "Dinner",
+        "Snack",
+        "Pre-Workout",
+        "Post-Workout",
+        "Bulking",
+        "Cutting",
+        "High Protein",
+        "Low Carb",
+        "Vegan",
+        "Vegetarian",
+        "Custom"
+      ],
+      "default": "Lunch"
+    },
+    "custom_category": {
+      "type": "string"
+    },
+    "calories": {
+      "type": "number"
+    },
+    "protein": {
+      "type": "number"
+    },
+    "carbs": {
+      "type": "number"
+    },
+    "fats": {
+      "type": "number"
+    },
+    "fiber": {
+      "type": "number"
+    },
+    "sodium": {
+      "type": "number"
+    },
+    "servings": {
+      "type": "number",
+      "default": 1
+    },
+    "prep_time_minutes": {
+      "type": "number"
+    },
+    "cook_time_minutes": {
+      "type": "number"
+    },
+    "weight_mode": {
+      "type": "string",
+      "enum": [
+        "raw",
+        "cooked",
+        "both"
+      ],
+      "default": "raw"
+    },
+    "ingredients": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quantity_raw": {
+            "type": "string"
+          },
+          "quantity_cooked": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "string"
+          },
+          "calories": {
+            "type": "number"
+          },
+          "protein": {
+            "type": "number"
+          },
+          "carbs": {
+            "type": "number"
+          },
+          "fats": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "preparation_steps": {
+      "type": "string"
+    },
+    "cooking_tips": {
+      "type": "string"
+    },
+    "image_url": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

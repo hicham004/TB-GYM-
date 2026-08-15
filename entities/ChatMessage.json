@@ -1,0 +1,30 @@
+{
+  "name": "ChatMessage",
+  "type": "object",
+  "properties": {
+    "client_id": {
+      "type": "string"
+    },
+    "sender_role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "client"
+      ]
+    },
+    "sender_name": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "context": {
+      "type": "string",
+      "description": "e.g. program_day_1_week_2 or general"
+    }
+  },
+  "required": [
+    "client_id",
+    "message"
+  ]
+}

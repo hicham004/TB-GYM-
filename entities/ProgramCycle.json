@@ -1,0 +1,68 @@
+{
+  "name": "ProgramCycle",
+  "type": "object",
+  "properties": {
+    "client_id": {
+      "type": "string",
+      "description": "User ID of the client"
+    },
+    "program_name": {
+      "type": "string",
+      "description": "e.g. Meso 1, Phase 2"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "duration_weeks": {
+      "type": "number"
+    },
+    "payment_due_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Auto-calculated: start_date + 5 days"
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": [
+        "paid",
+        "not_paid",
+        "overdue"
+      ],
+      "default": "not_paid"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "completed"
+      ],
+      "default": "active"
+    },
+    "assigned_program_id": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "payment_reminder_sent": {
+      "type": "boolean",
+      "default": false,
+      "description": "True after 3-day unpaid reminder sent"
+    },
+    "renewal_reminder_sent": {
+      "type": "boolean",
+      "default": false,
+      "description": "True after 2-day-before-end reminder sent"
+    }
+  },
+  "required": [
+    "client_id",
+    "program_name",
+    "start_date"
+  ]
+}

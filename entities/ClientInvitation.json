@@ -1,0 +1,81 @@
+{
+  "name": "ClientInvitation",
+  "type": "object",
+  "properties": {
+    "full_name": {
+      "type": "string",
+      "description": "Client's full name entered by coach"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "date_of_birth": {
+      "type": "string",
+      "format": "date"
+    },
+    "height_cm": {
+      "type": "number"
+    },
+    "weight_kg": {
+      "type": "number"
+    },
+    "starting_weight_kg": {
+      "type": "number"
+    },
+    "goal": {
+      "type": "string"
+    },
+    "medical_conditions": {
+      "type": "string"
+    },
+    "allergies": {
+      "type": "string"
+    },
+    "program_name": {
+      "type": "string"
+    },
+    "program_duration_weeks": {
+      "type": "number",
+      "default": 4
+    },
+    "program_start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "program_end_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "payment_due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": [
+        "paid",
+        "not_paid",
+        "overdue"
+      ],
+      "default": "not_paid"
+    },
+    "welcome_message": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "synced"
+      ],
+      "default": "pending",
+      "description": "pending = awaiting registration, synced = client has registered and data is merged"
+    }
+  },
+  "required": [
+    "email"
+  ]
+}

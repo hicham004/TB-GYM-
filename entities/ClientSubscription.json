@@ -1,0 +1,66 @@
+{
+  "name": "ClientSubscription",
+  "type": "object",
+  "properties": {
+    "client_id": {
+      "type": "string",
+      "description": "User ID of the client"
+    },
+    "client_name": {
+      "type": "string"
+    },
+    "client_email": {
+      "type": "string"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Subscription access start date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Subscription access end date (auto-calculated from start + duration)"
+    },
+    "duration_weeks": {
+      "type": "number",
+      "description": "Total purchased duration in weeks",
+      "default": 12
+    },
+    "total_fee": {
+      "type": "number",
+      "description": "Total price charged for this subscription"
+    },
+    "amount_paid": {
+      "type": "number",
+      "description": "Amount already paid by client",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "expired",
+        "cancelled",
+        "pending"
+      ],
+      "default": "active"
+    },
+    "payment_reminder_sent": {
+      "type": "boolean",
+      "default": false
+    },
+    "renewal_reminder_sent": {
+      "type": "boolean",
+      "default": false
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "client_id",
+    "start_date",
+    "duration_weeks"
+  ]
+}
