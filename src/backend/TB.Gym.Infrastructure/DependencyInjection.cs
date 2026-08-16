@@ -1,0 +1,129 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using TB.Gym.Infrastructure.Health;
+using TB.Gym.Infrastructure.Persistence;
+using TB.Gym.Infrastructure.Security;
+using TB.Gym.Modules.Clients;
+using TB.Gym.Modules.Identity;
+using TB.Gym.Modules.Tenancy;
+using TB.Gym.SharedKernel;
+
+namespace TB.Gym.Infrastructure;
+
+public static class DependencyInjection
+{
+    public static IServiceCollection AddTbGymInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
+    {
+        var connectionString = configuration.GetConnectionString("Database");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            if (!environment.IsDevelopment())
+            {
+                throw new InvalidOperationException("ConnectionStrings:Database must be configured.");
+            }
+
+            connectionString = "Host=localhost;Port=5432;Database=tbgym;Username=tbgym;Password=tbgym_dev";
+        }
+
+        services.AddHttpContextAccessor();
+        services.AddSingleton<IClock, SystemClock>();
+        services.AddScoped<ICurrentUser, HttpCurrentUser>();
+        services.AddScoped<TenantContext>();
+        services.AddScoped<ITenantContext>(provider => provider.GetRequiredService<TenantContext>());
+        services.AddScoped<IMutableTenantContext>(provider => provider.GetRequiredService<TenantContext>());
+
+        services.AddDbContext<GymDbContext>(options =>
+            options.UseNpgsql(connectionString, npgsql =>
+            {
+                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "platform");
+                npgsql.EnableRetryOnFailure(3);
+            }));
+
+        services
+            .AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
+            {
+                options.Password.RequiredLength = 12;
+                options.Password.RequireDigit = true;
+                options.Password.RequireLowercase = true;
+                options.Password.RequireUppercase = true;
+                options.Password.RequireNonAlphanumeric = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                options.User.RequireUniqueEmail = true;
+                options.SignIn.RequireConfirmedEmail = !environment.IsDevelopment();
+            })
+            .AddEntityFrameworkStores<GymDbContext>()
+            .AddDefaultTokenProviders();
+
+        services.ConfigureApplicationCookie(options =>
+        {
+            options.Cookie.Name = environment.IsDevelopment() ? "tb-gym.auth" : "__Host-tb-gym.auth";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.IsEssential = true;
+            options.Cookie.Path = "/";
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = environment.IsDevelopment()
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
+            options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            options.SlidingExpiration = true;
+            options.Events.OnRedirectToLogin = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            };
+            options.Events.OnRedirectToAccessDenied = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            };
+        });
+
+        services.AddAntiforgery(options =>
+        {
+            options.Cookie.Name = "XSRF-TOKEN";
+            options.Cookie.HttpOnly = false;
+            options.Cookie.Path = "/";
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = environment.IsDevelopment()
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
+            options.HeaderName = "X-XSRF-TOKEN";
+        });
+
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy(AuthorizationPolicies.PlatformAdmin, policy =>
+                policy.RequireRole(SystemRoles.PlatformAdmin));
+            options.AddPolicy(AuthorizationPolicies.TenantMember, policy =>
+                policy.AddRequirements(new TenantRoleRequirement(
+                    TenantRole.Owner,
+                    TenantRole.Coach,
+                    TenantRole.Client)));
+            options.AddPolicy(AuthorizationPolicies.TenantCoach, policy =>
+                policy.AddRequirements(new TenantRoleRequirement(
+                    TenantRole.Owner,
+                    TenantRole.Coach)));
+            options.AddPolicy(AuthorizationPolicies.TenantClient, policy =>
+                policy.AddRequirements(new TenantRoleRequirement(TenantRole.Client)));
+        });
+
+        services.AddScoped<IAuthorizationHandler, TenantRoleAuthorizationHandler>();
+        services.AddScoped<ITenantMembershipStore, TenantMembershipStore>();
+        services.AddScoped<IClientProfileRepository, ClientProfileRepository>();
+
+        services.AddHealthChecks()
+            .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])
+            .AddCheck<PostgresHealthCheck>("postgres", tags: ["ready"]);
+
+        return services;
+    }
+}

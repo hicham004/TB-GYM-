@@ -1,0 +1,62 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/backend/">
+    <Project Path="src/backend/TB.Gym.Api/TB.Gym.Api.csproj" />
+    <Project Path="src/backend/TB.Gym.Infrastructure/TB.Gym.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/BuildingBlocks/">
+    <Project Path="src/backend/BuildingBlocks/TB.Gym.SharedKernel/TB.Gym.SharedKernel.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/" />
+  <Folder Name="/src/backend/Modules/Clients/">
+    <Project Path="src/backend/Modules/Clients/TB.Gym.Modules.Clients/TB.Gym.Modules.Clients.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/ExerciseLibrary/">
+    <Project Path="src/backend/Modules/ExerciseLibrary/TB.Gym.Modules.ExerciseLibrary/TB.Gym.Modules.ExerciseLibrary.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Gamification/">
+    <Project Path="src/backend/Modules/Gamification/TB.Gym.Modules.Gamification/TB.Gym.Modules.Gamification.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Identity/">
+    <Project Path="src/backend/Modules/Identity/TB.Gym.Modules.Identity/TB.Gym.Modules.Identity.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Integrations/">
+    <Project Path="src/backend/Modules/Integrations/TB.Gym.Modules.Integrations/TB.Gym.Modules.Integrations.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Invitations/">
+    <Project Path="src/backend/Modules/Invitations/TB.Gym.Modules.Invitations/TB.Gym.Modules.Invitations.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Media/">
+    <Project Path="src/backend/Modules/Media/TB.Gym.Modules.Media/TB.Gym.Modules.Media.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Messaging/">
+    <Project Path="src/backend/Modules/Messaging/TB.Gym.Modules.Messaging/TB.Gym.Modules.Messaging.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Notifications/">
+    <Project Path="src/backend/Modules/Notifications/TB.Gym.Modules.Notifications/TB.Gym.Modules.Notifications.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Nutrition/">
+    <Project Path="src/backend/Modules/Nutrition/TB.Gym.Modules.Nutrition/TB.Gym.Modules.Nutrition.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Progress/">
+    <Project Path="src/backend/Modules/Progress/TB.Gym.Modules.Progress/TB.Gym.Modules.Progress.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Strength/">
+    <Project Path="src/backend/Modules/Strength/TB.Gym.Modules.Strength/TB.Gym.Modules.Strength.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Subscriptions/">
+    <Project Path="src/backend/Modules/Subscriptions/TB.Gym.Modules.Subscriptions/TB.Gym.Modules.Subscriptions.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Tenancy/">
+    <Project Path="src/backend/Modules/Tenancy/TB.Gym.Modules.Tenancy/TB.Gym.Modules.Tenancy.csproj" />
+  </Folder>
+  <Folder Name="/src/backend/Modules/Training/">
+    <Project Path="src/backend/Modules/Training/TB.Gym.Modules.Training/TB.Gym.Modules.Training.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/backend/">
+    <Project Path="tests/backend/TB.Gym.Api.IntegrationTests/TB.Gym.Api.IntegrationTests.csproj" />
+    <Project Path="tests/backend/TB.Gym.Architecture.Tests/TB.Gym.Architecture.Tests.csproj" />
+    <Project Path="tests/backend/TB.Gym.Domain.Tests/TB.Gym.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

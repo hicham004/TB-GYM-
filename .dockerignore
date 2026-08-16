@@ -1,0 +1,17 @@
+.git
+.tools
+.vs
+.vscode
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.angular
+**/coverage
+**/TestResults
+base44
+plan.docx
+postgres-data
+*.log
+.env
+

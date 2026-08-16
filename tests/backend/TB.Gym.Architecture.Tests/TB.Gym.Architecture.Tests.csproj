@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\backend\Modules\Clients\TB.Gym.Modules.Clients\TB.Gym.Modules.Clients.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\ExerciseLibrary\TB.Gym.Modules.ExerciseLibrary\TB.Gym.Modules.ExerciseLibrary.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Gamification\TB.Gym.Modules.Gamification\TB.Gym.Modules.Gamification.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Identity\TB.Gym.Modules.Identity\TB.Gym.Modules.Identity.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Integrations\TB.Gym.Modules.Integrations\TB.Gym.Modules.Integrations.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Invitations\TB.Gym.Modules.Invitations\TB.Gym.Modules.Invitations.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Media\TB.Gym.Modules.Media\TB.Gym.Modules.Media.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Messaging\TB.Gym.Modules.Messaging\TB.Gym.Modules.Messaging.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Notifications\TB.Gym.Modules.Notifications\TB.Gym.Modules.Notifications.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Nutrition\TB.Gym.Modules.Nutrition\TB.Gym.Modules.Nutrition.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Progress\TB.Gym.Modules.Progress\TB.Gym.Modules.Progress.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Strength\TB.Gym.Modules.Strength\TB.Gym.Modules.Strength.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Subscriptions\TB.Gym.Modules.Subscriptions\TB.Gym.Modules.Subscriptions.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Tenancy\TB.Gym.Modules.Tenancy\TB.Gym.Modules.Tenancy.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Training\TB.Gym.Modules.Training\TB.Gym.Modules.Training.csproj" />
+  </ItemGroup>
+
+</Project>

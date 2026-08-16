@@ -1,0 +1,40 @@
+<header class="topbar">
+  <a class="brand" routerLink="/" aria-label="TB Gym home">
+    <span class="brand-mark">TB</span>
+    <span>TB Gym</span>
+  </a>
+
+  <nav aria-label="Primary navigation">
+    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"
+      >Overview</a
+    >
+    @if (auth.user()) {
+      <a routerLink="/clients" routerLinkActive="active">Clients</a>
+    }
+  </nav>
+
+  <div class="session-controls">
+    @if (auth.user()) {
+      @if (tenants.memberships().length > 0) {
+        <label class="tenant-picker">
+          <span>Workspace</span>
+          <select [value]="tenants.selectedTenantId() ?? ''" (change)="selectTenant($event)">
+            @for (membership of tenants.memberships(); track membership.tenantId) {
+              <option [value]="membership.tenantId">
+                {{ membership.tenantName }} ({{ membership.role }})
+              </option>
+            }
+          </select>
+        </label>
+      }
+      <span class="user-name">{{ auth.user()?.displayName }}</span>
+      <button class="quiet-button" type="button" (click)="logout()">Sign out</button>
+    } @else if (auth.loading()) {
+      <span class="muted">Checking session...</span>
+    }
+  </div>
+</header>
+
+<main>
+  <router-outlet />
+</main>

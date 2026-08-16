@@ -1,0 +1,135 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">Platform foundation</p>
+    <h1>System overview</h1>
+    <p class="subtitle">Local API, database readiness, and active workspace.</p>
+  </div>
+  <button type="button" class="secondary-button" (click)="refreshStatus()">Refresh</button>
+</section>
+
+<section class="status-band" aria-label="System status">
+  <div class="status-item">
+    <span class="status-label">API</span>
+    <strong [class.good]="liveHealth()?.status === 'Healthy'">
+      {{ liveHealth()?.status ?? 'Unavailable' }}
+    </strong>
+  </div>
+  <div class="status-item">
+    <span class="status-label">PostgreSQL</span>
+    <strong
+      [class.good]="readyHealth()?.status === 'Healthy'"
+      [class.warning]="readyHealth()?.status !== 'Healthy'"
+    >
+      {{ readyHealth()?.status ?? 'Unavailable' }}
+    </strong>
+  </div>
+  <div class="status-item">
+    <span class="status-label">Runtime</span>
+    <strong>{{ system()?.framework ?? '.NET 10' }}</strong>
+  </div>
+  <div class="status-item">
+    <span class="status-label">Architecture</span>
+    <strong>{{ system()?.architecture ?? 'Modular Monolith' }}</strong>
+  </div>
+</section>
+
+@if (statusError()) {
+  <p class="error-message">{{ statusError() }}</p>
+}
+
+<div class="content-grid">
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Session</p>
+        <h2>Account</h2>
+      </div>
+      @if (auth.user()) {
+        <span class="state-badge good">Authenticated</span>
+      } @else {
+        <span class="state-badge">Signed out</span>
+      }
+    </div>
+
+    @if (auth.user(); as user) {
+      <dl class="details">
+        <div>
+          <dt>Name</dt>
+          <dd>{{ user.displayName }}</dd>
+        </div>
+        <div>
+          <dt>Email</dt>
+          <dd>{{ user.email }}</dd>
+        </div>
+        <div>
+          <dt>Platform roles</dt>
+          <dd>{{ user.roles.join(', ') || 'None' }}</dd>
+        </div>
+        <div>
+          <dt>Workspaces</dt>
+          <dd>{{ tenants.memberships().length }}</dd>
+        </div>
+      </dl>
+    } @else {
+      <form [formGroup]="loginForm" (ngSubmit)="login()" novalidate>
+        <label>
+          <span>Email</span>
+          <input type="email" formControlName="email" autocomplete="username" />
+        </label>
+        <label>
+          <span>Password</span>
+          <input type="password" formControlName="password" autocomplete="current-password" />
+        </label>
+        <label class="check-field">
+          <input type="checkbox" formControlName="rememberMe" />
+          <span>Keep me signed in</span>
+        </label>
+        @if (loginError()) {
+          <p class="error-message">{{ loginError() }}</p>
+        }
+        <button type="submit" class="primary-button" [disabled]="auth.loading()">
+          {{ auth.loading() ? 'Signing in...' : 'Sign in' }}
+        </button>
+      </form>
+    }
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Persistence</p>
+        <h2>Database check</h2>
+      </div>
+      <span class="state-badge" [class.good]="readyHealth()?.status === 'Healthy'">
+        {{ readyHealth()?.status ?? 'Unknown' }}
+      </span>
+    </div>
+
+    @if (readyHealth()?.checks?.['postgres']; as postgres) {
+      <p class="database-message">{{ postgres.description }}</p>
+    } @else {
+      <p class="database-message">
+        Start PostgreSQL to enable migrations, authentication, and tenant data.
+      </p>
+    }
+
+    <dl class="details compact">
+      <div>
+        <dt>Provider</dt>
+        <dd>PostgreSQL 18</dd>
+      </div>
+      <div>
+        <dt>ORM</dt>
+        <dd>EF Core 10</dd>
+      </div>
+      <div>
+        <dt>Isolation</dt>
+        <dd>Tenant policy + query filters</dd>
+      </div>
+      <div>
+        <dt>Concurrency</dt>
+        <dd>PostgreSQL xmin</dd>
+      </div>
+    </dl>
+  </section>
+</div>

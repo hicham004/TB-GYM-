@@ -1,0 +1,48 @@
+name: tb-gym
+
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tbgym}
+      POSTGRES_USER: ${POSTGRES_USER:-tbgym}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tbgym_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: src/backend/TB.Gym.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__Database: Host=postgres;Port=5432;Database=${POSTGRES_DB:-tbgym};Username=${POSTGRES_USER:-tbgym};Password=${POSTGRES_PASSWORD:-tbgym_dev}
+      Database__ApplyMigrationsOnStartup: "true"
+      Seed__Enabled: ${TB_GYM_SEED_ENABLED:-true}
+      Seed__AdminEmail: ${TB_GYM_ADMIN_EMAIL:-admin@tbgym.local}
+      Seed__AdminPassword: ${TB_GYM_ADMIN_PASSWORD:-ChangeMe!12345}
+    ports:
+      - "5134:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: src/web/Dockerfile
+    ports:
+      - "4200:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
