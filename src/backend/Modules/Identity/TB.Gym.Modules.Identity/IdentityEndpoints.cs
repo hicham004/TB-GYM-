@@ -61,11 +61,13 @@ public static class IdentityEndpoints
             .ProducesValidationProblem();
         group.MapPost("/change-password", ChangePasswordAsync)
             .RequireAuthorization()
+            .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
             .WithName("ChangePassword")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesValidationProblem();
         group.MapPost("/sessions/revoke-all", RevokeAllSessionsAsync)
             .RequireAuthorization()
+            .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
             .WithName("RevokeAllSessions")
             .Produces(StatusCodes.Status204NoContent);
 

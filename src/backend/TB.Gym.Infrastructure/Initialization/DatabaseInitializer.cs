@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Tenancy;
@@ -32,6 +33,12 @@ public static class DatabaseInitializer
     {
         var applyMigrations = app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup");
         var seedDevelopmentData = app.Configuration.GetValue<bool>("Seed:Enabled");
+
+        if (seedDevelopmentData && !app.Environment.IsDevelopment())
+        {
+            throw new InvalidOperationException(
+                "Seed:Enabled is a development-only setting and cannot run outside Development.");
+        }
 
         if (!applyMigrations && !seedDevelopmentData)
         {

@@ -8,8 +8,12 @@ public sealed class GymDbContextFactory : IDesignTimeDbContextFactory<GymDbConte
 {
     public GymDbContext CreateDbContext(string[] args)
     {
-        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Database")
-            ?? "Host=localhost;Port=5432;Database=tbgym;Username=tbgym;Password=tbgym_dev";
+        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Database");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "Set ConnectionStrings__Database before running EF Core design-time commands.");
+        }
 
         var options = new DbContextOptionsBuilder<GymDbContext>()
             .UseNpgsql(connectionString, npgsql =>

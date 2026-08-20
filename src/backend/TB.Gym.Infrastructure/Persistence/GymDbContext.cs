@@ -4,13 +4,15 @@ using Microsoft.EntityFrameworkCore;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
+using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.Progress;
+using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Persistence;
 
-public sealed class GymDbContext(
+public sealed partial class GymDbContext(
     DbContextOptions<GymDbContext> options,
     IClock clock,
     ICurrentUser currentUser,
@@ -25,6 +27,8 @@ public sealed class GymDbContext(
 
     public DbSet<ClientProfileChange> ClientProfileChanges => Set<ClientProfileChange>();
 
+    public DbSet<ClientRelationshipEvent> ClientRelationshipEvents => Set<ClientRelationshipEvent>();
+
     public DbSet<ClientInvitation> ClientInvitations => Set<ClientInvitation>();
 
     public DbSet<InvitationDelivery> InvitationDeliveries => Set<InvitationDelivery>();
@@ -32,6 +36,24 @@ public sealed class GymDbContext(
     public DbSet<AccountEmailDelivery> AccountEmailDeliveries => Set<AccountEmailDelivery>();
 
     public DbSet<BodyweightObservation> BodyweightObservations => Set<BodyweightObservation>();
+
+    public DbSet<CoachingProduct> CoachingProducts => Set<CoachingProduct>();
+
+    public DbSet<ProductOffer> ProductOffers => Set<ProductOffer>();
+
+    public DbSet<OfferEntitlement> OfferEntitlements => Set<OfferEntitlement>();
+
+    public DbSet<ClientEnrollment> ClientEnrollments => Set<ClientEnrollment>();
+
+    public DbSet<EnrollmentEntitlement> EnrollmentEntitlements => Set<EnrollmentEntitlement>();
+
+    public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
+
+    public DbSet<NotificationOutboxItem> NotificationOutboxItems => Set<NotificationOutboxItem>();
+
+    public DbSet<LegalDocumentVersion> LegalDocumentVersions => Set<LegalDocumentVersion>();
+
+    public DbSet<LegalConsentAcceptance> LegalConsentAcceptances => Set<LegalConsentAcceptance>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -42,6 +64,9 @@ public sealed class GymDbContext(
         ConfigureClients(builder);
         ConfigureInvitations(builder);
         ConfigureProgress(builder);
+        ConfigureCommercial(builder);
+        ConfigureNotifications(builder);
+        ConfigureLegalConsent(builder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -222,6 +247,23 @@ public sealed class GymDbContext(
                 tenantContext.HasTenant && change.TenantId == tenantContext.TenantId);
             ConfigureAuditable(entity);
         });
+
+        builder.Entity<ClientRelationshipEvent>(entity =>
+        {
+            entity.ToTable("ClientRelationshipEvents", "clients");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.EventType).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.OccurredAtUtc });
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(client => new { client.TenantId, client.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            ConfigureAuditable(entity);
+        });
     }
 
     private void ConfigureInvitations(ModelBuilder builder)
@@ -332,6 +374,35 @@ public sealed class GymDbContext(
 
     private void ApplyPersistenceRules()
     {
+        RejectAppendOnlyMutations<PaymentRecord>("Payment records are append-only.");
+        RejectAppendOnlyMutations<ClientRelationshipEvent>("Client relationship events are append-only.");
+        RejectAppendOnlyMutations<LegalConsentAcceptance>("Legal consent acceptances are append-only.");
+
+        foreach (var entry in ChangeTracker.Entries<ProductOffer>().Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.Property(item => item.PriceAmount).IsModified ||
+                entry.Property(item => item.PriceCurrency).IsModified ||
+                entry.Property(item => item.DurationCount).IsModified ||
+                entry.Property(item => item.DurationUnit).IsModified ||
+                entry.Property(item => item.BillingModel).IsModified)
+            {
+                throw new InvalidOperationException("Published offer terms are immutable; create a new offer instead.");
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<ClientEnrollment>().Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.Property(item => item.ProductId).IsModified ||
+                entry.Property(item => item.OfferId).IsModified ||
+                entry.Property(item => item.PriceAmount).IsModified ||
+                entry.Property(item => item.PriceCurrency).IsModified ||
+                entry.Property(item => item.StartDate).IsModified ||
+                entry.Property(item => item.EndDateExclusive).IsModified)
+            {
+                throw new InvalidOperationException("Enrollment commercial snapshots are immutable.");
+            }
+        }
+
         var now = clock.UtcNow;
         var userId = currentUser.UserId;
 
@@ -354,6 +425,15 @@ public sealed class GymDbContext(
             {
                 throw new InvalidOperationException("A tenant-owned record cannot be written outside the active tenant scope.");
             }
+        }
+    }
+
+    private void RejectAppendOnlyMutations<TEntity>(string message)
+        where TEntity : class
+    {
+        if (ChangeTracker.Entries<TEntity>().Any(item => item.State is EntityState.Modified or EntityState.Deleted))
+        {
+            throw new InvalidOperationException(message);
         }
     }
 }

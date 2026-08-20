@@ -82,6 +82,40 @@ public static class ClientEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        coachGroup.MapPost("/{clientId:guid}/relationship/block", async (
+            Guid clientId,
+            ChangeClientRelationshipRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.BlockRelationshipAsync(clientId, request, cancellationToken));
+        })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("BlockClientRelationship")
+        .Produces<CoachClientDetails>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        coachGroup.MapPost("/{clientId:guid}/relationship/unblock", async (
+            Guid clientId,
+            ChangeClientRelationshipRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.UnblockRelationshipAsync(clientId, request, cancellationToken));
+        })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("UnblockClientRelationship")
+        .Produces<CoachClientDetails>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
         var selfGroup = endpoints
             .MapGroup("/api/client-profile")
             .RequireAuthorization(AuthorizationPolicies.TenantClient)

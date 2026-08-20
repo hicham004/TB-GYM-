@@ -32,6 +32,16 @@ public interface IClientProfileApplicationService
         Guid clientId,
         UpdateCoachNotesRequest request,
         CancellationToken cancellationToken);
+
+    Task<ClientCommandResult> BlockRelationshipAsync(
+        Guid clientId,
+        ChangeClientRelationshipRequest request,
+        CancellationToken cancellationToken);
+
+    Task<ClientCommandResult> UnblockRelationshipAsync(
+        Guid clientId,
+        ChangeClientRelationshipRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record ClientSummary(
@@ -137,6 +147,8 @@ public sealed record CompleteClientOnboardingRequest(
     DateOnly MeasurementDate);
 
 public sealed record UpdateCoachNotesRequest(string? Notes, uint Version);
+
+public sealed record ChangeClientRelationshipRequest(string Reason, uint Version);
 
 public sealed record ClientCommandResult(
     ClientCommandStatus Status,

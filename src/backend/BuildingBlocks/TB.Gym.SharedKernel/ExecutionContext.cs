@@ -36,6 +36,8 @@ public static class AuthorizationPolicies
 public static class RateLimitPolicies
 {
     public const string PublicAuthentication = "PublicAuthentication";
+
+    public const string SensitiveWrite = "SensitiveWrite";
 }
 
 public static class TenantHeaders

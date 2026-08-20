@@ -12,13 +12,16 @@ concurrency:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    env:
+      ConnectionStrings__Database: Host=localhost;Port=5433;Database=postgres;Username=tbgym
+      TB_GYM_TEST_ADMIN_CONNECTION: Host=localhost;Port=5433;Database=postgres;Username=tbgym;Pooling=false
     services:
       postgres:
         image: postgres:18.4-alpine
         env:
           POSTGRES_DB: postgres
           POSTGRES_USER: tbgym
-          POSTGRES_PASSWORD: tbgym_dev
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5433:5432
         options: >-

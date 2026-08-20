@@ -1,0 +1,240 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow" i18n>Commercial</p>
+    <h1 i18n>Coaching products</h1>
+    <p i18n>Define what you sell once, then assign a dated offer to each client.</p>
+  </div>
+  <button class="primary-button" type="button" (click)="createOpen.set(!createOpen())" i18n>
+    New product
+  </button>
+</section>
+
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="form-success" role="status">{{ notice() }}</p>
+}
+
+@if (createOpen()) {
+  <section class="surface-section product-form">
+    <div class="section-heading">
+      <div>
+        <h2 i18n>Create a coaching product</h2>
+        <p class="muted" i18n>The first fixed-duration offer is created with it.</p>
+      </div>
+      <button class="quiet-button compact" type="button" (click)="createOpen.set(false)" i18n>
+        Close
+      </button>
+    </div>
+    <form [formGroup]="createForm" (ngSubmit)="createProduct()">
+      <div class="form-grid">
+        <label>
+          <span i18n>Product name</span>
+          <input formControlName="name" autocomplete="off" />
+        </label>
+        <label>
+          <span i18n>Offer label</span>
+          <input formControlName="offerLabel" placeholder="8 weeks" i18n-placeholder />
+        </label>
+        <label class="span-full">
+          <span i18n>Description</span>
+          <textarea formControlName="description"></textarea>
+        </label>
+        <label>
+          <span i18n>Duration</span>
+          <div class="joined-fields">
+            <input type="number" min="1" max="3650" formControlName="durationCount" />
+            <select formControlName="durationUnit">
+              <option value="Week" i18n>Weeks</option>
+            </select>
+          </div>
+        </label>
+        <label>
+          <span i18n>Price</span>
+          <div class="joined-fields price-fields">
+            <input type="number" min="0" step="0.01" formControlName="priceAmount" />
+            <input maxlength="3" formControlName="currencyCode" />
+          </div>
+        </label>
+      </div>
+      <fieldset class="feature-picker">
+        <legend i18n>Included access</legend>
+        <label
+          ><input type="checkbox" formControlName="training" /><span i18n>Training</span></label
+        >
+        <label
+          ><input type="checkbox" formControlName="nutrition" /><span i18n>Nutrition</span></label
+        >
+        <label
+          ><input type="checkbox" formControlName="checkIns" /><span i18n>Check-ins</span></label
+        >
+        <label
+          ><input type="checkbox" formControlName="messaging" /><span i18n>Messaging</span></label
+        >
+        <label
+          ><input type="checkbox" formControlName="resourceLibrary" /><span i18n
+            >Resource library</span
+          ></label
+        >
+      </fieldset>
+      <div class="form-actions">
+        <button class="primary-button" type="submit" [disabled]="busy()" i18n>
+          Create product
+        </button>
+      </div>
+    </form>
+  </section>
+}
+
+@if (loading()) {
+  <p class="loading-row" i18n>Loading coaching products...</p>
+} @else if (catalog(); as currentCatalog) {
+  @if (currentCatalog.products.length === 0) {
+    <div class="empty-state">
+      <h2 i18n>No products yet</h2>
+      <p i18n>Create your first service before assigning commercial access to a client.</p>
+    </div>
+  } @else {
+    <section class="product-list" aria-label="Coaching products" i18n-aria-label>
+      @for (product of currentCatalog.products; track product.id) {
+        <article class="product-row" [class.inactive]="!product.isActive">
+          <div class="product-heading">
+            <div>
+              <div class="title-line">
+                <h2>{{ product.name }}</h2>
+                <span class="status-badge" [class.success]="product.isActive">
+                  @if (product.isActive) {
+                    <span i18n>Available</span>
+                  } @else {
+                    <span i18n>Archived</span>
+                  }
+                </span>
+              </div>
+              @if (product.description) {
+                <p class="muted">{{ product.description }}</p>
+              }
+            </div>
+            <div class="button-group">
+              <button
+                class="secondary-button compact"
+                type="button"
+                (click)="openOffer(product)"
+                i18n
+              >
+                Add offer
+              </button>
+              <button class="quiet-button compact" type="button" (click)="toggleProduct(product)">
+                @if (product.isActive) {
+                  <span i18n>Archive</span>
+                } @else {
+                  <span i18n>Restore</span>
+                }
+              </button>
+            </div>
+          </div>
+
+          <div class="offer-list">
+            @for (offer of product.offers; track offer.id) {
+              <div class="offer-row" [class.inactive]="!offer.isActive">
+                <div class="offer-price">
+                  <strong>{{ offer.priceAmount }} {{ offer.priceCurrency }}</strong>
+                  <span>{{ offer.label }}</span>
+                </div>
+                <span class="offer-duration">
+                  @if (offer.durationUnit === 'Week') {
+                    <span i18n>{{ offer.durationCount }} weeks</span>
+                  } @else {
+                    <span i18n>{{ offer.durationCount }} days</span>
+                  }
+                </span>
+                <div class="feature-tags">
+                  @for (feature of offer.features; track feature.feature) {
+                    <span>{{ featureLabel(feature.feature) }}</span>
+                  }
+                </div>
+                <button
+                  class="quiet-button compact"
+                  type="button"
+                  (click)="toggleOffer(product, offer.id)"
+                >
+                  @if (offer.isActive) {
+                    <span i18n>Retire</span>
+                  } @else {
+                    <span i18n>Restore</span>
+                  }
+                </button>
+              </div>
+            }
+          </div>
+
+          @if (offerProductId() === product.id) {
+            <form class="inline-offer" [formGroup]="offerForm" (ngSubmit)="addOffer()">
+              <div class="inline-offer-heading">
+                <h3 i18n>New offer</h3>
+                <button
+                  class="quiet-button compact"
+                  type="button"
+                  (click)="offerProductId.set(null)"
+                  i18n
+                >
+                  Cancel
+                </button>
+              </div>
+              <div class="form-grid">
+                <label><span i18n>Label</span><input formControlName="offerLabel" /></label>
+                <label>
+                  <span i18n>Duration</span>
+                  <div class="joined-fields">
+                    <input type="number" min="1" formControlName="durationCount" />
+                    <select formControlName="durationUnit">
+                      <option value="Week" i18n>Weeks</option>
+                    </select>
+                  </div>
+                </label>
+                <label>
+                  <span i18n>Price</span>
+                  <div class="joined-fields price-fields">
+                    <input type="number" min="0" step="0.01" formControlName="priceAmount" />
+                    <input maxlength="3" formControlName="currencyCode" />
+                  </div>
+                </label>
+              </div>
+              <fieldset class="feature-picker compact-features">
+                <legend i18n>Included access</legend>
+                <label
+                  ><input type="checkbox" formControlName="training" /><span i18n
+                    >Training</span
+                  ></label
+                >
+                <label
+                  ><input type="checkbox" formControlName="nutrition" /><span i18n
+                    >Nutrition</span
+                  ></label
+                >
+                <label
+                  ><input type="checkbox" formControlName="checkIns" /><span i18n
+                    >Check-ins</span
+                  ></label
+                >
+                <label
+                  ><input type="checkbox" formControlName="messaging" /><span i18n
+                    >Messaging</span
+                  ></label
+                >
+                <label
+                  ><input type="checkbox" formControlName="resourceLibrary" /><span i18n
+                    >Resources</span
+                  ></label
+                >
+              </fieldset>
+              <button class="primary-button compact" type="submit" [disabled]="busy()" i18n>
+                Save offer
+              </button>
+            </form>
+          }
+        </article>
+      }
+    </section>
+  }
+}

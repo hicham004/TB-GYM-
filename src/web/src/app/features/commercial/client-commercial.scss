@@ -1,0 +1,242 @@
+.commercial-summary {
+  border-inline-start: 4px solid var(--accent);
+}
+
+.relationship-heading {
+  align-items: flex-start;
+}
+
+.relationship-state,
+.relationship-form,
+.assignment-form,
+.enrollment-actions,
+.title-line,
+.action-panel-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.relationship-form {
+  background: var(--surface-subtle);
+  border-block: 1px solid var(--border);
+  margin-inline: -22px;
+  padding: 14px 22px;
+}
+
+.relationship-form label {
+  flex: 1 1 260px;
+}
+
+.status-badge.danger {
+  background: var(--danger-soft);
+  border-color: #f2c6c1;
+  color: var(--danger);
+}
+
+.access-grid {
+  border-block-start: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-block-start: 18px;
+}
+
+.access-item {
+  min-width: 0;
+  padding: 15px 12px 4px;
+}
+
+.access-item + .access-item {
+  border-inline-start: 1px solid var(--border);
+}
+
+.access-item strong,
+.access-item span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.access-item strong {
+  font-size: 0.84rem;
+}
+
+.access-item span {
+  color: var(--muted-text);
+  font-size: 0.72rem;
+  margin-block-start: 3px;
+}
+
+.access-item.allowed strong,
+.access-item.allowed span {
+  color: var(--success);
+}
+
+.assignment-form {
+  align-items: end;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(160px, 0.4fr) auto;
+}
+
+.enrollment-list {
+  border-block-start: 1px solid var(--border);
+}
+
+.enrollment-item {
+  padding-block: 20px;
+}
+
+.enrollment-item + .enrollment-item {
+  border-block-start: 1px solid var(--border);
+}
+
+.enrollment-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.enrollment-heading h3,
+.enrollment-heading p {
+  margin-block-end: 0;
+}
+
+.enrollment-heading h3 {
+  font-size: 1rem;
+}
+
+.enrollment-heading p,
+.price-summary span {
+  color: var(--muted-text);
+  font-size: 0.82rem;
+}
+
+.price-summary {
+  text-align: end;
+}
+
+.price-summary strong,
+.price-summary span {
+  display: block;
+}
+
+.enrollment-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block: 13px;
+}
+
+.enrollment-features span {
+  background: #eaf5f4;
+  border: 1px solid #b9dcda;
+  border-radius: 4px;
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 6px;
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.action-panel {
+  background: #f8fafb;
+  border-block: 1px solid var(--border);
+  margin-block: 16px;
+  padding: 16px;
+}
+
+.action-panel-heading {
+  justify-content: space-between;
+  margin-block-end: 14px;
+}
+
+.action-panel h4 {
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.action-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-block-end: 14px;
+}
+
+.renewal-grid {
+  grid-template-columns: minmax(220px, 1fr) 180px;
+}
+
+.status-panel label {
+  display: block;
+  margin-block-end: 12px;
+  max-width: 600px;
+}
+
+.payment-history {
+  margin-block-start: 16px;
+}
+
+.payment-history summary {
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding-block: 6px;
+}
+
+.compact-empty {
+  border-block-end: 0;
+  padding-block: 28px;
+}
+
+@media (max-width: 900px) {
+  .access-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .access-item:nth-child(4) {
+    border-inline-start: 0;
+  }
+
+  .action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .relationship-form {
+    margin-inline: -15px;
+    padding-inline: 15px;
+  }
+
+  .relationship-heading,
+  .enrollment-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .access-grid,
+  .assignment-form,
+  .action-grid,
+  .renewal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .access-item + .access-item {
+    border-block-start: 1px solid var(--border);
+    border-inline-start: 0;
+  }
+
+  .price-summary {
+    text-align: start;
+  }
+
+  .action-panel {
+    margin-inline: -8px;
+    padding: 14px 10px;
+  }
+}

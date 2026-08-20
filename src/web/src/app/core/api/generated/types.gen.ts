@@ -10,11 +10,62 @@ export type AcceptClientInvitationRequest = {
   password: null | string;
 };
 
+export type AcceptLegalDocumentRequest = {
+  documentVersionId: string;
+  tenantId: null | string;
+};
+
+export type AssignProductRequest = {
+  offerId: string;
+  startDate: string;
+  idempotencyKey: string;
+};
+
 export type BodyweightUnit = 'Kilogram' | 'Pound';
+
+export type ChangeClientRelationshipRequest = {
+  reason: string;
+  version: number | string;
+};
+
+export type ChangeEnrollmentStatusRequest = {
+  reason: string;
+  version: number | string;
+};
 
 export type ChangePasswordRequest = {
   currentPassword: string;
   newPassword: string;
+};
+
+export type ClientCommercialOverview = {
+  clientProfileId: string;
+  isRelationshipBlocked: boolean;
+  featureAccess: Array<FeatureAccessDecision>;
+  enrollments: Array<ClientEnrollmentView>;
+};
+
+export type ClientEnrollmentView = {
+  id: string;
+  productId: string;
+  offerId: string;
+  renewedFromEnrollmentId: null | string;
+  productName: string;
+  offerLabel: string;
+  priceAmount: number | string;
+  priceCurrency: string;
+  paidAmount: number | string;
+  balanceAmount: number | string;
+  startDate: string;
+  endDateExclusive: string;
+  lastActiveDate: string;
+  storedStatus: EnrollmentStatus;
+  effectiveStatus: EffectiveEnrollmentStatus;
+  statusReason: null | string;
+  features: Array<CoachingFeature>;
+  payments: Array<PaymentRecordView>;
+  createdAtUtc: string;
+  version: number | string;
 };
 
 export type ClientOnboardingStatus = 'NotStarted' | 'InProgress' | 'Completed';
@@ -81,6 +132,18 @@ export type CoachClientDetails = {
   version: number | string;
 };
 
+export type CoachingFeature =
+  'Training' | 'Nutrition' | 'CheckIns' | 'Messaging' | 'ResourceLibrary';
+
+export type CoachingProductView = {
+  id: string;
+  name: string;
+  description: null | string;
+  isActive: boolean;
+  offers: Array<ProductOfferView>;
+  version: number | string;
+};
+
 export type CoachRegistrationResponse = {
   email: string;
   developmentConfirmationUrl: null | string;
@@ -106,6 +169,21 @@ export type CreateClientInvitationRequest = {
   birthDate: null | string;
 };
 
+export type CreateCoachingProductRequest = {
+  name: string;
+  description: null | string;
+  initialOffer: CreateProductOfferRequest;
+};
+
+export type CreateProductOfferRequest = {
+  label: string;
+  durationCount: number | string;
+  durationUnit: OfferDurationUnit;
+  priceAmount: number | string;
+  priceCurrency: null | string;
+  features: Array<OfferFeatureRequest>;
+};
+
 export type CsrfResponse = {
   token: string;
 };
@@ -122,10 +200,36 @@ export type CurrentUserResponse = {
 export type DayOfWeek =
   'Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
 
+export type EffectiveEnrollmentStatus =
+  'PendingPayment' | 'Upcoming' | 'Active' | 'Paused' | 'Expired' | 'Cancelled' | 'Blocked';
+
 export type EmailActionResponse = {
   message: string;
   developmentActionUrl: null | string;
 };
+
+export type EnrollmentStatus = 'PendingPayment' | 'Active' | 'Paused' | 'Cancelled' | 'Expired';
+
+export type FeatureAccessDecision = {
+  feature: CoachingFeature;
+  isAllowed: boolean;
+  reason: FeatureAccessReason;
+  enrollmentId?: null | string;
+  accessibleFrom?: null | string;
+  accessibleUntilExclusive?: null | string;
+};
+
+export type FeatureAccessReason =
+  | 'Granted'
+  | 'MembershipInactive'
+  | 'RelationshipBlocked'
+  | 'NoEntitlement'
+  | 'PaymentRequired'
+  | 'NotStarted'
+  | 'Expired'
+  | 'Paused'
+  | 'Cancelled'
+  | 'PlatformBlocked';
 
 export type ForgotPasswordRequest = {
   email: string;
@@ -162,6 +266,30 @@ export type InvitationSummary = {
   developmentActionUrl?: null | string;
 };
 
+export type LegalConsentAcceptanceView = {
+  id: string;
+  documentVersionId: string;
+  context: LegalConsentContext;
+  tenantId: null | string;
+  acceptedAtUtc: string;
+};
+
+export type LegalConsentContext = 'Platform' | 'Workspace';
+
+export type LegalDocumentKind = 'TermsOfService' | 'PrivacyPolicy' | 'HealthIntakeConsent';
+
+export type LegalDocumentView = {
+  id: string;
+  kind: LegalDocumentKind;
+  version: string;
+  culture: string;
+  context: LegalConsentContext;
+  contentUri: string;
+  contentSha256: string;
+  publishedAtUtc: string;
+  isAccepted: boolean;
+};
+
 export type LengthUnit = 'Centimeter' | 'Inch';
 
 export type LoginRequest = {
@@ -170,12 +298,65 @@ export type LoginRequest = {
   rememberMe?: boolean;
 };
 
+export type ManualPaymentMethod = 'Cash' | 'BankTransfer' | 'Card' | 'MobileWallet' | 'Other';
+
+export type OfferBillingModel = 'FixedDuration' | 'Recurring';
+
+export type OfferDurationUnit = 'Day' | 'Week';
+
+export type OfferFeatureRequest = {
+  feature: CoachingFeature;
+  allowsConcurrentCoverage?: boolean;
+};
+
+export type OfferFeatureView = {
+  feature: CoachingFeature;
+  allowsConcurrentCoverage: boolean;
+};
+
+export type PaymentOperation = 'Receipt' | 'Refund' | 'Reversal';
+
+export type PaymentRecordView = {
+  id: string;
+  amount: number | string;
+  currencyCode: string;
+  receivedAtUtc: string;
+  method: ManualPaymentMethod;
+  reference: null | string;
+  note: null | string;
+  recordedByUserId: string;
+  operation: PaymentOperation;
+  source: PaymentSource;
+  createdAtUtc: string;
+};
+
+export type PaymentSource = 'Manual' | 'Provider';
+
 export type ProblemDetails = {
   type?: null | string;
   title?: null | string;
   status?: null | number | string;
   detail?: null | string;
   instance?: null | string;
+};
+
+export type ProductCatalog = {
+  workspaceCurrencyCode: string;
+  products: Array<CoachingProductView>;
+};
+
+export type ProductOfferView = {
+  id: string;
+  label: string;
+  billingModel: OfferBillingModel;
+  durationCount: number | string;
+  durationUnit: OfferDurationUnit;
+  priceAmount: number | string;
+  priceCurrency: string;
+  isActive: boolean;
+  features: Array<OfferFeatureView>;
+  createdAtUtc: string;
+  version: number | string;
 };
 
 export type PublicInvitationDetails = {
@@ -186,6 +367,16 @@ export type PublicInvitationDetails = {
   status: InvitationStatus;
   expiresAtUtc: string;
   requiresExistingAccountSignIn: boolean;
+};
+
+export type RecordManualPaymentRequest = {
+  amount: number | string;
+  currencyCode: string;
+  receivedAtUtc: string;
+  method: ManualPaymentMethod;
+  reference: null | string;
+  note: null | string;
+  idempotencyKey: string;
 };
 
 export type RegisterCoachRequest = {
@@ -199,10 +390,25 @@ export type RegisterCoachRequest = {
   weekStartsOn?: DayOfWeek;
 };
 
+export type RenewEnrollmentRequest = {
+  offerId: string;
+  startDate: string;
+  idempotencyKey: string;
+};
+
 export type ResetPasswordRequest = {
   userId: string;
   code: string;
   newPassword: string;
+};
+
+export type ResumeEnrollmentRequest = {
+  version: number | string;
+};
+
+export type SetOfferAvailabilityRequest = {
+  isActive: boolean;
+  version: number | string;
 };
 
 export type SystemStatusResponse = {
@@ -237,6 +443,13 @@ export type UpdateClientIntakeRequest = {
   allergies: null | string;
   medications: null | string;
   previousInjuries: null | string;
+  version: number | string;
+};
+
+export type UpdateCoachingProductRequest = {
+  name: string;
+  description: null | string;
+  isActive: boolean;
   version: number | string;
 };
 
@@ -443,6 +656,30 @@ export type AcceptClientInvitationResponses = {
 export type AcceptClientInvitationResponse =
   AcceptClientInvitationResponses[keyof AcceptClientInvitationResponses];
 
+export type GetOwnCoachingFeatureAccessData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/client-access/me';
+};
+
+export type GetOwnCoachingFeatureAccessErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetOwnCoachingFeatureAccessResponses = {
+  /**
+   * OK
+   */
+  200: Array<FeatureAccessDecision>;
+};
+
+export type GetOwnCoachingFeatureAccessResponse =
+  GetOwnCoachingFeatureAccessResponses[keyof GetOwnCoachingFeatureAccessResponses];
+
 export type GetCsrfTokenData = {
   body?: never;
   path?: never;
@@ -632,6 +869,59 @@ export type RevokeAllSessionsResponses = {
 
 export type RevokeAllSessionsResponse =
   RevokeAllSessionsResponses[keyof RevokeAllSessionsResponses];
+
+export type ListCurrentLegalDocumentsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    workspaceId?: string;
+  };
+  url: '/api/legal/documents/current';
+};
+
+export type ListCurrentLegalDocumentsResponses = {
+  /**
+   * OK
+   */
+  200: Array<LegalDocumentView>;
+};
+
+export type ListCurrentLegalDocumentsResponse =
+  ListCurrentLegalDocumentsResponses[keyof ListCurrentLegalDocumentsResponses];
+
+export type AcceptLegalDocumentData = {
+  body: AcceptLegalDocumentRequest;
+  path?: never;
+  query?: never;
+  url: '/api/legal/consents';
+};
+
+export type AcceptLegalDocumentErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type AcceptLegalDocumentError = AcceptLegalDocumentErrors[keyof AcceptLegalDocumentErrors];
+
+export type AcceptLegalDocumentResponses = {
+  /**
+   * OK
+   */
+  200: LegalConsentAcceptanceView;
+};
+
+export type AcceptLegalDocumentResponse =
+  AcceptLegalDocumentResponses[keyof AcceptLegalDocumentResponses];
 
 export type ListClientInvitationsData = {
   body?: never;
@@ -880,6 +1170,72 @@ export type UpdateClientCoachNotesResponses = {
 export type UpdateClientCoachNotesResponse =
   UpdateClientCoachNotesResponses[keyof UpdateClientCoachNotesResponses];
 
+export type BlockClientRelationshipData = {
+  body: ChangeClientRelationshipRequest;
+  path: {
+    clientId: string;
+  };
+  query?: never;
+  url: '/api/clients/{clientId}/relationship/block';
+};
+
+export type BlockClientRelationshipErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type BlockClientRelationshipError =
+  BlockClientRelationshipErrors[keyof BlockClientRelationshipErrors];
+
+export type BlockClientRelationshipResponses = {
+  /**
+   * OK
+   */
+  200: CoachClientDetails;
+};
+
+export type BlockClientRelationshipResponse =
+  BlockClientRelationshipResponses[keyof BlockClientRelationshipResponses];
+
+export type UnblockClientRelationshipData = {
+  body: ChangeClientRelationshipRequest;
+  path: {
+    clientId: string;
+  };
+  query?: never;
+  url: '/api/clients/{clientId}/relationship/unblock';
+};
+
+export type UnblockClientRelationshipErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type UnblockClientRelationshipError =
+  UnblockClientRelationshipErrors[keyof UnblockClientRelationshipErrors];
+
+export type UnblockClientRelationshipResponses = {
+  /**
+   * OK
+   */
+  200: CoachClientDetails;
+};
+
+export type UnblockClientRelationshipResponse =
+  UnblockClientRelationshipResponses[keyof UnblockClientRelationshipResponses];
+
 export type GetOwnClientProfileData = {
   body?: never;
   path?: never;
@@ -965,3 +1321,371 @@ export type CompleteOwnClientOnboardingResponses = {
 
 export type CompleteOwnClientOnboardingResponse =
   CompleteOwnClientOnboardingResponses[keyof CompleteOwnClientOnboardingResponses];
+
+export type ListCoachingProductsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/commercial/products';
+};
+
+export type ListCoachingProductsResponses = {
+  /**
+   * OK
+   */
+  200: ProductCatalog;
+};
+
+export type ListCoachingProductsResponse =
+  ListCoachingProductsResponses[keyof ListCoachingProductsResponses];
+
+export type CreateCoachingProductData = {
+  body: CreateCoachingProductRequest;
+  path?: never;
+  query?: never;
+  url: '/api/commercial/products';
+};
+
+export type CreateCoachingProductErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CreateCoachingProductError =
+  CreateCoachingProductErrors[keyof CreateCoachingProductErrors];
+
+export type CreateCoachingProductResponses = {
+  /**
+   * OK
+   */
+  200: CoachingProductView;
+};
+
+export type CreateCoachingProductResponse =
+  CreateCoachingProductResponses[keyof CreateCoachingProductResponses];
+
+export type UpdateCoachingProductData = {
+  body: UpdateCoachingProductRequest;
+  path: {
+    productId: string;
+  };
+  query?: never;
+  url: '/api/commercial/products/{productId}';
+};
+
+export type UpdateCoachingProductErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type UpdateCoachingProductError =
+  UpdateCoachingProductErrors[keyof UpdateCoachingProductErrors];
+
+export type UpdateCoachingProductResponses = {
+  /**
+   * OK
+   */
+  200: CoachingProductView;
+};
+
+export type UpdateCoachingProductResponse =
+  UpdateCoachingProductResponses[keyof UpdateCoachingProductResponses];
+
+export type AddProductOfferData = {
+  body: CreateProductOfferRequest;
+  path: {
+    productId: string;
+  };
+  query?: never;
+  url: '/api/commercial/products/{productId}/offers';
+};
+
+export type AddProductOfferErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type AddProductOfferError = AddProductOfferErrors[keyof AddProductOfferErrors];
+
+export type AddProductOfferResponses = {
+  /**
+   * OK
+   */
+  200: CoachingProductView;
+};
+
+export type AddProductOfferResponse = AddProductOfferResponses[keyof AddProductOfferResponses];
+
+export type SetProductOfferAvailabilityData = {
+  body: SetOfferAvailabilityRequest;
+  path: {
+    offerId: string;
+  };
+  query?: never;
+  url: '/api/commercial/offers/{offerId}/availability';
+};
+
+export type SetProductOfferAvailabilityErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SetProductOfferAvailabilityError =
+  SetProductOfferAvailabilityErrors[keyof SetProductOfferAvailabilityErrors];
+
+export type SetProductOfferAvailabilityResponses = {
+  /**
+   * OK
+   */
+  200: CoachingProductView;
+};
+
+export type SetProductOfferAvailabilityResponse =
+  SetProductOfferAvailabilityResponses[keyof SetProductOfferAvailabilityResponses];
+
+export type GetClientCommercialOverviewData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/commercial/clients/{clientProfileId}';
+};
+
+export type GetClientCommercialOverviewErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetClientCommercialOverviewResponses = {
+  /**
+   * OK
+   */
+  200: ClientCommercialOverview;
+};
+
+export type GetClientCommercialOverviewResponse =
+  GetClientCommercialOverviewResponses[keyof GetClientCommercialOverviewResponses];
+
+export type AssignProductToClientData = {
+  body: AssignProductRequest;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/commercial/clients/{clientProfileId}/enrollments';
+};
+
+export type AssignProductToClientErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type AssignProductToClientError =
+  AssignProductToClientErrors[keyof AssignProductToClientErrors];
+
+export type AssignProductToClientResponses = {
+  /**
+   * OK
+   */
+  200: ClientEnrollmentView;
+};
+
+export type AssignProductToClientResponse =
+  AssignProductToClientResponses[keyof AssignProductToClientResponses];
+
+export type RecordManualPaymentData = {
+  body: RecordManualPaymentRequest;
+  path: {
+    enrollmentId: string;
+  };
+  query?: never;
+  url: '/api/commercial/enrollments/{enrollmentId}/payments';
+};
+
+export type RecordManualPaymentErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RecordManualPaymentError = RecordManualPaymentErrors[keyof RecordManualPaymentErrors];
+
+export type RecordManualPaymentResponses = {
+  /**
+   * OK
+   */
+  200: ClientEnrollmentView;
+};
+
+export type RecordManualPaymentResponse =
+  RecordManualPaymentResponses[keyof RecordManualPaymentResponses];
+
+export type RenewClientEnrollmentData = {
+  body: RenewEnrollmentRequest;
+  path: {
+    enrollmentId: string;
+  };
+  query?: never;
+  url: '/api/commercial/enrollments/{enrollmentId}/renew';
+};
+
+export type RenewClientEnrollmentErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RenewClientEnrollmentError =
+  RenewClientEnrollmentErrors[keyof RenewClientEnrollmentErrors];
+
+export type RenewClientEnrollmentResponses = {
+  /**
+   * OK
+   */
+  200: ClientEnrollmentView;
+};
+
+export type RenewClientEnrollmentResponse =
+  RenewClientEnrollmentResponses[keyof RenewClientEnrollmentResponses];
+
+export type PauseClientEnrollmentData = {
+  body: ChangeEnrollmentStatusRequest;
+  path: {
+    enrollmentId: string;
+  };
+  query?: never;
+  url: '/api/commercial/enrollments/{enrollmentId}/pause';
+};
+
+export type PauseClientEnrollmentErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PauseClientEnrollmentError =
+  PauseClientEnrollmentErrors[keyof PauseClientEnrollmentErrors];
+
+export type PauseClientEnrollmentResponses = {
+  /**
+   * OK
+   */
+  200: ClientEnrollmentView;
+};
+
+export type PauseClientEnrollmentResponse =
+  PauseClientEnrollmentResponses[keyof PauseClientEnrollmentResponses];
+
+export type ResumeClientEnrollmentData = {
+  body: ResumeEnrollmentRequest;
+  path: {
+    enrollmentId: string;
+  };
+  query?: never;
+  url: '/api/commercial/enrollments/{enrollmentId}/resume';
+};
+
+export type ResumeClientEnrollmentErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ResumeClientEnrollmentError =
+  ResumeClientEnrollmentErrors[keyof ResumeClientEnrollmentErrors];
+
+export type ResumeClientEnrollmentResponses = {
+  /**
+   * OK
+   */
+  200: ClientEnrollmentView;
+};
+
+export type ResumeClientEnrollmentResponse =
+  ResumeClientEnrollmentResponses[keyof ResumeClientEnrollmentResponses];
+
+export type CancelClientEnrollmentData = {
+  body: ChangeEnrollmentStatusRequest;
+  path: {
+    enrollmentId: string;
+  };
+  query?: never;
+  url: '/api/commercial/enrollments/{enrollmentId}/cancel';
+};
+
+export type CancelClientEnrollmentErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CancelClientEnrollmentError =
+  CancelClientEnrollmentErrors[keyof CancelClientEnrollmentErrors];
+
+export type CancelClientEnrollmentResponses = {
+  /**
+   * OK
+   */
+  200: ClientEnrollmentView;
+};
+
+export type CancelClientEnrollmentResponse =
+  CancelClientEnrollmentResponses[keyof CancelClientEnrollmentResponses];

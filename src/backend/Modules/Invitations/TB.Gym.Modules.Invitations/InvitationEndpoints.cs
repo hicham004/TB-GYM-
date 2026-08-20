@@ -33,6 +33,7 @@ public static class InvitationEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToCommandResult(await service.CreateAsync(request, cancellationToken), created: true);
         })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("CreateClientInvitation")
         .Produces<InvitationSummary>(StatusCodes.Status201Created)
         .ProducesValidationProblem()
@@ -48,6 +49,7 @@ public static class InvitationEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToCommandResult(await service.ResendAsync(invitationId, cancellationToken));
         })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("ResendClientInvitation")
         .Produces<InvitationSummary>()
         .ProducesProblem(StatusCodes.Status409Conflict);
@@ -62,6 +64,7 @@ public static class InvitationEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToCommandResult(await service.RevokeAsync(invitationId, cancellationToken));
         })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("RevokeClientInvitation")
         .Produces<InvitationSummary>()
         .ProducesProblem(StatusCodes.Status409Conflict);

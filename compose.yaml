@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-tbgym}
       POSTGRES_USER: ${POSTGRES_USER:-tbgym}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tbgym_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
@@ -24,11 +24,11 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTP_PORTS: 8080
-      ConnectionStrings__Database: Host=postgres;Port=5432;Database=${POSTGRES_DB:-tbgym};Username=${POSTGRES_USER:-tbgym};Password=${POSTGRES_PASSWORD:-tbgym_dev}
+      ConnectionStrings__Database: Host=postgres;Port=5432;Database=${POSTGRES_DB:-tbgym};Username=${POSTGRES_USER:-tbgym};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       Database__ApplyMigrationsOnStartup: "true"
       Seed__Enabled: ${TB_GYM_SEED_ENABLED:-true}
       Seed__AdminEmail: ${TB_GYM_ADMIN_EMAIL:-admin@tbgym.local}
-      Seed__AdminPassword: ${TB_GYM_ADMIN_PASSWORD:-ChangeMe!12345}
+      Seed__AdminPassword: ${TB_GYM_ADMIN_PASSWORD:-}
     ports:
       - "5134:8080"
     volumes:

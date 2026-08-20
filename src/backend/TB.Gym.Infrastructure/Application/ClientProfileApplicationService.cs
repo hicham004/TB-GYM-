@@ -130,6 +130,61 @@ internal sealed class ClientProfileApplicationService(
         }
     }
 
+    public Task<ClientCommandResult> BlockRelationshipAsync(
+        Guid clientId,
+        ChangeClientRelationshipRequest request,
+        CancellationToken cancellationToken) =>
+        ChangeRelationshipAsync(clientId, request, block: true, cancellationToken);
+
+    public Task<ClientCommandResult> UnblockRelationshipAsync(
+        Guid clientId,
+        ChangeClientRelationshipRequest request,
+        CancellationToken cancellationToken) =>
+        ChangeRelationshipAsync(clientId, request, block: false, cancellationToken);
+
+    private async Task<ClientCommandResult> ChangeRelationshipAsync(
+        Guid clientId,
+        ChangeClientRelationshipRequest request,
+        bool block,
+        CancellationToken cancellationToken)
+    {
+        var profile = await dbContext.ClientProfiles.SingleOrDefaultAsync(
+            client => client.Id == clientId,
+            cancellationToken);
+        if (profile is null)
+        {
+            return new ClientCommandResult(ClientCommandStatus.NotFound);
+        }
+
+        try
+        {
+            dbContext.Entry(profile).Property(client => client.Version).OriginalValue = request.Version;
+            var changed = block ? profile.BlockCoachAccess() : profile.UnblockCoachAccess();
+            if (changed)
+            {
+                dbContext.ClientRelationshipEvents.Add(ClientRelationshipEvent.Create(
+                    profile.TenantId,
+                    profile.Id,
+                    block ? ClientRelationshipEventType.Blocked : ClientRelationshipEventType.Unblocked,
+                    request.Reason,
+                    clock.UtcNow));
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+
+            return new ClientCommandResult(
+                ClientCommandStatus.Success,
+                CoachDetails: ToCoachDetails(profile));
+        }
+        catch (ArgumentException exception)
+        {
+            return Invalid("reason", exception.Message);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return new ClientCommandResult(ClientCommandStatus.Conflict);
+        }
+    }
+
     private async Task<ClientCommandResult> UpdateAsync(
         Guid clientId,
         UpdateClientIntakeRequest request,

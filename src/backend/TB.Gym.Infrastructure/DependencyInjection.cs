@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -17,6 +18,7 @@ using TB.Gym.Infrastructure.Security;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
+using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
@@ -32,12 +34,7 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("Database");
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            if (!environment.IsDevelopment())
-            {
-                throw new InvalidOperationException("ConnectionStrings:Database must be configured.");
-            }
-
-            connectionString = "Host=localhost;Port=5432;Database=tbgym;Username=tbgym;Password=tbgym_dev";
+            throw new InvalidOperationException("ConnectionStrings:Database must be configured.");
         }
 
         services.AddHttpContextAccessor();
@@ -135,16 +132,39 @@ public static class DependencyInjection
         services.AddScoped<IInvitationDelivery, CapturedInvitationDelivery>();
         services.AddScoped<IInvitationApplicationService, InvitationApplicationService>();
         services.AddScoped<IClientProfileApplicationService, ClientProfileApplicationService>();
+        services.AddScoped<ICoachingFeatureAccessService, CoachingFeatureAccessService>();
+        services.AddScoped<ICommercialApplicationService, CommercialApplicationService>();
+        services.AddScoped<ILegalConsentApplicationService, LegalConsentApplicationService>();
 
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.AddFixedWindowLimiter(RateLimitPolicies.PublicAuthentication, limiter =>
+            options.AddPolicy(RateLimitPolicies.PublicAuthentication, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 30,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
+                    }));
+            options.AddPolicy(RateLimitPolicies.SensitiveWrite, context =>
             {
-                limiter.PermitLimit = 30;
-                limiter.Window = TimeSpan.FromMinutes(1);
-                limiter.QueueLimit = 0;
-                limiter.AutoReplenishment = true;
+                var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                    ?? context.Connection.RemoteIpAddress?.ToString()
+                    ?? "unknown";
+                var workspace = context.Request.Headers[TenantHeaders.TenantId].FirstOrDefault()
+                    ?? "none";
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: $"{actor}:{workspace}",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 60,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
+                    });
             });
         });
 

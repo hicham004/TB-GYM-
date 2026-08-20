@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using TB.Gym.Modules.Tenancy;
 
@@ -37,16 +38,21 @@ public sealed class ApiSmokeTests
         var response = await RequiredClient.GetAsync("/health/live");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsTrue(response.Headers.TryGetValues("X-Content-Type-Options", out var values));
+        Assert.AreEqual("nosniff", values.Single());
     }
 
     [TestMethod]
     public async Task SystemStatusExposesTheNewArchitecture()
     {
-        var response = await RequiredClient.GetFromJsonAsync<SystemStatus>("/api/system/status");
+        var response = await RequiredClient.GetAsync("/api/system/status");
+        var status = await response.Content.ReadFromJsonAsync<SystemStatus>();
 
-        Assert.IsNotNull(response);
-        Assert.AreEqual("TB Gym API", response.Name);
-        Assert.AreEqual("Modular Monolith", response.Architecture);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsTrue(response.Headers.CacheControl is { NoStore: true });
+        Assert.IsNotNull(status);
+        Assert.AreEqual("TB Gym API", status.Name);
+        Assert.AreEqual("Modular Monolith", status.Architecture);
     }
 
     [TestMethod]
@@ -60,6 +66,38 @@ public sealed class ApiSmokeTests
         var json = JsonSerializer.Serialize(TenantRole.Owner, options);
 
         Assert.AreEqual("\"Owner\"", json);
+    }
+
+    [TestMethod]
+    public void ProductionEnvironmentRefusesDevelopmentSeedingBeforeDatabaseAccess()
+    {
+        var generatedTestPassword = $"Aa1!{Guid.NewGuid():N}";
+        using var productionFactory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Production");
+                builder.UseSetting(
+                    "ConnectionStrings:Database",
+                    "Host=invalid;Database=invalid;Username=invalid");
+                builder.UseSetting("Database:ApplyMigrationsOnStartup", "false");
+                builder.UseSetting("Seed:Enabled", "true");
+                builder.UseSetting("Seed:AdminEmail", "admin@example.test");
+                builder.UseSetting("Seed:AdminPassword", generatedTestPassword);
+                builder.ConfigureAppConfiguration((_, configuration) =>
+                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["ConnectionStrings:Database"] = "Host=invalid;Database=invalid;Username=invalid",
+                        ["Database:ApplyMigrationsOnStartup"] = "false",
+                        ["Seed:Enabled"] = "true",
+                        ["Seed:AdminEmail"] = "admin@example.test",
+                        ["Seed:AdminPassword"] = generatedTestPassword,
+                    }));
+            });
+
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            productionFactory.CreateClient());
+
+        StringAssert.Contains(exception.Message, "development-only");
     }
 
     private HttpClient RequiredClient => client ?? throw new InvalidOperationException("The test client is not initialized.");

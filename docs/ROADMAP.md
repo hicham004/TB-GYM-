@@ -21,10 +21,11 @@ readiness accurately reports PostgreSQL availability.
 
 ## Phase 1: Identity, tenancy, and client onboarding
 
-Dependencies: decisions 1-3 and 12 in `DOMAIN-RULES.md`.
+Dependencies: approved tenant/account/invitation and field-ownership decisions recorded in
+ADRs 0002-0004.
 
-Status: implemented 2026-08-20 for the approved "coach invites the first real client"
-vertical slice. Phase 2 must not start until Phase 1 is reviewed.
+Status: implemented and reviewed 2026-08-20 for the approved "coach invites the first real
+client" vertical slice.
 
 - Record ADRs for tenant shape, identity reuse, time zone, privacy jurisdiction, and field
   ownership.
@@ -50,24 +51,41 @@ adapter. Their boundaries exist, but they are not represented as finished Phase 
 
 ## Phase 2: Subscriptions, manual payments, and access
 
-Dependencies: Phase 1; decisions 4-6.
+Dependencies: Phase 1.
 
-- Model subscription aggregate, half-open service period, state machine, manual payment
-  ledger, coach/platform blocks, cancellation, renewal, and audit history.
-- Add PostgreSQL range/check/exclusion constraints that make overlapping live periods
-  impossible under concurrent requests.
-- Centralize the account access decision and enforce it on content APIs, not only navigation.
-- Add profile-only client experience and coach payment registration/reversal workflow.
-- Add idempotent three-day renewal notification scheduling through an outbox/worker.
-- Test adjacent periods, overlap races, stale updates, payment reversals, blocks, expiry, and
-  time-zone boundaries.
+Status: implemented 2026-08-20 for the commercial/access foundation. Phase 3 must not start
+until Phase 2 is reviewed and the Phase 3 decisions in `DOMAIN-RULES.md` are answered.
 
-Exit: subscription and payment state reliably determines access, with no duplicate or
-overwritten periods/payments.
+- Separate products, immutable offers, enrollments, entitlement coverage, payments, and
+  workspace relationship status. Fixed-duration offers are implemented; recurring billing
+  remains architecture only.
+- Add explicit pending/active/paused/cancelled/expired transitions, historical renewal, and
+  full-payment access with append-only manual receipts.
+- Add PostgreSQL checks, tenant-composite foreign keys, immutable-ledger triggers, and a
+  partial GiST exclusion constraint per tenant/client/feature/date range.
+- Centralize coaching-feature access and return backend reason codes for unpaid, upcoming,
+  paused, expired, blocked, and granted states.
+- Build coach product management and client commercial workflows for assignment, payment,
+  history, renewal, lifecycle, and workspace-local block/unblock.
+- Persist idempotent, timezone-aware notification outbox jobs for payment required,
+  activation, ending soon, expiration, and renewal. Provider dispatch remains deferred.
+- Add versioned legal-document and append-only consent architecture without inventing legal
+  wording.
+- Test adjacent/overlapping coverage, a real race, non-conflicting concurrent services,
+  simultaneous identical command retries, stale writes, payment idempotency/history,
+  currency snapshots, access authorization, notification deduplication, tenant isolation,
+  and relationship-scoped blocking.
+
+Exit: enrollment, payment, entitlement, and relationship state reliably determine access,
+with no duplicate or overwritten commercial history.
+
+Explicitly deferred: automated/recurring provider payments, refunds/reversals/credits,
+installment schedules, a notification dispatch worker, final legal documents, and any
+training/nutrition/chat feature implementation.
 
 ## Phase 3: Exercise library, training, and strength
 
-Dependencies: Phase 2; decisions 6, 9, and 10.
+Dependencies: Phase 2; open decisions 1, 3, 6, 7, and 9 in `DOMAIN-RULES.md`.
 
 - Build tenant exercise/category library, exercise versions, media metadata, uploads, and
   signed viewing access.
@@ -87,7 +105,7 @@ authorized dated work while calculations remain reproducible.
 
 ## Phase 4: Nutrition and meal planning
 
-Dependencies: Phase 2 and client intake; decisions 7 and 8.
+Dependencies: Phase 2 and client intake; open decisions 4, 5, and 9 in `DOMAIN-RULES.md`.
 
 - Approve BMR, TDEE, calorie-target, unit, and macro calculation policies with a qualified
   domain reviewer.
@@ -137,7 +155,8 @@ retries, duplicate callbacks, and multiple API replicas.
 
 ## Phase 7: Theme and gamification
 
-Dependencies: authoritative completion/diet events; decision 11 and rights review.
+Dependencies: authoritative completion/diet events; open decisions 8 and 9 in
+`DOMAIN-RULES.md`.
 
 - Build constrained tenant theme tokens and licensed uploaded/generated assets.
 - Build versioned experience rules, append-only experience ledger, levels, ranks, progress
@@ -152,8 +171,8 @@ experience point traces to one authoritative event.
 
 Dependencies: validated core product.
 
-- Coach onboarding, plans/quotas, tenant billing abstraction, feature entitlements, admin
-  support workflow, data export/deletion, and terms/consent records.
+- Coach onboarding, SaaS plans/quotas, tenant billing, admin support workflow,
+  data export/deletion, and production legal-document publication/consent enforcement.
 - Production secret management, managed PostgreSQL backups/PITR, object lifecycle, TLS,
   WAF/rate limits, observability, alerting, runbooks, and disaster-recovery exercises.
 - Load/security/accessibility testing and independent review of authentication,

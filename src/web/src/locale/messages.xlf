@@ -45,11 +45,18 @@
           <context context-type="linenumber">17,18</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="6707361102856436710" datatype="html">
+        <source>Products</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">32,33</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="7992244993643023209" datatype="html">
         <source>Invitations</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">32,33</context>
+          <context context-type="linenumber">33,34</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
@@ -60,7 +67,7 @@
         <source>My profile</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">35,36</context>
+          <context context-type="linenumber">36,37</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/client-profile.html</context>
@@ -71,11 +78,11 @@
         <source>Workspace</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">38,39</context>
+          <context context-type="linenumber">39,40</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">45,46</context>
+          <context context-type="linenumber">46,47</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
@@ -86,21 +93,21 @@
         <source>Sign out</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">58,59</context>
+          <context context-type="linenumber">59,60</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3233478152769805266" datatype="html">
         <source>Account navigation</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">62</context>
+          <context context-type="linenumber">63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5207635742003539443" datatype="html">
         <source>Sign in</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">63,64</context>
+          <context context-type="linenumber">64,65</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
@@ -123,14 +130,14 @@
         <source>Coach registration</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">64,65</context>
+          <context context-type="linenumber">65,66</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4888930727562781134" datatype="html">
         <source>Checking session...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">67,68</context>
+          <context context-type="linenumber">68,69</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2528064290555018471" datatype="html">
@@ -154,25 +161,32 @@
           <context context-type="linenumber">38</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="8154827992341872049" datatype="html">
+        <source>Coaching products | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.routes.ts</context>
+          <context context-type="linenumber">45</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="4506798355054557482" datatype="html">
         <source>My profile | TB Gym</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.routes.ts</context>
-          <context context-type="linenumber">45</context>
+          <context context-type="linenumber">51</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1545882748786007291" datatype="html">
         <source>Workspace settings | TB Gym</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.routes.ts</context>
-          <context context-type="linenumber">52</context>
+          <context context-type="linenumber">58</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4639506285628516620" datatype="html">
         <source>Account security | TB Gym</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.routes.ts</context>
-          <context context-type="linenumber">59</context>
+          <context context-type="linenumber">65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3715596725146409911" datatype="html">
@@ -255,6 +269,10 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
           <context context-type="linenumber">36</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">272</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4086606389696938932" datatype="html">
@@ -705,6 +723,10 @@
           <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
           <context context-type="linenumber">61,62</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">235</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="1367912003314119412" datatype="html">
         <source>Creating workspace...</source>
@@ -871,77 +893,77 @@
         <source>Client intake</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">35,36</context>
+          <context context-type="linenumber">37,38</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2778245965110195175" datatype="html">
         <source>Contact, training, nutrition, and health details.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">36,37</context>
+          <context context-type="linenumber">38,39</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3178819533620462882" datatype="html">
         <source>Coach-only notes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">50,51</context>
+          <context context-type="linenumber">52,53</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4037370659332383082" datatype="html">
         <source>These notes are not exposed through the client profile API.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">51,52</context>
+          <context context-type="linenumber">53,54</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8104421162933956065" datatype="html">
         <source>Notes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">56,57</context>
+          <context context-type="linenumber">58,59</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8406648699226019403" datatype="html">
         <source>Save notes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">60,61</context>
+          <context context-type="linenumber">62,63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1775274146380056262" datatype="html">
         <source>Client intake saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">56</context>
+          <context context-type="linenumber">57</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8381653381385786356" datatype="html">
         <source>Client onboarding completed.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">63</context>
+          <context context-type="linenumber">64</context>
         </context-group>
       </trans-unit>
       <trans-unit id="166203247581475534" datatype="html">
         <source>Coach notes saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">80</context>
+          <context context-type="linenumber">81</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7713092832151105630" datatype="html">
         <source>The client profile could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">91</context>
+          <context context-type="linenumber">96</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4885091206165415192" datatype="html">
         <source>The client profile could not be saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">108</context>
+          <context context-type="linenumber">113</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5489523001763972004" datatype="html">
@@ -1279,12 +1301,24 @@
           <context context-type="sourcefile">src/app/features/clients/clients.html</context>
           <context context-type="linenumber">53,54</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">15,16</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">274</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="8204176479746810612" datatype="html">
         <source>Active</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/clients.html</context>
           <context context-type="linenumber">55,56</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">270</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6602706258740451656" datatype="html">
@@ -1313,6 +1347,942 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/clients.ts</context>
           <context context-type="linenumber">43</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="899107573280742886" datatype="html">
+        <source>Commercial access</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5095837353311922967" datatype="html">
+        <source>Service and access</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="149540351298392844" datatype="html">
+        <source>Payment, dates, entitlements, and relationship status resolve here.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">6,7</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6212440988315799121" datatype="html">
+        <source>Relationship active</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">17,18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4859202148272511129" datatype="html">
+        <source>Unblock</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">28,29</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8341583611023631235" datatype="html">
+        <source>Block access</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">30,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4775550080689015987" datatype="html">
+        <source>Reason</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">43,44</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">318</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5548579258946144064" datatype="html">
+        <source>Confirm unblock</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">48,49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2716497870540089898" datatype="html">
+        <source>Confirm block</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">50,51</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5908726620405358032" datatype="html">
+        <source>Resolving client access...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">64,65</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6304987877541412502" datatype="html">
+        <source>Feature access</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">66</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5882817832572445789" datatype="html">
+        <source>Assign a service</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">80,81</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="612496168646676393" datatype="html">
+        <source>The offer fixes price, currency, duration, and included access.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">81,82</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7405942774975371056" datatype="html">
+        <source>Create an active coaching product before assigning service.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">85,86</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3788423102945812260" datatype="html">
+        <source>Product and offer</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">89,90</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="888341446683346521" datatype="html">
+        <source>Start date</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">100,101</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3314953096185783078" datatype="html">
+        <source>Assign service</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">103,104</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1873654654709463308" datatype="html">
+        <source>Enrollment history</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">111,112</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2537856239224736952" datatype="html">
+        <source>Renewals and payments remain separate historical records.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">112,113</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7388988653070816386" datatype="html">
+        <source>No services assigned</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">119,120</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8184506892427856147" datatype="html">
+        <source>Choose an offer above to begin the client&apos;s commercial history.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">120,121</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1882492622898576243" datatype="html">
+        <source>paid</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">149,150</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8185942595843102934" datatype="html">
+        <source> Record payment </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">167</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8596827567089228260" datatype="html">
+        <source> Renew </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">176</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4235048773939818674" datatype="html">
+        <source> Pause </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">185</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3407056172872902855" datatype="html">
+        <source> Resume </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">195</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2330577642930707695" datatype="html">
+        <source> Cancel </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">207</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">181</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="457883008605984511" datatype="html">
+        <source>Record manual payment</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">219,220</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5547981558491672240" datatype="html">
+        <source> Close </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">226</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">270</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">315</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">27,28</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6533918067030990396" datatype="html">
+        <source>Amount</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">231,232</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">333,334</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8691920320483720007" datatype="html">
+        <source>Received</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">238,239</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">332,333</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8864288285279476751" datatype="html">
+        <source>Method</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">242,243</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">334,335</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="787798817533231355" datatype="html">
+        <source>Cash</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">244,245</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="962288116381554789" datatype="html">
+        <source>Bank transfer</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">245,246</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5691966639616932851" datatype="html">
+        <source>Card</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">246,247</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2902037793132816783" datatype="html">
+        <source>Mobile wallet</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">247,248</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8693603235657020323" datatype="html">
+        <source>Other</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">248,249</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3147371091697922238" datatype="html">
+        <source>Reference</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">251</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">335,336</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4388879716045736175" datatype="html">
+        <source>Note</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">252</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3572460758633756552" datatype="html">
+        <source> Confirm payment </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">255</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6735373919420231404" datatype="html">
+        <source>Create renewal</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">263,264</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5980912879753983465" datatype="html">
+        <source>Offer</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">275,276</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5265692635538057834" datatype="html">
+        <source>Starts</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">288</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2967096041801931747" datatype="html">
+        <source> Create renewal </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">292</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6848710878950243597" datatype="html">
+        <source>Pause enrollment</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">305,306</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6410244019944359006" datatype="html">
+        <source>Cancel enrollment</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">307,308</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6249484391846924804" datatype="html">
+        <source> Confirm </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">320</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3375299563320247314" datatype="html">
+        <source>Payment history (<x id="INTERPOLATION" equiv-text="{{ enrollment.payments.length }}"/>)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
+          <context context-type="linenumber">327,328</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6759734083006441303" datatype="html">
+        <source>Service assigned. Access will follow payment and service dates.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">112</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2746984693762159341" datatype="html">
+        <source>Payment recorded in the immutable payment history.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">150</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2517520990097982487" datatype="html">
+        <source>Renewal created as a new historical enrollment.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">179</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2264209083364826110" datatype="html">
+        <source>Enrollment paused.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">207</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9138529583055022026" datatype="html">
+        <source>Enrollment cancelled.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">207</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9104083405081742934" datatype="html">
+        <source>Enrollment resumed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">216</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6493431767170625797" datatype="html">
+        <source>Client access blocked in this workspace only.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">243</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="980667383783014285" datatype="html">
+        <source>Workspace relationship restored.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">244</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="616463518213451964" datatype="html">
+        <source>The relationship status could not be changed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">248</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4013060476269413412" datatype="html">
+        <source>Training</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">257</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">64</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">207,208</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">187</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4531960510824900278" datatype="html">
+        <source>Nutrition</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">258</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">67</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">212,213</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">188</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7733471178412142306" datatype="html">
+        <source>Check-ins</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">259</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">70</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">217,218</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">189</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2609637210173724919" datatype="html">
+        <source>Messaging</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">260</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">73</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">222,223</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">190</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2446117790692479672" datatype="html">
+        <source>Resources</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">261</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">227,228</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8702648589692074901" datatype="html">
+        <source>Pending payment</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">268</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8725224299321680590" datatype="html">
+        <source>Upcoming</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">269</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="840264455199725883" datatype="html">
+        <source>Paused</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">271</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4043049091728011235" datatype="html">
+        <source>Cancelled</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">273</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9146311869339772098" datatype="html">
+        <source>Available now</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">281</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4263547067617005852" datatype="html">
+        <source>Membership inactive</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">282</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4618798747925857079" datatype="html">
+        <source>Blocked by coach</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">283</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="297208535294697212" datatype="html">
+        <source>Not included</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">284</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7183754950294531278" datatype="html">
+        <source>Payment required</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">285</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2932942139498336103" datatype="html">
+        <source>Starts later</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">286</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6166190034640432546" datatype="html">
+        <source>Coverage expired</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">287</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="127844927612749458" datatype="html">
+        <source>Enrollment paused</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">288</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6600444728074344435" datatype="html">
+        <source>Enrollment cancelled</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">289</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3550991950160129639" datatype="html">
+        <source>Account blocked</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">290</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1766715709110224111" datatype="html">
+        <source>Commercial access could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">321</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5284310337223620534" datatype="html">
+        <source>The commercial change could not be saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/client-commercial.ts</context>
+          <context context-type="linenumber">340</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">221</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1655799311892631140" datatype="html">
+        <source>Commercial</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1721405687849704371" datatype="html">
+        <source>Coaching products</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">99</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7445028452779777403" datatype="html">
+        <source>Define what you sell once, then assign a dated offer to each client.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4720249809945846656" datatype="html">
+        <source> New product </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">8,9</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1453291911079974805" datatype="html">
+        <source>Create a coaching product</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">23,24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8369453232231311090" datatype="html">
+        <source>The first fixed-duration offer is created with it.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">24,25</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="588284100849805066" datatype="html">
+        <source>Product name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">33,34</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6051334276046515285" datatype="html">
+        <source>Offer label</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">37,38</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3379099991290561466" datatype="html">
+        <source>8 weeks</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">38</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4902817035128594900" datatype="html">
+        <source>Description</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">41,42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7410432243549869948" datatype="html">
+        <source>Duration</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">45,46</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">187,188</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8365450656480095075" datatype="html">
+        <source>Weeks</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">49,50</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">191,192</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8894377483833272091" datatype="html">
+        <source>Price</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">54,55</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">196,197</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4633167822367244214" datatype="html">
+        <source>Included access</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">62,63</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">204,205</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4822238165145520411" datatype="html">
+        <source>Resource library</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">77,78</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">191</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8086916056067247665" datatype="html">
+        <source> Create product </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">83,84</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3593348874859440446" datatype="html">
+        <source>Loading coaching products...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">91,92</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7013742346335647895" datatype="html">
+        <source>No products yet</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">95,96</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4406028706527360476" datatype="html">
+        <source>Create your first service before assigning commercial access to a client.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">96,97</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3955868613858648955" datatype="html">
+        <source>Available</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">108,109</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1562584780596394495" datatype="html">
+        <source>Archived</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">110,111</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2219734919036350320" datatype="html">
+        <source> Add offer </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">125</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1055686627716339120" datatype="html">
+        <source>Archive</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">129,130</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6770769801335635194" datatype="html">
+        <source>Restore</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">131,132</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">164,165</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4605273802885589405" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ offer.durationCount }}"/> weeks</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">146,147</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7494361412465596264" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ offer.durationCount }}"/> days</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">148,149</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3781947398072736573" datatype="html">
+        <source>Retire</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">162,163</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5034116131929203885" datatype="html">
+        <source>New offer</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">174,175</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4077520913910941990" datatype="html">
+        <source>Label</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">185</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3475738999436175723" datatype="html">
+        <source> Save offer </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.html</context>
+          <context context-type="linenumber">232</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5354973167646850879" datatype="html">
+        <source>Select at least one coaching feature.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">90</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">146</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1860767532696563395" datatype="html">
+        <source>Coaching product created.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">117</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4352106766880256716" datatype="html">
+        <source>New offer added. Existing enrollments were left unchanged.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">153</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="215409144418421465" datatype="html">
+        <source>Product archived.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">168</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8435715158412169349" datatype="html">
+        <source>Product restored.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">168</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2550819588298227143" datatype="html">
+        <source>Offer retired.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">181</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5128250323303458617" datatype="html">
+        <source>Offer restored.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">181</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1333287970753872192" datatype="html">
+        <source>Coaching products could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/commercial/products.ts</context>
+          <context context-type="linenumber">207</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6413121411962413511" datatype="html">

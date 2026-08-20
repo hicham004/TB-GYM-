@@ -1,6 +1,6 @@
 # TB Gym Architecture
 
-Status: Phase 1 complete, 2026-08-20
+Status: Phase 2 complete, 2026-08-20
 
 ## 1. Architectural style
 
@@ -55,18 +55,18 @@ into additional projects only when that produces a measurable boundary benefit.
 
 | Module | Owns |
 | --- | --- |
-| Identity | Global user account, credential, lockout, platform roles, sessions |
+| Identity | Global account, credential, lockout, platform roles, sessions, legal consent |
 | Tenancy | Coach workspace, membership, tenant role, tenant lifecycle |
-| Clients | Tenant-specific profile, onboarding/intake, coach block state |
+| Clients | Tenant-specific profile, onboarding/intake, relationship block state/history |
 | Invitations | Invite lifecycle, prefilled fields, acceptance and account linking |
-| Subscriptions | Service periods, manual payments, renewal and account access policy |
+| Subscriptions | Products, immutable offers, enrollments, entitlement coverage, payments, renewal |
 | Training | Templates, assigned snapshots, mesocycles, sessions, prescriptions, completion |
 | Exercise Library | Exercises, categories, coaching instructions, video associations |
 | Nutrition | Ingredients, recipes, meal choices, plans, calorie and macro snapshots |
 | Progress | Daily bodyweight, weekly summaries, measurements and progress views |
 | Strength | Versioned 1RM observations, RPE/RIR tables, deterministic load progression |
 | Messaging | Tenant-scoped coach/client conversations and messages |
-| Notifications | Notification records, delivery scheduling, email and WhatsApp ports |
+| Notifications | Idempotent outbox, delivery scheduling, email and future channel ports |
 | Media | Object metadata, upload authorization, signed access, retention |
 | Gamification | Tenant theme, levels, ranks and auditable experience events |
 | Integrations | AI, payment, nutrition-data and other external provider contracts |
@@ -96,7 +96,8 @@ Additional rules:
 2. Cross-module workflows use narrow public contracts or integration events. They do not
    expose `DbSet`, `IQueryable`, or internal domain objects.
 3. The shared kernel contains only genuinely universal primitives such as the clock,
-   request identity, tenant context, audit base type, and policy names.
+   request identity, tenant context, audit base type, policy names, and the narrow coaching
+   feature-access decision port used by every protected module.
 4. Infrastructure contains mechanisms, not fitness policy. Formulas and access decisions
    belong in their owning modules.
 5. A single `GymDbContext` is acceptable in the monolith and permits atomic local
@@ -154,9 +155,19 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   `XSRF-TOKEN` cookie and sends `X-XSRF-TOKEN`.
 - Failed API authorization returns 401 or 403, never an HTML redirect.
 - Password lockout and unique email are enabled; production requires confirmed email.
+- Public authentication is rate-limited by source address. Sensitive authenticated writes
+  are rate-limited by actor/workspace, and authenticated API responses use `no-store`.
 - Tenant policies verify membership on every scoped request. A UI role check is cosmetic.
-- Account access is a separate domain decision that combines platform block, coach block,
-  membership, subscription, and payment standing.
+- Account authentication and coaching-feature access are separate. An unpaid client can
+  authenticate and view permitted profile/account data. `ICoachingFeatureAccessService`
+  combines membership, platform block, workspace-local relationship block, entitlement,
+  dates, enrollment lifecycle, and payment on every protected feature request.
+- Access denies by default and returns a stable reason code. Angular may explain that reason
+  but cannot override it.
+
+Legal document versions are global identity records, while a workspace consent acceptance is
+contextual. Listing current documents accepts an optional workspace context, verifies active
+membership, and never treats acceptance in Workspace A as acceptance in Workspace B.
 
 Cookie authentication assumes the SPA and API are served under one public origin. The
 Angular development proxy and production Nginx configuration preserve that model.
@@ -177,18 +188,26 @@ Persistence conventions:
   not overlap.
 - Auditable rows carry created/updated time and actor identifiers.
 - PostgreSQL `xmin` is the initial optimistic concurrency token for mutable aggregates.
-- Money will use an exact decimal amount plus ISO currency; payments are append-only ledger
-  entries rather than an overwritten amount.
+- Money uses an exact decimal amount plus ISO currency. Offers and enrollment commercial
+  snapshots preserve immutable price/currency; payments are append-only ledger operations.
 - Workspace defaults use an IANA time zone, culture, configurable week start, and ISO
   currency. Initial Lebanon defaults are `Asia/Beirut`, `en-LB`, Monday, and `USD`; none are
   global business constants.
 - Database check, unique, foreign-key, and exclusion constraints duplicate critical domain
   guards where possible.
 
-The subscription module should use a PostgreSQL date range and a partial GiST exclusion
-constraint to reject overlapping live periods for the same tenant/client. PostgreSQL
-[exclusion constraints](https://www.postgresql.org/docs/18/ddl-constraints.html) are suited
-to this cross-row invariant.
+The subscription module stores one `EnrollmentEntitlement` coverage row per included
+feature. A partial GiST exclusion constraint over tenant, client, feature, and a PostgreSQL
+date range rejects conflicting coverage under concurrent requests. It does not globally
+reject simultaneous products: training and nutrition can coexist when their entitlement
+sets do not conflict. An explicit offer-level concurrency rule removes a coverage row from
+the exclusion predicate. PostgreSQL
+[exclusion constraints](https://www.postgresql.org/docs/18/ddl-constraints.html) protect the
+cross-row invariant after application pre-validation.
+
+Database triggers complement the domain model by rejecting updates/deletes to payment,
+relationship-event, offer-entitlement, and consent ledgers. Separate triggers protect offer
+terms and enrollment price/date snapshots while still allowing lifecycle status changes.
 
 Local Docker startup may apply migrations because there is one API instance. Production
 migrations run as a separate deployment step, not concurrently in every API replica.
@@ -217,6 +236,10 @@ Phase 1 transport contracts are generated from the running API's OpenAPI documen
 generated DTOs into stable Angular view models; generated files are never edited manually
 and remain separate from backend domain entities.
 
+Phase 2 adds lazy-loaded product management and a focused commercial section on the client
+view. Coaches create products/offers, assign service, record payment, renew, manage lifecycle,
+and see backend access explanations without exposing raw database concepts.
+
 ## 9. Realtime, jobs, and integrations
 
 `ChatHub` proves SignalR hosting and tenant authorization readiness; full conversation
@@ -224,10 +247,13 @@ membership, persistence, delivery acknowledgements, and reconnect behavior remai
 work. Scale-out adds a managed SignalR service or Redis backplane only when multiple API
 replicas require it.
 
-Notifications expose background job, email, and WhatsApp abstractions. Production flow will
-be: commit domain state and an outbox message atomically, dispatch from a worker, record each
-attempt, retry transient failures with backoff, and make handlers idempotent. Scheduled
-renewal and week-unlock jobs must recalculate eligibility before sending or changing state.
+Commercial notifications now persist an outbox item atomically with enrollment/payment state.
+Each item retains the tenant time zone used to calculate its UTC schedule and a unique
+deduplication key. A completed/cancelled item cannot be dispatched again, and activation
+cancels a still-pending payment-required item without deleting its history. Production flow
+remains: dispatch from a worker, record each attempt, retry transient failures with backoff,
+and re-evaluate eligibility before sending delayed items. Phase 2 proves scheduling but
+deliberately does not claim provider delivery. WhatsApp is not implemented.
 
 Media, nutrition data, AI, and payment providers sit behind module-owned ports. Provider
 payloads and credentials do not leak into domain objects. AI output is untrusted input: it
@@ -268,7 +294,29 @@ Scale in this order:
   ranges, exclusion constraints, case handling, and `xmin`.
 - Every production incident involving an invariant should produce a regression test.
 
-Phase 1 includes domain and architecture tests, API smoke tests, Angular store/transport
-tests, and a real PostgreSQL workflow test. The workflow creates isolated workspaces, accepts
-new- and existing-account invitations, completes intake, persists bodyweight, and proves a
-second tenant cannot read the first tenant's client profile.
+Phase 2 adds domain state-machine tests, Angular commercial contract mapping, and real
+PostgreSQL workflows covering unpaid/paid access, payment history, renewal, overlap races,
+simultaneous identical assignment/payment retries, non-conflicting services, stale writes,
+currency snapshots, notification idempotency, append-only triggers, and relationship
+isolation when one identity is a client in two workspaces.
+
+## 12. Phase 2 commercial flow
+
+```text
+CoachingProduct
+  -> immutable ProductOffer (duration + money + features)
+  -> ClientEnrollment (dated commercial snapshot)
+       -> EnrollmentEntitlement coverage rows
+       -> append-only PaymentRecords
+       -> idempotent NotificationOutboxItems
+
+ClientProfile + TenantMembership + ClientEnrollment
+  -> ICoachingFeatureAccessService
+  -> FeatureAccessDecision
+```
+
+Renewal always creates another enrollment. A fixed-duration enrollment is fully paid only
+when same-currency receipt operations equal its snapshotted price. Partial payments remain
+historical but grant no proportional access. Refund/reversal operation names and provider
+ports exist for forward compatibility; their business workflows are not implemented in
+Phase 2. See ADR 0005 and ADR 0006.

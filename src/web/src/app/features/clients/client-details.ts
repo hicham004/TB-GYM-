@@ -13,10 +13,11 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { onboardingStatusLabel } from '../../core/i18n/display-labels';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { ClientIntakeForm } from './client-intake-form';
+import { ClientCommercial } from '../commercial/client-commercial';
 
 @Component({
   selector: 'app-client-details',
-  imports: [ClientIntakeForm, ReactiveFormsModule, RouterLink],
+  imports: [ClientCommercial, ClientIntakeForm, ReactiveFormsModule, RouterLink],
   templateUrl: './client-details.html',
   styleUrl: './client-details.scss',
 })
@@ -79,6 +80,10 @@ export class ClientDetails {
         ),
       $localize`Coach notes saved.`,
     );
+  }
+
+  protected commercialProfileChanged(profile: CoachClientDetails): void {
+    this.setProfile(profile);
   }
 
   private async load(): Promise<void> {

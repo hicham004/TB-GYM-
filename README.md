@@ -11,6 +11,8 @@ migrations, seeds a development owner, starts the API, and serves Angular throug
 
 ```powershell
 Copy-Item .env.example .env
+# Set a local POSTGRES_PASSWORD in .env. If seeding is enabled, also set
+# TB_GYM_ADMIN_PASSWORD to a unique local password.
 docker compose up --build
 ```
 
@@ -18,8 +20,8 @@ Open <http://localhost:4200>. The API is also exposed at
 <http://localhost:5134>; liveness is `/health/live`, readiness is `/health/ready`, and the
 development OpenAPI document is `/openapi/v1.json`.
 
-The example development login is `admin@tbgym.local` / `ChangeMe!12345`. Change it in `.env`.
-These defaults are for local development only.
+Development seeding is disabled in the example configuration. To use it, enable it and set
+the local admin email and password in the ignored `.env` file.
 
 You can also register a new coach from the sign-in screen. A solo coach automatically owns
 a new workspace. Development confirmation, reset, and invitation responses include a local
@@ -35,8 +37,8 @@ uses that path so the named volume persists correctly.
 
 ## Run without Docker
 
-Start PostgreSQL with the connection in
-`src/backend/TB.Gym.Api/appsettings.Development.json`, then run these in separate terminals:
+Set the PostgreSQL values in the ignored `.env`, start PostgreSQL, then run these in separate
+terminals:
 
 ```powershell
 .\scripts\run-api.ps1
@@ -69,11 +71,12 @@ npm run api:generate
 - [Architecture](docs/ARCHITECTURE.md)
 - [Domain rules and open decisions](docs/DOMAIN-RULES.md)
 - [Delivery roadmap](docs/ROADMAP.md)
+- [Production launch checklist](docs/LAUNCH-CHECKLIST.md)
 - [Permanent coding-agent rules](AGENTS.md)
 - [Legacy application notes](base44/LEGACY.md)
 
-Phase 1 implements the first real vertical slice: coach registration, automatic solo
-workspace ownership, email confirmation and account recovery, workspace switching and
-settings, secure client invitations, new/existing-account acceptance, tenant-local client
-intake, coach-only notes, and initial bodyweight persistence. It is not the complete
-13-feature product; subscriptions and access control begin in Phase 2 only after review.
+Phases 1 and 2 implement identity/onboarding plus the commercial foundation: coaching
+products, immutable offers, dated client enrollments, per-feature entitlements, append-only
+manual payments, renewal/history, workspace-local block state, centralized access decisions,
+notification outbox scheduling, and legal-consent architecture. Training, nutrition, chat,
+gamification, AI, recurring billing, and production provider delivery are not implemented.

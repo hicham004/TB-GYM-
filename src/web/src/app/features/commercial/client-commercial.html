@@ -1,0 +1,357 @@
+<section class="surface-section commercial-summary">
+  <div class="section-heading relationship-heading">
+    <div>
+      <p class="eyebrow" i18n>Commercial access</p>
+      <h2 i18n>Service and access</h2>
+      <p class="muted" i18n>Payment, dates, entitlements, and relationship status resolve here.</p>
+    </div>
+    <div class="relationship-state">
+      <span
+        class="status-badge"
+        [class.success]="!client().isCoachBlocked"
+        [class.danger]="client().isCoachBlocked"
+      >
+        @if (client().isCoachBlocked) {
+          <span i18n>Blocked</span>
+        } @else {
+          <span i18n>Relationship active</span>
+        }
+      </span>
+      <button
+        [class.danger-button]="!client().isCoachBlocked"
+        [class.secondary-button]="client().isCoachBlocked"
+        class="compact"
+        type="button"
+        (click)="relationshipFormOpen.set(!relationshipFormOpen())"
+      >
+        @if (client().isCoachBlocked) {
+          <span i18n>Unblock</span>
+        } @else {
+          <span i18n>Block access</span>
+        }
+      </button>
+    </div>
+  </div>
+
+  @if (relationshipFormOpen()) {
+    <form
+      class="relationship-form"
+      [formGroup]="relationshipForm"
+      (ngSubmit)="changeRelationship()"
+    >
+      <label>
+        <span i18n>Reason</span>
+        <input formControlName="reason" />
+      </label>
+      <button class="primary-button compact" type="submit" [disabled]="busy()">
+        @if (client().isCoachBlocked) {
+          <span i18n>Confirm unblock</span>
+        } @else {
+          <span i18n>Confirm block</span>
+        }
+      </button>
+    </form>
+  }
+
+  @if (error()) {
+    <p class="form-error" role="alert">{{ error() }}</p>
+  }
+  @if (notice()) {
+    <p class="form-success" role="status">{{ notice() }}</p>
+  }
+
+  @if (loading()) {
+    <p class="loading-row" i18n>Resolving client access...</p>
+  } @else if (overview(); as accessOverview) {
+    <div class="access-grid" aria-label="Feature access" i18n-aria-label>
+      @for (decision of accessOverview.featureAccess; track decision.feature) {
+        <div class="access-item" [class.allowed]="decision.isAllowed">
+          <strong>{{ featureLabel(decision.feature) }}</strong>
+          <span>{{ reasonLabel(decision.reason) }}</span>
+        </div>
+      }
+    </div>
+  }
+</section>
+
+<section class="surface-section assignment-section">
+  <div class="section-heading">
+    <div>
+      <h2 i18n>Assign a service</h2>
+      <p class="muted" i18n>The offer fixes price, currency, duration, and included access.</p>
+    </div>
+  </div>
+  @if (activeOffers().length === 0) {
+    <p class="notice" i18n>Create an active coaching product before assigning service.</p>
+  } @else {
+    <form class="assignment-form" [formGroup]="assignForm" (ngSubmit)="assign()">
+      <label>
+        <span i18n>Product and offer</span>
+        <select formControlName="offerId">
+          @for (entry of activeOffers(); track entry.offer.id) {
+            <option [value]="entry.offer.id">
+              {{ entry.product.name }} / {{ entry.offer.label }} / {{ entry.offer.priceAmount }}
+              {{ entry.offer.priceCurrency }}
+            </option>
+          }
+        </select>
+      </label>
+      <label>
+        <span i18n>Start date</span>
+        <input type="date" formControlName="startDate" />
+      </label>
+      <button class="primary-button" type="submit" [disabled]="busy()" i18n>Assign service</button>
+    </form>
+  }
+</section>
+
+<section class="surface-section enrollment-section">
+  <div class="section-heading">
+    <div>
+      <h2 i18n>Enrollment history</h2>
+      <p class="muted" i18n>Renewals and payments remain separate historical records.</p>
+    </div>
+  </div>
+
+  @if (overview(); as commercial) {
+    @if (commercial.enrollments.length === 0) {
+      <div class="empty-state compact-empty">
+        <h2 i18n>No services assigned</h2>
+        <p i18n>Choose an offer above to begin the client's commercial history.</p>
+      </div>
+    } @else {
+      <div class="enrollment-list">
+        @for (enrollment of commercial.enrollments; track enrollment.id) {
+          <article class="enrollment-item">
+            <header class="enrollment-heading">
+              <div>
+                <div class="title-line">
+                  <h3>{{ enrollment.productName }}</h3>
+                  <span
+                    class="status-badge"
+                    [class.success]="statusTone(enrollment.effectiveStatus) === 'success'"
+                    [class.warning]="statusTone(enrollment.effectiveStatus) === 'warning'"
+                    [class.danger]="statusTone(enrollment.effectiveStatus) === 'danger'"
+                  >
+                    {{ statusLabel(enrollment.effectiveStatus) }}
+                  </span>
+                </div>
+                <p>
+                  {{ enrollment.offerLabel }} / {{ enrollment.startDate }} -
+                  {{ enrollment.lastActiveDate }}
+                </p>
+              </div>
+              <div class="price-summary">
+                <strong
+                  >{{ enrollment.paidAmount }} / {{ enrollment.priceAmount }}
+                  {{ enrollment.priceCurrency }}</strong
+                >
+                <span i18n>paid</span>
+              </div>
+            </header>
+
+            <div class="enrollment-features">
+              @for (feature of enrollment.features; track feature) {
+                <span>{{ featureLabel(feature) }}</span>
+              }
+            </div>
+
+            <div class="enrollment-actions">
+              @if (enrollment.storedStatus === 'PendingPayment' && enrollment.balanceAmount > 0) {
+                <button
+                  class="primary-button compact"
+                  type="button"
+                  (click)="openPayment(enrollment)"
+                  i18n
+                >
+                  Record payment
+                </button>
+              }
+              <button
+                class="secondary-button compact"
+                type="button"
+                (click)="openRenewal(enrollment)"
+                i18n
+              >
+                Renew
+              </button>
+              @if (enrollment.storedStatus === 'Active') {
+                <button
+                  class="quiet-button compact"
+                  type="button"
+                  (click)="openStatus(enrollment, 'pause')"
+                  i18n
+                >
+                  Pause
+                </button>
+              }
+              @if (enrollment.storedStatus === 'Paused') {
+                <button
+                  class="quiet-button compact"
+                  type="button"
+                  (click)="resume(enrollment)"
+                  i18n
+                >
+                  Resume
+                </button>
+              }
+              @if (
+                enrollment.storedStatus !== 'Cancelled' && enrollment.effectiveStatus !== 'Expired'
+              ) {
+                <button
+                  class="quiet-button compact danger-text"
+                  type="button"
+                  (click)="openStatus(enrollment, 'cancel')"
+                  i18n
+                >
+                  Cancel
+                </button>
+              }
+            </div>
+
+            @if (paymentEnrollmentId() === enrollment.id) {
+              <form
+                class="action-panel"
+                [formGroup]="paymentForm"
+                (ngSubmit)="recordPayment(enrollment)"
+              >
+                <div class="action-panel-heading">
+                  <h4 i18n>Record manual payment</h4>
+                  <button
+                    class="quiet-button compact"
+                    type="button"
+                    (click)="paymentEnrollmentId.set(null)"
+                    i18n
+                  >
+                    Close
+                  </button>
+                </div>
+                <div class="action-grid">
+                  <label
+                    ><span i18n>Amount</span
+                    ><input type="number" min="0.01" step="0.01" formControlName="amount"
+                  /></label>
+                  <label
+                    ><span i18n>Currency</span><input maxlength="3" formControlName="currencyCode"
+                  /></label>
+                  <label
+                    ><span i18n>Received</span
+                    ><input type="datetime-local" formControlName="receivedAtLocal"
+                  /></label>
+                  <label>
+                    <span i18n>Method</span>
+                    <select formControlName="method">
+                      <option value="Cash" i18n>Cash</option>
+                      <option value="BankTransfer" i18n>Bank transfer</option>
+                      <option value="Card" i18n>Card</option>
+                      <option value="MobileWallet" i18n>Mobile wallet</option>
+                      <option value="Other" i18n>Other</option>
+                    </select>
+                  </label>
+                  <label><span i18n>Reference</span><input formControlName="reference" /></label>
+                  <label><span i18n>Note</span><input formControlName="note" /></label>
+                </div>
+                <button class="primary-button compact" type="submit" [disabled]="busy()" i18n>
+                  Confirm payment
+                </button>
+              </form>
+            }
+
+            @if (renewalEnrollmentId() === enrollment.id) {
+              <form class="action-panel" [formGroup]="renewalForm" (ngSubmit)="renew(enrollment)">
+                <div class="action-panel-heading">
+                  <h4 i18n>Create renewal</h4>
+                  <button
+                    class="quiet-button compact"
+                    type="button"
+                    (click)="renewalEnrollmentId.set(null)"
+                    i18n
+                  >
+                    Close
+                  </button>
+                </div>
+                <div class="action-grid renewal-grid">
+                  <label>
+                    <span i18n>Offer</span>
+                    <select formControlName="offerId">
+                      @for (entry of activeOffers(); track entry.offer.id) {
+                        @if (entry.product.id === enrollment.productId) {
+                          <option [value]="entry.offer.id">
+                            {{ entry.offer.label }} / {{ entry.offer.priceAmount }}
+                            {{ entry.offer.priceCurrency }}
+                          </option>
+                        }
+                      }
+                    </select>
+                  </label>
+                  <label
+                    ><span i18n>Starts</span><input type="date" formControlName="startDate"
+                  /></label>
+                </div>
+                <button class="primary-button compact" type="submit" [disabled]="busy()" i18n>
+                  Create renewal
+                </button>
+              </form>
+            }
+
+            @if (statusEnrollmentId() === enrollment.id) {
+              <form
+                class="action-panel status-panel"
+                [formGroup]="statusForm"
+                (ngSubmit)="changeStatus(enrollment)"
+              >
+                <div class="action-panel-heading">
+                  @if (statusAction() === 'pause') {
+                    <h4 i18n>Pause enrollment</h4>
+                  } @else {
+                    <h4 i18n>Cancel enrollment</h4>
+                  }
+                  <button
+                    class="quiet-button compact"
+                    type="button"
+                    (click)="statusEnrollmentId.set(null)"
+                    i18n
+                  >
+                    Close
+                  </button>
+                </div>
+                <label><span i18n>Reason</span><input formControlName="reason" /></label>
+                <button class="primary-button compact" type="submit" [disabled]="busy()" i18n>
+                  Confirm
+                </button>
+              </form>
+            }
+
+            @if (enrollment.payments.length > 0) {
+              <details class="payment-history">
+                <summary i18n>Payment history ({{ enrollment.payments.length }})</summary>
+                <div class="table-scroll">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th i18n>Received</th>
+                        <th i18n>Amount</th>
+                        <th i18n>Method</th>
+                        <th i18n>Reference</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (payment of enrollment.payments; track payment.id) {
+                        <tr>
+                          <td>{{ payment.receivedAtUtc | date: 'medium' }}</td>
+                          <td>{{ payment.amount }} {{ payment.currencyCode }}</td>
+                          <td>{{ payment.method }}</td>
+                          <td>{{ payment.reference || '-' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            }
+          </article>
+        }
+      </div>
+    }
+  }
+</section>

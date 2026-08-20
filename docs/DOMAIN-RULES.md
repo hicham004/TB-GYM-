@@ -76,56 +76,87 @@ are auditable, retention is defined, and logs/analytics must not contain raw val
 **CLI-009** Coach block and platform block are separate facts with actor, reason, effective
 time, and optional reversal. The client cannot change either fact.
 
-## 3. Subscriptions, payments, programs, and access
+**CLI-010** Legal documents are versioned by kind, version label, culture, context, content
+hash, publication/retirement, and professional-review status. Consent acceptance is
+append-only and identifies the exact document, user, accepted UTC instant, and workspace
+context where applicable. TB Gym must not seed invented legal wording or allow an unreviewed
+draft to become an accepted production document. Current-document resolution verifies the
+requested workspace membership; acceptance in one workspace never satisfies another.
 
-**SUB-001** A subscription is a commercial service period for one tenant/client. Periods use
-`[startDate, endDateExclusive)`, so a four-week period starting July 27 ends exclusively on
-August 24 and its last active date is August 23.
+## 3. Products, enrollments, payments, programs, and access
 
-**SUB-002** A client cannot have overlapping live subscription periods in the same tenant.
-Drafts may overlap while being edited, but activation must be serialized and protected by a
-PostgreSQL exclusion constraint. Cancelled/rejected drafts do not block a new period.
+**SUB-001** Product/catalog identity, offer/price, client enrollment, payment operation,
+feature entitlement, and client-workspace relationship are separate concepts. Training and
+nutrition assignments are not commercial entities and will reference an enrollment later.
 
-**SUB-003** A client cannot have overlapping active assigned training mesocycles. **Proposed:**
-each assigned training program belongs to exactly one subscription and normally shares its
-service period. If diet and training can have different periods, that must be modeled
-explicitly rather than duplicating unsynchronized dates.
+**SUB-002** An offer is an immutable set of billing model, duration, price, ISO currency, and
+coaching features. Editing price, currency, or duration creates another offer. Disabling an
+offer prevents new assignments but never changes historical enrollments.
 
-**SUB-004** Subscription duration has one source of truth: start plus end-exclusive. Week
-count is validated/derived, not a third independently editable fact. Training week dates,
-unlock dates, renewal time, diet applicability, and progress grouping derive from that
-period.
+**SUB-003** An enrollment is a dated client-specific snapshot of one offer in one tenant.
+Periods use `[startDate, endDateExclusive)`, so a four-week period starting July 27 ends
+exclusively on August 24 and its last active date is August 23. Renewal creates another row
+linked to the previous enrollment and never overwrites it.
 
-**SUB-005** Payment registration is append-only. A new payment never overwrites an earlier
-amount. Each entry records amount, currency, method/reference, received time, registering
-coach, and reversal/refund if any. The subscription exposes a derived payment standing.
+**SUB-004** Clients may own concurrent products. Coverage may not overlap only when tenant,
+client, and feature entitlement are the same, unless the offer explicitly allows concurrent
+coverage for that feature. A PostgreSQL partial GiST exclusion constraint makes this rule
+safe under races. A training product and non-conflicting nutrition add-on may overlap.
 
-**SUB-006** The initial manual-payment policy in `plan.docx` is:
+**SUB-005** Enrollment duration has one source of truth: start plus end-exclusive. Offer
+duration deterministically produces the end. Future training week dates, unlock dates,
+nutrition applicability, and progress grouping derive from authoritative assignment and
+enrollment periods; they are not independently copied inputs.
 
-1. No active membership, platform block, or coach block: access denied.
-2. Valid membership but no current paid subscription: profile-only access with payment CTA.
-3. Current subscription with pending/overdue payment: profile-only access.
-4. Current subscription in acceptable payment standing: full assigned-content access.
+**SUB-006** Phase 2 enrollment state is `PendingPayment`, `Active`, `Paused`, `Cancelled`, or
+`Expired`. Effective UI state may also be `Upcoming` or relationship `Blocked`. Transitions
+are explicit domain methods with optimistic concurrency. The calendar date is authoritative:
+an enrollment is effectively expired at `endDateExclusive` even before an asynchronous
+projection persists `Expired`.
 
-The ordering above is authoritative and must be evaluated server-side for every protected
-resource. Whether `Waived` grants full access is proposed as yes.
+**SUB-007** Payment registration is append-only. Each receipt retains amount, currency,
+received instant, method, optional reference/note, source, idempotency key, registering user,
+and audit metadata. Database triggers reject update/delete. Future refunds, reversals, and
+corrections are new linked operations, never edits.
 
-**SUB-007** "Partially paid means proportionally paid weeks" is not safe without a precise
-contract. Amount paid does not automatically identify which dates are covered, especially
-with discounts, installments, currencies, or refunds. Until defined, payment is either
-accepted for the subscription or outstanding; installment support requires an explicit
-schedule.
+**SUB-008** Phase 2 accepts partial same-currency receipts but grants access only when total
+receipts equal the immutable enrollment price. It rejects overpayment and cross-currency
+settlement because no credit balance or FX-rate contract exists. "Partially paid means
+proportionally paid weeks" remains rejected as ambiguous. Free offers activate immediately.
 
-**SUB-008** A renewal reminder is scheduled for three tenant-calendar days before the end
-date, sent at most once per channel/version, and cancelled or recalculated if the period is
-changed, cancelled, renewed, or blocked.
+**SUB-009** The centralized feature-access order is:
 
-**SUB-009** Blocking takes effect immediately for authorization even if a session is active.
-Unblocking does not create a subscription or mark a payment paid.
+1. inactive tenant/client membership: deny feature access;
+2. platform block: deny feature access globally;
+3. workspace-local relationship block: deny coaching features in that workspace only;
+4. no current entitlement: lock that feature;
+5. pending payment, future start, pause, cancellation, or expiration: lock with that reason;
+6. active date, lifecycle, entitlement, and full payment: grant that feature.
 
-**SUB-010** Account, subscription, program, and payment statuses are state machines. Arbitrary
-boolean combinations are not accepted from clients. All transitions are authorized,
-validated, concurrent-write protected, and audited.
+An unpaid or relationship-blocked user can still authenticate and view basic permitted
+account/profile data. Every protected backend module asks the centralized policy; Angular is
+only an explanation/presentation layer.
+
+**SUB-010** Blocking takes effect immediately for authorization even if a session is active.
+The current flag lives on the tenant-specific client profile and every block/unblock appends
+an actor/reason/effective-time event. Unblocking never creates an enrollment or payment and
+cannot affect another workspace.
+
+**SUB-011** Commercial commands that can be retried use caller-generated idempotency keys.
+The key is bound to the normalized command payload: an identical simultaneous retry resolves
+to the original result, while changing dates, money, method, or metadata with the same key is
+a conflict. Payment recording also takes a database row lock inside EF's retry execution
+strategy. Notification jobs have a unique tenant/deduplication key.
+
+**SUB-012** Assignment schedules payment-required or activation, ending-in-three-days,
+expiration, and renewal notifications in the tenant's time zone. Phase 2 persists these
+outbox jobs; it does not claim email delivery. A dispatcher must re-check state before a
+delayed send. Full payment cancels any still-pending payment-required job, and terminal
+outbox items cannot be dispatched again.
+
+**SUB-013** One-time fixed-duration offers are implemented. The recurring billing-model name
+is reserved, but invoice schedules, automatic charging, retries, dunning, grace periods, and
+provider webhook behavior require a later approved design.
 
 ## 4. Program templates and assigned snapshots
 
@@ -355,8 +386,11 @@ At minimum, later migrations should enforce:
 | One membership per tenant/user | Unique `(TenantId, UserId)` |
 | One client identity link per tenant | Filtered unique `(TenantId, UserId)` |
 | One tenant client email | Unique normalized `(TenantId, Email)` per approved policy |
-| No overlapping live subscriptions | Partial GiST exclusion on tenant, client, date range |
+| No conflicting entitlement coverage | Partial GiST exclusion on tenant, client, feature, date range |
 | Valid service period | Check `EndExclusive > Start` |
+| Immutable offer/enrollment money and dates | Application guard plus PostgreSQL trigger |
+| Append-only payments/block events/consents | Application guard plus PostgreSQL trigger |
+| Idempotent assignments/payments/notifications | Tenant-scoped unique command/deduplication keys |
 | One daily bodyweight | Unique `(TenantId, ClientId, LocalDate)` |
 | Positive bodyweight/height/load | Check constraints with approved limits |
 | One completion per assigned day | Unique `(TenantId, AssignmentDayId, ClientId)` |
@@ -386,12 +420,25 @@ Approved on 2026-08-20 and recorded under `docs/adr/`:
 7. Platform support has no implicit tenant-data access. Any future support access is
    explicit, time-limited, and audited.
 
-## 12. Decisions required before later phases
+## 12. Phase 2 decisions and open questions
 
-1. Does one subscription always bind training and diet to one period, or can each service
-   have independent dates? Can an active subscription have no training program?
-2. Are installments supported? Exactly which payment standings grant full access, and does
-   an overdue client retain historical content?
+Phase 2 approved these decisions on 2026-08-20:
+
+- products, immutable offers, enrollments, payments, entitlements, and relationships are
+  separate;
+- service concurrency is decided per feature, not by a global subscription exclusion;
+- fixed-duration service is first, renewal creates history, and recurring billing is later;
+- partial manual receipts are historical but access waits for full same-currency payment;
+- workspace-local block overrides entitlements without globally blocking the identity;
+- final legal wording and payment-provider claims require professional/external verification.
+
+Decisions still required before later phases:
+
+1. Which concrete training/nutrition assignment may consume each commercial entitlement?
+   Can one enrollment contain multiple mesocycles, and can an active paid enrollment have no
+   program assigned yet?
+2. Are payment schedules/installments, discounts, credits, waivers, refunds, and FX settlement
+   required for launch? Define grace-period and historical-content access behavior.
 3. What is the behavior when a program starts midweek or a coach changes dates after logs
    exist?
 4. Which BMR formula, activity/TDEE model, unit conventions, and sex/formula options are

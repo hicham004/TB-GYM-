@@ -11,6 +11,7 @@ using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Messaging;
+using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
@@ -38,6 +39,7 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
 });
+app.UseTbGymSecurityHeaders();
 app.UseRequestLocalization();
 app.UseRateLimiter();
 
@@ -78,9 +80,11 @@ app.MapGet("/api/system/status", (IClock clock) => Results.Ok(new SystemStatusRe
 .Produces<SystemStatusResponse>();
 
 app.MapIdentityModule();
+app.MapLegalConsentEndpoints();
 app.MapTenancyModule();
 app.MapInvitationsModule();
 app.MapClientsModule();
+app.MapSubscriptionsModule();
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization(AuthorizationPolicies.TenantMember);
 
 await app.InitializeDatabaseAsync();

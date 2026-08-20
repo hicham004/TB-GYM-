@@ -29,6 +29,8 @@
 @if (loading()) {
   <p class="loading-row" i18n>Loading client profile...</p>
 } @else if (profile(); as client) {
+  <app-client-commercial [client]="client" (profileChanged)="commercialProfileChanged($event)" />
+
   <section class="surface-section">
     <div class="section-heading">
       <div>

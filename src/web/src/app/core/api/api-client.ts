@@ -2,30 +2,49 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import type {
+  ClientCommercialOverview as ContractClientCommercialOverview,
+  ClientEnrollmentView as ContractClientEnrollmentView,
   ClientSelfProfile as ContractClientSelfProfile,
   ClientSummary as ContractClientSummary,
+  CoachingProductView as ContractCoachingProductView,
   CoachClientDetails as ContractCoachClientDetails,
+  FeatureAccessDecision as ContractFeatureAccessDecision,
   InvitationSummary,
+  PaymentRecordView as ContractPaymentRecordView,
+  ProductCatalog as ContractProductCatalog,
+  ProductOfferView as ContractProductOfferView,
   UpdateWorkspaceRequest,
   WorkspaceDetails as ContractWorkspaceDetails,
 } from './generated';
 import {
   ClientInvitation,
+  ClientCommercialOverview,
+  ClientEnrollment,
   ClientSelfProfile,
   ClientSummary,
   CoachClientDetails,
+  CoachingProduct,
   CompleteClientOnboardingRequest,
   CreateClientInvitationRequest,
+  CreateCoachingProductRequest,
+  CreateProductOfferRequest,
   CurrentUser,
   EmailActionResponse,
   InvitationAcceptance,
   LoginRequest,
+  PaymentRecord,
+  ProductCatalog,
   PublicInvitation,
   RegisterCoachRequest,
+  RecordManualPaymentRequest,
   RegistrationResponse,
   TenantMembership,
+  UpdateCoachingProductRequest,
   UpdateClientIntakeRequest,
   WorkspaceDetails,
+  AssignProductRequest,
+  RenewEnrollmentRequest,
+  ChangeEnrollmentStatusRequest,
 } from './api.models';
 
 @Injectable({ providedIn: 'root' })
@@ -167,6 +186,146 @@ export class ApiClient {
       .pipe(map(toCoachClient));
   }
 
+  blockClientRelationship(
+    clientId: string,
+    reason: string,
+    version: number,
+  ): Observable<CoachClientDetails> {
+    return this.http
+      .post<ContractCoachClientDetails>(`/api/clients/${clientId}/relationship/block`, {
+        reason,
+        version,
+      })
+      .pipe(map(toCoachClient));
+  }
+
+  unblockClientRelationship(
+    clientId: string,
+    reason: string,
+    version: number,
+  ): Observable<CoachClientDetails> {
+    return this.http
+      .post<ContractCoachClientDetails>(`/api/clients/${clientId}/relationship/unblock`, {
+        reason,
+        version,
+      })
+      .pipe(map(toCoachClient));
+  }
+
+  getProductCatalog(): Observable<ProductCatalog> {
+    return this.http
+      .get<ContractProductCatalog>('/api/commercial/products')
+      .pipe(map(toProductCatalog));
+  }
+
+  createCoachingProduct(request: CreateCoachingProductRequest): Observable<CoachingProduct> {
+    return this.http
+      .post<ContractCoachingProductView>('/api/commercial/products', request)
+      .pipe(map(toCoachingProduct));
+  }
+
+  updateCoachingProduct(
+    productId: string,
+    request: UpdateCoachingProductRequest,
+  ): Observable<CoachingProduct> {
+    return this.http
+      .put<ContractCoachingProductView>(`/api/commercial/products/${productId}`, request)
+      .pipe(map(toCoachingProduct));
+  }
+
+  addProductOffer(
+    productId: string,
+    request: CreateProductOfferRequest,
+  ): Observable<CoachingProduct> {
+    return this.http
+      .post<ContractCoachingProductView>(`/api/commercial/products/${productId}/offers`, request)
+      .pipe(map(toCoachingProduct));
+  }
+
+  setOfferAvailability(
+    offerId: string,
+    isActive: boolean,
+    version: number,
+  ): Observable<CoachingProduct> {
+    return this.http
+      .put<ContractCoachingProductView>(`/api/commercial/offers/${offerId}/availability`, {
+        isActive,
+        version,
+      })
+      .pipe(map(toCoachingProduct));
+  }
+
+  getClientCommercialOverview(clientId: string): Observable<ClientCommercialOverview> {
+    return this.http
+      .get<ContractClientCommercialOverview>(`/api/commercial/clients/${clientId}`)
+      .pipe(map(toClientCommercialOverview));
+  }
+
+  assignProduct(clientId: string, request: AssignProductRequest): Observable<ClientEnrollment> {
+    return this.http
+      .post<ContractClientEnrollmentView>(
+        `/api/commercial/clients/${clientId}/enrollments`,
+        request,
+      )
+      .pipe(map(toClientEnrollment));
+  }
+
+  recordManualPayment(
+    enrollmentId: string,
+    request: RecordManualPaymentRequest,
+  ): Observable<ClientEnrollment> {
+    return this.http
+      .post<ContractClientEnrollmentView>(
+        `/api/commercial/enrollments/${enrollmentId}/payments`,
+        request,
+      )
+      .pipe(map(toClientEnrollment));
+  }
+
+  renewEnrollment(
+    enrollmentId: string,
+    request: RenewEnrollmentRequest,
+  ): Observable<ClientEnrollment> {
+    return this.http
+      .post<ContractClientEnrollmentView>(
+        `/api/commercial/enrollments/${enrollmentId}/renew`,
+        request,
+      )
+      .pipe(map(toClientEnrollment));
+  }
+
+  pauseEnrollment(
+    enrollmentId: string,
+    request: ChangeEnrollmentStatusRequest,
+  ): Observable<ClientEnrollment> {
+    return this.http
+      .post<ContractClientEnrollmentView>(
+        `/api/commercial/enrollments/${enrollmentId}/pause`,
+        request,
+      )
+      .pipe(map(toClientEnrollment));
+  }
+
+  resumeEnrollment(enrollmentId: string, version: number): Observable<ClientEnrollment> {
+    return this.http
+      .post<ContractClientEnrollmentView>(`/api/commercial/enrollments/${enrollmentId}/resume`, {
+        version,
+      })
+      .pipe(map(toClientEnrollment));
+  }
+
+  cancelEnrollment(
+    enrollmentId: string,
+    request: ChangeEnrollmentStatusRequest,
+  ): Observable<ClientEnrollment> {
+    return this.http
+      .post<ContractClientEnrollmentView>(
+        `/api/commercial/enrollments/${enrollmentId}/cancel`,
+        request,
+      )
+      .pipe(map(toClientEnrollment));
+  }
+
   getSelfProfile(): Observable<ClientSelfProfile> {
     return this.http
       .get<ContractClientSelfProfile>('/api/client-profile/me')
@@ -230,5 +389,66 @@ function toCoachClient(value: ContractCoachClientDetails): CoachClientDetails {
     heightEnteredValue: toNullableNumber(value.heightEnteredValue),
     averageDailySteps: toNullableNumber(value.averageDailySteps),
     version: toNumber(value.version),
+  };
+}
+
+function toProductCatalog(value: ContractProductCatalog): ProductCatalog {
+  return {
+    workspaceCurrencyCode: value.workspaceCurrencyCode,
+    products: value.products.map(toCoachingProduct),
+  };
+}
+
+function toCoachingProduct(value: ContractCoachingProductView): CoachingProduct {
+  return {
+    ...value,
+    version: toNumber(value.version),
+    offers: value.offers.map(toProductOffer),
+  };
+}
+
+function toProductOffer(value: ContractProductOfferView) {
+  return {
+    ...value,
+    durationCount: toNumber(value.durationCount),
+    priceAmount: toNumber(value.priceAmount),
+    version: toNumber(value.version),
+  };
+}
+
+function toClientCommercialOverview(
+  value: ContractClientCommercialOverview,
+): ClientCommercialOverview {
+  return {
+    ...value,
+    featureAccess: value.featureAccess.map(toFeatureAccess),
+    enrollments: value.enrollments.map(toClientEnrollment),
+  };
+}
+
+function toFeatureAccess(value: ContractFeatureAccessDecision) {
+  return {
+    ...value,
+    enrollmentId: value.enrollmentId ?? null,
+    accessibleFrom: value.accessibleFrom ?? null,
+    accessibleUntilExclusive: value.accessibleUntilExclusive ?? null,
+  };
+}
+
+function toClientEnrollment(value: ContractClientEnrollmentView): ClientEnrollment {
+  return {
+    ...value,
+    priceAmount: toNumber(value.priceAmount),
+    paidAmount: toNumber(value.paidAmount),
+    balanceAmount: toNumber(value.balanceAmount),
+    version: toNumber(value.version),
+    payments: value.payments.map(toPaymentRecord),
+  };
+}
+
+function toPaymentRecord(value: ContractPaymentRecordView): PaymentRecord {
+  return {
+    ...value,
+    amount: toNumber(value.amount),
   };
 }

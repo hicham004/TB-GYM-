@@ -19,6 +19,8 @@
     <ProjectReference Include="..\..\..\src\backend\BuildingBlocks\TB.Gym.SharedKernel\TB.Gym.SharedKernel.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Clients\TB.Gym.Modules.Clients\TB.Gym.Modules.Clients.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Invitations\TB.Gym.Modules.Invitations\TB.Gym.Modules.Invitations.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Identity\TB.Gym.Modules.Identity\TB.Gym.Modules.Identity.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Notifications\TB.Gym.Modules.Notifications\TB.Gym.Modules.Notifications.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Progress\TB.Gym.Modules.Progress\TB.Gym.Modules.Progress.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Subscriptions\TB.Gym.Modules.Subscriptions\TB.Gym.Modules.Subscriptions.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Tenancy\TB.Gym.Modules.Tenancy\TB.Gym.Modules.Tenancy.csproj" />

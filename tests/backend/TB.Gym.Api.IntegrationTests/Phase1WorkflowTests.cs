@@ -12,10 +12,9 @@ namespace TB.Gym.Api.IntegrationTests;
 [TestClass]
 public sealed class Phase1WorkflowTests
 {
-    private const string Password = "StrongPass!123";
-    private const string AdminConnection =
-        "Host=localhost;Port=5433;Database=postgres;Username=tbgym;Password=tbgym_dev;Pooling=false";
+    private static readonly string Password = $"Aa1!{Guid.NewGuid():N}";
 
+    private string? adminConnection;
     private string? databaseName;
     private string? databaseConnection;
     private WebApplicationFactory<Program>? factory;
@@ -23,10 +22,16 @@ public sealed class Phase1WorkflowTests
     [TestInitialize]
     public async Task InitializeAsync()
     {
+        adminConnection = Environment.GetEnvironmentVariable("TB_GYM_TEST_ADMIN_CONNECTION");
+        if (string.IsNullOrWhiteSpace(adminConnection))
+        {
+            Assert.Inconclusive("TB_GYM_TEST_ADMIN_CONNECTION is not configured.");
+        }
+
         databaseName = $"tbgym_p1_{Guid.NewGuid():N}";
         try
         {
-            await using var connection = new NpgsqlConnection(AdminConnection);
+            await using var connection = new NpgsqlConnection(adminConnection);
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
             command.CommandText = $"CREATE DATABASE \"{databaseName}\"";
@@ -37,7 +42,7 @@ public sealed class Phase1WorkflowTests
             Assert.Inconclusive($"PostgreSQL integration database is unavailable: {exception.Message}");
         }
 
-        databaseConnection = new NpgsqlConnectionStringBuilder(AdminConnection)
+        databaseConnection = new NpgsqlConnectionStringBuilder(adminConnection)
         {
             Database = databaseName,
         }.ConnectionString;
@@ -66,12 +71,12 @@ public sealed class Phase1WorkflowTests
         factory?.Dispose();
         NpgsqlConnection.ClearAllPools();
 
-        if (databaseName is null)
+        if (databaseName is null || adminConnection is null)
         {
             return;
         }
 
-        await using var connection = new NpgsqlConnection(AdminConnection);
+        await using var connection = new NpgsqlConnection(adminConnection);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = $"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)";

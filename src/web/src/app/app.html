@@ -29,6 +29,7 @@
         </a>
         @if (tenants.canCoach()) {
           <a routerLink="/clients" routerLinkActive="active" i18n>Clients</a>
+          <a routerLink="/products" routerLinkActive="active" i18n>Products</a>
           <a routerLink="/invitations" routerLinkActive="active" i18n>Invitations</a>
         }
         @if (tenants.isClient()) {

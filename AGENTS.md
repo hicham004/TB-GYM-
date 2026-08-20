@@ -4,6 +4,8 @@
 
 - Read `docs/ARCHITECTURE.md`, `docs/DOMAIN-RULES.md`, and `docs/ROADMAP.md` before changing
   architecture or domain behavior.
+- Read ADR 0005 and ADR 0006 before changing commercial access, payment, notifications, or
+  legal consent. Phase 2 is complete; do not begin Phase 3 without the user's approval.
 - `base44/` is a preserved legacy reference, not the new architecture. Do not edit, delete,
   or copy its generic CRUD/security model unless the user explicitly requests legacy work.
 - The backend/database is the source of truth. Never implement an invariant only in Angular.
@@ -16,6 +18,8 @@
   or separate databases without an approved ADR and demonstrated need.
 - Keep `TB.Gym.SharedKernel` tiny. Module projects may reference SharedKernel only, never
   another `TB.Gym.Modules.*` assembly. Infrastructure and API compose modules.
+- `ICoachingFeatureAccessService` is the approved shared authorization port. Future training,
+  nutrition, check-in, messaging, and resource APIs must evaluate it server-side.
 - A module owns its entities, rules, tables, and terminology. Cross-module work uses narrow
   contracts or durable integration events, never another module's `DbSet`/repository.
 
@@ -52,6 +56,24 @@
   for critical invariants where possible, plus friendly domain validation.
 - Preserve audit/history for subscriptions, payments, blocks, programs, strength snapshots,
   and calculations. Do not overwrite history or hard-delete paid/completed facts.
+- Commercial naming is deliberate: `CoachingProduct` -> immutable `ProductOffer` -> dated
+  `ClientEnrollment` -> feature coverage and append-only `PaymentRecord`. Do not collapse
+  these into a generic Subscription DTO/table.
+- Renewal creates a new enrollment. A new price/duration/currency creates a new offer. Never
+  mutate enrollment snapshots or payment history.
+- Enrollment overlap is prohibited per tenant/client/feature/date range, not globally. Keep
+  the PostgreSQL GiST exclusion constraint and concurrency test intact.
+- Workspace relationship block overrides feature access only in that tenant. It must never
+  become a global Identity block.
+- Phase 2 manual receipts must match enrollment currency; partial receipts grant no access
+  until the exact price is paid. Do not add FX, credit, refunds, waiver, or recurring billing
+  behavior without an approved domain decision and ledger operation design.
+- Idempotency keys are bound to normalized command payloads. Identical concurrent retries
+  return the original result; changed payloads with a reused key must conflict.
+- Notification outbox keys are idempotent and schedules are calculated in tenant time. Do not
+  claim provider delivery until a durable dispatcher exists.
+- Legal acceptances are append-only and require an approved published document version. Do
+  not invent or seed legal wording.
 - Mutable aggregates require optimistic concurrency and conflict handling.
 - Template assignment creates a client snapshot. Master-template edits never mutate assigned
   programs or diets.

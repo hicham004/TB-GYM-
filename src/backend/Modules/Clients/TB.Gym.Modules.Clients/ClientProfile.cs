@@ -200,6 +200,28 @@ public sealed class ClientProfile : TenantEntity
         return true;
     }
 
+    public bool BlockCoachAccess()
+    {
+        if (IsCoachBlocked)
+        {
+            return false;
+        }
+
+        IsCoachBlocked = true;
+        return true;
+    }
+
+    public bool UnblockCoachAccess()
+    {
+        if (!IsCoachBlocked)
+        {
+            return false;
+        }
+
+        IsCoachBlocked = false;
+        return true;
+    }
+
     private static (string FirstName, string LastName) ValidateNames(string firstName, string lastName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(firstName);
@@ -294,6 +316,64 @@ public sealed class ClientProfile : TenantEntity
     }
 }
 
+public sealed class ClientRelationshipEvent : TenantEntity
+{
+    private ClientRelationshipEvent()
+    {
+    }
+
+    private ClientRelationshipEvent(
+        Guid tenantId,
+        Guid clientProfileId,
+        ClientRelationshipEventType eventType,
+        string reason,
+        DateTimeOffset occurredAtUtc)
+        : base(tenantId)
+    {
+        ClientProfileId = clientProfileId;
+        EventType = eventType;
+        Reason = ValidateReason(reason);
+        OccurredAtUtc = occurredAtUtc;
+    }
+
+    public Guid ClientProfileId { get; private set; }
+
+    public ClientRelationshipEventType EventType { get; private set; }
+
+    public string Reason { get; private set; } = string.Empty;
+
+    public DateTimeOffset OccurredAtUtc { get; private set; }
+
+    public static ClientRelationshipEvent Create(
+        Guid tenantId,
+        Guid clientProfileId,
+        ClientRelationshipEventType eventType,
+        string reason,
+        DateTimeOffset occurredAtUtc)
+    {
+        if (clientProfileId == Guid.Empty || !Enum.IsDefined(eventType))
+        {
+            throw new ArgumentException("A client and relationship event type are required.");
+        }
+
+        return new ClientRelationshipEvent(
+            tenantId,
+            clientProfileId,
+            eventType,
+            reason,
+            occurredAtUtc);
+    }
+
+    private static string ValidateReason(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        var normalized = reason.Trim();
+        return normalized.Length <= 500
+            ? normalized
+            : throw new ArgumentException("The relationship status reason cannot exceed 500 characters.", nameof(reason));
+    }
+}
+
 public sealed class ClientProfileChange : TenantEntity
 {
     private ClientProfileChange()
@@ -368,4 +448,10 @@ public enum ClientChangeSource
     Client = 2,
     Coach = 3,
     OnboardingCompletion = 4,
+}
+
+public enum ClientRelationshipEventType
+{
+    Blocked = 1,
+    Unblocked = 2,
 }

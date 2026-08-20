@@ -70,4 +70,69 @@ describe('ApiClient contract mapping', () => {
       version: '7',
     });
   });
+
+  it('normalizes immutable commercial money, payments, and concurrency values', () => {
+    api.getClientCommercialOverview('client-a').subscribe((overview) => {
+      const enrollment = overview.enrollments[0];
+      expect(enrollment.priceAmount).toBe(250);
+      expect(enrollment.paidAmount).toBe(100);
+      expect(enrollment.balanceAmount).toBe(150);
+      expect(enrollment.version).toBe(9);
+      expect(enrollment.payments[0].amount).toBe(100);
+      expect(overview.featureAccess[0].reason).toBe('PaymentRequired');
+    });
+
+    http.expectOne('/api/commercial/clients/client-a').flush({
+      clientProfileId: 'client-a',
+      isRelationshipBlocked: false,
+      featureAccess: [
+        {
+          feature: 'Training',
+          isAllowed: false,
+          reason: 'PaymentRequired',
+          enrollmentId: 'enrollment-a',
+          accessibleFrom: '2026-08-20',
+          accessibleUntilExclusive: '2026-10-15',
+        },
+      ],
+      enrollments: [
+        {
+          id: 'enrollment-a',
+          productId: 'product-a',
+          offerId: 'offer-a',
+          renewedFromEnrollmentId: null,
+          productName: 'Premium Coaching',
+          offerLabel: '8 weeks',
+          priceAmount: '250.00',
+          priceCurrency: 'USD',
+          paidAmount: '100.00',
+          balanceAmount: '150.00',
+          startDate: '2026-08-20',
+          endDateExclusive: '2026-10-15',
+          lastActiveDate: '2026-10-14',
+          storedStatus: 'PendingPayment',
+          effectiveStatus: 'PendingPayment',
+          statusReason: null,
+          features: ['Training'],
+          payments: [
+            {
+              id: 'payment-a',
+              amount: '100.00',
+              currencyCode: 'USD',
+              receivedAtUtc: '2026-08-20T10:00:00Z',
+              method: 'Cash',
+              reference: null,
+              note: null,
+              recordedByUserId: 'coach-a',
+              operation: 'Receipt',
+              source: 'Manual',
+              createdAtUtc: '2026-08-20T10:00:00Z',
+            },
+          ],
+          createdAtUtc: '2026-08-20T09:00:00Z',
+          version: '9',
+        },
+      ],
+    });
+  });
 });
