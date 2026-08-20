@@ -1,0 +1,29 @@
+.invite-form {
+  margin-block-end: 20px;
+}
+
+td strong,
+td small,
+td a {
+  display: block;
+}
+
+td small {
+  color: var(--muted-text);
+  margin-block-start: 2px;
+}
+
+td a {
+  font-size: 0.78rem;
+  margin-block-start: 4px;
+}
+
+.visually-hidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}

@@ -23,15 +23,19 @@ readiness accurately reports PostgreSQL availability.
 
 Dependencies: decisions 1-3 and 12 in `DOMAIN-RULES.md`.
 
+Status: implemented 2026-08-20 for the approved "coach invites the first real client"
+vertical slice. Phase 2 must not start until Phase 1 is reviewed.
+
 - Record ADRs for tenant shape, identity reuse, time zone, privacy jurisdiction, and field
   ownership.
 - Complete account lifecycle: registration/invite-only policy, email verification, password
   reset, security stamp invalidation, lockout, session management, and platform block.
-- Complete tenant lifecycle and Owner/Coach/Client membership administration.
-- Build invitation drafts, email/WhatsApp delivery records, expiry, resend, revoke,
+- Create a workspace automatically for an independent coach, support workspace switching,
+  and persist configurable culture, time zone, currency, and week-start settings.
+- Build client invitation drafts, email delivery records, expiry, resend, revoke,
   acceptance, and existing-account linking.
 - Build client intake with coach/client field permissions, units, sensitive-data handling,
-  validation, photo metadata, and audit events.
+  validation, initial bodyweight persistence, coach-only notes, and field-level audit events.
 - Generate the Angular API client from versioned OpenAPI and map generated DTOs to view
   models.
 - Add PostgreSQL integration fixtures and cross-tenant denial tests for every route.
@@ -39,6 +43,10 @@ Dependencies: decisions 1-3 and 12 in `DOMAIN-RULES.md`.
 
 Exit: a coach can securely create a workspace, invite a new or existing user, complete the
 approved intake workflow, and prove that another tenant cannot read or mutate it.
+
+Explicitly deferred: organization staff invitations and membership administration,
+WhatsApp delivery, production media/profile photos, and a production transactional email
+adapter. Their boundaries exist, but they are not represented as finished Phase 1 behavior.
 
 ## Phase 2: Subscriptions, manual payments, and access
 

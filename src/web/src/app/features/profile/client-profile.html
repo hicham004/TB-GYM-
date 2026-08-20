@@ -1,0 +1,38 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow" i18n>Client account</p>
+    <h1 i18n>My profile</h1>
+    @if (profile(); as client) {
+      <p>{{ client.email }}</p>
+    }
+  </div>
+  @if (profile(); as client) {
+    <span
+      class="status-badge"
+      [class.success]="client.onboardingStatus === 'Completed'"
+      [class.warning]="client.onboardingStatus === 'InProgress'"
+    >
+      {{ onboardingStatusLabel(client.onboardingStatus) }}
+    </span>
+  }
+</section>
+
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="form-success" role="status">{{ notice() }}</p>
+}
+
+@if (loading()) {
+  <p class="loading-row" i18n>Loading your profile...</p>
+} @else if (profile(); as client) {
+  <section class="surface-section">
+    <app-client-intake-form
+      [profile]="client"
+      [busy]="busy()"
+      (saveIntake)="save($event)"
+      (completeOnboarding)="complete($event)"
+    />
+  </section>
+}

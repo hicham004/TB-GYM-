@@ -1,15 +1,22 @@
+using System.Globalization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Localization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using TB.Gym.Infrastructure.Application;
 using TB.Gym.Infrastructure.Health;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Infrastructure.Security;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Identity;
+using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
@@ -58,10 +65,13 @@ public static class DependencyInjection
                 options.Lockout.MaxFailedAccessAttempts = 5;
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
                 options.User.RequireUniqueEmail = true;
-                options.SignIn.RequireConfirmedEmail = !environment.IsDevelopment();
+                options.SignIn.RequireConfirmedEmail = true;
             })
             .AddEntityFrameworkStores<GymDbContext>()
             .AddDefaultTokenProviders();
+
+        services.Configure<SecurityStampValidatorOptions>(options =>
+            options.ValidationInterval = TimeSpan.Zero);
 
         services.ConfigureApplicationCookie(options =>
         {
@@ -108,6 +118,8 @@ public static class DependencyInjection
                     TenantRole.Owner,
                     TenantRole.Coach,
                     TenantRole.Client)));
+            options.AddPolicy(AuthorizationPolicies.TenantOwner, policy =>
+                policy.AddRequirements(new TenantRoleRequirement(TenantRole.Owner)));
             options.AddPolicy(AuthorizationPolicies.TenantCoach, policy =>
                 policy.AddRequirements(new TenantRoleRequirement(
                     TenantRole.Owner,
@@ -118,7 +130,35 @@ public static class DependencyInjection
 
         services.AddScoped<IAuthorizationHandler, TenantRoleAuthorizationHandler>();
         services.AddScoped<ITenantMembershipStore, TenantMembershipStore>();
-        services.AddScoped<IClientProfileRepository, ClientProfileRepository>();
+        services.AddScoped<IWorkspaceApplicationService, WorkspaceApplicationService>();
+        services.AddScoped<IAccountEmailSender, AccountEmailSender>();
+        services.AddScoped<IInvitationDelivery, CapturedInvitationDelivery>();
+        services.AddScoped<IInvitationApplicationService, InvitationApplicationService>();
+        services.AddScoped<IClientProfileApplicationService, ClientProfileApplicationService>();
+
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.AddFixedWindowLimiter(RateLimitPolicies.PublicAuthentication, limiter =>
+            {
+                limiter.PermitLimit = 30;
+                limiter.Window = TimeSpan.FromMinutes(1);
+                limiter.QueueLimit = 0;
+                limiter.AutoReplenishment = true;
+            });
+        });
+
+        var supportedCultures = new[]
+        {
+            CultureInfo.GetCultureInfo("en-LB"),
+            CultureInfo.GetCultureInfo("ar-LB"),
+        };
+        services.Configure<RequestLocalizationOptions>(options =>
+        {
+            options.DefaultRequestCulture = new RequestCulture("en-LB");
+            options.SupportedCultures = supportedCultures;
+            options.SupportedUICultures = supportedCultures;
+        });
 
         services.AddHealthChecks()
             .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])

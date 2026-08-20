@@ -1,6 +1,6 @@
 # TB Gym Architecture
 
-Status: foundation scaffold, 2026-08-15
+Status: Phase 1 complete, 2026-08-20
 
 ## 1. Architectural style
 
@@ -107,9 +107,16 @@ Additional rules:
 ## 5. Multi-tenancy
 
 The initial model is a shared database with a tenant discriminator. A tenant represents a
-coach's business/workspace. One global Identity user may have memberships in multiple
+logical coaching workspace, not necessarily a physical gym or company. A solo coach owns a
+workspace directly; the same workspace can later contain an Owner and multiple Coaches. No
+coach requires a parent gym. One global Identity user may have memberships in multiple
 tenants, with a separate tenant role in each. Platform administrator is a global role;
 Owner, Coach, and Client are tenant membership roles.
+
+A global identity may be linked to separate client profiles under multiple coaches. Those
+profiles and every coaching fact remain tenant-local; only credentials and basic account
+identity are global. See `docs/adr/0001-workspace-tenancy.md` and
+`docs/adr/0002-identity-and-invitations.md`.
 
 Request flow:
 
@@ -172,6 +179,9 @@ Persistence conventions:
 - PostgreSQL `xmin` is the initial optimistic concurrency token for mutable aggregates.
 - Money will use an exact decimal amount plus ISO currency; payments are append-only ledger
   entries rather than an overwritten amount.
+- Workspace defaults use an IANA time zone, culture, configurable week start, and ISO
+  currency. Initial Lebanon defaults are `Asia/Beirut`, `en-LB`, Monday, and `USD`; none are
+  global business constants.
 - Database check, unique, foreign-key, and exclusion constraints duplicate critical domain
   guards where possible.
 
@@ -199,10 +209,13 @@ The Angular 22 application is standalone and feature-oriented:
 - Angular's built-in XSRF integration is used;
 - forms display server validation but never replace it;
 - feature code does not calculate authoritative fitness or billing state.
+- English source text is marked for Angular extraction and layouts use logical CSS properties
+  so a later Arabic locale can provide RTL presentation without component rewrites.
 
-The scaffold has small typed transport models for its proof endpoints. Once Phase 1 contracts
-stabilize, CI should export OpenAPI and generate the Angular transport client. Generated DTOs
-must stay separate from Angular view models and backend domain entities.
+Phase 1 transport contracts are generated from the running API's OpenAPI document with
+`npm run api:generate` and checked in for deterministic Angular builds. The API client maps
+generated DTOs into stable Angular view models; generated files are never edited manually
+and remain separate from backend domain entities.
 
 ## 9. Realtime, jobs, and integrations
 
@@ -255,5 +268,7 @@ Scale in this order:
   ranges, exclusion constraints, case handling, and `xmin`.
 - Every production incident involving an invariant should produce a regression test.
 
-The current scaffold includes domain, architecture, API smoke, and Angular shell tests. Full
-PostgreSQL integration coverage begins with Phase 1.
+Phase 1 includes domain and architecture tests, API smoke tests, Angular store/transport
+tests, and a real PostgreSQL workflow test. The workflow creates isolated workspaces, accepts
+new- and existing-account invitations, completes intake, persists bodyweight, and proves a
+second tenant cannot read the first tenant's client profile.

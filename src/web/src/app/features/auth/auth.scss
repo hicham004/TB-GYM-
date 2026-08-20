@@ -1,0 +1,152 @@
+:host {
+  display: block;
+}
+
+.auth-layout {
+  align-items: start;
+  display: grid;
+  gap: clamp(36px, 8vw, 112px);
+  grid-template-columns: minmax(240px, 0.8fr) minmax(320px, 520px);
+  margin: 48px auto;
+  max-width: 1040px;
+  padding-inline: 18px;
+  width: 100%;
+}
+
+.auth-layout > * {
+  min-width: 0;
+}
+
+.auth-layout.wide {
+  grid-template-columns: minmax(220px, 0.6fr) minmax(440px, 680px);
+}
+
+.compact-layout {
+  max-width: 760px;
+}
+
+.auth-copy {
+  padding-block-start: 24px;
+}
+
+.auth-copy h1 {
+  font-size: 42px;
+  line-height: 1.1;
+  margin: 8px 0 18px;
+}
+
+.auth-copy p:last-child {
+  color: var(--muted-text);
+  font-size: 17px;
+  line-height: 1.65;
+  margin: 0;
+}
+
+.auth-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  display: grid;
+  gap: 18px;
+  padding: 30px;
+}
+
+.auth-form form {
+  display: grid;
+  gap: 18px;
+}
+
+.success-state h2,
+.auth-form h2 {
+  margin: 0;
+}
+
+fieldset {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 4px 0 0;
+  padding: 20px 0 0;
+}
+
+legend {
+  font-size: 14px;
+  font-weight: 700;
+  padding-inline-end: 12px;
+}
+
+.two-column-fields,
+.three-column-fields {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.three-column-fields {
+  grid-template-columns: 1.3fr 1fr 0.65fr;
+}
+
+.form-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.between {
+  justify-content: space-between;
+}
+
+.check-field {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.check-field input[type='checkbox'] {
+  flex: 0 0 auto;
+  height: 16px;
+  margin: 0;
+  min-height: 0;
+  padding: 0;
+  width: 16px;
+}
+
+.check-field > span {
+  display: inline;
+  margin: 0;
+}
+
+.form-footer {
+  color: var(--muted-text);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin: 2px 0 0;
+}
+
+@media (max-width: 760px) {
+  .auth-layout,
+  .auth-layout.wide {
+    gap: 24px;
+    grid-template-columns: 1fr;
+    margin: 12px auto 36px;
+  }
+
+  .auth-copy {
+    padding-block-start: 0;
+  }
+
+  .auth-copy h1 {
+    font-size: 34px;
+  }
+
+  .auth-form {
+    padding: 22px;
+  }
+
+  .two-column-fields,
+  .three-column-fields {
+    grid-template-columns: 1fr;
+  }
+}

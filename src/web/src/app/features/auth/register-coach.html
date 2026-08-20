@@ -1,0 +1,84 @@
+<section class="auth-layout wide">
+  <div class="auth-copy">
+    <p class="eyebrow" i18n>Independent coaching</p>
+    <h1 i18n>Create your workspace</h1>
+    <p i18n>Your workspace can begin as a solo practice and grow with your coaching business.</p>
+  </div>
+
+  @if (registration(); as result) {
+    <div class="auth-form success-state" role="status">
+      <h2 i18n>Check your email</h2>
+      <p i18n>We queued a confirmation link for {{ result.email }}.</p>
+      @if (result.developmentConfirmationUrl) {
+        <a class="primary-button" [href]="result.developmentConfirmationUrl" i18n
+          >Open development confirmation</a
+        >
+      }
+      <a routerLink="/auth/sign-in" i18n>Return to sign in</a>
+    </div>
+  } @else {
+    <form class="auth-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="two-column-fields">
+        <label>
+          <span i18n>Your name</span>
+          <input type="text" formControlName="displayName" autocomplete="name" />
+        </label>
+        <label>
+          <span i18n>Workspace name</span>
+          <input type="text" formControlName="workspaceName" autocomplete="organization" />
+        </label>
+      </div>
+      <label>
+        <span i18n>Email</span>
+        <input type="email" formControlName="email" autocomplete="email" />
+      </label>
+      <div class="two-column-fields">
+        <label>
+          <span i18n>Password</span>
+          <input type="password" formControlName="password" autocomplete="new-password" />
+          <small i18n>At least 12 characters with upper, lower, number, and symbol.</small>
+        </label>
+        <label>
+          <span i18n>Confirm password</span>
+          <input type="password" formControlName="confirmPassword" autocomplete="new-password" />
+        </label>
+      </div>
+
+      <fieldset>
+        <legend i18n>Workspace defaults</legend>
+        <div class="three-column-fields">
+          <label>
+            <span i18n>Time zone</span>
+            <input type="text" formControlName="timeZoneId" />
+          </label>
+          <label>
+            <span i18n>Language and region</span>
+            <select formControlName="defaultCulture">
+              <option value="en-LB" i18n>English (Lebanon)</option>
+            </select>
+          </label>
+          <label>
+            <span i18n>Currency</span>
+            <input type="text" maxlength="3" formControlName="defaultCurrencyCode" />
+          </label>
+        </div>
+      </fieldset>
+
+      @if (error()) {
+        <p class="form-error" role="alert">{{ error() }}</p>
+      }
+
+      <button class="primary-button" type="submit" [disabled]="submitting()">
+        @if (submitting()) {
+          <span i18n>Creating workspace...</span>
+        } @else {
+          <span i18n>Create coach account</span>
+        }
+      </button>
+      <p class="form-footer">
+        <span i18n>Already registered?</span>
+        <a routerLink="/auth/sign-in" i18n>Sign in</a>
+      </p>
+    </form>
+  }
+</section>

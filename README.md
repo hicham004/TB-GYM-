@@ -6,8 +6,8 @@ application is preserved under `base44/` and is reference material only.
 
 ## Start with Docker
 
-Docker is the shortest complete path because it starts PostgreSQL, applies the initial EF
-migration, seeds a development owner, starts the API, and serves Angular through Nginx.
+Docker is the shortest complete path because it starts PostgreSQL, applies the EF
+migrations, seeds a development owner, starts the API, and serves Angular through Nginx.
 
 ```powershell
 Copy-Item .env.example .env
@@ -20,6 +20,15 @@ development OpenAPI document is `/openapi/v1.json`.
 
 The example development login is `admin@tbgym.local` / `ChangeMe!12345`. Change it in `.env`.
 These defaults are for local development only.
+
+You can also register a new coach from the sign-in screen. A solo coach automatically owns
+a new workspace. Development confirmation, reset, and invitation responses include a local
+action link so the complete flow can be exercised without an external email account. A
+transactional email provider must be configured before a production launch.
+
+The container database is exposed on host port `5433` by default, leaving the conventional
+`5432` port available for an existing native PostgreSQL installation. Services inside the
+Compose network still use PostgreSQL port `5432`.
 
 PostgreSQL 18 changed the official image data mount to `/var/lib/postgresql`; `compose.yaml`
 uses that path so the named volume persists correctly.
@@ -47,6 +56,14 @@ and development seeding are disabled by default outside the Docker environment.
 This restores and builds the .NET solution, runs backend tests, checks Angular formatting and
 lint, builds Angular, runs Vitest, and audits npm dependencies.
 
+When an API contract changes, run the development API and regenerate the checked-in Angular
+transport contracts:
+
+```powershell
+Set-Location src\web
+npm run api:generate
+```
+
 ## Architecture
 
 - [Architecture](docs/ARCHITECTURE.md)
@@ -55,7 +72,8 @@ lint, builds Angular, runs Vitest, and audits npm dependencies.
 - [Permanent coding-agent rules](AGENTS.md)
 - [Legacy application notes](base44/LEGACY.md)
 
-The current implementation is a foundation proof, not the 13-feature finished product. Its
-small client endpoint demonstrates Angular to authenticated API to tenant-filtered EF
-persistence; feature delivery follows the roadmap after the listed product decisions are
-approved.
+Phase 1 implements the first real vertical slice: coach registration, automatic solo
+workspace ownership, email confirmation and account recovery, workspace switching and
+settings, secure client invitations, new/existing-account acceptance, tenant-local client
+intake, coach-only notes, and initial bodyweight persistence. It is not the complete
+13-feature product; subscriptions and access control begin in Phase 2 only after review.

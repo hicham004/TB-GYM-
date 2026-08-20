@@ -1,81 +1,65 @@
 <section class="page-heading">
   <div>
-    <p class="eyebrow">Coach workspace</p>
-    <h1>Clients</h1>
-    <p>Tenant-isolated client profiles.</p>
+    <p class="eyebrow" i18n>Coach workspace</p>
+    <h1 i18n>Clients</h1>
+    <p i18n>Accepted client profiles in the active workspace.</p>
   </div>
-  @if (auth.user() && tenants.selectedTenantId()) {
-    <button type="button" class="primary-button" (click)="showCreate.set(!showCreate())">
-      {{ showCreate() ? 'Close' : 'Add client' }}
-    </button>
-  }
+  <a class="primary-button" routerLink="/invitations" i18n>Invite client</a>
 </section>
 
-@if (!auth.user()) {
-  <section class="empty-state">
-    <h2>Session required</h2>
-    <p>Sign in from Overview to access a coach workspace.</p>
-  </section>
-} @else if (!tenants.selectedTenantId()) {
-  <section class="empty-state">
-    <h2>No active workspace</h2>
-    <p>This account has no active tenant membership.</p>
-  </section>
-} @else {
-  @if (showCreate()) {
-    <form class="create-form" [formGroup]="clientForm" (ngSubmit)="createClient()" novalidate>
-      <label>
-        <span>First name</span>
-        <input type="text" formControlName="firstName" autocomplete="given-name" />
-      </label>
-      <label>
-        <span>Last name</span>
-        <input type="text" formControlName="lastName" autocomplete="family-name" />
-      </label>
-      <label>
-        <span>Email</span>
-        <input type="email" formControlName="email" autocomplete="email" />
-      </label>
-      <label>
-        <span>Date of birth</span>
-        <input type="date" formControlName="birthDate" />
-      </label>
-      <button type="submit" class="primary-button" [disabled]="loading()">
-        {{ loading() ? 'Saving...' : 'Create profile' }}
-      </button>
-    </form>
-  }
-
-  @if (error()) {
-    <p class="error-message">{{ error() }}</p>
-  }
-
-  <section class="client-list" aria-live="polite">
-    <div class="list-heading">
-      <span>Client</span>
-      <span>Email</span>
-      <span>Date of birth</span>
-      <span>Status</span>
-    </div>
-
-    @if (loading() && clients().length === 0) {
-      <p class="loading-row">Loading clients...</p>
-    } @else {
-      @for (client of clients(); track client.id) {
-        <div class="client-row">
-          <strong>{{ client.firstName }} {{ client.lastName }}</strong>
-          <span>{{ client.email }}</span>
-          <span>{{ client.birthDate ?? 'Not set' }}</span>
-          <span [class.blocked]="client.isCoachBlocked">
-            {{ client.isCoachBlocked ? 'Blocked' : 'Active' }}
-          </span>
-        </div>
-      } @empty {
-        <div class="empty-state inline">
-          <h2>No clients yet</h2>
-          <p>Create the first tenant-owned client profile.</p>
-        </div>
-      }
-    }
-  </section>
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
 }
+
+<section class="surface-section">
+  @if (loading()) {
+    <p class="loading-row" i18n>Loading clients...</p>
+  } @else if (clients().length === 0) {
+    <div class="empty-state">
+      <h2 i18n>No accepted clients yet</h2>
+      <p i18n>Send an invitation to connect the first client account.</p>
+    </div>
+  } @else {
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col" i18n>Client</th>
+            <th scope="col" i18n>Phone</th>
+            <th scope="col" i18n>Onboarding</th>
+            <th scope="col" i18n>Access</th>
+            <th scope="col"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (client of clients(); track client.id) {
+            <tr>
+              <td>
+                <strong>{{ client.firstName }} {{ client.lastName }}</strong>
+                <small>{{ client.email }}</small>
+              </td>
+              <td>{{ client.phoneNumber || '-' }}</td>
+              <td>
+                <span
+                  class="status-badge"
+                  [class.success]="client.onboardingStatus === 'Completed'"
+                  [class.warning]="client.onboardingStatus === 'InProgress'"
+                >
+                  {{ onboardingStatusLabel(client.onboardingStatus) }}
+                </span>
+              </td>
+              <td>
+                @if (client.isCoachBlocked) {
+                  <span class="status-badge" i18n>Blocked</span>
+                } @else {
+                  <span class="status-badge success" i18n>Active</span>
+                }
+              </td>
+              <td><a [routerLink]="[client.id]" i18n>Open profile</a></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

@@ -25,6 +25,9 @@
   end in `Async`. Angular files use the repository's concise Angular 22 naming style.
 - Prefer domain names from `DOMAIN-RULES.md`; do not reintroduce ambiguous `BMR` for TDEE or
   calorie target.
+- Never edit `src/web/src/app/core/api/generated/` manually. Run `npm run api:generate`
+  against the development OpenAPI endpoint and map generated DTOs into owned Angular view
+  models.
 - Use framework features before adding packages. Explain and document each new dependency.
 - Keep provider SDK types behind owned interfaces. AI/provider output is untrusted input.
 - Use UTC instants, `DateOnly` for calendar dates, explicit tenant time zones, half-open
@@ -88,4 +91,3 @@ dotnet ef migrations add <Name> `
 
 Update the three docs when a decision, boundary, invariant, or phase changes. A working UI is
 not evidence that business state is correct.
-

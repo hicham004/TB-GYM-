@@ -1,40 +1,73 @@
 <header class="topbar">
-  <a class="brand" routerLink="/" aria-label="TB Gym home">
-    <span class="brand-mark">TB</span>
+  <a class="brand" routerLink="/" aria-label="TB Gym home" i18n-aria-label>
+    <span class="brand-mark" aria-hidden="true">TB</span>
     <span>TB Gym</span>
   </a>
 
-  <nav aria-label="Primary navigation">
-    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"
-      >Overview</a
+  @if (auth.user()) {
+    <button
+      class="menu-button"
+      type="button"
+      [attr.aria-expanded]="menuOpen()"
+      aria-controls="primary-navigation"
+      aria-label="Toggle navigation"
+      i18n-aria-label
+      (click)="menuOpen.set(!menuOpen())"
     >
-    @if (auth.user()) {
-      <a routerLink="/clients" routerLinkActive="active">Clients</a>
-    }
-  </nav>
+      <span aria-hidden="true">&#9776;</span>
+    </button>
 
-  <div class="session-controls">
-    @if (auth.user()) {
-      @if (tenants.memberships().length > 0) {
-        <label class="tenant-picker">
-          <span>Workspace</span>
-          <select [value]="tenants.selectedTenantId() ?? ''" (change)="selectTenant($event)">
-            @for (membership of tenants.memberships(); track membership.tenantId) {
-              <option [value]="membership.tenantId">
-                {{ membership.tenantName }} ({{ membership.role }})
-              </option>
-            }
-          </select>
-        </label>
-      }
-      <span class="user-name">{{ auth.user()?.displayName }}</span>
-      <button class="quiet-button" type="button" (click)="logout()">Sign out</button>
-    } @else if (auth.loading()) {
-      <span class="muted">Checking session...</span>
-    }
-  </div>
+    <div id="primary-navigation" class="authenticated-nav" [class.open]="menuOpen()">
+      <nav aria-label="Primary navigation" i18n-aria-label>
+        <a
+          routerLink="/"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: true }"
+          i18n
+        >
+          Dashboard
+        </a>
+        @if (tenants.canCoach()) {
+          <a routerLink="/clients" routerLinkActive="active" i18n>Clients</a>
+          <a routerLink="/invitations" routerLinkActive="active" i18n>Invitations</a>
+        }
+        @if (tenants.isClient()) {
+          <a routerLink="/profile" routerLinkActive="active" i18n>My profile</a>
+        }
+        @if (tenants.isOwner()) {
+          <a routerLink="/workspace" routerLinkActive="active" i18n>Workspace</a>
+        }
+      </nav>
+
+      <div class="session-controls">
+        @if (tenants.memberships().length > 0) {
+          <label class="workspace-picker">
+            <span i18n>Workspace</span>
+            <select [value]="tenants.selectedTenantId() ?? ''" (change)="selectTenant($event)">
+              @for (membership of tenants.memberships(); track membership.tenantId) {
+                <option [value]="membership.tenantId">
+                  {{ membership.tenantName }} ({{ roleLabel(membership.role) }})
+                </option>
+              }
+            </select>
+          </label>
+        }
+        <a class="account-link" routerLink="/account/security" routerLinkActive="active">
+          {{ auth.user()?.displayName }}
+        </a>
+        <button class="quiet-button" type="button" (click)="logout()" i18n>Sign out</button>
+      </div>
+    </div>
+  } @else if (!auth.loading()) {
+    <nav class="public-nav" aria-label="Account navigation" i18n-aria-label>
+      <a routerLink="/auth/sign-in" routerLinkActive="active" i18n>Sign in</a>
+      <a class="primary-button compact" routerLink="/auth/register" i18n>Coach registration</a>
+    </nav>
+  } @else {
+    <span class="session-loading" i18n>Checking session...</span>
+  }
 </header>
 
-<main>
+<main [class.app-main]="auth.user()">
   <router-outlet />
 </main>

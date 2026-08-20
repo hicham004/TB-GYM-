@@ -1,4 +1,4 @@
-import { inject, Injectable, signal } from '@angular/core';
+import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../api/api-client';
 import { TenantMembership } from '../api/api.models';
@@ -15,16 +15,26 @@ export class TenantStore {
 
   readonly memberships = this.membershipsState.asReadonly();
   readonly selectedTenantId = this.selectedTenantIdState.asReadonly();
+  readonly selectedMembership = computed(() =>
+    this.membershipsState().find(
+      (membership) => membership.tenantId === this.selectedTenantIdState(),
+    ),
+  );
+  readonly canCoach = computed(() => {
+    const role = this.selectedMembership()?.role;
+    return role === 'Owner' || role === 'Coach';
+  });
+  readonly isOwner = computed(() => this.selectedMembership()?.role === 'Owner');
+  readonly isClient = computed(() => this.selectedMembership()?.role === 'Client');
 
-  async load(): Promise<void> {
+  async load(preferredTenantId?: string): Promise<void> {
     const memberships = await firstValueFrom(this.api.getTenants());
     this.membershipsState.set(memberships);
 
-    const current = this.selectedTenantIdState();
-    const selected = memberships.some((membership) => membership.tenantId === current)
-      ? current
+    const candidate = preferredTenantId ?? this.selectedTenantIdState();
+    const selected = memberships.some((membership) => membership.tenantId === candidate)
+      ? candidate
       : (memberships[0]?.tenantId ?? null);
-
     this.select(selected);
   }
 

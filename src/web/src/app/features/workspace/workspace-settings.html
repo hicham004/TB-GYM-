@@ -1,0 +1,63 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow" i18n>Owner settings</p>
+    <h1 i18n>Workspace</h1>
+    <p i18n>Regional defaults belong to this coaching workspace.</p>
+  </div>
+</section>
+
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="form-success" role="status">{{ notice() }}</p>
+}
+
+@if (loading()) {
+  <p class="loading-row" i18n>Loading workspace settings...</p>
+} @else {
+  <form class="surface-section settings-form" [formGroup]="form" (ngSubmit)="save()" novalidate>
+    <div class="form-grid">
+      <label>
+        <span i18n>Workspace name</span>
+        <input type="text" formControlName="name" />
+      </label>
+      <label>
+        <span i18n>Workspace identifier</span>
+        <input type="text" formControlName="slug" readonly />
+      </label>
+      <label>
+        <span i18n>Time zone</span>
+        <input type="text" formControlName="timeZoneId" />
+      </label>
+      <label>
+        <span i18n>Default language and region</span>
+        <select formControlName="defaultCulture">
+          <option value="en-LB" i18n>English (Lebanon)</option>
+          <option value="ar-LB" i18n>Arabic (Lebanon)</option>
+        </select>
+      </label>
+      <label>
+        <span i18n>Default currency</span>
+        <input type="text" maxlength="3" formControlName="defaultCurrencyCode" />
+      </label>
+      <label>
+        <span i18n>Week starts on</span>
+        <select formControlName="weekStartsOn">
+          <option value="Monday" i18n>Monday</option>
+          <option value="Sunday" i18n>Sunday</option>
+          <option value="Saturday" i18n>Saturday</option>
+        </select>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button class="primary-button" type="submit" [disabled]="saving()">
+        @if (saving()) {
+          <span i18n>Saving...</span>
+        } @else {
+          <span i18n>Save settings</span>
+        }
+      </button>
+    </div>
+  </form>
+}

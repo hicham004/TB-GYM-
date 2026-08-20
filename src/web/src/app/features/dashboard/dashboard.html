@@ -1,0 +1,52 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow" i18n>Active workspace</p>
+    <h1>{{ tenants.selectedMembership()?.tenantName }}</h1>
+    <p i18n>Hello, {{ auth.user()?.displayName }}.</p>
+  </div>
+  <span class="status-badge">{{ roleLabel(tenants.selectedMembership()?.role) }}</span>
+</section>
+
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+
+@if (tenants.canCoach()) {
+  <section class="metric-grid" aria-label="Workspace summary" i18n-aria-label>
+    <a class="metric" routerLink="/clients">
+      <span i18n>Clients</span>
+      <strong>{{ loading() ? '-' : clientCount() }}</strong>
+      <small i18n>Accepted client profiles</small>
+    </a>
+    <a class="metric" routerLink="/invitations">
+      <span i18n>Pending invitations</span>
+      <strong>{{ loading() ? '-' : pendingInvitationCount() }}</strong>
+      <small i18n>Awaiting client acceptance</small>
+    </a>
+  </section>
+
+  <section class="next-action">
+    <div>
+      <h2 i18n>Invite your next client</h2>
+      <p i18n>The client creates an account from a secure, expiring invitation.</p>
+    </div>
+    <a class="primary-button" routerLink="/invitations" i18n>Manage invitations</a>
+  </section>
+} @else if (tenants.isClient()) {
+  <section class="next-action">
+    <div>
+      <h2 i18n>Client onboarding</h2>
+      @if (onboardingStatus() === 'Completed') {
+        <p i18n>Your intake profile is complete.</p>
+      } @else {
+        <p i18n>Complete your intake details and initial bodyweight.</p>
+      }
+    </div>
+    <a class="primary-button" routerLink="/profile" i18n>Open my profile</a>
+  </section>
+} @else {
+  <section class="empty-state">
+    <h2 i18n>No active workspace role</h2>
+    <p i18n>Select another workspace to continue.</p>
+  </section>
+}

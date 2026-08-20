@@ -1,0 +1,22 @@
+<section class="auth-layout compact-layout">
+  <div class="auth-copy">
+    <p class="eyebrow" i18n>Email verification</p>
+    <h1 i18n>Confirm your account</h1>
+  </div>
+
+  <div class="auth-form" aria-live="polite">
+    @switch (state()) {
+      @case ('working') {
+        <p i18n>Confirming your email...</p>
+      }
+      @case ('success') {
+        <h2 i18n>Email confirmed</h2>
+        <a class="primary-button" routerLink="/auth/sign-in" i18n>Continue to sign in</a>
+      }
+      @case ('error') {
+        <p class="form-error">{{ error() }}</p>
+        <a routerLink="/auth/sign-in" i18n>Return to sign in</a>
+      }
+    }
+  </div>
+</section>

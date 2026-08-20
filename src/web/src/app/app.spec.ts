@@ -26,6 +26,10 @@ describe('App', () => {
           useValue: {
             memberships: signal([]),
             selectedTenantId: signal(null),
+            selectedMembership: signal(undefined),
+            canCoach: signal(false),
+            isOwner: signal(false),
+            isClient: signal(false),
             select: vi.fn(),
           },
         },

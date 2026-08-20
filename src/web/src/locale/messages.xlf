@@ -1,0 +1,1923 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file source-language="en-LB" datatype="plaintext" original="ng2.template">
+    <body>
+      <trans-unit id="747312051867087674" datatype="html">
+        <source>TB Gym home</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">2</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8255834268347738766" datatype="html">
+        <source>Toggle navigation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">13,14</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7636378792229629378" datatype="html">
+        <source>Primary navigation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1137318306951557633" datatype="html">
+        <source> Dashboard </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">28,29</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5910845130937645353" datatype="html">
+        <source>Clients</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">31,32</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">17,18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7992244993643023209" datatype="html">
+        <source>Invitations</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">32,33</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8258325324649507024" datatype="html">
+        <source>My profile</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">35,36</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/client-profile.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2244471832629453998" datatype="html">
+        <source>Workspace</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">38,39</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">45,46</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2949848596707725099" datatype="html">
+        <source>Sign out</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">58,59</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3233478152769805266" datatype="html">
+        <source>Account navigation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">62</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5207635742003539443" datatype="html">
+        <source>Sign in</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">63,64</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">80,81</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.html</context>
+          <context context-type="linenumber">13,14</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">33,34</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">35,36</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4008120440042330123" datatype="html">
+        <source>Coach registration</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">64,65</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4888930727562781134" datatype="html">
+        <source>Checking session...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">67,68</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2528064290555018471" datatype="html">
+        <source>Client invitation | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.routes.ts</context>
+          <context context-type="linenumber">18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1817486295163877952" datatype="html">
+        <source>Dashboard | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.routes.ts</context>
+          <context context-type="linenumber">25</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4437575447872774885" datatype="html">
+        <source>Invitations | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.routes.ts</context>
+          <context context-type="linenumber">38</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4506798355054557482" datatype="html">
+        <source>My profile | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.routes.ts</context>
+          <context context-type="linenumber">45</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1545882748786007291" datatype="html">
+        <source>Workspace settings | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.routes.ts</context>
+          <context context-type="linenumber">52</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4639506285628516620" datatype="html">
+        <source>Account security | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.routes.ts</context>
+          <context context-type="linenumber">59</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3715596725146409911" datatype="html">
+        <source>Owner</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
+          <context context-type="linenumber">6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1480214864546334131" datatype="html">
+        <source>Coach</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
+          <context context-type="linenumber">8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3014142150963657456" datatype="html">
+        <source>Client</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
+          <context context-type="linenumber">10</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">27,28</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">17,18</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">80,81</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2827276519893025325" datatype="html">
+        <source>Not started</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
+          <context context-type="linenumber">19</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3307214558906712688" datatype="html">
+        <source>In progress</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
+          <context context-type="linenumber">21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1161299114153631702" datatype="html">
+        <source>Completed</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
+          <context context-type="linenumber">23</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4416413576346763682" datatype="html">
+        <source>Pending</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
+          <context context-type="linenumber">30</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7317290694079257887" datatype="html">
+        <source>Accepted</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
+          <context context-type="linenumber">32</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7096440230985171865" datatype="html">
+        <source>Revoked</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
+          <context context-type="linenumber">34</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="464749780222721589" datatype="html">
+        <source>Expired</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
+          <context context-type="linenumber">36</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4086606389696938932" datatype="html">
+        <source>Account</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8878700331247603166" datatype="html">
+        <source>Security</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2032592671383295656" datatype="html">
+        <source>Signed in as <x id="INTERPOLATION" equiv-text="{{ auth.user()?.email }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">5,7</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6309828574111583895" datatype="html">
+        <source>Change password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">18,19</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">36,37</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5340498030552368470" datatype="html">
+        <source>Current password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">23,24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3588415639242079458" datatype="html">
+        <source>New password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">27,28</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.html</context>
+          <context context-type="linenumber">17,18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8656126574213649581" datatype="html">
+        <source>Confirm new password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">31,32</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.html</context>
+          <context context-type="linenumber">21,22</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="536043666315773972" datatype="html">
+        <source>Active sessions</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">44,45</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2389719197504359502" datatype="html">
+        <source>Sign out this account on every device, including this one.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">45,46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2348561208805152493" datatype="html">
+        <source> Sign out everywhere </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.html</context>
+          <context context-type="linenumber">49,50</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1543538730036692975" datatype="html">
+        <source>Passwords do not match.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.ts</context>
+          <context context-type="linenumber">39</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.ts</context>
+          <context context-type="linenumber">43</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.ts</context>
+          <context context-type="linenumber">40</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.ts</context>
+          <context context-type="linenumber">86</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8666615009060969246" datatype="html">
+        <source>Password changed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.ts</context>
+          <context context-type="linenumber">49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8634535292987263575" datatype="html">
+        <source>The password could not be changed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.ts</context>
+          <context context-type="linenumber">51</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6938443782443065715" datatype="html">
+        <source>Sessions could not be revoked.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/account/account-security.ts</context>
+          <context context-type="linenumber">66</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5283077136634318461" datatype="html">
+        <source>Sign in | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6743582327094160940" datatype="html">
+        <source>Create coach account | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6489777575205315837" datatype="html">
+        <source>Forgot password | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">16</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7951642783348856174" datatype="html">
+        <source>Reset password | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2731323862111275800" datatype="html">
+        <source>Confirm email | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/auth.routes.ts</context>
+          <context context-type="linenumber">26</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2012914451599952796" datatype="html">
+        <source>Email verification</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/confirm-email.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8693902080738720202" datatype="html">
+        <source>Confirm your account</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/confirm-email.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1786332948374766127" datatype="html">
+        <source>Confirming your email...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/confirm-email.html</context>
+          <context context-type="linenumber">10,11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3955007016208635928" datatype="html">
+        <source>Email confirmed</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/confirm-email.html</context>
+          <context context-type="linenumber">13,14</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5608884161811363589" datatype="html">
+        <source>Continue to sign in</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/confirm-email.html</context>
+          <context context-type="linenumber">14,15</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6340970481322850527" datatype="html">
+        <source>Return to sign in</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/confirm-email.html</context>
+          <context context-type="linenumber">18,19</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/forgot-password.html</context>
+          <context context-type="linenumber">17,18</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">17,18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6525506952917883121" datatype="html">
+        <source>This confirmation link is incomplete.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/confirm-email.ts</context>
+          <context context-type="linenumber">31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="477189909002562605" datatype="html">
+        <source>This confirmation link is invalid or expired.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/confirm-email.ts</context>
+          <context context-type="linenumber">42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4322635044366744724" datatype="html">
+        <source>Account recovery</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/forgot-password.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4371680625121499898" datatype="html">
+        <source>Reset your password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/forgot-password.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1726268523478709492" datatype="html">
+        <source>Enter the email connected to your TB Gym account.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/forgot-password.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="608914549508618385" datatype="html">
+        <source>Check your email</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/forgot-password.html</context>
+          <context context-type="linenumber">10,11</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">10,11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6693151021874511380" datatype="html">
+        <source>Open development reset</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/forgot-password.html</context>
+          <context context-type="linenumber">14,15</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4768749765465246664" datatype="html">
+        <source>Email</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/forgot-password.html</context>
+          <context context-type="linenumber">21,22</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">32,33</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">10,11</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">21,22</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">31,32</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1118027788072351320" datatype="html">
+        <source>Sending...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/forgot-password.html</context>
+          <context context-type="linenumber">29,30</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">46,47</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5111842031822965750" datatype="html">
+        <source>Send reset link</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/forgot-password.html</context>
+          <context context-type="linenumber">31,32</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5880797122590901587" datatype="html">
+        <source>The reset request could not be sent.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/forgot-password.ts</context>
+          <context context-type="linenumber">40</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7649007792114679720" datatype="html">
+        <source>Independent coaching</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3526008509359402755" datatype="html">
+        <source>Create your workspace</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">39,40</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6724924442549125285" datatype="html">
+        <source>Your workspace can begin as a solo practice and grow with your coaching business.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7695572480439699667" datatype="html">
+        <source>We queued a confirmation link for <x id="INTERPOLATION" equiv-text="{{ result.email }}"/>.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">11,12</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3292268096462368280" datatype="html">
+        <source>Open development confirmation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">14,15</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8203367621031610680" datatype="html">
+        <source>Your name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">23,24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4786271583797086407" datatype="html">
+        <source>Workspace name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">27,28</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">22,23</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1431416938026210429" datatype="html">
+        <source>Password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">37,38</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">14,15</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">66,67</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5347138836194682072" datatype="html">
+        <source>At least 12 characters with upper, lower, number, and symbol.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">39,40</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">68,69</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3782563238994348625" datatype="html">
+        <source>Confirm password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">42,43</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">71,72</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3435864796418567667" datatype="html">
+        <source>Workspace defaults</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">48,49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4872987153696118205" datatype="html">
+        <source>Time zone</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">51,52</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">30,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7727240616027004928" datatype="html">
+        <source>Language and region</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">55,56</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7384009132499982101" datatype="html">
+        <source>English (Lebanon)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">57,58</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">36,37</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4327471061205783634" datatype="html">
+        <source>Currency</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">61,62</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1367912003314119412" datatype="html">
+        <source>Creating workspace...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">73,74</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6003424661346878858" datatype="html">
+        <source>Create coach account</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">75,76</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4960241331715335287" datatype="html">
+        <source>Already registered?</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
+          <context context-type="linenumber">79,80</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7883922813488572210" datatype="html">
+        <source>Your coach account could not be created.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/register-coach.ts</context>
+          <context context-type="linenumber">66</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4200328509857455180" datatype="html">
+        <source>Choose a new password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7156827908308569449" datatype="html">
+        <source>Resetting your password signs out existing sessions.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2789055719330193926" datatype="html">
+        <source>This reset link is incomplete.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.html</context>
+          <context context-type="linenumber">10,11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5800187103306660757" datatype="html">
+        <source>Password updated</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.html</context>
+          <context context-type="linenumber">12,13</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3155504588637566135" datatype="html">
+        <source>Updating...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.html</context>
+          <context context-type="linenumber">29,30</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="102408375548589662" datatype="html">
+        <source>Update password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.html</context>
+          <context context-type="linenumber">31,32</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5315072372901818791" datatype="html">
+        <source>The reset link is invalid or expired.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/reset-password.ts</context>
+          <context context-type="linenumber">57</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8083922153245183732" datatype="html">
+        <source>Coach and client access</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4200317694838753109" datatype="html">
+        <source>Welcome back</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7705857181828703642" datatype="html">
+        <source>Sign in to your coaching workspace.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6931016988830314039" datatype="html">
+        <source>Keep me signed in</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">20,21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2727496946419791472" datatype="html">
+        <source>Forgot password?</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">22,23</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1858953469563036586" datatype="html">
+        <source>Signing in...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">31,32</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2708926920864575737" datatype="html">
+        <source>Independent coach?</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.html</context>
+          <context context-type="linenumber">38,39</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="24026912849820950" datatype="html">
+        <source>Confirm your email before signing in.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.ts</context>
+          <context context-type="linenumber">47</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6586656662938056988" datatype="html">
+        <source>Email or password is incorrect.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/auth/sign-in.ts</context>
+          <context context-type="linenumber">48</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1261163204741839387" datatype="html">
+        <source>Back to clients</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6285448190149901985" datatype="html">
+        <source>Client profile</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
+          <context context-type="linenumber">8,9</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7291391227032568691" datatype="html">
+        <source>Loading client profile...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
+          <context context-type="linenumber">30,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7545722986948994898" datatype="html">
+        <source>Client intake</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
+          <context context-type="linenumber">35,36</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2778245965110195175" datatype="html">
+        <source>Contact, training, nutrition, and health details.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
+          <context context-type="linenumber">36,37</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3178819533620462882" datatype="html">
+        <source>Coach-only notes</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
+          <context context-type="linenumber">50,51</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4037370659332383082" datatype="html">
+        <source>These notes are not exposed through the client profile API.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
+          <context context-type="linenumber">51,52</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8104421162933956065" datatype="html">
+        <source>Notes</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
+          <context context-type="linenumber">56,57</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8406648699226019403" datatype="html">
+        <source>Save notes</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
+          <context context-type="linenumber">60,61</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1775274146380056262" datatype="html">
+        <source>Client intake saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
+          <context context-type="linenumber">56</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8381653381385786356" datatype="html">
+        <source>Client onboarding completed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
+          <context context-type="linenumber">63</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="166203247581475534" datatype="html">
+        <source>Coach notes saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
+          <context context-type="linenumber">80</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7713092832151105630" datatype="html">
+        <source>The client profile could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
+          <context context-type="linenumber">91</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4885091206165415192" datatype="html">
+        <source>The client profile could not be saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
+          <context context-type="linenumber">108</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5489523001763972004" datatype="html">
+        <source>Contact and measurements</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5342432350421167093" datatype="html">
+        <source>First name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">6,7</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">23,24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3586674587150281199" datatype="html">
+        <source>Last name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">10,11</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">27,28</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8121141462865337916" datatype="html">
+        <source>Phone number</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">14,15</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">35,36</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3179148736830644140" datatype="html">
+        <source>Date of birth</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">18,19</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">39,40</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3033623772164647792" datatype="html">
+        <source>Height</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">22,23</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8954035649238734396" datatype="html">
+        <source>Height unit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">26,27</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8413637818210967474" datatype="html">
+        <source>Select unit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">28,29</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9149273497839397487" datatype="html">
+        <source>Centimeters</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">29,30</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6737958027856898996" datatype="html">
+        <source>Inches</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">30,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8303759397871558516" datatype="html">
+        <source>Work type</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">34,35</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2368030893334311924" datatype="html">
+        <source>Average daily steps</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">38,39</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3812899390861785628" datatype="html">
+        <source>Training and nutrition</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">45,46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4103456400514703198" datatype="html">
+        <source>Goals</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">48,49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6888123003759573875" datatype="html">
+        <source>Training background</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">52,53</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7675269481226775452" datatype="html">
+        <source>Food preferences</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">56,57</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1271849981730346775" datatype="html">
+        <source>Food aversions</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">60,61</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9166520990811790196" datatype="html">
+        <source>Health information</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">67,68</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1908011460846775182" datatype="html">
+        <source>Allergies</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">70,71</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5790418513312898248" datatype="html">
+        <source>Medications</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">74,75</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4451983401637738351" datatype="html">
+        <source>Previous injuries</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">78,79</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="360693052166801713" datatype="html">
+        <source>Complete onboarding</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">86,87</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">121,122</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5745278209593433676" datatype="html">
+        <source>Record the initial bodyweight to finish this intake.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">87,88</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8840208672439918225" datatype="html">
+        <source>Initial bodyweight</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">90,91</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3203225164200800044" datatype="html">
+        <source>Bodyweight unit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">94,95</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2855431162516324274" datatype="html">
+        <source>Kilograms</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">96,97</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4572518146388988362" datatype="html">
+        <source>Pounds</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">97,98</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7156004847730302766" datatype="html">
+        <source>Measurement date</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">101,102</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1605476523737868756" datatype="html">
+        <source> Save intake </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">114,115</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3407061818321766940" datatype="html">
+        <source>Saving...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
+          <context context-type="linenumber">119,120</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">56,57</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="449705285373999248" datatype="html">
+        <source>Birth date, height, and at least one goal are required to complete onboarding.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.ts</context>
+          <context context-type="linenumber">103</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4742090822895592545" datatype="html">
+        <source>Initial bodyweight and measurement date are required.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.ts</context>
+          <context context-type="linenumber">108</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4118285550011233487" datatype="html">
+        <source>Review the highlighted intake fields.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.ts</context>
+          <context context-type="linenumber">123</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5738380966431278722" datatype="html">
+        <source>Enter both a height value and unit, or leave both empty.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/client-intake-form.ts</context>
+          <context context-type="linenumber">129</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1329392719255614928" datatype="html">
+        <source>Coach workspace</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6343844849854704881" datatype="html">
+        <source>Accepted client profiles in the active workspace.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3494748554580112126" datatype="html">
+        <source>Invite client</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">7,8</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">11,12</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1190727321344614357" datatype="html">
+        <source>Loading clients...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">16,17</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1083437547529202049" datatype="html">
+        <source>No accepted clients yet</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">19,20</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4277923346717558578" datatype="html">
+        <source>Send an invitation to connect the first client account.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">20,21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3262236020277300799" datatype="html">
+        <source>Phone</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">28,29</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4491658745075169055" datatype="html">
+        <source>Onboarding</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">29,30</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5278627882107105833" datatype="html">
+        <source>Access</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">30,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9081463435738465430" datatype="html">
+        <source>Blocked</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">53,54</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8204176479746810612" datatype="html">
+        <source>Active</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">55,56</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6602706258740451656" datatype="html">
+        <source>Open profile</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.html</context>
+          <context context-type="linenumber">58,59</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="500827893464814570" datatype="html">
+        <source>Clients | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.routes.ts</context>
+          <context context-type="linenumber">6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="57131207839410071" datatype="html">
+        <source>Client profile | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.routes.ts</context>
+          <context context-type="linenumber">11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5518364085011929360" datatype="html">
+        <source>Clients could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clients/clients.ts</context>
+          <context context-type="linenumber">43</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6413121411962413511" datatype="html">
+        <source>Active workspace</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1372806857748341150" datatype="html">
+        <source>Hello, <x id="INTERPOLATION" equiv-text="{{ auth.user()?.displayName }}"/>.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">5,7</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="198968797971808791" datatype="html">
+        <source>Workspace summary</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">15</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1766227478641658033" datatype="html">
+        <source>Accepted client profiles</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">19,20</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7668019104010759211" datatype="html">
+        <source>Pending invitations</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">22,23</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2343977783368915272" datatype="html">
+        <source>Awaiting client acceptance</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">24,25</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6220150117108235014" datatype="html">
+        <source>Invite your next client</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">30,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="434796621858664444" datatype="html">
+        <source>The client creates an account from a secure, expiring invitation.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">31,32</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1956527120996576181" datatype="html">
+        <source>Manage invitations</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">33,34</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8660641579937725845" datatype="html">
+        <source>Client onboarding</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">38,39</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="891937436965689071" datatype="html">
+        <source>Your intake profile is complete.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">40,41</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7157099401601940089" datatype="html">
+        <source>Complete your intake details and initial bodyweight.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">42,43</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8775821175228591887" datatype="html">
+        <source>Open my profile</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">45,46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1098089907977651591" datatype="html">
+        <source>No active workspace role</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">49,50</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7286872530510450491" datatype="html">
+        <source>Select another workspace to continue.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">50,51</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8187549955851076268" datatype="html">
+        <source>Dashboard data could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.ts</context>
+          <context context-type="linenumber">58</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2616781092371786238" datatype="html">
+        <source>Checking invitation...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1383840683563733601" datatype="html">
+        <source>Client invitation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">6,7</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1289327940623019856" datatype="html">
+        <source>Link unavailable</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">7,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3323226814267271798" datatype="html">
+        <source>Go to sign in</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">9,10</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5515073938548506220" datatype="html">
+        <source>Invitation from <x id="INTERPOLATION" equiv-text="{{ invite.workspaceName }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">13,14</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6610670925652098566" datatype="html">
+        <source>Join your coaching workspace</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">14,15</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8037476586059399916" datatype="html">
+        <source>Expires</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">25,26</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">82,83</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2458823025117279530" datatype="html">
+        <source>This invitation has already been accepted.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">31,32</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7100499546504178446" datatype="html">
+        <source>Open dashboard</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">33,34</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3454055950570292202" datatype="html">
+        <source>This invitation is no longer active.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">38,39</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7686399246029996820" datatype="html">
+        <source> You are signed in as <x id="INTERPOLATION" equiv-text="{{ signedInUser()?.email }}"/>, but this invitation belongs to <x id="INTERPOLATION_1" equiv-text="{{ invite.email }}"/>. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">41,44</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7815005096064571953" datatype="html">
+        <source> Switch account </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">45,46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6885930980807920675" datatype="html">
+        <source>An account already exists for this email. Sign in to continue.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">48,49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3035914963614651241" datatype="html">
+        <source> Sign in to accept </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">55,56</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8265838946635020245" datatype="html">
+        <source>Create your client account</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">60,61</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2409672154570643758" datatype="html">
+        <source>Display name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">62,63</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2212849680097104190" datatype="html">
+        <source>Joining...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">83,84</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">96,97</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4747355868851679499" datatype="html">
+        <source>Create account and join</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">85,86</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3779009519568452319" datatype="html">
+        <source>Accept this invitation using <x id="INTERPOLATION" equiv-text="{{ signedInUser()?.email }}"/>.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">90,91</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6326759550347037576" datatype="html">
+        <source>Accept invitation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.html</context>
+          <context context-type="linenumber">98,99</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7527482675717236983" datatype="html">
+        <source>This invitation link is incomplete.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.ts</context>
+          <context context-type="linenumber">54</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5688983796150607388" datatype="html">
+        <source>This invitation link is invalid or no longer available.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.ts</context>
+          <context context-type="linenumber">66</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9214371409588212884" datatype="html">
+        <source>Sign in with the invited email before accepting.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.ts</context>
+          <context context-type="linenumber">107</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5094113835877718295" datatype="html">
+        <source>Sign out and use the account matching the invited email.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.ts</context>
+          <context context-type="linenumber">109</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2302545727231982577" datatype="html">
+        <source>The invitation could not be accepted.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/accept-invitation.ts</context>
+          <context context-type="linenumber">111</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="601790700744437926" datatype="html">
+        <source>Client access</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2603418807082525303" datatype="html">
+        <source>Invite a client into this workspace.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="496253918035140006" datatype="html">
+        <source>Close form</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">9,10</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8413504376572607583" datatype="html">
+        <source>New client invitation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">19,20</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6562443981073475055" datatype="html">
+        <source>Send invitation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">48,49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="918918193571633831" datatype="html">
+        <source>Invitation history</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">64,65</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4190206000041147392" datatype="html">
+        <source>View accepted clients</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">65,66</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4518960614233337310" datatype="html">
+        <source>Loading invitations...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">69,70</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1252924125842831768" datatype="html">
+        <source>No invitations yet</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">72,73</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2788458746959740821" datatype="html">
+        <source>Your first client invitation will appear here.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">73,74</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5611592591303869712" datatype="html">
+        <source>Status</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">81,82</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7372755454773589030" datatype="html">
+        <source>Delivery</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">83,84</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3193976279273491157" datatype="html">
+        <source>Actions</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">84</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2713184267318070333" datatype="html">
+        <source>Sent <x id="INTERPOLATION" equiv-text="{{ invitation.sendCount }}"/> time(s)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">105,106</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1811771460157492570" datatype="html">
+        <source>Open local link</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">107,108</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1989164125161091212" datatype="html">
+        <source> Resend </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">120</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2438803034455350509" datatype="html">
+        <source> Revoke </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.html</context>
+          <context context-type="linenumber">129</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8386695123810807216" datatype="html">
+        <source>Invitation created and queued for delivery.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.ts</context>
+          <context context-type="linenumber">76</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7674142822108599201" datatype="html">
+        <source>The invitation could not be created.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.ts</context>
+          <context context-type="linenumber">78</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8605155833663957945" datatype="html">
+        <source>A new invitation link was queued.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.ts</context>
+          <context context-type="linenumber">88</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8283990248165287145" datatype="html">
+        <source>Invitation revoked.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.ts</context>
+          <context context-type="linenumber">96</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4189467467511250248" datatype="html">
+        <source>Invitations could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.ts</context>
+          <context context-type="linenumber">107</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2637159526334172212" datatype="html">
+        <source>The invitation could not be updated.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/invitations/invitations.ts</context>
+          <context context-type="linenumber">128</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3973357683343532423" datatype="html">
+        <source>Client account</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/client-profile.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6290114484882011057" datatype="html">
+        <source>Loading your profile...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/client-profile.html</context>
+          <context context-type="linenumber">28,29</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7193361064923105795" datatype="html">
+        <source>Your intake was saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/client-profile.ts</context>
+          <context context-type="linenumber">44</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6692186644348502483" datatype="html">
+        <source>Your onboarding is complete.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/client-profile.ts</context>
+          <context context-type="linenumber">50</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5956388419794565110" datatype="html">
+        <source>Your profile could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/client-profile.ts</context>
+          <context context-type="linenumber">60</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6628933167594584729" datatype="html">
+        <source>Your profile could not be saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/client-profile.ts</context>
+          <context context-type="linenumber">78</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3359768897900302053" datatype="html">
+        <source>Owner settings</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7630366777181455003" datatype="html">
+        <source>Regional defaults belong to this coaching workspace.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8737286956224350789" datatype="html">
+        <source>Loading workspace settings...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">17,18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7511222388152278638" datatype="html">
+        <source>Workspace identifier</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">26,27</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4816132638979056134" datatype="html">
+        <source>Default language and region</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">34,35</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3753208064842918966" datatype="html">
+        <source>Arabic (Lebanon)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">37,38</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6021375693420723366" datatype="html">
+        <source>Default currency</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">41,42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1490622997501451513" datatype="html">
+        <source>Week starts on</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">45,46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8739442281958563044" datatype="html">
+        <source>Monday</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">47,48</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6950140976689343775" datatype="html">
+        <source>Sunday</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">48,49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1830554030016307335" datatype="html">
+        <source>Saturday</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">49,50</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5550126009216036505" datatype="html">
+        <source>Save settings</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
+          <context context-type="linenumber">58,59</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7625086915922573449" datatype="html">
+        <source>Workspace settings saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.ts</context>
+          <context context-type="linenumber">71</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2541903001188276387" datatype="html">
+        <source>Workspace settings could not be saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.ts</context>
+          <context context-type="linenumber">73</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8741850842110678621" datatype="html">
+        <source>Workspace settings could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/workspace/workspace-settings.ts</context>
+          <context context-type="linenumber">86</context>
+        </context-group>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

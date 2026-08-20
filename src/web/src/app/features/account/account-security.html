@@ -1,0 +1,51 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow" i18n>Account</p>
+    <h1 i18n>Security</h1>
+    <p i18n>Signed in as {{ auth.user()?.email }}</p>
+  </div>
+</section>
+
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="form-success" role="status">{{ notice() }}</p>
+}
+
+<section class="surface-section security-section">
+  <div class="section-heading">
+    <h2 i18n>Change password</h2>
+  </div>
+  <form [formGroup]="form" (ngSubmit)="changePassword()" novalidate>
+    <div class="form-grid">
+      <label class="span-full">
+        <span i18n>Current password</span>
+        <input type="password" formControlName="currentPassword" autocomplete="current-password" />
+      </label>
+      <label>
+        <span i18n>New password</span>
+        <input type="password" formControlName="newPassword" autocomplete="new-password" />
+      </label>
+      <label>
+        <span i18n>Confirm new password</span>
+        <input type="password" formControlName="confirmPassword" autocomplete="new-password" />
+      </label>
+    </div>
+    <div class="form-actions">
+      <button class="primary-button" type="submit" [disabled]="busy()" i18n>Change password</button>
+    </div>
+  </form>
+</section>
+
+<section class="surface-section security-section">
+  <div class="section-heading">
+    <div>
+      <h2 i18n>Active sessions</h2>
+      <p class="muted" i18n>Sign out this account on every device, including this one.</p>
+    </div>
+  </div>
+  <button class="danger-button" type="button" [disabled]="busy()" (click)="revokeSessions()" i18n>
+    Sign out everywhere
+  </button>
+</section>

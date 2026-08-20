@@ -28,8 +28,14 @@ public static class AuthorizationPolicies
 {
     public const string PlatformAdmin = "PlatformAdmin";
     public const string TenantMember = "TenantMember";
+    public const string TenantOwner = "TenantOwner";
     public const string TenantCoach = "TenantCoach";
     public const string TenantClient = "TenantClient";
+}
+
+public static class RateLimitPolicies
+{
+    public const string PublicAuthentication = "PublicAuthentication";
 }
 
 public static class TenantHeaders

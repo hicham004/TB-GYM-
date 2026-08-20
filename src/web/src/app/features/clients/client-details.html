@@ -1,0 +1,64 @@
+<section class="page-heading">
+  <div>
+    <a routerLink="/clients" i18n>Back to clients</a>
+    @if (profile(); as client) {
+      <h1>{{ client.firstName }} {{ client.lastName }}</h1>
+      <p>{{ client.email }}</p>
+    } @else {
+      <h1 i18n>Client profile</h1>
+    }
+  </div>
+  @if (profile(); as client) {
+    <span
+      class="status-badge"
+      [class.success]="client.onboardingStatus === 'Completed'"
+      [class.warning]="client.onboardingStatus === 'InProgress'"
+    >
+      {{ onboardingStatusLabel(client.onboardingStatus) }}
+    </span>
+  }
+</section>
+
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="form-success" role="status">{{ notice() }}</p>
+}
+
+@if (loading()) {
+  <p class="loading-row" i18n>Loading client profile...</p>
+} @else if (profile(); as client) {
+  <section class="surface-section">
+    <div class="section-heading">
+      <div>
+        <h2 i18n>Client intake</h2>
+        <p class="muted" i18n>Contact, training, nutrition, and health details.</p>
+      </div>
+    </div>
+    <app-client-intake-form
+      [profile]="client"
+      [busy]="busy()"
+      (saveIntake)="saveIntake($event)"
+      (completeOnboarding)="completeOnboarding($event)"
+    />
+  </section>
+
+  <section class="surface-section coach-notes">
+    <div class="section-heading">
+      <div>
+        <h2 i18n>Coach-only notes</h2>
+        <p class="muted" i18n>These notes are not exposed through the client profile API.</p>
+      </div>
+    </div>
+    <form [formGroup]="notesForm" (ngSubmit)="saveNotes()">
+      <label>
+        <span i18n>Notes</span>
+        <textarea formControlName="notes"></textarea>
+      </label>
+      <div class="form-actions">
+        <button class="primary-button" type="submit" [disabled]="busy()" i18n>Save notes</button>
+      </div>
+    </form>
+  </section>
+}

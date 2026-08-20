@@ -1,0 +1,65 @@
+.accept-layout {
+  display: grid;
+  min-height: calc(100vh - 64px);
+  padding: 48px 20px;
+  place-items: start center;
+}
+
+.accept-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  max-width: 580px;
+  padding: 28px;
+  width: 100%;
+}
+
+.invitation-details {
+  border-block: 1px solid var(--border);
+  display: grid;
+  gap: 0;
+  margin-block: 24px;
+}
+
+.invitation-details div {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 90px 1fr;
+  padding-block: 10px;
+}
+
+.invitation-details dt {
+  color: var(--muted-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.invitation-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+form {
+  display: grid;
+  gap: 16px;
+}
+
+form h2 {
+  margin-block-end: 0;
+}
+
+small {
+  color: var(--muted-text);
+  display: block;
+  margin-block-start: 4px;
+}
+
+@media (max-width: 520px) {
+  .accept-layout {
+    padding: 24px 12px;
+  }
+
+  .accept-panel {
+    padding: 20px 16px;
+  }
+}

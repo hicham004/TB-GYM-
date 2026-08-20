@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: tbgym
+          POSTGRES_PASSWORD: tbgym_dev
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U tbgym -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore TB.Gym.slnx
+      - name: Verify formatting
+        run: dotnet format analyzers TB.Gym.slnx --verify-no-changes --no-restore
+      - name: Build
+        run: dotnet build TB.Gym.slnx --configuration Release --no-restore
+      - name: Test
+        run: dotnet test TB.Gym.slnx --configuration Release --no-build
+      - name: Verify EF model and migrations agree
+        run: |
+          dotnet tool restore
+          dotnet ef migrations has-pending-model-changes \
+            --project src/backend/TB.Gym.Infrastructure/TB.Gym.Infrastructure.csproj \
+            --startup-project src/backend/TB.Gym.Api/TB.Gym.Api.csproj \
+            --no-build \
+            --configuration Release
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+      - run: npm install --global npm@11.17.0
+      - run: npm ci
+        working-directory: src/web
+      - run: npm run format:check
+        working-directory: src/web
+      - run: npm run lint
+        working-directory: src/web
+      - run: npm run build
+        working-directory: src/web
+      - run: npm test
+        working-directory: src/web
+      - run: npm audit --audit-level=high
+        working-directory: src/web
+
+  containers:
+    runs-on: ubuntu-latest
+    needs: [backend, web]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --file src/backend/TB.Gym.Api/Dockerfile --tag tb-gym-api:ci .
+      - run: docker build --file src/web/Dockerfile --tag tb-gym-web:ci .

@@ -21,6 +21,8 @@
   <ItemGroup>
     <ProjectReference Include="..\BuildingBlocks\TB.Gym.SharedKernel\TB.Gym.SharedKernel.csproj" />
     <ProjectReference Include="..\Modules\Identity\TB.Gym.Modules.Identity\TB.Gym.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Modules\Invitations\TB.Gym.Modules.Invitations\TB.Gym.Modules.Invitations.csproj" />
+    <ProjectReference Include="..\Modules\Progress\TB.Gym.Modules.Progress\TB.Gym.Modules.Progress.csproj" />
     <ProjectReference Include="..\Modules\Tenancy\TB.Gym.Modules.Tenancy\TB.Gym.Modules.Tenancy.csproj" />
     <ProjectReference Include="..\Modules\Clients\TB.Gym.Modules.Clients\TB.Gym.Modules.Clients.csproj" />
   </ItemGroup>

@@ -10,61 +10,138 @@ public static class ClientEndpoints
 {
     public static IEndpointRouteBuilder MapClientsModule(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints
+        var coachGroup = endpoints
             .MapGroup("/api/clients")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
             .WithTags(ClientsModule.Name);
 
-        group.MapGet("/", async (
-            IClientProfileRepository repository,
+        coachGroup.MapGet("/", async (
+            IClientProfileApplicationService service,
             CancellationToken cancellationToken) =>
-            Results.Ok(await repository.ListAsync(cancellationToken)));
+            Results.Ok(await service.ListAsync(cancellationToken)))
+            .WithName("ListClients")
+            .Produces<ClientSummary[]>();
 
-        group.MapPost("/", async (
-            CreateClientRequest request,
+        coachGroup.MapGet("/{clientId:guid}", async (
+            Guid clientId,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var client = await service.GetForCoachAsync(clientId, cancellationToken);
+            return client is null ? Results.NotFound() : Results.Ok(client);
+        })
+        .WithName("GetClientForCoach")
+        .Produces<CoachClientDetails>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        coachGroup.MapPut("/{clientId:guid}/intake", async (
+            Guid clientId,
+            UpdateClientIntakeRequest request,
             HttpContext context,
             IAntiforgery antiforgery,
-            ITenantContext tenantContext,
-            IClientProfileRepository repository,
+            IClientProfileApplicationService service,
             CancellationToken cancellationToken) =>
         {
             await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.UpdateForCoachAsync(clientId, request, cancellationToken));
+        })
+        .WithName("UpdateClientIntakeForCoach")
+        .Produces<CoachClientDetails>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
 
-            try
-            {
-                var profile = ClientProfile.Create(
-                    tenantContext.TenantId,
-                    request.FirstName,
-                    request.LastName,
-                    request.Email,
-                    request.BirthDate);
+        coachGroup.MapPost("/{clientId:guid}/complete-onboarding", async (
+            Guid clientId,
+            CompleteClientOnboardingRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.CompleteForCoachAsync(clientId, request, cancellationToken));
+        })
+        .WithName("CompleteClientOnboardingForCoach")
+        .Produces<CoachClientDetails>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
 
-                await repository.AddAsync(profile, cancellationToken);
-                return Results.Created($"/api/clients/{profile.Id}", ToSummary(profile));
-            }
-            catch (ArgumentException exception)
-            {
-                return Results.ValidationProblem(new Dictionary<string, string[]>
-                {
-                    ["client"] = [exception.Message],
-                });
-            }
-            catch (InvalidOperationException exception)
-            {
-                return Results.Conflict(new { error = exception.Message });
-            }
-        });
+        coachGroup.MapPut("/{clientId:guid}/coach-notes", async (
+            Guid clientId,
+            UpdateCoachNotesRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.UpdateCoachNotesAsync(clientId, request, cancellationToken));
+        })
+        .WithName("UpdateClientCoachNotes")
+        .Produces<CoachClientDetails>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        var selfGroup = endpoints
+            .MapGroup("/api/client-profile")
+            .RequireAuthorization(AuthorizationPolicies.TenantClient)
+            .WithTags(ClientsModule.Name);
+
+        selfGroup.MapGet("/me", async (
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var profile = await service.GetSelfAsync(cancellationToken);
+            return profile is null ? Results.NotFound() : Results.Ok(profile);
+        })
+        .WithName("GetOwnClientProfile")
+        .Produces<ClientSelfProfile>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        selfGroup.MapPut("/me/intake", async (
+            UpdateClientIntakeRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.UpdateSelfAsync(request, cancellationToken));
+        })
+        .WithName("UpdateOwnClientIntake")
+        .Produces<ClientSelfProfile>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        selfGroup.MapPost("/me/complete-onboarding", async (
+            CompleteClientOnboardingRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.CompleteSelfAsync(request, cancellationToken));
+        })
+        .WithName("CompleteOwnClientOnboarding")
+        .Produces<ClientSelfProfile>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
 
         return endpoints;
     }
 
-    private static ClientSummary ToSummary(ClientProfile profile) =>
-        new(
-            profile.Id,
-            profile.FirstName,
-            profile.LastName,
-            profile.Email,
-            profile.BirthDate,
-            profile.IsCoachBlocked,
-            profile.Version);
+    private static IResult ToResult(ClientCommandResult result) =>
+        result.Status switch
+        {
+            ClientCommandStatus.Success => Results.Ok((object?)result.SelfProfile ?? result.CoachDetails),
+            ClientCommandStatus.NotFound => Results.NotFound(),
+            ClientCommandStatus.Invalid => Results.ValidationProblem(
+                result.Errors ?? new Dictionary<string, string[]>()),
+            _ => Results.Conflict(new
+            {
+                code = "concurrency_conflict",
+                message = "The client profile was changed by another request.",
+            }),
+        };
 }

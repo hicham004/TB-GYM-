@@ -1,11 +1,15 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using TB.Gym.Api;
 using TB.Gym.Infrastructure;
 using TB.Gym.Infrastructure.Initialization;
+using TB.Gym.Infrastructure.Security;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Identity;
+using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Messaging;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
@@ -22,6 +26,9 @@ builder.Logging.AddJsonConsole(options =>
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(
+        new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)));
 builder.Services.AddTbGymInfrastructure(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
@@ -31,6 +38,8 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
 });
+app.UseRequestLocalization();
+app.UseRateLimiter();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -38,6 +47,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseAuthentication();
+app.UseTbGymPlatformAccess();
 app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
@@ -57,19 +67,19 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
     ResponseWriter = WriteHealthResponseAsync,
 }).AllowAnonymous();
 
-app.MapGet("/api/system/status", (IClock clock) => Results.Ok(new
-{
-    name = "TB Gym API",
-    architecture = "Modular Monolith",
-    framework = ".NET 10",
-    utcTime = clock.UtcNow,
-}))
+app.MapGet("/api/system/status", (IClock clock) => Results.Ok(new SystemStatusResponse(
+    "TB Gym API",
+    "Modular Monolith",
+    ".NET 10",
+    clock.UtcNow)))
 .AllowAnonymous()
 .WithName("GetSystemStatus")
-.WithTags("System");
+.WithTags("System")
+.Produces<SystemStatusResponse>();
 
 app.MapIdentityModule();
 app.MapTenancyModule();
+app.MapInvitationsModule();
 app.MapClientsModule();
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization(AuthorizationPolicies.TenantMember);
 

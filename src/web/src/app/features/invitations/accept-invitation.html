@@ -1,0 +1,105 @@
+<section class="accept-layout">
+  @if (loading()) {
+    <p class="loading-row" i18n>Checking invitation...</p>
+  } @else if (error() && !invitation()) {
+    <div class="accept-panel">
+      <p class="eyebrow" i18n>Client invitation</p>
+      <h1 i18n>Link unavailable</h1>
+      <p class="form-error" role="alert">{{ error() }}</p>
+      <a routerLink="/auth/sign-in" i18n>Go to sign in</a>
+    </div>
+  } @else if (invitation(); as invite) {
+    <div class="accept-panel">
+      <p class="eyebrow" i18n>Invitation from {{ invite.workspaceName }}</p>
+      <h1 i18n>Join your coaching workspace</h1>
+      <dl class="invitation-details">
+        <div>
+          <dt i18n>Client</dt>
+          <dd>{{ invite.firstName }} {{ invite.lastName }}</dd>
+        </div>
+        <div>
+          <dt i18n>Email</dt>
+          <dd>{{ invite.email }}</dd>
+        </div>
+        <div>
+          <dt i18n>Expires</dt>
+          <dd>{{ invite.expiresAtUtc | date: 'medium' }}</dd>
+        </div>
+      </dl>
+
+      @if (invite.status === 'Accepted') {
+        <p class="form-success" i18n>This invitation has already been accepted.</p>
+        @if (signedInUser()) {
+          <a class="primary-button" routerLink="/" i18n>Open dashboard</a>
+        } @else {
+          <a class="primary-button" routerLink="/auth/sign-in" i18n>Sign in</a>
+        }
+      } @else if (invite.status !== 'Pending') {
+        <p class="form-error" i18n>This invitation is no longer active.</p>
+      } @else if (signedInUser() && !signedInWithInvitedEmail()) {
+        <p class="notice" i18n>
+          You are signed in as {{ signedInUser()?.email }}, but this invitation belongs to
+          {{ invite.email }}.
+        </p>
+        <button class="primary-button" type="button" (click)="signOut()" i18n>
+          Switch account
+        </button>
+      } @else if (invite.requiresExistingAccountSignIn && !signedInUser()) {
+        <p class="notice" i18n>An account already exists for this email. Sign in to continue.</p>
+        <a
+          class="primary-button"
+          routerLink="/auth/sign-in"
+          [queryParams]="{ returnUrl: returnUrl() }"
+          i18n
+        >
+          Sign in to accept
+        </a>
+      } @else {
+        @if (!signedInUser()) {
+          <form [formGroup]="accountForm" (ngSubmit)="accept()" novalidate>
+            <h2 i18n>Create your client account</h2>
+            <label>
+              <span i18n>Display name</span>
+              <input type="text" formControlName="displayName" autocomplete="name" />
+            </label>
+            <label>
+              <span i18n>Password</span>
+              <input type="password" formControlName="password" autocomplete="new-password" />
+              <small i18n>At least 12 characters with upper, lower, number, and symbol.</small>
+            </label>
+            <label>
+              <span i18n>Confirm password</span>
+              <input
+                type="password"
+                formControlName="confirmPassword"
+                autocomplete="new-password"
+              />
+            </label>
+            @if (error()) {
+              <p class="form-error" role="alert">{{ error() }}</p>
+            }
+            <button class="primary-button" type="submit" [disabled]="submitting()">
+              @if (submitting()) {
+                <span i18n>Joining...</span>
+              } @else {
+                <span i18n>Create account and join</span>
+              }
+            </button>
+          </form>
+        } @else {
+          <p i18n>Accept this invitation using {{ signedInUser()?.email }}.</p>
+          @if (error()) {
+            <p class="form-error" role="alert">{{ error() }}</p>
+          }
+          <button class="primary-button" type="button" [disabled]="submitting()" (click)="accept()">
+            @if (submitting()) {
+              <span i18n>Joining...</span>
+            } @else {
+              <span i18n>Accept invitation</span>
+            }
+          </button>
+        }
+      }
+    </div>
+  }
+</section>

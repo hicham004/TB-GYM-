@@ -1,0 +1,126 @@
+<form [formGroup]="form" novalidate>
+  <fieldset>
+    <legend i18n>Contact and measurements</legend>
+    <div class="form-grid">
+      <label>
+        <span i18n>First name</span>
+        <input type="text" formControlName="firstName" autocomplete="given-name" />
+      </label>
+      <label>
+        <span i18n>Last name</span>
+        <input type="text" formControlName="lastName" autocomplete="family-name" />
+      </label>
+      <label>
+        <span i18n>Phone number</span>
+        <input type="tel" formControlName="phoneNumber" autocomplete="tel" />
+      </label>
+      <label>
+        <span i18n>Date of birth</span>
+        <input type="date" formControlName="birthDate" [max]="maximumBirthDate" />
+      </label>
+      <label>
+        <span i18n>Height</span>
+        <input type="number" formControlName="heightValue" min="1" step="0.1" />
+      </label>
+      <label>
+        <span i18n>Height unit</span>
+        <select formControlName="heightUnit">
+          <option [ngValue]="null" i18n>Select unit</option>
+          <option value="Centimeter" i18n>Centimeters</option>
+          <option value="Inch" i18n>Inches</option>
+        </select>
+      </label>
+      <label>
+        <span i18n>Work type</span>
+        <input type="text" formControlName="workType" />
+      </label>
+      <label>
+        <span i18n>Average daily steps</span>
+        <input type="number" formControlName="averageDailySteps" min="0" max="100000" />
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend i18n>Training and nutrition</legend>
+    <div class="form-grid">
+      <label class="span-full">
+        <span i18n>Goals</span>
+        <textarea formControlName="goals"></textarea>
+      </label>
+      <label class="span-full">
+        <span i18n>Training background</span>
+        <textarea formControlName="trainingBackground"></textarea>
+      </label>
+      <label>
+        <span i18n>Food preferences</span>
+        <textarea formControlName="foodPreferences"></textarea>
+      </label>
+      <label>
+        <span i18n>Food aversions</span>
+        <textarea formControlName="foodAversions"></textarea>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend i18n>Health information</legend>
+    <div class="form-grid">
+      <label>
+        <span i18n>Allergies</span>
+        <textarea formControlName="allergies"></textarea>
+      </label>
+      <label>
+        <span i18n>Medications</span>
+        <textarea formControlName="medications"></textarea>
+      </label>
+      <label class="span-full">
+        <span i18n>Previous injuries</span>
+        <textarea formControlName="previousInjuries"></textarea>
+      </label>
+    </div>
+  </fieldset>
+
+  @if (profile().onboardingStatus !== 'Completed') {
+    <fieldset class="completion-fields">
+      <legend i18n>Complete onboarding</legend>
+      <p class="muted" i18n>Record the initial bodyweight to finish this intake.</p>
+      <div class="form-grid">
+        <label>
+          <span i18n>Initial bodyweight</span>
+          <input type="number" formControlName="initialBodyweightValue" min="1" step="0.1" />
+        </label>
+        <label>
+          <span i18n>Bodyweight unit</span>
+          <select formControlName="initialBodyweightUnit">
+            <option value="Kilogram" i18n>Kilograms</option>
+            <option value="Pound" i18n>Pounds</option>
+          </select>
+        </label>
+        <label>
+          <span i18n>Measurement date</span>
+          <input type="date" formControlName="measurementDate" [max]="maximumMeasurementDate" />
+        </label>
+      </div>
+    </fieldset>
+  }
+
+  @if (localError()) {
+    <p class="form-error" role="alert">{{ localError() }}</p>
+  }
+
+  <div class="form-actions">
+    <button class="secondary-button" type="button" [disabled]="busy()" (click)="save()" i18n>
+      Save intake
+    </button>
+    @if (profile().onboardingStatus !== 'Completed') {
+      <button class="primary-button" type="button" [disabled]="busy()" (click)="complete()">
+        @if (busy()) {
+          <span i18n>Saving...</span>
+        } @else {
+          <span i18n>Complete onboarding</span>
+        }
+      </button>
+    }
+  </div>
+</form>
