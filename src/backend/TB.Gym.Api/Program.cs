@@ -8,11 +8,15 @@ using TB.Gym.Infrastructure;
 using TB.Gym.Infrastructure.Initialization;
 using TB.Gym.Infrastructure.Security;
 using TB.Gym.Modules.Clients;
+using TB.Gym.Modules.ExerciseLibrary;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
+using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Messaging;
+using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
+using TB.Gym.Modules.Training;
 using TB.Gym.SharedKernel;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -85,6 +89,10 @@ app.MapTenancyModule();
 app.MapInvitationsModule();
 app.MapClientsModule();
 app.MapSubscriptionsModule();
+app.MapExerciseLibraryModule();
+app.MapStrengthModule();
+app.MapTrainingModule();
+app.MapMediaModule();
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization(AuthorizationPolicies.TenantMember);
 
 await app.InitializeDatabaseAsync();

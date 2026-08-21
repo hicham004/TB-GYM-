@@ -31,6 +31,8 @@
 } @else if (profile(); as client) {
   <app-client-commercial [client]="client" (profileChanged)="commercialProfileChanged($event)" />
 
+  <app-client-training [clientId]="client.id" />
+
   <section class="surface-section">
     <div class="section-heading">
       <div>

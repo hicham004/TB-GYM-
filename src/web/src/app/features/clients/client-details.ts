@@ -14,10 +14,11 @@ import { onboardingStatusLabel } from '../../core/i18n/display-labels';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { ClientIntakeForm } from './client-intake-form';
 import { ClientCommercial } from '../commercial/client-commercial';
+import { ClientTraining } from '../training/client-training';
 
 @Component({
   selector: 'app-client-details',
-  imports: [ClientCommercial, ClientIntakeForm, ReactiveFormsModule, RouterLink],
+  imports: [ClientCommercial, ClientIntakeForm, ClientTraining, ReactiveFormsModule, RouterLink],
   templateUrl: './client-details.html',
   styleUrl: './client-details.scss',
 })

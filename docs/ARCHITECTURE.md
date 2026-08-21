@@ -1,6 +1,6 @@
 # TB Gym Architecture
 
-Status: Phase 2 complete, 2026-08-20
+Status: Phase 3 remediation complete, 2026-08-21
 
 ## 1. Architectural style
 
@@ -60,14 +60,14 @@ into additional projects only when that produces a measurable boundary benefit.
 | Clients | Tenant-specific profile, onboarding/intake, relationship block state/history |
 | Invitations | Invite lifecycle, prefilled fields, acceptance and account linking |
 | Subscriptions | Products, immutable offers, enrollments, entitlement coverage, payments, renewal |
-| Training | Templates, assigned snapshots, mesocycles, sessions, prescriptions, completion |
-| Exercise Library | Exercises, categories, coaching instructions, video associations |
+| Training | Immutable template versions, assigned mesocycle snapshots, prescriptions, executions, actuals |
+| Exercise Library | Tenant exercise metadata, muscles, tags, approved alternatives, media associations |
 | Nutrition | Ingredients, recipes, meal choices, plans, calorie and macro snapshots |
 | Progress | Daily bodyweight, weekly summaries, measurements and progress views |
-| Strength | Versioned 1RM observations, RPE/RIR tables, deterministic load progression |
+| Strength | Append-only max history, canonical RPE/RIR, versioned estimates, recommendations, rounding |
 | Messaging | Tenant-scoped coach/client conversations and messages |
 | Notifications | Idempotent outbox, delivery scheduling, email and future channel ports |
-| Media | Object metadata, upload authorization, signed access, retention |
+| Media | Object metadata, signature/scanner lifecycle, protected access, external embeds, retention |
 | Gamification | Tenant theme, levels, ranks and auditable experience events |
 | Integrations | AI, payment, nutrition-data and other external provider contracts |
 
@@ -151,8 +151,9 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
 
 - The authentication cookie is HTTP-only, secure in production, SameSite Lax, and never
   stored in browser storage.
-- State-changing requests validate ASP.NET Core antiforgery tokens. Angular reads the
-  `XSRF-TOKEN` cookie and sends `X-XSRF-TOKEN`.
+- State-changing requests validate ASP.NET Core antiforgery tokens. The framework cookie
+  (`tb-gym-antiforgery`) is HTTP-only; `/api/auth/csrf` publishes the paired request token
+  in the readable `XSRF-TOKEN` cookie, which Angular sends as `X-XSRF-TOKEN`.
 - Failed API authorization returns 401 or 403, never an HTML redirect.
 - Password lockout and unique email are enabled; production requires confirmed email.
 - Public authentication is rate-limited by source address. Sensitive authenticated writes
@@ -171,6 +172,23 @@ membership, and never treats acceptance in Workspace A as acceptance in Workspac
 
 Cookie authentication assumes the SPA and API are served under one public origin. The
 Angular development proxy and production Nginx configuration preserve that model.
+
+Private media follows the same-origin model without requiring Angular headers on native
+subresource requests. An authorized API call sets a short-lived HTTP-only cookie scoped to
+one asset content path. Its protected payload binds tenant, user, and asset. The content
+endpoint requires the normal auth cookie, restores only that bound tenant context, rechecks
+membership, current feature access, and assignment history, then streams server-controlled
+content with range support. A previously issued grant therefore does not survive revoked
+entitlement.
+
+The grant carries its absolute expiry inside the protected payload and the content endpoint
+compares that expiry against `IClock`, so expiry is deterministic and testable rather than
+dependent on a provider-internal wall clock. `Media:AccessLifetimeSeconds` is configurable
+between 60 seconds and 4 hours and defaults to 1800. The default is sized for one realistic
+viewing session because each seek in a paused video issues a fresh Range request carrying the
+same grant; a shorter lifetime interrupts playback without adding protection, since the
+content endpoint reauthorizes membership and entitlement on every request and therefore
+revokes access immediately regardless of the remaining lifetime.
 
 ## 7. Persistence
 
@@ -209,6 +227,12 @@ Database triggers complement the domain model by rejecting updates/deletes to pa
 relationship-event, offer-entitlement, and consent ledgers. Separate triggers protect offer
 terms and enrollment price/date snapshots while still allowing lifecycle status changes.
 
+Phase 3 extends database defense in depth to immutable template-version content, append-only
+strength max and working-max history, append-only workout notes/progression applications,
+started/completed prescription snapshots, and completed actual performance. A second GiST
+exclusion constraint rejects overlapping primary mesocycles per tenant/client/date range,
+while `pg_trgm` indexes support tenant-local exercise and tag search.
+
 Local Docker startup may apply migrations because there is one API instance. Production
 migrations run as a separate deployment step, not concurrently in every API replica.
 Schema rollback means restoring a tested backup or deploying a forward repair migration;
@@ -240,6 +264,24 @@ Phase 2 adds lazy-loaded product management and a focused commercial section on 
 view. Coaches create products/offers, assign service, record payment, renew, manage lifecycle,
 and see backend access explanations without exposing raw database concepts.
 
+Phase 3 adds lazy coach routes for the exercise library and program builder, a client-training
+section on each coach client view, and a separate focused client `Today` route. The mutable
+Angular builder draft exists only for editing ergonomics; saving creates a backend-owned
+immutable template version. Assignment, calculated loads, unlock state, substitutions,
+completion, and history always come back from the API.
+
+Workout entry uses a separate local draft map keyed by set-performance ID. Saving one set
+reconciles only that set and the authoritative execution version; other dirty drafts survive
+success, failure, stale responses, and normal read-model refreshes. Writes for one workout
+are serialized to preserve optimistic-concurrency order and duplicate taps are suppressed.
+
+The `Today` read model first selects only sessions whose `ScheduledDate` equals the tenant's
+current date, then loads the selected prescription/execution IDs with no-tracking split
+queries. It does not materialize historical mesocycles before filtering. A PostgreSQL
+integration interceptor measures 21 SQL commands for the complete authenticated request
+(including authentication, tenant policy, and commercial access) and enforces a ceiling of
+24; the schedule SQL must contain client and date predicates.
+
 ## 9. Realtime, jobs, and integrations
 
 `ChatHub` proves SignalR hosting and tenant authorization readiness; full conversation
@@ -260,6 +302,13 @@ payloads and credentials do not leak into domain objects. AI output is untrusted
 requires schema validation, provenance, human approval where appropriate, and normal domain
 validation before persistence.
 
+Phase 3 provides a local streaming object-store adapter and a development signature scanner.
+Production fails media publication closed until a real scanning adapter is configured.
+Phase 3 also enforces request-size, endpoint rate/concurrency, and configurable workspace
+quota limits, and tombstones historically referenced media. The local storage implementation
+is not the production object-store decision; managed object storage, scanner, CDN/private
+delivery, retention/purge processing, and orphan cleanup remain Phase 6 work.
+
 ## 10. Operations and scaling
 
 The API emits structured JSON console logs and exposes:
@@ -270,6 +319,10 @@ The API emits structured JSON console logs and exposes:
 
 Production configuration comes from environment variables or a secret manager. Secrets,
 connection strings, uploaded files, and local databases are not committed.
+
+Docker persists local uploads and ASP.NET Core Data Protection keys in separate named
+volumes. Multiple API replicas must share an external key repository and object storage;
+container-local files are never a horizontal-scaling design.
 
 Scale in this order:
 
@@ -300,6 +353,24 @@ simultaneous identical assignment/payment retries, non-conflicting services, sta
 currency snapshots, notification idempotency, append-only triggers, and relationship
 isolation when one identity is a client in two workspaces.
 
+Phase 3 adds fixed-reference domain tests for snapshot isolation, exertion, estimators,
+rounding, progression, substitutions, dates, and media signatures. Its PostgreSQL HTTP test
+runs the real coach-to-client workflow. Focused scenarios separately verify lifecycle and
+same-date replacement, coverage boundaries and atomic progression rejection, overlap races,
+multi-workspace notes, entitlement expiry, private browser media grants, tenant isolation,
+stale/double progression, and the bounded `Today` SQL shape. The release check sets
+`TB_GYM_REQUIRE_POSTGRES_TESTS=true`; an unavailable PostgreSQL environment fails rather than
+being reported as a passing integration run.
+
+Checkpoint counts on 2026-08-21 are intentionally separated: 63 tests repository-wide
+(29 domain, 1 architecture, 16 PostgreSQL API integration, 17 Angular); 31 are Phase 3
+specific (12 domain, 8 PostgreSQL integration, 11 Angular); and 19 focused tests were added
+by the remediation pass (5 domain, 7 PostgreSQL integration, 7 Angular). The required full
+PostgreSQL run executed all 16 integration tests with zero skips. A separate headless-Chrome
+acceptance run exercises the live Angular/API/PostgreSQL stack, native protected media,
+coach cancellation/replacement, multi-set drafts, completion, responsive layout, tenant
+denials, grant tampering, and clock-driven grant expiry.
+
 ## 12. Phase 2 commercial flow
 
 ```text
@@ -320,3 +391,23 @@ when same-currency receipt operations equal its snapshotted price. Partial payme
 historical but grant no proportional access. Refund/reversal operation names and provider
 ports exist for forward compatibility; their business workflows are not implemented in
 Phase 2. See ADR 0005 and ADR 0006.
+
+## 13. Phase 3 training flow
+
+```text
+Exercise Library + coach media
+  -> immutable ProgramTemplateVersion
+  -> assignment command + one Training enrollment + explicit start/time zone
+  -> deep TrainingMesocycle snapshot + WorkingMaxSnapshots
+  -> date-derived Planned/Active or audited Completed/Cancelled lifecycle
+  -> published/date/reveal availability
+  -> WorkoutExecution prescription snapshot
+  -> separate SetPerformance actuals + authored notes + completion
+```
+
+One enrollment can authorize several sequential mesocycles and can temporarily authorize
+none. The template, assigned mesocycle, and workout execution are intentionally three
+different historical layers. Progression is a reviewed, hashed append operation, and global
+strength changes never rewrite a captured program. A completed workout remains available in
+the dated client view on its scheduled day so terminal mesocycle state does not erase the
+just-completed prescription/performance comparison. See ADR 0007.

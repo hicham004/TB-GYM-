@@ -85,7 +85,10 @@ training/nutrition/chat feature implementation.
 
 ## Phase 3: Exercise library, training, and strength
 
-Dependencies: Phase 2; open decisions 1, 3, 6, 7, and 9 in `DOMAIN-RULES.md`.
+Dependencies: Phase 2.
+
+Status: implemented and independently remediated 2026-08-21. Decisions and intentionally
+deferred scope are recorded in ADR 0007.
 
 - Build tenant exercise/category library, exercise versions, media metadata, uploads, and
   signed viewing access.
@@ -102,6 +105,25 @@ Dependencies: Phase 2; open decisions 1, 3, 6, 7, and 9 in `DOMAIN-RULES.md`.
 
 Exit: a coach can safely assign and adjust a mesocycle, and a client can see/complete only
 authorized dated work while calculations remain reproducible.
+
+Implemented exit evidence includes a real PostgreSQL coach/client workflow, database-level
+history guards, generated Angular contracts, a dense template/exercise workflow, enrollment-
+bounded client assignment, reviewed progression, protected media, and a focused client
+workout logger. The remediation adds reachable audited lifecycle operations, one authoritative
+coverage policy for all date mutations, native-browser private media delivery, resilient
+per-set Angular drafts, bounded/predicated `Today` reads, upload abuse controls, paged growing
+collections, fixed strength boundaries, and required PostgreSQL release tests.
+
+The remediation checkpoint contains 31 Phase-3-specific automated tests, including 19 added
+during remediation, and was accepted through a live Chrome coach/client journey against the
+Dockerized API and PostgreSQL. The browser run also verifies the compact mobile workout grid,
+native protected-media rendering without `X-Tenant-Id`, and real five-minute grant expiry.
+
+Explicitly deferred: supplemental mesocycles, intentional future working-max rebase,
+completion correction, arbitrary edits to started sessions, more progression transforms,
+large analytics/PR dashboards, a production object-store/scanner/CDN adapter, and media
+retention/purge jobs. Configurable local workspace quota enforcement is delivered; provider-
+level quota accounting and physical purge are not.
 
 ## Phase 4: Nutrition and meal planning
 

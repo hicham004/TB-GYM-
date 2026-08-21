@@ -1,6 +1,7 @@
 # TB Gym Domain Rules
 
-Source: complete review of `plan.docx` and the legacy application, 2026-08-15.
+Source: complete review of `plan.docx`, the legacy application, and implemented decisions
+through Phase 3, last updated 2026-08-20.
 
 This document turns the product description into rules that can be enforced and tested. A
 rule marked **proposed** is the safest interpretation of an ambiguous request and needs
@@ -164,76 +165,110 @@ provider webhook behavior require a later approved design.
 client-specific snapshot with a reference to template/version provenance. Later template
 edits do not mutate an assigned mesocycle.
 
-**TRN-002** Assigned snapshots receive a per-client sequence/name such as `Meso 1`; the coach
-may rename the display label. Sequence identity remains stable and unique within the client.
+**TRN-002** Assigned snapshots receive a stable per-client sequence/name such as `Meso 1`.
+Phase 3 does not expose rename; a later rename must not change sequence identity or source
+provenance.
 
-**TRN-003** The assigned snapshot belongs to one client and subscription. Copying must include
+**TRN-003** The assigned snapshot belongs to one client and enrollment. Copying includes
 weeks, days, prescriptions, set overrides, notes intended as template content, visibility
-rules, exercise version references, and strength calculation inputs. Completion data and
-client notes are never copied from a previous assignment.
+rules, exercise identity/name, approved alternatives, media identifiers, calculation outputs,
+and strength inputs. Completion data and client notes are never copied from another assignment.
 
-**TRN-004** The coach can add/remove/reorder weeks and days while an assignment is editable.
-Changes to started/completed work require an audit trail and must not silently remap existing
-logs to a different date.
+**TRN-004** Template versions support add/remove/reorder/copy for weeks, sessions, exercises,
+and sets. An assigned mesocycle allows explicit future-session replacement and reviewed
+progression append. Started sessions cannot be replaced. Rescheduling changes only sessions
+that have not started, so historical dates and executions are never silently remapped.
 
-**TRN-005** A program supports a week-by-day grid. Each day contains ordered exercises. Each
-exercise prescription supports sets, reps, load, target RPE or RIR, and optional per-set
-overrides. A shared value is the default; only differing sets need overrides.
+**TRN-005** A program supports an ordered week/session/exercise/set tree. Each set independently
+supports optional rep range, set type, load strategy/value, canonical RPE or RIR target, rest,
+tempo, notes, and manual load override. The Phase 3 UI accelerates repeated values by copying
+sets; an exercise-level default model is not persisted yet.
 
-**TRN-006** Client-visible future weeks are calculated from program start, tenant time zone,
-and week index. The coach may override visibility for one week or reveal the entire program.
-The API filters locked content; hiding it only in Angular is not protection.
+**TRN-006** Client-visible future weeks are calculated from program start, snapshotted workspace
+time zone, and week index. A week must be published and locally unlocked, unless the coach
+enables `RevealAllWeeks`. The API filters locked content; Angular visibility is not protection.
 
-**TRN-007** The phrase "international calendar" is not precise. **Proposed:** weeks start on
-the tenant's configured ISO Monday and the first program week starts on the subscription
-start date even when that date is not Monday. Product confirmation is required.
+**TRN-007** The phrase "international calendar" is rejected as ambiguous. Week 1 starts on the
+explicit mesocycle start date, even when it is not Monday. Sessions use offsets 0 through 6,
+and later weeks start every seven days. Tenant week-start remains a display preference only.
 
-**TRN-008** Workout completion is one idempotent event for the assigned day/client, with time
-and actor. A completion can be corrected under a defined policy and audit trail. Gamification
-consumes the event; it does not own workout truth.
+**TRN-008** Starting a workout creates one execution snapshot per assigned session/client.
+Completion records server time and becomes immutable in Phase 3. A future correction must be
+a separately authorized/audited operation; direct update or delete is prohibited.
 
-**TRN-009** Coach notes and client notes have separate author and visibility policies. Notes
-may target an assignment, week, training day, prescribed exercise, diet plan, meal slot, or
-meal choice using explicit typed references. A client cannot edit a coach-only note.
+**TRN-009** Template/prescription coach notes are snapshotted separately from append-only
+workout notes. Workout notes carry author user, Coach/Client role, optional exercise-performance
+target, and server time. A client cannot mutate coach notes, and no workout note is overwritten.
 
-**TRN-010** The note "main lifts non modifiable, accessories client can modify" conflicts
-with coach-only program adjustment. **Proposed:** the coach marks each prescription as
-locked, client-adjustable, or client-suggestion-only; all client changes retain the original
-prescription and are audited.
+**TRN-010** Prescription modification is explicit: `Locked` or `CoachApprovedSwap`. A main
+lift is always `Locked`. A permitted client swap must use an alternative captured at assignment,
+and records `Prescribed -> Actually Performed`; it never overwrites coach content.
+
+**TRN-011** Enrollment and mesocycle are not the same aggregate. One training enrollment may
+authorize zero or multiple sequential mesocycles. A mesocycle must fit fully inside that
+enrollment. Phase 3 rejects overlapping primary mesocycles in application code and PostgreSQL;
+supplemental mesocycles are reserved but disabled.
+
+**TRN-012** Starting execution snapshots exercise identity and every prescribed set. Actual
+reps/load/exertion/completion/note are separate fields. Completed execution and performance
+rows cannot be rewritten even when templates or future prescriptions change.
+
+**TRN-013** Planned and Active are derived from the mesocycle dates in its snapshotted time
+zone. Completed and Cancelled are explicit terminal states. Cancellation requires an audit
+reason, preserves history, releases future primary-overlap blocking, and cannot occur while
+a workout is in progress. Completion requires every programmed session to be complete.
+
+**TRN-014** One Training-owned coverage policy authorizes every date-changing operation:
+assignment, rescheduling, and progression apply. Preview exposes projected overflow, but the
+backend always recomputes on apply. Rejection is atomic and leaves the mesocycle unchanged.
+
+**TRN-015** Completing the last programmed session may make the mesocycle terminal, but the
+completed workout remains visible in the client's read model on its scheduled local date.
+Prescribed values and actual performance remain separate and visible after completion.
+
+**TRN-016** Recording a non-null actual load requires an explicit kg or lb unit. When a set
+has no prescribed load/unit, the client UI presents an unselected unit choice rather than
+displaying a default that is absent from the draft or silently assuming a measurement system.
 
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
-**STR-001** A 1RM observation belongs to tenant, client, exercise, value/unit, effective time,
-source (tested or estimated), formula/model version, and optional evidence/notes. Updating a
-client's current 1RM creates a new version rather than rewriting history.
+**STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated
+1RM, or coach working max), value/unit, effective date, source, method/version, optional source
+workout, and note. Recording a new value appends history; update/delete is prohibited.
 
-**STR-002** Assigning 1RM values to a program snapshots the exact strength profile/version
-used by its calculations. Later strength updates do not silently change prescribed loads;
-the coach explicitly recalculates/accepts a new snapshot.
+**STR-002** Assignment snapshots exactly one working max for every exercise using calculated
+loading. Later global strength records never rewrite prescriptions. Intentional rebasing of
+future work is deferred and must create a superseding working-max snapshot with audit reason.
 
-**STR-003** RPE and RIR are related but not two independently exact fields. In common
+**STR-003** RPE and RIR are related but not two independently authoritative fields. In common
 resistance-training usage, RPE 10 roughly means 0 RIR, RPE 9 roughly 1 RIR, and so on, but
-the relationship is subjective and less meaningful far from failure. Store one canonical
-target plus the conversion model/version; derive the companion display where appropriate.
+the relationship is subjective and less meaningful far from failure. Phase 3 stores canonical
+RPE and derives RIR as `10 - RPE`; UI/API input cannot persist contradictory targets.
 
-**STR-004** The plan requests both RPE and RIR from 0 to 10. That is not a sound universal
-validation rule. RPE prescriptions commonly use a bounded exertion scale, while useful RIR
-is normally a non-negative estimate and does not need to mirror the full scale. Final ranges
-and allowed increments (such as 0.5 RPE) need coach confirmation.
+**STR-004** The plan's 0-10 range for both fields is rejected. Phase 3 accepts RPE 5-10 and
+RIR 0-5, each in 0.5 steps. This is a conservative v1 product policy, not a claim that the
+subjective scale is physiologically exact; changing it requires a strategy/version decision.
 
-**STR-005** There is no universal "most sophisticated" load formula. A progression model must
-be named and versioned, publish its source/table, state valid rep/RPE ranges, round to the
-available plate increment, and return an explanation. Out-of-range inputs require coach
-review rather than fabricated precision.
+**STR-005** There is no universal "most sophisticated" load formula. Phase 3 names and
+versions Epley v1 (1-12 reps), Brzycki v1 (1-10 reps), and `WorkingMaxLoad` v2. The latter
+supports direct, percentage-working-max, and an inverse-Epley-shaped RPE recommendation from
+the captured coach working max. It is not labeled as a 1RM estimate. The actual formula input,
+prescribed repetitions plus RIR, cannot exceed 12. It stores unrounded and rounded values plus
+explanation and rejects unsupported inputs instead of fabricating precision.
 
-**STR-006** Duplicating week 1 into later weeks creates new prescriptions and applies a
-deterministic progression rule to each eligible exercise. Re-running with the same source
-and rule is idempotent or requires an explicit replace confirmation. Manual overrides are
-identified and not silently overwritten.
+**STR-006** RPE progression v1 duplicates each selected source week for each requested
+iteration, applies `sourceRpe + increment * iteration`, and creates new prescriptions.
+Increment is -2 to +2 in 0.5 steps. Preview has no side effect; apply recomputes and requires
+the preview hash and concurrency token. Manual load overrides are retained and win.
 
-**STR-007** Calculation from a program 1RM and calculation from week-1 working load are
-different models. The coach chooses one source per progression operation; the system records
-it. It never mixes them implicitly.
+**STR-007** Phase 3 calculated loads use only the captured mesocycle working max. Calculation
+from week-1 performed load is a different future strategy and is never mixed implicitly.
+
+**STR-008** A recommendation and its rounding are separate. Rounding is configured per
+mesocycle with unit, positive increment, and Nearest/Down/Up mode. Phase 3 does not silently
+convert kg and lb; selected maxes must use the mesocycle unit. A positive recommendation that
+would round to zero is rejected as no practical external load; a coach must choose a smaller
+increment, round up deliberately, use a manual override, or explicitly prescribe no load.
 
 ## 6. Nutrition, recipes, and calorie targets
 
@@ -355,6 +390,21 @@ client explicit full-library access per tenant.
 URLs, but a web application cannot guarantee that viewable media is impossible to copy.
 Product language must not promise absolute download prevention.
 
+**MED-004** Phase 3 validates declared type, extension, byte signature, and size; stores under
+a generated key; records checksum and scanner result; and authorizes before issuing a short-
+lived user/tenant/asset-bound browser grant. The content request remains authenticated,
+derives tenant identity from the protected grant rather than a custom subresource header,
+and rechecks current resource/entitlement authorization. The grant carries its own absolute
+expiry, enforced against the injected clock rather than a provider wall clock, and its
+lifetime is configurable (60 seconds to 4 hours, default 1800) so that pausing and seeking a
+demo video does not fail mid-playback. External embeds are validated YouTube/Vimeo IDs. Production publication fails closed until a scanner is configured. Local
+Docker storage is development infrastructure, not the production object-store decision.
+
+**MED-005** Upload bodies are streamed with explicit application and Nginx limits, endpoint
+rate/concurrency controls, and a configurable workspace-byte quota. Deleting historically
+referenced media creates a tombstone and retains bytes. A later retention worker may purge
+only when no protected snapshot requires the object and the approved retention period elapsed.
+
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and
 cannot leak one coach's private library into another tenant.
@@ -420,7 +470,7 @@ Approved on 2026-08-20 and recorded under `docs/adr/`:
 7. Platform support has no implicit tenant-data access. Any future support access is
    explicit, time-limited, and audited.
 
-## 12. Phase 2 decisions and open questions
+## 12. Approved Phase 2/3 decisions and open questions
 
 Phase 2 approved these decisions on 2026-08-20:
 
@@ -432,21 +482,36 @@ Phase 2 approved these decisions on 2026-08-20:
 - workspace-local block overrides entitlements without globally blocking the identity;
 - final legal wording and payment-provider claims require professional/external verification.
 
-Decisions still required before later phases:
+Phase 3 approved and implemented these decisions on 2026-08-21:
 
-1. Which concrete training/nutrition assignment may consume each commercial entitlement?
-   Can one enrollment contain multiple mesocycles, and can an active paid enrollment have no
-   program assigned yet?
-2. Are payment schedules/installments, discounts, credits, waivers, refunds, and FX settlement
+- one enrollment may authorize zero or multiple sequential mesocycles; primary periods do
+  not overlap, while supplemental training is deferred;
+- week 1 starts on an explicit assignment date and workspace time zone, not an ambiguous
+  international-calendar convention;
+- templates, assigned snapshots, executions, prescriptions, and actuals have separate
+  immutable/history boundaries;
+- client prescription policy is `Locked` or `CoachApprovedSwap`, with main lifts locked;
+- RPE is canonical under the v1 ranges above; calculations and progression are versioned,
+  reviewed, rounded separately, and never silently rebase captured working maxes;
+- uploaded media is private and fail-closed without production scanning; viewable media
+  cannot be promised as impossible to copy;
+- mesocycle lifecycle is date-derived until explicit completion/cancellation, and every
+  date-changing path remains inside its authorizing training entitlement;
+- native browser media uses a short-lived HTTP-only grant plus server reauthorization;
+  historical references tombstone media instead of deleting required bytes.
+
+Decisions still required before Phase 4 and later phases:
+
+1. Are payment schedules/installments, discounts, credits, waivers, refunds, and FX settlement
    required for launch? Define grace-period and historical-content access behavior.
-3. What is the behavior when a program starts midweek or a coach changes dates after logs
-   exist?
-4. Which BMR formula, activity/TDEE model, unit conventions, and sex/formula options are
+2. Which BMR formula, activity/TDEE model, unit conventions, and sex/formula options are
    approved? Who is responsible for clinical review?
-5. Is macro energy strictly 4/4/9, provider calories, or both with discrepancy reporting?
-6. Which RPE/RIR reference table and progression model is the first supported version? What
-   plate increments and rounding policy apply?
-7. Can clients truly edit accessory prescriptions, or only log actuals/request a change?
-8. What counts as diet completion and a missed workout for experience changes?
-9. Do you own or license all uploaded/imported recipes, videos, generated art, and any themed
+3. Is macro energy strictly 4/4/9, provider calories, or both with discrepancy reporting?
+4. What counts as diet completion and a missed workout for experience changes?
+5. Do you own or license all uploaded/imported recipes, videos, generated art, and any themed
    intellectual property?
+6. Before expanding training, decide completion-correction policy, historical access after
+   entitlement expiry, supplemental-program rules, default plate policies, and whether/when
+   future prescriptions may be intentionally rebased.
+7. Choose production object storage, malware scanning, private delivery/CDN, retention, and
+   quota providers before accepting real coach uploads in production.

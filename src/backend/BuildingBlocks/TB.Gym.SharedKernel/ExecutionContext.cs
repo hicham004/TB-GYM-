@@ -38,6 +38,8 @@ public static class RateLimitPolicies
     public const string PublicAuthentication = "PublicAuthentication";
 
     public const string SensitiveWrite = "SensitiveWrite";
+
+    public const string MediaUpload = "MediaUpload";
 }
 
 public static class TenantHeaders

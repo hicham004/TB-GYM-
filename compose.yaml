@@ -26,6 +26,9 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080
       ConnectionStrings__Database: Host=postgres;Port=5432;Database=${POSTGRES_DB:-tbgym};Username=${POSTGRES_USER:-tbgym};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       Database__ApplyMigrationsOnStartup: "true"
+      DataProtection__KeyPath: /home/app/.aspnet/DataProtection-Keys
+      Media__StorageRoot: /home/app/media
+      Media__MaxWorkspaceStorageBytes: ${TB_GYM_MEDIA_WORKSPACE_QUOTA_BYTES:-21474836480}
       Seed__Enabled: ${TB_GYM_SEED_ENABLED:-true}
       Seed__AdminEmail: ${TB_GYM_ADMIN_EMAIL:-admin@tbgym.local}
       Seed__AdminPassword: ${TB_GYM_ADMIN_PASSWORD:-}
@@ -33,6 +36,7 @@ services:
       - "5134:8080"
     volumes:
       - data-protection-keys:/home/app/.aspnet/DataProtection-Keys
+      - media-data:/home/app/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,3 +53,4 @@ services:
 volumes:
   postgres-data:
   data-protection-keys:
+  media-data:

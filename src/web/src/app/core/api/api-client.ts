@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { map, Observable } from 'rxjs';
+import type * as Phase3Contracts from './generated';
 import type {
   ClientCommercialOverview as ContractClientCommercialOverview,
   ClientEnrollmentView as ContractClientEnrollmentView,
@@ -342,6 +343,320 @@ export class ApiClient {
     return this.http
       .post<ContractClientSelfProfile>('/api/client-profile/me/complete-onboarding', request)
       .pipe(map(toSelfProfile));
+  }
+
+  searchExercises(query: {
+    query?: string;
+    equipment?: Phase3Contracts.ExerciseEquipment;
+    movementPattern?: Phase3Contracts.MovementPattern;
+    classification?: Phase3Contracts.ExerciseClassification;
+    tag?: string;
+    includeArchived?: boolean;
+  }): Observable<Phase3Contracts.ExerciseSearchResult> {
+    const parameters = Object.fromEntries(
+      Object.entries({ ...query, skip: 0, take: 200 }).filter(
+        ([, value]) => value !== undefined && value !== '',
+      ),
+    );
+    return this.http.get<Phase3Contracts.ExerciseSearchResult>('/api/exercises', {
+      params: parameters,
+    });
+  }
+
+  createExercise(
+    request: Phase3Contracts.CreateExerciseRequest,
+  ): Observable<Phase3Contracts.ExerciseView> {
+    return this.http.post<Phase3Contracts.ExerciseView>('/api/exercises', request);
+  }
+
+  updateExercise(
+    exerciseId: string,
+    request: Phase3Contracts.UpdateExerciseRequest,
+  ): Observable<Phase3Contracts.ExerciseView> {
+    return this.http.put<Phase3Contracts.ExerciseView>(`/api/exercises/${exerciseId}`, request);
+  }
+
+  setExerciseArchived(
+    exerciseId: string,
+    request: Phase3Contracts.SetExerciseArchivedRequest,
+  ): Observable<Phase3Contracts.ExerciseView> {
+    return this.http.put<Phase3Contracts.ExerciseView>(
+      `/api/exercises/${exerciseId}/archive`,
+      request,
+    );
+  }
+
+  listMedia(skip = 0, take = 100): Observable<Phase3Contracts.MediaAssetPage> {
+    return this.http.get<Phase3Contracts.MediaAssetPage>('/api/media', {
+      params: { skip, take },
+    });
+  }
+
+  uploadMedia(title: string, file: File): Observable<Phase3Contracts.MediaAssetView> {
+    const body = new FormData();
+    body.append('title', title);
+    body.append('file', file, file.name);
+    return this.http.post<Phase3Contracts.MediaAssetView>('/api/media/uploads', body);
+  }
+
+  registerExternalMedia(
+    request: Phase3Contracts.RegisterExternalMediaRequest,
+  ): Observable<Phase3Contracts.MediaAssetView> {
+    return this.http.post<Phase3Contracts.MediaAssetView>('/api/media/external', request);
+  }
+
+  createMediaAccess(assetId: string): Observable<Phase3Contracts.MediaAccessView> {
+    return this.http.post<Phase3Contracts.MediaAccessView>(`/api/media/${assetId}/access`, {});
+  }
+
+  deleteMedia(
+    assetId: string,
+    request: Phase3Contracts.DeleteMediaRequest,
+  ): Observable<Phase3Contracts.MediaAssetView> {
+    return this.http.delete<Phase3Contracts.MediaAssetView>(`/api/media/${assetId}`, {
+      body: request,
+    });
+  }
+
+  listProgramTemplates(skip = 0, take = 100): Observable<Phase3Contracts.ProgramTemplatePage> {
+    return this.http.get<Phase3Contracts.ProgramTemplatePage>('/api/training/templates', {
+      params: { skip, take },
+    });
+  }
+
+  getProgramTemplateVersion(
+    versionId: string,
+  ): Observable<Phase3Contracts.ProgramTemplateVersionView> {
+    return this.http.get<Phase3Contracts.ProgramTemplateVersionView>(
+      `/api/training/template-versions/${versionId}`,
+    );
+  }
+
+  createProgramTemplate(
+    request: Phase3Contracts.SaveProgramTemplateRequest,
+  ): Observable<Phase3Contracts.ProgramTemplateVersionView> {
+    return this.http.post<Phase3Contracts.ProgramTemplateVersionView>(
+      '/api/training/templates',
+      request,
+    );
+  }
+
+  addProgramTemplateVersion(
+    templateId: string,
+    request: Phase3Contracts.SaveProgramTemplateRequest,
+  ): Observable<Phase3Contracts.ProgramTemplateVersionView> {
+    return this.http.post<Phase3Contracts.ProgramTemplateVersionView>(
+      `/api/training/templates/${templateId}/versions`,
+      request,
+    );
+  }
+
+  listSavedSessions(): Observable<Phase3Contracts.SavedSessionView[]> {
+    return this.http.get<Phase3Contracts.SavedSessionView[]>('/api/training/saved-sessions');
+  }
+
+  saveTrainingSession(
+    request: Phase3Contracts.SaveSessionTemplateRequest,
+  ): Observable<Phase3Contracts.SavedSessionView> {
+    return this.http.post<Phase3Contracts.SavedSessionView>(
+      '/api/training/saved-sessions',
+      request,
+    );
+  }
+
+  listClientMesocycles(clientId: string): Observable<Phase3Contracts.MesocycleSummary[]> {
+    return this.http.get<Phase3Contracts.MesocycleSummary[]>(
+      `/api/training/clients/${clientId}/mesocycles`,
+    );
+  }
+
+  assignClientMesocycle(
+    clientId: string,
+    request: Phase3Contracts.AssignMesocycleRequest,
+  ): Observable<Phase3Contracts.TrainingMesocycleView> {
+    return this.http.post<Phase3Contracts.TrainingMesocycleView>(
+      `/api/training/clients/${clientId}/mesocycles`,
+      request,
+    );
+  }
+
+  getTrainingMesocycle(id: string): Observable<Phase3Contracts.TrainingMesocycleView> {
+    return this.http.get<Phase3Contracts.TrainingMesocycleView>(`/api/training/mesocycles/${id}`);
+  }
+
+  updateMesocycleVisibility(
+    id: string,
+    request: Phase3Contracts.UpdateMesocycleVisibilityRequest,
+  ): Observable<Phase3Contracts.TrainingMesocycleView> {
+    return this.http.put<Phase3Contracts.TrainingMesocycleView>(
+      `/api/training/mesocycles/${id}/visibility`,
+      request,
+    );
+  }
+
+  setMesocycleWeekPublished(
+    mesocycleId: string,
+    weekId: string,
+    request: Phase3Contracts.SetWeekPublishedRequest,
+  ): Observable<Phase3Contracts.TrainingMesocycleView> {
+    return this.http.put<Phase3Contracts.TrainingMesocycleView>(
+      `/api/training/mesocycles/${mesocycleId}/weeks/${weekId}/publish`,
+      request,
+    );
+  }
+
+  rescheduleMesocycle(
+    mesocycleId: string,
+    request: Phase3Contracts.RescheduleMesocycleRequest,
+  ): Observable<Phase3Contracts.TrainingMesocycleView> {
+    return this.http.put<Phase3Contracts.TrainingMesocycleView>(
+      `/api/training/mesocycles/${mesocycleId}/schedule`,
+      request,
+    );
+  }
+
+  cancelTrainingMesocycle(
+    mesocycleId: string,
+    request: Phase3Contracts.CancelMesocycleRequest,
+  ): Observable<Phase3Contracts.TrainingMesocycleView> {
+    return this.http.post<Phase3Contracts.TrainingMesocycleView>(
+      `/api/training/mesocycles/${mesocycleId}/cancel`,
+      request,
+    );
+  }
+
+  completeTrainingMesocycle(
+    mesocycleId: string,
+    request: Phase3Contracts.CompleteMesocycleRequest,
+  ): Observable<Phase3Contracts.TrainingMesocycleView> {
+    return this.http.post<Phase3Contracts.TrainingMesocycleView>(
+      `/api/training/mesocycles/${mesocycleId}/complete`,
+      request,
+    );
+  }
+
+  replaceFutureTrainingSession(
+    mesocycleId: string,
+    sessionId: string,
+    request: Phase3Contracts.ReplaceTrainingSessionRequest,
+  ): Observable<Phase3Contracts.TrainingMesocycleView> {
+    return this.http.put<Phase3Contracts.TrainingMesocycleView>(
+      `/api/training/mesocycles/${mesocycleId}/sessions/${sessionId}`,
+      request,
+    );
+  }
+
+  previewTrainingProgression(
+    mesocycleId: string,
+    request: Phase3Contracts.ProgressionPreviewRequest,
+  ): Observable<Phase3Contracts.ProgressionPreviewView> {
+    return this.http.post<Phase3Contracts.ProgressionPreviewView>(
+      `/api/training/mesocycles/${mesocycleId}/progression/preview`,
+      request,
+    );
+  }
+
+  applyTrainingProgression(
+    mesocycleId: string,
+    request: Phase3Contracts.ApplyProgressionRequest,
+  ): Observable<Phase3Contracts.TrainingMesocycleView> {
+    return this.http.post<Phase3Contracts.TrainingMesocycleView>(
+      `/api/training/mesocycles/${mesocycleId}/progression/apply`,
+      request,
+    );
+  }
+
+  getExerciseHistory(
+    clientId: string,
+    exerciseId: string,
+    skip = 0,
+    take = 50,
+  ): Observable<Phase3Contracts.ExerciseHistoryPage> {
+    return this.http.get<Phase3Contracts.ExerciseHistoryPage>(
+      `/api/training/clients/${clientId}/exercises/${exerciseId}/history`,
+      { params: { skip, take } },
+    );
+  }
+
+  listStrengthMaxes(
+    clientId: string,
+    exerciseId?: string,
+    skip = 0,
+    take = 100,
+  ): Observable<Phase3Contracts.StrengthMaxPage> {
+    return this.http.get<Phase3Contracts.StrengthMaxPage>(
+      `/api/strength/clients/${clientId}/maxes`,
+      {
+        params: {
+          ...(exerciseId ? { exerciseId } : {}),
+          skip,
+          take,
+        },
+      },
+    );
+  }
+
+  recordStrengthMax(
+    clientId: string,
+    request: Phase3Contracts.RecordStrengthMaxRequest,
+  ): Observable<Phase3Contracts.StrengthMaxView> {
+    return this.http.post<Phase3Contracts.StrengthMaxView>(
+      `/api/strength/clients/${clientId}/maxes`,
+      request,
+    );
+  }
+
+  getMyTrainingToday(): Observable<Phase3Contracts.ClientTrainingDayResult> {
+    return this.http.get<Phase3Contracts.ClientTrainingDayResult>('/api/training/me/today');
+  }
+
+  startMyWorkout(sessionId: string): Observable<Phase3Contracts.WorkoutExecutionView> {
+    return this.http.post<Phase3Contracts.WorkoutExecutionView>(
+      `/api/training/me/sessions/${sessionId}/start`,
+      {},
+    );
+  }
+
+  recordMyTrainingSet(
+    workoutId: string,
+    setId: string,
+    request: Phase3Contracts.RecordSetActualRequest,
+  ): Observable<Phase3Contracts.WorkoutSetSaveView> {
+    return this.http.put<Phase3Contracts.WorkoutSetSaveView>(
+      `/api/training/me/workouts/${workoutId}/sets/${setId}`,
+      request,
+    );
+  }
+
+  substituteMyTrainingExercise(
+    workoutId: string,
+    exercisePerformanceId: string,
+    request: Phase3Contracts.SubstituteExerciseRequest,
+  ): Observable<Phase3Contracts.WorkoutExecutionView> {
+    return this.http.put<Phase3Contracts.WorkoutExecutionView>(
+      `/api/training/me/workouts/${workoutId}/exercises/${exercisePerformanceId}/substitution`,
+      request,
+    );
+  }
+
+  completeMyWorkout(
+    workoutId: string,
+    request: Phase3Contracts.CompleteWorkoutRequest,
+  ): Observable<Phase3Contracts.WorkoutExecutionView> {
+    return this.http.post<Phase3Contracts.WorkoutExecutionView>(
+      `/api/training/me/workouts/${workoutId}/complete`,
+      request,
+    );
+  }
+
+  addWorkoutNote(
+    workoutId: string,
+    request: Phase3Contracts.AddWorkoutNoteRequest,
+  ): Observable<Phase3Contracts.WorkoutExecutionView> {
+    return this.http.post<Phase3Contracts.WorkoutExecutionView>(
+      `/api/training/workouts/${workoutId}/notes`,
+      request,
+    );
   }
 }
 

@@ -46,6 +46,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/commercial/products').then((module) => module.Products),
   },
   {
+    path: 'training',
+    canActivate: [authGuard],
+    loadChildren: () =>
+      import('./features/training/training.routes').then((module) => module.trainingRoutes),
+  },
+  {
     path: 'profile',
     canActivate: [authGuard, clientGuard],
     title: $localize`My profile | TB Gym`,

@@ -1,0 +1,567 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow" i18n>Training</p>
+    <h1 i18n>Program builder</h1>
+    <p>
+      {{ templates().length }} / {{ templateTotal() }} templates &middot;
+      {{ exercises().length }} exercises
+    </p>
+  </div>
+  <div class="button-group">
+    <button class="secondary-button" type="button" (click)="newTemplate()" i18n>
+      New template
+    </button>
+    <button class="primary-button" type="button" [disabled]="busy()" (click)="saveProgram()">
+      @if (draft().templateId) {
+        <span i18n>Save new version</span>
+      } @else {
+        <span i18n>Create template</span>
+      }
+    </button>
+  </div>
+</section>
+
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="form-success" role="status">{{ notice() }}</p>
+}
+
+<div class="builder-layout">
+  <aside
+    class="template-rail"
+    [class.empty]="templates().length === 0"
+    aria-label="Program templates"
+    i18n-aria-label
+  >
+    <h2 i18n>Templates</h2>
+    @if (loading()) {
+      <p class="muted" i18n>Loading...</p>
+    } @else if (templates().length === 0) {
+      <p class="muted" i18n>No templates yet.</p>
+    }
+    @for (template of templates(); track template.id) {
+      <div class="template-entry">
+        <strong>{{ template.name }}</strong>
+        <span>v{{ template.currentVersionNumber }}</span>
+        <div class="version-list">
+          @for (version of template.versions; track version.id) {
+            <button
+              type="button"
+              [class.active]="draft().sourceVersionId === version.id"
+              [disabled]="busy()"
+              (click)="openVersion(version.id)"
+            >
+              <span>v{{ version.versionNumber }}</span>
+              @if (version.isPublished) {
+                <small i18n>Published</small>
+              } @else {
+                <small i18n>Draft</small>
+              }
+            </button>
+          }
+        </div>
+      </div>
+    }
+    @if (templates().length < templateTotal()) {
+      <button
+        class="quiet-button compact"
+        type="button"
+        [disabled]="busy()"
+        (click)="loadMoreTemplates()"
+        i18n
+      >
+        Load more templates
+      </button>
+    }
+  </aside>
+
+  <section class="editor" aria-label="Program editor" i18n-aria-label>
+    <div class="program-fields">
+      <label>
+        <span i18n>Program name</span>
+        <input [(ngModel)]="draft().name" maxlength="160" />
+      </label>
+      <label class="description-field">
+        <span i18n>Description</span>
+        <input [(ngModel)]="draft().description" maxlength="2000" />
+      </label>
+      <label class="check-field">
+        <input type="checkbox" [(ngModel)]="draft().publish" />
+        <span i18n>Publish version</span>
+      </label>
+    </div>
+
+    <div class="bulk-toolbar">
+      <div class="button-group">
+        <button class="secondary-button compact" type="button" (click)="addWeek()" i18n>
+          Add week
+        </button>
+        <button
+          class="quiet-button compact"
+          type="button"
+          [disabled]="selectedWeeks().size === 0"
+          (click)="copySelectedWeeks()"
+          i18n
+        >
+          Duplicate selected weeks
+        </button>
+        <button
+          class="quiet-button compact"
+          type="button"
+          [disabled]="selectedSessions().size === 0"
+          (click)="copySelectedSessions()"
+          i18n
+        >
+          Copy selected sessions
+        </button>
+      </div>
+      <span>{{ draft().weeks.length }} <span i18n>weeks</span></span>
+    </div>
+
+    @for (week of draft().weeks; track week.key; let weekIndex = $index) {
+      <article
+        class="week-band"
+        draggable="true"
+        (dragstart)="weekDragStart(weekIndex)"
+        (dragover)="$event.preventDefault()"
+        (drop)="weekDrop(weekIndex)"
+      >
+        <header class="week-heading">
+          <label class="select-row">
+            <input
+              type="checkbox"
+              [checked]="selectedWeeks().has(week.key)"
+              (change)="toggleWeek(week.key, $event)"
+            />
+            <strong i18n>Week {{ weekIndex + 1 }}</strong>
+          </label>
+          <input
+            class="week-label"
+            [(ngModel)]="week.label"
+            maxlength="120"
+            aria-label="Week label"
+            i18n-aria-label
+          />
+          <label class="check-field publish-check">
+            <input type="checkbox" [(ngModel)]="week.isPublished" />
+            <span i18n>Published</span>
+          </label>
+          <div class="icon-actions">
+            <button
+              type="button"
+              title="Move week up"
+              i18n-title
+              aria-label="Move week up"
+              i18n-aria-label
+              [disabled]="weekIndex === 0"
+              (click)="moveWeek(weekIndex, -1)"
+            >
+              &#8593;
+            </button>
+            <button
+              type="button"
+              title="Move week down"
+              i18n-title
+              aria-label="Move week down"
+              i18n-aria-label
+              [disabled]="weekIndex === draft().weeks.length - 1"
+              (click)="moveWeek(weekIndex, 1)"
+            >
+              &#8595;
+            </button>
+            <button
+              type="button"
+              title="Duplicate week"
+              i18n-title
+              aria-label="Duplicate week"
+              i18n-aria-label
+              (click)="copyWeek(weekIndex)"
+            >
+              &#10697;
+            </button>
+            <button
+              class="danger-icon"
+              type="button"
+              title="Delete week"
+              i18n-title
+              aria-label="Delete week"
+              i18n-aria-label
+              [disabled]="draft().weeks.length === 1"
+              (click)="removeWeek(weekIndex)"
+            >
+              &times;
+            </button>
+          </div>
+        </header>
+
+        <div class="week-tools">
+          <button
+            class="secondary-button compact"
+            type="button"
+            (click)="addSession(weekIndex)"
+            i18n
+          >
+            Add session
+          </button>
+          @if (savedSessions().length > 0) {
+            <label class="reuse-picker">
+              <span i18n>Reuse saved session</span>
+              <select (change)="reuseSession(weekIndex, $event)">
+                <option value="" i18n>Select...</option>
+                @for (saved of savedSessions(); track saved.id) {
+                  <option [value]="saved.id">{{ saved.name }}</option>
+                }
+              </select>
+            </label>
+          }
+        </div>
+
+        @if (week.sessions.length === 0) {
+          <p class="inline-empty" i18n>No sessions in this week.</p>
+        }
+
+        @for (session of week.sessions; track session.key; let sessionIndex = $index) {
+          <section
+            class="session-row"
+            draggable="true"
+            (dragstart)="sessionDragStart(weekIndex, sessionIndex); $event.stopPropagation()"
+            (dragover)="$event.preventDefault()"
+            (drop)="sessionDrop(weekIndex, sessionIndex); $event.stopPropagation()"
+          >
+            <div class="session-heading">
+              <label class="select-row">
+                <input
+                  type="checkbox"
+                  [checked]="selectedSessions().has(session.key)"
+                  (change)="toggleSession(session.key, $event)"
+                />
+                <span class="session-number">{{ sessionIndex + 1 }}</span>
+              </label>
+              <label class="session-name">
+                <span i18n>Session</span>
+                <input [(ngModel)]="session.name" maxlength="160" />
+              </label>
+              <label class="day-field">
+                <span i18n>Day</span>
+                <select [(ngModel)]="session.dayOffset">
+                  <option [ngValue]="0" i18n>Day 1</option>
+                  <option [ngValue]="1" i18n>Day 2</option>
+                  <option [ngValue]="2" i18n>Day 3</option>
+                  <option [ngValue]="3" i18n>Day 4</option>
+                  <option [ngValue]="4" i18n>Day 5</option>
+                  <option [ngValue]="5" i18n>Day 6</option>
+                  <option [ngValue]="6" i18n>Day 7</option>
+                </select>
+              </label>
+              <div class="icon-actions">
+                <button
+                  type="button"
+                  title="Move session up"
+                  i18n-title
+                  aria-label="Move session up"
+                  i18n-aria-label
+                  [disabled]="sessionIndex === 0"
+                  (click)="moveSession(weekIndex, sessionIndex, -1)"
+                >
+                  &#8593;
+                </button>
+                <button
+                  type="button"
+                  title="Move session down"
+                  i18n-title
+                  aria-label="Move session down"
+                  i18n-aria-label
+                  [disabled]="sessionIndex === week.sessions.length - 1"
+                  (click)="moveSession(weekIndex, sessionIndex, 1)"
+                >
+                  &#8595;
+                </button>
+                <button
+                  type="button"
+                  title="Copy session"
+                  i18n-title
+                  aria-label="Copy session"
+                  i18n-aria-label
+                  (click)="copySession(weekIndex, sessionIndex)"
+                >
+                  &#10697;
+                </button>
+                <button
+                  class="danger-icon"
+                  type="button"
+                  title="Delete session"
+                  i18n-title
+                  aria-label="Delete session"
+                  i18n-aria-label
+                  (click)="removeSession(weekIndex, sessionIndex)"
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+
+            <div class="session-meta">
+              <label>
+                <span i18n>Coach notes</span>
+                <input [(ngModel)]="session.coachNotes" maxlength="2000" />
+              </label>
+              <button
+                class="quiet-button compact"
+                type="button"
+                [disabled]="!session.sourceId || busy()"
+                (click)="saveSession(session)"
+                i18n
+              >
+                Save session
+              </button>
+            </div>
+
+            <div class="exercise-add">
+              <select
+                aria-label="Add exercise"
+                i18n-aria-label
+                (change)="addExercise(weekIndex, sessionIndex, $event)"
+              >
+                <option value="" i18n>Add exercise...</option>
+                @for (exerciseOption of exercises(); track exerciseOption.id) {
+                  <option [value]="exerciseOption.id">{{ exerciseOption.name }}</option>
+                }
+              </select>
+            </div>
+
+            @for (exercise of session.exercises; track exercise.key; let exerciseIndex = $index) {
+              <div class="exercise-row">
+                <div class="exercise-heading">
+                  <strong>{{ exerciseIndex + 1 }}. {{ exerciseName(exercise.exerciseId) }}</strong>
+                  <div class="icon-actions">
+                    <button
+                      type="button"
+                      title="Move exercise up"
+                      i18n-title
+                      aria-label="Move exercise up"
+                      i18n-aria-label
+                      [disabled]="exerciseIndex === 0"
+                      (click)="moveExercise(weekIndex, sessionIndex, exerciseIndex, -1)"
+                    >
+                      &#8593;
+                    </button>
+                    <button
+                      type="button"
+                      title="Move exercise down"
+                      i18n-title
+                      aria-label="Move exercise down"
+                      i18n-aria-label
+                      [disabled]="exerciseIndex === session.exercises.length - 1"
+                      (click)="moveExercise(weekIndex, sessionIndex, exerciseIndex, 1)"
+                    >
+                      &#8595;
+                    </button>
+                    <button
+                      class="danger-icon"
+                      type="button"
+                      title="Remove exercise"
+                      i18n-title
+                      aria-label="Remove exercise"
+                      i18n-aria-label
+                      (click)="removeExercise(weekIndex, sessionIndex, exerciseIndex)"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                </div>
+
+                <div class="prescription-options">
+                  <label class="check-field">
+                    <input
+                      type="checkbox"
+                      [(ngModel)]="exercise.isMainLift"
+                      (change)="mainLiftChanged(exercise)"
+                    />
+                    <span i18n>Main lift</span>
+                  </label>
+                  <label>
+                    <span i18n>Client modification</span>
+                    <select
+                      [(ngModel)]="exercise.modificationPolicy"
+                      [disabled]="exercise.isMainLift"
+                    >
+                      <option value="Locked" i18n>Locked</option>
+                      <option value="CoachApprovedSwap" i18n>Approved swap</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span i18n>Coach notes</span>
+                    <input [(ngModel)]="exercise.coachNotes" maxlength="2000" />
+                  </label>
+                  @if (exercise.modificationPolicy === 'CoachApprovedSwap') {
+                    <label>
+                      <span i18n>Approved alternatives</span>
+                      <select multiple [(ngModel)]="exercise.approvedAlternativeExerciseIds">
+                        @for (alternative of exercises(); track alternative.id) {
+                          @if (alternative.id !== exercise.exerciseId) {
+                            <option [value]="alternative.id">{{ alternative.name }}</option>
+                          }
+                        }
+                      </select>
+                    </label>
+                  }
+                </div>
+
+                <div class="set-table" role="table" aria-label="Set prescriptions" i18n-aria-label>
+                  <div class="set-header" role="row">
+                    <span i18n>Set</span>
+                    <span i18n>Type</span>
+                    <span i18n>Reps</span>
+                    <span i18n>Load model</span>
+                    <span i18n>Target</span>
+                    <span i18n>RPE/RIR</span>
+                    <span i18n>Rest</span>
+                    <span></span>
+                  </div>
+                  @for (set of exercise.sets; track set.key; let setIndex = $index) {
+                    <div class="set-line" role="row">
+                      <strong>{{ setIndex + 1 }}</strong>
+                      <select [(ngModel)]="set.setType" aria-label="Set type" i18n-aria-label>
+                        @for (type of setTypes; track type) {
+                          <option [value]="type">{{ setTypeLabel(type) }}</option>
+                        }
+                      </select>
+                      <div class="joined-inputs">
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          [(ngModel)]="set.repetitionsMinimum"
+                          aria-label="Minimum repetitions"
+                          i18n-aria-label
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          [(ngModel)]="set.repetitionsMaximum"
+                          aria-label="Maximum repetitions"
+                          i18n-aria-label
+                        />
+                      </div>
+                      <select
+                        [(ngModel)]="set.loadStrategy"
+                        aria-label="Load strategy"
+                        i18n-aria-label
+                      >
+                        @for (strategy of loadStrategies; track strategy) {
+                          <option [value]="strategy">{{ loadStrategyLabel(strategy) }}</option>
+                        }
+                      </select>
+                      <label class="inline-field">
+                        <span>{{ loadValueLabel(set) }}</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.25"
+                          [(ngModel)]="set.loadValue"
+                          [disabled]="
+                            set.loadStrategy === 'None' || set.loadStrategy === 'RpeBasedEpley'
+                          "
+                        />
+                      </label>
+                      <div class="joined-inputs exertion-input">
+                        <select
+                          [ngModel]="set.exertionDisplayPreference"
+                          (ngModelChange)="exertionPreferenceChanged(set, $event)"
+                          aria-label="Exertion scale"
+                          i18n-aria-label
+                        >
+                          <option value="Rpe">RPE</option>
+                          <option value="Rir">RIR</option>
+                        </select>
+                        <input
+                          type="number"
+                          [attr.min]="set.exertionDisplayPreference === 'Rpe' ? 5 : 0"
+                          [attr.max]="set.exertionDisplayPreference === 'Rpe' ? 10 : 5"
+                          step="0.5"
+                          [(ngModel)]="set.exertionTarget"
+                          aria-label="Exertion target"
+                          i18n-aria-label
+                        />
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max="3600"
+                        step="15"
+                        [(ngModel)]="set.restSeconds"
+                        aria-label="Rest seconds"
+                        i18n-aria-label
+                      />
+                      <div class="icon-actions">
+                        <button
+                          type="button"
+                          title="Copy set"
+                          i18n-title
+                          aria-label="Copy set"
+                          i18n-aria-label
+                          (click)="copySet(exercise, set)"
+                        >
+                          &#10697;
+                        </button>
+                        <button
+                          class="danger-icon"
+                          type="button"
+                          title="Remove set"
+                          i18n-title
+                          aria-label="Remove set"
+                          i18n-aria-label
+                          [disabled]="exercise.sets.length === 1"
+                          (click)="removeSet(exercise, setIndex)"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    </div>
+                    <div class="set-details">
+                      <label>
+                        <span i18n>Unit</span>
+                        <select [(ngModel)]="set.loadUnit">
+                          <option value="Kilogram">kg</option>
+                          <option value="Pound">lb</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span i18n>Manual load override</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.25"
+                          [(ngModel)]="set.manualLoadOverride"
+                        />
+                      </label>
+                      <label>
+                        <span i18n>Tempo</span>
+                        <input [(ngModel)]="set.tempo" maxlength="40" placeholder="3-1-1-0" />
+                      </label>
+                      <label>
+                        <span i18n>Set note</span>
+                        <input [(ngModel)]="set.coachNotes" maxlength="1000" />
+                      </label>
+                    </div>
+                  }
+                </div>
+                <button
+                  class="quiet-button compact add-set"
+                  type="button"
+                  (click)="addSet(exercise)"
+                  i18n
+                >
+                  Add set
+                </button>
+              </div>
+            }
+          </section>
+        }
+      </article>
+    }
+  </section>
+</div>

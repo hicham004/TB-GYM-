@@ -4,8 +4,9 @@
 
 - Read `docs/ARCHITECTURE.md`, `docs/DOMAIN-RULES.md`, and `docs/ROADMAP.md` before changing
   architecture or domain behavior.
-- Read ADR 0005 and ADR 0006 before changing commercial access, payment, notifications, or
-  legal consent. Phase 2 is complete; do not begin Phase 3 without the user's approval.
+- Read ADRs 0005-0007 before changing commercial access, training, strength, progression,
+  notifications, media, or legal consent. Phase 3 is complete; do not begin Phase 4 without
+  the user's approval.
 - `base44/` is a preserved legacy reference, not the new architecture. Do not edit, delete,
   or copy its generic CRUD/security model unless the user explicitly requests legacy work.
 - The backend/database is the source of truth. Never implement an invariant only in Angular.
@@ -77,6 +78,29 @@
 - Mutable aggregates require optimistic concurrency and conflict handling.
 - Template assignment creates a client snapshot. Master-template edits never mutate assigned
   programs or diets.
+- Keep `ProgramTemplate`, immutable `ProgramTemplateVersion`, client `TrainingMesocycle`, and
+  `WorkoutExecution` separate. Starting a workout snapshots prescriptions; actuals never
+  overwrite prescribed values.
+- One enrollment may authorize zero or several sequential mesocycles. Do not collapse
+  enrollment and mesocycle. Keep the primary-mesocycle GiST overlap constraint. Assignment,
+  rescheduling, and progression must all use `TrainingCoveragePolicy`.
+- Planned/Active mesocycle status is date-derived. Completed/Cancelled is terminal and
+  audited; never delete an assignment to correct it or mutate terminal programming.
+- Main lifts are `Locked`. `CoachApprovedSwap` permits only captured alternatives and records
+  the performed exercise without changing the prescription.
+- Strength observations and mesocycle working maxes are append-only snapshots. Do not
+  silently rebase a program after a global max changes or convert kg/lb implicitly.
+- RPE is canonical: Phase 3 accepts RPE 5-10 or RIR 0-5 in 0.5 steps. Calculation,
+  progression, and rounding strategies must remain named, versioned, explainable, and tested;
+  manual coach overrides win.
+- Progression must remain `Preview -> hash/concurrency check -> Apply`; no bulk transform may
+  persist before coach review, and apply must recheck enrollment coverage server-side.
+- Private media access must reauthorize tenant/user/asset, validate signature and size, use
+  generated object keys, and fail closed in production when scanning is unavailable. Native
+  image/video requests use the short-lived path-scoped grant cookie, never public URLs or a
+  required `X-Tenant-Id` subresource header.
+- Keep unsaved workout-entry drafts separate from API DTOs and keyed by set-performance ID.
+  Saving or failing one set must not erase another set's dirty values.
 - Keep formulas named/versioned with inputs and provenance. Add fixed reference tests.
 
 ## Testing

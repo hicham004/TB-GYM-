@@ -22,25 +22,8 @@ public sealed class Phase1WorkflowTests
     [TestInitialize]
     public async Task InitializeAsync()
     {
-        adminConnection = Environment.GetEnvironmentVariable("TB_GYM_TEST_ADMIN_CONNECTION");
-        if (string.IsNullOrWhiteSpace(adminConnection))
-        {
-            Assert.Inconclusive("TB_GYM_TEST_ADMIN_CONNECTION is not configured.");
-        }
-
-        databaseName = $"tbgym_p1_{Guid.NewGuid():N}";
-        try
-        {
-            await using var connection = new NpgsqlConnection(adminConnection);
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"CREATE DATABASE \"{databaseName}\"";
-            await command.ExecuteNonQueryAsync();
-        }
-        catch (NpgsqlException exception)
-        {
-            Assert.Inconclusive($"PostgreSQL integration database is unavailable: {exception.Message}");
-        }
+        adminConnection = PostgreSqlTestEnvironment.RequireAdminConnection();
+        databaseName = await PostgreSqlTestEnvironment.CreateDatabaseAsync("tbgym_p1");
 
         databaseConnection = new NpgsqlConnectionStringBuilder(adminConnection)
         {

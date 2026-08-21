@@ -20,7 +20,20 @@ public static class IdentityEndpoints
         group.MapGet("/csrf", (HttpContext context, IAntiforgery antiforgery) =>
         {
             var tokens = antiforgery.GetAndStoreTokens(context);
-            return Results.Ok(new CsrfResponse(tokens.RequestToken ?? string.Empty));
+            var requestToken = tokens.RequestToken ?? string.Empty;
+            context.Response.Cookies.Append(
+                "XSRF-TOKEN",
+                requestToken,
+                new CookieOptions
+                {
+                    HttpOnly = false,
+                    IsEssential = true,
+                    Path = "/",
+                    SameSite = SameSiteMode.Lax,
+                    Secure = context.Request.IsHttps,
+                });
+            context.Response.Headers.CacheControl = "no-store";
+            return Results.Ok(new CsrfResponse(requestToken));
         })
         .AllowAnonymous()
         .WithName("GetCsrfToken")

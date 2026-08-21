@@ -56,6 +56,27 @@ public sealed class ApiSmokeTests
     }
 
     [TestMethod]
+    public async Task CsrfEndpointSeparatesFrameworkAndSpaTokens()
+    {
+        var response = await RequiredClient.GetAsync("/api/auth/csrf");
+        var payload = await response.Content.ReadFromJsonAsync<CsrfResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(payload);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(payload.Token));
+        Assert.IsTrue(response.Headers.CacheControl is { NoStore: true });
+        Assert.IsTrue(response.Headers.TryGetValues("Set-Cookie", out var setCookies));
+
+        var cookies = setCookies.ToArray();
+        var frameworkCookie = cookies.Single(value => value.StartsWith("tb-gym-antiforgery=", StringComparison.Ordinal));
+        var spaCookie = cookies.Single(value => value.StartsWith("XSRF-TOKEN=", StringComparison.Ordinal));
+
+        StringAssert.Contains(frameworkCookie, "httponly", StringComparison.OrdinalIgnoreCase);
+        Assert.IsFalse(spaCookie.Contains("httponly", StringComparison.OrdinalIgnoreCase));
+        StringAssert.Contains(spaCookie, payload.Token, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
     public void TenantRolesUseTheDocumentedStringContract()
     {
         var options = RequiredFactory.Services
@@ -106,4 +127,6 @@ public sealed class ApiSmokeTests
         factory ?? throw new InvalidOperationException("The test factory is not initialized.");
 
     private sealed record SystemStatus(string Name, string Architecture, string Framework, DateTimeOffset UtcTime);
+
+    private sealed record CsrfResponse(string Token);
 }

@@ -2,12 +2,16 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using TB.Gym.Modules.Clients;
+using TB.Gym.Modules.ExerciseLibrary;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
+using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.Progress;
+using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
+using TB.Gym.Modules.Training;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Persistence;
@@ -55,6 +59,68 @@ public sealed partial class GymDbContext(
 
     public DbSet<LegalConsentAcceptance> LegalConsentAcceptances => Set<LegalConsentAcceptance>();
 
+    public DbSet<Exercise> Exercises => Set<Exercise>();
+
+    public DbSet<ExerciseMuscle> ExerciseMuscles => Set<ExerciseMuscle>();
+
+    public DbSet<ExerciseTag> ExerciseTags => Set<ExerciseTag>();
+
+    public DbSet<ExerciseAlternative> ExerciseAlternatives => Set<ExerciseAlternative>();
+
+    public DbSet<ExerciseMediaLink> ExerciseMediaLinks => Set<ExerciseMediaLink>();
+
+    public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
+
+    public DbSet<StrengthMaxRecord> StrengthMaxRecords => Set<StrengthMaxRecord>();
+
+    public DbSet<MesocycleWorkingMaxSnapshot> MesocycleWorkingMaxSnapshots => Set<MesocycleWorkingMaxSnapshot>();
+
+    public DbSet<ProgramTemplate> ProgramTemplates => Set<ProgramTemplate>();
+
+    public DbSet<ProgramTemplateVersion> ProgramTemplateVersions => Set<ProgramTemplateVersion>();
+
+    public DbSet<ProgramTemplateWeek> ProgramTemplateWeeks => Set<ProgramTemplateWeek>();
+
+    public DbSet<ProgramTemplateSession> ProgramTemplateSessions => Set<ProgramTemplateSession>();
+
+    public DbSet<ProgramTemplateExercise> ProgramTemplateExercises => Set<ProgramTemplateExercise>();
+
+    public DbSet<ProgramTemplateExerciseAlternative> ProgramTemplateExerciseAlternatives => Set<ProgramTemplateExerciseAlternative>();
+
+    public DbSet<ProgramTemplateSet> ProgramTemplateSets => Set<ProgramTemplateSet>();
+
+    public DbSet<SavedSessionTemplate> SavedSessionTemplates => Set<SavedSessionTemplate>();
+
+    public DbSet<TrainingMesocycle> TrainingMesocycles => Set<TrainingMesocycle>();
+
+    public DbSet<MesocycleLifecycleEvent> MesocycleLifecycleEvents => Set<MesocycleLifecycleEvent>();
+
+    public DbSet<MesocycleWeek> MesocycleWeeks => Set<MesocycleWeek>();
+
+    public DbSet<TrainingSession> TrainingSessions => Set<TrainingSession>();
+
+    public DbSet<ExercisePrescription> ExercisePrescriptions => Set<ExercisePrescription>();
+
+    public DbSet<ExercisePrescriptionAlternative> ExercisePrescriptionAlternatives => Set<ExercisePrescriptionAlternative>();
+
+    public DbSet<ExercisePrescriptionMediaSnapshot> ExercisePrescriptionMediaSnapshots => Set<ExercisePrescriptionMediaSnapshot>();
+
+    public DbSet<SetPrescription> SetPrescriptions => Set<SetPrescription>();
+
+    public DbSet<WorkoutExecution> WorkoutExecutions => Set<WorkoutExecution>();
+
+    public DbSet<WorkoutExercisePerformance> WorkoutExercisePerformances => Set<WorkoutExercisePerformance>();
+
+    public DbSet<WorkoutExerciseAlternativeSnapshot> WorkoutExerciseAlternativeSnapshots => Set<WorkoutExerciseAlternativeSnapshot>();
+
+    public DbSet<WorkoutExerciseMediaSnapshot> WorkoutExerciseMediaSnapshots => Set<WorkoutExerciseMediaSnapshot>();
+
+    public DbSet<WorkoutSetPerformance> WorkoutSetPerformances => Set<WorkoutSetPerformance>();
+
+    public DbSet<WorkoutNote> WorkoutNotes => Set<WorkoutNote>();
+
+    public DbSet<ProgressionApplication> ProgressionApplications => Set<ProgressionApplication>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -67,6 +133,10 @@ public sealed partial class GymDbContext(
         ConfigureCommercial(builder);
         ConfigureNotifications(builder);
         ConfigureLegalConsent(builder);
+        ConfigureExerciseLibrary(builder);
+        ConfigureMedia(builder);
+        ConfigureStrength(builder);
+        ConfigureTraining(builder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -377,6 +447,11 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<PaymentRecord>("Payment records are append-only.");
         RejectAppendOnlyMutations<ClientRelationshipEvent>("Client relationship events are append-only.");
         RejectAppendOnlyMutations<LegalConsentAcceptance>("Legal consent acceptances are append-only.");
+        RejectAppendOnlyMutations<StrengthMaxRecord>("Strength max history is append-only.");
+        RejectAppendOnlyMutations<MesocycleWorkingMaxSnapshot>("Working-max snapshots are append-only.");
+        RejectAppendOnlyMutations<WorkoutNote>("Workout notes are append-only.");
+        RejectAppendOnlyMutations<ProgressionApplication>("Progression applications are append-only.");
+        RejectAppendOnlyMutations<MesocycleLifecycleEvent>("Mesocycle lifecycle events are append-only.");
 
         foreach (var entry in ChangeTracker.Entries<ProductOffer>().Where(item => item.State == EntityState.Modified))
         {

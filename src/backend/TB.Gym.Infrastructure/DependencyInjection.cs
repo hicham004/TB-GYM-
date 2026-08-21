@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Localization;
@@ -18,8 +19,12 @@ using TB.Gym.Infrastructure.Security;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
+using TB.Gym.Modules.ExerciseLibrary;
+using TB.Gym.Modules.Media;
+using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
+using TB.Gym.Modules.Training;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure;
@@ -96,8 +101,8 @@ public static class DependencyInjection
 
         services.AddAntiforgery(options =>
         {
-            options.Cookie.Name = "XSRF-TOKEN";
-            options.Cookie.HttpOnly = false;
+            options.Cookie.Name = "tb-gym-antiforgery";
+            options.Cookie.HttpOnly = true;
             options.Cookie.Path = "/";
             options.Cookie.SameSite = SameSiteMode.Lax;
             options.Cookie.SecurePolicy = environment.IsDevelopment()
@@ -135,6 +140,32 @@ public static class DependencyInjection
         services.AddScoped<ICoachingFeatureAccessService, CoachingFeatureAccessService>();
         services.AddScoped<ICommercialApplicationService, CommercialApplicationService>();
         services.AddScoped<ILegalConsentApplicationService, LegalConsentApplicationService>();
+        services.AddScoped<IExerciseLibraryApplicationService, ExerciseLibraryApplicationService>();
+        services.AddScoped<IStrengthApplicationService, StrengthApplicationService>();
+        services.AddScoped<ITrainingApplicationService, TrainingApplicationService>();
+        services.AddScoped<IMediaApplicationService, MediaApplicationService>();
+        services.AddSingleton<MediaUploadConcurrencyGate>();
+        services.AddSingleton<IObjectStorage, LocalObjectStorage>();
+        services.AddSingleton<IMediaScanner>(_ => environment.IsDevelopment()
+            ? new DevelopmentMediaScanner()
+            : new UnavailableMediaScanner());
+        services.AddOptions<MediaStorageOptions>()
+            .Bind(configuration.GetSection(MediaStorageOptions.SectionName))
+            .Validate(
+                options => options.MaxWorkspaceStorageBytes is >= MediaUploadPolicy.MaximumImageBytes and <= 10L * 1024L * 1024L * 1024L * 1024L,
+                "Media:MaxWorkspaceStorageBytes must be between 15 MB and 10 TB.")
+            .Validate(
+                // The lower bound is deliberately a minute: sub-minute grants expire inside normal
+                // request latency and produce intermittent playback failures rather than security.
+                options => options.AccessLifetimeSeconds is >= 60 and <= 14400,
+                "Media:AccessLifetimeSeconds must be between 60 seconds and 4 hours.")
+            .ValidateOnStart();
+        var dataProtection = services.AddDataProtection().SetApplicationName("TB.Gym");
+        var dataProtectionKeyPath = configuration["DataProtection:KeyPath"];
+        if (!string.IsNullOrWhiteSpace(dataProtectionKeyPath))
+        {
+            dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyPath));
+        }
 
         services.AddRateLimiter(options =>
         {
@@ -162,6 +193,23 @@ public static class DependencyInjection
                     {
                         PermitLimit = 60,
                         Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
+                    });
+            });
+            options.AddPolicy(RateLimitPolicies.MediaUpload, context =>
+            {
+                var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                    ?? context.Connection.RemoteIpAddress?.ToString()
+                    ?? "unknown";
+                var workspace = context.Request.Headers[TenantHeaders.TenantId].FirstOrDefault()
+                    ?? "none";
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: $"media:{actor}:{workspace}",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 10,
+                        Window = TimeSpan.FromHours(1),
                         QueueLimit = 0,
                         AutoReplenishment = true,
                     });

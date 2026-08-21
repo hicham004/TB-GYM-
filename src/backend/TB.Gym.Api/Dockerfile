@@ -16,8 +16,8 @@ EXPOSE 8080
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends libgssapi-krb5-2 \
     && rm --recursive --force /var/lib/apt/lists/* \
-    && mkdir --parents /home/app/.aspnet/DataProtection-Keys \
-    && chown --recursive $APP_UID:$APP_UID /home/app/.aspnet
+    && mkdir --parents /home/app/.aspnet/DataProtection-Keys /home/app/media \
+    && chown --recursive $APP_UID:$APP_UID /home/app/.aspnet /home/app/media
 
 COPY --from=build /app/publish .
 USER $APP_UID

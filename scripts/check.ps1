@@ -15,6 +15,7 @@ try {
     dotnet build TB.Gym.slnx --configuration Release --no-restore
     Assert-TbGymCommandSucceeded 'dotnet build'
 
+    $env:TB_GYM_REQUIRE_POSTGRES_TESTS = 'true'
     dotnet test TB.Gym.slnx --configuration Release --no-build
     Assert-TbGymCommandSucceeded 'dotnet test'
 

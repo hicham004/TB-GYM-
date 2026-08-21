@@ -1,0 +1,301 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow" i18n>Training</p>
+    <h1 i18n>Exercise library</h1>
+    <p>{{ total() }} <span i18n>exercises</span></p>
+  </div>
+  <button class="primary-button" type="button" (click)="newExercise()" i18n>New exercise</button>
+</section>
+
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="form-success" role="status">{{ notice() }}</p>
+}
+
+<section class="filter-bar" aria-label="Exercise filters" i18n-aria-label>
+  <label class="search-field">
+    <span i18n>Search</span>
+    <input
+      type="search"
+      [ngModel]="query()"
+      (ngModelChange)="query.set($event)"
+      (keyup.enter)="search()"
+    />
+  </label>
+  <label>
+    <span i18n>Equipment</span>
+    <select [ngModel]="equipmentFilter()" (ngModelChange)="equipmentFilter.set($event)">
+      <option value="" i18n>All</option>
+      @for (item of equipment; track item) {
+        <option [value]="item">{{ equipmentLabel(item) }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    <span i18n>Movement</span>
+    <select [ngModel]="patternFilter()" (ngModelChange)="patternFilter.set($event)">
+      <option value="" i18n>All</option>
+      @for (item of patterns; track item) {
+        <option [value]="item">{{ patternLabel(item) }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    <span i18n>Class</span>
+    <select [ngModel]="classificationFilter()" (ngModelChange)="classificationFilter.set($event)">
+      <option value="" i18n>All</option>
+      @for (item of classifications; track item) {
+        <option [value]="item">{{ classificationLabel(item) }}</option>
+      }
+    </select>
+  </label>
+  <label class="archive-filter">
+    <input
+      type="checkbox"
+      [ngModel]="includeArchived()"
+      (ngModelChange)="includeArchived.set($event)"
+    />
+    <span i18n>Archived</span>
+  </label>
+  <button class="secondary-button" type="button" [disabled]="loading()" (click)="search()" i18n>
+    Apply
+  </button>
+</section>
+
+@if (editor(); as form) {
+  <section class="surface-section editor-section">
+    <div class="section-heading">
+      @if (form.id) {
+        <h2 i18n>Edit exercise</h2>
+      } @else {
+        <h2 i18n>Create exercise</h2>
+      }
+      <button class="quiet-button compact" type="button" (click)="editor.set(null)" i18n>
+        Close
+      </button>
+    </div>
+    <div class="editor-grid">
+      <label>
+        <span i18n>Name</span>
+        <input [(ngModel)]="form.name" maxlength="180" />
+      </label>
+      <label>
+        <span i18n>Classification</span>
+        <select [(ngModel)]="form.classification">
+          @for (item of classifications; track item) {
+            <option [value]="item">{{ classificationLabel(item) }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span i18n>Equipment</span>
+        <select [(ngModel)]="form.equipment">
+          @for (item of equipment; track item) {
+            <option [value]="item">{{ equipmentLabel(item) }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span i18n>Movement pattern</span>
+        <select [(ngModel)]="form.movementPattern">
+          @for (item of patterns; track item) {
+            <option [value]="item">{{ patternLabel(item) }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span i18n>Primary muscle</span>
+        <select [(ngModel)]="form.primaryMuscle">
+          @for (muscle of muscles; track muscle) {
+            <option [value]="muscle">{{ muscle }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span i18n>Secondary muscles</span>
+        <select multiple [(ngModel)]="form.secondaryMuscles">
+          @for (muscle of muscles; track muscle) {
+            @if (muscle !== form.primaryMuscle) {
+              <option [value]="muscle">{{ muscle }}</option>
+            }
+          }
+        </select>
+      </label>
+      <label>
+        <span i18n>Tags</span>
+        <input [(ngModel)]="form.tags" maxlength="500" />
+      </label>
+      <label>
+        <span i18n>Approved alternatives</span>
+        <select multiple [(ngModel)]="form.alternativeIds">
+          @for (exercise of exercises(); track exercise.id) {
+            @if (!exercise.isArchived && exercise.id !== form.id) {
+              <option [value]="exercise.id">{{ exercise.name }}</option>
+            }
+          }
+        </select>
+      </label>
+      <label class="span-full">
+        <span i18n>Instructions</span>
+        <textarea [(ngModel)]="form.instructions" maxlength="8000"></textarea>
+      </label>
+      <fieldset class="span-full media-picker">
+        <legend i18n>Exercise media</legend>
+        @for (asset of media(); track asset.id) {
+          @if (asset.status === 'Ready') {
+            <label>
+              <input
+                type="checkbox"
+                [checked]="form.mediaAssetIds.includes(asset.id)"
+                (change)="
+                  $any($event.target).checked
+                    ? form.mediaAssetIds.push(asset.id)
+                    : form.mediaAssetIds.splice(form.mediaAssetIds.indexOf(asset.id), 1)
+                "
+              />
+              <span
+                >{{ asset.title }} <small>{{ kindLabel(asset.kind) }}</small></span
+              >
+            </label>
+          }
+        }
+      </fieldset>
+    </div>
+    <div class="form-actions">
+      <button class="primary-button" type="button" [disabled]="busy()" (click)="save()" i18n>
+        Save exercise
+      </button>
+      <button class="quiet-button" type="button" (click)="editor.set(null)" i18n>Cancel</button>
+    </div>
+  </section>
+}
+
+<section class="surface-section media-section">
+  <div class="section-heading">
+    <h2 i18n>Media</h2>
+    <span class="muted">{{ media().length }} / {{ mediaTotal() }}</span>
+  </div>
+  <div class="media-commands">
+    <div class="media-command">
+      <label>
+        <span i18n>Upload title</span>
+        <input [ngModel]="uploadTitle()" (ngModelChange)="uploadTitle.set($event)" />
+      </label>
+      <label>
+        <span i18n>Image or video</span>
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
+          (change)="fileSelected($event)"
+        />
+      </label>
+      <button class="secondary-button" type="button" [disabled]="busy()" (click)="upload()" i18n>
+        Upload
+      </button>
+    </div>
+    <div class="media-command">
+      <label>
+        <span i18n>External title</span>
+        <input [ngModel]="externalTitle()" (ngModelChange)="externalTitle.set($event)" />
+      </label>
+      <label class="provider-field">
+        <span i18n>Provider</span>
+        <select [ngModel]="externalProvider()" (ngModelChange)="externalProvider.set($event)">
+          <option value="YouTube">YouTube</option>
+          <option value="Vimeo">Vimeo</option>
+        </select>
+      </label>
+      <label>
+        <span i18n>Video ID or URL</span>
+        <input [ngModel]="externalValue()" (ngModelChange)="externalValue.set($event)" />
+      </label>
+      <button
+        class="secondary-button"
+        type="button"
+        [disabled]="busy()"
+        (click)="registerExternal()"
+        i18n
+      >
+        Register
+      </button>
+    </div>
+  </div>
+  @if (media().length > 0) {
+    <div class="media-list">
+      @for (asset of media(); track asset.id) {
+        <div>
+          <strong>{{ asset.title }}</strong>
+          <span>
+            {{ mediaSourceLabel(asset.source) }} &middot; {{ kindLabel(asset.kind) }} &middot;
+            {{ mediaStatusLabel(asset.status) }}
+          </span>
+          <button
+            class="quiet-button compact"
+            type="button"
+            [disabled]="busy() || asset.status === 'Tombstoned'"
+            (click)="deleteMedia(asset)"
+            i18n
+          >
+            Delete
+          </button>
+        </div>
+      }
+    </div>
+  }
+  @if (media().length < mediaTotal()) {
+    <button
+      class="quiet-button compact"
+      type="button"
+      [disabled]="busy()"
+      (click)="loadMoreMedia()"
+      i18n
+    >
+      Load more media
+    </button>
+  }
+</section>
+
+<section class="exercise-list" aria-label="Exercises" i18n-aria-label>
+  @if (loading()) {
+    <p class="loading-row" i18n>Loading exercises...</p>
+  } @else if (exercises().length === 0) {
+    <div class="empty-state">
+      <h2 i18n>No exercises found</h2>
+    </div>
+  } @else {
+    @for (exercise of exercises(); track exercise.id) {
+      <article [class.archived]="exercise.isArchived">
+        <div class="exercise-title">
+          <strong>{{ exercise.name }}</strong>
+          <span class="status-badge">{{ classificationLabel(exercise.classification) }}</span>
+        </div>
+        <div class="exercise-meta">
+          <span>{{ patternLabel(exercise.movementPattern) }}</span>
+          <span>{{ equipmentLabel(exercise.equipment) }}</span>
+          @for (tag of exercise.tags; track tag) {
+            <span class="tag">{{ tag }}</span>
+          }
+        </div>
+        <div class="button-group">
+          <button class="quiet-button compact" type="button" (click)="edit(exercise)" i18n>
+            Edit
+          </button>
+          <button
+            class="quiet-button compact"
+            type="button"
+            [disabled]="busy()"
+            (click)="toggleArchive(exercise)"
+          >
+            @if (exercise.isArchived) {
+              <span i18n>Restore</span>
+            } @else {
+              <span i18n>Archive</span>
+            }
+          </button>
+        </div>
+      </article>
+    }
+  }
+</section>

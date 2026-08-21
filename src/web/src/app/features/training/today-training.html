@@ -1,0 +1,320 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow" i18n>Training</p>
+    <h1 i18n>Today</h1>
+    <p>{{ day()?.localDate }}</p>
+  </div>
+  @if (day(); as currentDay) {
+    <span class="status-badge" [class.success]="currentDay.isAllowed">
+      {{ accessReasonLabel(currentDay.accessReason) }}
+    </span>
+  }
+</section>
+
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="form-success" role="status">{{ notice() }}</p>
+}
+
+@if (loading()) {
+  <p class="loading-row" i18n>Loading today's training...</p>
+} @else if (day(); as currentDay) {
+  @if (!currentDay.isAllowed) {
+    <section class="access-state">
+      <h2 i18n>Training is not available</h2>
+      <p>{{ accessReasonLabel(currentDay.accessReason) }}</p>
+    </section>
+  } @else if (currentDay.workouts.length === 0) {
+    <section class="empty-state">
+      <h2 i18n>Recovery day</h2>
+      <p i18n>No workout is scheduled today.</p>
+    </section>
+  } @else {
+    @for (workout of currentDay.workouts; track workout.sessionId) {
+      <article class="workout">
+        <header class="workout-heading">
+          <div>
+            <h2>{{ workout.name }}</h2>
+            @if (workout.coachNotes) {
+              <p>{{ workout.coachNotes }}</p>
+            }
+          </div>
+          @if (!workout.workoutExecutionId) {
+            <button
+              class="primary-button"
+              type="button"
+              [disabled]="busy()"
+              (click)="start(workout)"
+              i18n
+            >
+              Start workout
+            </button>
+          } @else {
+            <div class="exercise-actions">
+              @if (isWorkoutSaving(workout)) {
+                <span class="muted" role="status" i18n>Saving sets...</span>
+              }
+              <span class="status-badge" [class.success]="workout.status === 'Completed'">
+                @if (workout.status) {
+                  {{ workoutStatusLabel(workout.status) }}
+                }
+              </span>
+            </div>
+          }
+        </header>
+
+        @for (
+          exercise of workout.exercises;
+          track exercise.prescriptionId;
+          let exerciseIndex = $index
+        ) {
+          <section class="workout-exercise">
+            <header class="exercise-heading">
+              <div class="exercise-title">
+                <span>{{ exerciseIndex + 1 }}</span>
+                <div>
+                  <h3>{{ exercise.actualExerciseName }}</h3>
+                  @if (exercise.wasSubstituted) {
+                    <small i18n>Prescribed: {{ exercise.prescribedExerciseName }}</small>
+                  }
+                </div>
+              </div>
+              <div class="exercise-actions">
+                @for (assetId of exercise.mediaAssetIds; track assetId; let mediaIndex = $index) {
+                  <button
+                    class="quiet-button compact"
+                    type="button"
+                    [disabled]="busy()"
+                    (click)="showMedia(assetId, $event)"
+                    i18n
+                  >
+                    Demo {{ mediaIndex + 1 }}
+                  </button>
+                }
+                @if (
+                  workout.workoutExecutionId &&
+                  workout.status !== 'Completed' &&
+                  exercise.modificationPolicy === 'CoachApprovedSwap' &&
+                  exercise.alternatives.length > 0
+                ) {
+                  <select
+                    class="swap-picker"
+                    aria-label="Approved exercise alternative"
+                    i18n-aria-label
+                    [disabled]="busy() || isWorkoutSaving(workout)"
+                    (change)="substitute(workout, exercise, $event)"
+                  >
+                    <option value="" i18n>Swap exercise...</option>
+                    @for (alternative of exercise.alternatives; track alternative.exerciseId) {
+                      <option [value]="alternative.exerciseId">{{ alternative.name }}</option>
+                    }
+                  </select>
+                }
+              </div>
+            </header>
+
+            @if (exercise.coachNotes) {
+              <p class="coach-note">{{ exercise.coachNotes }}</p>
+            }
+            @if (exercise.previousPerformance; as previous) {
+              <p class="previous-performance">
+                <strong i18n>Previous</strong>
+                {{ previous.date }} &middot; {{ previous.bestLoad ?? '-' }}
+                {{ previous.unit === 'Kilogram' ? 'kg' : previous.unit === 'Pound' ? 'lb' : '' }}
+                &times; {{ previous.repetitions ?? '-' }}
+                @if (previous.rpe !== null) {
+                  &middot; RPE {{ previous.rpe }}
+                }
+              </p>
+            }
+
+            <div class="client-set-table">
+              <div class="client-set-header">
+                <span i18n>Set</span>
+                <span i18n>Prescription</span>
+                <span i18n>Load</span>
+                <span i18n>Reps</span>
+                <span>RPE</span>
+                <span i18n>Done</span>
+                <span></span>
+              </div>
+              @for (set of exercise.sets; track set.prescriptionId; let setIndex = $index) {
+                @let draft = setDraft(set);
+                <div class="client-set-row">
+                  <strong>{{ setIndex + 1 }}</strong>
+                  <span class="prescription">
+                    {{ set.setType }} &middot; {{ prescribedReps(set) }}
+                    @if (set.prescribedLoad !== null) {
+                      &middot; {{ set.prescribedLoad }}
+                      {{ set.prescribedLoadUnit === 'Kilogram' ? 'kg' : 'lb' }}
+                    }
+                    &middot; {{ prescribedEffort(set) }}
+                  </span>
+                  <div class="load-input">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.25"
+                      [ngModel]="draft ? draft.actualLoad : set.actualLoad"
+                      (ngModelChange)="updateSetDraft(set, { actualLoad: $event })"
+                      [disabled]="!workout.workoutExecutionId || workout.status === 'Completed'"
+                      aria-label="Actual load"
+                      i18n-aria-label
+                    />
+                    <select
+                      [ngModel]="draft?.actualLoadUnit ?? set.actualLoadUnit"
+                      (ngModelChange)="updateSetDraft(set, { actualLoadUnit: $event })"
+                      [disabled]="!workout.workoutExecutionId || workout.status === 'Completed'"
+                      aria-label="Actual load unit"
+                      i18n-aria-label
+                    >
+                      <option [ngValue]="null" disabled i18n>Select unit</option>
+                      <option value="Kilogram">kg</option>
+                      <option value="Pound">lb</option>
+                    </select>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    [ngModel]="draft ? draft.actualRepetitions : set.actualRepetitions"
+                    (ngModelChange)="updateSetDraft(set, { actualRepetitions: $event })"
+                    [disabled]="!workout.workoutExecutionId || workout.status === 'Completed'"
+                    aria-label="Actual repetitions"
+                    i18n-aria-label
+                  />
+                  <input
+                    type="number"
+                    min="5"
+                    max="10"
+                    step="0.5"
+                    [ngModel]="draft ? draft.actualRpe : set.actualRpe"
+                    (ngModelChange)="updateSetDraft(set, { actualRpe: $event })"
+                    [disabled]="!workout.workoutExecutionId || workout.status === 'Completed'"
+                    aria-label="Actual RPE"
+                    i18n-aria-label
+                  />
+                  <input
+                    class="done-check"
+                    type="checkbox"
+                    [ngModel]="draft?.isCompleted ?? set.isCompleted"
+                    (ngModelChange)="updateSetDraft(set, { isCompleted: $event })"
+                    [disabled]="!workout.workoutExecutionId || workout.status === 'Completed'"
+                    aria-label="Set completed"
+                    i18n-aria-label
+                  />
+                  <button
+                    class="secondary-button compact"
+                    type="button"
+                    [disabled]="
+                      !workout.workoutExecutionId ||
+                      workout.status === 'Completed' ||
+                      !set.performanceId ||
+                      savingSetIds().has(set.performanceId)
+                    "
+                    (click)="saveSet(workout, set)"
+                    i18n
+                  >
+                    Save
+                  </button>
+                </div>
+                <label class="set-note">
+                  <span i18n>Set note</span>
+                  <input
+                    [ngModel]="draft ? draft.clientNote : set.clientNote"
+                    (ngModelChange)="updateSetDraft(set, { clientNote: $event })"
+                    maxlength="1000"
+                    [disabled]="!workout.workoutExecutionId || workout.status === 'Completed'"
+                  />
+                </label>
+              }
+            </div>
+          </section>
+        }
+
+        @if (workout.workoutExecutionId) {
+          <footer class="workout-footer">
+            <div class="note-entry">
+              <input
+                [(ngModel)]="workoutNotes[workout.sessionId]"
+                maxlength="2000"
+                [disabled]="workout.status === 'Completed'"
+                aria-label="Workout note"
+                i18n-aria-label
+              />
+              <button
+                class="secondary-button"
+                type="button"
+                [disabled]="
+                  workout.status === 'Completed' || !workoutNotes[workout.sessionId] || busy()
+                "
+                (click)="addNote(workout)"
+                i18n
+              >
+                Add note
+              </button>
+            </div>
+            @if (workout.status !== 'Completed') {
+              <button
+                class="primary-button"
+                type="button"
+                [disabled]="busy() || isWorkoutSaving(workout) || hasUnsavedSets(workout)"
+                (click)="complete(workout)"
+                i18n
+              >
+                Complete workout
+              </button>
+            }
+          </footer>
+          @if (workout.notes.length > 0) {
+            <div class="note-history">
+              @for (note of workout.notes; track note.id) {
+                <p>
+                  <strong>{{ note.authorRole }}</strong>
+                  <span>{{ note.createdAtUtc }}</span>
+                  {{ note.text }}
+                </p>
+              }
+            </div>
+          }
+        }
+      </article>
+    }
+  }
+}
+
+@if (activeMedia(); as media) {
+  <div
+    #mediaDialog
+    class="media-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="exercise-media-title"
+    tabindex="-1"
+    (keydown)="mediaDialogKeydown($event)"
+  >
+    <div class="media-toolbar">
+      <span id="exercise-media-title" i18n>Exercise demo</span>
+      <button
+        #mediaClose
+        type="button"
+        aria-label="Close media"
+        i18n-aria-label
+        title="Close"
+        i18n-title
+        (click)="closeMedia()"
+      >
+        &times;
+      </button>
+    </div>
+    @if (media.source === 'ExternalEmbed' && externalMediaUrl()) {
+      <iframe [src]="externalMediaUrl()" title="Exercise demonstration" allowfullscreen></iframe>
+    } @else if (media.kind === 'Image') {
+      <img [src]="media.url" alt="Exercise demonstration" i18n-alt />
+    } @else {
+      <video [src]="media.url" controls controlsList="nodownload" autoplay></video>
+    }
+  </div>
+}

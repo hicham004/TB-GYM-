@@ -1,0 +1,56 @@
+using Microsoft.EntityFrameworkCore;
+using TB.Gym.Modules.Identity;
+using TB.Gym.Modules.Media;
+
+namespace TB.Gym.Infrastructure.Persistence;
+
+public sealed partial class GymDbContext
+{
+    private void ConfigureMedia(ModelBuilder builder)
+    {
+        builder.Entity<MediaAsset>(entity =>
+        {
+            entity.ToTable("Assets", "media");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Title).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Kind).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.Source).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.OriginalFileName).HasMaxLength(255);
+            entity.Property(item => item.DeclaredContentType).HasMaxLength(100);
+            entity.Property(item => item.VerifiedContentType).HasMaxLength(100);
+            entity.Property(item => item.Sha256).HasMaxLength(64).IsFixedLength();
+            entity.Property(item => item.StorageKey).HasMaxLength(500);
+            entity.Property(item => item.ExternalProvider).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.ExternalMediaId).HasMaxLength(100);
+            entity.Property(item => item.ScannerKey).HasMaxLength(80);
+            entity.Property(item => item.ScannerVersion).HasMaxLength(40);
+            entity.Property(item => item.FailureCode).HasMaxLength(100);
+            entity.Property(item => item.TombstonedAtUtc);
+            entity.HasIndex(item => new { item.TenantId, item.Status, item.CreatedAtUtc });
+            entity.HasIndex(item => new { item.TenantId, item.StorageKey })
+                .IsUnique()
+                .HasFilter("\"StorageKey\" IS NOT NULL");
+            entity.HasIndex(item => new { item.TenantId, item.ExternalProvider, item.ExternalMediaId })
+                .IsUnique()
+                .HasFilter("\"ExternalMediaId\" IS NOT NULL");
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(item => item.OwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_MediaAssets_Source",
+                    "(\"Source\" = 'Upload' AND \"StorageKey\" IS NOT NULL AND \"ExternalMediaId\" IS NULL) OR (\"Source\" = 'ExternalEmbed' AND \"StorageKey\" IS NULL AND \"ExternalMediaId\" IS NOT NULL)");
+                table.HasCheckConstraint(
+                    "CK_MediaAssets_Length",
+                    "\"Length\" IS NULL OR (\"Length\" > 0 AND \"Length\" <= 524288000)");
+                table.HasCheckConstraint(
+                    "CK_MediaAssets_Hash",
+                    "\"Sha256\" IS NULL OR \"Sha256\" ~ '^[0-9a-f]{64}$'");
+            });
+            ConfigureTenantEntity(entity);
+        });
+    }
+}

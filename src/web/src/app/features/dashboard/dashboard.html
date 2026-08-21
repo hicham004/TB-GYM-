@@ -27,22 +27,26 @@
 
   <section class="next-action">
     <div>
-      <h2 i18n>Invite your next client</h2>
-      <p i18n>The client creates an account from a secure, expiring invitation.</p>
+      <h2 i18n>Build the next training block</h2>
+      <p i18n>Create a reusable template, then assign a client-specific snapshot.</p>
     </div>
-    <a class="primary-button" routerLink="/invitations" i18n>Manage invitations</a>
+    <a class="primary-button" routerLink="/training/programs" i18n>Open program builder</a>
   </section>
 } @else if (tenants.isClient()) {
   <section class="next-action">
     <div>
-      <h2 i18n>Client onboarding</h2>
+      <h2 i18n>Today's training</h2>
       @if (onboardingStatus() === 'Completed') {
-        <p i18n>Your intake profile is complete.</p>
+        <p i18n>Open the workout scheduled in this workspace.</p>
       } @else {
         <p i18n>Complete your intake details and initial bodyweight.</p>
       }
     </div>
-    <a class="primary-button" routerLink="/profile" i18n>Open my profile</a>
+    @if (onboardingStatus() === 'Completed') {
+      <a class="primary-button" routerLink="/training/today" i18n>Open today</a>
+    } @else {
+      <a class="primary-button" routerLink="/profile" i18n>Open my profile</a>
+    }
   </section>
 } @else {
   <section class="empty-state">

@@ -1,0 +1,513 @@
+<section class="surface-section assignment-section">
+  <div class="section-heading">
+    <div>
+      <h2 i18n>Training assignment</h2>
+      <p class="muted" i18n>Primary mesocycle</p>
+    </div>
+    <button class="primary-button" type="button" [disabled]="busy()" (click)="assign()" i18n>
+      Assign snapshot
+    </button>
+  </div>
+
+  @if (templates().length < templateTotal()) {
+    <button
+      class="quiet-button compact"
+      type="button"
+      [disabled]="busy()"
+      (click)="loadMoreTemplates()"
+      i18n
+    >
+      Load more programs
+    </button>
+  }
+
+  @if (error()) {
+    <p class="form-error" role="alert">{{ error() }}</p>
+  }
+  @if (notice()) {
+    <p class="form-success" role="status">{{ notice() }}</p>
+  }
+
+  <div class="assignment-grid">
+    <label class="wide-field">
+      <span i18n>Training enrollment</span>
+      <select [(ngModel)]="assignment.enrollmentId">
+        <option value="" i18n>Select enrollment...</option>
+        @for (enrollment of trainingEnrollments(); track enrollment.id) {
+          <option [value]="enrollment.id">{{ enrollmentLabel(enrollment) }}</option>
+        }
+      </select>
+    </label>
+    <label class="wide-field">
+      <span i18n>Published program</span>
+      <select [(ngModel)]="assignment.templateVersionId" (change)="templateChanged()">
+        <option value="" i18n>Select program...</option>
+        @for (version of publishedVersions(); track version.id) {
+          <option [value]="version.id">
+            {{ version.templateName }} &middot; v{{ version.versionNumber }} &middot;
+            {{ version.weekCount }} weeks
+          </option>
+        }
+      </select>
+    </label>
+    <label>
+      <span i18n>Start date</span>
+      <input type="date" [(ngModel)]="assignment.startDate" />
+    </label>
+    <label>
+      <span i18n>Unit</span>
+      <select [(ngModel)]="assignment.loadUnit" (change)="loadUnitChanged()">
+        <option value="Kilogram">kg</option>
+        <option value="Pound">lb</option>
+      </select>
+    </label>
+    <label>
+      <span i18n>Load increment</span>
+      <input type="number" min="0.01" step="0.25" [(ngModel)]="assignment.loadIncrement" />
+    </label>
+    <label>
+      <span i18n>Rounding</span>
+      <select [(ngModel)]="assignment.loadRoundingMode">
+        <option value="Nearest" i18n>Nearest</option>
+        <option value="Down" i18n>Down</option>
+        <option value="Up" i18n>Up</option>
+      </select>
+    </label>
+  </div>
+
+  @if (workingMaxes().length > 0) {
+    <div class="working-max-grid">
+      <span class="grid-label" i18n>Program working-max snapshots</span>
+      @for (max of workingMaxes(); track max.exerciseId; let index = $index) {
+        <label>
+          <span>{{ max.exerciseName }}</span>
+          <div class="value-unit">
+            <input
+              type="number"
+              min="0.01"
+              step="0.25"
+              [ngModel]="max.value"
+              (ngModelChange)="updateWorkingMax(index, $event)"
+            />
+            <strong>{{ max.unit === 'Kilogram' ? 'kg' : 'lb' }}</strong>
+          </div>
+          @if (max.sourceRecordId) {
+            <small i18n>Using recorded max</small>
+          } @else {
+            <small i18n>Coach value</small>
+          }
+        </label>
+      }
+    </div>
+  }
+</section>
+
+<section class="surface-section strength-section">
+  <div class="section-heading">
+    <h2 i18n>Strength max history</h2>
+    <span class="muted">{{ maxHistory().length }} / {{ maxHistoryTotal() }}</span>
+  </div>
+  <div class="max-entry">
+    <label class="exercise-field">
+      <span i18n>Exercise</span>
+      <select [(ngModel)]="maxForm.exerciseId">
+        <option value="" i18n>Select...</option>
+        @for (exercise of exercises(); track exercise.id) {
+          <option [value]="exercise.id">{{ exercise.name }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span i18n>Kind</span>
+      <select [(ngModel)]="maxForm.kind">
+        <option value="CoachWorkingMax" i18n>Working max</option>
+        <option value="TestedOneRepMax" i18n>Tested 1RM</option>
+        <option value="EstimatedOneRepMax" i18n>Estimated 1RM</option>
+      </select>
+    </label>
+    <label>
+      <span i18n>Value</span>
+      <input type="number" min="0.01" step="0.25" [(ngModel)]="maxForm.value" />
+    </label>
+    <label>
+      <span i18n>Unit</span>
+      <select [(ngModel)]="maxForm.unit">
+        <option value="Kilogram">kg</option>
+        <option value="Pound">lb</option>
+      </select>
+    </label>
+    <label>
+      <span i18n>Effective date</span>
+      <input type="date" [(ngModel)]="maxForm.effectiveDate" />
+    </label>
+    <label>
+      <span i18n>Note</span>
+      <input [(ngModel)]="maxForm.note" maxlength="1000" />
+    </label>
+    <button class="secondary-button" type="button" [disabled]="busy()" (click)="recordMax()" i18n>
+      Record
+    </button>
+  </div>
+  @if (maxHistory().length > 0) {
+    <div class="table-scroll compact-table">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th i18n>Date</th>
+            <th i18n>Exercise</th>
+            <th i18n>Kind</th>
+            <th i18n>Value</th>
+            <th i18n>Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (record of maxHistory(); track record.id) {
+            <tr>
+              <td>{{ record.effectiveDate }}</td>
+              <td>{{ record.exerciseName }}</td>
+              <td>{{ maxKindLabel(record.kind) }}</td>
+              <td>{{ record.value }} {{ record.unit === 'Kilogram' ? 'kg' : 'lb' }}</td>
+              <td>{{ record.methodKey }} v{{ record.methodVersion }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (maxHistory().length < maxHistoryTotal()) {
+      <button
+        class="quiet-button compact"
+        type="button"
+        [disabled]="busy()"
+        (click)="loadMoreMaxHistory()"
+        i18n
+      >
+        Load more max records
+      </button>
+    }
+  }
+</section>
+
+<section class="surface-section mesocycle-section">
+  <div class="section-heading">
+    <h2 i18n>Client mesocycles</h2>
+    <span class="muted">{{ mesocycles().length }}</span>
+  </div>
+  @if (mesocycles().length === 0) {
+    <p class="inline-empty" i18n>No mesocycles assigned.</p>
+  } @else {
+    <div class="mesocycle-tabs" role="tablist">
+      @for (item of mesocycles(); track item.id) {
+        <button
+          type="button"
+          role="tab"
+          [class.active]="selectedMesocycle()?.id === item.id"
+          [attr.aria-selected]="selectedMesocycle()?.id === item.id"
+          (click)="openMesocycle(item.id)"
+        >
+          <strong>{{ item.name }}</strong>
+          <span>{{ item.startDate }} &middot; {{ mesocycleStatusLabel(item.status) }}</span>
+        </button>
+      }
+    </div>
+  }
+
+  @if (selectedMesocycle(); as mesocycle) {
+    <div class="mesocycle-toolbar">
+      <div>
+        <strong>{{ mesocycle.name }}</strong>
+        <span>
+          {{ mesocycle.startDate }} - {{ mesocycle.endDateExclusive }} &middot;
+          {{ mesocycle.timeZoneId }}
+        </span>
+        <span class="status-badge" [class.success]="mesocycle.status === 'Completed'">
+          {{ mesocycleStatusLabel(mesocycle.status) }}
+        </span>
+      </div>
+      <div class="button-group">
+        <button
+          class="secondary-button compact"
+          type="button"
+          [disabled]="busy() || isTerminal(mesocycle)"
+          (click)="toggleReveal()"
+        >
+          @if (mesocycle.revealAllWeeks) {
+            <span i18n>Use dated unlock</span>
+          } @else {
+            <span i18n>Reveal all weeks</span>
+          }
+        </button>
+        <label class="reschedule-field">
+          <span i18n>Start</span>
+          <input type="date" [(ngModel)]="rescheduleDate" [disabled]="isTerminal(mesocycle)" />
+        </label>
+        <button
+          class="quiet-button compact"
+          type="button"
+          [disabled]="busy() || isTerminal(mesocycle)"
+          (click)="reschedule()"
+          i18n
+        >
+          Reschedule future
+        </button>
+      </div>
+    </div>
+
+    <div class="lifecycle-panel">
+      @if (!isTerminal(mesocycle)) {
+        <label>
+          <span i18n>Cancellation reason</span>
+          <input [(ngModel)]="cancelReason" maxlength="500" />
+        </label>
+        <button
+          class="quiet-button compact"
+          type="button"
+          [disabled]="busy() || !cancelReason.trim()"
+          (click)="cancelMesocycle()"
+          i18n
+        >
+          Cancel assignment
+        </button>
+        @if (mesocycle.status === 'Active') {
+          <button
+            class="secondary-button compact"
+            type="button"
+            [disabled]="busy()"
+            (click)="completeMesocycle()"
+            i18n
+          >
+            Complete mesocycle
+          </button>
+        }
+      }
+      <div class="lifecycle-history" aria-label="Mesocycle lifecycle" i18n-aria-label>
+        @for (event of mesocycle.lifecycle; track event.id) {
+          <span>
+            <strong>{{ event.eventType }}</strong>
+            {{ event.occurredAtUtc }} &middot; {{ event.reason }}
+          </span>
+        }
+      </div>
+    </div>
+
+    <div class="mesocycle-weeks">
+      @for (week of mesocycle.weeks; track week.id) {
+        <section class="mesocycle-week">
+          <header>
+            <label class="week-select">
+              <input
+                type="checkbox"
+                [checked]="progressionWeeks().has(week.id)"
+                [disabled]="isTerminal(mesocycle)"
+                (change)="toggleProgressionWeek(week.id, $event)"
+              />
+              <strong i18n>Week {{ week.weekNumber }}</strong>
+            </label>
+            <span>{{ week.startsOn }} &middot; <span i18n>Unlock</span> {{ week.unlockDate }}</span>
+            <label class="publish-toggle">
+              <input
+                type="checkbox"
+                [checked]="week.isPublished"
+                [disabled]="busy() || isTerminal(mesocycle)"
+                (change)="togglePublished(week.id, $any($event.target).checked)"
+              />
+              <span i18n>Published</span>
+            </label>
+          </header>
+          @for (session of week.sessions; track session.id) {
+            <div class="mesocycle-session">
+              <div>
+                <strong>{{ session.name }}</strong>
+                <span>
+                  {{ session.scheduledDate }} &middot; {{ session.exercises.length }}
+                  <span i18n>exercises</span>
+                </span>
+              </div>
+              @if (!isTerminal(mesocycle) && !session.hasStarted && savedSessions().length > 0) {
+                <div class="replace-session">
+                  <select [(ngModel)]="replacementSessionIds[session.id]">
+                    <option value="" i18n>Replace with saved...</option>
+                    @for (saved of savedSessions(); track saved.id) {
+                      <option [value]="saved.id">{{ saved.name }}</option>
+                    }
+                  </select>
+                  <button
+                    class="quiet-button compact"
+                    type="button"
+                    [disabled]="!replacementSessionIds[session.id]"
+                    (click)="replaceSession(session.id)"
+                    i18n
+                  >
+                    Replace
+                  </button>
+                </div>
+              } @else if (session.hasStarted) {
+                <span class="status-badge" [class.success]="session.isCompleted">
+                  @if (session.isCompleted) {
+                    <span i18n>Completed</span>
+                  } @else {
+                    <span i18n>Started</span>
+                  }
+                </span>
+              }
+            </div>
+          }
+        </section>
+      }
+    </div>
+
+    <div class="progression-panel">
+      <div class="progression-controls">
+        <strong i18n>Duplicate and transform</strong>
+        <label>
+          <span i18n>Generated weeks</span>
+          <input
+            type="number"
+            min="1"
+            max="12"
+            [ngModel]="progression.iterations"
+            (ngModelChange)="progression.iterations = $event; progressionChanged()"
+            [disabled]="isTerminal(mesocycle)"
+          />
+        </label>
+        <label>
+          <span i18n>RPE per week</span>
+          <input
+            type="number"
+            min="-2"
+            max="2"
+            step="0.5"
+            [ngModel]="progression.rpeIncrement"
+            (ngModelChange)="progression.rpeIncrement = $event; progressionChanged()"
+            [disabled]="isTerminal(mesocycle)"
+          />
+        </label>
+        <button
+          class="secondary-button"
+          type="button"
+          [disabled]="busy() || isTerminal(mesocycle)"
+          (click)="previewProgression()"
+          i18n
+        >
+          Preview
+        </button>
+      </div>
+      @if (progressionPreview(); as preview) {
+        <div class="preview">
+          <div class="preview-heading">
+            <span>
+              {{ preview.generatedWeeks.length }} <span i18n>generated weeks</span> &middot;
+              {{ preview.transformKey }} v{{ preview.transformVersion }} &middot;
+              <span i18n>ends</span> {{ preview.resultingEndDateExclusive }}
+            </span>
+            <button
+              class="primary-button compact"
+              type="button"
+              [disabled]="busy() || !preview.isInsideTrainingCoverage"
+              (click)="applyProgression()"
+              i18n
+            >
+              Apply reviewed preview
+            </button>
+          </div>
+          @if (!preview.isInsideTrainingCoverage) {
+            <p class="form-error" role="alert">
+              {{ preview.coverageMessage || progressionCoverageFallback }}
+            </p>
+          }
+          @for (week of preview.generatedWeeks; track week.id) {
+            <div class="preview-week">
+              <strong i18n>Week {{ week.weekNumber }}</strong>
+              @for (session of week.sessions; track session.id) {
+                <span>
+                  {{ session.name }}:
+                  @for (exercise of session.exercises; track exercise.id) {
+                    {{ exercise.exerciseName }}
+                    @for (set of exercise.sets; track set.id) {
+                      [{{ set.prescribedLoad ?? '-' }}
+                      {{ mesocycle.loadUnit === 'Kilogram' ? 'kg' : 'lb' }}
+                      @if (set.targetRpe !== null) {
+                        RPE {{ set.targetRpe }}
+                      }
+                      ]
+                    }
+                  }
+                </span>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</section>
+
+<section class="surface-section history-section">
+  <div class="section-heading">
+    <h2 i18n>Exercise performance history</h2>
+    <div class="history-picker">
+      <select
+        [ngModel]="historyExerciseId()"
+        (ngModelChange)="historyExerciseId.set($event); loadExerciseHistory()"
+      >
+        <option value="" i18n>Select exercise...</option>
+        @for (exercise of exercises(); track exercise.id) {
+          <option [value]="exercise.id">{{ exercise.name }}</option>
+        }
+      </select>
+    </div>
+  </div>
+  @if (exerciseHistory().length > 0) {
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th i18n>Date</th>
+            <th i18n>Load</th>
+            <th i18n>Reps</th>
+            <th>RPE</th>
+            <th>RIR</th>
+            <th>e1RM</th>
+            <th i18n>Volume</th>
+            <th i18n>Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of exerciseHistory(); track item.workoutExecutionId + item.date + $index) {
+            <tr>
+              <td>{{ item.date }}</td>
+              <td>
+                {{ displayNumber(item.load) }}
+                {{ item.loadUnit === 'Kilogram' ? 'kg' : item.loadUnit === 'Pound' ? 'lb' : '' }}
+              </td>
+              <td>{{ displayNumber(item.repetitions) }}</td>
+              <td>{{ displayNumber(item.rpe) }}</td>
+              <td>{{ displayNumber(item.rir) }}</td>
+              <td>{{ displayNumber(item.estimatedOneRepMax) }}</td>
+              <td>{{ displayNumber(item.volume) }}</td>
+              <td>
+                @if (item.wasSubstituted) {
+                  <span i18n>Substituted</span>
+                } @else {
+                  -
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (exerciseHistory().length < exerciseHistoryTotal()) {
+      <button
+        class="quiet-button compact"
+        type="button"
+        [disabled]="loading()"
+        (click)="loadMoreExerciseHistory()"
+        i18n
+      >
+        Load more history
+      </button>
+    }
+  } @else {
+    <p class="inline-empty" i18n>No completed performance for this exercise.</p>
+  }
+</section>
