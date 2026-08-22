@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TB.Gym.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TB.Gym.Infrastructure.Persistence;
 namespace TB.Gym.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GymDbContext))]
-    partial class GymDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260822114552_Phase4NutritionEngine")]
+    partial class Phase4NutritionEngine
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1624,9 +1627,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("BlocksOverlap")
-                        .HasColumnType("boolean");
-
                     b.Property<Guid>("ClientProfileId")
                         .HasColumnType("uuid");
 
@@ -1652,11 +1652,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -1687,8 +1682,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("ClientNutritionPlans", "nutrition", t =>
                         {
-                            t.HasCheckConstraint("CK_ClientNutritionPlans_BlocksOverlap", "(\"Status\" = 'Active') = \"BlocksOverlap\"");
-
                             t.HasCheckConstraint("CK_ClientNutritionPlans_Period", "\"EndDateExclusive\" > \"StartDate\"");
                         });
                 });
@@ -1929,7 +1922,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("CookingFactors", "nutrition", t =>
                         {
-                            t.HasCheckConstraint("CK_CookingFactors_Factor", "\"Factor\" > 0 AND \"FromBasis\" <> \"ToBasis\" AND (CASE WHEN \"Kind\" = 'Retention' THEN \"Factor\" <= 1 ELSE \"Factor\" <= 5 END)");
+                            t.HasCheckConstraint("CK_CookingFactors_Factor", "\"Factor\" > 0 AND \"Factor\" <= 2 AND \"FromBasis\" <> \"ToBasis\"");
                         });
                 });
 
@@ -2794,74 +2787,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("TB.Gym.Modules.Nutrition.NutritionPlanLifecycleEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ActorUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClientNutritionPlanId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("FromStatus")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTimeOffset>("OccurredAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ToStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.HasKey("Id");
-
-                    b.HasAlternateKey("TenantId", "Id");
-
-                    b.HasIndex("TenantId", "ClientNutritionPlanId", "OccurredAtUtc");
-
-                    b.ToTable("PlanLifecycleEvents", "nutrition");
-                });
-
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.NutritionWorkspaceSettings", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2880,6 +2805,11 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("AiMonthlyRequestLimit")
                         .HasColumnType("integer");
+
+                    b.Property<string>("AllergenDisplayRegime")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .ValueGeneratedOnAdd()
@@ -6171,16 +6101,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "ClientProfileId")
-                        .HasPrincipalKey("TenantId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("TB.Gym.Modules.Nutrition.NutritionPlanLifecycleEvent", b =>
-                {
-                    b.HasOne("TB.Gym.Modules.Nutrition.ClientNutritionPlan", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "ClientNutritionPlanId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();

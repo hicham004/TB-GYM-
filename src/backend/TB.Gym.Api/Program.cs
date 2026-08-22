@@ -17,6 +17,7 @@ using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Training;
+using TB.Gym.Modules.Nutrition;
 using TB.Gym.SharedKernel;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -92,6 +93,7 @@ app.MapSubscriptionsModule();
 app.MapExerciseLibraryModule();
 app.MapStrengthModule();
 app.MapTrainingModule();
+app.MapNutritionModule();
 app.MapMediaModule();
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization(AuthorizationPolicies.TenantMember);
 

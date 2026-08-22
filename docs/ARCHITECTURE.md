@@ -1,6 +1,6 @@
 # TB Gym Architecture
 
-Status: Phase 3 remediation complete, 2026-08-21
+Status: Phase 4 nutrition engine implemented, 2026-08-22
 
 ## 1. Architectural style
 
@@ -62,7 +62,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Subscriptions | Products, immutable offers, enrollments, entitlement coverage, payments, renewal |
 | Training | Immutable template versions, assigned mesocycle snapshots, prescriptions, executions, actuals |
 | Exercise Library | Tenant exercise metadata, muscles, tags, approved alternatives, media associations |
-| Nutrition | Ingredients, recipes, meal choices, plans, calorie and macro snapshots |
+| Nutrition | Versioned foods/cooking factors, immutable recipes and meal-plan versions, assigned client snapshots, daily actuals, energy/macro calculations, structured allergens, reviewed AI drafts |
 | Progress | Daily bodyweight, weekly summaries, measurements and progress views |
 | Strength | Append-only max history, canonical RPE/RIR, versioned estimates, recommendations, rounding |
 | Messaging | Tenant-scoped coach/client conversations and messages |
@@ -104,6 +104,18 @@ Additional rules:
    transactions. Table ownership and schema boundaries still apply.
 6. Add an outbox before asynchronous cross-module side effects become production critical.
    Do not add an in-memory event bus and pretend it guarantees delivery.
+
+Assigned nutrition plans support one audited, one-way cancellation that releases their date
+reservation so a misassignment can be corrected; a partial exclusion constraint and a targeted
+trigger keep the snapshot itself immutable.
+
+Nutrition follows the same historical layering as training without sharing its entities:
+`FoodItemVersion -> RecipeVersion -> MealPlanTemplateVersion -> ClientNutritionPlan ->
+DailyNutritionLog`. Publishing locks library versions; assignment deep-copies the selected
+plan graph and calculation snapshot reference; actual consumption is stored separately.
+The module owns calculation, preparation-basis, allergen, AI-review, and coverage policy.
+Infrastructure owns EF persistence and the USDA FoodData Central HTTP adapter. See
+`docs/adr/0008-nutrition-engine-v1.md`.
 
 ## 5. Multi-tenancy
 

@@ -60,7 +60,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
-          <context context-type="linenumber">249</context>
+          <context context-type="linenumber">260</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6707361102856436710" datatype="html">
@@ -201,21 +201,21 @@
         <source>My profile | TB Gym</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.routes.ts</context>
-          <context context-type="linenumber">57</context>
+          <context context-type="linenumber">63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1545882748786007291" datatype="html">
         <source>Workspace settings | TB Gym</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.routes.ts</context>
-          <context context-type="linenumber">64</context>
+          <context context-type="linenumber">70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4639506285628516620" datatype="html">
         <source>Account security | TB Gym</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.routes.ts</context>
-          <context context-type="linenumber">71</context>
+          <context context-type="linenumber">77</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3715596725146409911" datatype="html">
@@ -285,7 +285,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">270,271</context>
+          <context context-type="linenumber">346,347</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4416413576346763682" datatype="html">
@@ -578,7 +578,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">112,113</context>
+          <context context-type="linenumber">124,125</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2449111960644334277" datatype="html">
@@ -589,7 +589,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">113,114</context>
+          <context context-type="linenumber">125,126</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3602629278812088012" datatype="html">
@@ -600,7 +600,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">111,112</context>
+          <context context-type="linenumber">123,124</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8446875339104617088" datatype="html">
@@ -685,8 +685,8 @@
           <context context-type="linenumber">154</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="6381490568322624964" datatype="html">
-        <source>Deleted</source>
+      <trans-unit id="5406093358072761930" datatype="html">
+        <source>Removed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
           <context context-type="linenumber">155</context>
@@ -1225,6 +1225,10 @@
           <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
           <context context-type="linenumber">235</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">356,357</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="1367912003314119412" datatype="html">
         <source>Creating workspace...</source>
@@ -1391,77 +1395,77 @@
         <source>Client intake</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">39,40</context>
+          <context context-type="linenumber">41,42</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2778245965110195175" datatype="html">
         <source>Contact, training, nutrition, and health details.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">40,41</context>
+          <context context-type="linenumber">42,43</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3178819533620462882" datatype="html">
         <source>Coach-only notes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">54,55</context>
+          <context context-type="linenumber">56,57</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4037370659332383082" datatype="html">
         <source>These notes are not exposed through the client profile API.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">55,56</context>
+          <context context-type="linenumber">57,58</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8104421162933956065" datatype="html">
         <source>Notes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">60,61</context>
+          <context context-type="linenumber">62,63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8406648699226019403" datatype="html">
         <source>Save notes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">64,65</context>
+          <context context-type="linenumber">66,67</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1775274146380056262" datatype="html">
         <source>Client intake saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">58</context>
+          <context context-type="linenumber">66</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8381653381385786356" datatype="html">
         <source>Client onboarding completed.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">65</context>
+          <context context-type="linenumber">73</context>
         </context-group>
       </trans-unit>
       <trans-unit id="166203247581475534" datatype="html">
         <source>Coach notes saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">82</context>
+          <context context-type="linenumber">90</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7713092832151105630" datatype="html">
         <source>The client profile could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">97</context>
+          <context context-type="linenumber">105</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4885091206165415192" datatype="html">
         <source>The client profile could not be saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">114</context>
+          <context context-type="linenumber">122</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5489523001763972004" datatype="html">
@@ -1535,6 +1539,10 @@
           <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
           <context context-type="linenumber">28,29</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/today-training.html</context>
+          <context context-type="linenumber">173,174</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="9149273497839397487" datatype="html">
         <source>Centimeters</source>
@@ -1562,6 +1570,10 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
           <context context-type="linenumber">38,39</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">91,92</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3812899390861785628" datatype="html">
@@ -1952,8 +1964,12 @@
           <context context-type="linenumber">100,101</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">211,212</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">42,43</context>
+          <context context-type="linenumber">54,55</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3314953096185783078" datatype="html">
@@ -2101,7 +2117,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">148,149</context>
+          <context context-type="linenumber">160,161</context>
         </context-group>
       </trans-unit>
       <trans-unit id="787798817533231355" datatype="html">
@@ -2151,7 +2167,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">132,133</context>
+          <context context-type="linenumber">144,145</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3572460758633756552" datatype="html">
@@ -2556,7 +2572,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">68,69</context>
+          <context context-type="linenumber">87,88</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7410432243549869948" datatype="html">
@@ -2675,7 +2691,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
-          <context context-type="linenumber">283,284</context>
+          <context context-type="linenumber">294,295</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6770769801335635194" datatype="html">
@@ -2690,7 +2706,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
-          <context context-type="linenumber">281,282</context>
+          <context context-type="linenumber">292,293</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4605273802885589405" datatype="html">
@@ -2858,53 +2874,95 @@
           <context context-type="linenumber">33,34</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="8899112086077281738" datatype="html">
+        <source>Build a nutrition plan</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">37,38</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3507789607413731816" datatype="html">
+        <source>Version foods and recipes, then publish a reusable meal-plan snapshot.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">38,39</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6246511046765436574" datatype="html">
+        <source>Open nutrition library</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">40,41</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="3979297918704915071" datatype="html">
         <source>Today&apos;s training</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">38,39</context>
+          <context context-type="linenumber">45,46</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7790271338095849769" datatype="html">
         <source>Open the workout scheduled in this workspace.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">40,41</context>
+          <context context-type="linenumber">47,48</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7157099401601940089" datatype="html">
         <source>Complete your intake details and initial bodyweight.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">42,43</context>
+          <context context-type="linenumber">49,50</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8351711308856592517" datatype="html">
         <source>Open today</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">46,47</context>
+          <context context-type="linenumber">53,54</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8775821175228591887" datatype="html">
         <source>Open my profile</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">48,50</context>
+          <context context-type="linenumber">55,57</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4190885764985714528" datatype="html">
+        <source>Today&apos;s nutrition</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">60,61</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7656840253240740258" datatype="html">
+        <source>Record the concrete meal choices you consumed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">61,62</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8091004814054110758" datatype="html">
+        <source>Open today&apos;s meals</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">63,64</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1098089907977651591" datatype="html">
         <source>No active workspace role</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">53,54</context>
+          <context context-type="linenumber">67,68</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7286872530510450491" datatype="html">
         <source>Select another workspace to continue.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">54,55</context>
+          <context context-type="linenumber">68,69</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8187549955851076268" datatype="html">
@@ -3258,6 +3316,1070 @@
           <context context-type="linenumber">128</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="7347270772235596490" datatype="html">
+        <source>Nutrition and meal planning</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="138748009944390046" datatype="html">
+        <source> Calculate explainable estimates, review safety warnings, then assign an immutable client snapshot. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">6,7</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8360854339654953754" datatype="html">
+        <source>Loading nutrition...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">19,20</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8195096750149856903" datatype="html">
+        <source>Energy and macro estimate</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">23,24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3522974214264257775" datatype="html">
+        <source>BMR and TDEE are estimates, not clinically exact measurements.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">24,25</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1836232655965214150" datatype="html">
+        <source>BMR strategy</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">26,27</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8733077706173054468" datatype="html">
+        <source>Weight (kg)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">35,36</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6390426569284839080" datatype="html">
+        <source>Height (cm)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">46,47</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1130652265542107236" datatype="html">
+        <source>Age</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">57,58</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9021104741504254073" datatype="html">
+        <source>Formula sex</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">63,64</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5667840900782067941" datatype="html">
+        <source>Female</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">65,66</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8012344910054029733" datatype="html">
+        <source>Male</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">66,67</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3874640702682900060" datatype="html">
+        <source>Body fat (%)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">71,72</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5318919276110084725" datatype="html">
+        <source>Occupation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">83,84</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4413597527674605964" datatype="html">
+        <source>Seated</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">85,86</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4047706430081393646" datatype="html">
+        <source>Mixed</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">86,87</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="337101541139237513" datatype="html">
+        <source>Physical</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">87,88</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3459723941122322658" datatype="html">
+        <source>Coach goal adjustment (kcal)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">103,104</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="364453403834121056" datatype="html">
+        <source>Protein (g)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">112,113</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">62,63</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">255,256</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6522211286824628938" datatype="html">
+        <source>Fat percentage (%)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">122,123</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4568556448477157812" datatype="html">
+        <source>Energy deficit (uses the wider protein warning ceiling)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">135,136</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3163000165445525935" datatype="html">
+        <source> Calculate and snapshot </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">139,140</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5724616799511688793" datatype="html">
+        <source>Calorie target: <x id="INTERPOLATION" equiv-text="{{ result.calorieTarget | number: &apos;1.0-0&apos; }}"/> kcal/day</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">144,145</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7780686023001669891" datatype="html">
+        <source>BMR estimate <x id="INTERPOLATION" equiv-text="{{ result.bmrEstimate | number: &apos;1.0-0&apos; }}"/> → PAL <x id="INTERPOLATION_1" equiv-text="{{ result.activityModelPal }}"/> → TDEE estimate <x id="INTERPOLATION_2" equiv-text="{{ result.tdeeEstimate | number: &apos;1.0-0&apos; }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">147,150</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3778690653513557564" datatype="html">
+        <source>Protein <x id="INTERPOLATION" equiv-text="{{ result.protein | number: &apos;1.0-1&apos; }}"/> g · Carbohydrate <x id="INTERPOLATION_1" equiv-text="{{ result.carbohydrate | number: &apos;1.0-1&apos; }}"/> g · Fat <x id="INTERPOLATION_2" equiv-text="{{ result.fat | number: &apos;1.0-1&apos; }}"/> g</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">152,155</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">105,109</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="88190840725356001" datatype="html">
+        <source>Structured allergen declarations</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">164,165</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8419743823809588266" datatype="html">
+        <source> These declarations warn the coach. Missing declarations never prove that a recipe is safe. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">166,167</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="651274501513776391" datatype="html">
+        <source> Save declarations </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">186,187</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2573263955529772542" datatype="html">
+        <source>Assign meal-plan snapshot</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">191,192</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5689521177478849441" datatype="html">
+        <source>Published plan</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">193,194</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6576579240854744096" datatype="html">
+        <source>Select a plan</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">195,196</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8907337400381434898" datatype="html">
+        <source>Nutrition enrollment</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">202,203</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6321589056779784569" datatype="html">
+        <source>Select enrollment</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">204,205</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8614243048688869546" datatype="html">
+        <source>I reviewed any declared allergen conflicts. I understand TB Gym does not assert this plan is safe.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">220,221</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4810697217714049810" datatype="html">
+        <source> Assign immutable snapshot </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">225,226</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6600915530765148386" datatype="html">
+        <source>Assignment history</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">232,233</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2651252364349676074" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ plan.calorieTarget | number: &apos;1.0-0&apos; }}"/> kcal target snapshot</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.html</context>
+          <context context-type="linenumber">236,237</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9208778376332482396" datatype="html">
+        <source>Nutrition estimates calculated and snapshotted.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.ts</context>
+          <context context-type="linenumber">108</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6660167694120080750" datatype="html">
+        <source>Structured allergen declarations saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.ts</context>
+          <context context-type="linenumber">129</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9135204929638014487" datatype="html">
+        <source>Choose a published plan, nutrition enrollment, start date, and calculation snapshot.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.ts</context>
+          <context context-type="linenumber">137</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4609732570560364183" datatype="html">
+        <source>Client nutrition snapshot assigned.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.ts</context>
+          <context context-type="linenumber">157</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7924754774039321925" datatype="html">
+        <source>Client nutrition could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.ts</context>
+          <context context-type="linenumber">181</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8679067496740251495" datatype="html">
+        <source>Nutrition changes could not be saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/client-nutrition.ts</context>
+          <context context-type="linenumber">196</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="154562243963869314" datatype="html">
+        <source>Phase 4</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3915164531211060486" datatype="html">
+        <source>Nutrition library</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3250337114795187101" datatype="html">
+        <source>Canonical food versions feed immutable recipes and reusable meal-plan versions.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4659562590387415861" datatype="html">
+        <source>Loading nutrition library...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">15,16</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2659961008666561774" datatype="html">
+        <source>Foods and provenance</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">21,22</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="452785861653761813" datatype="html">
+        <source> Coach-authored foods are first-class. USDA FoodData Central is the only Phase 4 external food provider. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">23,24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2907903572026351696" datatype="html">
+        <source>Coach-authored food</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">30,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8953033926734869941" datatype="html">
+        <source>Name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">32</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
+          <context context-type="linenumber">81,82</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4563773618892144313" datatype="html">
+        <source>Basis quantity</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">36,37</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8932917860978648376" datatype="html">
+        <source>Unit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">44,45</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">58,59</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">133,134</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
+          <context context-type="linenumber">526,527</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8719299559470149238" datatype="html">
+        <source>Gram</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">46,47</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8211086700853159425" datatype="html">
+        <source>Millilitre</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">47,48</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6070859571382191792" datatype="html">
+        <source>Serving</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">48,49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8012514127191102182" datatype="html">
+        <source>Preparation basis</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">51,52</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2091295268977103253" datatype="html">
+        <source>Raw</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">53,54</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8374659673961748447" datatype="html">
+        <source>Cooked</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">54,55</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="834408317229685116" datatype="html">
+        <source>As sold</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">55,56</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1954409312172546617" datatype="html">
+        <source>Prepared</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">56,57</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4797291625878288188" datatype="html">
+        <source>Carbohydrate (g)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">65,66</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">258,259</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1626531563380839669" datatype="html">
+        <source>Fat (g)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">73,74</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">265,266</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7951122730138404790" datatype="html">
+        <source>Fibre (g)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">76,77</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6447862167180810386" datatype="html">
+        <source>Polyols (g)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">84,85</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7906717731182840778" datatype="html">
+        <source>Ethanol (g)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">92,93</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1621678070848691451" datatype="html">
+        <source>Label/provider calories (optional)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">100,101</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7766882509068225329" datatype="html">
+        <source>Declared allergens</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">110,111</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="393453999040197371" datatype="html">
+        <source>Save canonical food</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">123,124</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7958638603103860564" datatype="html">
+        <source>USDA FoodData Central</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">126,127</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2016349632636715706" datatype="html">
+        <source>Search FDC</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">131,132</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2212695292809375179" datatype="html">
+        <source> Search </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">134</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9137237868181009953" datatype="html">
+        <source> Import and cache </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">144</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1829508056357353658" datatype="html">
+        <source>Provider/computed calorie discrepancy</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">163,164</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6398028434062443415" datatype="html">
+        <source>Recipe versions</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">171,172</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1482688802584960066" datatype="html">
+        <source>Recipe name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">174,175</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7290374659252540217" datatype="html">
+        <source>Instructions</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">177,178</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
+          <context context-type="linenumber">141,142</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7672141881412143827" datatype="html">
+        <source>Recipe yield (servings)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">184,185</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4814285799071780083" datatype="html">
+        <source>Remove</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">209,210</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">292,293</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6496141313720203533" datatype="html">
+        <source> Add ingredient</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">214</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2842337338988850737" datatype="html">
+        <source> Create recipe draft </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">216</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7745030972554181689" datatype="html">
+        <source> Publish and lock </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">229</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">313</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6730477287764408165" datatype="html">
+        <source>Meal-plan versions</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">238,239</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6441211002656395249" datatype="html">
+        <source>Plan name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">241</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="840951359074313455" datatype="html">
+        <source>Days</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">245,246</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1614922647233111265" datatype="html">
+        <source>Daily calories</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">248,249</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3844453596712314808" datatype="html">
+        <source> Add meal slot</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">297</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7439860599011545707" datatype="html">
+        <source> Create plan draft </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">299</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4234992148096832718" datatype="html">
+        <source>Workspace calculation policy</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">322,323</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4791269829769346253" datatype="html">
+        <source>Energy factors</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">326,327</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6988514994117525368" datatype="html">
+        <source>Provider calorie discrepancy tolerance (kcal)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">332,333</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5845620030487359055" datatype="html">
+        <source>AI requests/month</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">341,342</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5854047926129699708" datatype="html">
+        <source>AI cost limit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">348,349</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5908424453355701240" datatype="html">
+        <source>Save policy</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">360,361</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6568015173493365628" datatype="html">
+        <source>AI meal draft review</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">366,367</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="676435901708246964" datatype="html">
+        <source> AI output is untrusted. Schema validation, canonical food mapping, and coach approval are required before a recipe draft is created. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">368,369</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="80516320088170434" datatype="html">
+        <source>Prompt</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">373,374</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4623268367187978271" datatype="html">
+        <source>Generate reviewed draft</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">375,376</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2965437287274259927" datatype="html">
+        <source>Coach-confirmed recipe name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">387,388</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7244274938642898614" datatype="html">
+        <source>Coach-confirmed instructions</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">390,391</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8026344988748719558" datatype="html">
+        <source>Servings</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">397,398</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4691448240092386786" datatype="html">
+        <source>Canonical food for ingredient <x id="INTERPOLATION" equiv-text="{{ $index + 1 }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">402,403</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7905670780913296770" datatype="html">
+        <source> Approve into recipe draft</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">416</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7378878529334768232" datatype="html">
+        <source>Reject</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.html</context>
+          <context context-type="linenumber">417,418</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1768915347868901322" datatype="html">
+        <source>Coach-authored food saved as a canonical version.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">159</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="633734830026273116" datatype="html">
+        <source>USDA FoodData Central search failed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">172</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5822545312152913564" datatype="html">
+        <source>USDA FoodData Central record cached locally with attribution.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">182</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6516690099001876849" datatype="html">
+        <source>Recipe draft created from canonical food snapshots.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">234</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5111881246750866992" datatype="html">
+        <source>Recipe version published and locked.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">244</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8822111197987747557" datatype="html">
+        <source>Meal <x id="PH" equiv-text="items.length + 1"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">256</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8776387869170721655" datatype="html">
+        <source>Meal-plan draft created with per-choice totals and alternative averages.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">289</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4315313246688033259" datatype="html">
+        <source>Meal-plan version published and locked.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">299</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6778857558979828703" datatype="html">
+        <source>Nutrition workspace policy saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">321</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7661320574710821548" datatype="html">
+        <source>AI draft generated for coach review.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">349</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5235773414292539477" datatype="html">
+        <source>AI draft rejected.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">371</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2035756751529998968" datatype="html">
+        <source>AI draft approved into a coach-reviewed recipe draft.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">394</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="146685883057134756" datatype="html">
+        <source>Nutrition library could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">438</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8360541813657053433" datatype="html">
+        <source>The nutrition operation could not be completed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition-library.ts</context>
+          <context context-type="linenumber">464</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="46376018389260013" datatype="html">
+        <source>Nutrition library | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition.routes.ts</context>
+          <context context-type="linenumber">8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7780936560468477630" datatype="html">
+        <source>Today&apos;s nutrition | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/nutrition.routes.ts</context>
+          <context context-type="linenumber">14</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3226611674928337742" datatype="html">
+        <source>Nutrition prescription</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">3,4</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5437246744903697606" datatype="html">
+        <source>Today&apos;s meals</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6544195089494697813" datatype="html">
+        <source> Record the concrete choice you ate. Alternative averages are never logged as consumption. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">6,7</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3973931101896534797" datatype="html">
+        <source>Date</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">10</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">156,157</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">464,465</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5553532403888698804" datatype="html">
+        <source>Loading your meal plan...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">22,23</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6560184563571763678" datatype="html">
+        <source>Daily target</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">26,27</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3488683882555681558" datatype="html">
+        <source>Protein</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">30</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6128418476228439129" datatype="html">
+        <source>Carbohydrate</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">33,34</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8936746239272851343" datatype="html">
+        <source>Fat</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">37</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6406734733081847028" datatype="html">
+        <source>Meal <x id="INTERPOLATION" equiv-text="{{ slot.order + 1 }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">49,50</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6333335057236774263" datatype="html">
+        <source>Saved</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">53,54</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4089293970858474765" datatype="html">
+        <source>What did you eat?</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">57,58</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2048703253921374205" datatype="html">
+        <source>Select a meal</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">63,64</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1884554196583844690" datatype="html">
+        <source>Actual servings</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">72,73</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6310037757452628702" datatype="html">
+        <source>Concrete selected total</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">102,103</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1890905244285808086" datatype="html">
+        <source> Complete nutrition day </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">117,118</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2338247878109237247" datatype="html">
+        <source>Day completed</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.html</context>
+          <context context-type="linenumber">120,121</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6544009661008083137" datatype="html">
+        <source>Choose a meal and enter positive servings.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.ts</context>
+          <context context-type="linenumber">79</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7634079729300091769" datatype="html">
+        <source>Meal saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.ts</context>
+          <context context-type="linenumber">97</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1385650505231065384" datatype="html">
+        <source>This meal could not be saved. Your other edits are still here.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.ts</context>
+          <context context-type="linenumber">103</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3344289538126323370" datatype="html">
+        <source>Save every edited meal before completing the day.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.ts</context>
+          <context context-type="linenumber">118</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6972260527156498928" datatype="html">
+        <source>Nutrition day completed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.ts</context>
+          <context context-type="linenumber">131</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1970429657963493899" datatype="html">
+        <source>The nutrition day could not be completed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.ts</context>
+          <context context-type="linenumber">133</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3796822252090290969" datatype="html">
+        <source>No authorized nutrition plan was found for this date.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/nutrition/today-nutrition.ts</context>
+          <context context-type="linenumber">154</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="3973357683343532423" datatype="html">
         <source>Client account</source>
         <context-group purpose="location">
@@ -3321,269 +4443,285 @@
           <context context-type="linenumber">8,9</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="75297451489714691" datatype="html">
+        <source> Load more programs </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">20,21</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="5538505878013034554" datatype="html">
         <source>Training enrollment</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">21,22</context>
+          <context context-type="linenumber">33,34</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4942815180065738318" datatype="html">
         <source>Select enrollment...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">23,24</context>
+          <context context-type="linenumber">35,36</context>
         </context-group>
       </trans-unit>
       <trans-unit id="259713098649232010" datatype="html">
         <source>Published program</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">30,31</context>
+          <context context-type="linenumber">42,43</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3770557480713959506" datatype="html">
         <source>Select program...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">32,33</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="8932917860978648376" datatype="html">
-        <source>Unit</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">46,47</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">121,122</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">506,507</context>
+          <context context-type="linenumber">44,45</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4542296999071140904" datatype="html">
         <source>Load increment</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">53,54</context>
+          <context context-type="linenumber">65,66</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3483532750500721162" datatype="html">
         <source>Rounding</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">57,58</context>
+          <context context-type="linenumber">69,70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5752041521961438563" datatype="html">
         <source>Nearest</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">59,60</context>
+          <context context-type="linenumber">71,72</context>
         </context-group>
       </trans-unit>
       <trans-unit id="375247309021166846" datatype="html">
         <source>Down</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">60,61</context>
+          <context context-type="linenumber">72,73</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5573486145935722913" datatype="html">
         <source>Up</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">61,62</context>
+          <context context-type="linenumber">73,74</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5446188282005151041" datatype="html">
         <source>Program working-max snapshots</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">68,69</context>
+          <context context-type="linenumber">80,81</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4341609192291556002" datatype="html">
         <source>Using recorded max</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">83,84</context>
+          <context context-type="linenumber">95,96</context>
         </context-group>
       </trans-unit>
       <trans-unit id="938639134249089709" datatype="html">
         <source>Coach value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">85,86</context>
+          <context context-type="linenumber">97,98</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4720186668575352407" datatype="html">
         <source>Strength max history</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">95,96</context>
+          <context context-type="linenumber">107,108</context>
         </context-group>
       </trans-unit>
       <trans-unit id="9056543421332015840" datatype="html">
         <source>Exercise</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">100,101</context>
+          <context context-type="linenumber">112,113</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">145,146</context>
+          <context context-type="linenumber">157,158</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">278</context>
+          <context context-type="linenumber">288</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2250784683932913830" datatype="html">
         <source>Select...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">102,103</context>
+          <context context-type="linenumber">114,115</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">193,194</context>
+          <context context-type="linenumber">212,213</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6599752784987327249" datatype="html">
         <source>Kind</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">109,110</context>
+          <context context-type="linenumber">121,122</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">146,147</context>
+          <context context-type="linenumber">158,159</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6555318547274416232" datatype="html">
         <source>Value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">117,118</context>
+          <context context-type="linenumber">129,130</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">147,148</context>
+          <context context-type="linenumber">159,160</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8175254808871137157" datatype="html">
         <source>Effective date</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">128,129</context>
+          <context context-type="linenumber">140,141</context>
         </context-group>
       </trans-unit>
       <trans-unit id="640022366211466001" datatype="html">
         <source> Record </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">136,137</context>
+          <context context-type="linenumber">148,149</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="3973931101896534797" datatype="html">
-        <source>Date</source>
+      <trans-unit id="3110491000864912879" datatype="html">
+        <source> Load more max records </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">144,145</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">355,356</context>
+          <context context-type="linenumber">184,185</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1417035489710187936" datatype="html">
         <source>Client mesocycles</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">169,170</context>
+          <context context-type="linenumber">192,193</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4370297334891613946" datatype="html">
         <source>No mesocycles assigned.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">173,174</context>
+          <context context-type="linenumber">196,197</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8371095499887540704" datatype="html">
         <source>Use dated unlock</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">203,204</context>
+          <context context-type="linenumber">234,235</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6906282904591368734" datatype="html">
         <source>Reveal all weeks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">205,206</context>
+          <context context-type="linenumber">236,237</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5162686434580248853" datatype="html">
         <source>Start</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">209,210</context>
+          <context context-type="linenumber">240,241</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7477383884489731964" datatype="html">
         <source> Reschedule future </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">213,214</context>
+          <context context-type="linenumber">250,251</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5370170519653047207" datatype="html">
+        <source>Cancellation reason</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">258,259</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4727581528551466368" datatype="html">
+        <source> Cancel assignment </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">268,269</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5632641530726452646" datatype="html">
+        <source> Complete mesocycle </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">278</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2441153104666959597" datatype="html">
+        <source>Mesocycle lifecycle</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">282</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3173011364149618146" datatype="html">
         <source>Week <x id="INTERPOLATION" equiv-text="{{ week.weekNumber }}"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">228,229</context>
+          <context context-type="linenumber">303,304</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">310,311</context>
+          <context context-type="linenumber">419,420</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">119,120</context>
+          <context context-type="linenumber">138,139</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4545041448523656285" datatype="html">
         <source>Unlock</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">230</context>
+          <context context-type="linenumber">305</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4058575476871566236" datatype="html">
         <source>Published</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">237,238</context>
+          <context context-type="linenumber">313,314</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">50,51</context>
+          <context context-type="linenumber">58,59</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">130,131</context>
+          <context context-type="linenumber">149,150</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3616783749469928782" datatype="html">
         <source>exercises</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">246,247</context>
+          <context context-type="linenumber">322,323</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
@@ -3594,216 +4732,258 @@
         <source>Replace with saved...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">252,253</context>
+          <context context-type="linenumber">328,329</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4419785925408189157" datatype="html">
         <source> Replace </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">264</context>
+          <context context-type="linenumber">340</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3326877877555410533" datatype="html">
         <source>Started</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">272,273</context>
+          <context context-type="linenumber">348,349</context>
         </context-group>
       </trans-unit>
       <trans-unit id="410208724656306340" datatype="html">
         <source>Duplicate and transform</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">284,285</context>
+          <context context-type="linenumber">360,361</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5453929666731473173" datatype="html">
         <source>Generated weeks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">286,287</context>
+          <context context-type="linenumber">362,363</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5713128113257093189" datatype="html">
         <source>RPE per week</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">290,291</context>
+          <context context-type="linenumber">373,374</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5740206434555920246" datatype="html">
         <source> Preview </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">294,295</context>
+          <context context-type="linenumber">391,392</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2723549627500819777" datatype="html">
         <source>generated weeks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">301</context>
+          <context context-type="linenumber">398</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4906166672887705856" datatype="html">
+        <source>ends</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">400</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6420983616762282726" datatype="html">
         <source> Apply reviewed preview </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">305</context>
+          <context context-type="linenumber">409</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7304001861392033526" datatype="html">
         <source>Exercise performance history</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">337,338</context>
+          <context context-type="linenumber">446,447</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8836105382882083928" datatype="html">
         <source>Select exercise...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">343,344</context>
+          <context context-type="linenumber">452,453</context>
         </context-group>
       </trans-unit>
       <trans-unit id="9131913350495870905" datatype="html">
         <source>Load</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">356,357</context>
+          <context context-type="linenumber">465,466</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">283</context>
+          <context context-type="linenumber">293</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">131,132</context>
+          <context context-type="linenumber">137,138</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7860075696718747782" datatype="html">
         <source>Reps</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">357,358</context>
+          <context context-type="linenumber">466,467</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">397,398</context>
+          <context context-type="linenumber">416,417</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">132,133</context>
+          <context context-type="linenumber">138,139</context>
         </context-group>
       </trans-unit>
       <trans-unit id="434404492084234684" datatype="html">
         <source>Volume</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">361,362</context>
+          <context context-type="linenumber">470,471</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1230154438678955604" datatype="html">
         <source>Change</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">362,363</context>
+          <context context-type="linenumber">471,472</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1070721504728476831" datatype="html">
         <source>Substituted</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">380,381</context>
+          <context context-type="linenumber">489,490</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5096084393219695099" datatype="html">
+        <source> Load more history </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">507,508</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1372952719837833391" datatype="html">
         <source>No completed performance for this exercise.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">391,393</context>
+          <context context-type="linenumber">511,513</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8871029336355627817" datatype="html">
+        <source>This progression exceeds paid training coverage.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
+          <context context-type="linenumber">97</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3674939289300366161" datatype="html">
         <source>The program details could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">152</context>
+          <context context-type="linenumber">159</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8893572295768218255" datatype="html">
         <source>Enrollment, published program, date, and all working maxes are required.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">181</context>
+          <context context-type="linenumber">184</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1973259043710577387" datatype="html">
         <source>Client-specific mesocycle snapshot assigned.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">207</context>
+          <context context-type="linenumber">214</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3765026086282403394" datatype="html">
         <source>The mesocycle could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">217</context>
+          <context context-type="linenumber">224</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5188409548919961408" datatype="html">
+        <source>A cancellation reason is required.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
+          <context context-type="linenumber">273</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1045673262244466603" datatype="html">
         <source>Select at least one source week.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">276</context>
+          <context context-type="linenumber">318</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5978675645704541076" datatype="html">
+        <source>Progression iterations must be between 1 and 12.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
+          <context context-type="linenumber">322</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2857999933955461904" datatype="html">
+        <source>RPE change must be between -2 and 2 in half-step increments.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
+          <context context-type="linenumber">330</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7452840271019362787" datatype="html">
         <source>Exercise and positive max value are required.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">331</context>
+          <context context-type="linenumber">389</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1606175624370428846" datatype="html">
         <source>Strength max appended to history.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">352</context>
+          <context context-type="linenumber">412</context>
         </context-group>
       </trans-unit>
       <trans-unit id="9028570866477351697" datatype="html">
         <source>Exercise history could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">369</context>
+          <context context-type="linenumber">430</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3509337326558098544" datatype="html">
         <source>Client training could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">411</context>
+          <context context-type="linenumber">506</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7202376738066599796" datatype="html">
         <source>Mesocycle updated.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">428</context>
+          <context context-type="linenumber">523</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8261275814690646226" datatype="html">
         <source>The training change could not be saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.ts</context>
-          <context context-type="linenumber">439</context>
+          <context context-type="linenumber">534</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">373</context>
+          <context context-type="linenumber">401</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2539006690604269656" datatype="html">
@@ -3895,13 +5075,6 @@
           <context context-type="linenumber">73,74</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="8953033926734869941" datatype="html">
-        <source>Name</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
-          <context context-type="linenumber">81,82</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="8846151385804023521" datatype="html">
         <source>Classification</source>
         <context-group purpose="location">
@@ -3945,14 +5118,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">381,382</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="7290374659252540217" datatype="html">
-        <source>Instructions</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
-          <context context-type="linenumber">141,142</context>
+          <context context-type="linenumber">400,401</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7489197329181806113" datatype="html">
@@ -4039,102 +5205,116 @@
           <context context-type="linenumber">241</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="438065579373478869" datatype="html">
+        <source> Load more media </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
+          <context context-type="linenumber">255,256</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="2347398465318273141" datatype="html">
         <source>Loading exercises...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
-          <context context-type="linenumber">251,252</context>
+          <context context-type="linenumber">262,263</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2385333422868527884" datatype="html">
         <source>No exercises found</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
-          <context context-type="linenumber">254,255</context>
+          <context context-type="linenumber">265,266</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5377078063439833222" datatype="html">
         <source> Edit </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.html</context>
-          <context context-type="linenumber">272</context>
+          <context context-type="linenumber">283</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2777195744830023961" datatype="html">
         <source>Exercise name is required.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">182</context>
+          <context context-type="linenumber">183</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3983658869258117629" datatype="html">
         <source>Exercise saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">216</context>
+          <context context-type="linenumber">217</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6618379367570794603" datatype="html">
         <source>Exercise restored.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">230</context>
+          <context context-type="linenumber">231</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4918292027143248955" datatype="html">
         <source>Exercise archived.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">230</context>
+          <context context-type="linenumber">231</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4376331419278768157" datatype="html">
         <source>Choose an image or video.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">242</context>
+          <context context-type="linenumber">243</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1271357856670900084" datatype="html">
         <source>Protected media uploaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">250</context>
+          <context context-type="linenumber">251</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2006814350714267337" datatype="html">
         <source>Media title and a valid provider ID or URL are required.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">257</context>
+          <context context-type="linenumber">258</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1708133070974224463" datatype="html">
         <source>External media registered.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">271</context>
+          <context context-type="linenumber">272</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3141849451441031107" datatype="html">
         <source>Media deleted.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">279</context>
+          <context context-type="linenumber">280</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3755158428595429951" datatype="html">
         <source>The exercise library could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">295</context>
+          <context context-type="linenumber">296</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2593431360110184641" datatype="html">
+        <source>More media could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
+          <context context-type="linenumber">331</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7465458721139834357" datatype="html">
         <source>The exercise-library change could not be saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/exercise-library.ts</context>
-          <context context-type="linenumber">327</context>
+          <context context-type="linenumber">345</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8371370114242230066" datatype="html">
@@ -4148,617 +5328,698 @@
         <source> New template </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">9,10</context>
+          <context context-type="linenumber">12,13</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2222328576028711109" datatype="html">
         <source>Save new version</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">13,14</context>
+          <context context-type="linenumber">16,17</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1879677727243709196" datatype="html">
         <source>Create template</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">15,16</context>
+          <context context-type="linenumber">18,19</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2693286189705363920" datatype="html">
         <source>Program templates</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">29</context>
+          <context context-type="linenumber">35,36</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5433675495457939071" datatype="html">
         <source>Templates</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">30,31</context>
+          <context context-type="linenumber">38,39</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3894950702316166331" datatype="html">
         <source>Loading...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">32,33</context>
+          <context context-type="linenumber">40,41</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3953390787757097566" datatype="html">
         <source>No templates yet.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">34,36</context>
+          <context context-type="linenumber">42,44</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4808589666930368915" datatype="html">
         <source>Draft</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">52,53</context>
+          <context context-type="linenumber">60,61</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3608977282529901718" datatype="html">
+        <source> Load more templates </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
+          <context context-type="linenumber">75,76</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2516688930046585179" datatype="html">
         <source>Program editor</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">61</context>
+          <context context-type="linenumber">80</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4899062938754891176" datatype="html">
         <source>Program name</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">64,65</context>
+          <context context-type="linenumber">83,84</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6718144026714007098" datatype="html">
         <source>Publish version</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">73,74</context>
+          <context context-type="linenumber">92,93</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6698978509048165881" datatype="html">
         <source> Add week </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">80,81</context>
+          <context context-type="linenumber">99,100</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2368419086062635958" datatype="html">
         <source> Duplicate selected weeks </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">89,90</context>
+          <context context-type="linenumber">108,109</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1938927849565776196" datatype="html">
         <source> Copy selected sessions </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">98,99</context>
+          <context context-type="linenumber">117,118</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1381807530861875083" datatype="html">
         <source>weeks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">101</context>
+          <context context-type="linenumber">120</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3182741751708925016" datatype="html">
         <source>Week label</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">125,126</context>
+          <context context-type="linenumber">144,145</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1141488846780024510" datatype="html">
         <source>Move week up</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">135,136</context>
+          <context context-type="linenumber">154,155</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">137,138</context>
+          <context context-type="linenumber">156,157</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2741693450434916531" datatype="html">
         <source>Move week down</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">146,147</context>
+          <context context-type="linenumber">165,166</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">148,149</context>
+          <context context-type="linenumber">167,168</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6980138735857789506" datatype="html">
         <source>Duplicate week</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">157,158</context>
+          <context context-type="linenumber">176,177</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">159,160</context>
+          <context context-type="linenumber">178,179</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5016189345428815603" datatype="html">
         <source>Delete week</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">168,169</context>
+          <context context-type="linenumber">187,188</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">170,171</context>
+          <context context-type="linenumber">189,190</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7331411127209513153" datatype="html">
         <source> Add session </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">187</context>
+          <context context-type="linenumber">206</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6402046294500559430" datatype="html">
         <source>Reuse saved session</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">191,192</context>
+          <context context-type="linenumber">210,211</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3654412084644445542" datatype="html">
         <source>No sessions in this week.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">203,204</context>
+          <context context-type="linenumber">222,223</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5903110565317428249" datatype="html">
         <source>Session</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">224,225</context>
+          <context context-type="linenumber">243,244</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1286983255645370171" datatype="html">
         <source>Day</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">228,229</context>
+          <context context-type="linenumber">247,248</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7069722712777398239" datatype="html">
         <source>Day 1</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">230,231</context>
+          <context context-type="linenumber">249,250</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7875532155900769028" datatype="html">
         <source>Day 2</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">231,232</context>
+          <context context-type="linenumber">250,251</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8593514934752142515" datatype="html">
         <source>Day 3</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">232,233</context>
+          <context context-type="linenumber">251,252</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8502772828392269874" datatype="html">
         <source>Day 4</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">233,234</context>
+          <context context-type="linenumber">252,253</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2719672518093594456" datatype="html">
         <source>Day 5</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">234,235</context>
+          <context context-type="linenumber">253,254</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2681302683879981484" datatype="html">
         <source>Day 6</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">235,236</context>
+          <context context-type="linenumber">254,255</context>
         </context-group>
       </trans-unit>
       <trans-unit id="507665453279913946" datatype="html">
         <source>Day 7</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">236,237</context>
+          <context context-type="linenumber">255,256</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3086221085325089096" datatype="html">
         <source>Move session up</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">242,243</context>
+          <context context-type="linenumber">261,262</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">244,245</context>
+          <context context-type="linenumber">263,264</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5227834795879431905" datatype="html">
         <source>Move session down</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">253,254</context>
+          <context context-type="linenumber">272,273</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">255,256</context>
+          <context context-type="linenumber">274,275</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2496617535183989587" datatype="html">
         <source>Copy session</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">264,265</context>
+          <context context-type="linenumber">283,284</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">266,267</context>
+          <context context-type="linenumber">285,286</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6888499122836389837" datatype="html">
         <source>Delete session</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">275,276</context>
+          <context context-type="linenumber">294,295</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">277,278</context>
+          <context context-type="linenumber">296,297</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5178122075755596782" datatype="html">
         <source>Coach notes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">288,289</context>
+          <context context-type="linenumber">307,308</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">376,377</context>
+          <context context-type="linenumber">395,396</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8595520404063031488" datatype="html">
         <source> Save session </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">298</context>
+          <context context-type="linenumber">317</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4339339761619265745" datatype="html">
         <source>Add exercise</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">304,305</context>
+          <context context-type="linenumber">323,324</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8628016126690190406" datatype="html">
         <source>Add exercise...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">308,309</context>
+          <context context-type="linenumber">327,328</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6128446309457745602" datatype="html">
         <source>Move exercise up</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">322,323</context>
+          <context context-type="linenumber">341,342</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">324,325</context>
+          <context context-type="linenumber">343,344</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4563134833925742677" datatype="html">
         <source>Move exercise down</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">333,334</context>
+          <context context-type="linenumber">352,353</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">335,336</context>
+          <context context-type="linenumber">354,355</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3983165914931486631" datatype="html">
         <source>Remove exercise</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">345,346</context>
+          <context context-type="linenumber">364,365</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">347,348</context>
+          <context context-type="linenumber">366,367</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4811443853663828334" datatype="html">
         <source>Main lift</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">363,364</context>
+          <context context-type="linenumber">382,383</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7071173190629336241" datatype="html">
         <source>Client modification</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">366,367</context>
+          <context context-type="linenumber">385,386</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7870689051450450957" datatype="html">
         <source>Locked</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">371,372</context>
+          <context context-type="linenumber">390,391</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7291685063929991023" datatype="html">
         <source>Approved swap</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">372,373</context>
+          <context context-type="linenumber">391,392</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3518031780604263577" datatype="html">
         <source>Set prescriptions</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">393</context>
+          <context context-type="linenumber">412</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4359847060009771702" datatype="html">
         <source>Set</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">395,396</context>
+          <context context-type="linenumber">414,415</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">129,130</context>
+          <context context-type="linenumber">135,136</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8650499415827640724" datatype="html">
         <source>Type</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">396,397</context>
+          <context context-type="linenumber">415,416</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1856977380259725110" datatype="html">
         <source>Load model</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">398,399</context>
+          <context context-type="linenumber">417,418</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4854396465510517671" datatype="html">
         <source>Target</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">399,400</context>
+          <context context-type="linenumber">418,419</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3206261567645901558" datatype="html">
         <source>RPE/RIR</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">400,401</context>
+          <context context-type="linenumber">419,420</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7377467231284431042" datatype="html">
         <source>Rest</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">401,402</context>
+          <context context-type="linenumber">420,421</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2356447628672933991" datatype="html">
         <source>Set type</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">407</context>
+          <context context-type="linenumber">426</context>
         </context-group>
       </trans-unit>
       <trans-unit id="949871526971208527" datatype="html">
         <source>Minimum repetitions</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">418,419</context>
+          <context context-type="linenumber">437,438</context>
         </context-group>
       </trans-unit>
       <trans-unit id="9049930212614679000" datatype="html">
         <source>Maximum repetitions</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">426,427</context>
+          <context context-type="linenumber">445,446</context>
         </context-group>
       </trans-unit>
       <trans-unit id="123220178793724623" datatype="html">
         <source>Load strategy</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">432,433</context>
+          <context context-type="linenumber">451,452</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3247802184118647159" datatype="html">
         <source>Exertion scale</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">454,455</context>
+          <context context-type="linenumber">474,475</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3716119271265839045" datatype="html">
         <source>Exertion target</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">466,467</context>
+          <context context-type="linenumber">486,487</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5542965688065482898" datatype="html">
         <source>Rest seconds</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">476,477</context>
+          <context context-type="linenumber">496,497</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1519760637019292566" datatype="html">
         <source>Copy set</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">482,483</context>
+          <context context-type="linenumber">502,503</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">484,485</context>
+          <context context-type="linenumber">504,505</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7195039573486868497" datatype="html">
         <source>Remove set</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">493,494</context>
+          <context context-type="linenumber">513,514</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">495,496</context>
+          <context context-type="linenumber">515,516</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3916518370500102276" datatype="html">
         <source>Manual load override</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">513,514</context>
+          <context context-type="linenumber">533,534</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2352899333765080767" datatype="html">
         <source>Tempo</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">522,523</context>
+          <context context-type="linenumber">542,543</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8657375483439808037" datatype="html">
         <source>Set note</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">526,527</context>
+          <context context-type="linenumber">546,547</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">208,209</context>
+          <context context-type="linenumber">224,225</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4989321603795654759" datatype="html">
         <source> Add set </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.html</context>
-          <context context-type="linenumber">538</context>
+          <context context-type="linenumber">558</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4387568449915954076" datatype="html">
         <source>The program version could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">105</context>
+          <context context-type="linenumber">107</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3927377406638030265" datatype="html">
         <source>Save the program version before adding this session to the library.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">201</context>
+          <context context-type="linenumber">203</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5611528612392666293" datatype="html">
         <source>Session saved to the reusable library.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">215</context>
+          <context context-type="linenumber">217</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2042788885036836600" datatype="html">
         <source>% max</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">286</context>
+          <context context-type="linenumber">296</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1060618206768345197" datatype="html">
         <source>Calculated</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">288</context>
+          <context context-type="linenumber">298</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6484412142362300858" datatype="html">
         <source>New immutable program version saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">308</context>
+          <context context-type="linenumber">318</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1553914354985378738" datatype="html">
         <source>Program template created.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">309</context>
+          <context context-type="linenumber">319</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5547438472001877714" datatype="html">
         <source>Training resources could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">360</context>
+          <context context-type="linenumber">371</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3241018395864240710" datatype="html">
+        <source>More program templates could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">387</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2705885571334248955" datatype="html">
         <source>Program name is required.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">405</context>
+          <context context-type="linenumber">433</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8768456736770179891" datatype="html">
         <source>Add at least one week.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">408</context>
+          <context context-type="linenumber">436</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6609482394438818940" datatype="html">
         <source>Every session needs a name.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">413</context>
+          <context context-type="linenumber">441</context>
         </context-group>
       </trans-unit>
       <trans-unit id="321092892638865843" datatype="html">
         <source>Every prescribed exercise needs at least one set.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
-          <context context-type="linenumber">418</context>
+          <context context-type="linenumber">446</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3094881260431484386" datatype="html">
+        <source>Set repetitions must be between 1 and 100.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">454</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">460</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="593408965332246903" datatype="html">
+        <source>Minimum repetitions cannot exceed maximum repetitions.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">467</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="466110503340917814" datatype="html">
+        <source>Rest must be between 0 and 3600 seconds.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">470</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7845476275432865777" datatype="html">
+        <source>RPE must be between 5 and 10 in 0.5 steps.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">481</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8305227917681002247" datatype="html">
+        <source>RIR must be between 0 and 5 in 0.5 steps.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">482</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7935445420503095793" datatype="html">
+        <source>Direct load must be greater than 0 and at most 2000.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">489</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9132430192769297380" datatype="html">
+        <source>Working-max percentage must be greater than 0 and at most 150.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">495</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8722348162117897298" datatype="html">
+        <source>The working-max recommendation needs maximum repetitions and an exertion target.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">499</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5869574811216435625" datatype="html">
+        <source>Maximum repetitions plus RIR cannot exceed 12 for this recommendation strategy.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/program-builder.ts</context>
+          <context context-type="linenumber">506</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6935517430159299349" datatype="html">
@@ -4796,204 +6057,228 @@
           <context context-type="linenumber">52</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="4099989690023436367" datatype="html">
+        <source>Saving sets...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/today-training.html</context>
+          <context context-type="linenumber">57,58</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="8352007315755529044" datatype="html">
         <source>Prescribed: <x id="INTERPOLATION" equiv-text="{{ exercise.prescribedExerciseName }}"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">75,76</context>
+          <context context-type="linenumber">80,81</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8183143075782699056" datatype="html">
         <source> Demo <x id="INTERPOLATION" equiv-text="{{ mediaIndex + 1 }}"/> </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">88,89</context>
+          <context context-type="linenumber">93,94</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8766754195508359468" datatype="html">
         <source>Approved exercise alternative</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">99,100</context>
+          <context context-type="linenumber">104,105</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1698612538532726657" datatype="html">
         <source>Swap exercise...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">103,104</context>
+          <context context-type="linenumber">109,110</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4452427314943113135" datatype="html">
         <source>Previous</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">117,118</context>
+          <context context-type="linenumber">123,124</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2923804620022401467" datatype="html">
         <source>Prescription</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">130,131</context>
+          <context context-type="linenumber">136,137</context>
         </context-group>
       </trans-unit>
       <trans-unit id="397098723873502323" datatype="html">
         <source>Done</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">134,135</context>
+          <context context-type="linenumber">140,141</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2867786443579511901" datatype="html">
         <source>Actual load</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">155,156</context>
+          <context context-type="linenumber">163,164</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7277753486384490627" datatype="html">
         <source>Actual load unit</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">161,162</context>
+          <context context-type="linenumber">170,171</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2820164938478574943" datatype="html">
         <source>Actual repetitions</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">174,175</context>
+          <context context-type="linenumber">185,186</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4168951949016395810" datatype="html">
         <source>Actual RPE</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">184,185</context>
+          <context context-type="linenumber">196,197</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2935425822166417359" datatype="html">
         <source>Set completed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">192,193</context>
+          <context context-type="linenumber">205,206</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3620188369327429839" datatype="html">
         <source> Save </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">204</context>
+          <context context-type="linenumber">220</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1404954336944376143" datatype="html">
         <source>Workout note</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">227,228</context>
+          <context context-type="linenumber">244,245</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1355531414770032654" datatype="html">
         <source> Add note </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">239</context>
+          <context context-type="linenumber">256</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5793651319438899782" datatype="html">
         <source> Complete workout </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">250</context>
+          <context context-type="linenumber">267</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4253257656658610691" datatype="html">
         <source>Exercise demo</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">276,277</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">280,281</context>
+          <context context-type="linenumber">299,300</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1326660700361750151" datatype="html">
         <source>Close media</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">283,284</context>
+          <context context-type="linenumber">303,304</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7819314041543176992" datatype="html">
         <source>Close</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">286</context>
+          <context context-type="linenumber">306</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1725313845803062971" datatype="html">
         <source>Exercise demonstration</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.html</context>
-          <context context-type="linenumber">295</context>
+          <context context-type="linenumber">315</context>
         </context-group>
       </trans-unit>
       <trans-unit id="158199557409471896" datatype="html">
         <source>Workout started.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
-          <context context-type="linenumber">57</context>
+          <context context-type="linenumber">81</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6132339378600689013" datatype="html">
+        <source>Select kg or lb before saving a load.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
+          <context context-type="linenumber">97</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4051874940376139082" datatype="html">
         <source>Set saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">130</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2090265265897186930" datatype="html">
+        <source>The set could not be saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
+          <context context-type="linenumber">132</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6092111049478051537" datatype="html">
         <source>Approved substitution recorded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
-          <context context-type="linenumber">106</context>
+          <context context-type="linenumber">204</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3255940963238696331" datatype="html">
         <source>Workout note added.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
-          <context context-type="linenumber">124</context>
+          <context context-type="linenumber">222</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6172971362656244128" datatype="html">
+        <source>Save every edited set before completing the workout.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
+          <context context-type="linenumber">231</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5140125026401919034" datatype="html">
         <source>Workout completed.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
-          <context context-type="linenumber">139</context>
+          <context context-type="linenumber">241</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2078766089655679010" datatype="html">
         <source>Exercise media could not be opened.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
-          <context context-type="linenumber">156</context>
+          <context context-type="linenumber">260</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5218601410696499213" datatype="html">
         <source>Today&apos;s training could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
-          <context context-type="linenumber">197</context>
+          <context context-type="linenumber">342</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1830051226596670743" datatype="html">
         <source>The workout change could not be saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/today-training.ts</context>
-          <context context-type="linenumber">210</context>
+          <context context-type="linenumber">355</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2834066636604402232" datatype="html">

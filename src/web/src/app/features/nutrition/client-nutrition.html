@@ -1,0 +1,242 @@
+<section class="surface-section nutrition-client">
+  <div class="section-heading">
+    <div>
+      <h2 i18n>Nutrition and meal planning</h2>
+      <p class="muted" i18n>
+        Calculate explainable estimates, review safety warnings, then assign an immutable client
+        snapshot.
+      </p>
+    </div>
+  </div>
+
+  @if (error()) {
+    <p class="form-error" role="alert">{{ error() }}</p>
+  }
+  @if (notice()) {
+    <p class="form-success" role="status">{{ notice() }}</p>
+  }
+  @if (loading()) {
+    <p i18n>Loading nutrition...</p>
+  } @else {
+    <div class="nutrition-grid">
+      <form (ngSubmit)="calculate()" class="panel">
+        <h3 i18n>Energy and macro estimate</h3>
+        <p class="safety" i18n>BMR and TDEE are estimates, not clinically exact measurements.</p>
+        <label
+          ><span i18n>BMR strategy</span
+          ><select [(ngModel)]="bmrMethodKey" name="bmr">
+            <option value="MifflinStJeor">Mifflin-St Jeor v1</option>
+            <option value="KatchMcArdle">Katch-McArdle v1</option>
+            <option value="HarrisBenedictRevised">Harris-Benedict Revised v1</option>
+          </select></label
+        >
+        <div class="field-row">
+          <label
+            ><span i18n>Weight (kg)</span
+            ><input
+              type="number"
+              min="20"
+              max="500"
+              step="0.1"
+              [(ngModel)]="weightKilograms"
+              name="weight"
+              required
+          /></label>
+          <label
+            ><span i18n>Height (cm)</span
+            ><input
+              type="number"
+              min="50"
+              max="300"
+              step="0.1"
+              [(ngModel)]="heightCentimeters"
+              name="height"
+              required
+          /></label>
+          <label
+            ><span i18n>Age</span
+            ><input type="number" min="18" max="120" [(ngModel)]="ageYears" name="age" required
+          /></label>
+        </div>
+        <div class="field-row">
+          <label
+            ><span i18n>Formula sex</span
+            ><select [(ngModel)]="sex" name="sex">
+              <option value="Female" i18n>Female</option>
+              <option value="Male" i18n>Male</option>
+            </select></label
+          >
+          @if (bmrMethodKey === 'KatchMcArdle') {
+            <label
+              ><span i18n>Body fat (%)</span
+              ><input
+                type="number"
+                min="1"
+                max="70"
+                step="0.1"
+                [(ngModel)]="bodyFatPercentage"
+                name="bodyFat"
+                required
+            /></label>
+          }
+          <label
+            ><span i18n>Occupation</span
+            ><select [(ngModel)]="occupationType" name="occupation">
+              <option value="Seated" i18n>Seated</option>
+              <option value="Mixed" i18n>Mixed</option>
+              <option value="Physical" i18n>Physical</option>
+            </select></label
+          >
+          <label
+            ><span i18n>Average daily steps</span
+            ><input
+              type="number"
+              min="0"
+              max="100000"
+              [(ngModel)]="averageDailySteps"
+              name="steps"
+              required
+          /></label>
+        </div>
+        <div class="field-row">
+          <label
+            ><span i18n>Coach goal adjustment (kcal)</span
+            ><input
+              type="number"
+              step="1"
+              [(ngModel)]="coachGoalAdjustment"
+              name="adjustment"
+              required
+          /></label>
+          <label
+            ><span i18n>Protein (g)</span
+            ><input
+              type="number"
+              min="0"
+              step="1"
+              [(ngModel)]="proteinGrams"
+              name="protein"
+              required
+          /></label>
+          <label
+            ><span i18n>Fat percentage (%)</span
+            ><input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              [(ngModel)]="fatPercentage"
+              name="fatPercentage"
+              required
+          /></label>
+        </div>
+        <label class="check"
+          ><input type="checkbox" [(ngModel)]="isEnergyDeficit" name="deficit" /><span i18n
+            >Energy deficit (uses the wider protein warning ceiling)</span
+          ></label
+        >
+        <button class="primary-button" type="submit" [disabled]="busy()" i18n>
+          Calculate and snapshot
+        </button>
+        @if (calculation(); as result) {
+          <div class="result">
+            <strong i18n
+              >Calorie target: {{ result.calorieTarget | number: '1.0-0' }} kcal/day</strong
+            >
+            <span i18n
+              >BMR estimate {{ result.bmrEstimate | number: '1.0-0' }} → PAL
+              {{ result.activityModelPal }} → TDEE estimate
+              {{ result.tdeeEstimate | number: '1.0-0' }}</span
+            >
+            <span i18n
+              >Protein {{ result.protein | number: '1.0-1' }} g · Carbohydrate
+              {{ result.carbohydrate | number: '1.0-1' }} g · Fat
+              {{ result.fat | number: '1.0-1' }} g</span
+            >
+            @for (warning of result.warnings; track warning) {
+              <p class="warning">{{ warning }}</p>
+            }
+          </div>
+        }
+      </form>
+
+      <div class="panel">
+        <h3 i18n>Structured allergen declarations</h3>
+        <p class="safety" i18n>
+          These declarations warn the coach. Missing declarations never prove that a recipe is safe.
+        </p>
+        <div class="allergens">
+          @for (code of allergenCodes; track code) {
+            <label class="check"
+              ><input
+                type="checkbox"
+                [checked]="selectedAllergens().has(code)"
+                (change)="toggleAllergen(code, $any($event.target).checked)"
+              /><span>{{ code }}</span></label
+            >
+          }
+        </div>
+        <button
+          type="button"
+          class="secondary-button"
+          (click)="saveAllergens()"
+          [disabled]="busy()"
+          i18n
+        >
+          Save declarations
+        </button>
+      </div>
+
+      <form (ngSubmit)="assign()" class="panel">
+        <h3 i18n>Assign meal-plan snapshot</h3>
+        <label
+          ><span i18n>Published plan</span
+          ><select [(ngModel)]="mealPlanVersionId" name="mealPlan">
+            <option value="" i18n>Select a plan</option>
+            @for (plan of mealPlans(); track plan.versionId) {
+              <option [value]="plan.versionId">{{ plan.name }} · {{ plan.dayCount }} days</option>
+            }
+          </select></label
+        >
+        <label
+          ><span i18n>Nutrition enrollment</span
+          ><select [(ngModel)]="enrollmentId" name="enrollment">
+            <option value="" i18n>Select enrollment</option>
+            @for (id of enrollmentIds(); track id) {
+              <option [value]="id">{{ id }}</option>
+            }
+          </select></label
+        >
+        <label
+          ><span i18n>Start date</span
+          ><input type="date" [(ngModel)]="startDate" name="startDate" required
+        /></label>
+        <label class="check warning"
+          ><input
+            type="checkbox"
+            [checked]="acknowledgeAllergens()"
+            (change)="acknowledgeAllergens.set($any($event.target).checked)"
+          /><span i18n
+            >I reviewed any declared allergen conflicts. I understand TB Gym does not assert this
+            plan is safe.</span
+          ></label
+        >
+        <button class="primary-button" type="submit" [disabled]="busy()" i18n>
+          Assign immutable snapshot
+        </button>
+      </form>
+    </div>
+
+    @if (assignments().length) {
+      <div class="assignment-list">
+        <h3 i18n>Assignment history</h3>
+        @for (plan of assignments(); track plan.id) {
+          <p>
+            <strong>{{ plan.startDate }} – {{ plan.endDateExclusive }}</strong> ·
+            <span i18n>{{ plan.calorieTarget | number: '1.0-0' }} kcal target snapshot</span>
+          </p>
+        }
+      </div>
+    }
+  }
+</section>

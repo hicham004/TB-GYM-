@@ -1,0 +1,66 @@
+.date-picker {
+  display: grid;
+  gap: 0.3rem;
+}
+.target-card {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: var(--surface-soft);
+}
+.target-card div {
+  display: grid;
+  gap: 0.2rem;
+}
+.target-card span {
+  color: var(--text-muted);
+}
+.safety-notice {
+  padding: 0.8rem 1rem;
+  border-inline-start: 0.25rem solid #d97706;
+  background: #fffbeb;
+  color: #78350f;
+}
+.meal-list {
+  display: grid;
+  gap: 1rem;
+  margin-block: 1rem;
+}
+.meal-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+.meal-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+.meal-card header span {
+  color: var(--text-muted);
+}
+.meal-card label {
+  display: grid;
+  gap: 0.35rem;
+}
+.actual-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: var(--surface-soft);
+}
+@media (min-width: 48rem) {
+  .target-card {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .meal-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

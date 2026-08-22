@@ -7,6 +7,7 @@ using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Notifications;
+using TB.Gym.Modules.Nutrition;
 using TB.Gym.Modules.Progress;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
@@ -121,6 +122,56 @@ public sealed partial class GymDbContext(
 
     public DbSet<ProgressionApplication> ProgressionApplications => Set<ProgressionApplication>();
 
+    public DbSet<NutritionWorkspaceSettings> NutritionWorkspaceSettings => Set<NutritionWorkspaceSettings>();
+
+    public DbSet<FoodItem> FoodItems => Set<FoodItem>();
+
+    public DbSet<FoodItemVersion> FoodItemVersions => Set<FoodItemVersion>();
+
+    public DbSet<FoodItemAllergen> FoodItemAllergens => Set<FoodItemAllergen>();
+
+    public DbSet<CookingFactorRecord> CookingFactorRecords => Set<CookingFactorRecord>();
+
+    public DbSet<Recipe> Recipes => Set<Recipe>();
+
+    public DbSet<RecipeVersion> RecipeVersions => Set<RecipeVersion>();
+
+    public DbSet<RecipeIngredient> RecipeIngredients => Set<RecipeIngredient>();
+
+    public DbSet<RecipeVersionAllergen> RecipeVersionAllergens => Set<RecipeVersionAllergen>();
+
+    public DbSet<NutritionCalculationSnapshot> NutritionCalculationSnapshots => Set<NutritionCalculationSnapshot>();
+
+    public DbSet<MacroOverrideAudit> MacroOverrideAudits => Set<MacroOverrideAudit>();
+
+    public DbSet<MealPlanTemplate> MealPlanTemplates => Set<MealPlanTemplate>();
+
+    public DbSet<MealPlanTemplateVersion> MealPlanTemplateVersions => Set<MealPlanTemplateVersion>();
+
+    public DbSet<MealPlanSlot> MealPlanSlots => Set<MealPlanSlot>();
+
+    public DbSet<MealPlanChoice> MealPlanChoices => Set<MealPlanChoice>();
+
+    public DbSet<ClientNutritionPlan> ClientNutritionPlans => Set<ClientNutritionPlan>();
+
+    public DbSet<ClientNutritionPlanDay> ClientNutritionPlanDays => Set<ClientNutritionPlanDay>();
+
+    public DbSet<ClientNutritionPlanSlot> ClientNutritionPlanSlots => Set<ClientNutritionPlanSlot>();
+
+    public DbSet<ClientNutritionPlanChoice> ClientNutritionPlanChoices => Set<ClientNutritionPlanChoice>();
+
+    public DbSet<DailyNutritionLog> DailyNutritionLogs => Set<DailyNutritionLog>();
+
+    public DbSet<DailyNutritionLogEntry> DailyNutritionLogEntries => Set<DailyNutritionLogEntry>();
+
+    public DbSet<NutritionPlanLifecycleEvent> NutritionPlanLifecycleEvents => Set<NutritionPlanLifecycleEvent>();
+
+    public DbSet<AllergenConflictRecord> AllergenConflictRecords => Set<AllergenConflictRecord>();
+
+    public DbSet<ClientDeclaredAllergen> ClientDeclaredAllergens => Set<ClientDeclaredAllergen>();
+
+    public DbSet<AiMealDraftOperation> AiMealDraftOperations => Set<AiMealDraftOperation>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -137,6 +188,7 @@ public sealed partial class GymDbContext(
         ConfigureMedia(builder);
         ConfigureStrength(builder);
         ConfigureTraining(builder);
+        ConfigureNutrition(builder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -452,6 +504,35 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<WorkoutNote>("Workout notes are append-only.");
         RejectAppendOnlyMutations<ProgressionApplication>("Progression applications are append-only.");
         RejectAppendOnlyMutations<MesocycleLifecycleEvent>("Mesocycle lifecycle events are append-only.");
+        RejectAppendOnlyMutations<FoodItemVersion>("Food item versions are immutable.");
+        RejectAppendOnlyMutations<CookingFactorRecord>("Cooking factors are versioned and immutable.");
+        RejectAppendOnlyMutations<NutritionCalculationSnapshot>("Nutrition calculation snapshots are append-only.");
+        RejectAppendOnlyMutations<MacroOverrideAudit>("Macro override audits are append-only.");
+        RejectAppendOnlyMutations<AllergenConflictRecord>("Allergen conflict records are append-only.");
+
+        foreach (var entry in ChangeTracker.Entries<RecipeVersion>().Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<PublicationStatus>(nameof(RecipeVersion.Status)) == PublicationStatus.Published)
+            {
+                throw new InvalidOperationException("Published recipe versions are immutable.");
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<MealPlanTemplateVersion>().Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<PublicationStatus>(nameof(MealPlanTemplateVersion.Status)) == PublicationStatus.Published)
+            {
+                throw new InvalidOperationException("Published meal-plan versions are immutable.");
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<DailyNutritionLog>().Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<DailyNutritionLogStatus>(nameof(DailyNutritionLog.Status)) == DailyNutritionLogStatus.Completed)
+            {
+                throw new InvalidOperationException("Completed daily nutrition logs are immutable.");
+            }
+        }
 
         foreach (var entry in ChangeTracker.Entries<ProductOffer>().Where(item => item.State == EntityState.Modified))
         {

@@ -29,6 +29,7 @@
     <ProjectReference Include="..\Modules\Clients\TB.Gym.Modules.Clients\TB.Gym.Modules.Clients.csproj" />
     <ProjectReference Include="..\Modules\ExerciseLibrary\TB.Gym.Modules.ExerciseLibrary\TB.Gym.Modules.ExerciseLibrary.csproj" />
     <ProjectReference Include="..\Modules\Media\TB.Gym.Modules.Media\TB.Gym.Modules.Media.csproj" />
+    <ProjectReference Include="..\Modules\Nutrition\TB.Gym.Modules.Nutrition\TB.Gym.Modules.Nutrition.csproj" />
     <ProjectReference Include="..\Modules\Strength\TB.Gym.Modules.Strength\TB.Gym.Modules.Strength.csproj" />
     <ProjectReference Include="..\Modules\Training\TB.Gym.Modules.Training\TB.Gym.Modules.Training.csproj" />
   </ItemGroup>

@@ -129,6 +129,9 @@ level quota accounting and physical purge are not.
 
 Dependencies: Phase 2 and client intake; open decisions 4, 5, and 9 in `DOMAIN-RULES.md`.
 
+Status: implemented 2026-08-22; production launch remains gated on qualified nutrition,
+clinical, and legal review plus configuration of the USDA API key and a real AI provider.
+
 - Approve BMR, TDEE, calorie-target, unit, and macro calculation policies with a qualified
   domain reviewer.
 - Build ingredient/source records, raw/cooked basis, recipe versions, servings/yield,
@@ -143,6 +146,14 @@ Dependencies: Phase 2 and client intake; open decisions 4, 5, and 9 in `DOMAIN-R
 
 Exit: every displayed target and recipe total has one explainable source and historical
 assignments cannot change through library edits.
+
+Delivered: named/versioned BMR, occupation-and-steps PAL, TDEE, macro, Atwater and EU 1169
+policies; structured EU14/US9 allergens; sourced preparation factors; versioned coach/label/
+USDA foods; immutable recipes and meal plans; enrollment-bound deep assignment snapshots;
+separate daily actuals; reviewed AI-draft state machine; paginated coach library and simple
+client logger. USDA FoodData Central is the only external nutrition source. The AI adapter is
+intentionally unavailable until a provider is selected and configured. Progress/bodyweight,
+AI provider selection, provider SDK integration, and production clinical approval are deferred.
 
 ## Phase 5: Bodyweight and progress
 

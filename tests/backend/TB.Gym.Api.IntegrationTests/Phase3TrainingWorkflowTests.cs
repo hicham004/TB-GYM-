@@ -11,8 +11,10 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
+using TB.Gym.Modules.Nutrition;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Api.IntegrationTests;
@@ -31,6 +33,9 @@ public sealed partial class Phase3TrainingWorkflowTests
     private string? databaseConnection;
     private WebApplicationFactory<Program>? factory;
     private MutableTestClock? testClock;
+    private SensitiveLogCapture? sensitiveLogCapture;
+
+    public TestContext TestContext { get; set; } = null!;
 
     [TestInitialize]
     public async Task InitializeAsync()
@@ -42,8 +47,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         {
             Database = databaseName,
         }.ConnectionString;
-        var clock = new MutableTestClock(DateTimeOffset.UtcNow);
+        var clock = new MutableTestClock(
+            TestContext.TestName.StartsWith("Phase4", StringComparison.Ordinal)
+                ? new DateTimeOffset(2026, 8, 22, 10, 0, 0, TimeSpan.Zero)
+                : DateTimeOffset.UtcNow);
         testClock = clock;
+        var logCapture = new SensitiveLogCapture();
+        sensitiveLogCapture = logCapture;
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");
@@ -64,7 +74,12 @@ public sealed partial class Phase3TrainingWorkflowTests
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IClock>();
+                services.RemoveAll<IAiMealDraftProvider>();
+                services.RemoveAll<INutritionDataProvider>();
                 services.AddSingleton<IClock>(clock);
+                services.AddSingleton<IAiMealDraftProvider, InvalidSchemaAiMealDraftProvider>();
+                services.AddSingleton<INutritionDataProvider, FibreRichTestNutritionDataProvider>();
+                services.AddSingleton<ILoggerProvider>(logCapture);
                 services.AddSingleton<TodayQueryCounter>();
                 services.AddDbContext<GymDbContext>((provider, options) =>
                     options.AddInterceptors(provider.GetRequiredService<TodayQueryCounter>()));

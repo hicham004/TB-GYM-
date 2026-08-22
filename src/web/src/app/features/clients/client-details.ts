@@ -15,10 +15,18 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { ClientIntakeForm } from './client-intake-form';
 import { ClientCommercial } from '../commercial/client-commercial';
 import { ClientTraining } from '../training/client-training';
+import { ClientNutrition } from '../nutrition/client-nutrition';
 
 @Component({
   selector: 'app-client-details',
-  imports: [ClientCommercial, ClientIntakeForm, ClientTraining, ReactiveFormsModule, RouterLink],
+  imports: [
+    ClientCommercial,
+    ClientIntakeForm,
+    ClientTraining,
+    ClientNutrition,
+    ReactiveFormsModule,
+    RouterLink,
+  ],
   templateUrl: './client-details.html',
   styleUrl: './client-details.scss',
 })

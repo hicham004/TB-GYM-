@@ -32,6 +32,13 @@
     </div>
     <a class="primary-button" routerLink="/training/programs" i18n>Open program builder</a>
   </section>
+  <section class="next-action">
+    <div>
+      <h2 i18n>Build a nutrition plan</h2>
+      <p i18n>Version foods and recipes, then publish a reusable meal-plan snapshot.</p>
+    </div>
+    <a class="primary-button" routerLink="/nutrition/library" i18n>Open nutrition library</a>
+  </section>
 } @else if (tenants.isClient()) {
   <section class="next-action">
     <div>
@@ -47,6 +54,13 @@
     } @else {
       <a class="primary-button" routerLink="/profile" i18n>Open my profile</a>
     }
+  </section>
+  <section class="next-action">
+    <div>
+      <h2 i18n>Today's nutrition</h2>
+      <p i18n>Record the concrete meal choices you consumed.</p>
+    </div>
+    <a class="primary-button" routerLink="/nutrition/today" i18n>Open today's meals</a>
   </section>
 } @else {
   <section class="empty-state">

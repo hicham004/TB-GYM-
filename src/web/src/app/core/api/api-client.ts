@@ -2,6 +2,17 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import type * as Phase3Contracts from './generated';
+import {
+  mapAiDraft,
+  mapCalculation,
+  mapClientPlan,
+  mapFoodPage,
+  mapMealPlanPage,
+  mapNutritionDay,
+  mapNutritionSettings,
+  mapProviderSearch,
+  mapRecipePage,
+} from '../../features/nutrition/nutrition.models';
 import type {
   ClientCommercialOverview as ContractClientCommercialOverview,
   ClientEnrollmentView as ContractClientEnrollmentView,
@@ -657,6 +668,150 @@ export class ApiClient {
       `/api/training/workouts/${workoutId}/notes`,
       request,
     );
+  }
+
+  getNutritionSettings() {
+    return this.http
+      .get<Phase3Contracts.NutritionWorkspaceSettingsView>('/api/nutrition/settings')
+      .pipe(map(mapNutritionSettings));
+  }
+
+  updateNutritionSettings(request: Phase3Contracts.UpdateNutritionSettingsRequest) {
+    return this.http
+      .put<Phase3Contracts.NutritionWorkspaceSettingsView>('/api/nutrition/settings', request)
+      .pipe(map(mapNutritionSettings));
+  }
+
+  listFoods(query = '', skip = 0, take = 100) {
+    return this.http
+      .get<Phase3Contracts.FoodItemPage>('/api/nutrition/foods', { params: { query, skip, take } })
+      .pipe(map(mapFoodPage));
+  }
+
+  createFood(request: Phase3Contracts.CreateFoodItemRequest) {
+    return this.http.post<Phase3Contracts.FoodItemView>('/api/nutrition/foods', request);
+  }
+
+  searchUsdaFoods(query: string, skip = 0, take = 25) {
+    return this.http
+      .get<Phase3Contracts.ProviderFoodSearchPage>('/api/nutrition/providers/usda/search', {
+        params: { query, skip, take },
+      })
+      .pipe(map(mapProviderSearch));
+  }
+
+  importUsdaFood(fdcId: string) {
+    return this.http.post<Phase3Contracts.FoodItemView>('/api/nutrition/providers/usda/import', {
+      fdcId,
+    });
+  }
+
+  listRecipes(query = '', skip = 0, take = 100) {
+    return this.http
+      .get<Phase3Contracts.RecipePage>('/api/nutrition/recipes', { params: { query, skip, take } })
+      .pipe(map(mapRecipePage));
+  }
+
+  createRecipe(request: Phase3Contracts.CreateRecipeRequest) {
+    return this.http.post<Phase3Contracts.RecipeSummary>('/api/nutrition/recipes', request);
+  }
+
+  publishRecipe(versionId: string) {
+    return this.http.post<Phase3Contracts.RecipeSummary>(
+      `/api/nutrition/recipe-versions/${versionId}/publish`,
+      {},
+    );
+  }
+
+  listMealPlans(skip = 0, take = 100) {
+    return this.http
+      .get<Phase3Contracts.MealPlanTemplatePage>('/api/nutrition/meal-plans', {
+        params: { skip, take },
+      })
+      .pipe(map(mapMealPlanPage));
+  }
+
+  createMealPlan(request: Phase3Contracts.CreateMealPlanRequest) {
+    return this.http.post<Phase3Contracts.MealPlanTemplateSummary>(
+      '/api/nutrition/meal-plans',
+      request,
+    );
+  }
+
+  publishMealPlan(versionId: string) {
+    return this.http.post<Phase3Contracts.MealPlanTemplateSummary>(
+      `/api/nutrition/meal-plan-versions/${versionId}/publish`,
+      {},
+    );
+  }
+
+  calculateNutritionTargets(
+    clientId: string,
+    request: Phase3Contracts.CalculateNutritionTargetsRequest,
+  ) {
+    return this.http
+      .post<Phase3Contracts.NutritionCalculationView>(
+        `/api/nutrition/clients/${clientId}/calculations`,
+        request,
+      )
+      .pipe(map(mapCalculation));
+  }
+
+  replaceClientAllergens(clientId: string, codes: Phase3Contracts.AllergenCode[]) {
+    return this.http.put<void>(`/api/nutrition/clients/${clientId}/allergens`, { codes });
+  }
+
+  listClientNutritionPlans(clientId: string) {
+    return this.http
+      .get<Phase3Contracts.ClientNutritionPlanSummary[]>(`/api/nutrition/clients/${clientId}/plans`)
+      .pipe(map((items) => items.map(mapClientPlan)));
+  }
+
+  assignNutritionPlan(clientId: string, request: Phase3Contracts.AssignNutritionPlanRequest) {
+    return this.http
+      .post<Phase3Contracts.ClientNutritionPlanSummary>(
+        `/api/nutrition/clients/${clientId}/plans`,
+        request,
+      )
+      .pipe(map(mapClientPlan));
+  }
+
+  getMyNutritionDay(localDate?: string) {
+    return this.http
+      .get<Phase3Contracts.ClientNutritionDayView>('/api/nutrition/me/day', {
+        params: localDate ? { localDate } : {},
+      })
+      .pipe(map(mapNutritionDay));
+  }
+
+  recordMyNutritionChoice(request: Phase3Contracts.RecordNutritionChoiceRequest) {
+    return this.http
+      .put<Phase3Contracts.ClientNutritionDayView>('/api/nutrition/me/choices', request)
+      .pipe(map(mapNutritionDay));
+  }
+
+  completeMyNutritionLog(logId: string, request: Phase3Contracts.CompleteNutritionLogRequest) {
+    return this.http
+      .post<Phase3Contracts.ClientNutritionDayView>(
+        `/api/nutrition/me/logs/${logId}/complete`,
+        request,
+      )
+      .pipe(map(mapNutritionDay));
+  }
+
+  generateAiMealDraft(request: Phase3Contracts.GenerateAiMealDraftRequest) {
+    return this.http
+      .post<Phase3Contracts.AiMealDraftView>('/api/nutrition/ai-drafts', request)
+      .pipe(map(mapAiDraft));
+  }
+
+  reviewAiMealDraft(operationId: string, request: Phase3Contracts.ReviewAiMealDraftRequest) {
+    return this.http
+      .post<Phase3Contracts.AiMealDraftView>(
+        `/api/nutrition/ai-drafts/${operationId}/review`,
+        request,
+      )
+      .pipe(map(mapAiDraft));
   }
 }
 

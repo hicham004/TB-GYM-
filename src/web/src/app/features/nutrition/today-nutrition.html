@@ -1,0 +1,123 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow" i18n>Nutrition prescription</p>
+    <h1 i18n>Today's meals</h1>
+    <p i18n>
+      Record the concrete choice you ate. Alternative averages are never logged as consumption.
+    </p>
+  </div>
+  <label class="date-picker"
+    ><span i18n>Date</span><input type="date" [(ngModel)]="selectedDate" (change)="changeDate()"
+  /></label>
+</section>
+
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="form-success" role="status">{{ notice() }}</p>
+}
+
+@if (loading()) {
+  <p class="loading-row" i18n>Loading your meal plan...</p>
+} @else if (day(); as plan) {
+  <section class="target-card">
+    <div>
+      <span i18n>Daily target</span
+      ><strong>{{ plan.targetCalories | number: '1.0-0' }} kcal</strong>
+    </div>
+    <div>
+      <span i18n>Protein</span><strong>{{ plan.targetProtein | number: '1.0-1' }} g</strong>
+    </div>
+    <div>
+      <span i18n>Carbohydrate</span
+      ><strong>{{ plan.targetCarbohydrate | number: '1.0-1' }} g</strong>
+    </div>
+    <div>
+      <span i18n>Fat</span><strong>{{ plan.targetFat | number: '1.0-1' }} g</strong>
+    </div>
+  </section>
+
+  <p class="safety-notice" role="note">{{ plan.safetyNotice }}</p>
+
+  <section class="meal-list">
+    @for (slot of plan.slots; track slot.id) {
+      @if (draft(slot.id); as entry) {
+        <article class="meal-card" [class.saved]="!entry.dirty && slot.selectedChoiceId">
+          <header>
+            <div>
+              <span i18n>Meal {{ slot.order + 1 }}</span>
+              <h2>{{ slot.name }}</h2>
+            </div>
+            @if (!entry.dirty && slot.selectedChoiceId) {
+              <span class="status-badge success" i18n>Saved</span>
+            }
+          </header>
+          <label
+            ><span i18n>What did you eat?</span
+            ><select
+              [ngModel]="entry.choiceId"
+              (ngModelChange)="updateChoice(slot.id, $event)"
+              [disabled]="plan.logStatus === 'Completed' || entry.saving"
+            >
+              <option value="" i18n>Select a meal</option>
+              @for (choice of slot.choices; track choice.id) {
+                <option [value]="choice.id">
+                  {{ choice.recipeName }} · {{ choice.calories | number: '1.0-0' }} kcal
+                </option>
+              }
+            </select></label
+          >
+          <label
+            ><span i18n>Actual servings</span
+            ><input
+              type="number"
+              min="0.01"
+              step="0.01"
+              [ngModel]="entry.servings"
+              (ngModelChange)="updateServings(slot.id, $event)"
+              [disabled]="plan.logStatus === 'Completed' || entry.saving"
+          /></label>
+          @if (entry.error) {
+            <p class="form-error" role="alert">{{ entry.error }}</p>
+          }
+          <button
+            class="primary-button"
+            type="button"
+            (click)="save(slot)"
+            [disabled]="plan.logStatus === 'Completed' || !entry.dirty || entry.saving"
+          >
+            @if (entry.saving) {
+              Saving...
+            } @else {
+              Save meal
+            }
+          </button>
+        </article>
+      }
+    }
+  </section>
+
+  <section class="actual-card">
+    <h2 i18n>Concrete selected total</h2>
+    <strong>{{ plan.selectedCalories | number: '1.0-0' }} kcal</strong>
+    <span i18n
+      >Protein {{ plan.selectedProtein | number: '1.0-1' }} g · Carbohydrate
+      {{ plan.selectedCarbohydrate | number: '1.0-1' }} g · Fat
+      {{ plan.selectedFat | number: '1.0-1' }} g</span
+    >
+    @if (plan.logStatus !== 'Completed') {
+      <button
+        class="primary-button"
+        type="button"
+        (click)="complete()"
+        [disabled]="completing()"
+        i18n
+      >
+        Complete nutrition day
+      </button>
+    } @else {
+      <span class="status-badge success" i18n>Day completed</span>
+    }
+  </section>
+}

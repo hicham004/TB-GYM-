@@ -52,6 +52,12 @@ export const routes: Routes = [
       import('./features/training/training.routes').then((module) => module.trainingRoutes),
   },
   {
+    path: 'nutrition',
+    canActivate: [authGuard],
+    loadChildren: () =>
+      import('./features/nutrition/nutrition.routes').then((module) => module.nutritionRoutes),
+  },
+  {
     path: 'profile',
     canActivate: [authGuard, clientGuard],
     title: $localize`My profile | TB Gym`,

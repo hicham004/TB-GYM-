@@ -301,6 +301,12 @@ choices. The system distinguishes:
 "Average macros per meal" cannot be used as the client's actual consumed total unless a
 specific choice was recorded.
 
+**NUT-011** Stored carbohydrate is total carbohydrate including fibre and polyols, matching
+USDA "Carbohydrate, by difference" and printed labels. Energy policies derive available
+carbohydrate themselves, so fibre is never charged twice. Percentages use a 0-100 scale.
+An assigned nutrition plan may be cancelled once, by an audited coach operation that keeps the
+snapshot and its logs as history and releases the date range for a corrected plan.
+
 **NUT-006** Assigning a diet from a library creates a client-specific versioned snapshot
 linked to the subscription, following the same template rule as training. Client logs and
 notes refer to the snapshot/choice that existed on that date.
@@ -340,6 +346,18 @@ the snapshot they were based on.
 **NUT-010** Allergy and medication data may warn the coach but the app must not claim medical
 diagnosis or guarantee recipe safety. Ingredient/allergen completeness and clinical scope
 require legal and domain review before release.
+
+**Phase 4 decision (2026-08-22).** `MifflinStJeor v1` is the default BMR estimate;
+`KatchMcArdle v1` (body-fat required) and `HarrisBenedictRevised v1` are explicit
+alternatives. `OccupationStepsPal v1` combines occupation and average daily steps and feeds
+`TdeeMultiplication v1`. Inputs outside each strategy's declared range are rejected. These
+policies require qualified clinical review before production launch.
+
+**Phase 4 energy decision (2026-08-22).** Workspaces choose `Atwater v1` (default) or
+`Eu1169 v1`. Provider calories and policy-computed calories are both retained; a configurable
+tolerance produces a discrepancy flag. Missing provider nutrient facts are never inferred as
+zero during import. Raw-to-cooked conversion requires compatible, sourced `Yield` and
+`Retention` factor records and applies yield before retention.
 
 ## 7. Bodyweight and progress
 
@@ -500,13 +518,14 @@ Phase 3 approved and implemented these decisions on 2026-08-21:
 - native browser media uses a short-lived HTTP-only grant plus server reauthorization;
   historical references tombstone media instead of deleting required bytes.
 
-Decisions still required before Phase 4 and later phases:
+Decisions still required for later phases and production launch:
 
 1. Are payment schedules/installments, discounts, credits, waivers, refunds, and FX settlement
    required for launch? Define grace-period and historical-content access behavior.
-2. Which BMR formula, activity/TDEE model, unit conventions, and sex/formula options are
-   approved? Who is responsible for clinical review?
-3. Is macro energy strictly 4/4/9, provider calories, or both with discrepancy reporting?
+2. Phase 4 implements the versioned BMR/PAL/TDEE policies above; a qualified reviewer must
+   still approve their clinical use, coefficient ranges, and sex/formula policy before launch.
+3. Phase 4 implements both named energy-policy calculation and provider calories with
+   discrepancy reporting; legal/clinical review must approve display tolerances before launch.
 4. What counts as diet completion and a missed workout for experience changes?
 5. Do you own or license all uploaded/imported recipes, videos, generated art, and any themed
    intellectual property?

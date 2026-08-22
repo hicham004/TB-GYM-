@@ -25,6 +25,7 @@ using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Training;
+using TB.Gym.Modules.Nutrition;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure;
@@ -143,6 +144,16 @@ public static class DependencyInjection
         services.AddScoped<IExerciseLibraryApplicationService, ExerciseLibraryApplicationService>();
         services.AddScoped<IStrengthApplicationService, StrengthApplicationService>();
         services.AddScoped<ITrainingApplicationService, TrainingApplicationService>();
+        services.AddScoped<INutritionApplicationService, NutritionApplicationService>();
+        services.AddHttpClient<INutritionDataProvider, UsdaFoodDataCentralProvider>((provider, client) =>
+        {
+            var configured = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<UsdaFoodDataCentralOptions>>().Value.BaseUrl;
+            client.BaseAddress = new Uri(configured, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
+        services.AddSingleton<IAiMealDraftProvider, UnavailableAiMealDraftProvider>();
+        services.AddOptions<UsdaFoodDataCentralOptions>()
+            .Bind(configuration.GetSection("Nutrition:UsdaFoodDataCentral"));
         services.AddScoped<IMediaApplicationService, MediaApplicationService>();
         services.AddSingleton<MediaUploadConcurrencyGate>();
         services.AddSingleton<IObjectStorage, LocalObjectStorage>();
