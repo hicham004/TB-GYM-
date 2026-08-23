@@ -1,6 +1,6 @@
 # TB Gym Architecture
 
-Status: Phase 5A bodyweight and weight trend implemented, 2026-08-22
+Status: Phase 5B-1 body measurements implemented, 2026-08-23
 
 ## 1. Architectural style
 
@@ -125,6 +125,10 @@ coach views require a coach role, a tenant-local client, and an unblocked worksp
 relationship. Workspace-aligned weekly means and the time-aware `BodyweightTrendEwma` v2
 estimate read Progress data only and do not recalculate or mutate Nutrition. See
 `docs/adr/0009-bodyweight-and-trend-v1.md`.
+
+Progress Phase 5B-1 mirrors that tenant/auth/history boundary for typed body measurements.
+Girths store canonical centimetres, body fat stores canonical percent, and corrections append
+prior values. Phase 5B-2, progress photos, and dashboards have not started. See ADR 0010.
 
 ## 5. Multi-tenancy
 

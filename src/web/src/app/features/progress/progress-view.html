@@ -194,4 +194,220 @@
       </section>
     }
   }
+
+  <section class="measurement-panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow" i18n>Body measurements</p>
+        <h2 i18n>{{ coachMode() ? 'Client measurements' : 'My measurements' }}</h2>
+        <p class="muted" i18n>
+          Only recorded measurements are shown. Missing values are never estimated.
+        </p>
+      </div>
+      <label class="unit-picker">
+        <span i18n>Girth display unit</span>
+        <select [(ngModel)]="measurementDisplayUnit" (change)="changeMeasurementDisplayUnit()">
+          <option value="Centimetre" i18n>Centimetres</option>
+          <option value="Inch" i18n>Inches</option>
+        </select>
+      </label>
+    </div>
+
+    <form class="entry-form measurement-entry" (ngSubmit)="recordMeasurement()">
+      <label>
+        <span i18n>Measurement</span>
+        <select
+          [(ngModel)]="measurementType"
+          (change)="changeMeasurementType()"
+          name="measurementType"
+        >
+          <option value="Waist" i18n>Waist</option>
+          <option value="Chest" i18n>Chest</option>
+          <option value="Hips" i18n>Hips</option>
+          <option value="Thigh" i18n>Thigh</option>
+          <option value="Arm" i18n>Arm</option>
+          <option value="BodyFatPercentage" i18n>Body fat percentage</option>
+        </select>
+      </label>
+      <label>
+        <span i18n>Value</span>
+        <input
+          type="number"
+          step="0.001"
+          [min]="measurementType === 'BodyFatPercentage' ? 1 : 10"
+          [max]="measurementType === 'BodyFatPercentage' ? 75 : 300"
+          [(ngModel)]="measurementValue"
+          name="measurementValue"
+          required
+        />
+      </label>
+      <label>
+        <span i18n>Entered unit</span>
+        <select [(ngModel)]="measurementUnit" name="measurementUnit">
+          @if (measurementType === 'BodyFatPercentage') {
+            <option value="Percent" i18n>Percent</option>
+          } @else {
+            <option value="Centimetre" i18n>Centimetres</option>
+            <option value="Inch" i18n>Inches</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span i18n>Measurement date</span>
+        <input type="date" [(ngModel)]="measurementDate" name="measurementDate" />
+        <small i18n>Leave blank for today in the workspace time zone.</small>
+      </label>
+      <button class="primary-button" type="submit" [disabled]="busy()" i18n>
+        Record measurement
+      </button>
+    </form>
+
+    @if (measurementsLoading()) {
+      <p class="loading-row" i18n>Loading body measurements...</p>
+    } @else if (measurements()) {
+      @if (measurementDays().length === 0) {
+        <p class="muted" i18n>No body measurements have been recorded in this period.</p>
+      } @else {
+        <div class="day-list measurement-list">
+          @for (day of measurementDays(); track day.date) {
+            @for (measurement of day.measurements; track measurement.id) {
+              <article>
+                <time [attr.datetime]="day.date">{{ day.date | date: 'mediumDate' : 'UTC' }}</time>
+                <div class="measurement">
+                  <strong>
+                    {{
+                      measurement.measurementType === 'BodyFatPercentage'
+                        ? 'Body fat'
+                        : measurement.measurementType
+                    }}
+                  </strong>
+                  <small i18n>
+                    Entered {{ measurement.enteredValue | number: '1.1-3' }}
+                    {{
+                      measurement.enteredUnit === 'Centimetre'
+                        ? 'cm'
+                        : measurement.enteredUnit === 'Inch'
+                          ? 'in'
+                          : '%'
+                    }}
+                    by {{ measurement.source === 'Coach' ? 'coach' : 'client' }}
+                  </small>
+                </div>
+                <div class="measurement">
+                  <span i18n>Displayed value</span>
+                  <strong>
+                    {{ measurement.displayValue | number: '1.1-3' }}
+                    {{
+                      measurement.displayUnit === 'Centimetre'
+                        ? 'cm'
+                        : measurement.displayUnit === 'Inch'
+                          ? 'in'
+                          : '%'
+                    }}
+                  </strong>
+                </div>
+                <div class="row-actions">
+                  <button
+                    class="quiet-button"
+                    type="button"
+                    (click)="showMeasurementHistory(measurement.id)"
+                    i18n
+                  >
+                    History
+                  </button>
+                  <button
+                    class="quiet-button"
+                    type="button"
+                    (click)="beginMeasurementCorrection(measurement)"
+                    i18n
+                  >
+                    Correct
+                  </button>
+                </div>
+                @if (correctingMeasurementId === measurement.id) {
+                  <form class="correction-form" (ngSubmit)="correctMeasurement(measurement)">
+                    <label>
+                      <span i18n>Corrected value</span>
+                      <input
+                        type="number"
+                        step="0.001"
+                        [(ngModel)]="measurementCorrectionValue"
+                        name="measurementCorrectionValue"
+                        required
+                      />
+                    </label>
+                    <label>
+                      <span i18n>Unit</span>
+                      <select
+                        [(ngModel)]="measurementCorrectionUnit"
+                        name="measurementCorrectionUnit"
+                      >
+                        @if (measurement.measurementType === 'BodyFatPercentage') {
+                          <option value="Percent" i18n>Percent</option>
+                        } @else {
+                          <option value="Centimetre" i18n>Centimetres</option>
+                          <option value="Inch" i18n>Inches</option>
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span i18n>Reason</span>
+                      <input
+                        maxlength="500"
+                        [(ngModel)]="measurementCorrectionReason"
+                        name="measurementCorrectionReason"
+                        required
+                      />
+                    </label>
+                    <button class="primary-button" type="submit" [disabled]="busy()" i18n>
+                      Save correction
+                    </button>
+                    <button
+                      class="quiet-button"
+                      type="button"
+                      (click)="cancelMeasurementCorrection()"
+                      i18n
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                }
+              </article>
+            }
+          }
+        </div>
+      }
+    }
+
+    @if (measurementHistory(); as record) {
+      <section class="history-panel">
+        <h3 i18n>
+          Measurement history for
+          {{ record.current.measurementDate | date: 'mediumDate' : 'UTC' }}
+        </h3>
+        @if (record.previousValues.length === 0) {
+          <p class="muted" i18n>No corrections have been made.</p>
+        } @else {
+          <ol>
+            @for (item of record.previousValues; track item.id) {
+              <li>
+                <strong>
+                  {{ item.enteredValue | number: '1.1-3' }}
+                  {{
+                    item.enteredUnit === 'Centimetre'
+                      ? 'cm'
+                      : item.enteredUnit === 'Inch'
+                        ? 'in'
+                        : '%'
+                  }}
+                </strong>
+                <span>{{ item.reason }}</span>
+                <small i18n>Superseded {{ item.supersededAtUtc | date: 'medium' }}</small>
+              </li>
+            }
+          </ol>
+        }
+      </section>
+    }
+  </section>
 </section>

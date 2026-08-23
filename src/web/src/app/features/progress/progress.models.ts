@@ -1,9 +1,61 @@
 import type {
+  BodyMeasurementHistoryView as ContractMeasurementHistory,
+  BodyMeasurementsView as ContractMeasurements,
+  BodyMeasurementView as ContractMeasurement,
   BodyweightHistoryView as ContractHistory,
   BodyweightObservationView as ContractObservation,
   ProgressView as ContractProgress,
   RecordedMassUnit,
+  MeasurementType,
+  MeasurementUnit,
 } from '../../core/api/generated';
+
+export interface BodyMeasurement {
+  id: string;
+  measurementDate: string;
+  measurementType: MeasurementType;
+  canonicalValue: number;
+  canonicalUnit: MeasurementUnit;
+  enteredValue: number;
+  enteredUnit: MeasurementUnit;
+  displayValue: number;
+  displayUnit: MeasurementUnit;
+  source: 'Client' | 'Coach';
+  recordedByUserId: string | null;
+  recordedAtUtc: string;
+  version: number;
+}
+
+export interface BodyMeasurements {
+  clientProfileId: string;
+  timeZoneId: string;
+  displayUnit: MeasurementUnit;
+  from: string;
+  toExclusive: string;
+  days: {
+    date: string;
+    measurements: BodyMeasurement[];
+  }[];
+}
+
+export interface BodyMeasurementHistory {
+  current: BodyMeasurement;
+  previousValues: {
+    id: string;
+    measurementDate: string;
+    measurementType: MeasurementType;
+    canonicalValue: number;
+    canonicalUnit: MeasurementUnit;
+    enteredValue: number;
+    enteredUnit: MeasurementUnit;
+    source: 'Client' | 'Coach';
+    recordedByUserId: string | null;
+    recordedAtUtc: string;
+    reason: string;
+    supersededByUserId: string;
+    supersededAtUtc: string;
+  }[];
+}
 
 export interface BodyweightObservation {
   id: string;
@@ -115,6 +167,37 @@ export function mapHistory(value: ContractHistory): BodyweightHistory {
     previousValues: value.previousValues.map((item) => ({
       ...item,
       valueKilograms: Number(item.valueKilograms),
+      enteredValue: Number(item.enteredValue),
+    })),
+  };
+}
+
+export function mapMeasurements(value: ContractMeasurements): BodyMeasurements {
+  return {
+    ...value,
+    days: value.days.map((day) => ({
+      date: day.date,
+      measurements: day.measurements.map(mapMeasurement),
+    })),
+  };
+}
+
+export function mapMeasurement(value: ContractMeasurement): BodyMeasurement {
+  return {
+    ...value,
+    canonicalValue: Number(value.canonicalValue),
+    enteredValue: Number(value.enteredValue),
+    displayValue: Number(value.displayValue),
+    version: Number(value.version),
+  };
+}
+
+export function mapMeasurementHistory(value: ContractMeasurementHistory): BodyMeasurementHistory {
+  return {
+    current: mapMeasurement(value.current),
+    previousValues: value.previousValues.map((item) => ({
+      ...item,
+      canonicalValue: Number(item.canonicalValue),
       enteredValue: Number(item.enteredValue),
     })),
   };

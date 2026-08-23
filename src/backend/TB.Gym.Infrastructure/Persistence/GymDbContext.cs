@@ -44,6 +44,10 @@ public sealed partial class GymDbContext(
 
     public DbSet<BodyweightCorrection> BodyweightCorrections => Set<BodyweightCorrection>();
 
+    public DbSet<BodyMeasurement> BodyMeasurements => Set<BodyMeasurement>();
+
+    public DbSet<BodyMeasurementCorrection> BodyMeasurementCorrections => Set<BodyMeasurementCorrection>();
+
     public DbSet<CoachingProduct> CoachingProducts => Set<CoachingProduct>();
 
     public DbSet<ProductOffer> ProductOffers => Set<ProductOffer>();
@@ -515,6 +519,83 @@ public sealed partial class GymDbContext(
                 "\"ValueKilograms\" >= 20 AND \"ValueKilograms\" <= 500"));
             ConfigureAuditable(entity);
         });
+
+        builder.Entity<BodyMeasurement>(entity =>
+        {
+            entity.ToTable("BodyMeasurements", "progress");
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => new { item.TenantId, item.Id });
+            entity.Property(item => item.MeasurementDate).HasColumnType("date");
+            entity.Property(item => item.MeasurementType).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.CanonicalValue).HasPrecision(7, 3);
+            entity.Property(item => item.EnteredValue).HasPrecision(8, 3);
+            entity.Property(item => item.EnteredUnit).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.Source).HasConversion<string>().HasMaxLength(16);
+            entity.HasIndex(item => new
+            {
+                item.TenantId,
+                item.ClientProfileId,
+                item.MeasurementDate,
+                item.MeasurementType,
+            }).IsUnique();
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(client => new { client.TenantId, client.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_BodyMeasurements_CanonicalValue",
+                    "(\"MeasurementType\" = 'BodyFatPercentage' AND \"CanonicalValue\" BETWEEN 1 AND 75) OR " +
+                    "(\"MeasurementType\" <> 'BodyFatPercentage' AND \"CanonicalValue\" BETWEEN 10 AND 300)");
+                table.HasCheckConstraint(
+                    "CK_BodyMeasurements_EnteredUnit",
+                    "(\"MeasurementType\" = 'BodyFatPercentage' AND \"EnteredUnit\" = 'Percent') OR " +
+                    "(\"MeasurementType\" <> 'BodyFatPercentage' AND \"EnteredUnit\" IN ('Centimetre', 'Inch'))");
+            });
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<BodyMeasurementCorrection>(entity =>
+        {
+            entity.ToTable("BodyMeasurementCorrections", "progress");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.MeasurementDate).HasColumnType("date");
+            entity.Property(item => item.MeasurementType).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.CanonicalValue).HasPrecision(7, 3);
+            entity.Property(item => item.EnteredValue).HasPrecision(8, 3);
+            entity.Property(item => item.EnteredUnit).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.Source).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(item => new { item.TenantId, item.MeasurementId, item.SupersededAtUtc });
+            entity.HasOne<BodyMeasurement>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.MeasurementId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_BodyMeasurementCorrections_CanonicalValue",
+                    "(\"MeasurementType\" = 'BodyFatPercentage' AND \"CanonicalValue\" BETWEEN 1 AND 75) OR " +
+                    "(\"MeasurementType\" <> 'BodyFatPercentage' AND \"CanonicalValue\" BETWEEN 10 AND 300)");
+                table.HasCheckConstraint(
+                    "CK_BodyMeasurementCorrections_EnteredUnit",
+                    "(\"MeasurementType\" = 'BodyFatPercentage' AND \"EnteredUnit\" = 'Percent') OR " +
+                    "(\"MeasurementType\" <> 'BodyFatPercentage' AND \"EnteredUnit\" IN ('Centimetre', 'Inch'))");
+            });
+            ConfigureAuditable(entity);
+        });
     }
 
     private static void ConfigureAuditable<TEntity>(
@@ -542,10 +623,16 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<MacroOverrideAudit>("Macro override audits are append-only.");
         RejectAppendOnlyMutations<AllergenConflictRecord>("Allergen conflict records are append-only.");
         RejectAppendOnlyMutations<BodyweightCorrection>("Bodyweight correction history is append-only.");
+        RejectAppendOnlyMutations<BodyMeasurementCorrection>("Body measurement correction history is append-only.");
 
         if (ChangeTracker.Entries<BodyweightObservation>().Any(item => item.State == EntityState.Deleted))
         {
             throw new InvalidOperationException("Bodyweight observations cannot be deleted; corrections preserve history.");
+        }
+
+        if (ChangeTracker.Entries<BodyMeasurement>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Body measurements cannot be deleted; corrections preserve history.");
         }
 
         foreach (var entry in ChangeTracker.Entries<RecipeVersion>().Where(item => item.State == EntityState.Modified))

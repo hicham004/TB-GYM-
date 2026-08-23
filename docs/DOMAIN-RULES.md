@@ -396,6 +396,13 @@ window. The same observation date has the same rounded estimate across display w
 relationship denies coach-facing progress reads and writes without denying the client's own
 access in that workspace.
 
+**PRG-009** Body measurements are unique per tenant, client, local date, and enum type.
+Girths store canonical centimetres and accept centimetres/inches; body fat stores and accepts
+percent only. Entered value/unit and append-only corrections are retained.
+
+**PRG-010** Missing measurement types are absent rows, never inferred values. Canonical girths
+must be 10-300 centimetres and body fat 1-75 percent.
+
 ## 8. Messaging, notifications, media, and libraries
 
 **MSG-001** A conversation belongs to a tenant and an explicit participant set. A tenant

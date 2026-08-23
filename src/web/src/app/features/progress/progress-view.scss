@@ -11,6 +11,13 @@
   background: var(--surface);
 }
 
+.measurement-panel {
+  display: grid;
+  gap: 1rem;
+  padding-block-start: 1.5rem;
+  border-block-start: 1px solid var(--border);
+}
+
 .unit-picker,
 .entry-form label,
 .correction-form label {
@@ -125,6 +132,10 @@
 
   .trend-summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .entry-form.measurement-entry {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
   }
 }
 

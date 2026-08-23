@@ -4,10 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
-import type { RecordedMassUnit } from '../../core/api/generated';
+import type { MeasurementType, MeasurementUnit, RecordedMassUnit } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import type {
+  BodyMeasurement,
+  BodyMeasurementHistory,
+  BodyMeasurements,
   BodyweightHistory,
   BodyweightObservation,
   ProgressViewModel,
@@ -29,7 +32,13 @@ export class ProgressView {
   protected readonly coachMode = computed(() => this.clientId() !== null);
   protected readonly progress = signal<ProgressViewModel | null>(null);
   protected readonly history = signal<BodyweightHistory | null>(null);
+  protected readonly measurements = signal<BodyMeasurements | null>(null);
+  protected readonly measurementHistory = signal<BodyMeasurementHistory | null>(null);
+  protected readonly measurementDays = computed(() =>
+    (this.measurements()?.days ?? []).filter((day) => day.measurements.length > 0),
+  );
   protected readonly loading = signal(false);
+  protected readonly measurementsLoading = signal(false);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
@@ -41,6 +50,15 @@ export class ProgressView {
   protected correctionValue: number | null = null;
   protected correctionUnit: RecordedMassUnit = 'Kilogram';
   protected correctionReason = '';
+  protected measurementDisplayUnit: MeasurementUnit = 'Centimetre';
+  protected measurementType: MeasurementType = 'Waist';
+  protected measurementUnit: MeasurementUnit = 'Centimetre';
+  protected measurementValue: number | null = null;
+  protected measurementDate = '';
+  protected correctingMeasurementId: string | null = null;
+  protected measurementCorrectionValue: number | null = null;
+  protected measurementCorrectionUnit: MeasurementUnit = 'Centimetre';
+  protected measurementCorrectionReason = '';
 
   constructor() {
     effect(() => {
@@ -50,12 +68,114 @@ export class ProgressView {
       if (key && key !== this.loadedKey) {
         this.loadedKey = key;
         void this.load();
+        void this.loadMeasurements();
       }
     });
   }
 
   protected async changeDisplayUnit(): Promise<void> {
     await this.load();
+  }
+
+  protected async changeMeasurementDisplayUnit(): Promise<void> {
+    await this.loadMeasurements();
+  }
+
+  protected changeMeasurementType(): void {
+    this.measurementUnit =
+      this.measurementType === 'BodyFatPercentage'
+        ? 'Percent'
+        : this.measurementUnit === 'Percent'
+          ? 'Centimetre'
+          : this.measurementUnit;
+  }
+
+  protected async recordMeasurement(): Promise<void> {
+    if (this.measurementValue === null || !Number.isFinite(this.measurementValue)) {
+      this.error.set($localize`Enter a body measurement value.`);
+      return;
+    }
+
+    await this.runMeasurement(
+      async () => {
+        const request = {
+          measurementType: this.measurementType,
+          value: this.measurementValue!,
+          unit: this.measurementUnit,
+          measurementDate: this.measurementDate || null,
+        };
+        const clientId = this.clientId();
+        if (clientId) {
+          await firstValueFrom(this.api.recordClientBodyMeasurement(clientId, request));
+        } else {
+          await firstValueFrom(this.api.recordMyBodyMeasurement(request));
+        }
+        this.measurementValue = null;
+        this.measurementDate = '';
+        await this.loadMeasurements(false);
+      },
+      $localize`Body measurement recorded.`,
+    );
+  }
+
+  protected beginMeasurementCorrection(measurement: BodyMeasurement): void {
+    this.correctingMeasurementId = measurement.id;
+    this.measurementCorrectionValue = measurement.enteredValue;
+    this.measurementCorrectionUnit = measurement.enteredUnit;
+    this.measurementCorrectionReason = '';
+    this.measurementHistory.set(null);
+  }
+
+  protected cancelMeasurementCorrection(): void {
+    this.correctingMeasurementId = null;
+    this.measurementCorrectionValue = null;
+    this.measurementCorrectionReason = '';
+  }
+
+  protected async correctMeasurement(measurement: BodyMeasurement): Promise<void> {
+    if (
+      this.measurementCorrectionValue === null ||
+      !Number.isFinite(this.measurementCorrectionValue) ||
+      !this.measurementCorrectionReason.trim()
+    ) {
+      this.error.set($localize`Enter the corrected measurement and a reason.`);
+      return;
+    }
+
+    await this.runMeasurement(
+      async () => {
+        const request = {
+          value: this.measurementCorrectionValue!,
+          unit: this.measurementCorrectionUnit,
+          reason: this.measurementCorrectionReason,
+          version: measurement.version,
+        };
+        const clientId = this.clientId();
+        const corrected = clientId
+          ? await firstValueFrom(
+              this.api.correctClientBodyMeasurement(clientId, measurement.id, request),
+            )
+          : await firstValueFrom(this.api.correctMyBodyMeasurement(measurement.id, request));
+        this.measurementHistory.set(corrected);
+        this.correctingMeasurementId = null;
+        await this.loadMeasurements(false);
+      },
+      $localize`Measurement correction saved with its prior value preserved.`,
+    );
+  }
+
+  protected async showMeasurementHistory(measurementId: string): Promise<void> {
+    this.error.set(null);
+    try {
+      const clientId = this.clientId();
+      this.measurementHistory.set(
+        clientId
+          ? await firstValueFrom(this.api.getClientBodyMeasurementHistory(clientId, measurementId))
+          : await firstValueFrom(this.api.getMyBodyMeasurementHistory(measurementId)),
+      );
+    } catch (error) {
+      this.error.set(apiErrorMessage(error, $localize`Measurement history could not be loaded.`));
+    }
   }
 
   protected async record(): Promise<void> {
@@ -165,6 +285,28 @@ export class ProgressView {
     }
   }
 
+  private async loadMeasurements(showSpinner = true): Promise<void> {
+    if (showSpinner) {
+      this.measurementsLoading.set(true);
+    }
+    this.error.set(null);
+    try {
+      const clientId = this.clientId();
+      this.measurements.set(
+        clientId
+          ? await firstValueFrom(
+              this.api.getClientBodyMeasurements(clientId, this.measurementDisplayUnit),
+            )
+          : await firstValueFrom(this.api.getMyBodyMeasurements(this.measurementDisplayUnit)),
+      );
+    } catch (error) {
+      this.measurements.set(null);
+      this.error.set(apiErrorMessage(error, $localize`Body measurements could not be loaded.`));
+    } finally {
+      this.measurementsLoading.set(false);
+    }
+  }
+
   private async run(action: () => Promise<void>, success: string): Promise<void> {
     this.busy.set(true);
     this.error.set(null);
@@ -175,6 +317,21 @@ export class ProgressView {
       this.notice.set(success);
     } catch (error) {
       this.error.set(apiErrorMessage(error, $localize`The bodyweight change could not be saved.`));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  private async runMeasurement(action: () => Promise<void>, success: string): Promise<void> {
+    this.busy.set(true);
+    this.error.set(null);
+    this.notice.set(null);
+    try {
+      await this.csrf.refresh();
+      await action();
+      this.notice.set(success);
+    } catch (error) {
+      this.error.set(apiErrorMessage(error, $localize`The measurement could not be saved.`));
     } finally {
       this.busy.set(false);
     }

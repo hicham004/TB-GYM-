@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapProgress } from './progress.models';
+import { mapMeasurements, mapProgress } from './progress.models';
 
 describe('progress view mapping', () => {
   it('preserves missing days and converts API decimals without inventing values', () => {
@@ -68,5 +68,46 @@ describe('progress view mapping', () => {
     expect(mapped.trend.sampleCount).toBe(1);
     expect(mapped.trend.availability).toBe('NotEnoughData');
     expect(mapped.trend.timeConstantDays).toBe(10);
+  });
+
+  it('maps body measurements while preserving explicitly empty days', () => {
+    const mapped = mapMeasurements({
+      clientProfileId: 'client',
+      timeZoneId: 'Asia/Beirut',
+      displayUnit: 'Inch',
+      from: '2026-08-22',
+      toExclusive: '2026-08-24',
+      days: [
+        { date: '2026-08-22', measurements: [] },
+        {
+          date: '2026-08-23',
+          measurements: [
+            {
+              id: 'waist',
+              measurementDate: '2026-08-23',
+              measurementType: 'Waist',
+              canonicalValue: '80.010',
+              canonicalUnit: 'Centimetre',
+              enteredValue: '31.500',
+              enteredUnit: 'Inch',
+              displayValue: '31.500',
+              displayUnit: 'Inch',
+              source: 'Client',
+              recordedByUserId: 'user',
+              recordedAtUtc: '2026-08-23T08:00:00Z',
+              version: '7',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(mapped.days[0].measurements).toEqual([]);
+    expect(mapped.days[1].measurements[0]).toMatchObject({
+      canonicalValue: 80.01,
+      enteredValue: 31.5,
+      displayValue: 31.5,
+      version: 7,
+    });
   });
 });

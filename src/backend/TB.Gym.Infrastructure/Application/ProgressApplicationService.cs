@@ -120,6 +120,120 @@ internal sealed class ProgressApplicationService(
             : null;
     }
 
+    public async Task<BodyMeasurementsView?> GetOwnMeasurementsAsync(
+        DateOnly? from,
+        DateOnly? to,
+        MeasurementUnit displayUnit,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindSelfAsync(cancellationToken);
+        return client is null
+            ? null
+            : await BuildMeasurementsViewAsync(client.Id, from, to, displayUnit, cancellationToken);
+    }
+
+    public async Task<BodyMeasurementsView?> GetClientMeasurementsAsync(
+        Guid clientProfileId,
+        DateOnly? from,
+        DateOnly? to,
+        MeasurementUnit displayUnit,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindClientRelationshipAsync(clientProfileId, cancellationToken);
+        return client is false
+            ? await BuildMeasurementsViewAsync(clientProfileId, from, to, displayUnit, cancellationToken)
+            : null;
+    }
+
+    public async Task<BodyMeasurementCommandResult> RecordOwnMeasurementAsync(
+        RecordBodyMeasurementRequest request,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindSelfAsync(cancellationToken);
+        return client is null
+            ? new BodyMeasurementCommandResult(ProgressCommandStatus.NotFound)
+            : await RecordMeasurementAsync(
+                client.Id,
+                request,
+                BodyMeasurementSource.Client,
+                cancellationToken);
+    }
+
+    public async Task<BodyMeasurementCommandResult> RecordMeasurementForClientAsync(
+        Guid clientProfileId,
+        RecordBodyMeasurementRequest request,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindClientRelationshipAsync(clientProfileId, cancellationToken);
+        return client switch
+        {
+            null => new BodyMeasurementCommandResult(ProgressCommandStatus.NotFound),
+            true => new BodyMeasurementCommandResult(ProgressCommandStatus.Forbidden),
+            false => await RecordMeasurementAsync(
+                clientProfileId,
+                request,
+                BodyMeasurementSource.Coach,
+                cancellationToken),
+        };
+    }
+
+    public async Task<BodyMeasurementCommandResult> CorrectOwnMeasurementAsync(
+        Guid measurementId,
+        CorrectBodyMeasurementRequest request,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindSelfAsync(cancellationToken);
+        return client is null
+            ? new BodyMeasurementCommandResult(ProgressCommandStatus.NotFound)
+            : await CorrectMeasurementAsync(
+                client.Id,
+                measurementId,
+                request,
+                BodyMeasurementSource.Client,
+                cancellationToken);
+    }
+
+    public async Task<BodyMeasurementCommandResult> CorrectMeasurementForClientAsync(
+        Guid clientProfileId,
+        Guid measurementId,
+        CorrectBodyMeasurementRequest request,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindClientRelationshipAsync(clientProfileId, cancellationToken);
+        return client switch
+        {
+            null => new BodyMeasurementCommandResult(ProgressCommandStatus.NotFound),
+            true => new BodyMeasurementCommandResult(ProgressCommandStatus.Forbidden),
+            false => await CorrectMeasurementAsync(
+                clientProfileId,
+                measurementId,
+                request,
+                BodyMeasurementSource.Coach,
+                cancellationToken),
+        };
+    }
+
+    public async Task<BodyMeasurementHistoryView?> GetOwnMeasurementHistoryAsync(
+        Guid measurementId,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindSelfAsync(cancellationToken);
+        return client is null
+            ? null
+            : await GetMeasurementHistoryAsync(client.Id, measurementId, cancellationToken);
+    }
+
+    public async Task<BodyMeasurementHistoryView?> GetClientMeasurementHistoryAsync(
+        Guid clientProfileId,
+        Guid measurementId,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindClientRelationshipAsync(clientProfileId, cancellationToken);
+        return client is false
+            ? await GetMeasurementHistoryAsync(clientProfileId, measurementId, cancellationToken)
+            : null;
+    }
+
     private async Task<ProgressCommandResult> RecordAsync(
         Guid clientProfileId,
         RecordBodyweightRequest request,
@@ -351,6 +465,212 @@ internal sealed class ProgressApplicationService(
         return new BodyweightHistoryView(ToObservationView(observation), previous);
     }
 
+    private async Task<BodyMeasurementCommandResult> RecordMeasurementAsync(
+        Guid clientProfileId,
+        RecordBodyMeasurementRequest request,
+        BodyMeasurementSource source,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var calendar = await GetTenantCalendarAsync(cancellationToken);
+            var measurementDate = request.MeasurementDate ?? calendar.Today;
+            if (measurementDate > calendar.Today)
+            {
+                return InvalidMeasurement(
+                    "measurementDate",
+                    "Body measurements cannot be dated in the future.");
+            }
+
+            if (await dbContext.BodyMeasurements.AnyAsync(
+                    item =>
+                        item.ClientProfileId == clientProfileId &&
+                        item.MeasurementDate == measurementDate &&
+                        item.MeasurementType == request.MeasurementType,
+                    cancellationToken))
+            {
+                return MeasurementConflict(
+                    "BodyMeasurementDateAndTypeAlreadyExists",
+                    "That measurement type already exists for the local date. Correct the existing entry instead.");
+            }
+
+            var measurement = BodyMeasurement.CreateInitial(
+                tenantContext.TenantId,
+                clientProfileId,
+                measurementDate,
+                request.MeasurementType,
+                request.Value,
+                request.Unit,
+                source);
+            dbContext.BodyMeasurements.Add(measurement);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return new BodyMeasurementCommandResult(
+                ProgressCommandStatus.Success,
+                Measurement: ToMeasurementView(measurement, request.Unit));
+        }
+        catch (ArgumentException exception)
+        {
+            return InvalidMeasurement("measurement", exception.Message);
+        }
+        catch (DbUpdateException)
+        {
+            return MeasurementConflict(
+                "BodyMeasurementDateAndTypeAlreadyExists",
+                "That measurement type already exists for the local date.");
+        }
+    }
+
+    private async Task<BodyMeasurementCommandResult> CorrectMeasurementAsync(
+        Guid clientProfileId,
+        Guid measurementId,
+        CorrectBodyMeasurementRequest request,
+        BodyMeasurementSource source,
+        CancellationToken cancellationToken)
+    {
+        var actorUserId = currentUser.UserId;
+        if (actorUserId is null)
+        {
+            return new BodyMeasurementCommandResult(ProgressCommandStatus.NotFound);
+        }
+
+        var measurement = await dbContext.BodyMeasurements.SingleOrDefaultAsync(
+            item => item.Id == measurementId && item.ClientProfileId == clientProfileId,
+            cancellationToken);
+        if (measurement is null)
+        {
+            return new BodyMeasurementCommandResult(ProgressCommandStatus.NotFound);
+        }
+
+        try
+        {
+            dbContext.Entry(measurement).Property(item => item.Version).OriginalValue = request.Version;
+            var previous = measurement.Correct(request.Value, request.Unit, source);
+            dbContext.BodyMeasurementCorrections.Add(BodyMeasurementCorrection.Create(
+                measurement,
+                previous,
+                request.Reason,
+                clock.UtcNow,
+                actorUserId.Value));
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return new BodyMeasurementCommandResult(
+                ProgressCommandStatus.Success,
+                History: await GetMeasurementHistoryAsync(
+                    clientProfileId,
+                    measurementId,
+                    cancellationToken));
+        }
+        catch (ArgumentException exception)
+        {
+            return InvalidMeasurement("measurement", exception.Message);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return MeasurementConflict(
+                "BodyMeasurementVersionConflict",
+                "The body measurement changed. Reload it before correcting it again.");
+        }
+    }
+
+    private async Task<BodyMeasurementsView> BuildMeasurementsViewAsync(
+        Guid clientProfileId,
+        DateOnly? requestedFrom,
+        DateOnly? requestedTo,
+        MeasurementUnit displayUnit,
+        CancellationToken cancellationToken)
+    {
+        if (displayUnit is not (MeasurementUnit.Centimetre or MeasurementUnit.Inch))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(displayUnit),
+                "The girth display unit must be Centimetre or Inch.");
+        }
+
+        var calendar = await GetTenantCalendarAsync(cancellationToken);
+        var toExclusive = requestedTo ?? calendar.Today.AddDays(1);
+        var from = requestedFrom ?? toExclusive.AddDays(-DefaultWindowDays);
+        if (from >= toExclusive || toExclusive.DayNumber - from.DayNumber > MaximumWindowDays)
+        {
+            throw new ArgumentException(
+                $"Progress windows must contain between 1 and {MaximumWindowDays} days.");
+        }
+
+        var measurements = await dbContext.BodyMeasurements
+            .AsNoTracking()
+            .Where(item =>
+                item.ClientProfileId == clientProfileId &&
+                item.MeasurementDate >= from &&
+                item.MeasurementDate < toExclusive)
+            .OrderBy(item => item.MeasurementDate)
+            .ThenBy(item => item.MeasurementType)
+            .ToArrayAsync(cancellationToken);
+        var measurementsByDate = measurements
+            .GroupBy(item => item.MeasurementDate)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<BodyMeasurementView>)group
+                    .Select(item => ToMeasurementView(item, displayUnit))
+                    .ToArray());
+        var days = Enumerable.Range(0, toExclusive.DayNumber - from.DayNumber)
+            .Select(offset =>
+            {
+                var date = from.AddDays(offset);
+                return new BodyMeasurementDayView(
+                    date,
+                    measurementsByDate.GetValueOrDefault(date) ?? []);
+            })
+            .ToArray();
+        return new BodyMeasurementsView(
+            clientProfileId,
+            calendar.TimeZoneId,
+            displayUnit,
+            from,
+            toExclusive,
+            days);
+    }
+
+    private async Task<BodyMeasurementHistoryView?> GetMeasurementHistoryAsync(
+        Guid clientProfileId,
+        Guid measurementId,
+        CancellationToken cancellationToken)
+    {
+        var measurement = await dbContext.BodyMeasurements
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                item => item.Id == measurementId && item.ClientProfileId == clientProfileId,
+                cancellationToken);
+        if (measurement is null)
+        {
+            return null;
+        }
+
+        var previous = await dbContext.BodyMeasurementCorrections
+            .AsNoTracking()
+            .Where(item =>
+                item.MeasurementId == measurementId &&
+                item.ClientProfileId == clientProfileId)
+            .OrderByDescending(item => item.SupersededAtUtc)
+            .Select(item => new BodyMeasurementHistoryItemView(
+                item.Id,
+                item.MeasurementDate,
+                item.MeasurementType,
+                item.CanonicalValue,
+                item.MeasurementType == MeasurementType.BodyFatPercentage
+                    ? MeasurementUnit.Percent
+                    : MeasurementUnit.Centimetre,
+                item.EnteredValue,
+                item.EnteredUnit,
+                item.Source,
+                item.RecordedByUserId,
+                item.RecordedAtUtc,
+                item.Reason,
+                item.SupersededByUserId,
+                item.SupersededAtUtc))
+            .ToArrayAsync(cancellationToken);
+        return new BodyMeasurementHistoryView(
+            ToMeasurementView(measurement, measurement.EnteredUnit),
+            previous);
+    }
+
     private Task<ClientProfile?> FindSelfAsync(CancellationToken cancellationToken) =>
         currentUser.UserId is not { } userId
             ? Task.FromResult<ClientProfile?>(null)
@@ -400,12 +720,51 @@ internal sealed class ProgressApplicationService(
             observation.UpdatedAtUtc,
             observation.Version);
 
+    private static BodyMeasurementView ToMeasurementView(
+        BodyMeasurement measurement,
+        MeasurementUnit girthDisplayUnit)
+    {
+        var canonicalUnit = BodyMeasurementUnitConverter.CanonicalUnit(measurement.MeasurementType);
+        var displayUnit = measurement.MeasurementType == MeasurementType.BodyFatPercentage
+            ? MeasurementUnit.Percent
+            : girthDisplayUnit;
+        return new BodyMeasurementView(
+            measurement.Id,
+            measurement.MeasurementDate,
+            measurement.MeasurementType,
+            measurement.CanonicalValue,
+            canonicalUnit,
+            measurement.EnteredValue,
+            measurement.EnteredUnit,
+            BodyMeasurementUnitConverter.FromCanonical(
+                measurement.MeasurementType,
+                measurement.CanonicalValue,
+                displayUnit),
+            displayUnit,
+            measurement.Source,
+            measurement.UpdatedByUserId ?? measurement.CreatedByUserId,
+            measurement.UpdatedAtUtc,
+            measurement.Version);
+    }
+
     private static ProgressCommandResult Invalid(string field, string message) =>
         new(
             ProgressCommandStatus.Invalid,
             Errors: new Dictionary<string, string[]> { [field] = [message] });
 
     private static ProgressCommandResult Conflict(string code, string message) =>
+        new(ProgressCommandStatus.Conflict, Code: code, Message: message);
+
+    private static BodyMeasurementCommandResult InvalidMeasurement(
+        string field,
+        string message) =>
+        new(
+            ProgressCommandStatus.Invalid,
+            Errors: new Dictionary<string, string[]> { [field] = [message] });
+
+    private static BodyMeasurementCommandResult MeasurementConflict(
+        string code,
+        string message) =>
         new(ProgressCommandStatus.Conflict, Code: code, Message: message);
 
     private sealed record TenantCalendar(string TimeZoneId, DayOfWeek WeekStartsOn, DateOnly Today);

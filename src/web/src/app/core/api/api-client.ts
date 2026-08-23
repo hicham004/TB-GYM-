@@ -13,7 +13,14 @@ import {
   mapProviderSearch,
   mapRecipePage,
 } from '../../features/nutrition/nutrition.models';
-import { mapHistory, mapObservation, mapProgress } from '../../features/progress/progress.models';
+import {
+  mapHistory,
+  mapMeasurement,
+  mapMeasurementHistory,
+  mapMeasurements,
+  mapObservation,
+  mapProgress,
+} from '../../features/progress/progress.models';
 import type {
   ClientCommercialOverview as ContractClientCommercialOverview,
   ClientEnrollmentView as ContractClientEnrollmentView,
@@ -880,6 +887,81 @@ export class ApiClient {
         `/api/progress/clients/${clientId}/bodyweight/${observationId}/history`,
       )
       .pipe(map(mapHistory));
+  }
+
+  getMyBodyMeasurements(displayUnit: Phase3Contracts.MeasurementUnit) {
+    return this.http
+      .get<Phase3Contracts.BodyMeasurementsView>('/api/progress/me/measurements', {
+        params: { displayUnit },
+      })
+      .pipe(map(mapMeasurements));
+  }
+
+  getClientBodyMeasurements(clientId: string, displayUnit: Phase3Contracts.MeasurementUnit) {
+    return this.http
+      .get<Phase3Contracts.BodyMeasurementsView>(`/api/progress/clients/${clientId}/measurements`, {
+        params: { displayUnit },
+      })
+      .pipe(map(mapMeasurements));
+  }
+
+  recordMyBodyMeasurement(request: Phase3Contracts.RecordBodyMeasurementRequest) {
+    return this.http
+      .post<Phase3Contracts.BodyMeasurementView>('/api/progress/me/measurements', request)
+      .pipe(map(mapMeasurement));
+  }
+
+  recordClientBodyMeasurement(
+    clientId: string,
+    request: Phase3Contracts.RecordBodyMeasurementRequest,
+  ) {
+    return this.http
+      .post<Phase3Contracts.BodyMeasurementView>(
+        `/api/progress/clients/${clientId}/measurements`,
+        request,
+      )
+      .pipe(map(mapMeasurement));
+  }
+
+  correctMyBodyMeasurement(
+    measurementId: string,
+    request: Phase3Contracts.CorrectBodyMeasurementRequest,
+  ) {
+    return this.http
+      .put<Phase3Contracts.BodyMeasurementHistoryView>(
+        `/api/progress/me/measurements/${measurementId}`,
+        request,
+      )
+      .pipe(map(mapMeasurementHistory));
+  }
+
+  correctClientBodyMeasurement(
+    clientId: string,
+    measurementId: string,
+    request: Phase3Contracts.CorrectBodyMeasurementRequest,
+  ) {
+    return this.http
+      .put<Phase3Contracts.BodyMeasurementHistoryView>(
+        `/api/progress/clients/${clientId}/measurements/${measurementId}`,
+        request,
+      )
+      .pipe(map(mapMeasurementHistory));
+  }
+
+  getMyBodyMeasurementHistory(measurementId: string) {
+    return this.http
+      .get<Phase3Contracts.BodyMeasurementHistoryView>(
+        `/api/progress/me/measurements/${measurementId}/history`,
+      )
+      .pipe(map(mapMeasurementHistory));
+  }
+
+  getClientBodyMeasurementHistory(clientId: string, measurementId: string) {
+    return this.http
+      .get<Phase3Contracts.BodyMeasurementHistoryView>(
+        `/api/progress/clients/${clientId}/measurements/${measurementId}/history`,
+      )
+      .pipe(map(mapMeasurementHistory));
   }
 }
 

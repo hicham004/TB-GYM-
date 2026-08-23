@@ -10,6 +10,14 @@ public interface IProgressApplicationService
     Task<ProgressCommandResult> CorrectForClientAsync(Guid clientProfileId, Guid observationId, CorrectBodyweightRequest request, CancellationToken cancellationToken);
     Task<BodyweightHistoryView?> GetOwnHistoryAsync(Guid observationId, CancellationToken cancellationToken);
     Task<BodyweightHistoryView?> GetClientHistoryAsync(Guid clientProfileId, Guid observationId, CancellationToken cancellationToken);
+    Task<BodyMeasurementsView?> GetOwnMeasurementsAsync(DateOnly? from, DateOnly? endExclusive, MeasurementUnit displayUnit, CancellationToken cancellationToken);
+    Task<BodyMeasurementsView?> GetClientMeasurementsAsync(Guid clientProfileId, DateOnly? from, DateOnly? endExclusive, MeasurementUnit displayUnit, CancellationToken cancellationToken);
+    Task<BodyMeasurementCommandResult> RecordOwnMeasurementAsync(RecordBodyMeasurementRequest request, CancellationToken cancellationToken);
+    Task<BodyMeasurementCommandResult> RecordMeasurementForClientAsync(Guid clientProfileId, RecordBodyMeasurementRequest request, CancellationToken cancellationToken);
+    Task<BodyMeasurementCommandResult> CorrectOwnMeasurementAsync(Guid measurementId, CorrectBodyMeasurementRequest request, CancellationToken cancellationToken);
+    Task<BodyMeasurementCommandResult> CorrectMeasurementForClientAsync(Guid clientProfileId, Guid measurementId, CorrectBodyMeasurementRequest request, CancellationToken cancellationToken);
+    Task<BodyMeasurementHistoryView?> GetOwnMeasurementHistoryAsync(Guid measurementId, CancellationToken cancellationToken);
+    Task<BodyMeasurementHistoryView?> GetClientMeasurementHistoryAsync(Guid clientProfileId, Guid measurementId, CancellationToken cancellationToken);
 }
 
 public sealed record RecordBodyweightRequest(
@@ -94,6 +102,72 @@ public sealed record BodyweightHistoryItemView(
 public sealed record BodyweightHistoryView(
     BodyweightObservationView Current,
     IReadOnlyList<BodyweightHistoryItemView> PreviousValues);
+
+public sealed record RecordBodyMeasurementRequest(
+    MeasurementType MeasurementType,
+    decimal Value,
+    MeasurementUnit Unit,
+    DateOnly? MeasurementDate = null);
+
+public sealed record CorrectBodyMeasurementRequest(
+    decimal Value,
+    MeasurementUnit Unit,
+    string Reason,
+    uint Version);
+
+public sealed record BodyMeasurementView(
+    Guid Id,
+    DateOnly MeasurementDate,
+    MeasurementType MeasurementType,
+    decimal CanonicalValue,
+    MeasurementUnit CanonicalUnit,
+    decimal EnteredValue,
+    MeasurementUnit EnteredUnit,
+    decimal DisplayValue,
+    MeasurementUnit DisplayUnit,
+    BodyMeasurementSource Source,
+    Guid? RecordedByUserId,
+    DateTimeOffset RecordedAtUtc,
+    uint Version);
+
+public sealed record BodyMeasurementDayView(
+    DateOnly Date,
+    IReadOnlyList<BodyMeasurementView> Measurements);
+
+public sealed record BodyMeasurementsView(
+    Guid ClientProfileId,
+    string TimeZoneId,
+    MeasurementUnit DisplayUnit,
+    DateOnly From,
+    DateOnly ToExclusive,
+    IReadOnlyList<BodyMeasurementDayView> Days);
+
+public sealed record BodyMeasurementHistoryItemView(
+    Guid Id,
+    DateOnly MeasurementDate,
+    MeasurementType MeasurementType,
+    decimal CanonicalValue,
+    MeasurementUnit CanonicalUnit,
+    decimal EnteredValue,
+    MeasurementUnit EnteredUnit,
+    BodyMeasurementSource Source,
+    Guid? RecordedByUserId,
+    DateTimeOffset RecordedAtUtc,
+    string Reason,
+    Guid SupersededByUserId,
+    DateTimeOffset SupersededAtUtc);
+
+public sealed record BodyMeasurementHistoryView(
+    BodyMeasurementView Current,
+    IReadOnlyList<BodyMeasurementHistoryItemView> PreviousValues);
+
+public sealed record BodyMeasurementCommandResult(
+    ProgressCommandStatus Status,
+    BodyMeasurementView? Measurement = null,
+    BodyMeasurementHistoryView? History = null,
+    IReadOnlyDictionary<string, string[]>? Errors = null,
+    string? Code = null,
+    string? Message = null);
 
 public sealed record ProgressCommandResult(
     ProgressCommandStatus Status,
