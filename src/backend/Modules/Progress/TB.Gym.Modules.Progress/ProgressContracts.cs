@@ -18,6 +18,58 @@ public interface IProgressApplicationService
     Task<BodyMeasurementCommandResult> CorrectMeasurementForClientAsync(Guid clientProfileId, Guid measurementId, CorrectBodyMeasurementRequest request, CancellationToken cancellationToken);
     Task<BodyMeasurementHistoryView?> GetOwnMeasurementHistoryAsync(Guid measurementId, CancellationToken cancellationToken);
     Task<BodyMeasurementHistoryView?> GetClientMeasurementHistoryAsync(Guid clientProfileId, Guid measurementId, CancellationToken cancellationToken);
+    Task<ProgressPhotoCommandResult> RecordOwnPhotoAsync(ProgressPhotoUpload upload, CancellationToken cancellationToken);
+    Task<ProgressPhotoCommandResult> RecordPhotoForClientAsync(Guid clientProfileId, ProgressPhotoUpload upload, CancellationToken cancellationToken);
+    Task<ProgressPhotosView?> GetOwnPhotosAsync(DateOnly? from, DateOnly? endExclusive, CancellationToken cancellationToken);
+    Task<ProgressPhotosView?> GetClientPhotosAsync(Guid clientProfileId, DateOnly? from, DateOnly? endExclusive, CancellationToken cancellationToken);
+    Task<ProgressPhotoCommandResult> RemoveOwnPhotoAsync(Guid photoId, RemoveProgressPhotoRequest request, CancellationToken cancellationToken);
+    Task<ProgressPhotoCommandResult> RemovePhotoForClientAsync(Guid clientProfileId, Guid photoId, RemoveProgressPhotoRequest request, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// A streamed progress-photo upload. The stream is consumed once and never buffered whole.
+/// </summary>
+public sealed record ProgressPhotoUpload(
+    DateOnly? PhotoDate,
+    ProgressPhotoPose Pose,
+    string FileName,
+    string ContentType,
+    Stream Content);
+
+public sealed record RemoveProgressPhotoRequest(string Reason, uint Version);
+
+public sealed record ProgressPhotoView(
+    Guid Id,
+    DateOnly PhotoDate,
+    ProgressPhotoPose Pose,
+    Guid MediaAssetId,
+    ProgressPhotoStatus Status,
+    ProgressPhotoSource Source,
+    Guid? RecordedByUserId,
+    DateTimeOffset RecordedAtUtc,
+    uint Version);
+
+public sealed record ProgressPhotosView(
+    Guid ClientProfileId,
+    DateOnly From,
+    DateOnly ToExclusive,
+    IReadOnlyList<ProgressPhotoView> Photos);
+
+public sealed record ProgressPhotoCommandResult(
+    ProgressPhotoCommandStatus Status,
+    ProgressPhotoView? Photo = null,
+    IReadOnlyDictionary<string, string[]>? Errors = null,
+    string? Code = null,
+    string? Message = null);
+
+public enum ProgressPhotoCommandStatus
+{
+    Success = 1,
+    NotFound = 2,
+    Invalid = 3,
+    Conflict = 4,
+    Forbidden = 5,
+    RateLimited = 6,
 }
 
 public sealed record RecordBodyweightRequest(

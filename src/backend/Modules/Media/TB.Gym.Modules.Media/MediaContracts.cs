@@ -7,7 +7,8 @@ public interface IMediaApplicationService
         string fileName,
         string contentType,
         Stream content,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        MediaPurpose purpose = MediaPurpose.ExerciseMedia);
 
     Task<MediaCommandResult> RegisterExternalAsync(
         RegisterExternalMediaRequest request,

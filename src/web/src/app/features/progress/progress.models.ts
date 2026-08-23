@@ -8,6 +8,11 @@ import type {
   RecordedMassUnit,
   MeasurementType,
   MeasurementUnit,
+  ProgressPhotoView as ContractProgressPhoto,
+  ProgressPhotosView as ContractProgressPhotos,
+  ProgressPhotoPose as ContractProgressPhotoPose,
+  ProgressPhotoSource,
+  ProgressPhotoStatus,
 } from '../../core/api/generated';
 
 export interface BodyMeasurement {
@@ -200,6 +205,46 @@ export function mapMeasurementHistory(value: ContractMeasurementHistory): BodyMe
       canonicalValue: Number(item.canonicalValue),
       enteredValue: Number(item.enteredValue),
     })),
+  };
+}
+
+export type ProgressPhotoPose = ContractProgressPhotoPose;
+
+export interface ProgressPhoto {
+  id: string;
+  photoDate: string;
+  pose: ProgressPhotoPose;
+  mediaAssetId: string;
+  status: ProgressPhotoStatus;
+  source: ProgressPhotoSource;
+  version: number;
+}
+
+export interface ProgressPhotos {
+  clientProfileId: string;
+  from: string;
+  toExclusive: string;
+  photos: ProgressPhoto[];
+}
+
+export function mapProgressPhoto(value: ContractProgressPhoto): ProgressPhoto {
+  return {
+    id: value.id,
+    photoDate: value.photoDate,
+    pose: value.pose,
+    mediaAssetId: value.mediaAssetId,
+    status: value.status,
+    source: value.source,
+    version: Number(value.version),
+  };
+}
+
+export function mapProgressPhotos(value: ContractProgressPhotos): ProgressPhotos {
+  return {
+    clientProfileId: value.clientProfileId,
+    from: value.from,
+    toExclusive: value.toExclusive,
+    photos: value.photos.map(mapProgressPhoto),
   };
 }
 

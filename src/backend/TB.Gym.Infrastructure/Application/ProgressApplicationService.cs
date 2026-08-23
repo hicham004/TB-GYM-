@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Clients;
+using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Progress;
 using TB.Gym.SharedKernel;
 
@@ -10,7 +11,8 @@ internal sealed class ProgressApplicationService(
     GymDbContext dbContext,
     IClock clock,
     ICurrentUser currentUser,
-    ITenantContext tenantContext)
+    ITenantContext tenantContext,
+    IMediaApplicationService mediaService)
     : IProgressApplicationService
 {
     private const int DefaultWindowDays = 84;
@@ -670,6 +672,278 @@ internal sealed class ProgressApplicationService(
             ToMeasurementView(measurement, measurement.EnteredUnit),
             previous);
     }
+
+    public async Task<ProgressPhotoCommandResult> RecordOwnPhotoAsync(
+        ProgressPhotoUpload upload,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindSelfAsync(cancellationToken);
+        return client is null
+            ? new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.NotFound)
+            : await RecordPhotoAsync(client.Id, upload, ProgressPhotoSource.Client, cancellationToken);
+    }
+
+    public async Task<ProgressPhotoCommandResult> RecordPhotoForClientAsync(
+        Guid clientProfileId,
+        ProgressPhotoUpload upload,
+        CancellationToken cancellationToken)
+    {
+        var blocked = await FindClientRelationshipAsync(clientProfileId, cancellationToken);
+        return blocked switch
+        {
+            null => new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.NotFound),
+            true => new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.Forbidden),
+            _ => await RecordPhotoAsync(clientProfileId, upload, ProgressPhotoSource.Coach, cancellationToken),
+        };
+    }
+
+    public async Task<ProgressPhotosView?> GetOwnPhotosAsync(
+        DateOnly? from,
+        DateOnly? endExclusive,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindSelfAsync(cancellationToken);
+        // The owning client also sees their removed photos, so a removal is visible rather than
+        // making an image silently vanish from their own history.
+        return client is null
+            ? null
+            : await BuildPhotosViewAsync(client.Id, from, endExclusive, includeRemoved: true, cancellationToken);
+    }
+
+    public async Task<ProgressPhotosView?> GetClientPhotosAsync(
+        Guid clientProfileId,
+        DateOnly? from,
+        DateOnly? endExclusive,
+        CancellationToken cancellationToken)
+    {
+        var blocked = await FindClientRelationshipAsync(clientProfileId, cancellationToken);
+        return blocked is null or true
+            ? null
+            : await BuildPhotosViewAsync(clientProfileId, from, endExclusive, includeRemoved: false, cancellationToken);
+    }
+
+    public async Task<ProgressPhotoCommandResult> RemoveOwnPhotoAsync(
+        Guid photoId,
+        RemoveProgressPhotoRequest request,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindSelfAsync(cancellationToken);
+        return client is null
+            ? new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.NotFound)
+            : await RemovePhotoAsync(client.Id, photoId, request, cancellationToken);
+    }
+
+    public async Task<ProgressPhotoCommandResult> RemovePhotoForClientAsync(
+        Guid clientProfileId,
+        Guid photoId,
+        RemoveProgressPhotoRequest request,
+        CancellationToken cancellationToken)
+    {
+        var blocked = await FindClientRelationshipAsync(clientProfileId, cancellationToken);
+        return blocked switch
+        {
+            null => new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.NotFound),
+            true => new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.Forbidden),
+            _ => await RemovePhotoAsync(clientProfileId, photoId, request, cancellationToken),
+        };
+    }
+
+    private async Task<ProgressPhotoCommandResult> RecordPhotoAsync(
+        Guid clientProfileId,
+        ProgressPhotoUpload upload,
+        ProgressPhotoSource source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(upload);
+        if (!Enum.IsDefined(upload.Pose))
+        {
+            return PhotoInvalid("pose", "A supported progress photo pose is required.");
+        }
+
+        var calendar = await GetTenantCalendarAsync(cancellationToken);
+        var photoDate = upload.PhotoDate ?? calendar.Today;
+        if (photoDate > calendar.Today)
+        {
+            return PhotoInvalid("photoDate", "A progress photo cannot be dated in the future.");
+        }
+
+        if (await dbContext.ProgressPhotos.AnyAsync(
+                item => item.ClientProfileId == clientProfileId &&
+                        item.PhotoDate == photoDate &&
+                        item.Pose == upload.Pose,
+                cancellationToken))
+        {
+            return PhotoConflict(
+                "ProgressPhotoAlreadyExists",
+                "A photo already exists for that local date and pose. Remove it before adding another.");
+        }
+
+        // The title is derived, never taken from user input or client identity, so health-adjacent
+        // detail cannot leak into media metadata or logs.
+        var stored = await mediaService.UploadAsync(
+            $"Progress photo {upload.Pose} {photoDate:yyyy-MM-dd}",
+            upload.FileName,
+            upload.ContentType,
+            upload.Content,
+            cancellationToken,
+            MediaPurpose.ProgressPhoto);
+        if (stored.Status != MediaCommandStatus.Success || stored.Asset is null)
+        {
+            return stored.Status switch
+            {
+                MediaCommandStatus.RateLimited => new ProgressPhotoCommandResult(
+                    ProgressPhotoCommandStatus.RateLimited,
+                    Code: "ProgressPhotoRateLimited",
+                    Message: "Too many uploads are in flight for this workspace. Try again shortly."),
+                MediaCommandStatus.Invalid => new ProgressPhotoCommandResult(
+                    ProgressPhotoCommandStatus.Invalid,
+                    Errors: stored.Errors ?? new Dictionary<string, string[]>
+                    {
+                        ["file"] = ["The progress photo was rejected."],
+                    }),
+                MediaCommandStatus.Conflict => PhotoConflict(
+                    "ProgressPhotoConflict",
+                    "The progress photo conflicts with current media state."),
+                _ => new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.NotFound),
+            };
+        }
+
+        var photo = ProgressPhoto.Record(
+            tenantContext.TenantId,
+            clientProfileId,
+            photoDate,
+            upload.Pose,
+            stored.Asset.Id,
+            source);
+        dbContext.ProgressPhotos.Add(photo);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.Success, ToPhotoView(photo));
+        }
+        catch (DbUpdateException)
+        {
+            // Two simultaneous uploads for the same date and pose: the loser's bytes would
+            // otherwise be orphaned, so tombstone the asset for the existing retention sweep.
+            await TombstoneOrphanedAssetAsync(stored.Asset.Id, cancellationToken);
+            return PhotoConflict(
+                "ProgressPhotoAlreadyExists",
+                "A photo already exists for that local date and pose.");
+        }
+    }
+
+    private async Task<ProgressPhotoCommandResult> RemovePhotoAsync(
+        Guid clientProfileId,
+        Guid photoId,
+        RemoveProgressPhotoRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } actorUserId)
+        {
+            return new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.NotFound);
+        }
+
+        var photo = await dbContext.ProgressPhotos.SingleOrDefaultAsync(
+            item => item.Id == photoId && item.ClientProfileId == clientProfileId,
+            cancellationToken);
+        if (photo is null)
+        {
+            return new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.NotFound);
+        }
+
+        try
+        {
+            dbContext.Entry(photo).Property(item => item.Version).OriginalValue = request.Version;
+            photo.Remove();
+            dbContext.ProgressPhotoRemovals.Add(ProgressPhotoRemoval.Create(
+                photo,
+                request.Reason,
+                clock.UtcNow,
+                actorUserId));
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.Success, ToPhotoView(photo));
+        }
+        catch (ArgumentException exception)
+        {
+            return PhotoInvalid("reason", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return PhotoConflict("ProgressPhotoAlreadyRemoved", exception.Message);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return PhotoConflict(
+                "ProgressPhotoVersionConflict",
+                "The progress photo changed. Reload it before removing it again.");
+        }
+    }
+
+    private async Task<ProgressPhotosView> BuildPhotosViewAsync(
+        Guid clientProfileId,
+        DateOnly? requestedFrom,
+        DateOnly? requestedEndExclusive,
+        bool includeRemoved,
+        CancellationToken cancellationToken)
+    {
+        var calendar = await GetTenantCalendarAsync(cancellationToken);
+        var toExclusive = requestedEndExclusive ?? AddDaysClamped(calendar.Today, 1);
+        var from = requestedFrom ?? AddDaysClamped(toExclusive, -DefaultWindowDays);
+        if (from >= toExclusive || toExclusive.DayNumber - from.DayNumber > MaximumWindowDays)
+        {
+            throw new ArgumentException($"Progress windows must contain between 1 and {MaximumWindowDays} days.");
+        }
+
+        var photos = await dbContext.ProgressPhotos
+            .AsNoTracking()
+            .Where(item =>
+                item.ClientProfileId == clientProfileId &&
+                item.PhotoDate >= from &&
+                item.PhotoDate < toExclusive &&
+                (includeRemoved || item.Status == ProgressPhotoStatus.Active))
+            .OrderBy(item => item.PhotoDate)
+            .ThenBy(item => item.Pose)
+            .ToArrayAsync(cancellationToken);
+        return new ProgressPhotosView(
+            clientProfileId,
+            from,
+            toExclusive,
+            photos.Select(ToPhotoView).ToArray());
+    }
+
+    private async Task TombstoneOrphanedAssetAsync(Guid mediaAssetId, CancellationToken cancellationToken)
+    {
+        var asset = await dbContext.MediaAssets.SingleOrDefaultAsync(
+            item => item.Id == mediaAssetId,
+            cancellationToken);
+        if (asset is null)
+        {
+            return;
+        }
+
+        asset.MarkTombstoned(clock.UtcNow, TimeSpan.FromDays(30), isHistoricallyReferenced: false);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static ProgressPhotoView ToPhotoView(ProgressPhoto photo) =>
+        new(
+            photo.Id,
+            photo.PhotoDate,
+            photo.Pose,
+            photo.MediaAssetId,
+            photo.Status,
+            photo.Source,
+            photo.UpdatedByUserId ?? photo.CreatedByUserId,
+            photo.UpdatedAtUtc,
+            photo.Version);
+
+    private static ProgressPhotoCommandResult PhotoInvalid(string field, string message) =>
+        new(
+            ProgressPhotoCommandStatus.Invalid,
+            Errors: new Dictionary<string, string[]> { [field] = [message] });
+
+    private static ProgressPhotoCommandResult PhotoConflict(string code, string message) =>
+        new(ProgressPhotoCommandStatus.Conflict, Code: code, Message: message);
 
     private Task<ClientProfile?> FindSelfAsync(CancellationToken cancellationToken) =>
         currentUser.UserId is not { } userId

@@ -11,5 +11,10 @@
     <PackageVersion Include="MSTest" Version="4.0.2" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <!-- MIT-licensed. Used only to re-encode uploaded progress photos so EXIF/GPS metadata cannot
+         reach permanent storage. ImageSharp was rejected: its Split License requires a paid
+         commercial licence for closed-source for-profit use above USD 1M revenue. -->
+    <PackageVersion Include="SkiaSharp" Version="3.119.0" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.0" />
   </ItemGroup>
 </Project>

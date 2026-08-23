@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapMeasurements, mapProgress } from './progress.models';
+import { mapMeasurements, mapProgress, mapProgressPhotos } from './progress.models';
 
 describe('progress view mapping', () => {
   it('preserves missing days and converts API decimals without inventing values', () => {
@@ -109,5 +109,48 @@ describe('progress view mapping', () => {
       displayValue: 31.5,
       version: 7,
     });
+  });
+
+  it('maps progress photos and normalises the concurrency token', () => {
+    const mapped = mapProgressPhotos({
+      clientProfileId: 'client',
+      from: '2026-08-01',
+      toExclusive: '2026-08-24',
+      photos: [
+        {
+          id: 'photo-1',
+          photoDate: '2026-08-22',
+          pose: 'Front',
+          mediaAssetId: 'asset-1',
+          status: 'Active',
+          source: 'Client',
+          recordedByUserId: 'user',
+          recordedAtUtc: '2026-08-22T08:00:00Z',
+          version: '11',
+        },
+        {
+          id: 'photo-2',
+          photoDate: '2026-08-23',
+          pose: 'Back',
+          mediaAssetId: 'asset-2',
+          status: 'Removed',
+          source: 'Coach',
+          recordedByUserId: 'coach',
+          recordedAtUtc: '2026-08-23T08:00:00Z',
+          version: '12',
+        },
+      ],
+    } as never);
+
+    expect(mapped.photos).toHaveLength(2);
+    expect(mapped.photos[0]).toMatchObject({
+      id: 'photo-1',
+      pose: 'Front',
+      mediaAssetId: 'asset-1',
+      status: 'Active',
+      version: 11,
+    });
+    // A removed photo stays in the client's own history rather than disappearing.
+    expect(mapped.photos[1]).toMatchObject({ status: 'Removed', version: 12 });
   });
 });

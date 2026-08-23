@@ -13,6 +13,7 @@ public sealed partial class GymDbContext
             entity.ToTable("Assets", "media");
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Title).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Purpose).HasConversion<string>().HasMaxLength(24);
             entity.Property(item => item.Kind).HasConversion<string>().HasMaxLength(24);
             entity.Property(item => item.Source).HasConversion<string>().HasMaxLength(24);
             entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(24);

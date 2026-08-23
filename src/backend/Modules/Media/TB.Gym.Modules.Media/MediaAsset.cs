@@ -18,12 +18,18 @@ public sealed class MediaAsset : TenantEntity
         string verifiedContentType,
         long length,
         string sha256,
-        string storageKey)
+        string storageKey,
+        MediaPurpose purpose)
         : base(tenantId)
     {
-        if (ownerUserId == Guid.Empty || !Enum.IsDefined(kind))
+        if (ownerUserId == Guid.Empty || !Enum.IsDefined(kind) || !Enum.IsDefined(purpose))
         {
-            throw new ArgumentException("Media owner and kind are required.");
+            throw new ArgumentException("Media owner, kind, and purpose are required.");
+        }
+
+        if (purpose == MediaPurpose.ProgressPhoto && kind != MediaKind.Image)
+        {
+            throw new ArgumentException("A progress photo must be an image.");
         }
 
         OwnerUserId = ownerUserId;
@@ -38,6 +44,7 @@ public sealed class MediaAsset : TenantEntity
         StorageKey = MediaText.Required(storageKey, 500, nameof(storageKey));
         Status = MediaAssetStatus.PendingScan;
         IsCoachProtected = true;
+        Purpose = purpose;
     }
 
     private MediaAsset(
@@ -61,7 +68,14 @@ public sealed class MediaAsset : TenantEntity
         ExternalMediaId = ValidateExternalId(externalMediaId);
         Status = MediaAssetStatus.Ready;
         IsCoachProtected = true;
+        Purpose = MediaPurpose.ExerciseMedia;
     }
+
+    /// <summary>
+    /// Separates coach-owned exercise library media from client progress photos. Authorization
+    /// differs fundamentally between the two, so it is never inferred from other fields.
+    /// </summary>
+    public MediaPurpose Purpose { get; private set; }
 
     public Guid OwnerUserId { get; private set; }
 
@@ -111,7 +125,8 @@ public sealed class MediaAsset : TenantEntity
         string verifiedContentType,
         long length,
         string sha256,
-        string storageKey) =>
+        string storageKey,
+        MediaPurpose purpose = MediaPurpose.ExerciseMedia) =>
         new(
             tenantId,
             ownerUserId,
@@ -122,7 +137,8 @@ public sealed class MediaAsset : TenantEntity
             verifiedContentType,
             length,
             sha256,
-            storageKey);
+            storageKey,
+            purpose);
 
     public static MediaAsset RegisterExternalEmbed(
         Guid tenantId,
@@ -218,6 +234,12 @@ public static class MediaUploadPolicy
 }
 
 public sealed record MediaFileValidation(MediaKind Kind, string VerifiedContentType, long MaximumBytes);
+
+public enum MediaPurpose
+{
+    ExerciseMedia = 1,
+    ProgressPhoto = 2,
+}
 
 public enum MediaKind
 {

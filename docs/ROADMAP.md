@@ -159,8 +159,8 @@ AI provider selection, provider SDK integration, and production clinical approva
 
 Dependencies: Phases 2-4; approved weekly summary rule.
 
-Status: Phase 5A bodyweight/trend and Phase 5B-1 body measurements implemented 2026-08-23.
-Phase 5B-2 has not started.
+Status: Phase 5A bodyweight/trend, Phase 5B-1 body measurements, and Phase 5B-2 progress
+photos implemented 2026-08-23. The combined cross-domain progress dashboard has not started.
 
 - Build dated bodyweight observations, correction history, unit conversion, one-entry-per-day
   constraint, and client/coach permissions.
@@ -184,7 +184,13 @@ Phase 5B-1 adds typed daily girth/body-fat observations, explicit canonical unit
 missing facts, tenant/date/type uniqueness, and append-only optimistic-concurrency correction
 history inside the existing Progress module and UI.
 
-Explicitly deferred to Phase 5B or later: mesocycle-aligned summaries and change statistics,
+Phase 5B-2 adds dated, private progress photos on the existing media pipeline with a purpose
+discriminator, blocking-aware authorization, one-way audited removal, and database-enforced
+immutability. See `docs/adr/0011-progress-photos-v1.md`.
+
+Explicitly deferred to a later phase: the combined cross-domain progress dashboard, EXIF/GPS
+stripping, thumbnails and photo comparison, physical purge of tombstoned bytes, and
+device/wearable import. Previously deferred: mesocycle-aligned summaries and change statistics,
 subscription/program period linking, date-adjustment impact analysis, privacy-safe exports,
 retention/deletion workflows, device imports, and any coupling to nutrition calculations.
 Progress photos, dashboards, and all Phase 5B-2 work remain deferred.

@@ -20,7 +20,10 @@ import {
   mapMeasurements,
   mapObservation,
   mapProgress,
+  mapProgressPhoto,
+  mapProgressPhotos,
 } from '../../features/progress/progress.models';
+import type { ProgressPhotoPose } from '../../features/progress/progress.models';
 import type {
   ClientCommercialOverview as ContractClientCommercialOverview,
   ClientEnrollmentView as ContractClientEnrollmentView,
@@ -889,6 +892,60 @@ export class ApiClient {
       .pipe(map(mapHistory));
   }
 
+  getMyProgressPhotos() {
+    return this.http
+      .get<Phase3Contracts.ProgressPhotosView>('/api/progress/me/photos')
+      .pipe(map(mapProgressPhotos));
+  }
+
+  getClientProgressPhotos(clientId: string) {
+    return this.http
+      .get<Phase3Contracts.ProgressPhotosView>(`/api/progress/clients/${clientId}/photos`)
+      .pipe(map(mapProgressPhotos));
+  }
+
+  recordMyProgressPhoto(pose: ProgressPhotoPose, photoDate: string | null, file: File) {
+    return this.http
+      .post<Phase3Contracts.ProgressPhotoView>('/api/progress/me/photos', progressPhotoBody(file), {
+        params: progressPhotoParams(pose, photoDate),
+      })
+      .pipe(map(mapProgressPhoto));
+  }
+
+  recordClientProgressPhoto(
+    clientId: string,
+    pose: ProgressPhotoPose,
+    photoDate: string | null,
+    file: File,
+  ) {
+    return this.http
+      .post<Phase3Contracts.ProgressPhotoView>(
+        `/api/progress/clients/${clientId}/photos`,
+        progressPhotoBody(file),
+        { params: progressPhotoParams(pose, photoDate) },
+      )
+      .pipe(map(mapProgressPhoto));
+  }
+
+  removeMyProgressPhoto(photoId: string, request: Phase3Contracts.RemoveProgressPhotoRequest) {
+    return this.http
+      .post<Phase3Contracts.ProgressPhotoView>(`/api/progress/me/photos/${photoId}/remove`, request)
+      .pipe(map(mapProgressPhoto));
+  }
+
+  removeClientProgressPhoto(
+    clientId: string,
+    photoId: string,
+    request: Phase3Contracts.RemoveProgressPhotoRequest,
+  ) {
+    return this.http
+      .post<Phase3Contracts.ProgressPhotoView>(
+        `/api/progress/clients/${clientId}/photos/${photoId}/remove`,
+        request,
+      )
+      .pipe(map(mapProgressPhoto));
+  }
+
   getMyBodyMeasurements(displayUnit: Phase3Contracts.MeasurementUnit) {
     return this.http
       .get<Phase3Contracts.BodyMeasurementsView>('/api/progress/me/measurements', {
@@ -1071,4 +1128,17 @@ function toPaymentRecord(value: ContractPaymentRecordView): PaymentRecord {
     ...value,
     amount: toNumber(value.amount),
   };
+}
+
+function progressPhotoBody(file: File): FormData {
+  const body = new FormData();
+  body.append('file', file, file.name);
+  return body;
+}
+
+function progressPhotoParams(
+  pose: ProgressPhotoPose,
+  photoDate: string | null,
+): Record<string, string> {
+  return photoDate === null ? { pose } : { pose, photoDate };
 }

@@ -92,11 +92,18 @@
           <context context-type="linenumber">4,5</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="3419681791450150574" datatype="html">
+        <source>Progress</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.html</context>
+          <context context-type="linenumber">39,40</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="8258325324649507024" datatype="html">
         <source>My profile</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">39,40</context>
+          <context context-type="linenumber">40,41</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/client-profile.html</context>
@@ -107,11 +114,11 @@
         <source>Workspace</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">42,43</context>
+          <context context-type="linenumber">43,44</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">49,50</context>
+          <context context-type="linenumber">50,51</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/workspace/workspace-settings.html</context>
@@ -122,21 +129,21 @@
         <source>Sign out</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">62,63</context>
+          <context context-type="linenumber">63,64</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3233478152769805266" datatype="html">
         <source>Account navigation</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">66</context>
+          <context context-type="linenumber">67</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5207635742003539443" datatype="html">
         <source>Sign in</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">67,68</context>
+          <context context-type="linenumber">68,69</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/auth/register-coach.html</context>
@@ -159,14 +166,14 @@
         <source>Coach registration</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">68,69</context>
+          <context context-type="linenumber">69,70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4888930727562781134" datatype="html">
         <source>Checking session...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.html</context>
-          <context context-type="linenumber">71,72</context>
+          <context context-type="linenumber">72,73</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2528064290555018471" datatype="html">
@@ -204,18 +211,25 @@
           <context context-type="linenumber">63</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="1228617461638759428" datatype="html">
+        <source>My bodyweight progress | TB Gym</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/app.routes.ts</context>
+          <context context-type="linenumber">70</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="1545882748786007291" datatype="html">
         <source>Workspace settings | TB Gym</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.routes.ts</context>
-          <context context-type="linenumber">70</context>
+          <context context-type="linenumber">77</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4639506285628516620" datatype="html">
         <source>Account security | TB Gym</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/app.routes.ts</context>
-          <context context-type="linenumber">77</context>
+          <context context-type="linenumber">84</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3715596725146409911" datatype="html">
@@ -642,6 +656,10 @@
           <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
           <context context-type="linenumber">143</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">436,437</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="6549265851868599441" datatype="html">
         <source>Video</source>
@@ -690,6 +708,10 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/i18n/display-labels.ts</context>
           <context context-type="linenumber">155</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">459,460</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8551055676661844710" datatype="html">
@@ -1395,77 +1417,77 @@
         <source>Client intake</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">41,42</context>
+          <context context-type="linenumber">43,44</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2778245965110195175" datatype="html">
         <source>Contact, training, nutrition, and health details.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">42,43</context>
+          <context context-type="linenumber">44,45</context>
         </context-group>
       </trans-unit>
       <trans-unit id="3178819533620462882" datatype="html">
         <source>Coach-only notes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">56,57</context>
+          <context context-type="linenumber">58,59</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4037370659332383082" datatype="html">
         <source>These notes are not exposed through the client profile API.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">57,58</context>
+          <context context-type="linenumber">59,60</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8104421162933956065" datatype="html">
         <source>Notes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">62,63</context>
+          <context context-type="linenumber">64,65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8406648699226019403" datatype="html">
         <source>Save notes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.html</context>
-          <context context-type="linenumber">66,67</context>
+          <context context-type="linenumber">68,69</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1775274146380056262" datatype="html">
         <source>Client intake saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">66</context>
+          <context context-type="linenumber">68</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8381653381385786356" datatype="html">
         <source>Client onboarding completed.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">73</context>
+          <context context-type="linenumber">75</context>
         </context-group>
       </trans-unit>
       <trans-unit id="166203247581475534" datatype="html">
         <source>Coach notes saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">90</context>
+          <context context-type="linenumber">92</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7713092832151105630" datatype="html">
         <source>The client profile could not be loaded.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">105</context>
+          <context context-type="linenumber">107</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4885091206165415192" datatype="html">
         <source>The client profile could not be saved.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-details.ts</context>
-          <context context-type="linenumber">122</context>
+          <context context-type="linenumber">124</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5489523001763972004" datatype="html">
@@ -1556,6 +1578,18 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
           <context context-type="linenumber">30,31</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">211,212</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">251,252</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">349,350</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8303759397871558516" datatype="html">
@@ -1677,6 +1711,10 @@
           <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
           <context context-type="linenumber">96,97</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">14,15</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="4572518146388988362" datatype="html">
         <source>Pounds</source>
@@ -1684,12 +1722,24 @@
           <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
           <context context-type="linenumber">97,98</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">15,16</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="7156004847730302766" datatype="html">
         <source>Measurement date</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/clients/client-intake-form.html</context>
           <context context-type="linenumber">101,102</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">40,41</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">256,257</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1605476523737868756" datatype="html">
@@ -1900,6 +1950,18 @@
           <context context-type="sourcefile">src/app/features/commercial/client-commercial.html</context>
           <context context-type="linenumber">318</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">155,156</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">354,355</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">482,483</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="5548579258946144064" datatype="html">
         <source>Confirm unblock</source>
@@ -2051,6 +2113,18 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/commercial/products.html</context>
           <context context-type="linenumber">181</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">162</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">371</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">492</context>
         </context-group>
       </trans-unit>
       <trans-unit id="457883008605984511" datatype="html">
@@ -2895,74 +2969,99 @@
           <context context-type="linenumber">40,41</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="7646688965299885981" datatype="html">
+        <source>Bodyweight progress</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">45,46</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">4,5</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4695516669625485105" datatype="html">
+        <source>Record today&apos;s weight and review weekly means and the trend estimate.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">46,47</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="177354695462464412" datatype="html">
+        <source>Open progress</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
+          <context context-type="linenumber">48,49</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="3979297918704915071" datatype="html">
         <source>Today&apos;s training</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">45,46</context>
+          <context context-type="linenumber">52,53</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7790271338095849769" datatype="html">
         <source>Open the workout scheduled in this workspace.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">47,48</context>
+          <context context-type="linenumber">54,55</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7157099401601940089" datatype="html">
         <source>Complete your intake details and initial bodyweight.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">49,50</context>
+          <context context-type="linenumber">56,57</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8351711308856592517" datatype="html">
         <source>Open today</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">53,54</context>
+          <context context-type="linenumber">60,61</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8775821175228591887" datatype="html">
         <source>Open my profile</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">55,57</context>
+          <context context-type="linenumber">62,64</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4190885764985714528" datatype="html">
         <source>Today&apos;s nutrition</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">60,61</context>
+          <context context-type="linenumber">67,68</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7656840253240740258" datatype="html">
         <source>Record the concrete meal choices you consumed.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">61,62</context>
+          <context context-type="linenumber">68,69</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8091004814054110758" datatype="html">
         <source>Open today&apos;s meals</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">63,64</context>
+          <context context-type="linenumber">70,71</context>
         </context-group>
       </trans-unit>
       <trans-unit id="1098089907977651591" datatype="html">
         <source>No active workspace role</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">67,68</context>
+          <context context-type="linenumber">74,75</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7286872530510450491" datatype="html">
         <source>Select another workspace to continue.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/dashboard/dashboard.html</context>
-          <context context-type="linenumber">68,69</context>
+          <context context-type="linenumber">75,76</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8187549955851076268" datatype="html">
@@ -3703,6 +3802,14 @@
           <context context-type="linenumber">44,45</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">148,149</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">340,341</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
           <context context-type="linenumber">58,59</context>
         </context-group>
@@ -4232,6 +4339,10 @@
           <context context-type="linenumber">10</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">432,433</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
           <context context-type="linenumber">156,157</context>
         </context-group>
@@ -4422,6 +4533,612 @@
           <context context-type="linenumber">78</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="187187500641108332" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ coachMode() ? &apos;Client weight trend&apos; : &apos;My weight trend&apos; }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">202,203</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2448752248639528335" datatype="html">
+        <source> Weekly means use recorded days only. The trend is an estimate, not a statement about fat loss or physiology. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">7,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2390816269270620938" datatype="html">
+        <source>Display unit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">12,13</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5848348023107769657" datatype="html">
+        <source>Weight</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">29,30</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4900543341142826739" datatype="html">
+        <source>Entered unit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">33,34</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">245,246</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4141745434313993573" datatype="html">
+        <source>kg</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">35,36</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7582402312831172261" datatype="html">
+        <source>lb</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">36,37</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="947310662647253287" datatype="html">
+        <source>Leave blank for today in the workspace time zone.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">42,43</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">258,259</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4007097548221738961" datatype="html">
+        <source>Record weight</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">44,45</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3839645742128816103" datatype="html">
+        <source>Loading bodyweight progress...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">48,49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4158444714164995135" datatype="html">
+        <source>Latest trend estimate</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">52,53</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4496572774093976020" datatype="html">
+        <source>Not enough data</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">58,59</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5838477595298785724" datatype="html">
+        <source>Recorded samples</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">63,64</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3328429443088406682" datatype="html">
+        <source>Estimate strategy</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">67,68</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1966190871389836949" datatype="html">
+        <source> Window <x id="INTERPOLATION" equiv-text="{{ view.trend.windowStart | date: &apos;mediumDate&apos; : &apos;UTC&apos; }}"/> to <x id="INTERPOLATION_1" equiv-text="{{ view.trend.windowEndExclusive | date: &apos;mediumDate&apos; : &apos;UTC&apos; }}"/> · time constant <x id="INTERPOLATION_2" equiv-text="{{ view.trend.timeConstantDays }}"/> days · <x id="INTERPOLATION_3" equiv-text="{{ view.trend.warmupDays }}"/>-day warm-up <x id="START_BLOCK_IF" equiv-text="@if (view.trend.availability === &apos;NotEnoughData&apos;) {"/> · needs <x id="INTERPOLATION_4" equiv-text="{{ view.trend.minimumSampleCount - view.trend.sampleCount }}"/> more observations <x id="CLOSE_BLOCK_IF" equiv-text="}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">71,78</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4765823123635385057" datatype="html">
+        <source>Weekly bodyweight averages</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">80</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3272722264126103180" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ week.observedDayCount }}"/> observed days</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">92,93</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7840260823194077941" datatype="html">
+        <source> Entered <x id="INTERPOLATION" equiv-text="{{ observation.enteredValue | number: &apos;1.1-3&apos; }}"/> <x id="INTERPOLATION_1" equiv-text="{{ observation.enteredUnit === &apos;Kilogram&apos; ? &apos;kg&apos; : &apos;lb&apos; }}"/> by <x id="INTERPOLATION_2" equiv-text="{{ observation.source === &apos;Coach&apos; ? &apos;coach&apos; : &apos;client&apos; }}"/> </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">108,111</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">285,294</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3339293732437165143" datatype="html">
+        <source>Trend estimate</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">115,116</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2919237623258423230" datatype="html">
+        <source> History </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">124</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">316</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="652378721919687068" datatype="html">
+        <source> Correct </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">132</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">324</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5786984852872256886" datatype="html">
+        <source>Corrected value</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">138,139</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">330,331</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7015862088355023599" datatype="html">
+        <source> Save correction </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">159</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">363</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6443154458329903913" datatype="html">
+        <source>No observation</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">167,168</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="299437934472955794" datatype="html">
+        <source> Correction history for <x id="INTERPOLATION" equiv-text="{{ record.current.measurementDate | date: &apos;mediumDate&apos; : &apos;UTC&apos; }}"/> </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">176,178</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="182394245769505481" datatype="html">
+        <source>No corrections have been made.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">179,180</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">389,390</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7867124799683356932" datatype="html">
+        <source>Superseded <x id="INTERPOLATION" equiv-text="{{ item.supersededAtUtc | date: &apos;medium&apos; }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">189,190</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">405,406</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8011760851058788071" datatype="html">
+        <source>Body measurements</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">201,202</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5900131487121124456" datatype="html">
+        <source> Only recorded measurements are shown. Missing values are never estimated. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">204,205</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2629339762190890701" datatype="html">
+        <source>Girth display unit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">208,209</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4914906751454487465" datatype="html">
+        <source>Centimetres</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">210,211</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">250,251</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">348,349</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6503627862793600467" datatype="html">
+        <source>Measurement</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">218,219</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="620223074245973228" datatype="html">
+        <source>Waist</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">224,225</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3425114984623914347" datatype="html">
+        <source>Chest</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">225,226</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8376782426528647094" datatype="html">
+        <source>Hips</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">226,227</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8498520920038615480" datatype="html">
+        <source>Thigh</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">227,228</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2662128665521995181" datatype="html">
+        <source>Arm</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">228,229</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2609787881477922081" datatype="html">
+        <source>Body fat percentage</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">229,230</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6555318547274416232" datatype="html">
+        <source>Value</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">233,234</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">129,130</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
+          <context context-type="linenumber">159,160</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6505243001439171756" datatype="html">
+        <source>Percent</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">248,249</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">346,347</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8304566448165074008" datatype="html">
+        <source> Record measurement </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">261,262</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7376055298801738062" datatype="html">
+        <source>Loading body measurements...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">266,267</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5557920626015934065" datatype="html">
+        <source>No body measurements have been recorded in this period.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">269,270</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4475455733231909218" datatype="html">
+        <source>Displayed value</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">297,298</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7135185036855721254" datatype="html">
+        <source> Measurement history for <x id="INTERPOLATION" equiv-text="{{ record.current.measurementDate | date: &apos;mediumDate&apos; : &apos;UTC&apos; }}"/> </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">385,388</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3271777488522921663" datatype="html">
+        <source>Progress photos</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">416,417</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3781164332370458290" datatype="html">
+        <source> Photos are private to this client and their coach. Removing one keeps it in the client&apos;s own history and withdraws it from the coach view. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">418,420</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2172109951069226499" datatype="html">
+        <source>Pose</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">424,425</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7932418406121526154" datatype="html">
+        <source>Front</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">426,427</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="791950660812381145" datatype="html">
+        <source>Side</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">427,428</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8890553633144307762" datatype="html">
+        <source>Back</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">428,429</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1039287813394914087" datatype="html">
+        <source>Loading progress photos…</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">448,449</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5529823703105622584" datatype="html">
+        <source>No progress photos in this period yet.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">450,451</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8461609631969932886" datatype="html">
+        <source>Hide</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">463</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2509141182388535183" datatype="html">
+        <source>View</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">465</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8212177249756365917" datatype="html">
+        <source> Remove </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">470</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6796744717135154233" datatype="html">
+        <source>Progress photo</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">476</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9178182467454450952" datatype="html">
+        <source>Confirm</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.html</context>
+          <context context-type="linenumber">490,491</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4632410530423870625" datatype="html">
+        <source>Enter a body measurement value.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">108</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2508212755246023410" datatype="html">
+        <source>Body measurement recorded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">130</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2039604230972991109" datatype="html">
+        <source>Enter the corrected measurement and a reason.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">154</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1039075041898429975" datatype="html">
+        <source>Measurement correction saved with its prior value preserved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">176</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5262643882439028879" datatype="html">
+        <source>Measurement history could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">190</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="846364160519147594" datatype="html">
+        <source>Enter a bodyweight value.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">196</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1407828988654030390" datatype="html">
+        <source>Bodyweight recorded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">217</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6896932966376632400" datatype="html">
+        <source>Enter the corrected value and a reason.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">241</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3679457137316731187" datatype="html">
+        <source>Correction saved with its prior value preserved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">263</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4534180924657154737" datatype="html">
+        <source>Correction history could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">277</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7231930582209911901" datatype="html">
+        <source>Bodyweight progress could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">295</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5777846859901090832" datatype="html">
+        <source>Body measurements could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">317</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8350285897353128391" datatype="html">
+        <source>The bodyweight change could not be saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">332</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6893366797038890398" datatype="html">
+        <source>Progress photo saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">358</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7625032062337633891" datatype="html">
+        <source>Enter a reason so the removal stays auditable.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">374</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3006628393058044461" datatype="html">
+        <source>Progress photo removed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">391</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2836199980832675261" datatype="html">
+        <source>The progress photo could not be opened.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">408</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5543326267255157260" datatype="html">
+        <source>Progress photos could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">431</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6975832051343642329" datatype="html">
+        <source>The progress photo could not be saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">446</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="802507506516452251" datatype="html">
+        <source>The measurement could not be saved.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/progress/progress-view.ts</context>
+          <context context-type="linenumber">461</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="1745743866427899989" datatype="html">
         <source>Training assignment</source>
         <context-group purpose="location">
@@ -4576,17 +5293,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/training/client-training.html</context>
           <context context-type="linenumber">158,159</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="6555318547274416232" datatype="html">
-        <source>Value</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">129,130</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/training/client-training.html</context>
-          <context context-type="linenumber">159,160</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8175254808871137157" datatype="html">

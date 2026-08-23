@@ -63,7 +63,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Training | Immutable template versions, assigned mesocycle snapshots, prescriptions, executions, actuals |
 | Exercise Library | Tenant exercise metadata, muscles, tags, approved alternatives, media associations |
 | Nutrition | Versioned foods/cooking factors, immutable recipes and meal-plan versions, assigned client snapshots, daily actuals, energy/macro calculations, structured allergens, reviewed AI drafts |
-| Progress | Daily bodyweight, weekly summaries, measurements and progress views |
+| Progress | Daily bodyweight, weekly summaries, measurements, dated progress photos and progress views |
 | Strength | Append-only max history, canonical RPE/RIR, versioned estimates, recommendations, rounding |
 | Messaging | Tenant-scoped coach/client conversations and messages |
 | Notifications | Idempotent outbox, delivery scheduling, email and future channel ports |

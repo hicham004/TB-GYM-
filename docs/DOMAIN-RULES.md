@@ -435,6 +435,15 @@ lifetime is configurable (60 seconds to 4 hours, default 1800) so that pausing a
 demo video does not fail mid-playback. External embeds are validated YouTube/Vimeo IDs. Production publication fails closed until a scanner is configured. Local
 Docker storage is development infrastructure, not the production object-store decision.
 
+**PRG-007** A progress photo belongs to one tenant, client, workspace-local date, and pose,
+enforced by a unique index. It is readable by the client it depicts and, only while the
+coaching relationship is not blocked, by an Owner/Coach of that workspace; it never appears
+in the coach exercise-media library. Uploads are images only. Removal is one-way and audited:
+the row and its media association are retained, the coach view loses it, and the owning client
+keeps it in their own history. Uploaded photos are re-encoded from their pixels before permanent
+storage so EXIF/GPS and other metadata cannot persist, with orientation applied to the pixels
+first; signature validation, scanning, size limits, and streaming are unchanged.
+
 **MED-005** Upload bodies are streamed with explicit application and Nginx limits, endpoint
 rate/concurrency controls, and a configurable workspace-byte quota. Deleting historically
 referenced media creates a tombstone and retains bytes. A later retention worker may purge

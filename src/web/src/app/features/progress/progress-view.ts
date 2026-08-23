@@ -13,6 +13,9 @@ import type {
   BodyMeasurements,
   BodyweightHistory,
   BodyweightObservation,
+  ProgressPhoto,
+  ProgressPhotoPose,
+  ProgressPhotos,
   ProgressViewModel,
 } from './progress.models';
 
@@ -34,6 +37,11 @@ export class ProgressView {
   protected readonly history = signal<BodyweightHistory | null>(null);
   protected readonly measurements = signal<BodyMeasurements | null>(null);
   protected readonly measurementHistory = signal<BodyMeasurementHistory | null>(null);
+  protected readonly photos = signal<ProgressPhotos | null>(null);
+  protected readonly photosLoading = signal(false);
+  // Object URLs are resolved on demand so an image is only fetched when the viewer opens it.
+  protected readonly openPhotoId = signal<string | null>(null);
+  protected readonly openPhotoUrl = signal<string | null>(null);
   protected readonly measurementDays = computed(() =>
     (this.measurements()?.days ?? []).filter((day) => day.measurements.length > 0),
   );
@@ -59,6 +67,10 @@ export class ProgressView {
   protected measurementCorrectionValue: number | null = null;
   protected measurementCorrectionUnit: MeasurementUnit = 'Centimetre';
   protected measurementCorrectionReason = '';
+  protected photoPose: ProgressPhotoPose = 'Front';
+  protected photoDate = '';
+  protected removingPhotoId: string | null = null;
+  protected photoRemovalReason = '';
 
   constructor() {
     effect(() => {
@@ -69,6 +81,7 @@ export class ProgressView {
         this.loadedKey = key;
         void this.load();
         void this.loadMeasurements();
+        void this.loadPhotos();
       }
     });
   }
@@ -317,6 +330,120 @@ export class ProgressView {
       this.notice.set(success);
     } catch (error) {
       this.error.set(apiErrorMessage(error, $localize`The bodyweight change could not be saved.`));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected async recordPhoto(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    if (file === null) {
+      return;
+    }
+
+    const clientId = this.clientId();
+    const photoDate = this.photoDate === '' ? null : this.photoDate;
+    await this.runPhoto(
+      async () => {
+        await firstValueFrom(
+          clientId
+            ? this.api.recordClientProgressPhoto(clientId, this.photoPose, photoDate, file)
+            : this.api.recordMyProgressPhoto(this.photoPose, photoDate, file),
+        );
+        // Clear the picker so re-selecting the same file still raises a change event.
+        input.value = '';
+        await this.loadPhotos(false);
+      },
+      $localize`Progress photo saved.`,
+    );
+  }
+
+  protected startPhotoRemoval(photo: ProgressPhoto): void {
+    this.removingPhotoId = photo.id;
+    this.photoRemovalReason = '';
+  }
+
+  protected cancelPhotoRemoval(): void {
+    this.removingPhotoId = null;
+    this.photoRemovalReason = '';
+  }
+
+  protected async removePhoto(photo: ProgressPhoto): Promise<void> {
+    if (this.photoRemovalReason.trim() === '') {
+      this.error.set($localize`Enter a reason so the removal stays auditable.`);
+      return;
+    }
+
+    const clientId = this.clientId();
+    const request = { reason: this.photoRemovalReason.trim(), version: photo.version };
+    await this.runPhoto(
+      async () => {
+        await firstValueFrom(
+          clientId
+            ? this.api.removeClientProgressPhoto(clientId, photo.id, request)
+            : this.api.removeMyProgressPhoto(photo.id, request),
+        );
+        this.cancelPhotoRemoval();
+        this.closePhoto();
+        await this.loadPhotos(false);
+      },
+      $localize`Progress photo removed.`,
+    );
+  }
+
+  protected async openPhoto(photo: ProgressPhoto): Promise<void> {
+    if (this.openPhotoId() === photo.id) {
+      this.closePhoto();
+      return;
+    }
+
+    this.closePhoto();
+    try {
+      await this.csrf.refresh();
+      const access = await firstValueFrom(this.api.createMediaAccess(photo.mediaAssetId));
+      this.openPhotoId.set(photo.id);
+      this.openPhotoUrl.set(access.url);
+    } catch (error) {
+      this.error.set(apiErrorMessage(error, $localize`The progress photo could not be opened.`));
+    }
+  }
+
+  protected closePhoto(): void {
+    this.openPhotoId.set(null);
+    this.openPhotoUrl.set(null);
+  }
+
+  private async loadPhotos(showSpinner = true): Promise<void> {
+    if (showSpinner) {
+      this.photosLoading.set(true);
+    }
+
+    try {
+      const clientId = this.clientId();
+      this.photos.set(
+        clientId
+          ? await firstValueFrom(this.api.getClientProgressPhotos(clientId))
+          : await firstValueFrom(this.api.getMyProgressPhotos()),
+      );
+    } catch (error) {
+      this.photos.set(null);
+      this.error.set(apiErrorMessage(error, $localize`Progress photos could not be loaded.`));
+    } finally {
+      this.photosLoading.set(false);
+    }
+  }
+
+  private async runPhoto(action: () => Promise<void>, success: string): Promise<void> {
+    this.busy.set(true);
+    this.error.set(null);
+    this.notice.set(null);
+    try {
+      await this.csrf.refresh();
+      await action();
+      this.notice.set(success);
+    } catch (error) {
+      this.error.set(apiErrorMessage(error, $localize`The progress photo could not be saved.`));
     } finally {
       this.busy.set(false);
     }

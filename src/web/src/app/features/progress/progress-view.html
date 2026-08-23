@@ -411,3 +411,90 @@
     }
   </section>
 </section>
+
+<section class="photo-panel">
+  <h3 i18n>Progress photos</h3>
+  <p class="hint" i18n>
+    Photos are private to this client and their coach. Removing one keeps it in the client's own
+    history and withdraws it from the coach view.
+  </p>
+
+  <form class="photo-form" (submit)="$event.preventDefault()">
+    <label
+      ><span i18n>Pose</span>
+      <select [(ngModel)]="photoPose" name="photoPose">
+        <option value="Front" i18n>Front</option>
+        <option value="Side" i18n>Side</option>
+        <option value="Back" i18n>Back</option>
+      </select>
+    </label>
+    <label
+      ><span i18n>Date</span>
+      <input type="date" [(ngModel)]="photoDate" name="photoDate" />
+    </label>
+    <label
+      ><span i18n>Image</span>
+      <input
+        type="file"
+        accept="image/jpeg,image/png"
+        name="photoFile"
+        [disabled]="busy()"
+        (change)="recordPhoto($event)"
+      />
+    </label>
+  </form>
+
+  @if (photosLoading()) {
+    <p i18n>Loading progress photos…</p>
+  } @else if ((photos()?.photos ?? []).length === 0) {
+    <p class="empty" i18n>No progress photos in this period yet.</p>
+  } @else {
+    <ul class="photo-list">
+      @for (photo of photos()!.photos; track photo.id) {
+        <li [class.removed]="photo.status === 'Removed'">
+          <div class="photo-summary">
+            <span class="photo-date">{{ photo.photoDate | date: 'mediumDate' }}</span>
+            <span class="photo-pose">{{ photo.pose }}</span>
+            @if (photo.status === 'Removed') {
+              <span class="photo-status" i18n>Removed</span>
+            }
+            <button type="button" (click)="openPhoto(photo)" [disabled]="busy()">
+              @if (openPhotoId() === photo.id) {
+                <ng-container i18n>Hide</ng-container>
+              } @else {
+                <ng-container i18n>View</ng-container>
+              }
+            </button>
+            @if (photo.status === 'Active') {
+              <button type="button" (click)="startPhotoRemoval(photo)" [disabled]="busy()" i18n>
+                Remove
+              </button>
+            }
+          </div>
+
+          @if (openPhotoId() === photo.id && openPhotoUrl() !== null) {
+            <img class="photo-image" [src]="openPhotoUrl()" alt="Progress photo" i18n-alt />
+          }
+
+          @if (removingPhotoId === photo.id) {
+            <form class="photo-removal" (submit)="$event.preventDefault(); removePhoto(photo)">
+              <label
+                ><span i18n>Reason</span>
+                <input
+                  [(ngModel)]="photoRemovalReason"
+                  name="photoRemovalReason"
+                  maxlength="500"
+                  required
+                />
+              </label>
+              <button class="primary-button" type="submit" [disabled]="busy()" i18n>Confirm</button>
+              <button type="button" (click)="cancelPhotoRemoval()" [disabled]="busy()" i18n>
+                Cancel
+              </button>
+            </form>
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

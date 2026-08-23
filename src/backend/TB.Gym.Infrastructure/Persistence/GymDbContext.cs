@@ -48,6 +48,10 @@ public sealed partial class GymDbContext(
 
     public DbSet<BodyMeasurementCorrection> BodyMeasurementCorrections => Set<BodyMeasurementCorrection>();
 
+    public DbSet<ProgressPhoto> ProgressPhotos => Set<ProgressPhoto>();
+
+    public DbSet<ProgressPhotoRemoval> ProgressPhotoRemovals => Set<ProgressPhotoRemoval>();
+
     public DbSet<CoachingProduct> CoachingProducts => Set<CoachingProduct>();
 
     public DbSet<ProductOffer> ProductOffers => Set<ProductOffer>();
@@ -596,6 +600,61 @@ public sealed partial class GymDbContext(
             });
             ConfigureAuditable(entity);
         });
+
+        builder.Entity<ProgressPhoto>(entity =>
+        {
+            entity.ToTable("ProgressPhotos", "progress");
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => new { item.TenantId, item.Id });
+            entity.Property(item => item.PhotoDate).HasColumnType("date");
+            entity.Property(item => item.Pose).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.Source).HasConversion<string>().HasMaxLength(16);
+            entity.HasIndex(item => new
+            {
+                item.TenantId,
+                item.ClientProfileId,
+                item.PhotoDate,
+                item.Pose,
+            }).IsUnique();
+            entity.HasIndex(item => new { item.TenantId, item.MediaAssetId }).IsUnique();
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(client => new { client.TenantId, client.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<MediaAsset>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.MediaAssetId })
+                .HasPrincipalKey(asset => new { asset.TenantId, asset.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<ProgressPhotoRemoval>(entity =>
+        {
+            entity.ToTable("ProgressPhotoRemovals", "progress");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.PhotoDate).HasColumnType("date");
+            entity.Property(item => item.Pose).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(item => new { item.TenantId, item.ProgressPhotoId, item.RemovedAtUtc });
+            entity.HasOne<ProgressPhoto>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ProgressPhotoId })
+                .HasPrincipalKey(photo => new { photo.TenantId, photo.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(client => new { client.TenantId, client.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            ConfigureAuditable(entity);
+        });
     }
 
     private static void ConfigureAuditable<TEntity>(
@@ -633,6 +692,13 @@ public sealed partial class GymDbContext(
         if (ChangeTracker.Entries<BodyMeasurement>().Any(item => item.State == EntityState.Deleted))
         {
             throw new InvalidOperationException("Body measurements cannot be deleted; corrections preserve history.");
+        }
+
+        RejectAppendOnlyMutations<ProgressPhotoRemoval>("Progress photo removal history is append-only.");
+
+        if (ChangeTracker.Entries<ProgressPhoto>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Progress photos cannot be deleted; removal preserves history.");
         }
 
         foreach (var entry in ChangeTracker.Entries<RecipeVersion>().Where(item => item.State == EntityState.Modified))

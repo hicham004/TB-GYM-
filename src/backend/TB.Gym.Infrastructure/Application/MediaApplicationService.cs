@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Media;
+using TB.Gym.Modules.Progress;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
@@ -38,7 +39,8 @@ internal sealed class MediaApplicationService(
         string fileName,
         string contentType,
         Stream content,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        MediaPurpose purpose = MediaPurpose.ExerciseMedia)
     {
         string? objectKey = null;
         try
@@ -63,6 +65,11 @@ internal sealed class MediaApplicationService(
                 return Invalid("quota", "The workspace media-storage quota has been reached.");
             }
 
+            // A progress photo can only ever be an image, so cap the accepted stream at the image
+            // limit rather than streaming up to the video limit before rejecting it.
+            var acceptedBytes = purpose == MediaPurpose.ProgressPhoto
+                ? MediaUploadPolicy.MaximumImageBytes
+                : MediaUploadPolicy.MaximumVideoBytes;
             objectKey = $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}";
             var stored = await objectStorage.PutAsync(
                 new ObjectUpload(
@@ -70,10 +77,28 @@ internal sealed class MediaApplicationService(
                     contentType,
                     content,
                     tenantContext.TenantId,
-                    Math.Min(MediaUploadPolicy.MaximumVideoBytes, remainingBytes)),
+                    Math.Min(acceptedBytes, remainingBytes)),
                 cancellationToken);
 
             var validation = MediaUploadPolicy.Validate(fileName, contentType, stored.Length, stored.Signature);
+            if (purpose == MediaPurpose.ProgressPhoto)
+            {
+                // Re-encode the pixels so EXIF/GPS never reaches permanent storage. The ingest
+                // stream stayed bounded above, the original object is deleted, and the sanitised
+                // bytes are re-validated and scanned below, so no protection is skipped.
+                var sanitized = await SanitizeProgressPhotoAsync(stored, validation, cancellationToken);
+                if (sanitized is null)
+                {
+                    await objectStorage.DeleteAsync(stored.ObjectKey, cancellationToken);
+                    objectKey = null;
+                    return Invalid("file", "The progress photo could not be processed as a valid image.");
+                }
+
+                await objectStorage.DeleteAsync(stored.ObjectKey, cancellationToken);
+                stored = sanitized;
+                objectKey = stored.ObjectKey;
+            }
+
             var asset = MediaAsset.RegisterUpload(
                 tenantContext.TenantId,
                 ownerUserId,
@@ -84,7 +109,8 @@ internal sealed class MediaApplicationService(
                 validation.VerifiedContentType,
                 stored.Length,
                 stored.Sha256,
-                stored.ObjectKey);
+                stored.ObjectKey,
+                purpose);
             var scan = await scanner.ScanAsync(stored.ObjectKey, validation.VerifiedContentType, cancellationToken);
             asset.RecordScan(scan);
             dbContext.MediaAssets.Add(asset);
@@ -134,7 +160,10 @@ internal sealed class MediaApplicationService(
         int take,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.MediaAssets.AsNoTracking();
+        // The coach media library is exercise content only; progress photos are reachable solely
+        // through the progress endpoints for the client they depict.
+        var query = dbContext.MediaAssets.AsNoTracking()
+            .Where(item => item.Purpose == MediaPurpose.ExerciseMedia);
         var total = await query.CountAsync(cancellationToken);
         var items = (await query
             .OrderByDescending(item => item.CreatedAtUtc)
@@ -286,6 +315,24 @@ internal sealed class MediaApplicationService(
             return false;
         }
 
+        // Progress photos are health-adjacent client data, not shared library content. They must
+        // never fall through to the exercise-media rules below, which grant every coach in the
+        // workspace unconditional access and require a training entitlement the subject may not
+        // have. Authorization is resolved from the owning client instead.
+        var purpose = await dbContext.MediaAssets.AsNoTracking()
+            .Where(item => item.Id == assetId)
+            .Select(item => (MediaPurpose?)item.Purpose)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (purpose is null)
+        {
+            return false;
+        }
+
+        if (purpose == MediaPurpose.ProgressPhoto)
+        {
+            return await IsProgressPhotoAuthorizedAsync(assetId, userId, cancellationToken);
+        }
+
         var role = await dbContext.TenantMemberships.AsNoTracking()
             .Where(item =>
                 item.TenantId == tenantContext.TenantId &&
@@ -355,6 +402,115 @@ internal sealed class MediaApplicationService(
             where media.MediaAssetId == assetId && execution.ClientProfileId == client.Id
             select media.Id)
             .AnyAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Re-encodes a stored progress photo without metadata and stores the result under a new key.
+    /// Returns null when the bytes cannot be decoded, or when the sanitised output no longer passes
+    /// the same signature and size validation as the original.
+    /// </summary>
+    private async Task<StoredObject?> SanitizeProgressPhotoAsync(
+        StoredObject stored,
+        MediaFileValidation validation,
+        CancellationToken cancellationToken)
+    {
+        MemoryStream? sanitizedBytes = null;
+        try
+        {
+            await using var original = await objectStorage.OpenReadAsync(stored.ObjectKey, cancellationToken);
+            if (!ProgressPhotoSanitizer.TrySanitize(original, validation.VerifiedContentType, out var produced))
+            {
+                produced.Dispose();
+                return null;
+            }
+
+            sanitizedBytes = produced;
+            var rewritten = await objectStorage.PutAsync(
+                new ObjectUpload(
+                    $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}",
+                    validation.VerifiedContentType,
+                    sanitizedBytes,
+                    tenantContext.TenantId,
+                    validation.MaximumBytes),
+                cancellationToken);
+            try
+            {
+                // The sanitised bytes must still be the same declared image format and within the
+                // same limits; anything else is rejected rather than trusted.
+                MediaUploadPolicy.Validate(
+                    $"sanitized{ExtensionFor(validation.VerifiedContentType)}",
+                    validation.VerifiedContentType,
+                    rewritten.Length,
+                    rewritten.Signature);
+                return rewritten;
+            }
+            catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+            {
+                await objectStorage.DeleteAsync(rewritten.ObjectKey, cancellationToken);
+                return null;
+            }
+        }
+        finally
+        {
+            if (sanitizedBytes is not null)
+            {
+                await sanitizedBytes.DisposeAsync();
+            }
+        }
+    }
+
+    private static string ExtensionFor(string verifiedContentType) => verifiedContentType switch
+    {
+        "image/png" => ".png",
+        _ => ".jpg",
+    };
+
+    /// <summary>
+    /// A progress photo is readable by the client it depicts, and by an Owner/Coach of the same
+    /// workspace only while the coaching relationship is not blocked. Removed photos stop being
+    /// readable by the coach but remain readable by the client who owns them.
+    /// </summary>
+    private async Task<bool> IsProgressPhotoAuthorizedAsync(
+        Guid assetId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var photo = await dbContext.ProgressPhotos.AsNoTracking()
+            .Where(item => item.MediaAssetId == assetId)
+            .Select(item => new { item.ClientProfileId, item.Status })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (photo is null)
+        {
+            return false;
+        }
+
+        var subject = await dbContext.ClientProfiles.AsNoTracking()
+            .Where(item => item.Id == photo.ClientProfileId)
+            .Select(item => new { item.UserId, item.IsCoachBlocked })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (subject is null)
+        {
+            return false;
+        }
+
+        if (subject.UserId == userId)
+        {
+            return true;
+        }
+
+        if (photo.Status != ProgressPhotoStatus.Active || subject.IsCoachBlocked)
+        {
+            return false;
+        }
+
+        var role = await dbContext.TenantMemberships.AsNoTracking()
+            .Where(item =>
+                item.TenantId == tenantContext.TenantId &&
+                item.UserId == userId &&
+                item.Status == MembershipStatus.Active)
+            .Select(item => (TenantRole?)item.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+        return role is TenantRole.Owner or TenantRole.Coach;
     }
 
     // The expiry travels inside the protected payload so the business decision is made against
