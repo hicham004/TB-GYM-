@@ -14,15 +14,29 @@ internal static class ProgressPhotoImageFactory
     /// <summary>EXIF orientation 6: rotate 90 degrees clockwise when displayed.</summary>
     public const ushort RotateNinetyOrientation = 6;
 
+    /// <summary>EXIF orientation 1: the pixels are already upright.</summary>
+    public const ushort UprightOrientation = 1;
+
     public static byte[] PlainJpeg(int width, int height) => EncodeJpeg(width, height);
 
     /// <summary>
     /// A valid JPEG whose EXIF carries the given orientation and a description string that must not
     /// appear in stored bytes.
     /// </summary>
-    public static byte[] JpegWithExif(int width, int height, ushort orientation)
+    public static byte[] JpegWithExif(int width, int height, ushort orientation) =>
+        WrapWithExif(EncodeJpeg(width, height), orientation);
+
+    /// <summary>
+    /// A JPEG carrying the same EXIF payload but filled with fine deterministic detail instead of
+    /// flat colour. Flat images compress to almost nothing at any resolution, which would let a
+    /// downscaled rendition look "smaller" for reasons unrelated to the downscale; high-frequency
+    /// pixel data makes the size difference attributable to the resize.
+    /// </summary>
+    public static byte[] DetailedJpegWithExif(int width, int height, ushort orientation) =>
+        WrapWithExif(EncodeDetailedJpeg(width, height), orientation);
+
+    private static byte[] WrapWithExif(byte[] body, ushort orientation)
     {
-        var body = EncodeJpeg(width, height);
         var exif = BuildExifApp1(orientation);
         var result = new byte[2 + exif.Length + (body.Length - 2)];
         // SOI, then our APP1, then the encoder's output minus its own SOI.
@@ -39,6 +53,29 @@ internal static class ProgressPhotoImageFactory
         using var codec = SKCodec.Create(data)
             ?? throw new AssertFailedException("The stored progress photo is not a decodable image.");
         return (codec.Info.Width, codec.Info.Height);
+    }
+
+    private static byte[] EncodeDetailedJpeg(int width, int height)
+    {
+        using var bitmap = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Opaque);
+        var pixels = new SKColor[width * height];
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                // A cheap deterministic hash: no RNG, so the encoded size is stable across runs.
+                pixels[(y * width) + x] = new SKColor(
+                    (byte)((x * 7) ^ (y * 13)),
+                    (byte)((x * 3) + (y * 5)),
+                    (byte)(x ^ (y * 11)));
+            }
+        }
+
+        bitmap.Pixels = pixels;
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, 92)
+            ?? throw new AssertFailedException("The detailed test JPEG could not be encoded.");
+        return encoded.ToArray();
     }
 
     private static byte[] EncodeJpeg(int width, int height)

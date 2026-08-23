@@ -979,6 +979,7 @@ export type MediaAccessView = {
   url: string;
   expiresAtUtc: string;
   downloadAllowed: boolean;
+  thumbnailUrl?: null | string;
 };
 
 export type MediaAssetPage = {
@@ -2009,6 +2010,33 @@ export type StreamPrivateMediaErrors = {
 };
 
 export type StreamPrivateMediaResponses = {
+  /**
+   * OK
+   */
+  200: unknown;
+};
+
+export type StreamPrivateMediaThumbnailData = {
+  body?: never;
+  path: {
+    assetId: string;
+  };
+  query?: never;
+  url: '/api/media/{assetId}/content/thumbnail';
+};
+
+export type StreamPrivateMediaThumbnailErrors = {
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type StreamPrivateMediaThumbnailResponses = {
   /**
    * OK
    */

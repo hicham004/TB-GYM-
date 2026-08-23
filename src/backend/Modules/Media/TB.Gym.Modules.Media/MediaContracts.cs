@@ -23,6 +23,15 @@ public interface IMediaApplicationService
         string grant,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Serves the thumbnail rendition of <paramref name="assetId"/> under the same grant and the
+    /// same authorization as the asset itself.
+    /// </summary>
+    Task<MediaContentResult> OpenThumbnailAsync(
+        Guid assetId,
+        string grant,
+        CancellationToken cancellationToken);
+
     Task<MediaCommandResult> DeleteAsync(
         Guid assetId,
         DeleteMediaRequest request,
@@ -63,7 +72,11 @@ public sealed record MediaAccessView(
     string? ContentType,
     string Url,
     DateTimeOffset ExpiresAtUtc,
-    bool DownloadAllowed);
+    bool DownloadAllowed,
+    // Null when the asset has no thumbnail rendition, which is every external embed and every
+    // asset that is not a progress photo. The same grant covers it, so a viewer that wants a
+    // preview never asks for a second one.
+    string? ThumbnailUrl = null);
 
 public sealed record MediaContentResult(
     MediaContentStatus Status,
@@ -131,4 +144,11 @@ public static class MediaAccessCookie
     public const string Name = "tb-gym.media";
 
     public static string Path(Guid assetId) => $"/api/media/{assetId:D}/content";
+
+    /// <summary>
+    /// The thumbnail lives beneath the asset's content path, so the cookie scoped to
+    /// <see cref="Path"/> already covers it under RFC 6265 path matching. A rendition therefore
+    /// needs no grant, cookie, or scope of its own.
+    /// </summary>
+    public static string ThumbnailPath(Guid assetId) => $"{Path(assetId)}/thumbnail";
 }

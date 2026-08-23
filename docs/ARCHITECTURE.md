@@ -67,7 +67,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Strength | Append-only max history, canonical RPE/RIR, versioned estimates, recommendations, rounding |
 | Messaging | Tenant-scoped coach/client conversations and messages |
 | Notifications | Idempotent outbox, delivery scheduling, email and future channel ports |
-| Media | Object metadata, signature/scanner lifecycle, protected access, external embeds, retention |
+| Media | Object metadata, signature/scanner lifecycle, protected access, subordinate renditions, external embeds, retention |
 | Gamification | Tenant theme, levels, ranks and auditable experience events |
 | Integrations | AI, payment, nutrition-data and other external provider contracts |
 
@@ -205,6 +205,12 @@ endpoint requires the normal auth cookie, restores only that bound tenant contex
 membership, current feature access, and assignment history, then streams server-controlled
 content with range support. A previously issued grant therefore does not survive revoked
 entitlement.
+
+A subordinate rendition, such as a progress-photo thumbnail, is served beneath that same asset
+content path and is covered by that same cookie, so it needs no grant, route pattern, or policy of
+its own. The variant is selected only after the grant has been unprotected and the parent asset has
+been authorized, inside the same method, so a rendition can never be reached by a caller who could
+not already reach the original.
 
 The grant carries its absolute expiry inside the protected payload and the content endpoint
 compares that expiry against `IClock`, so expiry is deterministic and testable rather than

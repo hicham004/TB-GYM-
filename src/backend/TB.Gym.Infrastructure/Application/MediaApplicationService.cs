@@ -43,6 +43,7 @@ internal sealed class MediaApplicationService(
         MediaPurpose purpose = MediaPurpose.ExerciseMedia)
     {
         string? objectKey = null;
+        string? thumbnailKey = null;
         try
         {
             if (currentUser.UserId is not { } ownerUserId)
@@ -81,13 +82,15 @@ internal sealed class MediaApplicationService(
                 cancellationToken);
 
             var validation = MediaUploadPolicy.Validate(fileName, contentType, stored.Length, stored.Signature);
+            ProgressPhotoRendition? rendition = null;
             if (purpose == MediaPurpose.ProgressPhoto)
             {
-                // Re-encode the pixels so EXIF/GPS never reaches permanent storage. The ingest
-                // stream stayed bounded above, the original object is deleted, and the sanitised
-                // bytes are re-validated and scanned below, so no protection is skipped.
-                var sanitized = await SanitizeProgressPhotoAsync(stored, validation, cancellationToken);
-                if (sanitized is null)
+                // Re-encode the pixels so EXIF/GPS never reaches permanent storage, and render the
+                // thumbnail from those same sanitised pixels. The ingest stream stayed bounded
+                // above, the original object is deleted, and both sets of stored bytes are
+                // re-validated and scanned below, so no protection is skipped.
+                rendition = await SanitizeProgressPhotoAsync(stored, validation, cancellationToken);
+                if (rendition is null)
                 {
                     await objectStorage.DeleteAsync(stored.ObjectKey, cancellationToken);
                     objectKey = null;
@@ -95,8 +98,9 @@ internal sealed class MediaApplicationService(
                 }
 
                 await objectStorage.DeleteAsync(stored.ObjectKey, cancellationToken);
-                stored = sanitized;
+                stored = rendition.Image;
                 objectKey = stored.ObjectKey;
+                thumbnailKey = rendition.Thumbnail.ObjectKey;
             }
 
             var asset = MediaAsset.RegisterUpload(
@@ -112,8 +116,42 @@ internal sealed class MediaApplicationService(
                 stored.ObjectKey,
                 purpose);
             var scan = await scanner.ScanAsync(stored.ObjectKey, validation.VerifiedContentType, cancellationToken);
+            if (rendition is not null && scan.IsAllowed)
+            {
+                // The thumbnail is bytes this workspace actually stores and serves, so the scanner
+                // runs against it too. A rendition the scanner refuses fails the whole upload
+                // closed rather than being quietly dropped, because the two share a source image.
+                var thumbnailScan = await scanner.ScanAsync(
+                    rendition.Thumbnail.ObjectKey,
+                    MediaThumbnailPolicy.ContentType,
+                    cancellationToken);
+                if (!thumbnailScan.IsAllowed)
+                {
+                    scan = thumbnailScan;
+                }
+            }
+
+            if (!scan.IsAllowed && thumbnailKey is not null)
+            {
+                await objectStorage.DeleteAsync(thumbnailKey, cancellationToken);
+                thumbnailKey = null;
+                rendition = null;
+            }
+
             asset.RecordScan(scan);
             dbContext.MediaAssets.Add(asset);
+            if (rendition is not null)
+            {
+                dbContext.MediaAssetDerivatives.Add(MediaAssetDerivative.RegisterThumbnail(
+                    tenantContext.TenantId,
+                    asset.Id,
+                    rendition.Thumbnail.Length,
+                    rendition.Thumbnail.Sha256,
+                    rendition.Thumbnail.ObjectKey,
+                    rendition.Width,
+                    rendition.Height));
+            }
+
             await dbContext.SaveChangesAsync(cancellationToken);
             return Success(asset);
         }
@@ -122,6 +160,11 @@ internal sealed class MediaApplicationService(
             if (objectKey is not null)
             {
                 await objectStorage.DeleteAsync(objectKey, cancellationToken);
+            }
+
+            if (thumbnailKey is not null)
+            {
+                await objectStorage.DeleteAsync(thumbnailKey, cancellationToken);
             }
 
             return Invalid("file", exception.Message);
@@ -207,6 +250,11 @@ internal sealed class MediaApplicationService(
                 BuildTokenPayload(tenantContext.TenantId, asset.Id, currentUser.UserId!.Value, expires),
                 expires)
             : null;
+        // The thumbnail path is only advertised when the rendition exists. The single grant issued
+        // above already covers it, so this adds no second authorization decision.
+        var thumbnailUrl = isUpload && await HasThumbnailAsync(asset.Id, cancellationToken)
+            ? MediaAccessCookie.ThumbnailPath(asset.Id)
+            : null;
         return new MediaAccessResult(
             MediaAccessStatus.Success,
             new MediaAccessView(
@@ -216,14 +264,38 @@ internal sealed class MediaApplicationService(
                 asset.VerifiedContentType,
                 url,
                 expires,
-                DownloadAllowed: false),
+                DownloadAllowed: false,
+                thumbnailUrl),
             grant,
             accessLifetime);
     }
 
-    public async Task<MediaContentResult> OpenContentAsync(
+    public Task<MediaContentResult> OpenContentAsync(
         Guid assetId,
         string grant,
+        CancellationToken cancellationToken) =>
+        OpenAsync(assetId, grant, thumbnail: false, cancellationToken);
+
+    public Task<MediaContentResult> OpenThumbnailAsync(
+        Guid assetId,
+        string grant,
+        CancellationToken cancellationToken) =>
+        OpenAsync(assetId, grant, thumbnail: true, cancellationToken);
+
+    /// <summary>
+    /// Resolves the bytes of one asset, or of its thumbnail rendition, behind a single grant and a
+    /// single authorization decision.
+    /// </summary>
+    /// <remarks>
+    /// The variant is chosen only after the grant has been unprotected and
+    /// <see cref="IsAuthorizedAsync"/> has approved the parent asset, so a thumbnail cannot be
+    /// reached by any caller who could not already reach the original. Keeping both variants in one
+    /// method is deliberate: a second copy of this check is a second place for the rules to drift.
+    /// </remarks>
+    private async Task<MediaContentResult> OpenAsync(
+        Guid assetId,
+        string grant,
+        bool thumbnail,
         CancellationToken cancellationToken)
     {
         try
@@ -264,20 +336,47 @@ internal sealed class MediaApplicationService(
             return new MediaContentResult(MediaContentStatus.NotFound);
         }
 
+        var storageKey = asset.StorageKey;
+        var contentType = asset.VerifiedContentType;
+        var length = asset.Length;
+        if (thumbnail)
+        {
+            var derivative = await dbContext.MediaAssetDerivatives.AsNoTracking().SingleOrDefaultAsync(
+                item =>
+                    item.MediaAssetId == assetId &&
+                    item.Variant == MediaDerivativeVariant.Thumbnail,
+                cancellationToken);
+            if (derivative is null)
+            {
+                return new MediaContentResult(MediaContentStatus.NotFound);
+            }
+
+            storageKey = derivative.StorageKey;
+            contentType = derivative.VerifiedContentType;
+            length = derivative.Length;
+        }
+
         try
         {
-            var stream = await objectStorage.OpenReadAsync(asset.StorageKey, cancellationToken);
+            var stream = await objectStorage.OpenReadAsync(storageKey, cancellationToken);
             return new MediaContentResult(
                 MediaContentStatus.Success,
                 stream,
-                asset.VerifiedContentType,
-                asset.Length);
+                contentType,
+                length);
         }
         catch (FileNotFoundException)
         {
             return new MediaContentResult(MediaContentStatus.NotFound);
         }
     }
+
+    private Task<bool> HasThumbnailAsync(Guid assetId, CancellationToken cancellationToken) =>
+        dbContext.MediaAssetDerivatives.AsNoTracking().AnyAsync(
+            item =>
+                item.MediaAssetId == assetId &&
+                item.Variant == MediaDerivativeVariant.Thumbnail,
+            cancellationToken);
 
     public async Task<MediaCommandResult> DeleteAsync(
         Guid assetId,
@@ -405,57 +504,107 @@ internal sealed class MediaApplicationService(
     }
 
     /// <summary>
-    /// Re-encodes a stored progress photo without metadata and stores the result under a new key.
-    /// Returns null when the bytes cannot be decoded, or when the sanitised output no longer passes
-    /// the same signature and size validation as the original.
+    /// Re-encodes a stored progress photo without metadata, renders its thumbnail from the same
+    /// decoded pixels, and stores both under new keys. Returns null when the bytes cannot be
+    /// decoded, or when either output no longer passes the same signature and size validation as
+    /// the original, in which case nothing it stored is left behind.
     /// </summary>
-    private async Task<StoredObject?> SanitizeProgressPhotoAsync(
+    private async Task<ProgressPhotoRendition?> SanitizeProgressPhotoAsync(
         StoredObject stored,
         MediaFileValidation validation,
         CancellationToken cancellationToken)
     {
-        MemoryStream? sanitizedBytes = null;
+        SanitizedProgressPhoto? produced = null;
+        StoredObject? rewritten = null;
         try
         {
-            await using var original = await objectStorage.OpenReadAsync(stored.ObjectKey, cancellationToken);
-            if (!ProgressPhotoSanitizer.TrySanitize(original, validation.VerifiedContentType, out var produced))
+            await using (var original = await objectStorage.OpenReadAsync(stored.ObjectKey, cancellationToken))
             {
-                produced.Dispose();
+                if (!ProgressPhotoSanitizer.TrySanitize(original, validation.VerifiedContentType, out produced) ||
+                    produced is null)
+                {
+                    return null;
+                }
+            }
+
+            rewritten = await StoreValidatedAsync(
+                produced.Image,
+                validation.VerifiedContentType,
+                validation.MaximumBytes,
+                cancellationToken);
+            if (rewritten is null)
+            {
                 return null;
             }
 
-            sanitizedBytes = produced;
-            var rewritten = await objectStorage.PutAsync(
-                new ObjectUpload(
-                    $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}",
-                    validation.VerifiedContentType,
-                    sanitizedBytes,
-                    tenantContext.TenantId,
-                    validation.MaximumBytes),
+            // The thumbnail is validated exactly like the sanitised original: it is only kept if
+            // the bytes on disk still carry an allowed image signature within the image byte cap.
+            var thumbnail = await StoreValidatedAsync(
+                produced.Thumbnail,
+                MediaThumbnailPolicy.ContentType,
+                MediaUploadPolicy.MaximumImageBytes,
                 cancellationToken);
-            try
+            if (thumbnail is null)
             {
-                // The sanitised bytes must still be the same declared image format and within the
-                // same limits; anything else is rejected rather than trusted.
-                MediaUploadPolicy.Validate(
-                    $"sanitized{ExtensionFor(validation.VerifiedContentType)}",
-                    validation.VerifiedContentType,
-                    rewritten.Length,
-                    rewritten.Signature);
-                return rewritten;
-            }
-            catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
-            {
-                await objectStorage.DeleteAsync(rewritten.ObjectKey, cancellationToken);
+                // The sanitised original is reclaimed below rather than left behind without the
+                // rendition this method promised alongside it.
                 return null;
             }
+
+            var result = new ProgressPhotoRendition(
+                rewritten,
+                thumbnail,
+                produced.ThumbnailWidth,
+                produced.ThumbnailHeight);
+            rewritten = null;
+            return result;
         }
         finally
         {
-            if (sanitizedBytes is not null)
+            if (rewritten is not null)
             {
-                await sanitizedBytes.DisposeAsync();
+                await objectStorage.DeleteAsync(rewritten.ObjectKey, cancellationToken);
             }
+
+            if (produced is not null)
+            {
+                await produced.DisposeAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Stores re-encoded bytes and keeps them only if the stored object still passes the upload
+    /// policy for its declared image type; anything else is deleted rather than trusted.
+    /// </summary>
+    private async Task<StoredObject?> StoreValidatedAsync(
+        Stream content,
+        string verifiedContentType,
+        long maximumBytes,
+        CancellationToken cancellationToken)
+    {
+        content.Position = 0;
+        var stored = await objectStorage.PutAsync(
+            new ObjectUpload(
+                $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}",
+                verifiedContentType,
+                content,
+                tenantContext.TenantId,
+                maximumBytes),
+            cancellationToken);
+        try
+        {
+            MediaUploadPolicy.Validate(
+                $"sanitized{ExtensionFor(verifiedContentType)}",
+                verifiedContentType,
+                stored.Length,
+                stored.Signature);
+            return stored;
+        }
+        catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+        {
+            await objectStorage.DeleteAsync(stored.ObjectKey, cancellationToken);
+            return null;
         }
     }
 
@@ -583,4 +732,14 @@ internal sealed class MediaApplicationService(
         new(
             MediaCommandStatus.Invalid,
             Errors: new Dictionary<string, string[]> { [field] = [message] });
+
+    /// <summary>
+    /// The two objects a sanitised progress photo occupies in storage: the metadata-free original
+    /// and its thumbnail rendition, plus the dimensions the rendition was scaled to.
+    /// </summary>
+    private sealed record ProgressPhotoRendition(
+        StoredObject Image,
+        StoredObject Thumbnail,
+        int Width,
+        int Height);
 }

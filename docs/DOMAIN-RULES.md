@@ -444,6 +444,16 @@ keeps it in their own history. Uploaded photos are re-encoded from their pixels 
 storage so EXIF/GPS and other metadata cannot persist, with orientation applied to the pixels
 first; signature validation, scanning, size limits, and streaming are unchanged.
 
+**PRG-008** A thumbnail is a subordinate derivative of its parent media asset, never a standalone
+asset and never independently addressable: it is resolved as "the thumbnail of asset X" beneath the
+asset's existing content path, under the same grant cookie, and authorization is the parent's own
+check rather than a separate policy. It is rendered from the already-sanitised, orientation-corrected
+pixels of the same decode, so the untrusted original is never decoded twice and the rendition carries
+no metadata either. Longest edge 480 px, aspect ratio preserved, a smaller original never upscaled,
+always JPEG at quality 80 even when the parent is a PNG. Length and SHA-256 are recorded per
+derivative. Renditions are signature-validated and scanned like any stored object; a rendition the
+scanner refuses fails the whole upload closed. Exercise media has no rendition and is unchanged.
+
 **MED-005** Upload bodies are streamed with explicit application and Nginx limits, endpoint
 rate/concurrency controls, and a configurable workspace-byte quota. Deleting historically
 referenced media creates a tombstone and retains bytes. A later retention worker may purge

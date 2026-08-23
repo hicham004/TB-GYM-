@@ -188,12 +188,17 @@ Phase 5B-2 adds dated, private progress photos on the existing media pipeline wi
 discriminator, blocking-aware authorization, one-way audited removal, and database-enforced
 immutability. See `docs/adr/0011-progress-photos-v1.md`.
 
-Explicitly deferred to a later phase: the combined cross-domain progress dashboard, EXIF/GPS
-stripping, thumbnails and photo comparison, physical purge of tombstoned bytes, and
-device/wearable import. Previously deferred: mesocycle-aligned summaries and change statistics,
-subscription/program period linking, date-adjustment impact analysis, privacy-safe exports,
-retention/deletion workflows, device imports, and any coupling to nutrition calculations.
-Progress photos, dashboards, and all Phase 5B-2 work remain deferred.
+Phase 5B-3 adds server-side thumbnails for progress photos as subordinate derivatives of their
+parent media asset, rendered from the already-sanitised pixels, served on the existing grant-cookie
+content route, and authorized by the same check as the original. See
+`docs/adr/0012-progress-photo-thumbnails-v1.md`.
+
+Explicitly deferred to a later phase: the combined cross-domain progress dashboard, photo
+comparison, physical purge of tombstoned bytes, per-client storage quotas, counting derivative
+bytes toward the workspace quota, and device/wearable import. Previously deferred:
+mesocycle-aligned summaries and change statistics, subscription/program period linking,
+date-adjustment impact analysis, privacy-safe exports, retention/deletion workflows, device
+imports, and any coupling to nutrition calculations.
 
 ## Phase 6: Messaging, notifications, and production media
 

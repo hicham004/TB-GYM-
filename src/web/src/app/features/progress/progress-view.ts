@@ -14,10 +14,12 @@ import type {
   BodyweightHistory,
   BodyweightObservation,
   ProgressPhoto,
+  ProgressPhotoImage,
   ProgressPhotoPose,
   ProgressPhotos,
   ProgressViewModel,
 } from './progress.models';
+import { mapProgressPhotoImage } from './progress.models';
 
 @Component({
   selector: 'app-progress-view',
@@ -41,7 +43,26 @@ export class ProgressView {
   protected readonly photosLoading = signal(false);
   // Object URLs are resolved on demand so an image is only fetched when the viewer opens it.
   protected readonly openPhotoId = signal<string | null>(null);
-  protected readonly openPhotoUrl = signal<string | null>(null);
+  protected readonly openPhotoImage = signal<ProgressPhotoImage | null>(null);
+  // Opening a photo shows the downscaled preview; the full-resolution bytes of a health-adjacent
+  // image are transferred only when the viewer asks for them.
+  protected readonly fullSizeRequested = signal(false);
+  // A photo stored before renditions existed has nothing smaller to fall back to, so it opens at
+  // full resolution and must not offer to load a full size it is already showing.
+  protected readonly showingThumbnail = computed(() => {
+    const image = this.openPhotoImage();
+    return image !== null && image.thumbnailUrl !== null && !this.fullSizeRequested();
+  });
+  protected readonly openPhotoUrl = computed(() => {
+    const image = this.openPhotoImage();
+    if (image === null) {
+      return null;
+    }
+
+    return image.thumbnailUrl !== null && !this.fullSizeRequested()
+      ? image.thumbnailUrl
+      : image.fullUrl;
+  });
   protected readonly measurementDays = computed(() =>
     (this.measurements()?.days ?? []).filter((day) => day.measurements.length > 0),
   );
@@ -403,15 +424,24 @@ export class ProgressView {
       await this.csrf.refresh();
       const access = await firstValueFrom(this.api.createMediaAccess(photo.mediaAssetId));
       this.openPhotoId.set(photo.id);
-      this.openPhotoUrl.set(access.url);
+      this.openPhotoImage.set(mapProgressPhotoImage(photo.id, access));
     } catch (error) {
       this.error.set(apiErrorMessage(error, $localize`The progress photo could not be opened.`));
     }
   }
 
+  /**
+   * Swaps the preview for the full-resolution image. The grant issued when the photo was opened
+   * already covers both, so this needs no further request for access.
+   */
+  protected showFullSize(): void {
+    this.fullSizeRequested.set(true);
+  }
+
   protected closePhoto(): void {
     this.openPhotoId.set(null);
-    this.openPhotoUrl.set(null);
+    this.openPhotoImage.set(null);
+    this.fullSizeRequested.set(false);
   }
 
   private async loadPhotos(showSpinner = true): Promise<void> {

@@ -53,5 +53,41 @@ public sealed partial class GymDbContext
             });
             ConfigureTenantEntity(entity);
         });
+
+        builder.Entity<MediaAssetDerivative>(entity =>
+        {
+            entity.ToTable("AssetDerivatives", "media");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Variant).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.VerifiedContentType).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.Sha256).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(item => item.StorageKey).HasMaxLength(500).IsRequired();
+            // One rendition per asset and variant. This is what makes a derivative addressable only
+            // through its parent: naming the asset and the variant identifies at most one row, so
+            // nothing needs to expose the derivative's own identifier.
+            entity.HasIndex(item => new { item.TenantId, item.MediaAssetId, item.Variant })
+                .IsUnique();
+            entity.HasIndex(item => new { item.TenantId, item.StorageKey })
+                .IsUnique();
+            entity.HasOne<MediaAsset>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.MediaAssetId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                // A rendition has no meaning without the asset it renders.
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_MediaAssetDerivatives_Length",
+                    "\"Length\" > 0 AND \"Length\" <= 15728640");
+                table.HasCheckConstraint(
+                    "CK_MediaAssetDerivatives_Hash",
+                    "\"Sha256\" ~ '^[0-9a-f]{64}$'");
+                table.HasCheckConstraint(
+                    "CK_MediaAssetDerivatives_Dimensions",
+                    "\"Width\" > 0 AND \"Height\" > 0 AND (\"Variant\" <> 'Thumbnail' OR (\"Width\" <= 480 AND \"Height\" <= 480))");
+            });
+            ConfigureTenantEntity(entity);
+        });
     }
 }

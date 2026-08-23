@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { mapMeasurements, mapProgress, mapProgressPhotos } from './progress.models';
+import {
+  mapMeasurements,
+  mapProgress,
+  mapProgressPhotoImage,
+  mapProgressPhotos,
+} from './progress.models';
 
 describe('progress view mapping', () => {
   it('preserves missing days and converts API decimals without inventing values', () => {
@@ -152,5 +157,39 @@ describe('progress view mapping', () => {
     });
     // A removed photo stays in the client's own history rather than disappearing.
     expect(mapped.photos[1]).toMatchObject({ status: 'Removed', version: 12 });
+  });
+
+  it('maps a photo access grant to its preview and full-size URLs', () => {
+    const withThumbnail = mapProgressPhotoImage('photo-1', {
+      assetId: 'asset-1',
+      kind: 'Image',
+      source: 'Upload',
+      contentType: 'image/jpeg',
+      url: '/api/media/asset-1/content',
+      expiresAtUtc: '2026-08-22T08:30:00Z',
+      downloadAllowed: false,
+      thumbnailUrl: '/api/media/asset-1/content/thumbnail',
+    } as never);
+
+    expect(withThumbnail).toEqual({
+      photoId: 'photo-1',
+      fullUrl: '/api/media/asset-1/content',
+      thumbnailUrl: '/api/media/asset-1/content/thumbnail',
+    });
+
+    // A photo stored before renditions existed reports no thumbnail rather than an empty string,
+    // so the view falls back to the full image instead of rendering a broken preview.
+    const withoutThumbnail = mapProgressPhotoImage('photo-2', {
+      assetId: 'asset-2',
+      kind: 'Image',
+      source: 'Upload',
+      contentType: 'image/jpeg',
+      url: '/api/media/asset-2/content',
+      expiresAtUtc: '2026-08-22T08:30:00Z',
+      downloadAllowed: false,
+    } as never);
+
+    expect(withoutThumbnail.thumbnailUrl).toBeNull();
+    expect(withoutThumbnail.fullUrl).toBe('/api/media/asset-2/content');
   });
 });

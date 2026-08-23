@@ -4,6 +4,7 @@ import type {
   BodyMeasurementView as ContractMeasurement,
   BodyweightHistoryView as ContractHistory,
   BodyweightObservationView as ContractObservation,
+  MediaAccessView as ContractMediaAccess,
   ProgressView as ContractProgress,
   RecordedMassUnit,
   MeasurementType,
@@ -245,6 +246,32 @@ export function mapProgressPhotos(value: ContractProgressPhotos): ProgressPhotos
     from: value.from,
     toExclusive: value.toExclusive,
     photos: value.photos.map(mapProgressPhoto),
+  };
+}
+
+/**
+ * The resolved image URLs for one opened progress photo. Both come from a single access response
+ * and are covered by the one grant it issues, so showing the preview costs no extra round trip.
+ */
+export interface ProgressPhotoImage {
+  photoId: string;
+  /** Full-resolution bytes, fetched only when the viewer deliberately opens them. */
+  fullUrl: string;
+  /**
+   * The downscaled preview, or null for a photo stored before renditions existed. A null value
+   * means the full image is the only thing to show, never that the photo should be hidden.
+   */
+  thumbnailUrl: string | null;
+}
+
+export function mapProgressPhotoImage(
+  photoId: string,
+  value: ContractMediaAccess,
+): ProgressPhotoImage {
+  return {
+    photoId,
+    fullUrl: value.url,
+    thumbnailUrl: value.thumbnailUrl ?? null,
   };
 }
 

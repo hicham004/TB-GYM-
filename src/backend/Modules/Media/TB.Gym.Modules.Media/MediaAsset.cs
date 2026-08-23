@@ -40,7 +40,7 @@ public sealed class MediaAsset : TenantEntity
         DeclaredContentType = MediaText.Required(declaredContentType, 100, nameof(declaredContentType));
         VerifiedContentType = MediaText.Required(verifiedContentType, 100, nameof(verifiedContentType));
         Length = length;
-        Sha256 = ValidateHash(sha256);
+        Sha256 = MediaText.Sha256(sha256);
         StorageKey = MediaText.Required(storageKey, 500, nameof(storageKey));
         Status = MediaAssetStatus.PendingScan;
         IsCoachProtected = true;
@@ -173,17 +173,6 @@ public sealed class MediaAsset : TenantEntity
         PurgeAfterUtc = isHistoricallyReferenced ? null : now.Add(retention);
     }
 
-    private static string ValidateHash(string value)
-    {
-        var normalized = MediaText.Required(value, 64, nameof(value)).ToLowerInvariant();
-        if (normalized.Length != 64 || normalized.Any(character => !Uri.IsHexDigit(character)))
-        {
-            throw new ArgumentException("Media requires a SHA-256 content hash.", nameof(value));
-        }
-
-        return normalized;
-    }
-
     private static string ValidateExternalId(string value)
     {
         var normalized = MediaText.Required(value, 100, nameof(value));
@@ -280,4 +269,19 @@ internal static class MediaText
 
     public static string? Optional(string? value, int maxLength, string parameterName) =>
         string.IsNullOrWhiteSpace(value) ? null : Required(value, maxLength, parameterName);
+
+    /// <summary>
+    /// Shared by assets and their derivatives so both record a content hash in the same shape the
+    /// database check constraint enforces.
+    /// </summary>
+    public static string Sha256(string value)
+    {
+        var normalized = Required(value, 64, nameof(value)).ToLowerInvariant();
+        if (normalized.Length != 64 || normalized.Any(character => !Uri.IsHexDigit(character)))
+        {
+            throw new ArgumentException("Media requires a SHA-256 content hash.", nameof(value));
+        }
+
+        return normalized;
+    }
 }

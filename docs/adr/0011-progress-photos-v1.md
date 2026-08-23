@@ -65,6 +65,7 @@ original object is deleted, and the recorded length and SHA-256 describe the san
 Decoding needs the whole image in memory, which is bounded by the 15 MB image limit and the
 per-workspace upload concurrency gate. Re-encoding a JPEG is lossy; quality 90 is used.
 
-Deferred: server-side thumbnails and downscaling, side-by-side photo comparison, the combined
-cross-domain progress dashboard, physical purge of tombstoned bytes, per-client storage quotas, and
-device/wearable photo import.
+Deferred: side-by-side photo comparison, the combined cross-domain progress dashboard, physical
+purge of tombstoned bytes, per-client storage quotas, and device/wearable photo import. Server-side
+thumbnails and downscaling were subsequently delivered; see
+`docs/adr/0012-progress-photo-thumbnails-v1.md`.

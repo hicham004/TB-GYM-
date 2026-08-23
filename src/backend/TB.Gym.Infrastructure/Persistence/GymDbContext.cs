@@ -82,6 +82,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
 
+    public DbSet<MediaAssetDerivative> MediaAssetDerivatives => Set<MediaAssetDerivative>();
+
     public DbSet<StrengthMaxRecord> StrengthMaxRecords => Set<StrengthMaxRecord>();
 
     public DbSet<MesocycleWorkingMaxSnapshot> MesocycleWorkingMaxSnapshots => Set<MesocycleWorkingMaxSnapshot>();

@@ -473,7 +473,20 @@
           </div>
 
           @if (openPhotoId() === photo.id && openPhotoUrl() !== null) {
-            <img class="photo-image" [src]="openPhotoUrl()" alt="Progress photo" i18n-alt />
+            <div class="photo-preview">
+              <img
+                class="photo-image"
+                [class.thumbnail]="showingThumbnail()"
+                [src]="openPhotoUrl()"
+                alt="Progress photo"
+                i18n-alt
+              />
+              @if (showingThumbnail()) {
+                <button type="button" (click)="showFullSize()" [disabled]="busy()" i18n>
+                  Load full size
+                </button>
+              }
+            </div>
           }
 
           @if (removingPhotoId === photo.id) {

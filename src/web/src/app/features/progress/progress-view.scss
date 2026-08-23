@@ -180,11 +180,24 @@
   opacity: 0.65;
 }
 
+.photo-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 0.5rem;
+}
+
 .photo-image {
   margin-block-start: 0.5rem;
   max-inline-size: 100%;
   block-size: auto;
   border-radius: 0.5rem;
+}
+
+// The rendition is 480px on its longest edge; letting it stretch wider would only display its own
+// upscaling artefacts in place of the detail the full-size image still holds.
+.photo-image.thumbnail {
+  max-inline-size: min(100%, 480px);
 }
 
 .photo-removal {

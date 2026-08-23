@@ -131,31 +131,54 @@ public static class MediaEndpoints
             HttpContext context,
             IMediaApplicationService service,
             CancellationToken cancellationToken) =>
-        {
-            if (!context.Request.Cookies.TryGetValue(MediaAccessCookie.Name, out var grant) ||
-                string.IsNullOrWhiteSpace(grant))
-            {
-                return Results.Forbid();
-            }
-
-            var result = await service.OpenContentAsync(assetId, grant, cancellationToken);
-            return result.Status switch
-            {
-                MediaContentStatus.Success => Results.Stream(
-                    result.Content!,
-                    result.ContentType,
-                    enableRangeProcessing: true),
-                MediaContentStatus.Forbidden => Results.Forbid(),
-                _ => Results.NotFound(),
-            };
-        })
+                await StreamGrantedAsync(
+                    context,
+                    grant => service.OpenContentAsync(assetId, grant, cancellationToken)))
         .WithName("StreamPrivateMedia")
         .RequireAuthorization()
         .Produces(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status403Forbidden)
         .Produces(StatusCodes.Status404NotFound);
 
+        // A thumbnail is a rendition of the asset above, not a resource of its own: it is addressed
+        // through its parent, presents the same grant cookie, and is authorized by the same check.
+        endpoints.MapGet("/api/media/{assetId:guid}/content/thumbnail", async (
+            Guid assetId,
+            HttpContext context,
+            IMediaApplicationService service,
+            CancellationToken cancellationToken) =>
+                await StreamGrantedAsync(
+                    context,
+                    grant => service.OpenThumbnailAsync(assetId, grant, cancellationToken)))
+        .WithName("StreamPrivateMediaThumbnail")
+        .RequireAuthorization()
+        .Produces(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound);
+
         return endpoints;
+    }
+
+    private static async Task<IResult> StreamGrantedAsync(
+        HttpContext context,
+        Func<string, Task<MediaContentResult>> open)
+    {
+        if (!context.Request.Cookies.TryGetValue(MediaAccessCookie.Name, out var grant) ||
+            string.IsNullOrWhiteSpace(grant))
+        {
+            return Results.Forbid();
+        }
+
+        var result = await open(grant);
+        return result.Status switch
+        {
+            MediaContentStatus.Success => Results.Stream(
+                result.Content!,
+                result.ContentType,
+                enableRangeProcessing: true),
+            MediaContentStatus.Forbidden => Results.Forbid(),
+            _ => Results.NotFound(),
+        };
     }
 
     private static async Task<IResult> StreamUploadAsync(
