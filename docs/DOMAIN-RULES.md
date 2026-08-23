@@ -369,13 +369,15 @@ correction history.
 zero/null weight. The UI renders every date in the current period and shows missing dates as
 empty.
 
-**PRG-003** On entry, the backend resolves which active subscription/program contains that
-local date and links the observation appropriately. A payload cannot attach a weight to
-another client's program or an out-of-period date.
+**PRG-003** A bodyweight observation is owned by its tenant, client, and local date and is not
+gated by commercial entitlement. Period-specific progress views may later resolve the
+authoritative subscription/program containing that date, but Phase 5A does not attach raw
+observations to a program and a payload can never attach weight to another client.
 
-**PRG-004** Week summaries use the program's date mapping. Mean bodyweight uses only valid
-observations and shows the number of observed days; missing days are never zero. A week with
-no measurements has no mean.
+**PRG-004** Phase 5A week summaries align to `Tenant.WeekStartsOn` in the workspace IANA time
+zone. Mean bodyweight uses only valid observations and shows the number of observed days;
+missing days are never zero and a week with no measurements has no mean. Mesocycle-aligned
+summaries and program date mapping are deferred.
 
 **PRG-005** End-of-mesocycle change compares explicitly defined statistics (proposed: first
 complete/available weekly mean versus last complete/available weekly mean), not arbitrary
@@ -385,6 +387,14 @@ version.
 **PRG-006** Training, diet, subscription, and progress views synchronize through shared
 identifiers and authoritative periods, not copied date fields. A period change triggers a
 validated rescheduling workflow and identifies any logs that would become out of range.
+
+**PRG-007** `BodyweightTrendEwma` v2 is a time-aware estimate with a 10-day time constant and
+a per-output-date 90-day warm-up. It is unavailable below three observations in the requested
+window. The same observation date has the same rounded estimate across display windows.
+
+**PRG-008** Personal progress is entitlement-independent, but a blocked workspace
+relationship denies coach-facing progress reads and writes without denying the client's own
+access in that workspace.
 
 ## 8. Messaging, notifications, media, and libraries
 

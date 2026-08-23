@@ -26,6 +26,7 @@ using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Training;
 using TB.Gym.Modules.Nutrition;
+using TB.Gym.Modules.Progress;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure;
@@ -145,6 +146,7 @@ public static class DependencyInjection
         services.AddScoped<IStrengthApplicationService, StrengthApplicationService>();
         services.AddScoped<ITrainingApplicationService, TrainingApplicationService>();
         services.AddScoped<INutritionApplicationService, NutritionApplicationService>();
+        services.AddScoped<IProgressApplicationService, ProgressApplicationService>();
         services.AddHttpClient<INutritionDataProvider, UsdaFoodDataCentralProvider>((provider, client) =>
         {
             var configured = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<UsdaFoodDataCentralOptions>>().Value.BaseUrl;

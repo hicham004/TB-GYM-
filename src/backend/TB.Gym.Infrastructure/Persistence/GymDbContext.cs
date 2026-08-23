@@ -42,6 +42,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<BodyweightObservation> BodyweightObservations => Set<BodyweightObservation>();
 
+    public DbSet<BodyweightCorrection> BodyweightCorrections => Set<BodyweightCorrection>();
+
     public DbSet<CoachingProduct> CoachingProducts => Set<CoachingProduct>();
 
     public DbSet<ProductOffer> ProductOffers => Set<ProductOffer>();
@@ -460,6 +462,7 @@ public sealed partial class GymDbContext(
         {
             entity.ToTable("BodyweightObservations", "progress");
             entity.HasKey(observation => observation.Id);
+            entity.HasAlternateKey(observation => new { observation.TenantId, observation.Id });
             entity.Property(observation => observation.MeasurementDate).HasColumnType("date");
             entity.Property(observation => observation.ValueKilograms).HasPrecision(7, 3);
             entity.Property(observation => observation.EnteredValue).HasPrecision(8, 3);
@@ -480,6 +483,35 @@ public sealed partial class GymDbContext(
                 tenantContext.HasTenant && observation.TenantId == tenantContext.TenantId);
             entity.ToTable(table => table.HasCheckConstraint(
                 "CK_BodyweightObservations_ValueKilograms",
+                "\"ValueKilograms\" >= 20 AND \"ValueKilograms\" <= 500"));
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<BodyweightCorrection>(entity =>
+        {
+            entity.ToTable("BodyweightCorrections", "progress");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.MeasurementDate).HasColumnType("date");
+            entity.Property(item => item.ValueKilograms).HasPrecision(7, 3);
+            entity.Property(item => item.EnteredValue).HasPrecision(8, 3);
+            entity.Property(item => item.EnteredUnit).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.Source).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(item => new { item.TenantId, item.ObservationId, item.SupersededAtUtc });
+            entity.HasOne<BodyweightObservation>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ObservationId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_BodyweightCorrections_ValueKilograms",
                 "\"ValueKilograms\" >= 20 AND \"ValueKilograms\" <= 500"));
             ConfigureAuditable(entity);
         });
@@ -509,6 +541,12 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<NutritionCalculationSnapshot>("Nutrition calculation snapshots are append-only.");
         RejectAppendOnlyMutations<MacroOverrideAudit>("Macro override audits are append-only.");
         RejectAppendOnlyMutations<AllergenConflictRecord>("Allergen conflict records are append-only.");
+        RejectAppendOnlyMutations<BodyweightCorrection>("Bodyweight correction history is append-only.");
+
+        if (ChangeTracker.Entries<BodyweightObservation>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Bodyweight observations cannot be deleted; corrections preserve history.");
+        }
 
         foreach (var entry in ChangeTracker.Entries<RecipeVersion>().Where(item => item.State == EntityState.Modified))
         {

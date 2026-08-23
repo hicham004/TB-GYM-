@@ -159,6 +159,9 @@ AI provider selection, provider SDK integration, and production clinical approva
 
 Dependencies: Phases 2-4; approved weekly summary rule.
 
+Status: Phase 5A bodyweight and workspace-aligned weight trend implemented 2026-08-22. Phase
+5B has not started.
+
 - Build dated bodyweight observations, correction history, unit conversion, one-entry-per-day
   constraint, and client/coach permissions.
 - Resolve dates to authoritative subscription/program periods on the backend.
@@ -169,6 +172,17 @@ Dependencies: Phases 2-4; approved weekly summary rule.
 
 Exit: progress remains coherent across date edits, missing days, subscriptions, diet, and
 training, with testable statistics.
+
+Phase 5A delivered the existing Phase 1 intake weight as the first progress observation,
+daily client/coach entry, canonical kg conversion with entered-unit retention, append-only
+correction history, tenant-local dates, workspace-week grids and observed-day means, and the
+time-aware `BodyweightTrendEwma` v2 estimate in client and coach views. The estimate uses a
+10-day time constant, a bounded 90-day warm-up, and a three-observation minimum. Own access is
+not entitlement-gated; coach-facing access respects relationship blocking.
+
+Explicitly deferred to Phase 5B or later: mesocycle-aligned summaries and change statistics,
+subscription/program period linking, date-adjustment impact analysis, privacy-safe exports,
+retention/deletion workflows, device imports, and any coupling to nutrition calculations.
 
 ## Phase 6: Messaging, notifications, and production media
 

@@ -1,0 +1,140 @@
+.progress-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.progress-shell.coach-panel {
+  margin-block: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.unit-picker,
+.entry-form label,
+.correction-form label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.entry-form {
+  display: grid;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: var(--surface-subtle);
+}
+
+.entry-form small,
+.trend-summary span,
+.trend-summary small,
+.week-grid span,
+.week-grid small,
+.measurement small,
+.measurement span,
+.missing-label,
+.history-panel small {
+  color: var(--muted-text);
+}
+
+.trend-summary,
+.week-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.trend-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 1rem;
+  border-inline-start: 0.25rem solid var(--accent);
+  background: var(--surface-subtle);
+}
+
+.trend-summary div,
+.week-grid article,
+.measurement {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.trend-summary small {
+  grid-column: 1 / -1;
+}
+
+.week-grid {
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.week-grid article,
+.history-panel {
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+}
+
+.day-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.day-list > article {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1fr) minmax(8rem, 1fr) minmax(8rem, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  min-height: 4rem;
+  padding: 0.75rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.day-list > article.missing {
+  opacity: 0.72;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.correction-form {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 0.6fr 2fr auto auto;
+  gap: 0.6rem;
+  align-items: end;
+  padding-block-start: 0.75rem;
+}
+
+.history-panel ol {
+  display: grid;
+  gap: 0.6rem;
+  padding-inline-start: 1.25rem;
+}
+
+.history-panel li {
+  display: grid;
+  gap: 0.2rem;
+}
+
+@media (min-width: 48rem) {
+  .entry-form {
+    grid-template-columns: 1fr 0.8fr 1.2fr auto;
+  }
+
+  .trend-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 47.99rem) {
+  .day-list > article,
+  .correction-form {
+    grid-template-columns: 1fr;
+  }
+
+  .correction-form {
+    grid-column: 1;
+  }
+}

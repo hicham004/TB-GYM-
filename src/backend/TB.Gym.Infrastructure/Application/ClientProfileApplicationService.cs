@@ -78,7 +78,12 @@ internal sealed class ClientProfileApplicationService(
         Guid clientId,
         CompleteClientOnboardingRequest request,
         CancellationToken cancellationToken) =>
-        CompleteAsync(clientId, request, returnSelf: false, cancellationToken);
+        CompleteAsync(
+            clientId,
+            request,
+            BodyweightSource.Coach,
+            returnSelf: false,
+            cancellationToken);
 
     public async Task<ClientCommandResult> CompleteSelfAsync(
         CompleteClientOnboardingRequest request,
@@ -87,7 +92,12 @@ internal sealed class ClientProfileApplicationService(
         var profile = await FindSelfAsync(cancellationToken);
         return profile is null
             ? new ClientCommandResult(ClientCommandStatus.NotFound)
-            : await CompleteAsync(profile.Id, request, returnSelf: true, cancellationToken);
+            : await CompleteAsync(
+                profile.Id,
+                request,
+                BodyweightSource.Client,
+                returnSelf: true,
+                cancellationToken);
     }
 
     public async Task<ClientCommandResult> UpdateCoachNotesAsync(
@@ -230,6 +240,7 @@ internal sealed class ClientProfileApplicationService(
     private async Task<ClientCommandResult> CompleteAsync(
         Guid clientId,
         CompleteClientOnboardingRequest request,
+        BodyweightSource bodyweightSource,
         bool returnSelf,
         CancellationToken cancellationToken)
     {
@@ -241,16 +252,19 @@ internal sealed class ClientProfileApplicationService(
             return new ClientCommandResult(ClientCommandStatus.NotFound);
         }
 
-        var existingObservation = await dbContext.BodyweightObservations.SingleOrDefaultAsync(
-            observation =>
-                observation.ClientProfileId == clientId &&
-                observation.Source == BodyweightSource.Onboarding,
-            cancellationToken);
+        var existingObservation = await dbContext.BodyweightObservations
+            .OrderBy(observation => observation.MeasurementDate)
+            .ThenBy(observation => observation.CreatedAtUtc)
+            .FirstOrDefaultAsync(
+                observation => observation.ClientProfileId == clientId,
+                cancellationToken);
         if (profile.OnboardingStatus == ClientOnboardingStatus.Completed && existingObservation is not null)
         {
-            var requestedKilograms = request.InitialBodyweightUnit == BodyweightUnit.Kilogram
-                ? request.InitialBodyweightValue
-                : request.InitialBodyweightValue * 0.45359237m;
+            var requestedKilograms = BodyweightUnitConverter.ToKilograms(
+                request.InitialBodyweightValue,
+                request.InitialBodyweightUnit == BodyweightUnit.Kilogram
+                    ? RecordedMassUnit.Kilogram
+                    : RecordedMassUnit.Pound);
             return existingObservation.MeasurementDate == request.MeasurementDate &&
                    decimal.Abs(existingObservation.ValueKilograms - requestedKilograms) < 0.001m
                 ? Success(profile, returnSelf)
@@ -265,21 +279,37 @@ internal sealed class ClientProfileApplicationService(
                 return Invalid("measurementDate", "Initial bodyweight cannot be dated in the future.");
             }
 
+            if (existingObservation is not null)
+            {
+                var requestedKilograms = BodyweightUnitConverter.ToKilograms(
+                    request.InitialBodyweightValue,
+                    request.InitialBodyweightUnit == BodyweightUnit.Kilogram
+                        ? RecordedMassUnit.Kilogram
+                        : RecordedMassUnit.Pound);
+                if (existingObservation.MeasurementDate != request.MeasurementDate ||
+                    existingObservation.ValueKilograms != requestedKilograms)
+                {
+                    return new ClientCommandResult(ClientCommandStatus.Conflict);
+                }
+            }
+
             dbContext.Entry(profile).Property(client => client.Version).OriginalValue = request.Intake.Version;
             var changedFields = profile.CompleteOnboarding(
                 request.Intake.ToInput(),
                 tenantToday,
                 clock.UtcNow);
-            var observation = BodyweightObservation.CreateInitial(
-                profile.TenantId,
-                profile.Id,
-                request.MeasurementDate,
-                request.InitialBodyweightValue,
-                request.InitialBodyweightUnit == BodyweightUnit.Kilogram
-                    ? RecordedMassUnit.Kilogram
-                    : RecordedMassUnit.Pound);
-
-            dbContext.BodyweightObservations.Add(observation);
+            if (existingObservation is null)
+            {
+                dbContext.BodyweightObservations.Add(BodyweightObservation.CreateInitial(
+                    profile.TenantId,
+                    profile.Id,
+                    request.MeasurementDate,
+                    request.InitialBodyweightValue,
+                    request.InitialBodyweightUnit == BodyweightUnit.Kilogram
+                        ? RecordedMassUnit.Kilogram
+                        : RecordedMassUnit.Pound,
+                    bodyweightSource));
+            }
             dbContext.ClientProfileChanges.Add(ClientProfileChange.Create(
                 profile.TenantId,
                 profile.Id,

@@ -42,6 +42,13 @@
 } @else if (tenants.isClient()) {
   <section class="next-action">
     <div>
+      <h2 i18n>Bodyweight progress</h2>
+      <p i18n>Record today's weight and review weekly means and the trend estimate.</p>
+    </div>
+    <a class="primary-button" routerLink="/progress" i18n>Open progress</a>
+  </section>
+  <section class="next-action">
+    <div>
       <h2 i18n>Today's training</h2>
       @if (onboardingStatus() === 'Completed') {
         <p i18n>Open the workout scheduled in this workspace.</p>

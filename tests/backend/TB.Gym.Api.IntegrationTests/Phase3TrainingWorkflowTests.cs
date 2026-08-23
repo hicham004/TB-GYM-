@@ -48,7 +48,8 @@ public sealed partial class Phase3TrainingWorkflowTests
             Database = databaseName,
         }.ConnectionString;
         var clock = new MutableTestClock(
-            TestContext.TestName.StartsWith("Phase4", StringComparison.Ordinal)
+            TestContext.TestName.StartsWith("Phase4", StringComparison.Ordinal) ||
+            TestContext.TestName.StartsWith("Phase5", StringComparison.Ordinal)
                 ? new DateTimeOffset(2026, 8, 22, 10, 0, 0, TimeSpan.Zero)
                 : DateTimeOffset.UtcNow);
         testClock = clock;

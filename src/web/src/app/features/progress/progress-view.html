@@ -1,0 +1,197 @@
+<section class="progress-shell" [class.coach-panel]="coachMode()">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow" i18n>Bodyweight progress</p>
+      <h2 i18n>{{ coachMode() ? 'Client weight trend' : 'My weight trend' }}</h2>
+      <p class="muted" i18n>
+        Weekly means use recorded days only. The trend is an estimate, not a statement about fat
+        loss or physiology.
+      </p>
+    </div>
+    <label class="unit-picker">
+      <span i18n>Display unit</span>
+      <select [(ngModel)]="displayUnit" (change)="changeDisplayUnit()">
+        <option value="Kilogram" i18n>Kilograms</option>
+        <option value="Pound" i18n>Pounds</option>
+      </select>
+    </label>
+  </div>
+
+  @if (error()) {
+    <p class="form-error" role="alert">{{ error() }}</p>
+  }
+  @if (notice()) {
+    <p class="form-success" role="status">{{ notice() }}</p>
+  }
+
+  <form class="entry-form" (ngSubmit)="record()">
+    <label>
+      <span i18n>Weight</span>
+      <input type="number" min="20" step="0.001" [(ngModel)]="entryValue" name="weight" required />
+    </label>
+    <label>
+      <span i18n>Entered unit</span>
+      <select [(ngModel)]="entryUnit" name="unit">
+        <option value="Kilogram" i18n>kg</option>
+        <option value="Pound" i18n>lb</option>
+      </select>
+    </label>
+    <label>
+      <span i18n>Measurement date</span>
+      <input type="date" [(ngModel)]="entryDate" name="date" />
+      <small i18n>Leave blank for today in the workspace time zone.</small>
+    </label>
+    <button class="primary-button" type="submit" [disabled]="busy()" i18n>Record weight</button>
+  </form>
+
+  @if (loading()) {
+    <p class="loading-row" i18n>Loading bodyweight progress...</p>
+  } @else if (progress(); as view) {
+    <div class="trend-summary">
+      <div>
+        <span i18n>Latest trend estimate</span>
+        <strong>
+          @if (view.trend.latestDisplayEstimate !== null) {
+            {{ view.trend.latestDisplayEstimate | number: '1.1-3' }}
+            {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}
+          } @else {
+            <span i18n>Not enough data</span>
+          }
+        </strong>
+      </div>
+      <div>
+        <span i18n>Recorded samples</span>
+        <strong>{{ view.trend.sampleCount }}</strong>
+      </div>
+      <div>
+        <span i18n>Estimate strategy</span>
+        <strong>{{ view.trend.methodKey }} v{{ view.trend.methodVersion }}</strong>
+      </div>
+      <small i18n>
+        Window {{ view.trend.windowStart | date: 'mediumDate' : 'UTC' }} to
+        {{ view.trend.windowEndExclusive | date: 'mediumDate' : 'UTC' }} · time constant
+        {{ view.trend.timeConstantDays }} days · {{ view.trend.warmupDays }}-day warm-up
+        @if (view.trend.availability === 'NotEnoughData') {
+          · needs {{ view.trend.minimumSampleCount - view.trend.sampleCount }} more observations
+        }
+      </small>
+    </div>
+
+    <div class="week-grid" aria-label="Weekly bodyweight averages" i18n-aria-label>
+      @for (week of view.weeks; track week.weekStart) {
+        <article>
+          <span>{{ week.weekStart | date: 'mediumDate' : 'UTC' }}</span>
+          <strong>
+            @if (week.displayMean !== null) {
+              {{ week.displayMean | number: '1.1-3' }}
+              {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}
+            } @else {
+              —
+            }
+          </strong>
+          <small i18n>{{ week.observedDayCount }} observed days</small>
+        </article>
+      }
+    </div>
+
+    <div class="day-list">
+      @for (day of view.days; track day.date) {
+        <article [class.missing]="!day.observation">
+          <time [attr.datetime]="day.date">{{ day.date | date: 'EEE, mediumDate' : 'UTC' }}</time>
+          @if (day.observation; as observation) {
+            <div class="measurement">
+              <strong>
+                {{ day.displayValue | number: '1.1-3' }}
+                {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}
+              </strong>
+              <small i18n>
+                Entered {{ observation.enteredValue | number: '1.1-3' }}
+                {{ observation.enteredUnit === 'Kilogram' ? 'kg' : 'lb' }} by
+                {{ observation.source === 'Coach' ? 'coach' : 'client' }}
+              </small>
+            </div>
+            @if (day.trendEstimate !== null) {
+              <div class="measurement trend">
+                <span i18n>Trend estimate</span>
+                <strong>
+                  {{ day.trendEstimate | number: '1.1-3' }}
+                  {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}
+                </strong>
+              </div>
+            }
+            <div class="row-actions">
+              <button class="quiet-button" type="button" (click)="showHistory(observation.id)" i18n>
+                History
+              </button>
+              <button
+                class="quiet-button"
+                type="button"
+                (click)="beginCorrection(observation)"
+                i18n
+              >
+                Correct
+              </button>
+            </div>
+            @if (correctingId === observation.id) {
+              <form class="correction-form" (ngSubmit)="correct(observation)">
+                <label
+                  ><span i18n>Corrected value</span
+                  ><input
+                    type="number"
+                    min="20"
+                    step="0.001"
+                    [(ngModel)]="correctionValue"
+                    name="correctedValue"
+                    required
+                /></label>
+                <label
+                  ><span i18n>Unit</span
+                  ><select [(ngModel)]="correctionUnit" name="correctedUnit">
+                    <option value="Kilogram">kg</option>
+                    <option value="Pound">lb</option>
+                  </select></label
+                >
+                <label
+                  ><span i18n>Reason</span
+                  ><input maxlength="500" [(ngModel)]="correctionReason" name="reason" required
+                /></label>
+                <button class="primary-button" type="submit" [disabled]="busy()" i18n>
+                  Save correction
+                </button>
+                <button class="quiet-button" type="button" (click)="cancelCorrection()" i18n>
+                  Cancel
+                </button>
+              </form>
+            }
+          } @else {
+            <span class="missing-label" i18n>No observation</span>
+          }
+        </article>
+      }
+    </div>
+
+    @if (history(); as record) {
+      <section class="history-panel">
+        <h3 i18n>
+          Correction history for {{ record.current.measurementDate | date: 'mediumDate' : 'UTC' }}
+        </h3>
+        @if (record.previousValues.length === 0) {
+          <p class="muted" i18n>No corrections have been made.</p>
+        } @else {
+          <ol>
+            @for (item of record.previousValues; track item.id) {
+              <li>
+                <strong
+                  >{{ item.enteredValue | number: '1.1-3' }}
+                  {{ item.enteredUnit === 'Kilogram' ? 'kg' : 'lb' }}</strong
+                >
+                <span>{{ item.reason }}</span>
+                <small i18n>Superseded {{ item.supersededAtUtc | date: 'medium' }}</small>
+              </li>
+            }
+          </ol>
+        }
+      </section>
+    }
+  }
+</section>

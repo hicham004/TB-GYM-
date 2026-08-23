@@ -36,6 +36,7 @@
         }
         @if (tenants.isClient()) {
           <a routerLink="/training/today" routerLinkActive="active" i18n>Today</a>
+          <a routerLink="/progress" routerLinkActive="active" i18n>Progress</a>
           <a routerLink="/profile" routerLinkActive="active" i18n>My profile</a>
         }
         @if (tenants.isOwner()) {

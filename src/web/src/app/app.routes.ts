@@ -65,6 +65,13 @@ export const routes: Routes = [
       import('./features/profile/client-profile').then((module) => module.ClientProfilePage),
   },
   {
+    path: 'progress',
+    canActivate: [authGuard, clientGuard],
+    title: $localize`My bodyweight progress | TB Gym`,
+    loadComponent: () =>
+      import('./features/progress/progress-view').then((module) => module.ProgressView),
+  },
+  {
     path: 'workspace',
     canActivate: [authGuard, ownerGuard],
     title: $localize`Workspace settings | TB Gym`,

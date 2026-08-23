@@ -31,6 +31,8 @@
 } @else if (profile(); as client) {
   <app-client-commercial [client]="client" (profileChanged)="commercialProfileChanged($event)" />
 
+  <app-progress-view [clientId]="client.id" />
+
   <app-client-training [clientId]="client.id" />
 
   <app-client-nutrition [clientId]="client.id" />

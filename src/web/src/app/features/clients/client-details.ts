@@ -16,6 +16,7 @@ import { ClientIntakeForm } from './client-intake-form';
 import { ClientCommercial } from '../commercial/client-commercial';
 import { ClientTraining } from '../training/client-training';
 import { ClientNutrition } from '../nutrition/client-nutrition';
+import { ProgressView } from '../progress/progress-view';
 
 @Component({
   selector: 'app-client-details',
@@ -24,6 +25,7 @@ import { ClientNutrition } from '../nutrition/client-nutrition';
     ClientIntakeForm,
     ClientTraining,
     ClientNutrition,
+    ProgressView,
     ReactiveFormsModule,
     RouterLink,
   ],

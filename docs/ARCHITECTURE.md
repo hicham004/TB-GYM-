@@ -1,6 +1,6 @@
 # TB Gym Architecture
 
-Status: Phase 4 nutrition engine implemented, 2026-08-22
+Status: Phase 5A bodyweight and weight trend implemented, 2026-08-22
 
 ## 1. Architectural style
 
@@ -116,6 +116,15 @@ plan graph and calculation snapshot reference; actual consumption is stored sepa
 The module owns calculation, preparation-basis, allergen, AI-review, and coverage policy.
 Infrastructure owns EF persistence and the USDA FoodData Central HTTP adapter. See
 `docs/adr/0008-nutrition-engine-v1.md`.
+
+Progress Phase 5A extends the Phase 1 `BodyweightObservation` rather than introducing another
+profile weight. It stores canonical kilograms plus the entered value/unit, keeps one current
+row per tenant/client/local date, and appends prior-value correction records. Client logging
+and history are membership-scoped but deliberately independent of coaching entitlements;
+coach views require a coach role, a tenant-local client, and an unblocked workspace
+relationship. Workspace-aligned weekly means and the time-aware `BodyweightTrendEwma` v2
+estimate read Progress data only and do not recalculate or mutate Nutrition. See
+`docs/adr/0009-bodyweight-and-trend-v1.md`.
 
 ## 5. Multi-tenancy
 
