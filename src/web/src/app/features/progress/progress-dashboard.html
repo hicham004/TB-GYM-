@@ -1,0 +1,178 @@
+<section class="dashboard">
+  <h2 i18n>Progress dashboard</h2>
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  @if (loading()) {
+    <p i18n>Loading the progress dashboard…</p>
+  } @else if (dashboard(); as view) {
+    <p class="window">
+      <ng-container i18n
+        >{{ view.from | date: 'mediumDate' }} to {{ view.toExclusive | date: 'mediumDate' }},
+        {{ view.windowDayCount }} days ({{ view.timeZoneId }})</ng-container
+      >
+    </p>
+
+    @if (view.isEmpty) {
+      <p class="empty" i18n>Nothing has been recorded in this period yet.</p>
+    }
+
+    <article class="panel">
+      <h3 i18n>Bodyweight</h3>
+      @if (view.bodyweight.latestDisplayValue === null) {
+        <p class="empty" i18n>No bodyweight recorded in this period.</p>
+      } @else {
+        <p class="figure">
+          {{ view.bodyweight.latestDisplayValue | number: '1.0-2' }}
+          <span class="unit">{{ view.displayUnit }}</span>
+        </p>
+        <p class="detail" i18n>Latest on {{ view.bodyweight.latestDate | date: 'mediumDate' }}</p>
+        @if (view.bodyweight.change; as change) {
+          <p class="detail" i18n>
+            Change of {{ change.delta | number: '1.0-2' }} from
+            {{ change.fromDate | date: 'mediumDate' }} to {{ change.toDate | date: 'mediumDate' }}
+          </p>
+        }
+        @if (view.bodyweight.trendIsAvailable && view.bodyweight.trendEstimate !== null) {
+          <p class="detail" i18n>
+            Trend estimate {{ view.bodyweight.trendEstimate | number: '1.0-2' }}
+          </p>
+        }
+        <p class="detail" i18n>
+          Weighed on {{ view.bodyweight.observedDayCount }} of {{ view.windowDayCount }} days
+        </p>
+        <ul class="weeks">
+          @for (week of view.bodyweight.weeks; track week.weekStart) {
+            @if (week.displayMean !== null) {
+              <li>
+                <span>{{ week.weekStart | date: 'mediumDate' }}</span>
+                <span>{{ week.displayMean | number: '1.0-2' }}</span>
+                <span class="detail" i18n>from {{ week.observedDayCount }} days</span>
+              </li>
+            }
+          }
+        </ul>
+      }
+    </article>
+
+    <article class="panel">
+      <h3 i18n>Body measurements</h3>
+      @if (view.measurements.length === 0) {
+        <p class="empty" i18n>No measurements recorded in this period.</p>
+      } @else {
+        <ul class="measurements">
+          @for (measurement of view.measurements; track measurement.measurementType) {
+            <li>
+              <span class="label">{{ measurement.measurementType }}</span>
+              <span class="figure"
+                >{{ measurement.latestDisplayValue | number: '1.0-2' }}
+                <span class="unit">{{ measurement.displayUnit }}</span></span
+              >
+              @if (measurement.change; as change) {
+                <span class="detail" i18n
+                  >change {{ change.delta | number: '1.0-2' }} over
+                  {{ measurement.observationCount }} entries</span
+                >
+              } @else {
+                <span class="detail" i18n>{{ measurement.observationCount }} entry</span>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </article>
+
+    <article class="panel">
+      <h3 i18n>Photos</h3>
+      @if (view.photos.photoCount === 0) {
+        <p class="empty" i18n>No progress photos in this period.</p>
+      } @else {
+        @if (view.photos.missingThumbnailCount > 0) {
+          <p class="detail" i18n>
+            {{ view.photos.missingThumbnailCount }} of {{ view.photos.photoCount }} photos have no
+            preview and can only be opened from the progress page.
+          </p>
+        }
+        @for (pose of view.photos.poses; track pose.pose) {
+          <div class="pose">
+            <h4>{{ pose.pose }}</h4>
+            <ul class="timeline">
+              @for (photo of pose.photos; track photo.id) {
+                <li>
+                  @if (photo.thumbnailUrl === null) {
+                    <span class="no-preview" i18n>Preview unavailable</span>
+                  } @else {
+                    <img
+                      class="thumbnail"
+                      [src]="photo.thumbnailUrl"
+                      alt="Progress photo preview"
+                      i18n-alt
+                      loading="lazy"
+                    />
+                  }
+                  <span class="detail">{{ photo.photoDate | date: 'mediumDate' }}</span>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+      }
+    </article>
+
+    <article class="panel">
+      <h3 i18n>Nutrition logging</h3>
+      @if (!view.nutrition.available) {
+        <p class="unavailable">{{ unavailableReason(view.nutrition.reason) }}</p>
+      } @else if (view.nutrition.context; as nutrition) {
+        <p class="figure" i18n>
+          Logged on {{ nutrition.recentLoggedDayCount }} of the last
+          {{ nutrition.recentDayCount }} days
+        </p>
+        <p class="detail" i18n>
+          {{ nutrition.recentCompletedDayCount }} of those days were completed
+        </p>
+        <p class="detail" i18n>
+          {{ nutrition.windowLoggedDayCount }} logged days in this period of
+          {{ view.windowDayCount }}
+        </p>
+        @if (nutrition.lastLoggedDate !== null) {
+          <p class="detail" i18n>Last logged {{ nutrition.lastLoggedDate | date: 'mediumDate' }}</p>
+        }
+      }
+    </article>
+
+    <article class="panel">
+      <h3 i18n>Training</h3>
+      @if (!view.training.available) {
+        <p class="unavailable">{{ unavailableReason(view.training.reason) }}</p>
+      } @else if (view.training.context; as training) {
+        <p class="figure" i18n>
+          {{ training.recentCompletedWorkoutCount }} of
+          {{ training.recentScheduledSessionCount }} sessions completed in the last
+          {{ training.recentDayCount }} days
+        </p>
+        <p class="detail" i18n>
+          {{ training.windowCompletedWorkoutCount }} of
+          {{ training.windowScheduledSessionCount }} scheduled sessions completed in this period
+        </p>
+        @if (training.windowInProgressWorkoutCount > 0) {
+          <p class="detail" i18n>
+            {{ training.windowInProgressWorkoutCount }} workouts still in progress
+          </p>
+        }
+        @if (training.lastCompletedDate !== null) {
+          <p class="detail" i18n>
+            Last completed {{ training.lastCompletedDate | date: 'mediumDate' }}
+          </p>
+        }
+      }
+    </article>
+
+    <p class="footnote" i18n>
+      These figures are recorded observations shown side by side. They are not combined, and no
+      relationship between them is implied.
+    </p>
+  }
+</section>

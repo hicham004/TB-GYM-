@@ -193,9 +193,15 @@ parent media asset, rendered from the already-sanitised pixels, served on the ex
 content route, and authorized by the same check as the original. See
 `docs/adr/0012-progress-photo-thumbnails-v1.md`.
 
-Explicitly deferred to a later phase: the combined cross-domain progress dashboard, photo
-comparison, physical purge of tombstoned bytes, per-client storage quotas, counting derivative
-bytes toward the workspace quota, and device/wearable import. Previously deferred:
+Phase 5B-4 adds the combined progress dashboard as a read-side projection with no tables of its
+own: bodyweight, measurements and photo timelines composed in Infrastructure alongside nutrition
+and training context, where each cross-domain section is gated on its own
+`ICoachingFeatureAccessService` decision and reports counts against explicit denominators. See
+`docs/adr/0013-progress-dashboard-v1.md`.
+
+Explicitly deferred to a later phase: photo comparison, physical purge of tombstoned bytes,
+per-client storage quotas, counting derivative bytes toward the workspace quota, correcting a
+mis-dated bodyweight observation, and device/wearable import. Previously deferred:
 mesocycle-aligned summaries and change statistics, subscription/program period linking,
 date-adjustment impact analysis, privacy-safe exports, retention/deletion workflows, device
 imports, and any coupling to nutrition calculations.

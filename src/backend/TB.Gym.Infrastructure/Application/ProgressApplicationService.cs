@@ -7,12 +7,13 @@ using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
-internal sealed class ProgressApplicationService(
+internal sealed partial class ProgressApplicationService(
     GymDbContext dbContext,
     IClock clock,
     ICurrentUser currentUser,
     ITenantContext tenantContext,
-    IMediaApplicationService mediaService)
+    IMediaApplicationService mediaService,
+    ICoachingFeatureAccessService featureAccessService)
     : IProgressApplicationService
 {
     private const int DefaultWindowDays = 84;

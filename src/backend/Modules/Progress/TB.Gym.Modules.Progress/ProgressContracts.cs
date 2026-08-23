@@ -24,6 +24,8 @@ public interface IProgressApplicationService
     Task<ProgressPhotosView?> GetClientPhotosAsync(Guid clientProfileId, DateOnly? from, DateOnly? endExclusive, CancellationToken cancellationToken);
     Task<ProgressPhotoCommandResult> RemoveOwnPhotoAsync(Guid photoId, RemoveProgressPhotoRequest request, CancellationToken cancellationToken);
     Task<ProgressPhotoCommandResult> RemovePhotoForClientAsync(Guid clientProfileId, Guid photoId, RemoveProgressPhotoRequest request, CancellationToken cancellationToken);
+    Task<ProgressDashboardView?> GetOwnDashboardAsync(DateOnly? from, DateOnly? endExclusive, RecordedMassUnit displayUnit, MeasurementUnit measurementDisplayUnit, CancellationToken cancellationToken);
+    Task<ProgressDashboardView?> GetClientDashboardAsync(Guid clientProfileId, DateOnly? from, DateOnly? endExclusive, RecordedMassUnit displayUnit, MeasurementUnit measurementDisplayUnit, CancellationToken cancellationToken);
 }
 
 /// <summary>

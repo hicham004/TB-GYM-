@@ -24,6 +24,7 @@ import {
   mapProgressPhotos,
 } from '../../features/progress/progress.models';
 import type { ProgressPhotoPose } from '../../features/progress/progress.models';
+import { mapProgressDashboard } from '../../features/progress/progress-dashboard.models';
 import type {
   ClientCommercialOverview as ContractClientCommercialOverview,
   ClientEnrollmentView as ContractClientEnrollmentView,
@@ -892,6 +893,26 @@ export class ApiClient {
       .pipe(map(mapHistory));
   }
 
+  getMyProgressDashboard(from: string | null = null, to: string | null = null) {
+    return this.http
+      .get<Phase3Contracts.ProgressDashboardView>('/api/progress/me/dashboard', {
+        params: progressWindowParams(from, to),
+      })
+      .pipe(map(mapProgressDashboard));
+  }
+
+  getClientProgressDashboard(
+    clientId: string,
+    from: string | null = null,
+    to: string | null = null,
+  ) {
+    return this.http
+      .get<Phase3Contracts.ProgressDashboardView>(`/api/progress/clients/${clientId}/dashboard`, {
+        params: progressWindowParams(from, to),
+      })
+      .pipe(map(mapProgressDashboard));
+  }
+
   getMyProgressPhotos() {
     return this.http
       .get<Phase3Contracts.ProgressPhotosView>('/api/progress/me/photos')
@@ -1141,4 +1162,19 @@ function progressPhotoParams(
   photoDate: string | null,
 ): Record<string, string> {
   return photoDate === null ? { pose } : { pose, photoDate };
+}
+
+// Omitted bounds let the server apply the shared progress window defaults rather than the client
+// guessing at them.
+function progressWindowParams(from: string | null, to: string | null): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (from !== null) {
+    params['from'] = from;
+  }
+
+  if (to !== null) {
+    params['to'] = to;
+  }
+
+  return params;
 }

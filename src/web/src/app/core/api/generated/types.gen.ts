@@ -638,6 +638,95 @@ export type CurrentUserResponse = {
 
 export type DailyNutritionLogStatus = 'InProgress' | 'Completed';
 
+export type DashboardBodyweightSection = {
+  latest: null | BodyweightObservationView;
+  latestDisplayValue: null | number | string;
+  change: null | DashboardChange;
+  weeks: Array<BodyweightWeekView>;
+  trend: BodyweightTrendView;
+  observedDayCount: number | string;
+};
+
+export type DashboardChange = {
+  fromDate: string;
+  fromValue: number | string;
+  toDate: string;
+  toValue: number | string;
+  delta: number | string;
+};
+
+export type DashboardEntitledSectionOfDashboardNutritionContext = {
+  feature: CoachingFeature;
+  availability: DashboardSectionAvailability;
+  reason: FeatureAccessReason;
+  context: null | DashboardNutritionContext;
+};
+
+export type DashboardEntitledSectionOfDashboardTrainingContext = {
+  feature: CoachingFeature;
+  availability: DashboardSectionAvailability;
+  reason: FeatureAccessReason;
+  context: null | DashboardTrainingContext;
+};
+
+export type DashboardMeasurementsSection = {
+  measurements: Array<DashboardMeasurementSummary>;
+  observedDayCount: number | string;
+};
+
+export type DashboardMeasurementSummary = {
+  measurementType: MeasurementType;
+  displayUnit: MeasurementUnit;
+  latestDate: string;
+  latestDisplayValue: number | string;
+  change: null | DashboardChange;
+  observationCount: number | string;
+};
+
+export type DashboardNutritionContext = {
+  recentFrom: string;
+  recentToExclusive: string;
+  recentDayCount: number | string;
+  recentLoggedDayCount: number | string;
+  recentCompletedDayCount: number | string;
+  windowLoggedDayCount: number | string;
+  windowCompletedDayCount: number | string;
+  lastLoggedDate: null | string;
+};
+
+export type DashboardPhotoPoseTimeline = {
+  pose: ProgressPhotoPose;
+  photos: Array<DashboardPhotoView>;
+};
+
+export type DashboardPhotosSection = {
+  poses: Array<DashboardPhotoPoseTimeline>;
+  photoCount: number | string;
+  missingThumbnailCount: number | string;
+};
+
+export type DashboardPhotoView = {
+  id: string;
+  photoDate: string;
+  pose: ProgressPhotoPose;
+  mediaAssetId: string;
+  thumbnailUrl: null | string;
+};
+
+export type DashboardSectionAvailability = 'Available' | 'Unavailable';
+
+export type DashboardTrainingContext = {
+  recentFrom: string;
+  recentToExclusive: string;
+  recentDayCount: number | string;
+  recentScheduledSessionCount: number | string;
+  recentCompletedWorkoutCount: number | string;
+  windowScheduledSessionCount: number | string;
+  windowCompletedWorkoutCount: number | string;
+  windowInProgressWorkoutCount: number | string;
+  lastCompletedDate: null | string;
+};
+
 export type DayOfWeek =
   'Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
 
@@ -1235,6 +1324,22 @@ export type ProgramTemplateVersionView = {
   description: null | string;
   isPublished: boolean;
   weeks: Array<TrainingWeekView>;
+};
+
+export type ProgressDashboardView = {
+  clientProfileId: string;
+  timeZoneId: string;
+  weekStartsOn: DayOfWeek;
+  from: string;
+  toExclusive: string;
+  windowDayCount: number | string;
+  displayUnit: RecordedMassUnit;
+  measurementDisplayUnit: MeasurementUnit;
+  bodyweight: DashboardBodyweightSection;
+  measurements: DashboardMeasurementsSection;
+  photos: DashboardPhotosSection;
+  nutrition: DashboardEntitledSectionOfDashboardNutritionContext;
+  training: DashboardEntitledSectionOfDashboardTrainingContext;
 };
 
 export type ProgressionPreviewRequest = {
@@ -5145,6 +5250,42 @@ export type RemoveOwnProgressPhotoResponses = {
 export type RemoveOwnProgressPhotoResponse =
   RemoveOwnProgressPhotoResponses[keyof RemoveOwnProgressPhotoResponses];
 
+export type GetOwnProgressDashboardData = {
+  body?: never;
+  path?: never;
+  query?: {
+    from?: string;
+    to?: string;
+    displayUnit?: RecordedMassUnit;
+    measurementDisplayUnit?: MeasurementUnit;
+  };
+  url: '/api/progress/me/dashboard';
+};
+
+export type GetOwnProgressDashboardErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type GetOwnProgressDashboardError =
+  GetOwnProgressDashboardErrors[keyof GetOwnProgressDashboardErrors];
+
+export type GetOwnProgressDashboardResponses = {
+  /**
+   * OK
+   */
+  200: ProgressDashboardView;
+};
+
+export type GetOwnProgressDashboardResponse =
+  GetOwnProgressDashboardResponses[keyof GetOwnProgressDashboardResponses];
+
 export type GetClientProgressData = {
   body?: never;
   path: {
@@ -5565,6 +5706,44 @@ export type RemoveClientProgressPhotoResponses = {
 
 export type RemoveClientProgressPhotoResponse =
   RemoveClientProgressPhotoResponses[keyof RemoveClientProgressPhotoResponses];
+
+export type GetClientProgressDashboardData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query?: {
+    from?: string;
+    to?: string;
+    displayUnit?: RecordedMassUnit;
+    measurementDisplayUnit?: MeasurementUnit;
+  };
+  url: '/api/progress/clients/{clientProfileId}/dashboard';
+};
+
+export type GetClientProgressDashboardErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type GetClientProgressDashboardError =
+  GetClientProgressDashboardErrors[keyof GetClientProgressDashboardErrors];
+
+export type GetClientProgressDashboardResponses = {
+  /**
+   * OK
+   */
+  200: ProgressDashboardView;
+};
+
+export type GetClientProgressDashboardResponse =
+  GetClientProgressDashboardResponses[keyof GetClientProgressDashboardResponses];
 
 export type ListMediaAssetsData = {
   body?: never;

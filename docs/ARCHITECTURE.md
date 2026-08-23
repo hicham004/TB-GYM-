@@ -190,6 +190,11 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   dates, enrollment lifecycle, and payment on every protected feature request.
 - Access denies by default and returns a stable reason code. Angular may explain that reason
   but cannot override it.
+- A read that composes across domains evaluates access per section, for the feature that owns
+  each section's data, before reading it. Progress data is deliberately entitlement-independent
+  and stays readable; a section whose feature is gated is returned present, explicitly
+  unavailable, with its reason and no content. Omitting it would be indistinguishable from
+  emptiness, and populating it would leak exactly what the entitlement gates.
 
 Legal document versions are global identity records, while a workspace consent acceptance is
 contextual. Listing current documents accepts an optional workspace context, verifies active

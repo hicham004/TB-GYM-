@@ -196,6 +196,25 @@ public static class ProgressEndpoints
             return ToPhotoResult(await service.RemoveOwnPhotoAsync(photoId, request, token));
         }).WithName("RemoveOwnProgressPhoto").Produces<ProgressPhotoView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
 
+        client.MapGet("/dashboard", async (
+            DateOnly? from,
+            DateOnly? to,
+            RecordedMassUnit? displayUnit,
+            MeasurementUnit? measurementDisplayUnit,
+            IProgressApplicationService service,
+            CancellationToken token) =>
+            await DashboardAsync(token => service.GetOwnDashboardAsync(
+                from,
+                to,
+                displayUnit ?? RecordedMassUnit.Kilogram,
+                measurementDisplayUnit ?? MeasurementUnit.Centimetre,
+                token),
+                token))
+        .WithName("GetOwnProgressDashboard")
+        .Produces<ProgressDashboardView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status404NotFound);
+
         var coach = endpoints.MapGroup("/api/progress/clients/{clientProfileId:guid}")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
             .WithTags(ProgressModule.Name);
@@ -391,7 +410,50 @@ public static class ProgressEndpoints
             return ToPhotoResult(await service.RemovePhotoForClientAsync(clientProfileId, photoId, request, token));
         }).WithName("RemoveClientProgressPhoto").Produces<ProgressPhotoView>().ProducesValidationProblem().Produces(StatusCodes.Status403Forbidden).ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
 
+        coach.MapGet("/dashboard", async (
+            Guid clientProfileId,
+            DateOnly? from,
+            DateOnly? to,
+            RecordedMassUnit? displayUnit,
+            MeasurementUnit? measurementDisplayUnit,
+            IProgressApplicationService service,
+            CancellationToken token) =>
+            await DashboardAsync(token => service.GetClientDashboardAsync(
+                clientProfileId,
+                from,
+                to,
+                displayUnit ?? RecordedMassUnit.Kilogram,
+                measurementDisplayUnit ?? MeasurementUnit.Centimetre,
+                token),
+                token))
+        .WithName("GetClientProgressDashboard")
+        .Produces<ProgressDashboardView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status404NotFound);
+
         return endpoints;
+    }
+
+    /// <summary>
+    /// Shares the existing progress range handling so an invalid window is a 400 here exactly as it
+    /// is on every other progress read, rather than a second convention.
+    /// </summary>
+    private static async Task<IResult> DashboardAsync(
+        Func<CancellationToken, Task<ProgressDashboardView?>> read,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var view = await read(cancellationToken);
+            return view is null ? Results.NotFound() : Results.Ok(view);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["range"] = [exception.Message],
+            });
+        }
     }
 
     private static IResult ToResult(ProgressCommandResult result) => result.Status switch

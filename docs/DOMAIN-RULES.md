@@ -454,6 +454,17 @@ always JPEG at quality 80 even when the parent is a PNG. Length and SHA-256 are 
 derivative. Renditions are signature-validated and scanned like any stored object; a rendition the
 scanner refuses fails the whole upload closed. Exercise media has no rendition and is unchanged.
 
+**PRG-009** The combined dashboard is a read-side projection that owns no data and no tables. It
+reuses the progress window rules, workspace time zone and `WeekStartsOn` unchanged, and its
+coach-facing read treats an unknown client and a blocked relationship alike. Bodyweight,
+measurements and photos remain entitlement-independent. Every cross-domain section evaluates
+`ICoachingFeatureAccessService` for its own feature before reading anything, and an unentitled
+section is returned present, explicitly unavailable, with the deciding reason and no content: never
+omitted, never partly populated. Photo timelines address only the thumbnail rendition, and a photo
+without one is reported as having no preview rather than falling back to the original. Counts are
+reported with the span they were counted over; no adherence score, percentage, streak or rating is
+derived, and no relationship between domains is stated or implied.
+
 **MED-005** Upload bodies are streamed with explicit application and Nginx limits, endpoint
 rate/concurrency controls, and a configurable workspace-byte quota. Deleting historically
 referenced media creates a tombstone and retains bytes. A later retention worker may purge
