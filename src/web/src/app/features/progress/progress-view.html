@@ -131,6 +131,9 @@
               >
                 Correct
               </button>
+              <button class="quiet-button" type="button" (click)="beginRedate(observation)" i18n>
+                Wrong date
+              </button>
             </div>
             @if (correctingId === observation.id) {
               <form class="correction-form" (ngSubmit)="correct(observation)">
@@ -163,6 +166,28 @@
                 </button>
               </form>
             }
+            @if (redatingId === observation.id) {
+              <form class="correction-form" (ngSubmit)="redate(observation)">
+                <p class="muted" i18n>
+                  The same weight moves to the date it was taken. This entry is kept as a voided
+                  record, not deleted.
+                </p>
+                <label
+                  ><span i18n>Correct date</span
+                  ><input type="date" [(ngModel)]="redateDate" name="redateDate" required
+                /></label>
+                <label
+                  ><span i18n>Reason</span
+                  ><input maxlength="500" [(ngModel)]="redateReason" name="redateReason" required
+                /></label>
+                <button class="primary-button" type="submit" [disabled]="busy()" i18n>
+                  Move to that date
+                </button>
+                <button class="quiet-button" type="button" (click)="cancelRedate()" i18n>
+                  Cancel
+                </button>
+              </form>
+            }
           } @else {
             <span class="missing-label" i18n>No observation</span>
           }
@@ -170,11 +195,28 @@
       }
     </div>
 
+    @if (correction(); as moved) {
+      <section class="history-panel">
+        <h3 i18n>Date corrected</h3>
+        <p i18n>
+          {{ moved.voided.measurementDate | date: 'mediumDate' : 'UTC' }} moved to
+          {{ moved.replacement.measurementDate | date: 'mediumDate' : 'UTC' }}. The original entry
+          is retained as a voided record.
+        </p>
+        <p class="muted">{{ moved.void.reason }}</p>
+      </section>
+    }
+
     @if (history(); as record) {
       <section class="history-panel">
         <h3 i18n>
           Correction history for {{ record.current.measurementDate | date: 'mediumDate' : 'UTC' }}
         </h3>
+        @if (record.void; as voided) {
+          <p class="muted" i18n>
+            This entry was voided on {{ voided.voidedAtUtc | date: 'medium' }}: {{ voided.reason }}
+          </p>
+        }
         @if (record.previousValues.length === 0) {
           <p class="muted" i18n>No corrections have been made.</p>
         } @else {

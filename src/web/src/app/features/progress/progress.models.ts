@@ -2,7 +2,9 @@ import type {
   BodyMeasurementHistoryView as ContractMeasurementHistory,
   BodyMeasurementsView as ContractMeasurements,
   BodyMeasurementView as ContractMeasurement,
+  BodyweightDateCorrectionView as ContractDateCorrection,
   BodyweightHistoryView as ContractHistory,
+  BodyweightObservationStatus,
   BodyweightObservationView as ContractObservation,
   MediaAccessView as ContractMediaAccess,
   ProgressView as ContractProgress,
@@ -72,7 +74,24 @@ export interface BodyweightObservation {
   source: 'Client' | 'Coach' | 'DeviceImport';
   recordedByUserId: string | null;
   recordedAtUtc: string;
+  status: BodyweightObservationStatus;
   version: number;
+}
+
+/** Why an observation was withdrawn, and what replaced it. */
+export interface BodyweightVoid {
+  id: string;
+  reason: string;
+  voidedByUserId: string;
+  voidedAtUtc: string;
+  replacementObservationId: string | null;
+}
+
+/** Both halves of one void-and-replace, so the UI can show what moved where. */
+export interface BodyweightDateCorrection {
+  replacement: BodyweightObservation;
+  voided: BodyweightObservation;
+  void: BodyweightVoid;
 }
 
 export interface BodyweightHistoryItem {
@@ -91,6 +110,8 @@ export interface BodyweightHistoryItem {
 export interface BodyweightHistory {
   current: BodyweightObservation;
   previousValues: BodyweightHistoryItem[];
+  /** Present only for a voided entry; history keeps showing it so the correction stays visible. */
+  void: BodyweightVoid | null;
 }
 
 export interface ProgressViewModel {
@@ -175,6 +196,15 @@ export function mapHistory(value: ContractHistory): BodyweightHistory {
       valueKilograms: Number(item.valueKilograms),
       enteredValue: Number(item.enteredValue),
     })),
+    void: value.void ?? null,
+  };
+}
+
+export function mapDateCorrection(value: ContractDateCorrection): BodyweightDateCorrection {
+  return {
+    replacement: mapObservation(value.replacement),
+    voided: mapObservation(value.voided),
+    void: value.void,
   };
 }
 

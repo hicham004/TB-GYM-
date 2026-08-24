@@ -69,6 +69,18 @@ public static class ProgressEndpoints
             return ToResult(await service.CorrectOwnAsync(observationId, request, token));
         }).WithName("CorrectOwnBodyweight").Produces<BodyweightHistoryView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
 
+        client.MapPost("/bodyweight/{observationId:guid}/replace-date", async (
+            Guid observationId,
+            ReplaceBodyweightDateRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IProgressApplicationService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.ReplaceOwnBodyweightDateAsync(observationId, request, token));
+        }).WithName("ReplaceOwnBodyweightDate").Produces<BodyweightDateCorrectionView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
+
         client.MapGet("/bodyweight/{observationId:guid}/history", async (
             Guid observationId,
             IProgressApplicationService service,
@@ -266,6 +278,23 @@ public static class ProgressEndpoints
             return ToResult(await service.CorrectForClientAsync(clientProfileId, observationId, request, token));
         }).WithName("CorrectClientBodyweight").Produces<BodyweightHistoryView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status403Forbidden).ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
 
+        coach.MapPost("/bodyweight/{observationId:guid}/replace-date", async (
+            Guid clientProfileId,
+            Guid observationId,
+            ReplaceBodyweightDateRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IProgressApplicationService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.ReplaceBodyweightDateForClientAsync(
+                clientProfileId,
+                observationId,
+                request,
+                token));
+        }).WithName("ReplaceClientBodyweightDate").Produces<BodyweightDateCorrectionView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status403Forbidden).ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
+
         coach.MapGet("/bodyweight/{observationId:guid}/history", async (
             Guid clientProfileId,
             Guid observationId,
@@ -458,6 +487,7 @@ public static class ProgressEndpoints
 
     private static IResult ToResult(ProgressCommandResult result) => result.Status switch
     {
+        ProgressCommandStatus.Success when result.DateCorrection is not null => Results.Ok(result.DateCorrection),
         ProgressCommandStatus.Success when result.History is not null => Results.Ok(result.History),
         ProgressCommandStatus.Success => Results.Ok(result.Observation),
         ProgressCommandStatus.NotFound => Results.NotFound(),

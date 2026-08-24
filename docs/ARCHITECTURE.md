@@ -128,7 +128,21 @@ estimate read Progress data only and do not recalculate or mutate Nutrition. See
 
 Progress Phase 5B-1 mirrors that tenant/auth/history boundary for typed body measurements.
 Girths store canonical centimetres, body fat stores canonical percent, and corrections append
-prior values. Phase 5B-2, progress photos, and dashboards have not started. See ADR 0010.
+prior values. See ADR 0010.
+
+Progress photos (5B-2) and their thumbnails (5B-3) reuse the Media pipeline without the Progress
+assembly referencing Media; the combined dashboard (5B-4) is a read-side projection in
+Infrastructure that owns no tables. See ADRs 0011-0013.
+
+Phase 5B-6 closes the one correction the model could not express. A bodyweight observation's
+measurement date is its identity — the unique index is keyed on it and a trigger refuses to change
+it — so a mis-dated entry is corrected by void-and-replace rather than by editing the date. The
+original is voided with a required reason and actor and retained as history; a replacement carrying
+the same weight is created on the correct date in the same transaction. The unique index is partial
+on an `IsActive` predicate, tied to the status by a check constraint, so a voided row keeps its date
+without reserving it and the freed date can be logged again. Every current-truth read excludes
+voided rows, including the onboarding earliest-observation lookup; the audit read still resolves
+them. See `docs/adr/0015-bodyweight-date-correction-v1.md`.
 
 ## 5. Multi-tenancy
 

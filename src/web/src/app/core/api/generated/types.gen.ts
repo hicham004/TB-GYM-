@@ -181,6 +181,12 @@ export type BodyMeasurementView = {
   version: number | string;
 };
 
+export type BodyweightDateCorrectionView = {
+  replacement: BodyweightObservationView;
+  voided: BodyweightObservationView;
+  void: BodyweightVoidView;
+};
+
 export type BodyweightDayView = {
   date: string;
   observation: null | BodyweightObservationView;
@@ -205,7 +211,10 @@ export type BodyweightHistoryItemView = {
 export type BodyweightHistoryView = {
   current: BodyweightObservationView;
   previousValues: Array<BodyweightHistoryItemView>;
+  void?: null | BodyweightVoidView;
 };
+
+export type BodyweightObservationStatus = 'Active' | 'Voided';
 
 export type BodyweightObservationView = {
   id: string;
@@ -216,6 +225,7 @@ export type BodyweightObservationView = {
   source: BodyweightSource;
   recordedByUserId: null | string;
   recordedAtUtc: string;
+  status: BodyweightObservationStatus;
   version: number | string;
 };
 
@@ -239,6 +249,14 @@ export type BodyweightTrendView = {
 };
 
 export type BodyweightUnit = 'Kilogram' | 'Pound';
+
+export type BodyweightVoidView = {
+  id: string;
+  reason: string;
+  voidedByUserId: string;
+  voidedAtUtc: string;
+  replacementObservationId: null | string;
+};
 
 export type BodyweightWeekView = {
   weekStart: string;
@@ -1530,6 +1548,12 @@ export type RenewEnrollmentRequest = {
   offerId: string;
   startDate: string;
   idempotencyKey: string;
+};
+
+export type ReplaceBodyweightDateRequest = {
+  measurementDate: string;
+  reason: string;
+  version: number | string;
 };
 
 export type ReplaceClientAllergensRequest = {
@@ -4980,6 +5004,43 @@ export type CorrectOwnBodyweightResponses = {
 export type CorrectOwnBodyweightResponse =
   CorrectOwnBodyweightResponses[keyof CorrectOwnBodyweightResponses];
 
+export type ReplaceOwnBodyweightDateData = {
+  body: ReplaceBodyweightDateRequest;
+  path: {
+    observationId: string;
+  };
+  query?: never;
+  url: '/api/progress/me/bodyweight/{observationId}/replace-date';
+};
+
+export type ReplaceOwnBodyweightDateErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ReplaceOwnBodyweightDateError =
+  ReplaceOwnBodyweightDateErrors[keyof ReplaceOwnBodyweightDateErrors];
+
+export type ReplaceOwnBodyweightDateResponses = {
+  /**
+   * OK
+   */
+  200: BodyweightDateCorrectionView;
+};
+
+export type ReplaceOwnBodyweightDateResponse =
+  ReplaceOwnBodyweightDateResponses[keyof ReplaceOwnBodyweightDateResponses];
+
 export type GetOwnBodyweightHistoryData = {
   body?: never;
   path: {
@@ -5404,6 +5465,48 @@ export type CorrectClientBodyweightResponses = {
 
 export type CorrectClientBodyweightResponse =
   CorrectClientBodyweightResponses[keyof CorrectClientBodyweightResponses];
+
+export type ReplaceClientBodyweightDateData = {
+  body: ReplaceBodyweightDateRequest;
+  path: {
+    clientProfileId: string;
+    observationId: string;
+  };
+  query?: never;
+  url: '/api/progress/clients/{clientProfileId}/bodyweight/{observationId}/replace-date';
+};
+
+export type ReplaceClientBodyweightDateErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ReplaceClientBodyweightDateError =
+  ReplaceClientBodyweightDateErrors[keyof ReplaceClientBodyweightDateErrors];
+
+export type ReplaceClientBodyweightDateResponses = {
+  /**
+   * OK
+   */
+  200: BodyweightDateCorrectionView;
+};
+
+export type ReplaceClientBodyweightDateResponse =
+  ReplaceClientBodyweightDateResponses[keyof ReplaceClientBodyweightDateResponses];
 
 export type GetClientBodyweightHistoryData = {
   body?: never;

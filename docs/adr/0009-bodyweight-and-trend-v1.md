@@ -68,4 +68,6 @@ deferred to Phase 5B or later. The raw observation remains coherent and availabl
 of those future projections.
 
 Correcting an accidentally mis-dated observation, including voiding/replacing it without
-losing audit history, remains a follow-up. Phase 5A correction changes values only.
+losing audit history, remains a follow-up. Phase 5A correction changes values only. This was
+subsequently delivered as void-and-replace; see
+`docs/adr/0015-bodyweight-date-correction-v1.md`.

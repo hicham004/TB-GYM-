@@ -98,6 +98,32 @@ internal sealed partial class ProgressApplicationService(
         };
     }
 
+    public async Task<ProgressCommandResult> ReplaceOwnBodyweightDateAsync(
+        Guid observationId,
+        ReplaceBodyweightDateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindSelfAsync(cancellationToken);
+        return client is null
+            ? new ProgressCommandResult(ProgressCommandStatus.NotFound)
+            : await ReplaceDateAsync(client.Id, observationId, request, BodyweightSource.Client, cancellationToken);
+    }
+
+    public async Task<ProgressCommandResult> ReplaceBodyweightDateForClientAsync(
+        Guid clientProfileId,
+        Guid observationId,
+        ReplaceBodyweightDateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var client = await FindClientRelationshipAsync(clientProfileId, cancellationToken);
+        return client switch
+        {
+            null => new ProgressCommandResult(ProgressCommandStatus.NotFound),
+            true => new ProgressCommandResult(ProgressCommandStatus.Forbidden),
+            false => await ReplaceDateAsync(clientProfileId, observationId, request, BodyweightSource.Coach, cancellationToken),
+        };
+    }
+
     public async Task<BodyweightHistoryView?> GetOwnHistoryAsync(
         Guid observationId,
         CancellationToken cancellationToken)
@@ -252,8 +278,13 @@ internal sealed partial class ProgressApplicationService(
                 return Invalid("measurementDate", "Bodyweight cannot be dated in the future.");
             }
 
+            // Only an active observation reserves its date. A date freed by a void-and-replace is
+            // available again, and the partial unique index agrees.
             if (await dbContext.BodyweightObservations.AnyAsync(
-                    item => item.ClientProfileId == clientProfileId && item.MeasurementDate == measurementDate,
+                    item =>
+                        item.ClientProfileId == clientProfileId &&
+                        item.MeasurementDate == measurementDate &&
+                        item.Status == BodyweightObservationStatus.Active,
                     cancellationToken))
             {
                 return Conflict("BodyweightDateAlreadyExists", "A bodyweight observation already exists for that local date. Correct the existing entry instead.");
@@ -303,6 +334,13 @@ internal sealed partial class ProgressApplicationService(
             return new ProgressCommandResult(ProgressCommandStatus.NotFound);
         }
 
+        // A voided observation is still readable as history, so this is a conflict rather than a
+        // not-found: the entry exists, it just is not current truth any more.
+        if (observation.Status != BodyweightObservationStatus.Active)
+        {
+            return VoidedConflict();
+        }
+
         try
         {
             dbContext.Entry(observation).Property(item => item.Version).OriginalValue = request.Version;
@@ -325,6 +363,110 @@ internal sealed partial class ProgressApplicationService(
         catch (DbUpdateConcurrencyException)
         {
             return Conflict("BodyweightVersionConflict", "The bodyweight observation changed. Reload it before correcting it again.");
+        }
+    }
+
+    /// <summary>
+    /// Corrects a mis-dated observation by voiding it and recording a replacement on the date it was
+    /// actually taken. The measurement date is the observation's identity and is immutable in the
+    /// domain and at the database, so this is never an in-place date change.
+    /// </summary>
+    private async Task<ProgressCommandResult> ReplaceDateAsync(
+        Guid clientProfileId,
+        Guid observationId,
+        ReplaceBodyweightDateRequest request,
+        BodyweightSource source,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } actorUserId)
+        {
+            return new ProgressCommandResult(ProgressCommandStatus.NotFound);
+        }
+
+        var observation = await dbContext.BodyweightObservations.SingleOrDefaultAsync(
+            item => item.Id == observationId && item.ClientProfileId == clientProfileId,
+            cancellationToken);
+        if (observation is null)
+        {
+            return new ProgressCommandResult(ProgressCommandStatus.NotFound);
+        }
+
+        if (observation.Status != BodyweightObservationStatus.Active)
+        {
+            return VoidedConflict();
+        }
+
+        var calendar = await GetTenantCalendarAsync(cancellationToken);
+        if (request.MeasurementDate > calendar.Today)
+        {
+            return Invalid("measurementDate", "Bodyweight cannot be dated in the future.");
+        }
+
+        if (request.MeasurementDate == observation.MeasurementDate)
+        {
+            return Invalid(
+                "measurementDate",
+                "The observation is already on that date. Correct its value instead.");
+        }
+
+        // Checked here for a precise message; the partial unique index is what actually guarantees it
+        // under a concurrent write, and a violation rolls the whole operation back.
+        if (await dbContext.BodyweightObservations.AnyAsync(
+                item =>
+                    item.ClientProfileId == clientProfileId &&
+                    item.MeasurementDate == request.MeasurementDate &&
+                    item.Status == BodyweightObservationStatus.Active,
+                cancellationToken))
+        {
+            return Conflict(
+                "BodyweightDateAlreadyExists",
+                "A bodyweight observation already exists for that local date. Correct the existing entry instead.");
+        }
+
+        try
+        {
+            var replacement = BodyweightObservation.CreateInitial(
+                tenantContext.TenantId,
+                clientProfileId,
+                request.MeasurementDate,
+                observation.EnteredValue,
+                observation.EnteredUnit,
+                source);
+
+            // One SaveChanges, therefore one transaction: the void and the replacement commit
+            // together or not at all, and a collision on the target date leaves the original active.
+            dbContext.Entry(observation).Property(item => item.Version).OriginalValue = request.Version;
+            var record = observation.Void(request.Reason, clock.UtcNow, actorUserId, replacement.Id);
+            dbContext.BodyweightObservations.Add(replacement);
+            dbContext.BodyweightObservationVoids.Add(record);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            return new ProgressCommandResult(
+                ProgressCommandStatus.Success,
+                DateCorrection: new BodyweightDateCorrectionView(
+                    ToObservationView(replacement),
+                    ToObservationView(observation),
+                    ToVoidView(record)));
+        }
+        catch (ArgumentException exception)
+        {
+            return Invalid("reason", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict("BodyweightObservationVoided", exception.Message);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(
+                "BodyweightVersionConflict",
+                "The bodyweight observation changed. Reload it before correcting it again.");
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(
+                "BodyweightDateAlreadyExists",
+                "A bodyweight observation already exists for that local date.");
         }
     }
 
@@ -353,10 +495,13 @@ internal sealed partial class ProgressApplicationService(
         var queryStart = firstWeekStart < trendWarmupStart ? firstWeekStart : trendWarmupStart;
         var lastIncludedDate = toExclusive.AddDays(-1);
         var weekEndExclusive = BodyweightWeekPolicy.GetWeekStart(lastIncludedDate, calendar.WeekStartsOn).AddDays(7);
+        // Days, weekly means and the trend are current truth, so a voided observation contributes
+        // nothing to any of them: not a sample, not a mean, not a warm-up point.
         var observations = await dbContext.BodyweightObservations
             .AsNoTracking()
             .Where(item =>
                 item.ClientProfileId == clientProfileId &&
+                item.Status == BodyweightObservationStatus.Active &&
                 item.MeasurementDate >= queryStart &&
                 item.MeasurementDate < weekEndExclusive)
             .OrderBy(item => item.MeasurementDate)
@@ -434,6 +579,10 @@ internal sealed partial class ProgressApplicationService(
                 latestTrend is null ? null : BodyweightUnitConverter.FromKilograms(latestTrend.EstimateKilograms, displayUnit)));
     }
 
+    /// <summary>
+    /// The audit read, and the one place a voided observation is deliberately still resolved: a
+    /// correction has to remain visible with its reason and actor, not disappear from history.
+    /// </summary>
     private async Task<BodyweightHistoryView?> GetHistoryAsync(
         Guid clientProfileId,
         Guid observationId,
@@ -448,6 +597,19 @@ internal sealed partial class ProgressApplicationService(
         {
             return null;
         }
+
+        var voided = observation.Status == BodyweightObservationStatus.Active
+            ? null
+            : await dbContext.BodyweightObservationVoids
+                .AsNoTracking()
+                .Where(item => item.ObservationId == observationId && item.ClientProfileId == clientProfileId)
+                .Select(item => new BodyweightVoidView(
+                    item.Id,
+                    item.Reason,
+                    item.VoidedByUserId,
+                    item.VoidedAtUtc,
+                    item.ReplacementObservationId))
+                .SingleOrDefaultAsync(cancellationToken);
 
         var previous = await dbContext.BodyweightCorrections
             .AsNoTracking()
@@ -465,7 +627,7 @@ internal sealed partial class ProgressApplicationService(
                 item.SupersededByUserId,
                 item.SupersededAtUtc))
             .ToArrayAsync(cancellationToken);
-        return new BodyweightHistoryView(ToObservationView(observation), previous);
+        return new BodyweightHistoryView(ToObservationView(observation), previous, voided);
     }
 
     private async Task<BodyMeasurementCommandResult> RecordMeasurementAsync(
@@ -940,7 +1102,7 @@ internal sealed partial class ProgressApplicationService(
             return;
         }
 
-        asset.MarkTombstoned(clock.UtcNow, TimeSpan.FromDays(30), isHistoricallyReferenced: false);
+        asset.MarkTombstoned(clock.UtcNow, MediaRetentionPolicy.DeleteRetention, isHistoricallyReferenced: false);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -1011,7 +1173,16 @@ internal sealed partial class ProgressApplicationService(
             observation.Source,
             observation.UpdatedByUserId ?? observation.CreatedByUserId,
             observation.UpdatedAtUtc,
+            observation.Status,
             observation.Version);
+
+    private static BodyweightVoidView ToVoidView(BodyweightObservationVoid record) =>
+        new(
+            record.Id,
+            record.Reason,
+            record.VoidedByUserId,
+            record.VoidedAtUtc,
+            record.ReplacementObservationId);
 
     private static BodyMeasurementView ToMeasurementView(
         BodyMeasurement measurement,
@@ -1047,6 +1218,11 @@ internal sealed partial class ProgressApplicationService(
 
     private static ProgressCommandResult Conflict(string code, string message) =>
         new(ProgressCommandStatus.Conflict, Code: code, Message: message);
+
+    private static ProgressCommandResult VoidedConflict() =>
+        Conflict(
+            "BodyweightObservationVoided",
+            "That bodyweight entry was voided by a correction. Work from the replacement instead.");
 
     private static BodyMeasurementCommandResult InvalidMeasurement(
         string field,

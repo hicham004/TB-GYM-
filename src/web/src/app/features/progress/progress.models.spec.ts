@@ -34,6 +34,7 @@ describe('progress view mapping', () => {
             source: 'Client',
             recordedByUserId: 'user',
             recordedAtUtc: '2026-08-22T21:30:00Z',
+            status: 'Active',
             version: '7',
           },
           displayValue: '220.462',

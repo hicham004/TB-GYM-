@@ -159,8 +159,9 @@ AI provider selection, provider SDK integration, and production clinical approva
 
 Dependencies: Phases 2-4; approved weekly summary rule.
 
-Status: Phase 5A bodyweight/trend, Phase 5B-1 body measurements, and Phase 5B-2 progress
-photos implemented 2026-08-23. The combined cross-domain progress dashboard has not started.
+Status: complete through Phase 5B-6, implemented 2026-08-23 and 2026-08-24 — bodyweight and trend,
+body measurements, progress photos and thumbnails, the combined cross-domain dashboard, media purge
+and storage quotas, and mis-dated bodyweight correction.
 
 - Build dated bodyweight observations, correction history, unit conversion, one-entry-per-day
   constraint, and client/coach permissions.
@@ -205,12 +206,19 @@ under `FOR UPDATE SKIP LOCKED` so replicas are safe, and both the workspace allo
 per-client progress-photo allowance are enforced under a transaction-scoped advisory lock. See
 `docs/adr/0014-media-purge-and-storage-quotas-v1.md`.
 
-Explicitly deferred to a later phase: photo comparison, correcting a mis-dated bodyweight
-observation, device/wearable import, a coach-facing storage-usage view, alerting on assets stuck
-pending purge, and purging orphaned objects with no row. Previously deferred:
-mesocycle-aligned summaries and change statistics, subscription/program period linking,
-date-adjustment impact analysis, privacy-safe exports, retention/deletion workflows, device
-imports, and any coupling to nutrition calculations.
+Phase 5B-6 adds correction of a mis-dated bodyweight observation as void-and-replace, keeping the
+measurement date immutable: the original is voided with a required reason and actor and retained,
+a replacement carrying the same weight is created on the correct date in the same transaction, and
+the unique index becomes partial on active rows so a freed date can be logged again. See
+`docs/adr/0015-bodyweight-date-correction-v1.md`.
+
+Explicitly deferred to a later phase: photo comparison, device/wearable import, a coach-facing
+storage-usage view, alerting on assets stuck pending purge, purging orphaned objects with no row,
+voiding a bodyweight observation without a replacement, bulk re-dating, and the same date correction
+for body measurements and progress photos. Previously deferred: mesocycle-aligned summaries and
+change statistics, subscription/program period linking, date-adjustment impact analysis,
+privacy-safe exports, retention/deletion workflows, device imports, and any coupling to nutrition
+calculations.
 
 ## Phase 6: Messaging, notifications, and production media
 

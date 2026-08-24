@@ -2,16 +2,20 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiErrorBody } from './api.models';
 
 /**
- * Stable server codes for a rejected upload, mapped to something a coach or client can act on.
- * A full allowance is not a broken file, and the difference decides what the user should do next:
- * free space in the workspace, or thin out this client's photos.
+ * Stable server codes mapped to something a coach or client can act on. Each of these leads to a
+ * different next step, so they must not collapse into one generic failure: a full allowance is not
+ * a broken file, and a date that is already taken is not a stale version.
  */
-function storageAllowanceMessage(code: string): string | null {
+function knownCodeMessage(code: string): string | null {
   switch (code) {
     case 'MediaWorkspaceStorageExceeded':
       return $localize`This workspace has used all of its media storage. Delete some media to free space, then try again.`;
     case 'ClientProgressPhotoStorageExceeded':
       return $localize`This client has used all of their progress-photo storage. Remove some older photos, then try again.`;
+    case 'BodyweightDateAlreadyExists':
+      return $localize`A weight is already recorded for that date. Correct that entry instead of moving this one onto it.`;
+    case 'BodyweightObservationVoided':
+      return $localize`That entry was already replaced by a correction. Work from the replacement instead.`;
     default:
       return null;
   }
@@ -24,7 +28,7 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
 
   const body = error.error as ApiErrorBody | undefined;
   if (body?.code) {
-    const known = storageAllowanceMessage(body.code);
+    const known = knownCodeMessage(body.code);
     if (known) {
       return known;
     }

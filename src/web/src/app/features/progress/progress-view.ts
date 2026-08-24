@@ -11,6 +11,7 @@ import type {
   BodyMeasurement,
   BodyMeasurementHistory,
   BodyMeasurements,
+  BodyweightDateCorrection,
   BodyweightHistory,
   BodyweightObservation,
   ProgressPhoto,
@@ -37,6 +38,7 @@ export class ProgressView {
   protected readonly coachMode = computed(() => this.clientId() !== null);
   protected readonly progress = signal<ProgressViewModel | null>(null);
   protected readonly history = signal<BodyweightHistory | null>(null);
+  protected readonly correction = signal<BodyweightDateCorrection | null>(null);
   protected readonly measurements = signal<BodyMeasurements | null>(null);
   protected readonly measurementHistory = signal<BodyMeasurementHistory | null>(null);
   protected readonly photos = signal<ProgressPhotos | null>(null);
@@ -79,6 +81,9 @@ export class ProgressView {
   protected correctionValue: number | null = null;
   protected correctionUnit: RecordedMassUnit = 'Kilogram';
   protected correctionReason = '';
+  protected redatingId: string | null = null;
+  protected redateDate = '';
+  protected redateReason = '';
   protected measurementDisplayUnit: MeasurementUnit = 'Centimetre';
   protected measurementType: MeasurementType = 'Waist';
   protected measurementUnit: MeasurementUnit = 'Centimetre';
@@ -244,7 +249,9 @@ export class ProgressView {
     this.correctionValue = observation.enteredValue;
     this.correctionUnit = observation.enteredUnit;
     this.correctionReason = '';
+    this.cancelRedate();
     this.history.set(null);
+    this.correction.set(null);
   }
 
   protected cancelCorrection(): void {
@@ -282,6 +289,57 @@ export class ProgressView {
         await this.load(false);
       },
       $localize`Correction saved with its prior value preserved.`,
+    );
+  }
+
+  /**
+   * Correcting a mis-dated entry is a separate flow from correcting a wrong value: it moves the same
+   * weight to another date rather than changing what was measured, so the two never share a form.
+   */
+  protected beginRedate(observation: BodyweightObservation): void {
+    this.redatingId = observation.id;
+    this.redateDate = observation.measurementDate;
+    this.redateReason = '';
+    this.cancelCorrection();
+    this.history.set(null);
+    this.correction.set(null);
+  }
+
+  protected cancelRedate(): void {
+    this.redatingId = null;
+    this.redateDate = '';
+    this.redateReason = '';
+  }
+
+  protected async redate(observation: BodyweightObservation): Promise<void> {
+    if (!this.redateReason.trim() || !this.redateDate) {
+      this.error.set($localize`Enter the correct date and a reason.`);
+      return;
+    }
+
+    if (this.redateDate === observation.measurementDate) {
+      this.error.set($localize`Pick a different date, or correct the value instead.`);
+      return;
+    }
+
+    await this.run(
+      async () => {
+        const request = {
+          measurementDate: this.redateDate,
+          reason: this.redateReason.trim(),
+          version: observation.version,
+        };
+        const clientId = this.clientId();
+        const corrected = clientId
+          ? await firstValueFrom(
+              this.api.replaceClientBodyweightDate(clientId, observation.id, request),
+            )
+          : await firstValueFrom(this.api.replaceMyBodyweightDate(observation.id, request));
+        this.correction.set(corrected);
+        this.cancelRedate();
+        await this.load(false);
+      },
+      $localize`Moved to the correct date. The original entry is kept as a voided record.`,
     );
   }
 

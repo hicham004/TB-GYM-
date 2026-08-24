@@ -154,10 +154,13 @@ internal sealed partial class ProgressApplicationService
         var weekEndExclusive = BodyweightWeekPolicy
             .GetWeekStart(lastIncludedDate, calendar.WeekStartsOn)
             .AddDays(7);
+        // Voided observations are excluded here for the same reason as on the detail view: the
+        // dashboard reports current truth, and a corrected-away entry is not part of it.
         var observations = await dbContext.BodyweightObservations
             .AsNoTracking()
             .Where(item =>
                 item.ClientProfileId == clientProfileId &&
+                item.Status == BodyweightObservationStatus.Active &&
                 item.MeasurementDate >= queryStart &&
                 item.MeasurementDate < weekEndExclusive)
             .OrderBy(item => item.MeasurementDate)

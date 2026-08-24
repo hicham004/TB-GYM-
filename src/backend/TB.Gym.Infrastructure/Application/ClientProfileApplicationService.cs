@@ -252,7 +252,10 @@ internal sealed class ClientProfileApplicationService(
             return new ClientCommandResult(ClientCommandStatus.NotFound);
         }
 
+        // The authoritative first weigh-in, so it has to skip voided rows: a mis-dated entry that has
+        // been corrected away must not become the client's onboarding weight.
         var existingObservation = await dbContext.BodyweightObservations
+            .Where(observation => observation.Status == BodyweightObservationStatus.Active)
             .OrderBy(observation => observation.MeasurementDate)
             .ThenBy(observation => observation.CreatedAtUtc)
             .FirstOrDefaultAsync(

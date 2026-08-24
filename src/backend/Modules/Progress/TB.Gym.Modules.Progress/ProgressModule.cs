@@ -2,6 +2,12 @@ using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Modules.Progress;
 
+/// <summary>
+/// One client's weight on one workspace-local date. The date is the observation's identity, so it is
+/// immutable in the domain and at the database. Fixing a mis-dated entry therefore voids this row and
+/// records a replacement on the correct date; it is never an in-place date change, and the voided row
+/// is retained so the correction stays visible rather than erased.
+/// </summary>
 public sealed class BodyweightObservation : TenantEntity
 {
     private BodyweightObservation()
@@ -24,6 +30,8 @@ public sealed class BodyweightObservation : TenantEntity
         EnteredValue = enteredValue;
         EnteredUnit = enteredUnit;
         Source = source;
+        Status = BodyweightObservationStatus.Active;
+        IsActive = true;
     }
 
     public Guid ClientProfileId { get; private set; }
@@ -37,6 +45,15 @@ public sealed class BodyweightObservation : TenantEntity
     public RecordedMassUnit EnteredUnit { get; private set; }
 
     public BodyweightSource Source { get; private set; }
+
+    public BodyweightObservationStatus Status { get; private set; }
+
+    /// <summary>
+    /// The predicate the partial unique index is built on, so a voided row releases its date for
+    /// reuse. It is redundant with <see cref="Status"/> on purpose and a check constraint keeps the
+    /// two from drifting, exactly as the nutrition plan overlap reservation does.
+    /// </summary>
+    public bool IsActive { get; private set; }
 
     public static BodyweightObservation CreateInitial(
         Guid tenantId,
@@ -64,6 +81,7 @@ public sealed class BodyweightObservation : TenantEntity
         RecordedMassUnit enteredUnit,
         BodyweightSource source)
     {
+        EnsureActive();
         ValidateClientAndSource(ClientProfileId, source);
         var kilograms = BodyweightUnitConverter.ToKilograms(enteredValue, enteredUnit);
         var previous = new BodyweightPreviousValue(
@@ -79,6 +97,37 @@ public sealed class BodyweightObservation : TenantEntity
         EnteredUnit = enteredUnit;
         Source = source;
         return previous;
+    }
+
+    /// <summary>
+    /// Withdraws this observation from every current-truth read and returns the append-only record of
+    /// why. Voiding is one-way and cannot be combined with a value change: the recorded weight stays
+    /// exactly as it was so history reads the original fact, not a rewritten one.
+    /// </summary>
+    public BodyweightObservationVoid Void(
+        string reason,
+        DateTimeOffset voidedAtUtc,
+        Guid voidedByUserId,
+        Guid? replacementObservationId)
+    {
+        EnsureActive();
+        var record = BodyweightObservationVoid.Create(
+            this,
+            reason,
+            voidedAtUtc,
+            voidedByUserId,
+            replacementObservationId);
+        Status = BodyweightObservationStatus.Voided;
+        IsActive = false;
+        return record;
+    }
+
+    private void EnsureActive()
+    {
+        if (Status != BodyweightObservationStatus.Active)
+        {
+            throw new InvalidOperationException("The bodyweight observation is already voided.");
+        }
     }
 
     private static void ValidateClientAndSource(Guid clientProfileId, BodyweightSource source)
@@ -171,6 +220,100 @@ public sealed class BodyweightCorrection : TenantEntity
             ? normalized
             : throw new ArgumentException("The correction reason cannot exceed 500 characters.", nameof(reason));
     }
+}
+
+/// <summary>
+/// Append-only record of one observation being voided. It keeps the observation's recorded facts
+/// alongside the actor, reason and moment, so a mis-dated entry that has been replaced can still be
+/// read back in full instead of vanishing from the client's history.
+/// </summary>
+public sealed class BodyweightObservationVoid : TenantEntity
+{
+    private BodyweightObservationVoid()
+    {
+    }
+
+    private BodyweightObservationVoid(
+        Guid tenantId,
+        BodyweightObservation observation,
+        string reason,
+        DateTimeOffset voidedAtUtc,
+        Guid voidedByUserId,
+        Guid? replacementObservationId)
+        : base(tenantId)
+    {
+        if (voidedByUserId == Guid.Empty)
+        {
+            throw new ArgumentException("A void requires the acting user.", nameof(voidedByUserId));
+        }
+
+        if (replacementObservationId == observation.Id)
+        {
+            throw new ArgumentException(
+                "An observation cannot replace itself.",
+                nameof(replacementObservationId));
+        }
+
+        ObservationId = observation.Id;
+        ClientProfileId = observation.ClientProfileId;
+        MeasurementDate = observation.MeasurementDate;
+        ValueKilograms = observation.ValueKilograms;
+        EnteredValue = observation.EnteredValue;
+        EnteredUnit = observation.EnteredUnit;
+        Source = observation.Source;
+        Reason = ProgressText.RequiredReason(reason);
+        VoidedAtUtc = voidedAtUtc;
+        VoidedByUserId = voidedByUserId;
+        ReplacementObservationId = replacementObservationId;
+    }
+
+    public Guid ObservationId { get; private set; }
+
+    public Guid ClientProfileId { get; private set; }
+
+    public DateOnly MeasurementDate { get; private set; }
+
+    public decimal ValueKilograms { get; private set; }
+
+    public decimal EnteredValue { get; private set; }
+
+    public RecordedMassUnit EnteredUnit { get; private set; }
+
+    public BodyweightSource Source { get; private set; }
+
+    public string Reason { get; private set; } = string.Empty;
+
+    public DateTimeOffset VoidedAtUtc { get; private set; }
+
+    public Guid VoidedByUserId { get; private set; }
+
+    /// <summary>
+    /// The corrected observation this one was replaced by, or null when it was voided outright.
+    /// </summary>
+    public Guid? ReplacementObservationId { get; private set; }
+
+    internal static BodyweightObservationVoid Create(
+        BodyweightObservation observation,
+        string reason,
+        DateTimeOffset voidedAtUtc,
+        Guid voidedByUserId,
+        Guid? replacementObservationId)
+    {
+        ArgumentNullException.ThrowIfNull(observation);
+        return new BodyweightObservationVoid(
+            observation.TenantId,
+            observation,
+            reason,
+            voidedAtUtc,
+            voidedByUserId,
+            replacementObservationId);
+    }
+}
+
+public enum BodyweightObservationStatus
+{
+    Active = 1,
+    Voided = 2,
 }
 
 public sealed record BodyweightPreviousValue(

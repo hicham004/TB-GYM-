@@ -481,6 +481,22 @@ silently marked complete. After a purge the rows survive as history with their s
 and grant creation, content and thumbnail all fail closed. A sweep claims rows with
 `FOR UPDATE SKIP LOCKED` per workspace, so multiple API replicas are safe.
 
+**PRG-011** A bodyweight observation's measurement date is its identity and is immutable in the
+domain and at the database. A mis-dated entry is corrected by void-and-replace, never by an in-place
+date change: the original is voided with a required reason and actor and retained in full, and a
+replacement carrying the same recorded weight is created on the correct date. The value is never
+changed by this operation — a wrong number is the separate value correction. Voiding is one-way, may
+not smuggle a value change into the same statement, and freezes the row; the database trigger
+enforces all three rather than trusting the application. The one-weight-per-client-per-local-date
+rule is enforced by a partial unique index on active observations tied to the status by a check
+constraint, so a voided row keeps its date without reserving it and the freed date can be logged
+again. The void and the replacement commit in one transaction: if the target date is held by an
+active observation the whole operation is refused and the original stays active, never partially
+voided. Every current-truth read — duplicate-date check, value correction, day/week/trend
+projection, dashboard bodyweight section, and the onboarding earliest-observation lookup — excludes
+voided rows, while the audit read still resolves them with the void attached so the correction stays
+visible rather than erased.
+
 **MED-007** A storage allowance counts the original and every derivative, counts tombstoned bytes
 that are not yet purged because they are still physically stored, and excludes purged bytes. Uploads
 are bounded by both the workspace allowance and a per-client progress-photo allowance. The

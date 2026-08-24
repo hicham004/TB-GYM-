@@ -8,6 +8,8 @@ public interface IProgressApplicationService
     Task<ProgressCommandResult> RecordForClientAsync(Guid clientProfileId, RecordBodyweightRequest request, CancellationToken cancellationToken);
     Task<ProgressCommandResult> CorrectOwnAsync(Guid observationId, CorrectBodyweightRequest request, CancellationToken cancellationToken);
     Task<ProgressCommandResult> CorrectForClientAsync(Guid clientProfileId, Guid observationId, CorrectBodyweightRequest request, CancellationToken cancellationToken);
+    Task<ProgressCommandResult> ReplaceOwnBodyweightDateAsync(Guid observationId, ReplaceBodyweightDateRequest request, CancellationToken cancellationToken);
+    Task<ProgressCommandResult> ReplaceBodyweightDateForClientAsync(Guid clientProfileId, Guid observationId, ReplaceBodyweightDateRequest request, CancellationToken cancellationToken);
     Task<BodyweightHistoryView?> GetOwnHistoryAsync(Guid observationId, CancellationToken cancellationToken);
     Task<BodyweightHistoryView?> GetClientHistoryAsync(Guid clientProfileId, Guid observationId, CancellationToken cancellationToken);
     Task<BodyMeasurementsView?> GetOwnMeasurementsAsync(DateOnly? from, DateOnly? endExclusive, MeasurementUnit displayUnit, CancellationToken cancellationToken);
@@ -85,6 +87,15 @@ public sealed record CorrectBodyweightRequest(
     string Reason,
     uint Version);
 
+/// <summary>
+/// Moves a mis-dated observation onto the date it was actually taken. The recorded weight is carried
+/// across untouched — a wrong value is the existing value correction, which is a different operation.
+/// </summary>
+public sealed record ReplaceBodyweightDateRequest(
+    DateOnly MeasurementDate,
+    string Reason,
+    uint Version);
+
 public sealed record BodyweightObservationView(
     Guid Id,
     DateOnly MeasurementDate,
@@ -94,7 +105,24 @@ public sealed record BodyweightObservationView(
     BodyweightSource Source,
     Guid? RecordedByUserId,
     DateTimeOffset RecordedAtUtc,
+    BodyweightObservationStatus Status,
     uint Version);
+
+public sealed record BodyweightVoidView(
+    Guid Id,
+    string Reason,
+    Guid VoidedByUserId,
+    DateTimeOffset VoidedAtUtc,
+    Guid? ReplacementObservationId);
+
+/// <summary>
+/// The result of a void-and-replace: both sides of the one atomic operation, so a caller never has to
+/// re-read to learn what happened to the entry it corrected.
+/// </summary>
+public sealed record BodyweightDateCorrectionView(
+    BodyweightObservationView Replacement,
+    BodyweightObservationView Voided,
+    BodyweightVoidView Void);
 
 public sealed record BodyweightDayView(
     DateOnly Date,
@@ -153,9 +181,14 @@ public sealed record BodyweightHistoryItemView(
     Guid SupersededByUserId,
     DateTimeOffset SupersededAtUtc);
 
+/// <summary>
+/// The audit view of one observation. It deliberately still resolves a voided observation, with the
+/// void record attached, because a correction has to be visible to be auditable.
+/// </summary>
 public sealed record BodyweightHistoryView(
     BodyweightObservationView Current,
-    IReadOnlyList<BodyweightHistoryItemView> PreviousValues);
+    IReadOnlyList<BodyweightHistoryItemView> PreviousValues,
+    BodyweightVoidView? Void = null);
 
 public sealed record RecordBodyMeasurementRequest(
     MeasurementType MeasurementType,
@@ -229,7 +262,8 @@ public sealed record ProgressCommandResult(
     BodyweightHistoryView? History = null,
     IReadOnlyDictionary<string, string[]>? Errors = null,
     string? Code = null,
-    string? Message = null);
+    string? Message = null,
+    BodyweightDateCorrectionView? DateCorrection = null);
 
 public enum ProgressCommandStatus
 {

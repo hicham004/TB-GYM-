@@ -44,6 +44,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<BodyweightCorrection> BodyweightCorrections => Set<BodyweightCorrection>();
 
+    public DbSet<BodyweightObservationVoid> BodyweightObservationVoids => Set<BodyweightObservationVoid>();
+
     public DbSet<BodyMeasurement> BodyMeasurements => Set<BodyMeasurement>();
 
     public DbSet<BodyMeasurementCorrection> BodyMeasurementCorrections => Set<BodyMeasurementCorrection>();
@@ -478,12 +480,17 @@ public sealed partial class GymDbContext(
             entity.Property(observation => observation.EnteredValue).HasPrecision(8, 3);
             entity.Property(observation => observation.EnteredUnit).HasConversion<string>().HasMaxLength(16);
             entity.Property(observation => observation.Source).HasConversion<string>().HasMaxLength(32);
+            entity.Property(observation => observation.Status).HasConversion<string>().HasMaxLength(16);
+
+            // Partial on the active predicate: one weight per client per local date holds for current
+            // truth, while a voided row keeps its date without reserving it, so the date can be
+            // logged again after a mis-dated entry is corrected away from it.
             entity.HasIndex(observation => new
             {
                 observation.TenantId,
                 observation.ClientProfileId,
                 observation.MeasurementDate,
-            }).IsUnique();
+            }).IsUnique().HasFilter("\"IsActive\"");
             entity.HasOne<ClientProfile>()
                 .WithMany()
                 .HasForeignKey(observation => new { observation.TenantId, observation.ClientProfileId })
@@ -491,8 +498,51 @@ public sealed partial class GymDbContext(
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(observation =>
                 tenantContext.HasTenant && observation.TenantId == tenantContext.TenantId);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_BodyweightObservations_ValueKilograms",
+                    "\"ValueKilograms\" >= 20 AND \"ValueKilograms\" <= 500");
+                table.HasCheckConstraint(
+                    "CK_BodyweightObservations_IsActive",
+                    "(\"Status\" = 'Active') = \"IsActive\"");
+            });
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<BodyweightObservationVoid>(entity =>
+        {
+            entity.ToTable("BodyweightObservationVoids", "progress");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.MeasurementDate).HasColumnType("date");
+            entity.Property(item => item.ValueKilograms).HasPrecision(7, 3);
+            entity.Property(item => item.EnteredValue).HasPrecision(8, 3);
+            entity.Property(item => item.EnteredUnit).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.Source).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+
+            // One void per observation, so a voided row can never accumulate conflicting reasons.
+            entity.HasIndex(item => new { item.TenantId, item.ObservationId }).IsUnique();
+            entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.VoidedAtUtc });
+            entity.HasOne<BodyweightObservation>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ObservationId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<BodyweightObservation>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ReplacementObservationId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(client => new { client.TenantId, client.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
             entity.ToTable(table => table.HasCheckConstraint(
-                "CK_BodyweightObservations_ValueKilograms",
+                "CK_BodyweightObservationVoids_ValueKilograms",
                 "\"ValueKilograms\" >= 20 AND \"ValueKilograms\" <= 500"));
             ConfigureAuditable(entity);
         });
@@ -684,6 +734,7 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<MacroOverrideAudit>("Macro override audits are append-only.");
         RejectAppendOnlyMutations<AllergenConflictRecord>("Allergen conflict records are append-only.");
         RejectAppendOnlyMutations<BodyweightCorrection>("Bodyweight correction history is append-only.");
+        RejectAppendOnlyMutations<BodyweightObservationVoid>("Bodyweight void history is append-only.");
         RejectAppendOnlyMutations<BodyMeasurementCorrection>("Body measurement correction history is append-only.");
 
         if (ChangeTracker.Entries<BodyweightObservation>().Any(item => item.State == EntityState.Deleted))

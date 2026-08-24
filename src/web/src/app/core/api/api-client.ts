@@ -14,6 +14,7 @@ import {
   mapRecipePage,
 } from '../../features/nutrition/nutrition.models';
 import {
+  mapDateCorrection,
   mapHistory,
   mapMeasurement,
   mapMeasurementHistory,
@@ -875,6 +876,31 @@ export class ApiClient {
         request,
       )
       .pipe(map(mapHistory));
+  }
+
+  replaceMyBodyweightDate(
+    observationId: string,
+    request: Phase3Contracts.ReplaceBodyweightDateRequest,
+  ) {
+    return this.http
+      .post<Phase3Contracts.BodyweightDateCorrectionView>(
+        `/api/progress/me/bodyweight/${observationId}/replace-date`,
+        request,
+      )
+      .pipe(map(mapDateCorrection));
+  }
+
+  replaceClientBodyweightDate(
+    clientId: string,
+    observationId: string,
+    request: Phase3Contracts.ReplaceBodyweightDateRequest,
+  ) {
+    return this.http
+      .post<Phase3Contracts.BodyweightDateCorrectionView>(
+        `/api/progress/clients/${clientId}/bodyweight/${observationId}/replace-date`,
+        request,
+      )
+      .pipe(map(mapDateCorrection));
   }
 
   getMyBodyweightHistory(observationId: string) {
