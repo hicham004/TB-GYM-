@@ -2,13 +2,18 @@ namespace TB.Gym.Modules.Media;
 
 public interface IMediaApplicationService
 {
+    /// <summary>
+    /// Streams and stores one upload. <paramref name="clientProfileId"/> is required for a progress
+    /// photo, because that purpose is additionally bounded by a per-client allowance.
+    /// </summary>
     Task<MediaCommandResult> UploadAsync(
         string title,
         string fileName,
         string contentType,
         Stream content,
         CancellationToken cancellationToken,
-        MediaPurpose purpose = MediaPurpose.ExerciseMedia);
+        MediaPurpose purpose = MediaPurpose.ExerciseMedia,
+        Guid? clientProfileId = null);
 
     Task<MediaCommandResult> RegisterExternalAsync(
         RegisterExternalMediaRequest request,
@@ -95,7 +100,11 @@ public sealed record MediaAccessResult(
 public sealed record MediaCommandResult(
     MediaCommandStatus Status,
     MediaAssetView? Asset = null,
-    IReadOnlyDictionary<string, string[]>? Errors = null);
+    IReadOnlyDictionary<string, string[]>? Errors = null,
+    // Carried for quota rejections so a caller can distinguish "this workspace is full" from
+    // "this client is full" and act on it, rather than parsing prose.
+    string? Code = null,
+    string? Message = null);
 
 public enum MediaCommandStatus
 {
@@ -104,6 +113,21 @@ public enum MediaCommandStatus
     Invalid = 3,
     Conflict = 4,
     RateLimited = 5,
+
+    /// <summary>
+    /// A storage allowance is full. Distinct from <see cref="Invalid"/>, which means the file
+    /// itself was rejected: nothing is wrong with the upload, there is simply no room for it.
+    /// </summary>
+    QuotaExceeded = 6,
+}
+
+/// <summary>
+/// Stable machine-readable codes for a rejected upload. These are part of the API contract.
+/// </summary>
+public static class MediaQuotaCodes
+{
+    public const string WorkspaceStorageExceeded = "MediaWorkspaceStorageExceeded";
+    public const string ClientProgressPhotoStorageExceeded = "ClientProgressPhotoStorageExceeded";
 }
 
 public enum MediaAccessStatus
@@ -126,6 +150,31 @@ public sealed class MediaStorageOptions
     public const string SectionName = "Media";
 
     public long MaxWorkspaceStorageBytes { get; set; } = 20L * 1024L * 1024L * 1024L;
+
+    /// <summary>
+    /// A single client's progress photos cannot consume the whole workspace allowance. 500 MB is
+    /// roughly a thousand sanitised phone photos with their renditions, which is years of weekly
+    /// three-pose sets, so it constrains a runaway account without constraining ordinary use.
+    /// </summary>
+    public long MaxClientProgressPhotoBytes { get; set; } = 500L * 1024L * 1024L;
+
+    /// <summary>
+    /// How often the purge sweep looks for due objects. Retention is measured in days, so the poll
+    /// interval only decides how late a deletion runs, not whether it runs.
+    /// </summary>
+    public int PurgeIntervalSeconds { get; set; } = 900;
+
+    /// <summary>
+    /// The most assets one sweep claims. Each batch holds row locks for the duration of its storage
+    /// calls, so this bounds how long another replica can be kept waiting.
+    /// </summary>
+    public int PurgeBatchSize { get; set; } = 25;
+
+    /// <summary>
+    /// Whether the sweep runs at all. Disabled in tests that drive the purge explicitly, so a
+    /// background pass cannot race the assertions.
+    /// </summary>
+    public bool PurgeEnabled { get; set; } = true;
 
     // A grant must outlive one viewing session, not one request. The initial response survives
     // expiry because the grant is checked once at request start, but a seek outside the buffered

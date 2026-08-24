@@ -113,7 +113,23 @@ public sealed class MediaAsset : TenantEntity
 
     public DateTimeOffset? TombstonedAtUtc { get; private set; }
 
+    /// <summary>
+    /// When the bytes become eligible for physical deletion. Null means never: the object is
+    /// referenced by history that must remain resolvable, so it is retained indefinitely.
+    /// </summary>
     public DateTimeOffset? PurgeAfterUtc { get; private set; }
+
+    public DateTimeOffset? PurgedAtUtc { get; private set; }
+
+    /// <summary>
+    /// How many times physical deletion has been attempted, and why the last attempt failed. Both
+    /// are kept on the row so a stuck object is visible rather than silently retried forever.
+    /// </summary>
+    public int PurgeAttemptCount { get; private set; }
+
+    public DateTimeOffset? LastPurgeAttemptAtUtc { get; private set; }
+
+    public string? PurgeFailureCode { get; private set; }
 
     public static MediaAsset RegisterUpload(
         Guid tenantId,
@@ -168,9 +184,81 @@ public sealed class MediaAsset : TenantEntity
             return;
         }
 
+        // Purging is terminal. Re-tombstoning a purged asset would reschedule bytes that no longer
+        // exist and make a deleted object look recoverable.
+        if (Status == MediaAssetStatus.Purged)
+        {
+            throw new InvalidOperationException("A purged media asset cannot be tombstoned again.");
+        }
+
         Status = MediaAssetStatus.Tombstoned;
         TombstonedAtUtc = now;
         PurgeAfterUtc = isHistoricallyReferenced ? null : now.Add(retention);
+    }
+
+    /// <summary>
+    /// Whether the bytes may be physically deleted at <paramref name="now"/>. An asset that is not
+    /// tombstoned, one retained indefinitely because history references it, and one whose retention
+    /// has not elapsed are all ineligible.
+    /// </summary>
+    public bool IsPurgeDue(DateTimeOffset now) =>
+        Status == MediaAssetStatus.Tombstoned &&
+        Source == MediaSource.Upload &&
+        PurgeAfterUtc is { } purgeAfter &&
+        now >= purgeAfter;
+
+    /// <summary>
+    /// Records that physical deletion is being attempted. Called before any object is touched so a
+    /// process that dies mid-purge still leaves evidence of the attempt.
+    /// </summary>
+    public void BeginPurgeAttempt(DateTimeOffset now)
+    {
+        EnsurePurgeable();
+        PurgeAttemptCount++;
+        LastPurgeAttemptAtUtc = now;
+    }
+
+    /// <summary>
+    /// Every object belonging to this asset is gone. The row is kept as history, but its storage
+    /// key is cleared: there is nothing left for it to address.
+    /// </summary>
+    public void CompletePurge(DateTimeOffset now)
+    {
+        EnsurePurgeable();
+        Status = MediaAssetStatus.Purged;
+        PurgedAtUtc = now;
+        StorageKey = null;
+        PurgeFailureCode = null;
+    }
+
+    /// <summary>
+    /// Physical deletion failed. The asset stays tombstoned and due, so the next sweep retries it,
+    /// and the reason stays on the row so a persistently stuck object can be found.
+    /// </summary>
+    public void RecordPurgeFailure(DateTimeOffset now, string failureCode)
+    {
+        EnsurePurgeable();
+        LastPurgeAttemptAtUtc = now;
+        PurgeFailureCode = MediaText.Required(failureCode, 100, nameof(failureCode));
+    }
+
+    private void EnsurePurgeable()
+    {
+        if (Status == MediaAssetStatus.Purged)
+        {
+            throw new InvalidOperationException("The media asset has already been purged.");
+        }
+
+        if (Status != MediaAssetStatus.Tombstoned)
+        {
+            throw new InvalidOperationException("Only tombstoned media can be purged.");
+        }
+
+        if (PurgeAfterUtc is null)
+        {
+            throw new InvalidOperationException(
+                "Media retained for historical reference cannot be purged.");
+        }
     }
 
     private static string ValidateExternalId(string value)
@@ -180,6 +268,19 @@ public sealed class MediaAsset : TenantEntity
             ? normalized
             : throw new ArgumentException("The external media id contains unsupported characters.", nameof(value));
     }
+}
+
+/// <summary>
+/// How long tombstoned bytes are retained before they may be physically deleted.
+/// </summary>
+/// <remarks>
+/// The delay exists so a deletion can be reversed by a human before it becomes irreversible, and
+/// so a client can still see a photo they removed by mistake. Shared by every path that tombstones,
+/// so coach media and progress photos cannot drift onto different retentions.
+/// </remarks>
+public static class MediaRetentionPolicy
+{
+    public static readonly TimeSpan DeleteRetention = TimeSpan.FromDays(30);
 }
 
 public static class MediaUploadPolicy
@@ -248,6 +349,12 @@ public enum MediaAssetStatus
     Ready = 2,
     Rejected = 3,
     Tombstoned = 4,
+
+    /// <summary>
+    /// The bytes have been physically deleted. Terminal: the row survives as history, but nothing
+    /// can resurrect the object it used to address.
+    /// </summary>
+    Purged = 5,
 }
 
 public enum ExternalMediaProvider

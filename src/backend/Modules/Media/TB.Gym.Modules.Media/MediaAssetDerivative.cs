@@ -67,11 +67,32 @@ public sealed class MediaAssetDerivative : TenantEntity
 
     public string Sha256 { get; private set; } = string.Empty;
 
-    public string StorageKey { get; private set; } = string.Empty;
+    /// <summary>
+    /// Null once the object has been physically deleted. Length and hash are retained so storage
+    /// accounting can still describe what was released.
+    /// </summary>
+    public string? StorageKey { get; private set; }
+
+    public DateTimeOffset? PurgedAtUtc { get; private set; }
 
     public int Width { get; private set; }
 
     public int Height { get; private set; }
+
+    /// <summary>
+    /// The rendition's object is gone. Purging a derivative twice is a no-op rather than an error,
+    /// because a retry after a partial failure must be able to walk the same list again.
+    /// </summary>
+    public void MarkPurged(DateTimeOffset now)
+    {
+        if (PurgedAtUtc is not null)
+        {
+            return;
+        }
+
+        PurgedAtUtc = now;
+        StorageKey = null;
+    }
 
     public static MediaAssetDerivative RegisterThumbnail(
         Guid tenantId,

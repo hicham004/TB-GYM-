@@ -343,7 +343,18 @@ Production fails media publication closed until a real scanning adapter is confi
 Phase 3 also enforces request-size, endpoint rate/concurrency, and configurable workspace
 quota limits, and tombstones historically referenced media. The local storage implementation
 is not the production object-store decision; managed object storage, scanner, CDN/private
-delivery, retention/purge processing, and orphan cleanup remain Phase 6 work.
+delivery, and orphan cleanup remain Phase 6 work.
+
+Retention processing is now in the application. One in-process `BackgroundService` — the only
+hosted service in this repository — sweeps tombstoned media whose retention has elapsed, deleting
+derivative objects before originals and recording completion. It is deliberately minimal and is not
+a job platform: it holds no queue, no schedule table, and no dispatch abstraction, and it is not a
+foundation for notification-outbox delivery, which needs durable semantics it does not have. Several
+API replicas may run it because each sweep claims rows with `FOR UPDATE SKIP LOCKED`, per workspace
+so the tenant write-scope guard stays in force for every write it makes. Storage allowances count
+originals and derivatives, count tombstoned bytes still on disk, exclude purged bytes, and are
+checked and committed inside one transaction holding a transaction-scoped advisory lock keyed on the
+workspace, so concurrent uploads cannot jointly exceed a limit.
 
 ## 10. Operations and scaling
 

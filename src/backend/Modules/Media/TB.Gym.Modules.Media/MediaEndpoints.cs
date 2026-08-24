@@ -274,6 +274,12 @@ public static class MediaEndpoints
             MediaCommandStatus.Invalid => Results.ValidationProblem(
                 result.Errors ?? new Dictionary<string, string[]>()),
             MediaCommandStatus.RateLimited => Results.StatusCode(StatusCodes.Status429TooManyRequests),
+            // A full allowance is a conflict with stored state, not a malformed request, and it
+            // carries a stable code so the client can tell the caller which limit was reached.
+            MediaCommandStatus.QuotaExceeded => Results.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: result.Message ?? "The storage allowance is full.",
+                extensions: new Dictionary<string, object?> { ["code"] = result.Code }),
             _ => Results.Conflict(new { code = "media_conflict" }),
         };
 }

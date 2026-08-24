@@ -199,9 +199,15 @@ and training context, where each cross-domain section is gated on its own
 `ICoachingFeatureAccessService` decision and reports counts against explicit denominators. See
 `docs/adr/0013-progress-dashboard-v1.md`.
 
-Explicitly deferred to a later phase: photo comparison, physical purge of tombstoned bytes,
-per-client storage quotas, counting derivative bytes toward the workspace quota, correcting a
-mis-dated bodyweight observation, and device/wearable import. Previously deferred:
+Phase 5B-5 adds physical purge of tombstoned media and storage quotas: removing a progress photo
+now schedules its bytes, a single in-process background sweep deletes derivatives then originals
+under `FOR UPDATE SKIP LOCKED` so replicas are safe, and both the workspace allowance and a new
+per-client progress-photo allowance are enforced under a transaction-scoped advisory lock. See
+`docs/adr/0014-media-purge-and-storage-quotas-v1.md`.
+
+Explicitly deferred to a later phase: photo comparison, correcting a mis-dated bodyweight
+observation, device/wearable import, a coach-facing storage-usage view, alerting on assets stuck
+pending purge, and purging orphaned objects with no row. Previously deferred:
 mesocycle-aligned summaries and change statistics, subscription/program period linking,
 date-adjustment impact analysis, privacy-safe exports, retention/deletion workflows, device
 imports, and any coupling to nutrition calculations.

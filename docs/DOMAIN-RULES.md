@@ -470,6 +470,24 @@ rate/concurrency controls, and a configurable workspace-byte quota. Deleting his
 referenced media creates a tombstone and retains bytes. A later retention worker may purge
 only when no protected snapshot requires the object and the approved retention period elapsed.
 
+**MED-006** Removing a progress photo tombstones its media asset on the shared retention, so its
+bytes are scheduled for deletion; the owning client keeps reading it until they are actually gone.
+Purge is a one-way progression on existing rows — Tombstoned with a due date, then Purged — never a
+second tombstone concept. Media that is not tombstoned, retained indefinitely for historical
+reference, or still inside its retention is never purged. Derivative objects are deleted before the
+original; deleting an object that is already gone counts as success, and any storage failure leaves
+the row tombstoned, due, and retryable with its attempt count and failure code recorded, never
+silently marked complete. After a purge the rows survive as history with their storage keys cleared,
+and grant creation, content and thumbnail all fail closed. A sweep claims rows with
+`FOR UPDATE SKIP LOCKED` per workspace, so multiple API replicas are safe.
+
+**MED-007** A storage allowance counts the original and every derivative, counts tombstoned bytes
+that are not yet purged because they are still physically stored, and excludes purged bytes. Uploads
+are bounded by both the workspace allowance and a per-client progress-photo allowance. The
+measurement, the decision and the insert happen in one transaction under a transaction-scoped
+advisory lock keyed on the workspace, so two concurrent uploads cannot both pass the same check. A
+full allowance is a conflict carrying a stable code, not a validation failure blamed on the file.
+
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and
 cannot leak one coach's private library into another tenant.

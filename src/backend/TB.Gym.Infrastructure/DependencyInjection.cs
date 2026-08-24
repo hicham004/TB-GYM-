@@ -162,11 +162,25 @@ public static class DependencyInjection
         services.AddSingleton<IMediaScanner>(_ => environment.IsDevelopment()
             ? new DevelopmentMediaScanner()
             : new UnavailableMediaScanner());
+        services.AddScoped<IMediaPurgeService, MediaPurgeService>();
+        services.AddHostedService<MediaPurgeWorker>();
         services.AddOptions<MediaStorageOptions>()
             .Bind(configuration.GetSection(MediaStorageOptions.SectionName))
             .Validate(
                 options => options.MaxWorkspaceStorageBytes is >= MediaUploadPolicy.MaximumImageBytes and <= 10L * 1024L * 1024L * 1024L * 1024L,
                 "Media:MaxWorkspaceStorageBytes must be between 15 MB and 10 TB.")
+            .Validate(
+                // A client allowance below one image would reject every upload; above the workspace
+                // ceiling it would never bind. Both are configuration mistakes worth failing on.
+                options => options.MaxClientProgressPhotoBytes >= MediaUploadPolicy.MaximumImageBytes &&
+                           options.MaxClientProgressPhotoBytes <= options.MaxWorkspaceStorageBytes,
+                "Media:MaxClientProgressPhotoBytes must be between 15 MB and Media:MaxWorkspaceStorageBytes.")
+            .Validate(
+                options => options.PurgeIntervalSeconds is >= 30 and <= 86400,
+                "Media:PurgeIntervalSeconds must be between 30 seconds and 24 hours.")
+            .Validate(
+                options => options.PurgeBatchSize is >= 1 and <= 1000,
+                "Media:PurgeBatchSize must be between 1 and 1000.")
             .Validate(
                 // The lower bound is deliberately a minute: sub-minute grants expire inside normal
                 // request latency and produce intermittent playback failures rather than security.

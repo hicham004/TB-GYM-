@@ -25,7 +25,6 @@ internal sealed class MediaApplicationService(
     IClock clock)
     : IMediaApplicationService
 {
-    private static readonly TimeSpan DeleteRetention = TimeSpan.FromDays(30);
     private readonly ITimeLimitedDataProtector tokenProtector = dataProtectionProvider
         // Kept in lockstep with the payload version so a format change makes stale grants
         // undecryptable rather than merely unparseable.
@@ -40,7 +39,8 @@ internal sealed class MediaApplicationService(
         string contentType,
         Stream content,
         CancellationToken cancellationToken,
-        MediaPurpose purpose = MediaPurpose.ExerciseMedia)
+        MediaPurpose purpose = MediaPurpose.ExerciseMedia,
+        Guid? clientProfileId = null)
     {
         string? objectKey = null;
         string? thumbnailKey = null;
@@ -57,13 +57,16 @@ internal sealed class MediaApplicationService(
                 return new MediaCommandResult(MediaCommandStatus.RateLimited);
             }
 
-            var usedBytes = await dbContext.MediaAssets.AsNoTracking()
-                .Where(item => item.Source == MediaSource.Upload && item.Length != null)
-                .SumAsync(item => item.Length ?? 0L, cancellationToken);
-            var remainingBytes = storageOptions.MaxWorkspaceStorageBytes - usedBytes;
+            // An unlocked pre-check, used only to bound the accepted stream and to refuse an upload
+            // that is already hopeless. It is not the guarantee: the binding check runs under an
+            // advisory lock once the real byte count is known.
+            var remainingBytes = storageOptions.MaxWorkspaceStorageBytes
+                - await MeasureWorkspaceBytesAsync(cancellationToken);
             if (remainingBytes <= 0)
             {
-                return Invalid("quota", "The workspace media-storage quota has been reached.");
+                return QuotaExceeded(
+                    MediaQuotaCodes.WorkspaceStorageExceeded,
+                    "The workspace media-storage allowance is full.");
             }
 
             // A progress photo can only ever be an image, so cap the accepted stream at the image
@@ -72,14 +75,30 @@ internal sealed class MediaApplicationService(
                 ? MediaUploadPolicy.MaximumImageBytes
                 : MediaUploadPolicy.MaximumVideoBytes;
             objectKey = $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}";
-            var stored = await objectStorage.PutAsync(
-                new ObjectUpload(
-                    objectKey,
-                    contentType,
-                    content,
-                    tenantContext.TenantId,
-                    Math.Min(acceptedBytes, remainingBytes)),
-                cancellationToken);
+            var quotaBoundsTheStream = remainingBytes < acceptedBytes;
+            StoredObject stored;
+            try
+            {
+                stored = await objectStorage.PutAsync(
+                    new ObjectUpload(
+                        objectKey,
+                        contentType,
+                        content,
+                        tenantContext.TenantId,
+                        Math.Min(acceptedBytes, remainingBytes)),
+                    cancellationToken);
+            }
+            catch (ArgumentOutOfRangeException) when (quotaBoundsTheStream)
+            {
+                // The stream was cut short by the remaining allowance rather than by the format's
+                // own limit, so this is a full workspace and must say so. Reporting it as an
+                // oversized file would blame the upload for a condition it did not cause. The
+                // storage layer removes its own partial object, so nothing is left behind.
+                objectKey = null;
+                return QuotaExceeded(
+                    MediaQuotaCodes.WorkspaceStorageExceeded,
+                    "The workspace media-storage allowance is full.");
+            }
 
             var validation = MediaUploadPolicy.Validate(fileName, contentType, stored.Length, stored.Signature);
             ProgressPhotoRendition? rendition = null;
@@ -139,20 +158,33 @@ internal sealed class MediaApplicationService(
             }
 
             asset.RecordScan(scan);
-            dbContext.MediaAssets.Add(asset);
-            if (rendition is not null)
-            {
-                dbContext.MediaAssetDerivatives.Add(MediaAssetDerivative.RegisterThumbnail(
+            var derivative = rendition is null
+                ? null
+                : MediaAssetDerivative.RegisterThumbnail(
                     tenantContext.TenantId,
                     asset.Id,
                     rendition.Thumbnail.Length,
                     rendition.Thumbnail.Sha256,
                     rendition.Thumbnail.ObjectKey,
                     rendition.Width,
-                    rendition.Height));
+                    rendition.Height);
+
+            var admitted = await AdmitWithinQuotaAsync(asset, derivative, clientProfileId, cancellationToken);
+            if (admitted is not null)
+            {
+                // Rejected after the bytes were written, so remove them: the row that would have
+                // accounted for them is never committed.
+                if (thumbnailKey is not null)
+                {
+                    await objectStorage.DeleteAsync(thumbnailKey, cancellationToken);
+                    thumbnailKey = null;
+                }
+
+                await objectStorage.DeleteAsync(objectKey, cancellationToken);
+                objectKey = null;
+                return admitted;
             }
 
-            await dbContext.SaveChangesAsync(cancellationToken);
             return Success(asset);
         }
         catch (ArgumentException exception)
@@ -226,6 +258,13 @@ internal sealed class MediaApplicationService(
         var asset = await dbContext.MediaAssets.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == assetId, cancellationToken);
         if (asset is null)
+        {
+            return new MediaAccessResult(MediaAccessStatus.NotFound);
+        }
+
+        // A purged asset has no bytes left to grant. It reports NotFound rather than NotReady,
+        // because "not ready yet" implies waiting will help and nothing will bring it back.
+        if (asset.Status == MediaAssetStatus.Purged)
         {
             return new MediaAccessResult(MediaAccessStatus.NotFound);
         }
@@ -346,7 +385,10 @@ internal sealed class MediaApplicationService(
                     item.MediaAssetId == assetId &&
                     item.Variant == MediaDerivativeVariant.Thumbnail,
                 cancellationToken);
-            if (derivative is null)
+            // The row survives a purge as history with its storage key cleared, so a missing key is
+            // as much a "gone" as a missing row. Both are NotFound; neither may reach storage with
+            // a null key and surface as a 500.
+            if (derivative?.StorageKey is null)
             {
                 return new MediaContentResult(MediaContentStatus.NotFound);
             }
@@ -370,6 +412,129 @@ internal sealed class MediaApplicationService(
             return new MediaContentResult(MediaContentStatus.NotFound);
         }
     }
+
+    /// <summary>
+    /// Bytes this workspace currently occupies on disk.
+    /// </summary>
+    /// <remarks>
+    /// The original and every derivative count, because both are real objects. Tombstoned but
+    /// not-yet-purged bytes count too: they are still physically stored, and pretending otherwise
+    /// would let a workspace overshoot its allowance by everything awaiting deletion, which is the
+    /// unsafe direction to be wrong in. Purged bytes are excluded, which is what finally releases
+    /// the space. External embeds occupy nothing and are not counted.
+    /// </remarks>
+    private async Task<long> MeasureWorkspaceBytesAsync(CancellationToken cancellationToken)
+    {
+        var assetBytes = await dbContext.MediaAssets.AsNoTracking()
+            .Where(item =>
+                item.Source == MediaSource.Upload &&
+                item.Status != MediaAssetStatus.Purged &&
+                item.Length != null)
+            .SumAsync(item => item.Length ?? 0L, cancellationToken);
+        var derivativeBytes = await dbContext.MediaAssetDerivatives.AsNoTracking()
+            .Where(item => item.PurgedAtUtc == null)
+            .SumAsync(item => item.Length, cancellationToken);
+        return assetBytes + derivativeBytes;
+    }
+
+    /// <summary>
+    /// Bytes one client's progress photos occupy, under the same rules as the workspace total.
+    /// </summary>
+    private async Task<long> MeasureClientProgressPhotoBytesAsync(
+        Guid clientProfileId,
+        CancellationToken cancellationToken)
+    {
+        var assetBytes = await (
+            from photo in dbContext.ProgressPhotos.AsNoTracking()
+            join asset in dbContext.MediaAssets.AsNoTracking()
+                on new { photo.TenantId, Id = photo.MediaAssetId }
+                equals new { asset.TenantId, asset.Id }
+            where photo.ClientProfileId == clientProfileId &&
+                  asset.Status != MediaAssetStatus.Purged &&
+                  asset.Length != null
+            select asset.Length ?? 0L)
+            .SumAsync(cancellationToken);
+        var derivativeBytes = await (
+            from photo in dbContext.ProgressPhotos.AsNoTracking()
+            join derivative in dbContext.MediaAssetDerivatives.AsNoTracking()
+                on new { photo.TenantId, Id = photo.MediaAssetId }
+                equals new { derivative.TenantId, Id = derivative.MediaAssetId }
+            where photo.ClientProfileId == clientProfileId && derivative.PurgedAtUtc == null
+            select derivative.Length)
+            .SumAsync(cancellationToken);
+        return assetBytes + derivativeBytes;
+    }
+
+    /// <summary>
+    /// Commits the asset only if it still fits, and returns a rejection when it does not.
+    /// </summary>
+    /// <remarks>
+    /// A read-then-write check cannot hold: two uploads can both observe the same free space and
+    /// both commit. The measurement, the decision, and the insert therefore happen inside one
+    /// transaction holding a PostgreSQL advisory lock keyed on the tenant, so a second upload in
+    /// the same workspace — in this process or in another replica — blocks until the first has
+    /// either committed its bytes or rolled back. The lock is transaction-scoped, so it is released
+    /// by commit or rollback and cannot be leaked by a crash. It is taken after the object is
+    /// stored, so it is held for the decision rather than for the whole ingest.
+    /// </remarks>
+    private async Task<MediaCommandResult?> AdmitWithinQuotaAsync(
+        MediaAsset asset,
+        MediaAssetDerivative? derivative,
+        Guid? clientProfileId,
+        CancellationToken cancellationToken)
+    {
+        // The connection retries on transient failure, and that strategy owns transaction
+        // boundaries: the whole check-and-commit has to be one retriable unit rather than a
+        // hand-rolled transaction it cannot replay.
+        return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            await dbContext.Database.ExecuteSqlAsync(
+                $"SELECT pg_advisory_xact_lock({QuotaLockKey(tenantContext.TenantId)})",
+                cancellationToken);
+
+            var incoming = (asset.Length ?? 0L) + (derivative?.Length ?? 0L);
+            if (await MeasureWorkspaceBytesAsync(cancellationToken) + incoming
+                > storageOptions.MaxWorkspaceStorageBytes)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return QuotaExceeded(
+                    MediaQuotaCodes.WorkspaceStorageExceeded,
+                    "The workspace media-storage allowance is full.");
+            }
+
+            if (clientProfileId is { } client &&
+                await MeasureClientProgressPhotoBytesAsync(client, cancellationToken) + incoming
+                > storageOptions.MaxClientProgressPhotoBytes)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return QuotaExceeded(
+                    MediaQuotaCodes.ClientProgressPhotoStorageExceeded,
+                    "This client's progress-photo allowance is full.");
+            }
+
+            dbContext.MediaAssets.Add(asset);
+            if (derivative is not null)
+            {
+                dbContext.MediaAssetDerivatives.Add(derivative);
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        });
+    }
+
+    /// <summary>
+    /// Advisory locks share one 64-bit key space across the whole database, so the workspace key is
+    /// mixed with a constant that namespaces this use and keeps it clear of any other advisory lock
+    /// the application might take later. Locking the workspace also serialises every client inside
+    /// it, so a single lock covers both allowances and no lock ordering can deadlock.
+    /// </summary>
+    private const long QuotaLockNamespace = 0x5B5_0000_0000_0000L;
+
+    private static long QuotaLockKey(Guid tenantId) =>
+        BitConverter.ToInt64(tenantId.ToByteArray(), 0) ^ QuotaLockNamespace;
 
     private Task<bool> HasThumbnailAsync(Guid assetId, CancellationToken cancellationToken) =>
         dbContext.MediaAssetDerivatives.AsNoTracking().AnyAsync(
@@ -397,7 +562,7 @@ internal sealed class MediaApplicationService(
                     .AnyAsync(item => item.MediaAssetId == assetId, cancellationToken) ||
                 await dbContext.WorkoutExerciseMediaSnapshots.AsNoTracking()
                     .AnyAsync(item => item.MediaAssetId == assetId, cancellationToken);
-            asset.MarkTombstoned(clock.UtcNow, DeleteRetention, isHistoricallyReferenced);
+            asset.MarkTombstoned(clock.UtcNow, MediaRetentionPolicy.DeleteRetention, isHistoricallyReferenced);
             await dbContext.SaveChangesAsync(cancellationToken);
             return Success(asset);
         }
@@ -732,6 +897,9 @@ internal sealed class MediaApplicationService(
         new(
             MediaCommandStatus.Invalid,
             Errors: new Dictionary<string, string[]> { [field] = [message] });
+
+    private static MediaCommandResult QuotaExceeded(string code, string message) =>
+        new(MediaCommandStatus.QuotaExceeded, Code: code, Message: message);
 
     /// <summary>
     /// The two objects a sanitised progress photo occupies in storage: the metadata-free original

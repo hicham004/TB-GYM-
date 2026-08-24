@@ -1078,7 +1078,7 @@ export type MediaAssetPage = {
   items: Array<MediaAssetView>;
 };
 
-export type MediaAssetStatus = 'PendingScan' | 'Ready' | 'Rejected' | 'Tombstoned';
+export type MediaAssetStatus = 'PendingScan' | 'Ready' | 'Rejected' | 'Tombstoned' | 'Purged';
 
 export type MediaAssetView = {
   id: string;

@@ -152,7 +152,9 @@ export function mediaStatusLabel(value: MediaAssetStatus): string {
     PendingScan: $localize`Pending scan`,
     Ready: $localize`Ready`,
     Rejected: $localize`Rejected`,
+    // Removed but still recoverable during retention, versus deleted for good.
     Tombstoned: $localize`Removed`,
+    Purged: $localize`Deleted permanently`,
   };
   return labels[value];
 }

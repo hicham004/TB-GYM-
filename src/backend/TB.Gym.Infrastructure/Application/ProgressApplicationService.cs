@@ -787,7 +787,8 @@ internal sealed partial class ProgressApplicationService(
             upload.ContentType,
             upload.Content,
             cancellationToken,
-            MediaPurpose.ProgressPhoto);
+            MediaPurpose.ProgressPhoto,
+            clientProfileId);
         if (stored.Status != MediaCommandStatus.Success || stored.Asset is null)
         {
             return stored.Status switch
@@ -805,6 +806,11 @@ internal sealed partial class ProgressApplicationService(
                 MediaCommandStatus.Conflict => PhotoConflict(
                     "ProgressPhotoConflict",
                     "The progress photo conflicts with current media state."),
+                // The storage-allowance codes are passed straight through rather than flattened
+                // into a generic conflict, so the client can tell which limit was reached.
+                MediaCommandStatus.QuotaExceeded => PhotoConflict(
+                    stored.Code ?? MediaQuotaCodes.WorkspaceStorageExceeded,
+                    stored.Message ?? "The storage allowance is full."),
                 _ => new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.NotFound),
             };
         }
@@ -854,13 +860,25 @@ internal sealed partial class ProgressApplicationService(
 
         try
         {
+            var now = clock.UtcNow;
             dbContext.Entry(photo).Property(item => item.Version).OriginalValue = request.Version;
             photo.Remove();
             dbContext.ProgressPhotoRemovals.Add(ProgressPhotoRemoval.Create(
                 photo,
                 request.Reason,
-                clock.UtcNow,
+                now,
                 actorUserId));
+
+            // Removing a photo also schedules its bytes for deletion. Without this the image left
+            // the coach's view but stayed on disk forever, counted against the allowance and never
+            // reclaimed. A progress photo is never referenced by a program snapshot, so it is not
+            // historically referenced and the ordinary retention applies. The owning client keeps
+            // reading it until the bytes actually go: CreateAccessAsync still permits Tombstoned.
+            var asset = await dbContext.MediaAssets.SingleOrDefaultAsync(
+                item => item.Id == photo.MediaAssetId,
+                cancellationToken);
+            asset?.MarkTombstoned(now, MediaRetentionPolicy.DeleteRetention, isHistoricallyReferenced: false);
+
             await dbContext.SaveChangesAsync(cancellationToken);
             return new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.Success, ToPhotoView(photo));
         }

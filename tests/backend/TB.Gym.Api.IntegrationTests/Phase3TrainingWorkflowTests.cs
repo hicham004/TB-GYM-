@@ -34,6 +34,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     private WebApplicationFactory<Program>? factory;
     private MutableTestClock? testClock;
     private SensitiveLogCapture? sensitiveLogCapture;
+    private StorageFaultSwitch? storageFaults;
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -55,6 +56,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         testClock = clock;
         var logCapture = new SensitiveLogCapture();
         sensitiveLogCapture = logCapture;
+        var storageFaults = new StorageFaultSwitch();
+        this.storageFaults = storageFaults;
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");
@@ -71,6 +74,13 @@ public sealed partial class Phase3TrainingWorkflowTests
                     ["Media:StorageRoot"] = Path.Combine(Path.GetTempPath(), databaseName, "media"),
                     ["Media:AccessLifetimeSeconds"] =
                         MediaAccessLifetimeSeconds.ToString(CultureInfo.InvariantCulture),
+                    // The sweep is driven explicitly by the purge tests, so a background tick can
+                    // never race an assertion about what has or has not been deleted.
+                    ["Media:PurgeEnabled"] = "false",
+                    ["Media:MaxWorkspaceStorageBytes"] =
+                        Phase5B5WorkspaceQuotaBytes().ToString(CultureInfo.InvariantCulture),
+                    ["Media:MaxClientProgressPhotoBytes"] =
+                        Phase5B5ClientQuotaBytes().ToString(CultureInfo.InvariantCulture),
                 }));
             builder.ConfigureServices(services =>
             {
@@ -84,6 +94,7 @@ public sealed partial class Phase3TrainingWorkflowTests
                 services.AddSingleton<TodayQueryCounter>();
                 services.AddDbContext<GymDbContext>((provider, options) =>
                     options.AddInterceptors(provider.GetRequiredService<TodayQueryCounter>()));
+                Phase5B5DecorateObjectStorage(services, storageFaults);
             });
         });
     }

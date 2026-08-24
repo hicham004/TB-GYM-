@@ -11,6 +11,20 @@ public interface IObjectStorage
     Task DeleteAsync(string objectKey, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Deletes the objects behind media whose retention has elapsed. Exposed as a port so the sweep can
+/// be driven directly by a test rather than only by its background schedule.
+/// </summary>
+public interface IMediaPurgeService
+{
+    Task<MediaPurgeOutcome> PurgeDueAsync(int batchSize, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// What one sweep did. <paramref name="Failed"/> assets remain tombstoned, due, and retryable.
+/// </summary>
+public sealed record MediaPurgeOutcome(int Claimed, int Purged, int Failed);
+
 public interface IMediaScanner
 {
     Task<MediaScanResult> ScanAsync(
