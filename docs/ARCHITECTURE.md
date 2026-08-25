@@ -302,9 +302,21 @@ The Angular 22 application is standalone and feature-oriented:
 - relative API URLs retain a same-origin security model;
 - Angular's built-in XSRF integration is used;
 - forms display server validation but never replace it;
+- a control whose value feeds a `computed` must itself be a signal, because a computed reading a
+  plain field never re-evaluates and silently disables whatever depends on it;
+- currency inputs accept either case and are normalised on send, matching the server's ISO code;
 - feature code does not calculate authoritative fitness or billing state.
 - English source text is marked for Angular extraction and layouts use logical CSS properties
   so a later Arabic locale can provide RTL presentation without component rewrites.
+
+**Open decision — inline field validation.** The application has no touched-state convention: no
+template consults `touched`, `ng-touched`, or `control.invalid`, and every form reports its
+outstanding reasons as soon as the form is invalid. On a pristine form this renders `role="alert"`
+text before the user has typed anything, which is noise for sighted users and an unprompted
+announcement for assistive technology. Phase 6A-4 deliberately did not invent a convention for one
+screen, because a validation-display rule applied inconsistently is worse than one applied
+consistently badly. Choosing one — most likely "show a field's error once it is touched or once
+submission has been attempted" — is a whole-application decision and belongs to its own chunk.
 
 Phase 1 transport contracts are generated from the running API's OpenAPI document with
 `npm run api:generate` and checked in for deterministic Angular builds. The API client maps
@@ -405,6 +417,11 @@ Scale in this order:
 - API integration tests cover HTTP behavior, authentication, tenant isolation, antiforgery,
   PostgreSQL constraints, and concurrency.
 - Angular tests cover stores, guards, interceptors, and critical feature interactions.
+- A feature's primary action is tested through its rendered controls, not by calling the
+  component method behind it. `src/testing/dom.ts` addresses a control by the caption a user reads
+  (or its `aria-label`), drives it with the event that kind of control actually reports, and
+  settles change detection across the passes Angular's forms pipeline needs. A spec that calls the
+  method proves the method; only a spec that drives the control proves the screen is wired to it.
 - Container-backed tests use real PostgreSQL for behavior SQLite cannot reproduce, including
   ranges, exclusion constraints, case handling, and `xmin`.
 - Every production incident involving an invariant should produce a regression test.
@@ -423,6 +440,14 @@ multi-workspace notes, entitlement expiry, private browser media grants, tenant 
 stale/double progression, and the bounded `Today` SQL shape. The release check sets
 `TB_GYM_REQUIRE_POSTGRES_TESTS=true`; an unavailable PostgreSQL environment fails rather than
 being reported as a passing integration run.
+
+Phase 6A-4 closes the blindness that let a dead Assign button ship behind a green suite: before it,
+18 Angular spec files existed and only 6 touched the DOM, with 8 of 13 features carrying no spec at
+all. It adds 21 spec files covering auth, invitations, commercial, clients, workspace, profile,
+account, nutrition, and training, each driving the real controls of that feature's primary action
+and asserting both that the action becomes performable and that it calls the API with the right
+payload. Every added test was proven to fail against deliberately broken wiring before being
+accepted. The pass found two dead controls in the commercial screens, both fixed.
 
 Checkpoint counts on 2026-08-21 are intentionally separated: 63 tests repository-wide
 (29 domain, 1 architecture, 16 PostgreSQL API integration, 17 Angular); 31 are Phase 3

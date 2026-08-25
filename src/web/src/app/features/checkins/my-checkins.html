@@ -21,8 +21,10 @@
         <ul class="assignments">
           @for (assignment of assignments(); track assignment.id) {
             <li>
+              <!-- The version number is part of the client's own record: the coach's list shows
+                   it, and two check-ins with the same title can ask different questions. -->
               <button type="button" class="link" (click)="open(assignment.id)">
-                {{ assignment.formTitle }}
+                {{ assignment.formTitle }} (v{{ assignment.formVersionNumber }})
               </button>
               <span class="detail" i18n>Due {{ assignment.dueDate | date: 'mediumDate' }}</span>
             </li>
@@ -40,9 +42,13 @@
         </p>
 
         @if (view.response; as response) {
-          <p class="detail">
+          <p class="detail badge-row">
             <span class="badge">{{ response.status }}</span>
             @if (response.submittedDate) {
+              <!-- An explicit separator, as elsewhere in this template. Angular removes the
+                   newline between the badge and this text, so the two ran together as
+                   "SubmittedSubmitted 26 Aug 2026". -->
+              <span aria-hidden="true">·</span>
               <ng-container i18n
                 >Submitted {{ response.submittedDate | date: 'mediumDate' }}</ng-container
               >

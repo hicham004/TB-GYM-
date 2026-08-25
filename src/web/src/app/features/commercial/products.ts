@@ -47,7 +47,9 @@ export class Products {
     durationCount: [8, [Validators.required, Validators.min(1), Validators.max(3650)]],
     durationUnit: ['Week' as const, Validators.required],
     priceAmount: [0, [Validators.required, Validators.min(0)]],
-    currencyCode: ['', [Validators.required, Validators.pattern(/^[A-Z]{3}$/)]],
+    // Either case: `toOfferRequest` uppercases before sending, so an uppercase-only pattern only
+    // dead-ended the form.
+    currencyCode: ['', [Validators.required, Validators.pattern(/^[A-Za-z]{3}$/)]],
     training: [true],
     nutrition: [false],
     checkIns: [true],
@@ -60,7 +62,9 @@ export class Products {
     durationCount: [8, [Validators.required, Validators.min(1), Validators.max(3650)]],
     durationUnit: ['Week' as const, Validators.required],
     priceAmount: [0, [Validators.required, Validators.min(0)]],
-    currencyCode: ['', [Validators.required, Validators.pattern(/^[A-Z]{3}$/)]],
+    // Either case: `toOfferRequest` uppercases before sending, so an uppercase-only pattern only
+    // dead-ended the form.
+    currencyCode: ['', [Validators.required, Validators.pattern(/^[A-Za-z]{3}$/)]],
     training: [true],
     nutrition: [false],
     checkIns: [true],
@@ -91,31 +95,33 @@ export class Products {
       return;
     }
 
-    await this.run(async () => {
-      await firstValueFrom(
-        this.api.createCoachingProduct({
-          name: raw.name,
-          description: raw.description || null,
-          initialOffer: offer,
-        }),
-      );
-      this.createForm.reset({
-        name: '',
-        description: '',
-        offerLabel: '',
-        durationCount: 8,
-        durationUnit: 'Week',
-        priceAmount: 0,
-        currencyCode: this.catalog()?.workspaceCurrencyCode ?? '',
-        training: true,
-        nutrition: false,
-        checkIns: true,
-        messaging: false,
-        resourceLibrary: false,
-      });
-      this.createOpen.set(false);
-      this.notice.set($localize`Coaching product created.`);
-    });
+    await this.run(
+      async () => {
+        await firstValueFrom(
+          this.api.createCoachingProduct({
+            name: raw.name,
+            description: raw.description || null,
+            initialOffer: offer,
+          }),
+        );
+        this.createForm.reset({
+          name: '',
+          description: '',
+          offerLabel: '',
+          durationCount: 8,
+          durationUnit: 'Week',
+          priceAmount: 0,
+          currencyCode: this.catalog()?.workspaceCurrencyCode ?? '',
+          training: true,
+          nutrition: false,
+          checkIns: true,
+          messaging: false,
+          resourceLibrary: false,
+        });
+        this.createOpen.set(false);
+      },
+      $localize`Coaching product created.`,
+    );
   }
 
   protected openOffer(product: CoachingProduct): void {
@@ -147,27 +153,29 @@ export class Products {
       return;
     }
 
-    await this.run(async () => {
-      await firstValueFrom(this.api.addProductOffer(productId, offer));
-      this.offerProductId.set(null);
-      this.notice.set($localize`New offer added. Existing enrollments were left unchanged.`);
-    });
+    await this.run(
+      async () => {
+        await firstValueFrom(this.api.addProductOffer(productId, offer));
+        this.offerProductId.set(null);
+      },
+      $localize`New offer added. Existing enrollments were left unchanged.`,
+    );
   }
 
   protected async toggleProduct(product: CoachingProduct): Promise<void> {
-    await this.run(async () => {
-      await firstValueFrom(
-        this.api.updateCoachingProduct(product.id, {
-          name: product.name,
-          description: product.description,
-          isActive: !product.isActive,
-          version: product.version,
-        }),
-      );
-      this.notice.set(
-        product.isActive ? $localize`Product archived.` : $localize`Product restored.`,
-      );
-    });
+    await this.run(
+      async () => {
+        await firstValueFrom(
+          this.api.updateCoachingProduct(product.id, {
+            name: product.name,
+            description: product.description,
+            isActive: !product.isActive,
+            version: product.version,
+          }),
+        );
+      },
+      product.isActive ? $localize`Product archived.` : $localize`Product restored.`,
+    );
   }
 
   protected async toggleOffer(product: CoachingProduct, offerId: string): Promise<void> {
@@ -176,10 +184,14 @@ export class Products {
       return;
     }
 
-    await this.run(async () => {
-      await firstValueFrom(this.api.setOfferAvailability(offer.id, !offer.isActive, offer.version));
-      this.notice.set(offer.isActive ? $localize`Offer retired.` : $localize`Offer restored.`);
-    });
+    await this.run(
+      async () => {
+        await firstValueFrom(
+          this.api.setOfferAvailability(offer.id, !offer.isActive, offer.version),
+        );
+      },
+      offer.isActive ? $localize`Offer retired.` : $localize`Offer restored.`,
+    );
   }
 
   protected featureLabel(feature: CoachingFeature): string {
@@ -210,13 +222,19 @@ export class Products {
     }
   }
 
-  private async run(command: () => Promise<void>): Promise<void> {
+  /**
+   * The confirmation is set after the reload, not by the command. `load` clears messages, so a
+   * notice set inside `command` was wiped by the refresh that followed it in the same turn and no
+   * success confirmation ever reached the screen.
+   */
+  private async run(command: () => Promise<void>, message: string): Promise<void> {
     this.busy.set(true);
     this.clearMessages();
     try {
       await this.csrf.refresh();
       await command();
       await this.load();
+      this.notice.set(message);
     } catch (error) {
       this.error.set(apiErrorMessage(error, $localize`The commercial change could not be saved.`));
     } finally {

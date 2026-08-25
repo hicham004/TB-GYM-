@@ -74,6 +74,19 @@
   color: var(--danger, #b3261e);
 }
 
+/*
+ * The response summary puts a status badge beside a submitted date, and a second badge when the
+ * submission was late. It is a plain paragraph, and Angular removes the newline between the
+ * elements, so without an explicit gap the badge and the date render as one run-on token
+ * ("Submitted26 Aug 2026"). The assignment rows below already solve this the same way.
+ */
+.detail.badge-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .form-list,
 .versions,
 .assignments,

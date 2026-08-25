@@ -12,6 +12,7 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { settle } from '../../../testing/dom';
 import { MyCheckIns } from './my-checkins';
 
 const TEXT_KEY = 'a'.repeat(32);
@@ -92,18 +93,6 @@ function response(overrides: Partial<CheckInResponseView> = {}): CheckInResponse
   };
 }
 
-/**
- * ngModel writes its value to the DOM through the forms pipeline rather than synchronously, so a
- * single change-detection pass is not enough to observe a rendered value or a disabled control.
- */
-async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }) {
-  fixture.detectChanges();
-  await fixture.whenStable();
-  fixture.detectChanges();
-  await fixture.whenStable();
-  fixture.detectChanges();
-}
-
 interface Harness {
   open(assignmentId: string): Promise<void>;
   setText(questionId: string, value: string): void;
@@ -150,6 +139,40 @@ describe('MyCheckIns', () => {
 
     expect(host.textContent).toContain('Weekly check-in');
     expect(host.textContent).toContain('Choose a check-in to answer it.');
+  });
+
+  /**
+   * The client's list used to show the title alone while the coach's showed the version too. Two
+   * check-ins can share a title and ask different questions, so the version belongs on both.
+   */
+  it('names the form version in the client’s own list, as the coach’s list does', async () => {
+    const { host } = await render({});
+
+    expect(host.querySelector('.assignments button')?.textContent).toContain(
+      'Weekly check-in (v1)',
+    );
+  });
+
+  /**
+   * The status badge and the submitted date are separate elements in one paragraph, and Angular
+   * removes the newline between them, so they used to render as "Submitted26 Aug 2026".
+   */
+  it('keeps the status badge and the submitted date apart', async () => {
+    const submitted = response({
+      status: 'Submitted',
+      submittedAtUtc: '2026-08-26T10:00:00Z',
+      submittedDate: '2026-08-26',
+    });
+    const { fixture, host, component } = await render({
+      getOwnCheckInResponse: vi.fn(() => of(detail(submitted))),
+    });
+
+    await component.open('assignment-1');
+    await settle(fixture);
+
+    const summary = host.querySelector('.badge-row');
+    expect(summary).not.toBeNull();
+    expect(summary!.textContent).not.toContain('SubmittedSubmitted');
   });
 
   it('blocks submission until every required question is answered', async () => {

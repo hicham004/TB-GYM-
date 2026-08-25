@@ -52,7 +52,10 @@ export class ClientCommercial {
 
   protected readonly paymentForm = this.formBuilder.nonNullable.group({
     amount: [0, [Validators.required, Validators.min(0.01)]],
-    currencyCode: ['', [Validators.required, Validators.pattern(/^[A-Z]{3}$/)]],
+    // Either case, because `recordPayment` uppercases before sending. An uppercase-only pattern
+    // made a lowercase code fail validation silently: nothing disables Confirm payment, so the
+    // coach clicked a live button and no request, message or field marking followed.
+    currencyCode: ['', [Validators.required, Validators.pattern(/^[A-Za-z]{3}$/)]],
     receivedAtLocal: [dateTimeLocalInput(), Validators.required],
     method: ['Cash' as ManualPaymentMethod, Validators.required],
     reference: ['', Validators.maxLength(200)],

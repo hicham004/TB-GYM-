@@ -12,6 +12,7 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { choose, settle, type } from '../../../testing/dom';
 import { CheckInClients } from './checkin-clients';
 
 const SHARED_KEY = 'a'.repeat(32);
@@ -183,18 +184,6 @@ const PUBLISHED_FORM = {
   version: 2,
 } as const;
 
-/**
- * ngModel writes its value to the DOM through the forms pipeline rather than synchronously, so a
- * single change-detection pass is not enough to observe a rendered value or a disabled control.
- */
-async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }) {
-  fixture.detectChanges();
-  await fixture.whenStable();
-  fixture.detectChanges();
-  await fixture.whenStable();
-  fixture.detectChanges();
-}
-
 interface Harness {
   selectClient(clientId: string): Promise<void>;
   openResponse(assignmentId: string): Promise<void>;
@@ -357,20 +346,16 @@ describe('CheckInClients', () => {
       const submit = host.querySelector<HTMLButtonElement>(
         'form.builder-form button[type="submit"]',
       );
-      const select = host.querySelector<HTMLSelectElement>('select[name="formVersionId"]');
-      const dueDate = host.querySelector<HTMLInputElement>('input[name="dueDate"]');
       expect(submit).not.toBeNull();
       expect(submit!.disabled).toBe(true);
 
-      select!.value = 'version-1';
-      select!.dispatchEvent(new Event('change'));
+      choose(host, 'select[name="formVersionId"]', 'version-1');
       await settle(fixture);
       // One field alone is not enough, and the outstanding reason is still on screen.
       expect(submit!.disabled).toBe(true);
       expect(host.textContent).toContain('Choose a due date.');
 
-      dueDate!.value = '2026-08-24';
-      dueDate!.dispatchEvent(new Event('input'));
+      type(host, 'input[name="dueDate"]', '2026-08-24');
       await settle(fixture);
 
       expect(submit!.disabled).toBe(false);
@@ -394,13 +379,8 @@ describe('CheckInClients', () => {
       const submit = host.querySelector<HTMLButtonElement>(
         'form.builder-form button[type="submit"]',
       );
-      host.querySelector<HTMLSelectElement>('select[name="formVersionId"]')!.value = 'version-1';
-      host
-        .querySelector<HTMLSelectElement>('select[name="formVersionId"]')!
-        .dispatchEvent(new Event('change'));
-      const dueDate = host.querySelector<HTMLInputElement>('input[name="dueDate"]')!;
-      dueDate.value = '2026-08-21';
-      dueDate.dispatchEvent(new Event('input'));
+      choose(host, 'select[name="formVersionId"]', 'version-1');
+      type(host, 'input[name="dueDate"]', '2026-08-21');
       await settle(fixture);
 
       expect(submit!.disabled).toBe(true);

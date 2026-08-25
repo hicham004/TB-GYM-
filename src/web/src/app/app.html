@@ -50,7 +50,10 @@
       <div class="session-controls">
         @if (tenants.memberships().length > 0) {
           <label class="workspace-picker">
-            <span i18n>Workspace</span>
+            <!-- "Active workspace", not "Workspace": an owner also has a Workspace nav link, and
+                 the two sat side by side in the topbar reading "Workspace Workspace". This one
+                 chooses which workspace you are in; that one opens its settings. -->
+            <span i18n>Active workspace</span>
             <select [value]="tenants.selectedTenantId() ?? ''" (change)="selectTenant($event)">
               @for (membership of tenants.memberships(); track membership.tenantId) {
                 <option [value]="membership.tenantId">
