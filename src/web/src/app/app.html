@@ -31,12 +31,15 @@
           <a routerLink="/clients" routerLinkActive="active" i18n>Clients</a>
           <a routerLink="/training/programs" routerLinkActive="active" i18n>Programs</a>
           <a routerLink="/training/exercises" routerLinkActive="active" i18n>Exercises</a>
+          <a routerLink="/checkins/forms" routerLinkActive="active" i18n>Check-in forms</a>
+          <a routerLink="/checkins/clients" routerLinkActive="active" i18n>Client check-ins</a>
           <a routerLink="/products" routerLinkActive="active" i18n>Products</a>
           <a routerLink="/invitations" routerLinkActive="active" i18n>Invitations</a>
         }
         @if (tenants.isClient()) {
           <a routerLink="/training/today" routerLinkActive="active" i18n>Today</a>
           <a routerLink="/progress" routerLinkActive="active" i18n>Progress</a>
+          <a routerLink="/checkins/me" routerLinkActive="active" i18n>Check-ins</a>
           <a routerLink="/profile" routerLinkActive="active" i18n>My profile</a>
         }
         @if (tenants.isOwner()) {

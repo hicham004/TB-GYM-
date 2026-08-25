@@ -65,6 +65,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Nutrition | Versioned foods/cooking factors, immutable recipes and meal-plan versions, assigned client snapshots, daily actuals, energy/macro calculations, structured allergens, reviewed AI drafts |
 | Progress | Daily bodyweight, weekly summaries, measurements, dated progress photos and progress views |
 | Strength | Append-only max history, canonical RPE/RIR, versioned estimates, recommendations, rounding |
+| Check-ins | Form lineages, immutable published versions, stable question keys, assignments, typed client answers, one-way submission/review, comparison projections |
 | Messaging | Tenant-scoped coach/client conversations and messages |
 | Notifications | Idempotent outbox, delivery scheduling, email and future channel ports |
 | Media | Object metadata, signature/scanner lifecycle, protected access, subordinate renditions, external embeds, retention |
@@ -472,3 +473,41 @@ different historical layers. Progression is a reviewed, hashed append operation,
 strength changes never rewrite a captured program. A completed workout remains available in
 the dated client view on its scheduled day so terminal mesocycle state does not erase the
 just-completed prescription/performance comparison. See ADR 0007.
+
+## 14. Phase 6A check-in flow
+
+```text
+CheckInForm lineage
+  -> draft CheckInFormVersion (stable QuestionKey per question)
+  -> publish freezes the version, its questions and its options at the database
+  -> CheckInAssignment pins one published version + one client + workspace-local due date
+  -> CheckInResponse (one per assignment): Draft -> Submitted -> Reviewed, one way
+  -> typed CheckInAnswer rows + CheckInAnswerChoice rows FK'd to that version's own options
+  -> append-only CheckInResponseEvent for submit and review
+  -> comparison: read-side projection over two responses, aligned by QuestionKey
+```
+
+The form, the published version, the assignment and the response are four deliberately separate
+layers. A version is the unit of truth: publishing freezes it, and an assignment resolves the exact
+version it named rather than the lineage's latest publication, so a later version can never change
+what a client was asked or what a submission means.
+
+Snapshotting is by immutability rather than by copying. An answer stores no question or option text;
+a submission renders its original wording by reading the frozen version's rows. The answer chain is
+held by composite foreign keys that carry each parent's discriminating columns, so answering a
+question of another version, or selecting an option belonging to another question, is refused by
+referential integrity rather than by application code.
+
+Drafts are lenient and submission is strict, validating the whole response in one pass and returning
+every failure together. Review is a state change plus an append-only event and never touches an
+answer. Comparison stores nothing, aligns by `QuestionKey`, carries each side's own wording, and
+reports a one-sided question explicitly rather than as an empty answer. No answer is interpreted:
+there is no score, rating, adherence measure or trend over check-in content.
+
+The Angular surface is three lazy routes under `/checkins`: the coach's form builder (`forms`), the
+coach's client view for assigning, reviewing and comparing (`clients`), and the client's own
+answering screen (`me`). The builder renders a published version read-only and offers a derived
+draft instead of an edit; the answering screen saves an incomplete draft freely and blocks only
+submission. Every rule it enforces is a duplicate of a server rule, never the only copy.
+
+See ADR 0017 for authoring and ADR 0016 for responses.

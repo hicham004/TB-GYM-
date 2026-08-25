@@ -7,6 +7,7 @@ public sealed class ModuleDependencyTests
 {
     private static readonly Assembly[] ModuleAssemblies =
     [
+        typeof(TB.Gym.Modules.CheckIns.CheckInsModule).Assembly,
         typeof(TB.Gym.Modules.Clients.ClientsModule).Assembly,
         typeof(TB.Gym.Modules.ExerciseLibrary.ExerciseLibraryModule).Assembly,
         typeof(TB.Gym.Modules.Gamification.GamificationModule).Assembly,

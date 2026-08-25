@@ -1148,20 +1148,8 @@ internal sealed partial class ProgressApplicationService(
             DateOnly.MinValue.DayNumber,
             DateOnly.MaxValue.DayNumber));
 
-    private async Task<TenantCalendar> GetTenantCalendarAsync(CancellationToken cancellationToken)
-    {
-        var tenant = await dbContext.Tenants
-            .Where(item => item.Id == tenantContext.TenantId)
-            .Select(item => new { item.TimeZoneId, item.WeekStartsOn })
-            .SingleAsync(cancellationToken);
-        var localNow = TimeZoneInfo.ConvertTime(
-            clock.UtcNow,
-            TimeZoneInfo.FindSystemTimeZoneById(tenant.TimeZoneId));
-        return new TenantCalendar(
-            tenant.TimeZoneId,
-            tenant.WeekStartsOn,
-            DateOnly.FromDateTime(localNow.DateTime));
-    }
+    private Task<WorkspaceCalendar> GetTenantCalendarAsync(CancellationToken cancellationToken) =>
+        WorkspaceCalendarReader.ReadAsync(dbContext, clock, tenantContext.TenantId, cancellationToken);
 
     private static BodyweightObservationView ToObservationView(BodyweightObservation observation) =>
         new(
@@ -1235,6 +1223,4 @@ internal sealed partial class ProgressApplicationService(
         string code,
         string message) =>
         new(ProgressCommandStatus.Conflict, Code: code, Message: message);
-
-    private sealed record TenantCalendar(string TimeZoneId, DayOfWeek WeekStartsOn, DateOnly Today);
 }

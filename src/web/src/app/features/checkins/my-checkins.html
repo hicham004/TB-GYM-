@@ -1,0 +1,161 @@
+<section class="checkins">
+  <h2 i18n>My check-ins</h2>
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+  @if (notice(); as message) {
+    <p class="notice" role="status">{{ message }}</p>
+  }
+
+  <div class="split">
+    <article class="panel">
+      <h3 i18n>Assigned</h3>
+      @if (loading() && assignments().length === 0) {
+        <p i18n>Loading your check-ins…</p>
+      } @else if (assignments().length === 0) {
+        <p class="empty" i18n>You have no check-ins right now.</p>
+      } @else {
+        <ul class="assignments">
+          @for (assignment of assignments(); track assignment.id) {
+            <li>
+              <button type="button" class="link" (click)="open(assignment.id)">
+                {{ assignment.formTitle }}
+              </button>
+              <span class="detail" i18n>Due {{ assignment.dueDate | date: 'mediumDate' }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </article>
+
+    <article class="panel">
+      @if (detail(); as view) {
+        <h3>{{ view.assignment.formTitle }}</h3>
+        <p class="detail" i18n>
+          Due {{ view.assignment.dueDate | date: 'mediumDate' }} · version
+          {{ view.assignment.formVersionNumber }}
+        </p>
+
+        @if (view.response; as response) {
+          <p class="detail">
+            <span class="badge">{{ response.status }}</span>
+            @if (response.submittedDate) {
+              <ng-container i18n
+                >Submitted {{ response.submittedDate | date: 'mediumDate' }}</ng-container
+              >
+            }
+            @if (response.isLate) {
+              <span class="badge late" i18n>After the due date</span>
+            }
+          </p>
+        }
+
+        @if (!editable()) {
+          <p class="hint" i18n>This check-in has been submitted and can no longer be changed.</p>
+        }
+
+        <form class="answer-form" (ngSubmit)="submit()">
+          <ol class="questions">
+            @for (question of view.version.questions; track question.id) {
+              <li class="question">
+                <p class="prompt">
+                  {{ question.prompt }}
+                  @if (question.isRequired) {
+                    <span aria-hidden="true">*</span>
+                  }
+                </p>
+                @if (question.helpText) {
+                  <p class="detail">{{ question.helpText }}</p>
+                }
+
+                @let answer = answerFor(question.id);
+
+                @switch (question.questionType) {
+                  @case ('ShortText') {
+                    <input
+                      type="text"
+                      [name]="'q-' + question.id"
+                      [ngModel]="answer?.textValue ?? ''"
+                      (ngModelChange)="setText(question.id, $event)"
+                      [disabled]="!editable()"
+                    />
+                  }
+                  @case ('LongText') {
+                    <textarea
+                      rows="3"
+                      [name]="'q-' + question.id"
+                      [ngModel]="answer?.textValue ?? ''"
+                      (ngModelChange)="setText(question.id, $event)"
+                      [disabled]="!editable()"
+                    ></textarea>
+                  }
+                  @case ('NumericScale') {
+                    <input
+                      type="number"
+                      [name]="'q-' + question.id"
+                      [ngModel]="answer?.numericValue"
+                      (ngModelChange)="setNumber(question.id, $event)"
+                      [min]="question.scaleMinimum"
+                      [max]="question.scaleMaximum"
+                      [step]="question.scaleStep"
+                      [disabled]="!editable()"
+                    />
+                    <span class="detail" i18n
+                      >{{ question.scaleMinimum }} to {{ question.scaleMaximum }} in steps of
+                      {{ question.scaleStep }}</span
+                    >
+                  }
+                  @default {
+                    <div class="choices">
+                      @for (option of question.options; track option.id) {
+                        <label class="inline">
+                          <input
+                            [type]="question.questionType === 'SingleChoice' ? 'radio' : 'checkbox'"
+                            [name]="'q-' + question.id"
+                            [value]="option.id"
+                            [checked]="isSelected(question.id, option.id)"
+                            (change)="toggleOption(question.id, option.id)"
+                            [disabled]="!editable()"
+                          />
+                          <span>{{ option.label }}</span>
+                        </label>
+                      }
+                    </div>
+                  }
+                }
+
+                @for (issue of questionIssues(question.questionKey); track issue) {
+                  <p class="error" role="alert">{{ issue }}</p>
+                }
+              </li>
+            }
+          </ol>
+
+          @if (editable()) {
+            <div class="actions">
+              <button type="button" class="link" [disabled]="saving()" (click)="saveDraft()" i18n>
+                Save draft
+              </button>
+              <button
+                type="submit"
+                class="primary-button"
+                [disabled]="saving() || !guard().canSubmit"
+                i18n
+              >
+                Submit check-in
+              </button>
+            </div>
+            @if (!guard().canSubmit) {
+              <p class="hint" i18n>
+                Answer every required question before submitting. Your draft is saved either way.
+              </p>
+            }
+          }
+        </form>
+      } @else {
+        <p class="empty" i18n>Choose a check-in to answer it.</p>
+      }
+    </article>
+  </div>
+</section>

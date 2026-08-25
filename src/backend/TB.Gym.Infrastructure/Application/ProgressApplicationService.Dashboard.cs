@@ -141,7 +141,7 @@ internal sealed partial class ProgressApplicationService
     private async Task<DashboardBodyweightSection> BuildDashboardBodyweightAsync(
         Guid clientProfileId,
         DashboardWindow window,
-        TenantCalendar calendar,
+        WorkspaceCalendar calendar,
         RecordedMassUnit displayUnit,
         CancellationToken cancellationToken)
     {

@@ -1,0 +1,284 @@
+<section class="checkins">
+  <header class="page-head">
+    <h2 i18n>Check-in forms</h2>
+    <button type="button" class="primary-button" (click)="startNewForm()" i18n>New form</button>
+  </header>
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+  @if (notice(); as message) {
+    <p class="notice" role="status">{{ message }}</p>
+  }
+
+  <div class="split">
+    <article class="panel library">
+      <h3 i18n>Library</h3>
+      @if (loading() && forms().length === 0) {
+        <p i18n>Loading check-in forms…</p>
+      } @else if (forms().length === 0) {
+        <p class="empty" i18n>No check-in forms yet.</p>
+      } @else {
+        <ul class="form-list">
+          @for (form of forms(); track form.id) {
+            <li>
+              <button type="button" class="link" (click)="openForm(form.id)">
+                {{ form.title }}
+              </button>
+              <span class="badge">{{ form.status }}</span>
+              @if (form.isArchived) {
+                <span class="badge muted" i18n>Archived</span>
+              }
+              <span class="detail" i18n>{{ form.currentVersionNumber }} version(s)</span>
+            </li>
+          }
+        </ul>
+      }
+    </article>
+
+    <article class="panel builder">
+      @if (selected(); as details) {
+        <h3>{{ details.form.title }}</h3>
+        @if (details.form.description) {
+          <p class="detail">{{ details.form.description }}</p>
+        }
+
+        <ul class="versions">
+          @for (version of details.versions; track version.id) {
+            <li>
+              <span i18n>Version {{ version.versionNumber }}</span>
+              <span class="badge">{{ version.status }}</span>
+              <span class="detail" i18n>{{ version.questionCount }} question(s)</span>
+              @if (version.status === 'Draft') {
+                <button type="button" class="link" (click)="editVersion(version.id)" i18n>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  class="link"
+                  [disabled]="saving()"
+                  (click)="publish(version.id, +version.version)"
+                  i18n
+                >
+                  Publish
+                </button>
+              } @else {
+                <button type="button" class="link" (click)="editVersion(version.id)" i18n>
+                  View
+                </button>
+                @if (!openDraft() && latestPublished() === version.id) {
+                  <button
+                    type="button"
+                    class="link"
+                    [disabled]="saving()"
+                    (click)="deriveDraft(version.id)"
+                    i18n
+                  >
+                    New draft from this
+                  </button>
+                }
+              }
+            </li>
+          }
+        </ul>
+        <p class="hint" i18n>
+          Publishing freezes a version permanently. To change published wording, create a new draft
+          from it — every question keeps its identity, so answers stay comparable across versions.
+        </p>
+      } @else if (!creating()) {
+        <p class="empty" i18n>Select a form to see its versions, or create a new one.</p>
+      }
+
+      @if (creating() || editingVersion(); as _) {
+        @let version = editingVersion();
+        @let readOnly = version !== null && version.status !== 'Draft';
+
+        <form class="builder-form" (ngSubmit)="save()">
+          <h4>
+            @if (creating()) {
+              <ng-container i18n>New check-in form</ng-container>
+            } @else if (readOnly) {
+              <ng-container i18n
+                >Version {{ version!.versionNumber }} (published, read-only)</ng-container
+              >
+            } @else {
+              <ng-container i18n>Editing draft version {{ version!.versionNumber }}</ng-container>
+            }
+          </h4>
+
+          @if (creating()) {
+            <label>
+              <span i18n>Title</span>
+              <input
+                type="text"
+                name="title"
+                [ngModel]="draft().title"
+                (ngModelChange)="setTitle($event)"
+                [maxlength]="limits.titleLength"
+                required
+              />
+            </label>
+            <label>
+              <span i18n>Description</span>
+              <textarea
+                name="description"
+                rows="2"
+                [ngModel]="draft().description"
+                (ngModelChange)="setDescription($event)"
+                [maxlength]="limits.descriptionLength"
+              ></textarea>
+            </label>
+          }
+
+          @for (formError of validation().formErrors; track formError) {
+            <p class="error" role="alert">{{ formError }}</p>
+          }
+
+          <ol class="questions">
+            @for (question of draft().questions; track question.key; let index = $index) {
+              <li class="question">
+                <div class="question-head">
+                  <select
+                    [name]="'type-' + question.key"
+                    [ngModel]="question.questionType"
+                    (ngModelChange)="changeQuestionType(index, $event)"
+                    [disabled]="readOnly"
+                  >
+                    @for (type of questionTypes; track type) {
+                      <option [value]="type">{{ type }}</option>
+                    }
+                  </select>
+                  @if (!readOnly) {
+                    <button type="button" class="link" (click)="moveQuestion(index, -1)" i18n>
+                      Up
+                    </button>
+                    <button type="button" class="link" (click)="moveQuestion(index, 1)" i18n>
+                      Down
+                    </button>
+                    <button type="button" class="link danger" (click)="removeQuestion(index)" i18n>
+                      Remove
+                    </button>
+                  }
+                </div>
+
+                <label>
+                  <span i18n>Prompt</span>
+                  <input
+                    type="text"
+                    [name]="'prompt-' + question.key"
+                    [ngModel]="question.prompt"
+                    (ngModelChange)="setPrompt(index, $event)"
+                    [maxlength]="limits.promptLength"
+                    [disabled]="readOnly"
+                  />
+                </label>
+
+                <label class="inline">
+                  <input
+                    type="checkbox"
+                    [name]="'required-' + question.key"
+                    [ngModel]="question.isRequired"
+                    (ngModelChange)="setRequired(index, $event)"
+                    [disabled]="readOnly"
+                  />
+                  <span i18n>Required</span>
+                </label>
+
+                @if (isChoice(question.questionType)) {
+                  <ul class="options">
+                    @for (option of question.options; track option.key; let optionIndex = $index) {
+                      <li>
+                        <input
+                          type="text"
+                          [name]="'option-' + option.key"
+                          [ngModel]="option.label"
+                          (ngModelChange)="setOptionLabel(index, optionIndex, $event)"
+                          [maxlength]="limits.optionLabelLength"
+                          [disabled]="readOnly"
+                        />
+                        @if (!readOnly) {
+                          <button
+                            type="button"
+                            class="link danger"
+                            (click)="removeOption(index, optionIndex)"
+                            i18n
+                          >
+                            Remove
+                          </button>
+                        }
+                      </li>
+                    }
+                  </ul>
+                  @if (!readOnly) {
+                    <button type="button" class="link" (click)="addOption(index)" i18n>
+                      Add option
+                    </button>
+                  }
+                }
+
+                @if (question.questionType === 'NumericScale') {
+                  <div class="scale">
+                    <label>
+                      <span i18n>Minimum</span>
+                      <input
+                        type="number"
+                        [name]="'min-' + question.key"
+                        [ngModel]="question.scaleMinimum"
+                        (ngModelChange)="setScale(index, 'scaleMinimum', $event)"
+                        [disabled]="readOnly"
+                      />
+                    </label>
+                    <label>
+                      <span i18n>Maximum</span>
+                      <input
+                        type="number"
+                        [name]="'max-' + question.key"
+                        [ngModel]="question.scaleMaximum"
+                        (ngModelChange)="setScale(index, 'scaleMaximum', $event)"
+                        [disabled]="readOnly"
+                      />
+                    </label>
+                    <label>
+                      <span i18n>Step</span>
+                      <input
+                        type="number"
+                        [name]="'step-' + question.key"
+                        [ngModel]="question.scaleStep"
+                        (ngModelChange)="setScale(index, 'scaleStep', $event)"
+                        [disabled]="readOnly"
+                      />
+                    </label>
+                  </div>
+                }
+
+                @for (questionError of questionErrors(question); track questionError) {
+                  <p class="error" role="alert">{{ questionError }}</p>
+                }
+              </li>
+            }
+          </ol>
+
+          @if (!readOnly) {
+            <div class="actions">
+              <button type="button" class="link" (click)="addQuestion()" i18n>Add question</button>
+              <button
+                type="submit"
+                class="primary-button"
+                [disabled]="saving() || !validation().isValid"
+                i18n
+              >
+                Save draft
+              </button>
+              <button type="button" class="link" (click)="cancelEditing()" i18n>Cancel</button>
+            </div>
+          } @else {
+            <p class="hint" i18n>
+              This version is published and frozen. Create a new draft from it to change anything.
+            </p>
+            <button type="button" class="link" (click)="cancelEditing()" i18n>Close</button>
+          }
+        </form>
+      }
+    </article>
+  </div>
+</section>

@@ -1067,6 +1067,172 @@ export class ApiClient {
       )
       .pipe(map(mapMeasurementHistory));
   }
+
+  listCheckInForms(skip = 0, take = 100): Observable<Phase3Contracts.CheckInFormPage> {
+    return this.http.get<Phase3Contracts.CheckInFormPage>('/api/checkins/forms', {
+      params: { skip, take },
+    });
+  }
+
+  getCheckInForm(formId: string): Observable<Phase3Contracts.CheckInFormDetails> {
+    return this.http.get<Phase3Contracts.CheckInFormDetails>(`/api/checkins/forms/${formId}`);
+  }
+
+  getCheckInFormVersion(
+    formId: string,
+    versionId: string,
+  ): Observable<Phase3Contracts.CheckInFormVersionView> {
+    return this.http.get<Phase3Contracts.CheckInFormVersionView>(
+      `/api/checkins/forms/${formId}/versions/${versionId}`,
+    );
+  }
+
+  createCheckInForm(
+    request: Phase3Contracts.CreateCheckInFormRequest,
+  ): Observable<Phase3Contracts.CheckInFormDetails> {
+    return this.http.post<Phase3Contracts.CheckInFormDetails>('/api/checkins/forms', request);
+  }
+
+  renameCheckInForm(
+    formId: string,
+    request: Phase3Contracts.RenameCheckInFormRequest,
+  ): Observable<Phase3Contracts.CheckInFormDetails> {
+    return this.http.put<Phase3Contracts.CheckInFormDetails>(
+      `/api/checkins/forms/${formId}`,
+      request,
+    );
+  }
+
+  archiveCheckInForm(
+    formId: string,
+    version: number,
+  ): Observable<Phase3Contracts.CheckInFormDetails> {
+    return this.http.post<Phase3Contracts.CheckInFormDetails>(
+      `/api/checkins/forms/${formId}/archive`,
+      { version },
+    );
+  }
+
+  restoreCheckInForm(
+    formId: string,
+    version: number,
+  ): Observable<Phase3Contracts.CheckInFormDetails> {
+    return this.http.post<Phase3Contracts.CheckInFormDetails>(
+      `/api/checkins/forms/${formId}/restore`,
+      { version },
+    );
+  }
+
+  deriveCheckInDraft(
+    formId: string,
+    request: Phase3Contracts.DeriveCheckInDraftRequest,
+  ): Observable<Phase3Contracts.CheckInFormVersionView> {
+    return this.http.post<Phase3Contracts.CheckInFormVersionView>(
+      `/api/checkins/forms/${formId}/versions`,
+      request,
+    );
+  }
+
+  saveCheckInDraft(
+    formId: string,
+    versionId: string,
+    request: Phase3Contracts.SaveCheckInDraftRequest,
+  ): Observable<Phase3Contracts.CheckInFormVersionView> {
+    return this.http.put<Phase3Contracts.CheckInFormVersionView>(
+      `/api/checkins/forms/${formId}/versions/${versionId}`,
+      request,
+    );
+  }
+
+  publishCheckInVersion(
+    formId: string,
+    versionId: string,
+    version: number,
+  ): Observable<Phase3Contracts.CheckInFormVersionView> {
+    return this.http.post<Phase3Contracts.CheckInFormVersionView>(
+      `/api/checkins/forms/${formId}/versions/${versionId}/publish`,
+      { version },
+    );
+  }
+
+  listClientCheckInAssignments(
+    clientId: string,
+  ): Observable<Phase3Contracts.CheckInAssignmentListView> {
+    return this.http.get<Phase3Contracts.CheckInAssignmentListView>(
+      `/api/checkins/clients/${clientId}/assignments`,
+    );
+  }
+
+  assignCheckIn(
+    clientId: string,
+    request: Phase3Contracts.AssignCheckInRequest,
+  ): Observable<Phase3Contracts.CheckInAssignmentDetail> {
+    return this.http.post<Phase3Contracts.CheckInAssignmentDetail>(
+      `/api/checkins/clients/${clientId}/assignments`,
+      request,
+    );
+  }
+
+  listOwnCheckInAssignments(): Observable<Phase3Contracts.CheckInAssignmentListView> {
+    return this.http.get<Phase3Contracts.CheckInAssignmentListView>('/api/checkins/me/assignments');
+  }
+
+  getOwnCheckInResponse(assignmentId: string): Observable<Phase3Contracts.CheckInResponseDetail> {
+    return this.http.get<Phase3Contracts.CheckInResponseDetail>(
+      `/api/checkins/me/assignments/${assignmentId}/response`,
+    );
+  }
+
+  saveOwnCheckInDraftResponse(
+    assignmentId: string,
+    request: Phase3Contracts.SaveCheckInResponseRequest,
+  ): Observable<Phase3Contracts.CheckInResponseDetail> {
+    return this.http.put<Phase3Contracts.CheckInResponseDetail>(
+      `/api/checkins/me/assignments/${assignmentId}/response`,
+      request,
+    );
+  }
+
+  submitOwnCheckInResponse(
+    assignmentId: string,
+    version: number,
+  ): Observable<Phase3Contracts.CheckInResponseDetail> {
+    return this.http.post<Phase3Contracts.CheckInResponseDetail>(
+      `/api/checkins/me/assignments/${assignmentId}/response/submit`,
+      { version },
+    );
+  }
+
+  getClientCheckInResponse(
+    clientId: string,
+    assignmentId: string,
+  ): Observable<Phase3Contracts.CheckInResponseDetail> {
+    return this.http.get<Phase3Contracts.CheckInResponseDetail>(
+      `/api/checkins/clients/${clientId}/assignments/${assignmentId}/response`,
+    );
+  }
+
+  reviewCheckInResponse(
+    clientId: string,
+    assignmentId: string,
+    version: number,
+  ): Observable<Phase3Contracts.CheckInResponseDetail> {
+    return this.http.post<Phase3Contracts.CheckInResponseDetail>(
+      `/api/checkins/clients/${clientId}/assignments/${assignmentId}/response/review`,
+      { version },
+    );
+  }
+
+  compareCheckInResponses(
+    clientId: string,
+    firstResponseId: string,
+    secondResponseId: string,
+  ): Observable<Phase3Contracts.CheckInComparisonView> {
+    return this.http.get<Phase3Contracts.CheckInComparisonView>(
+      `/api/checkins/clients/${clientId}/checkin-comparison`,
+      { params: { firstResponseId, secondResponseId } },
+    );
+  }
 }
 
 function toNumber(value: number | string): number {

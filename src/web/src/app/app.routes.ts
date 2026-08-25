@@ -58,6 +58,12 @@ export const routes: Routes = [
       import('./features/nutrition/nutrition.routes').then((module) => module.nutritionRoutes),
   },
   {
+    path: 'checkins',
+    canActivate: [authGuard],
+    loadChildren: () =>
+      import('./features/checkins/checkins.routes').then((module) => module.checkInRoutes),
+  },
+  {
     path: 'profile',
     canActivate: [authGuard, clientGuard],
     title: $localize`My profile | TB Gym`,

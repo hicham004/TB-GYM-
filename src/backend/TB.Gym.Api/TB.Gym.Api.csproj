@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TB.Gym.Infrastructure\TB.Gym.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\CheckIns\TB.Gym.Modules.CheckIns\TB.Gym.Modules.CheckIns.csproj" />
     <ProjectReference Include="..\Modules\Clients\TB.Gym.Modules.Clients\TB.Gym.Modules.Clients.csproj" />
     <ProjectReference Include="..\Modules\ExerciseLibrary\TB.Gym.Modules.ExerciseLibrary\TB.Gym.Modules.ExerciseLibrary.csproj" />
     <ProjectReference Include="..\Modules\Gamification\TB.Gym.Modules.Gamification\TB.Gym.Modules.Gamification.csproj" />

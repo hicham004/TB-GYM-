@@ -224,6 +224,28 @@ calculations.
 
 Dependencies: Phase 1 tenancy; can overlap Phases 3-5 after access policies stabilize.
 
+### Phase 6A: Check-ins (in progress)
+
+6A-1 (authoring) and 6A-2 (responses) are implemented and are the first production consumers of
+`CoachingFeature.CheckIns`. See ADR 0017 (authoring) and ADR 0016 (responses), plus
+`DOMAIN-RULES.md` section 13. Both halves have a coach and client UI under `/checkins`.
+
+- 6A-1: form lineage, draft versions, published versions frozen at the database, stable
+  `QuestionKey` carried across versions, and assignment of one published version to one client with
+  a workspace-local due date.
+- 6A-2: per-assignment response with a one-way `Draft -> Submitted -> Reviewed` lifecycle, typed
+  answers whose version and option membership are held by composite foreign keys, whole-response
+  validation returning every failure at once, coach review as an append-only event, and comparison
+  as a read-side projection aligned by `QuestionKey` that reports one-sided questions explicitly.
+
+Exit: a submitted check-in still renders the exact wording it was asked in after a later version is
+published, and no answer is scored, rated or interpreted anywhere.
+
+Deferred to 6B or later: recurring scheduling, tasks and habits, reminders and notifications,
+comments or chat on a check-in, signatures, file uploads, conditional branching, AI interpretation,
+exports, a cross-client outstanding-check-in view, and comparing more than two responses or charting
+one question over time.
+
 - Persist tenant-scoped conversations, participants, messages, read state, and moderation
   metadata.
 - Complete SignalR authorization, reconnect/catch-up, delivery, and scale-out tests.

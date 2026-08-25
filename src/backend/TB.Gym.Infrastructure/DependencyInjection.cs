@@ -16,6 +16,7 @@ using TB.Gym.Infrastructure.Application;
 using TB.Gym.Infrastructure.Health;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Infrastructure.Security;
+using TB.Gym.Modules.CheckIns;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
@@ -147,6 +148,9 @@ public static class DependencyInjection
         services.AddScoped<ITrainingApplicationService, TrainingApplicationService>();
         services.AddScoped<INutritionApplicationService, NutritionApplicationService>();
         services.AddScoped<IProgressApplicationService, ProgressApplicationService>();
+        services.AddScoped<CheckInAccessResolver>();
+        services.AddScoped<ICheckInApplicationService, CheckInApplicationService>();
+        services.AddScoped<ICheckInResponseApplicationService, CheckInResponseApplicationService>();
         services.AddHttpClient<INutritionDataProvider, UsdaFoodDataCentralProvider>((provider, client) =>
         {
             var configured = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<UsdaFoodDataCentralOptions>>().Value.BaseUrl;

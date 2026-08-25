@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\backend\BuildingBlocks\TB.Gym.SharedKernel\TB.Gym.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\CheckIns\TB.Gym.Modules.CheckIns\TB.Gym.Modules.CheckIns.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Clients\TB.Gym.Modules.Clients\TB.Gym.Modules.Clients.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Invitations\TB.Gym.Modules.Invitations\TB.Gym.Modules.Invitations.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Identity\TB.Gym.Modules.Identity\TB.Gym.Modules.Identity.csproj" />

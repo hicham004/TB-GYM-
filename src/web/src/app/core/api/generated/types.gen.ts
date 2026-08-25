@@ -102,6 +102,11 @@ export type ApplyProgressionRequest = {
   mesocycleVersion: number | string;
 };
 
+export type AssignCheckInRequest = {
+  formVersionId: string;
+  dueDate: string;
+};
+
 export type AssignMesocycleRequest = {
   enrollmentId: string;
   templateVersionId: string;
@@ -305,6 +310,206 @@ export type ChangeEnrollmentStatusRequest = {
 export type ChangePasswordRequest = {
   currentPassword: string;
   newPassword: string;
+};
+
+export type CheckInAnswerChoiceView = {
+  questionOptionId: string;
+  order: number | string;
+  label: string;
+};
+
+export type CheckInAnswerRequest = {
+  questionId: string;
+  textValue?: null | string;
+  numericValue?: null | number | string;
+  selectedOptionIds?: null | Array<string>;
+};
+
+export type CheckInAnswerView = {
+  questionId: string;
+  questionKey: string;
+  questionType: CheckInQuestionType;
+  textValue: null | string;
+  numericValue: null | number | string;
+  choices: Array<CheckInAnswerChoiceView>;
+};
+
+export type CheckInAssignmentDetail = {
+  assignment: CheckInAssignmentView;
+  version: CheckInFormVersionView;
+};
+
+export type CheckInAssignmentListView = {
+  clientProfileId: string;
+  assignments: Array<CheckInAssignmentView>;
+};
+
+export type CheckInAssignmentView = {
+  id: string;
+  formId: string;
+  formTitle: string;
+  formVersionId: string;
+  formVersionNumber: number | string;
+  clientProfileId: string;
+  dueDate: string;
+  assignedAtUtc: string;
+  assignedByUserId: null | string;
+};
+
+export type CheckInComparisonCell = {
+  questionId: string;
+  order: number | string;
+  questionType: CheckInQuestionType;
+  prompt: string;
+  isRequired: boolean;
+  answer: null | CheckInAnswerView;
+};
+
+export type CheckInComparisonPresence = 'InBoth' | 'OnlyInFirst' | 'OnlyInSecond';
+
+export type CheckInComparisonRow = {
+  questionKey: string;
+  presence: CheckInComparisonPresence;
+  first: null | CheckInComparisonCell;
+  second: null | CheckInComparisonCell;
+};
+
+export type CheckInComparisonSideView = {
+  responseId: string;
+  assignmentId: string;
+  formVersionId: string;
+  formVersionNumber: number | string;
+  status: CheckInResponseStatus;
+  dueDate: string;
+  submittedDate: null | string;
+  submittedAtUtc: null | string;
+  isLate: boolean;
+};
+
+export type CheckInComparisonView = {
+  clientProfileId: string;
+  formId: string;
+  formTitle: string;
+  first: CheckInComparisonSideView;
+  second: CheckInComparisonSideView;
+  rows: Array<CheckInComparisonRow>;
+};
+
+export type CheckInConcurrencyRequest = {
+  version: number | string;
+};
+
+export type CheckInFormDetails = {
+  form: CheckInFormSummary;
+  versions: Array<CheckInFormVersionSummary>;
+};
+
+export type CheckInFormPage = {
+  total: number | string;
+  items: Array<CheckInFormSummary>;
+};
+
+export type CheckInFormStatus = 'Draft' | 'Published';
+
+export type CheckInFormSummary = {
+  id: string;
+  title: string;
+  description: null | string;
+  status: CheckInFormStatus;
+  isArchived: boolean;
+  currentVersionNumber: number | string;
+  draftVersionId: null | string;
+  latestPublishedVersionId: null | string;
+  latestPublishedVersionNumber: null | number | string;
+  version: number | string;
+};
+
+export type CheckInFormVersionStatus = 'Draft' | 'Published';
+
+export type CheckInFormVersionSummary = {
+  id: string;
+  versionNumber: number | string;
+  status: CheckInFormVersionStatus;
+  derivedFromVersionId: null | string;
+  publishedAtUtc: null | string;
+  publishedByUserId: null | string;
+  questionCount: number | string;
+  version: number | string;
+};
+
+export type CheckInFormVersionView = {
+  id: string;
+  formId: string;
+  formTitle: string;
+  formDescription: null | string;
+  versionNumber: number | string;
+  status: CheckInFormVersionStatus;
+  derivedFromVersionId: null | string;
+  publishedAtUtc: null | string;
+  publishedByUserId: null | string;
+  questions: Array<CheckInQuestionView>;
+  version: number | string;
+};
+
+export type CheckInQuestionOptionView = {
+  id: string;
+  order: number | string;
+  label: string;
+};
+
+export type CheckInQuestionRequest = {
+  questionType: CheckInQuestionType;
+  prompt: string;
+  isRequired: boolean;
+  questionKey?: null | string;
+  helpText?: null | string;
+  scaleMinimum?: null | number | string;
+  scaleMaximum?: null | number | string;
+  scaleStep?: null | number | string;
+  options?: null | Array<string>;
+};
+
+export type CheckInQuestionType =
+  'ShortText' | 'LongText' | 'SingleChoice' | 'MultipleChoice' | 'NumericScale';
+
+export type CheckInQuestionView = {
+  id: string;
+  questionKey: string;
+  order: number | string;
+  questionType: CheckInQuestionType;
+  prompt: string;
+  helpText: null | string;
+  isRequired: boolean;
+  scaleMinimum: null | number | string;
+  scaleMaximum: null | number | string;
+  scaleStep: null | number | string;
+  options: Array<CheckInQuestionOptionView>;
+};
+
+export type CheckInResponseConcurrencyRequest = {
+  version: number | string;
+};
+
+export type CheckInResponseDetail = {
+  assignment: CheckInAssignmentView;
+  version: CheckInFormVersionView;
+  response: null | CheckInResponseView;
+};
+
+export type CheckInResponseStatus = 'Draft' | 'Submitted' | 'Reviewed';
+
+export type CheckInResponseView = {
+  id: string;
+  assignmentId: string;
+  clientProfileId: string;
+  status: CheckInResponseStatus;
+  submittedAtUtc: null | string;
+  submittedDate: null | string;
+  isLate: boolean;
+  reviewedAtUtc: null | string;
+  reviewedByUserId: null | string;
+  answers: Array<CheckInAnswerView>;
+  version: number | string;
 };
 
 export type ClientCommercialOverview = {
@@ -564,6 +769,12 @@ export type CorrectBodyweightRequest = {
   version: number | string;
 };
 
+export type CreateCheckInFormRequest = {
+  title: string;
+  description: null | string;
+  questions: Array<CheckInQuestionRequest>;
+};
+
 export type CreateClientInvitationRequest = {
   email: string;
   firstName: string;
@@ -750,6 +961,11 @@ export type DayOfWeek =
 
 export type DeleteMediaRequest = {
   version: number | string;
+};
+
+export type DeriveCheckInDraftRequest = {
+  sourceVersionId: string;
+  formVersion: number | string;
 };
 
 export type EffectiveEnrollmentStatus =
@@ -1544,6 +1760,12 @@ export type RemoveProgressPhotoRequest = {
   version: number | string;
 };
 
+export type RenameCheckInFormRequest = {
+  title: string;
+  description: null | string;
+  version: number | string;
+};
+
 export type RenewEnrollmentRequest = {
   offerId: string;
   startDate: string;
@@ -1587,6 +1809,16 @@ export type ReviewAiMealDraftRequest = {
   instructions: null | string;
   servings: null | number | string;
   ingredientMappings: Array<AiIngredientMappingRequest>;
+};
+
+export type SaveCheckInDraftRequest = {
+  questions: Array<CheckInQuestionRequest>;
+  version: number | string;
+};
+
+export type SaveCheckInResponseRequest = {
+  answers: Array<CheckInAnswerRequest>;
+  version?: null | number | string;
 };
 
 export type SavedSessionView = {
@@ -5847,6 +6079,722 @@ export type GetClientProgressDashboardResponses = {
 
 export type GetClientProgressDashboardResponse =
   GetClientProgressDashboardResponses[keyof GetClientProgressDashboardResponses];
+
+export type ListCheckInFormsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    skip?: number | string;
+    take?: number | string;
+  };
+  url: '/api/checkins/forms';
+};
+
+export type ListCheckInFormsResponses = {
+  /**
+   * OK
+   */
+  200: CheckInFormPage;
+};
+
+export type ListCheckInFormsResponse = ListCheckInFormsResponses[keyof ListCheckInFormsResponses];
+
+export type CreateCheckInFormData = {
+  body: CreateCheckInFormRequest;
+  path?: never;
+  query?: never;
+  url: '/api/checkins/forms';
+};
+
+export type CreateCheckInFormErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CreateCheckInFormError = CreateCheckInFormErrors[keyof CreateCheckInFormErrors];
+
+export type CreateCheckInFormResponses = {
+  /**
+   * OK
+   */
+  200: CheckInFormDetails;
+};
+
+export type CreateCheckInFormResponse =
+  CreateCheckInFormResponses[keyof CreateCheckInFormResponses];
+
+export type GetCheckInFormData = {
+  body?: never;
+  path: {
+    formId: string;
+  };
+  query?: never;
+  url: '/api/checkins/forms/{formId}';
+};
+
+export type GetCheckInFormErrors = {
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type GetCheckInFormError = GetCheckInFormErrors[keyof GetCheckInFormErrors];
+
+export type GetCheckInFormResponses = {
+  /**
+   * OK
+   */
+  200: CheckInFormDetails;
+};
+
+export type GetCheckInFormResponse = GetCheckInFormResponses[keyof GetCheckInFormResponses];
+
+export type RenameCheckInFormData = {
+  body: RenameCheckInFormRequest;
+  path: {
+    formId: string;
+  };
+  query?: never;
+  url: '/api/checkins/forms/{formId}';
+};
+
+export type RenameCheckInFormErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RenameCheckInFormError = RenameCheckInFormErrors[keyof RenameCheckInFormErrors];
+
+export type RenameCheckInFormResponses = {
+  /**
+   * OK
+   */
+  200: CheckInFormDetails;
+};
+
+export type RenameCheckInFormResponse =
+  RenameCheckInFormResponses[keyof RenameCheckInFormResponses];
+
+export type GetCheckInFormVersionData = {
+  body?: never;
+  path: {
+    formId: string;
+    versionId: string;
+  };
+  query?: never;
+  url: '/api/checkins/forms/{formId}/versions/{versionId}';
+};
+
+export type GetCheckInFormVersionErrors = {
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type GetCheckInFormVersionError =
+  GetCheckInFormVersionErrors[keyof GetCheckInFormVersionErrors];
+
+export type GetCheckInFormVersionResponses = {
+  /**
+   * OK
+   */
+  200: CheckInFormVersionView;
+};
+
+export type GetCheckInFormVersionResponse =
+  GetCheckInFormVersionResponses[keyof GetCheckInFormVersionResponses];
+
+export type SaveCheckInDraftVersionData = {
+  body: SaveCheckInDraftRequest;
+  path: {
+    formId: string;
+    versionId: string;
+  };
+  query?: never;
+  url: '/api/checkins/forms/{formId}/versions/{versionId}';
+};
+
+export type SaveCheckInDraftVersionErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SaveCheckInDraftVersionError =
+  SaveCheckInDraftVersionErrors[keyof SaveCheckInDraftVersionErrors];
+
+export type SaveCheckInDraftVersionResponses = {
+  /**
+   * OK
+   */
+  200: CheckInFormVersionView;
+};
+
+export type SaveCheckInDraftVersionResponse =
+  SaveCheckInDraftVersionResponses[keyof SaveCheckInDraftVersionResponses];
+
+export type ArchiveCheckInFormData = {
+  body: CheckInConcurrencyRequest;
+  path: {
+    formId: string;
+  };
+  query?: never;
+  url: '/api/checkins/forms/{formId}/archive';
+};
+
+export type ArchiveCheckInFormErrors = {
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ArchiveCheckInFormError = ArchiveCheckInFormErrors[keyof ArchiveCheckInFormErrors];
+
+export type ArchiveCheckInFormResponses = {
+  /**
+   * OK
+   */
+  200: CheckInFormDetails;
+};
+
+export type ArchiveCheckInFormResponse =
+  ArchiveCheckInFormResponses[keyof ArchiveCheckInFormResponses];
+
+export type RestoreCheckInFormData = {
+  body: CheckInConcurrencyRequest;
+  path: {
+    formId: string;
+  };
+  query?: never;
+  url: '/api/checkins/forms/{formId}/restore';
+};
+
+export type RestoreCheckInFormErrors = {
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RestoreCheckInFormError = RestoreCheckInFormErrors[keyof RestoreCheckInFormErrors];
+
+export type RestoreCheckInFormResponses = {
+  /**
+   * OK
+   */
+  200: CheckInFormDetails;
+};
+
+export type RestoreCheckInFormResponse =
+  RestoreCheckInFormResponses[keyof RestoreCheckInFormResponses];
+
+export type DeriveCheckInDraftVersionData = {
+  body: DeriveCheckInDraftRequest;
+  path: {
+    formId: string;
+  };
+  query?: never;
+  url: '/api/checkins/forms/{formId}/versions';
+};
+
+export type DeriveCheckInDraftVersionErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type DeriveCheckInDraftVersionError =
+  DeriveCheckInDraftVersionErrors[keyof DeriveCheckInDraftVersionErrors];
+
+export type DeriveCheckInDraftVersionResponses = {
+  /**
+   * OK
+   */
+  200: CheckInFormVersionView;
+};
+
+export type DeriveCheckInDraftVersionResponse =
+  DeriveCheckInDraftVersionResponses[keyof DeriveCheckInDraftVersionResponses];
+
+export type PublishCheckInFormVersionData = {
+  body: CheckInConcurrencyRequest;
+  path: {
+    formId: string;
+    versionId: string;
+  };
+  query?: never;
+  url: '/api/checkins/forms/{formId}/versions/{versionId}/publish';
+};
+
+export type PublishCheckInFormVersionErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PublishCheckInFormVersionError =
+  PublishCheckInFormVersionErrors[keyof PublishCheckInFormVersionErrors];
+
+export type PublishCheckInFormVersionResponses = {
+  /**
+   * OK
+   */
+  200: CheckInFormVersionView;
+};
+
+export type PublishCheckInFormVersionResponse =
+  PublishCheckInFormVersionResponses[keyof PublishCheckInFormVersionResponses];
+
+export type ListClientCheckInAssignmentsData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/checkins/clients/{clientProfileId}/assignments';
+};
+
+export type ListClientCheckInAssignmentsErrors = {
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type ListClientCheckInAssignmentsError =
+  ListClientCheckInAssignmentsErrors[keyof ListClientCheckInAssignmentsErrors];
+
+export type ListClientCheckInAssignmentsResponses = {
+  /**
+   * OK
+   */
+  200: CheckInAssignmentListView;
+};
+
+export type ListClientCheckInAssignmentsResponse =
+  ListClientCheckInAssignmentsResponses[keyof ListClientCheckInAssignmentsResponses];
+
+export type AssignCheckInData = {
+  body: AssignCheckInRequest;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/checkins/clients/{clientProfileId}/assignments';
+};
+
+export type AssignCheckInErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type AssignCheckInError = AssignCheckInErrors[keyof AssignCheckInErrors];
+
+export type AssignCheckInResponses = {
+  /**
+   * OK
+   */
+  200: CheckInAssignmentDetail;
+};
+
+export type AssignCheckInResponse = AssignCheckInResponses[keyof AssignCheckInResponses];
+
+export type GetClientCheckInAssignmentData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+    assignmentId: string;
+  };
+  query?: never;
+  url: '/api/checkins/clients/{clientProfileId}/assignments/{assignmentId}';
+};
+
+export type GetClientCheckInAssignmentErrors = {
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type GetClientCheckInAssignmentError =
+  GetClientCheckInAssignmentErrors[keyof GetClientCheckInAssignmentErrors];
+
+export type GetClientCheckInAssignmentResponses = {
+  /**
+   * OK
+   */
+  200: CheckInAssignmentDetail;
+};
+
+export type GetClientCheckInAssignmentResponse =
+  GetClientCheckInAssignmentResponses[keyof GetClientCheckInAssignmentResponses];
+
+export type ListOwnCheckInAssignmentsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/checkins/me/assignments';
+};
+
+export type ListOwnCheckInAssignmentsErrors = {
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type ListOwnCheckInAssignmentsError =
+  ListOwnCheckInAssignmentsErrors[keyof ListOwnCheckInAssignmentsErrors];
+
+export type ListOwnCheckInAssignmentsResponses = {
+  /**
+   * OK
+   */
+  200: CheckInAssignmentListView;
+};
+
+export type ListOwnCheckInAssignmentsResponse =
+  ListOwnCheckInAssignmentsResponses[keyof ListOwnCheckInAssignmentsResponses];
+
+export type GetOwnCheckInAssignmentData = {
+  body?: never;
+  path: {
+    assignmentId: string;
+  };
+  query?: never;
+  url: '/api/checkins/me/assignments/{assignmentId}';
+};
+
+export type GetOwnCheckInAssignmentErrors = {
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type GetOwnCheckInAssignmentError =
+  GetOwnCheckInAssignmentErrors[keyof GetOwnCheckInAssignmentErrors];
+
+export type GetOwnCheckInAssignmentResponses = {
+  /**
+   * OK
+   */
+  200: CheckInAssignmentDetail;
+};
+
+export type GetOwnCheckInAssignmentResponse =
+  GetOwnCheckInAssignmentResponses[keyof GetOwnCheckInAssignmentResponses];
+
+export type GetOwnCheckInResponseData = {
+  body?: never;
+  path: {
+    assignmentId: string;
+  };
+  query?: never;
+  url: '/api/checkins/me/assignments/{assignmentId}/response';
+};
+
+export type GetOwnCheckInResponseErrors = {
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type GetOwnCheckInResponseError =
+  GetOwnCheckInResponseErrors[keyof GetOwnCheckInResponseErrors];
+
+export type GetOwnCheckInResponseResponses = {
+  /**
+   * OK
+   */
+  200: CheckInResponseDetail;
+};
+
+export type GetOwnCheckInResponseResponse =
+  GetOwnCheckInResponseResponses[keyof GetOwnCheckInResponseResponses];
+
+export type SaveOwnCheckInDraftResponseData = {
+  body: SaveCheckInResponseRequest;
+  path: {
+    assignmentId: string;
+  };
+  query?: never;
+  url: '/api/checkins/me/assignments/{assignmentId}/response';
+};
+
+export type SaveOwnCheckInDraftResponseErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SaveOwnCheckInDraftResponseError =
+  SaveOwnCheckInDraftResponseErrors[keyof SaveOwnCheckInDraftResponseErrors];
+
+export type SaveOwnCheckInDraftResponseResponses = {
+  /**
+   * OK
+   */
+  200: CheckInResponseDetail;
+};
+
+export type SaveOwnCheckInDraftResponseResponse =
+  SaveOwnCheckInDraftResponseResponses[keyof SaveOwnCheckInDraftResponseResponses];
+
+export type SubmitOwnCheckInResponseData = {
+  body: CheckInResponseConcurrencyRequest;
+  path: {
+    assignmentId: string;
+  };
+  query?: never;
+  url: '/api/checkins/me/assignments/{assignmentId}/response/submit';
+};
+
+export type SubmitOwnCheckInResponseErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SubmitOwnCheckInResponseError =
+  SubmitOwnCheckInResponseErrors[keyof SubmitOwnCheckInResponseErrors];
+
+export type SubmitOwnCheckInResponseResponses = {
+  /**
+   * OK
+   */
+  200: CheckInResponseDetail;
+};
+
+export type SubmitOwnCheckInResponseResponse =
+  SubmitOwnCheckInResponseResponses[keyof SubmitOwnCheckInResponseResponses];
+
+export type GetClientCheckInResponseData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+    assignmentId: string;
+  };
+  query?: never;
+  url: '/api/checkins/clients/{clientProfileId}/assignments/{assignmentId}/response';
+};
+
+export type GetClientCheckInResponseErrors = {
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type GetClientCheckInResponseError =
+  GetClientCheckInResponseErrors[keyof GetClientCheckInResponseErrors];
+
+export type GetClientCheckInResponseResponses = {
+  /**
+   * OK
+   */
+  200: CheckInResponseDetail;
+};
+
+export type GetClientCheckInResponseResponse =
+  GetClientCheckInResponseResponses[keyof GetClientCheckInResponseResponses];
+
+export type ReviewCheckInResponseData = {
+  body: CheckInResponseConcurrencyRequest;
+  path: {
+    clientProfileId: string;
+    assignmentId: string;
+  };
+  query?: never;
+  url: '/api/checkins/clients/{clientProfileId}/assignments/{assignmentId}/response/review';
+};
+
+export type ReviewCheckInResponseErrors = {
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ReviewCheckInResponseError =
+  ReviewCheckInResponseErrors[keyof ReviewCheckInResponseErrors];
+
+export type ReviewCheckInResponseResponses = {
+  /**
+   * OK
+   */
+  200: CheckInResponseDetail;
+};
+
+export type ReviewCheckInResponseResponse =
+  ReviewCheckInResponseResponses[keyof ReviewCheckInResponseResponses];
+
+export type CompareCheckInResponsesData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query: {
+    firstResponseId: string;
+    secondResponseId: string;
+  };
+  url: '/api/checkins/clients/{clientProfileId}/checkin-comparison';
+};
+
+export type CompareCheckInResponsesErrors = {
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CompareCheckInResponsesError =
+  CompareCheckInResponsesErrors[keyof CompareCheckInResponsesErrors];
+
+export type CompareCheckInResponsesResponses = {
+  /**
+   * OK
+   */
+  200: CheckInComparisonView;
+};
+
+export type CompareCheckInResponsesResponse =
+  CompareCheckInResponsesResponses[keyof CompareCheckInResponsesResponses];
 
 export type ListMediaAssetsData = {
   body?: never;

@@ -1,0 +1,241 @@
+<section class="checkins">
+  <h2 i18n>Client check-ins</h2>
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+  @if (notice(); as message) {
+    <p class="notice" role="status">{{ message }}</p>
+  }
+
+  <div class="split">
+    <article class="panel">
+      <h3 i18n>Clients</h3>
+      @if (clients().length === 0) {
+        <p class="empty" i18n>No clients yet.</p>
+      } @else {
+        <ul class="form-list">
+          @for (client of clients(); track client.id) {
+            <li>
+              <button type="button" class="link" (click)="selectClient(client.id)">
+                {{ client.firstName }} {{ client.lastName }}
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </article>
+
+    <article class="panel">
+      @if (!selectedClientId()) {
+        <p class="empty" i18n>Select a client to assign and review their check-ins.</p>
+      } @else {
+        <h3 i18n>Assign a check-in</h3>
+        <form class="builder-form" (ngSubmit)="assign()">
+          <label>
+            <span i18n>Published form</span>
+            <select name="formVersionId" [(ngModel)]="assignment.formVersionId">
+              <option value="" i18n>Choose a form…</option>
+              @for (form of assignableForms(); track form.id) {
+                <option [value]="form.latestPublishedVersionId">
+                  {{ form.title }} (v{{ form.latestPublishedVersionNumber }})
+                </option>
+              }
+            </select>
+          </label>
+          <label>
+            <span i18n>Due date</span>
+            <input type="date" name="dueDate" [(ngModel)]="assignment.dueDate" />
+          </label>
+          @for (message of assignmentErrors(); track message) {
+            <p class="error" role="alert">{{ message }}</p>
+          }
+          <div class="actions">
+            <button
+              type="submit"
+              class="primary-button"
+              [disabled]="saving() || assignmentErrors().length > 0"
+              i18n
+            >
+              Assign
+            </button>
+          </div>
+        </form>
+
+        <h3 i18n>Assigned check-ins</h3>
+        @if (assignments().length === 0) {
+          <p class="empty" i18n>Nothing assigned to this client yet.</p>
+        } @else {
+          <ul class="assignments">
+            @for (item of assignments(); track item.id) {
+              <li>
+                <button type="button" class="link" (click)="openResponse(item.id)">
+                  {{ item.formTitle }} (v{{ item.formVersionNumber }})
+                </button>
+                <span class="detail" i18n>Due {{ item.dueDate | date: 'mediumDate' }}</span>
+                @if (statusOf(item.id); as status) {
+                  <span class="badge">{{ status }}</span>
+                } @else {
+                  <span class="badge muted" i18n>Not started</span>
+                }
+                @if (isLate(item.id)) {
+                  <span class="badge late" i18n>After the due date</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+
+        @if (comparable().length >= 2) {
+          <h3 i18n>Compare two check-ins</h3>
+          <div class="scale">
+            <label>
+              <span i18n>First</span>
+              <select name="first" [(ngModel)]="firstResponseId">
+                <option value="" i18n>Choose…</option>
+                @for (entry of comparable(); track entry.response!.id) {
+                  <option [value]="entry.response!.id">
+                    {{ entry.assignment.formTitle }} · {{ entry.assignment.dueDate }}
+                  </option>
+                }
+              </select>
+            </label>
+            <label>
+              <span i18n>Second</span>
+              <select name="second" [(ngModel)]="secondResponseId">
+                <option value="" i18n>Choose…</option>
+                @for (entry of comparable(); track entry.response!.id) {
+                  <option [value]="entry.response!.id">
+                    {{ entry.assignment.formTitle }} · {{ entry.assignment.dueDate }}
+                  </option>
+                }
+              </select>
+            </label>
+            <div class="actions">
+              <button type="button" class="link" [disabled]="loading()" (click)="compare()" i18n>
+                Compare
+              </button>
+            </div>
+          </div>
+        }
+      }
+    </article>
+  </div>
+
+  @if (detail(); as view) {
+    <article class="panel">
+      <h3>{{ view.assignment.formTitle }}</h3>
+      <p class="detail" i18n>
+        Due {{ view.assignment.dueDate | date: 'mediumDate' }} · version
+        {{ view.assignment.formVersionNumber }}
+      </p>
+
+      @if (view.response; as response) {
+        <p class="detail">
+          <span class="badge">{{ response.status }}</span>
+          @if (response.submittedDate) {
+            <ng-container i18n
+              >Submitted {{ response.submittedDate | date: 'mediumDate' }}</ng-container
+            >
+          }
+          @if (response.isLate) {
+            <span class="badge late" i18n>After the due date</span>
+          }
+        </p>
+
+        @if (response.status === 'Draft') {
+          <p class="hint" i18n>
+            This client has started a draft but has not submitted it. Draft answers are theirs until
+            they submit.
+          </p>
+        }
+
+        <ol class="questions">
+          @for (question of view.version.questions; track question.id) {
+            <li class="answer">
+              <p class="prompt">{{ question.prompt }}</p>
+              @let recorded = answerText(response, question.id);
+              @if (recorded === '') {
+                <p class="detail" i18n>No answer</p>
+              } @else {
+                <p>{{ recorded }}</p>
+              }
+            </li>
+          }
+        </ol>
+
+        @if (response.status === 'Submitted') {
+          <div class="actions">
+            <button
+              type="button"
+              class="primary-button"
+              [disabled]="saving()"
+              (click)="review()"
+              i18n
+            >
+              Mark as reviewed
+            </button>
+          </div>
+        } @else if (response.status === 'Reviewed') {
+          <p class="hint" i18n>Reviewed {{ response.reviewedAtUtc | date: 'medium' }}.</p>
+        }
+      } @else {
+        <p class="empty" i18n>This client has not started this check-in.</p>
+      }
+    </article>
+  }
+
+  @if (comparison(); as view) {
+    <article class="panel">
+      <h3 i18n>{{ view.formTitle }}: two check-ins side by side</h3>
+      <p class="hint" i18n>
+        Recorded answers only. Nothing here is scored, rated or compared for you.
+      </p>
+      <div class="scroll-x">
+        <table class="comparison">
+          <thead>
+            <tr>
+              <th scope="col" i18n>Question</th>
+              <th scope="col">
+                <ng-container i18n>Version {{ view.first.formVersionNumber }}</ng-container>
+                <span class="reworded">{{ view.first.submittedDate }}</span>
+              </th>
+              <th scope="col">
+                <ng-container i18n>Version {{ view.second.formVersionNumber }}</ng-container>
+                <span class="reworded">{{ view.second.submittedDate }}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of rows(); track row.questionKey) {
+              <tr>
+                <th scope="row">
+                  {{ row.firstPrompt ?? row.secondPrompt }}
+                  @if (row.wordingChanged) {
+                    <span class="reworded" i18n
+                      >Re-worded in the later version: "{{ row.secondPrompt }}"</span
+                    >
+                  }
+                </th>
+                <td>
+                  @if (row.firstPrompt === null) {
+                    <span class="not-asked" i18n>Not asked in this version</span>
+                  } @else {
+                    {{ row.firstAnswer }}
+                  }
+                </td>
+                <td>
+                  @if (row.secondPrompt === null) {
+                    <span class="not-asked" i18n>Not asked in this version</span>
+                  } @else {
+                    {{ row.secondAnswer }}
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </article>
+  }
+</section>

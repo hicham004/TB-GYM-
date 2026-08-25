@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using TB.Gym.Modules.CheckIns;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.ExerciseLibrary;
 using TB.Gym.Modules.Identity;
@@ -186,6 +188,26 @@ public sealed partial class GymDbContext(
 
     public DbSet<AiMealDraftOperation> AiMealDraftOperations => Set<AiMealDraftOperation>();
 
+    public DbSet<CheckInForm> CheckInForms => Set<CheckInForm>();
+
+    public DbSet<CheckInFormVersion> CheckInFormVersions => Set<CheckInFormVersion>();
+
+    public DbSet<CheckInQuestion> CheckInQuestions => Set<CheckInQuestion>();
+
+    public DbSet<CheckInQuestionOption> CheckInQuestionOptions => Set<CheckInQuestionOption>();
+
+    public DbSet<CheckInAssignment> CheckInAssignments => Set<CheckInAssignment>();
+
+    public DbSet<CheckInLifecycleEvent> CheckInLifecycleEvents => Set<CheckInLifecycleEvent>();
+
+    public DbSet<CheckInResponse> CheckInResponses => Set<CheckInResponse>();
+
+    public DbSet<CheckInAnswer> CheckInAnswers => Set<CheckInAnswer>();
+
+    public DbSet<CheckInAnswerChoice> CheckInAnswerChoices => Set<CheckInAnswerChoice>();
+
+    public DbSet<CheckInResponseEvent> CheckInResponseEvents => Set<CheckInResponseEvent>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -203,6 +225,7 @@ public sealed partial class GymDbContext(
         ConfigureStrength(builder);
         ConfigureTraining(builder);
         ConfigureNutrition(builder);
+        ConfigureCheckIns(builder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -754,6 +777,57 @@ public sealed partial class GymDbContext(
             throw new InvalidOperationException("Progress photos cannot be deleted; removal preserves history.");
         }
 
+        RejectAppendOnlyMutations<CheckInLifecycleEvent>("Check-in lifecycle events are append-only.");
+
+        if (ChangeTracker.Entries<CheckInAssignment>().Any(item => item.State is EntityState.Modified or EntityState.Deleted))
+        {
+            throw new InvalidOperationException(
+                "A check-in assignment records what a client was asked and cannot be changed or deleted.");
+        }
+
+        // A published version is frozen. The database trigger is the guarantee, because a migration or
+        // a future background job would not pass through the domain; this catches the mistake earlier
+        // and with a message that names the intended operation.
+        foreach (var entry in ChangeTracker.Entries<CheckInFormVersion>()
+                     .Where(item => item.State is EntityState.Modified or EntityState.Deleted))
+        {
+            if (entry.State == EntityState.Deleted ||
+                entry.OriginalValues.GetValue<CheckInFormVersionStatus>(nameof(CheckInFormVersion.Status))
+                    == CheckInFormVersionStatus.Published)
+            {
+                throw new InvalidOperationException(
+                    "A published check-in form version is immutable; derive a new draft version instead.");
+            }
+        }
+
+        RejectAppendOnlyMutations<CheckInResponseEvent>("Check-in response events are append-only.");
+
+        if (ChangeTracker.Entries<CheckInResponse>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException(
+                "A check-in response records what a client answered and cannot be deleted.");
+        }
+
+        // A submitted response is frozen, and so is everything beneath it. The database trigger is the
+        // guarantee; this catches the mistake in the code path that made it, with a message that says
+        // which response refused.
+        foreach (var entry in ChangeTracker.Entries<CheckInResponse>()
+                     .Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<CheckInResponseStatus>(nameof(CheckInResponse.Status))
+                == CheckInResponseStatus.Reviewed)
+            {
+                throw new InvalidOperationException("A reviewed check-in response is immutable.");
+            }
+        }
+
+        if (ChangeTracker.Entries<CheckInAnswer>().Any(IsAnswerOfFrozenResponse) ||
+            ChangeTracker.Entries<CheckInAnswerChoice>().Any(IsChoiceOfFrozenAnswer))
+        {
+            throw new InvalidOperationException(
+                "A submitted check-in response is frozen; its answers can no longer be changed.");
+        }
+
         foreach (var entry in ChangeTracker.Entries<RecipeVersion>().Where(item => item.State == EntityState.Modified))
         {
             if (entry.OriginalValues.GetValue<PublicationStatus>(nameof(RecipeVersion.Status)) == PublicationStatus.Published)
@@ -835,5 +909,41 @@ public sealed partial class GymDbContext(
         {
             throw new InvalidOperationException(message);
         }
+    }
+
+    private bool IsAnswerOfFrozenResponse(EntityEntry<CheckInAnswer> entry)
+    {
+        if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
+        {
+            return false;
+        }
+
+        var responseId = entry.State == EntityState.Deleted
+            ? entry.OriginalValues.GetValue<Guid>(nameof(CheckInAnswer.ResponseId))
+            : entry.Entity.ResponseId;
+        var response = ChangeTracker.Entries<CheckInResponse>()
+            .FirstOrDefault(item => item.Entity.Id == responseId);
+
+        // An untracked response is not a pass: it simply cannot be judged here, and the trigger is
+        // what refuses it. A response being added is a new draft and always writable.
+        return response is not null &&
+            response.State != EntityState.Added &&
+            response.OriginalValues.GetValue<CheckInResponseStatus>(nameof(CheckInResponse.Status))
+                != CheckInResponseStatus.Draft;
+    }
+
+    private bool IsChoiceOfFrozenAnswer(EntityEntry<CheckInAnswerChoice> entry)
+    {
+        if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
+        {
+            return false;
+        }
+
+        var answerId = entry.State == EntityState.Deleted
+            ? entry.OriginalValues.GetValue<Guid>(nameof(CheckInAnswerChoice.AnswerId))
+            : entry.Entity.AnswerId;
+        var answer = ChangeTracker.Entries<CheckInAnswer>()
+            .FirstOrDefault(item => item.Entity.Id == answerId);
+        return answer is not null && IsAnswerOfFrozenResponse(answer);
     }
 }

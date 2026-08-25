@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TB.Gym.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TB.Gym.Infrastructure.Persistence;
 namespace TB.Gym.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GymDbContext))]
-    partial class GymDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260824215207_Phase6A1CheckInFormLibrary")]
+    partial class Phase6A1CheckInFormLibrary
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -150,130 +153,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("UserTokens", "identity");
-                });
-
-            modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInAnswer", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("FormVersionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal?>("NumericValue")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.Property<Guid>("QuestionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("QuestionType")
-                        .IsRequired()
-                        .HasMaxLength(24)
-                        .HasColumnType("character varying(24)");
-
-                    b.Property<Guid>("ResponseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TextValue")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.HasKey("Id");
-
-                    b.HasAlternateKey("TenantId", "Id");
-
-                    b.HasIndex("TenantId", "ResponseId", "FormVersionId");
-
-                    b.HasIndex("TenantId", "ResponseId", "QuestionId")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "FormVersionId", "QuestionId", "QuestionType");
-
-                    b.ToTable("CheckInAnswers", "checkins", t =>
-                        {
-                            t.HasCheckConstraint("CK_CheckInAnswers_ValueShape", "(\"QuestionType\" IN ('ShortText', 'LongText') AND \"NumericValue\" IS NULL) OR (\"QuestionType\" = 'NumericScale' AND \"TextValue\" IS NULL) OR (\"QuestionType\" IN ('SingleChoice', 'MultipleChoice') AND \"TextValue\" IS NULL AND \"NumericValue\" IS NULL)");
-                        });
-                });
-
-            modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInAnswerChoice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AnswerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("QuestionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("QuestionOptionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.HasKey("Id");
-
-                    b.HasAlternateKey("TenantId", "Id");
-
-                    b.HasIndex("TenantId", "AnswerId", "QuestionId");
-
-                    b.HasIndex("TenantId", "AnswerId", "QuestionOptionId")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "QuestionId", "QuestionOptionId");
-
-                    b.ToTable("CheckInAnswerChoices", "checkins");
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInAssignment", b =>
@@ -679,147 +558,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_CheckInQuestionOptions_Order", "\"Order\" >= 1");
                         });
-                });
-
-            modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInResponse", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AssignmentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClientProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("FormVersionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("ReviewedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ReviewedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<DateTimeOffset?>("SubmittedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly?>("SubmittedDate")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "AssignmentId")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "FormVersionId");
-
-                    b.HasIndex("TenantId", "ClientProfileId", "Status");
-
-                    b.HasIndex("TenantId", "AssignmentId", "FormVersionId", "ClientProfileId");
-
-                    b.ToTable("CheckInResponses", "checkins", t =>
-                        {
-                            t.HasCheckConstraint("CK_CheckInResponses_Review", "(\"Status\" = 'Reviewed') = (\"ReviewedAtUtc\" IS NOT NULL) AND (\"ReviewedAtUtc\" IS NULL) = (\"ReviewedByUserId\" IS NULL)");
-
-                            t.HasCheckConstraint("CK_CheckInResponses_Submission", "(\"Status\" = 'Draft') = (\"SubmittedAtUtc\" IS NULL) AND (\"SubmittedAtUtc\" IS NULL) = (\"SubmittedDate\" IS NULL)");
-                        });
-                });
-
-            modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInResponseEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ActorUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AssignmentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClientProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTimeOffset>("OccurredAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ResponseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.HasKey("Id");
-
-                    b.HasAlternateKey("TenantId", "Id");
-
-                    b.HasIndex("TenantId", "ClientProfileId", "OccurredAtUtc");
-
-                    b.HasIndex("TenantId", "ResponseId", "EventType")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "ResponseId", "OccurredAtUtc");
-
-                    b.ToTable("CheckInResponseEvents", "checkins");
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Clients.ClientProfile", b =>
@@ -7050,40 +6788,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInAnswer", b =>
-                {
-                    b.HasOne("TB.Gym.Modules.CheckIns.CheckInResponse", null)
-                        .WithMany("Answers")
-                        .HasForeignKey("TenantId", "ResponseId", "FormVersionId")
-                        .HasPrincipalKey("TenantId", "Id", "FormVersionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("TB.Gym.Modules.CheckIns.CheckInQuestion", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "FormVersionId", "QuestionId", "QuestionType")
-                        .HasPrincipalKey("TenantId", "FormVersionId", "Id", "QuestionType")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInAnswerChoice", b =>
-                {
-                    b.HasOne("TB.Gym.Modules.CheckIns.CheckInAnswer", null)
-                        .WithMany("Choices")
-                        .HasForeignKey("TenantId", "AnswerId", "QuestionId")
-                        .HasPrincipalKey("TenantId", "Id", "QuestionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("TB.Gym.Modules.CheckIns.CheckInQuestionOption", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "QuestionId", "QuestionOptionId")
-                        .HasPrincipalKey("TenantId", "QuestionId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInAssignment", b =>
                 {
                     b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
@@ -7164,26 +6868,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "QuestionId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInResponse", b =>
-                {
-                    b.HasOne("TB.Gym.Modules.CheckIns.CheckInAssignment", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "AssignmentId", "FormVersionId", "ClientProfileId")
-                        .HasPrincipalKey("TenantId", "Id", "FormVersionId", "ClientProfileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInResponseEvent", b =>
-                {
-                    b.HasOne("TB.Gym.Modules.CheckIns.CheckInResponse", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "ResponseId")
-                        .HasPrincipalKey("TenantId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
@@ -8244,11 +7928,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInAnswer", b =>
-                {
-                    b.Navigation("Choices");
-                });
-
             modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInFormVersion", b =>
                 {
                     b.Navigation("Questions");
@@ -8257,11 +7936,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInQuestion", b =>
                 {
                     b.Navigation("Options");
-                });
-
-            modelBuilder.Entity("TB.Gym.Modules.CheckIns.CheckInResponse", b =>
-                {
-                    b.Navigation("Answers");
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.ExerciseLibrary.Exercise", b =>

@@ -7,6 +7,7 @@ using TB.Gym.Api;
 using TB.Gym.Infrastructure;
 using TB.Gym.Infrastructure.Initialization;
 using TB.Gym.Infrastructure.Security;
+using TB.Gym.Modules.CheckIns;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.ExerciseLibrary;
 using TB.Gym.Modules.Identity;
@@ -96,6 +97,8 @@ app.MapStrengthModule();
 app.MapTrainingModule();
 app.MapNutritionModule();
 app.MapProgressModule();
+app.MapCheckInsModule();
+app.MapCheckInResponses();
 app.MapMediaModule();
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization(AuthorizationPolicies.TenantMember);
 

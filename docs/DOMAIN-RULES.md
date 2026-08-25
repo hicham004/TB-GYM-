@@ -546,6 +546,14 @@ At minimum, later migrations should enforce:
 | Valid macro inputs | Non-negative checks; aggregate validation in domain transaction |
 | Tenant-safe child relationship | Composite FK including `TenantId` where practical |
 | Concurrency | PostgreSQL `xmin` token plus conflict handling |
+| Immutable published check-in version and its questions/options | PostgreSQL trigger refusing update and delete |
+| Contiguous check-in question/option order and per-version key uniqueness | Deferred constraint triggers checked at commit |
+| One check-in response per assignment | Unique `(TenantId, AssignmentId)` |
+| One answer per question per response | Unique `(TenantId, ResponseId, QuestionId)` |
+| Answer belongs to a question of the answered version | Composite FK `(TenantId, FormVersionId, QuestionId, QuestionType)` |
+| Selection belongs to the question it answers | Composite FK `(TenantId, QuestionId, QuestionOptionId)` |
+| One-way check-in response lifecycle and frozen submitted answers | Application guard plus PostgreSQL trigger |
+| One submit and one review per response | Unique `(TenantId, ResponseId, EventType)` |
 
 Database constraints complement domain validation. Friendly validation happens before save,
 and constraint violations are translated into stable API problem responses.
@@ -615,3 +623,62 @@ Decisions still required for later phases and production launch:
    future prescriptions may be intentionally rebased.
 7. Choose production object storage, malware scanning, private delivery/CDN, retention, and
    quota providers before accepting real coach uploads in production.
+
+## 13. Check-ins
+
+Implemented in Phase 6A. Authoring and assignment are 6A-1
+(`docs/adr/0017-check-in-form-library-and-versioning-v1.md`); answering, submission, review and
+comparison are 6A-2 (`docs/adr/0016-check-in-responses-v1.md`).
+
+**CHK-001** A check-in form is a lineage. A `CheckInFormVersion` is the unit of truth and owns an
+ordered question set. Editing published content derives a new draft version; it never mutates the
+version a client was already asked. At most one open draft exists per lineage.
+
+**CHK-002** Publishing freezes a version permanently, in the domain and at the database. The
+questions and options of a published version cannot be updated or deleted by any path, including a
+migration or a repair script.
+
+**CHK-003** Every question carries a stable `QuestionKey`, generated on first authoring and copied
+forward unchanged into every later version of the lineage. It is unique within a version and is what
+comparison aligns on. A re-worded question keeps its identity; a caller may not invent a key.
+
+**CHK-004** An assignment targets one published version and one client with a workspace-local due
+date. It cannot be repointed at another version, edited, or deleted. Publishing a later version never
+changes what an already-assigned client was asked.
+
+**CHK-005** There is exactly one response per assignment, moving `Draft` to `Submitted` to
+`Reviewed`, one way. Deletes are refused. A submitted response and every answer row beneath it are
+frozen, including against inserting a late answer.
+
+**CHK-006** Answers are typed columns, never a JSON blob: one row per answered question plus
+selection rows for choices. An answer must belong to a question of the version its response answers,
+and a selection must belong to the question it answers. Both are foreign keys, not code checks, so an
+option from another version is refused by the database.
+
+**CHK-007** A submission renders its original wording by reading the published version's own rows.
+Question and option text is never denormalised into an answer.
+
+**CHK-008** A draft is lenient: it may be partial, may hold a number outside the question's range,
+and may be saved repeatedly. Structure is still enforced. Submission validates the whole response in
+one pass — required answers, numeric range, numeric step, choice membership, single-choice arity —
+and returns every failure at once rather than the first.
+
+**CHK-009** Review is a state change plus an append-only event carrying actor and time. It never
+touches an answer, and re-reviewing is refused.
+
+**CHK-010** Comparison is a read-side projection over two responses of one lineage, both `Submitted`
+or `Reviewed`. It aligns by `QuestionKey`, carries each side's own wording, and reports a question
+present in only one version as one-sided. A one-sided question is never dropped and never rendered as
+an empty answer on the side that never asked it.
+
+**CHK-011** Every check-in route that names a client evaluates `CoachingFeature.CheckIns` through
+`ICoachingFeatureAccessService`; coach routes inherit relationship blocking from the same decision.
+Authoring routes have no client subject and are gated on the coach role and tenant isolation alone.
+Entitlement belongs to the client's enrollment, so when it lapses the feature closes for that client
+on both sides, including the coach's view. Records are retained, never deleted.
+
+**CHK-012** Lateness is a recorded fact: the workspace-local submitted date against the due date. The
+submitted date is stored because the workspace time zone can change later. No answer may be
+interpreted — there is no derived score, flag, rating, adherence percentage, streak or trend over
+check-in answers, and no stated or implied relationship between an answer and any training,
+nutrition or bodyweight fact.
