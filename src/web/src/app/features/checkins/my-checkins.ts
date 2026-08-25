@@ -4,7 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
-import { apiErrorMessage } from '../../core/api/api-error';
+import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
+import { ownCheckInDenialMessage } from '../../core/i18n/display-labels';
 import type { CheckInAssignmentView, CheckInResponseDetail } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -48,6 +49,11 @@ export class MyCheckIns {
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
+  /**
+   * Set when the server closed check-ins for this workspace and said why. It replaces the list
+   * rather than sitting above it: "you may not read these" must never be shown as "you have none".
+   */
+  protected readonly denial = signal<string | null>(null);
 
   protected readonly editable = computed(() => isEditable(this.detail()?.response ?? null));
 
@@ -102,7 +108,12 @@ export class MyCheckIns {
     } catch (error) {
       this.detail.set(null);
       this.draft.set(null);
-      this.error.set(apiErrorMessage(error, $localize`This check-in could not be opened.`));
+      const reason = featureAccessReason(error);
+      if (reason === null) {
+        this.error.set(apiErrorMessage(error, $localize`This check-in could not be opened.`));
+      } else {
+        this.denial.set(ownCheckInDenialMessage(reason));
+      }
     } finally {
       this.loading.set(false);
     }
@@ -210,20 +221,31 @@ export class MyCheckIns {
   private async loadAssignments(): Promise<void> {
     this.loading.set(true);
     this.clearMessages();
+    // This runs on a workspace switch, so an answer sheet opened in the previous workspace must
+    // not survive into the next one. The shell also routes away, but that is its choice, not ours.
+    this.detail.set(null);
+    this.draft.set(null);
     try {
       const list = await firstValueFrom(this.api.listOwnCheckInAssignments());
       this.assignments.set(list.assignments);
     } catch (error) {
       this.assignments.set([]);
-      this.error.set(apiErrorMessage(error, $localize`Your check-ins could not be loaded.`));
+      const reason = featureAccessReason(error);
+      if (reason === null) {
+        this.error.set(apiErrorMessage(error, $localize`Your check-ins could not be loaded.`));
+      } else {
+        this.denial.set(ownCheckInDenialMessage(reason));
+      }
     } finally {
       this.loading.set(false);
     }
   }
 
+  /** Including the denial, so a refusal from one workspace is not still on screen in the next. */
   private clearMessages(): void {
     this.error.set(null);
     this.notice.set(null);
+    this.denial.set(null);
     this.serverIssues.set([]);
   }
 }

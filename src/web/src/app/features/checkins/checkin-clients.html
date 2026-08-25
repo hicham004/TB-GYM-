@@ -29,12 +29,20 @@
     <article class="panel">
       @if (!selectedClientId()) {
         <p class="empty" i18n>Select a client to assign and review their check-ins.</p>
+      } @else if (denial(); as message) {
+        <!-- Access is closed for this client: say so, and do not offer an assign form the server
+             would refuse or an "assigned nothing yet" list that is not what happened. -->
+        <p class="notice" role="status">{{ message }}</p>
       } @else {
         <h3 i18n>Assign a check-in</h3>
         <form class="builder-form" (ngSubmit)="assign()">
           <label>
             <span i18n>Published form</span>
-            <select name="formVersionId" [(ngModel)]="assignment.formVersionId">
+            <select
+              name="formVersionId"
+              [ngModel]="assignment().formVersionId"
+              (ngModelChange)="setAssignmentVersion($event)"
+            >
               <option value="" i18n>Choose a form…</option>
               @for (form of assignableForms(); track form.id) {
                 <option [value]="form.latestPublishedVersionId">
@@ -45,7 +53,12 @@
           </label>
           <label>
             <span i18n>Due date</span>
-            <input type="date" name="dueDate" [(ngModel)]="assignment.dueDate" />
+            <input
+              type="date"
+              name="dueDate"
+              [ngModel]="assignment().dueDate"
+              (ngModelChange)="setAssignmentDueDate($event)"
+            />
           </label>
           @for (message of assignmentErrors(); track message) {
             <p class="error" role="alert">{{ message }}</p>

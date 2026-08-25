@@ -2,6 +2,7 @@ import { ClientOnboardingStatus, InvitationStatus, TenantRole } from '../api/api
 import type {
   ExerciseClassification,
   ExerciseEquipment,
+  FeatureAccessReason,
   MediaAssetStatus,
   MediaKind,
   MediaSource,
@@ -173,4 +174,41 @@ export function trainingAccessReasonLabel(reason: string): string {
     PlatformBlocked: $localize`Account access blocked`,
   };
   return labels[reason] ?? $localize`Training unavailable`;
+}
+
+/**
+ * Why check-ins are closed, said to the client themselves. "Access is denied" and "there is
+ * nothing here" are different facts, so a refused list must never fall through to an empty one.
+ */
+export function ownCheckInDenialMessage(reason: FeatureAccessReason): string {
+  const labels: Record<FeatureAccessReason, string> = {
+    Granted: $localize`Check-ins are not available in this workspace right now.`,
+    MembershipInactive: $localize`You are no longer an active member of this workspace, so its check-ins are closed.`,
+    RelationshipBlocked: $localize`Your coach has paused your access to this workspace, so check-ins are closed.`,
+    NoEntitlement: $localize`Check-ins are not part of your current plan in this workspace.`,
+    PaymentRequired: $localize`Your enrollment is awaiting payment, so check-ins are closed for now.`,
+    NotStarted: $localize`Your enrollment has not started yet, so check-ins are not open yet.`,
+    Expired: $localize`Your enrollment has ended, so its check-ins — including the ones you already sent — are closed.`,
+    Paused: $localize`Your enrollment is paused, so check-ins are closed for now.`,
+    Cancelled: $localize`Your enrollment was cancelled, so its check-ins — including the ones you already sent — are closed.`,
+    PlatformBlocked: $localize`Your account access is blocked, so check-ins are closed.`,
+  };
+  return labels[reason];
+}
+
+/** The same decision as the coach reads it, about one named client. */
+export function clientCheckInDenialMessage(reason: FeatureAccessReason): string {
+  const labels: Record<FeatureAccessReason, string> = {
+    Granted: $localize`This client's check-ins are not available.`,
+    MembershipInactive: $localize`This client is no longer an active member of the workspace, so their check-ins cannot be read.`,
+    RelationshipBlocked: $localize`You have blocked this client, so their check-ins cannot be read until you unblock them.`,
+    NoEntitlement: $localize`Check-ins are not part of this client's current plan, so theirs cannot be read.`,
+    PaymentRequired: $localize`This client's enrollment is awaiting payment, so their check-ins cannot be read.`,
+    NotStarted: $localize`This client's enrollment has not started yet, so their check-ins cannot be read.`,
+    Expired: $localize`This client's enrollment has ended, so their check-ins can no longer be read.`,
+    Paused: $localize`This client's enrollment is paused, so their check-ins cannot be read.`,
+    Cancelled: $localize`This client's enrollment was cancelled, so their check-ins can no longer be read.`,
+    PlatformBlocked: $localize`This client's account access is blocked, so their check-ins cannot be read.`,
+  };
+  return labels[reason];
 }

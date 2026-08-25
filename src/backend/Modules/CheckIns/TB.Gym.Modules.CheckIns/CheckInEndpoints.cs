@@ -23,7 +23,9 @@ public static class CheckInEndpoints
     private static void MapAuthoring(IEndpointRouteBuilder endpoints)
     {
         // Authoring has no client subject, so there is no entitlement to evaluate here: a form is
-        // workspace content. Every route that names a client evaluates CoachingFeature.CheckIns.
+        // workspace content, and nothing entitles a workspace. Every route that names a client
+        // evaluates CoachingFeature.CheckIns. Ratified in ADR 0017 ("Authorization"), which carries
+        // the rationale and the boundary this relies on; do not change it from here.
         var forms = endpoints.MapGroup("/api/checkins/forms")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
             .WithTags(CheckInsModule.Name);

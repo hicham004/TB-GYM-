@@ -57,11 +57,40 @@ arithmetic rather than an approximation of it. A scale whose step cannot land on
 rejected outright rather than silently truncated, because the client would otherwise be shown
 positions the coach never chose.
 
-**Authorization.** Authoring is workspace content: it names no client, so it is gated on the coach
-role and tenant isolation alone and evaluates no entitlement. Every route that names a client —
-assignment, and the client's own read — resolves `CoachingFeature.CheckIns` through
-`ICoachingFeatureAccessService`, which is where membership, platform block, workspace-local
-relationship block, entitlement and payment state are decided together. No bespoke check was added.
+**Authorization: `/api/checkins/forms/*` deliberately does not evaluate `CoachingFeature.CheckIns`.**
+This is a decision, not an oversight, and it is the one place Phase 6A departs from the instruction
+that check-in APIs evaluate the shared access port.
+
+*Rationale.* `ICoachingFeatureAccessService.EvaluateAsync` takes a `clientProfileId` and answers a
+question about one named client: is *this* person's enrollment active, paid, unblocked and in date
+for *this* feature. An authoring route has no client subject, so there is no argument to give it.
+Making authoring "evaluate" would mean inventing a subject — a synthetic client, an any-client
+disjunction, or a new workspace-scoped entitlement — and each of those is a new concept in the
+commercial model rather than a use of the existing one.
+
+*Why an unentitled workspace is not a concept here.* Entitlement in this system is dated and
+per-client: `CoachingProduct` -> immutable `ProductOffer` -> `ClientEnrollment` for one client over
+one date range. Nothing entitles a *workspace*. A workspace with no enrolled clients is not an
+unentitled workspace; it is a new one, and its coach must be able to author before a first client
+exists or the product could never be started. Conversely a workspace whose every enrollment has
+lapsed still owns its form library — the forms are the coach's own work, not the clients'.
+
+*Boundary.* Authoring is gated on the coach role (`AuthorizationPolicies.TenantCoach`) plus tenant
+isolation: the global query filter, the write-scope guard and tenant-aware constraints, with
+antiforgery on every state change and rate limiting on the expensive writes. That boundary admits
+exactly one thing — a coach of this workspace reading and writing this workspace's own form
+lineages. It reaches no client, no answer, and no other tenant. The moment a route names a client —
+assignment, the coach's read of a submission, review, comparison, and the client's own read and
+write — `CoachingFeature.CheckIns` is resolved through `ICoachingFeatureAccessService`, which is
+where membership, platform block, workspace-local relationship block, entitlement and payment state
+are decided together. No bespoke check was added anywhere.
+
+*Cost of being wrong.* A coach whose clients are all unentitled can still author and publish forms
+they cannot assign. That is a wasted-effort outcome, not an access leak: no client row, no
+assignment and no answer is reachable from any authoring route, and assignment itself is refused.
+If workspace-level entitlement ever becomes real — a plan that sells the check-in *builder* rather
+than a client's coverage — this is the decision to revisit, and it needs a commercial concept
+first, not an extra call here.
 
 **The client surface in this chunk is read-only.** A client lists their assignments and reads the
 assigned version's questions and options. Answering is 6A-2 (ADR 0016).

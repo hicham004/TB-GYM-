@@ -298,4 +298,53 @@ describe('MyCheckIns', () => {
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     expect(host.textContent).toContain('Choose a check-in to answer it.');
   });
+
+  /**
+   * A lapsed entitlement closes the client's own past submissions. The refusal carries the
+   * deciding reason, and the screen has to use it: showing "you have no check-ins right now" to
+   * someone who has two of them is a wrong statement, not a neutral empty state.
+   */
+  it('explains a lapsed entitlement using the reason the server sent', async () => {
+    const denied = new HttpErrorResponse({
+      status: 403,
+      error: {
+        title: 'Check-ins are not available for this client.',
+        accessReason: 'Cancelled',
+      },
+    });
+    const { host } = await render({
+      listOwnCheckInAssignments: vi.fn(() => throwError(() => denied)),
+    });
+
+    expect(host.textContent).toContain('Your enrollment was cancelled');
+    expect(host.textContent).toContain('including the ones you already sent');
+    // Never the flat contradiction, and never the coach's phrasing about "this client".
+    expect(host.textContent).not.toContain('You have no check-ins right now.');
+    expect(host.textContent).not.toContain('not available for this client');
+    expect(host.textContent).not.toContain('403');
+  });
+
+  it('distinguishes each denial reason rather than collapsing them', async () => {
+    const denied = (accessReason: string) =>
+      new HttpErrorResponse({ status: 403, error: { accessReason } });
+    const expired = await render({
+      listOwnCheckInAssignments: vi.fn(() => throwError(() => denied('Expired'))),
+    });
+    expect(expired.host.textContent).toContain('Your enrollment has ended');
+    TestBed.resetTestingModule();
+
+    const blocked = await render({
+      listOwnCheckInAssignments: vi.fn(() => throwError(() => denied('RelationshipBlocked'))),
+    });
+    expect(blocked.host.textContent).toContain('Your coach has paused your access');
+  });
+
+  it('still reports a plain transport failure as an error, not as a denial', async () => {
+    const { host } = await render({
+      listOwnCheckInAssignments: vi.fn(() => throwError(() => new Error('offline'))),
+    });
+
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.textContent).toContain('Your check-ins could not be loaded.');
+  });
 });

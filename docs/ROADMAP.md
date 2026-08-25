@@ -238,8 +238,17 @@ Dependencies: Phase 1 tenancy; can overlap Phases 3-5 after access policies stab
   validation returning every failure at once, coach review as an append-only event, and comparison
   as a read-side projection aligned by `QuestionKey` that reports one-sided questions explicitly.
 
+- 6A-3: verification and hardening, no new surface. The full coach and client journey was driven in
+  a live browser against a real API and PostgreSQL, in two profiles, including the three denial
+  paths. It found one blocking defect — the coach's Assign button could never enable, because the
+  assignment draft was a plain object behind a `computed`, so the screen was dead while every unit
+  test passed — and two denial surfaces that rendered a refusal as an empty list. All three are
+  fixed with regression tests that drive the rendered controls rather than the component fields.
+  The authoring-route entitlement deviation is ratified in ADR 0017 rather than left in a comment.
+
 Exit: a submitted check-in still renders the exact wording it was asked in after a later version is
-published, and no answer is scored, rated or interpreted anywhere.
+published, and no answer is scored, rated or interpreted anywhere. A refused read names its reason
+and is never shown as an empty list.
 
 Deferred to 6B or later: recurring scheduling, tasks and habits, reminders and notifications,
 comments or chat on a check-in, signatures, file uploads, conditional branching, AI interpretation,

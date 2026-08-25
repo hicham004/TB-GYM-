@@ -38,6 +38,14 @@
 - Use UTC instants, `DateOnly` for calendar dates, explicit tenant time zones, half-open
   periods `[start, endExclusive)`, exact decimal money plus currency, and explicit units.
 - Use succinct comments only for non-obvious reasoning. Do not commit secrets or user data.
+- Never round-trip repository files through Windows PowerShell 5.1 `Get-Content -Raw`,
+  `Set-Content` or `Add-Content`. They decode UTF-8 as ANSI and write ANSI back, so every em dash,
+  curly quote and accent becomes a two- or three-character mojibake sequence (the A-circumflex and
+  A-tilde prefixes) and a BOM can appear from nowhere — corruption that compiles and reviews
+  clean. Use the editing tools, or
+  `[System.IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false))` and `WriteAllText` with
+  the same encoding; pass `-Encoding utf8` when a cmdlet must write. Keep `.ps1` files pure ASCII
+  for the same reason: a non-ASCII literal in a script corrupts the script itself.
 
 ## Security and tenancy
 

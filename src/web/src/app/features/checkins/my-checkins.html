@@ -11,7 +11,9 @@
   <div class="split">
     <article class="panel">
       <h3 i18n>Assigned</h3>
-      @if (loading() && assignments().length === 0) {
+      @if (denial(); as message) {
+        <p class="notice" role="status">{{ message }}</p>
+      } @else if (loading() && assignments().length === 0) {
         <p i18n>Loading your check-ins…</p>
       } @else if (assignments().length === 0) {
         <p class="empty" i18n>You have no check-ins right now.</p>
@@ -153,6 +155,8 @@
             }
           }
         </form>
+      } @else if (denial()) {
+        <p class="empty" i18n>There is nothing to open while check-ins are closed.</p>
       } @else {
         <p class="empty" i18n>Choose a check-in to answer it.</p>
       }

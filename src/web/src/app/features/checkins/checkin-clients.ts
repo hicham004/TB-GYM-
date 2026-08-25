@@ -3,7 +3,8 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
-import { apiErrorMessage } from '../../core/api/api-error';
+import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
+import { clientCheckInDenialMessage } from '../../core/i18n/display-labels';
 import type {
   CheckInAnswerView,
   CheckInAssignmentView,
@@ -43,9 +44,19 @@ export class CheckInClients {
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
+  /**
+   * Set when the server refused this client's check-ins and said why. It replaces the assignment
+   * list, because "nothing assigned yet" and "you may not read what is assigned" are different
+   * facts and a blocked coach was being shown the first when the second was true.
+   */
+  protected readonly denial = signal<string | null>(null);
 
   protected readonly selectedClientId = signal('');
-  protected assignment: AssignmentDraft = { clientProfileId: '', formVersionId: '', dueDate: '' };
+  /**
+   * A signal, not a plain object: `assignmentErrors` is a computed, so a mutated field would never
+   * be seen and the Assign button would stay disabled however the form was filled in.
+   */
+  protected readonly assignment = signal<AssignmentDraft>(emptyAssignment());
   protected firstResponseId = '';
   protected secondResponseId = '';
 
@@ -74,7 +85,7 @@ export class CheckInClients {
 
   protected readonly assignmentErrors = computed(() =>
     validateAssignment(
-      { ...this.assignment, clientProfileId: this.selectedClientId() },
+      { ...this.assignment(), clientProfileId: this.selectedClientId() },
       this.workspaceToday(),
     ),
   );
@@ -99,6 +110,14 @@ export class CheckInClients {
     );
   }
 
+  protected setAssignmentVersion(formVersionId: string): void {
+    this.assignment.update((current) => ({ ...current, formVersionId }));
+  }
+
+  protected setAssignmentDueDate(dueDate: string): void {
+    this.assignment.update((current) => ({ ...current, dueDate }));
+  }
+
   protected async selectClient(clientId: string): Promise<void> {
     this.selectedClientId.set(clientId);
     this.detail.set(null);
@@ -118,14 +137,15 @@ export class CheckInClients {
     this.clearMessages();
     try {
       await this.csrf.refresh();
+      const draft = this.assignment();
       await firstValueFrom(
         this.api.assignCheckIn(this.selectedClientId(), {
-          formVersionId: this.assignment.formVersionId,
-          dueDate: this.assignment.dueDate,
+          formVersionId: draft.formVersionId,
+          dueDate: draft.dueDate,
         }),
       );
       this.notice.set($localize`Check-in assigned.`);
-      this.assignment = { clientProfileId: '', formVersionId: '', dueDate: '' };
+      this.assignment.set(emptyAssignment());
       await this.loadAssignments();
     } catch (error) {
       this.error.set(apiErrorMessage(error, $localize`This check-in could not be assigned.`));
@@ -271,9 +291,14 @@ export class CheckInClients {
     } catch (error) {
       this.assignments.set([]);
       this.responses.set({});
-      this.error.set(
-        apiErrorMessage(error, $localize`This client's check-ins could not be loaded.`),
-      );
+      const reason = featureAccessReason(error);
+      if (reason === null) {
+        this.error.set(
+          apiErrorMessage(error, $localize`This client's check-ins could not be loaded.`),
+        );
+      } else {
+        this.denial.set(clientCheckInDenialMessage(reason));
+      }
     } finally {
       this.loading.set(false);
     }
@@ -290,5 +315,10 @@ export class CheckInClients {
   private clearMessages(): void {
     this.error.set(null);
     this.notice.set(null);
+    this.denial.set(null);
   }
+}
+
+function emptyAssignment(): AssignmentDraft {
+  return { clientProfileId: '', formVersionId: '', dueDate: '' };
 }

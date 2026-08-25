@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
@@ -168,6 +169,20 @@ const COMPARISON: CheckInComparisonView = {
   ],
 };
 
+/** A lineage with one published version, so the assignment select has something to offer. */
+const PUBLISHED_FORM = {
+  id: 'form-1',
+  title: 'Weekly check-in',
+  description: null,
+  status: 'Published',
+  isArchived: false,
+  currentVersionNumber: 1,
+  draftVersionId: null,
+  latestPublishedVersionId: 'version-1',
+  latestPublishedVersionNumber: 1,
+  version: 2,
+} as const;
+
 /**
  * ngModel writes its value to the DOM through the forms pipeline rather than synchronously, so a
  * single change-detection pass is not enough to observe a rendered value or a disabled control.
@@ -321,5 +336,112 @@ describe('CheckInClients', () => {
     expect(text).toContain('How does your body feel today?');
     // And nothing is derived from the two answers.
     expect(text).toContain('Nothing here is scored, rated or compared for you.');
+  });
+
+  /**
+   * Drives the real controls rather than the component fields. The assignment draft used to be a
+   * plain object read by a computed, so filling the form left the computed on its cached value and
+   * Assign stayed disabled forever: the form validated correctly and the screen was still dead.
+   */
+  it('enables Assign once a published version and a due date are chosen', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-22T09:00:00Z'));
+    try {
+      const { fixture, host, component } = await render({
+        listCheckInForms: vi.fn(() => of({ total: 1, items: [PUBLISHED_FORM] })),
+      });
+
+      await component.selectClient('client-1');
+      await settle(fixture);
+
+      const submit = host.querySelector<HTMLButtonElement>(
+        'form.builder-form button[type="submit"]',
+      );
+      const select = host.querySelector<HTMLSelectElement>('select[name="formVersionId"]');
+      const dueDate = host.querySelector<HTMLInputElement>('input[name="dueDate"]');
+      expect(submit).not.toBeNull();
+      expect(submit!.disabled).toBe(true);
+
+      select!.value = 'version-1';
+      select!.dispatchEvent(new Event('change'));
+      await settle(fixture);
+      // One field alone is not enough, and the outstanding reason is still on screen.
+      expect(submit!.disabled).toBe(true);
+      expect(host.textContent).toContain('Choose a due date.');
+
+      dueDate!.value = '2026-08-24';
+      dueDate!.dispatchEvent(new Event('input'));
+      await settle(fixture);
+
+      expect(submit!.disabled).toBe(false);
+      expect(host.textContent).not.toContain('Choose a due date.');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps Assign disabled for a due date that has already passed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-22T09:00:00Z'));
+    try {
+      const { fixture, host, component } = await render({
+        listCheckInForms: vi.fn(() => of({ total: 1, items: [PUBLISHED_FORM] })),
+      });
+
+      await component.selectClient('client-1');
+      await settle(fixture);
+
+      const submit = host.querySelector<HTMLButtonElement>(
+        'form.builder-form button[type="submit"]',
+      );
+      host.querySelector<HTMLSelectElement>('select[name="formVersionId"]')!.value = 'version-1';
+      host
+        .querySelector<HTMLSelectElement>('select[name="formVersionId"]')!
+        .dispatchEvent(new Event('change'));
+      const dueDate = host.querySelector<HTMLInputElement>('input[name="dueDate"]')!;
+      dueDate.value = '2026-08-21';
+      dueDate.dispatchEvent(new Event('input'));
+      await settle(fixture);
+
+      expect(submit!.disabled).toBe(true);
+      expect(host.textContent).toContain('The due date cannot be in the past.');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
+   * A blocked relationship refuses the coach's read. The screen used to say "Nothing assigned to
+   * this client yet" over two real assignments, which is a false statement about the client's
+   * history rather than a description of the refusal.
+   */
+  it('explains a refused client instead of claiming nothing is assigned', async () => {
+    const denied = new HttpErrorResponse({
+      status: 403,
+      error: { accessReason: 'RelationshipBlocked' },
+    });
+    const { fixture, host, component } = await render({
+      listClientCheckInAssignments: vi.fn(() => throwError(() => denied)),
+    });
+
+    await component.selectClient('client-1');
+    await settle(fixture);
+
+    expect(host.textContent).toContain('You have blocked this client');
+    expect(host.textContent).not.toContain('Nothing assigned to this client yet.');
+    // And no assign form is offered for a client the server will refuse.
+    expect(host.querySelector('select[name="formVersionId"]')).toBeNull();
+  });
+
+  it('still reports a plain transport failure as an error, not as a denial', async () => {
+    const { fixture, host, component } = await render({
+      listClientCheckInAssignments: vi.fn(() => throwError(() => new Error('offline'))),
+    });
+
+    await component.selectClient('client-1');
+    await settle(fixture);
+
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.textContent).toContain("This client's check-ins could not be loaded.");
   });
 });

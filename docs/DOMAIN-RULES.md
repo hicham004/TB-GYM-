@@ -673,9 +673,12 @@ an empty answer on the side that never asked it.
 
 **CHK-011** Every check-in route that names a client evaluates `CoachingFeature.CheckIns` through
 `ICoachingFeatureAccessService`; coach routes inherit relationship blocking from the same decision.
-Authoring routes have no client subject and are gated on the coach role and tenant isolation alone.
-Entitlement belongs to the client's enrollment, so when it lapses the feature closes for that client
-on both sides, including the coach's view. Records are retained, never deleted.
+Authoring routes have no client subject and are gated on the coach role and tenant isolation alone —
+a ratified deviation, because entitlement is dated and per-client and no concept entitles a
+workspace; see ADR 0017 for its rationale and boundary. Entitlement belongs to the client's
+enrollment, so when it lapses the feature closes for that client on both sides, including the
+coach's view. Records are retained, never deleted. A refusal carries its `FeatureAccessReason` and
+the surface must state that reason; a denied list is never rendered as an empty one.
 
 **CHK-012** Lateness is a recorded fact: the workspace-local submitted date against the due date. The
 submitted date is stored because the workspace time zone can change later. No answer may be

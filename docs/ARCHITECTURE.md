@@ -510,4 +510,9 @@ answering screen (`me`). The builder renders a published version read-only and o
 draft instead of an edit; the answering screen saves an incomplete draft freely and blocks only
 submission. Every rule it enforces is a duplicate of a server rule, never the only copy.
 
+A refused read is rendered from the `accessReason` the 403 carries, in the audience's own words,
+and it replaces the list it was refused rather than sitting above an empty one — a client who may
+not read their two submissions is never told they have none, and a blocked coach is never told
+nothing was assigned. Only an unexplained failure falls back to a generic error.
+
 See ADR 0017 for authoring and ADR 0016 for responses.

@@ -1,5 +1,34 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ApiErrorBody } from './api.models';
+import { ApiErrorBody, FeatureAccessReason } from './api.models';
+
+const ACCESS_REASONS: readonly FeatureAccessReason[] = [
+  'Granted',
+  'MembershipInactive',
+  'RelationshipBlocked',
+  'NoEntitlement',
+  'PaymentRequired',
+  'NotStarted',
+  'Expired',
+  'Paused',
+  'Cancelled',
+  'PlatformBlocked',
+];
+
+/**
+ * The deciding reason a feature route refused, when the server sent one. A 403 from an
+ * entitlement-gated route carries it as an `accessReason` extension so the screen can say why
+ * access is closed instead of showing an unexplained denial or, worse, an empty list.
+ */
+export function featureAccessReason(error: unknown): FeatureAccessReason | null {
+  if (!(error instanceof HttpErrorResponse) || error.status !== 403) {
+    return null;
+  }
+
+  const reason = (error.error as { accessReason?: unknown } | undefined)?.accessReason;
+  return typeof reason === 'string' && (ACCESS_REASONS as readonly string[]).includes(reason)
+    ? (reason as FeatureAccessReason)
+    : null;
+}
 
 /**
  * Stable server codes mapped to something a coach or client can act on. Each of these leads to a
