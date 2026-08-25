@@ -12,11 +12,11 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
   announced,
+  focusedId,
   leave,
   leaveAt,
   press,
   query,
-  submitForm,
   fill,
   settle as settleDom,
 } from '../../../testing/dom';
@@ -207,13 +207,15 @@ describe('CheckInForms', () => {
     await settle(fixture);
 
     expect(component.validation().isValid).toBe(true);
+    // The button stays operable throughout: it is the attempt that gets refused, not the control
+    // that goes mute. Only an in-flight request disables it.
     expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
 
-    // A question without a prompt is not saveable, and the button says so.
+    // A question without a prompt is not saveable.
     component.addQuestion();
     await settle(fixture);
     expect(component.validation().isValid).toBe(false);
-    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
 
     component.setPrompt(1, 'Anything else?');
     await settle(fixture);
@@ -302,7 +304,7 @@ describe('CheckInForms validation display', () => {
   it('names every outstanding reason at once when a blocked submit is attempted', async () => {
     const { fixture, host } = await newForm();
 
-    submitForm(host, 'form.builder-form');
+    press(host, 'Save draft');
     await settleDom(fixture);
 
     const summary = announced(host);
@@ -315,7 +317,7 @@ describe('CheckInForms validation display', () => {
   it('clears a corrected field’s reason and leaves the question’s standing', async () => {
     const { fixture, host } = await newForm();
 
-    submitForm(host, 'form.builder-form');
+    press(host, 'Save draft');
     await settleDom(fixture);
 
     fill(host, 'Title', 'Weekly check-in');
@@ -345,11 +347,35 @@ describe('CheckInForms validation display', () => {
     expect(control().getAttribute('aria-describedby')).toBeNull();
   });
 
-  it('points the disabled submit at the summary region so its state is explicable', async () => {
+  it('keeps the submit control operable while the draft is invalid', async () => {
     const { host } = await newForm();
     const submit = query<HTMLButtonElement>(host, 'form.builder-form button[type="submit"]');
 
-    expect(submit.disabled).toBe(true);
+    expect(submit.disabled).toBe(false);
     expect(submit.getAttribute('aria-describedby')).toBe('builder-summary');
+  });
+
+  it('moves focus to the summary when a save is refused', async () => {
+    const { fixture, host } = await newForm();
+
+    press(host, 'Save draft');
+    await settleDom(fixture);
+
+    expect(focusedId()).toBe('builder-summary');
+  });
+
+  it('does not reach the API when a refused save is attempted', async () => {
+    const createCheckInForm = vi.fn(() => of(details(version('v1', 1, 'Draft'))));
+    const { fixture, host, component } = await render({
+      createCheckInForm: createCheckInForm as never,
+    });
+    component.startNewForm();
+    await settleDom(fixture);
+
+    press(host, 'Save draft');
+    await settleDom(fixture);
+
+    expect(createCheckInForm).not.toHaveBeenCalled();
+    expect(announced(host)).toContain('A title is required.');
   });
 });

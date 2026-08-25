@@ -307,8 +307,9 @@
 
           @if (!readOnly) {
             <!-- The one assertive region on this form: present from the start so the live region is
-                 registered, empty until a save is actually refused. -->
-            <p class="error summary" id="builder-summary" role="alert">
+                 registered, empty until a save is actually refused. `tabindex="-1"` so the refusal
+                 can take focus without entering the tab order. -->
+            <p class="error summary" id="builder-summary" role="alert" tabindex="-1" #summary>
               @if (attempt.wasTried() && outstanding().length > 0) {
                 <ng-container i18n>This draft cannot be saved yet:</ng-container>
                 @for (message of outstanding(); track $index) {
@@ -319,11 +320,12 @@
 
             <div class="actions">
               <button type="button" class="link" (click)="addQuestion()" i18n>Add question</button>
+              <!-- Disabled only while the request is in flight; see checkin-clients.html. -->
               <button
                 type="submit"
                 class="primary-button"
                 aria-describedby="builder-summary"
-                [disabled]="saving() || !validation().isValid"
+                [disabled]="saving()"
                 i18n
               >
                 Save draft

@@ -12,7 +12,7 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { announced, leaveAt, query, settle, submitForm, type } from '../../../testing/dom';
+import { announced, focusedId, leaveAt, press, query, settle, type } from '../../../testing/dom';
 import { MyCheckIns } from './my-checkins';
 
 const TEXT_KEY = 'a'.repeat(32);
@@ -184,9 +184,14 @@ describe('MyCheckIns', () => {
     await settle(fixture);
 
     expect(component.guard().canSubmit).toBe(false);
+    // The button stays operable while the check-in is incomplete: a disabled one cannot be pressed,
+    // reached by Enter, or focused, so it could not tell anyone why it was refusing.
     const submit = host.querySelector<HTMLButtonElement>('button[type="submit"]');
-    expect(submit?.disabled).toBe(true);
-    expect(host.textContent).toContain('Answer every required question before submitting');
+    expect(submit?.disabled).toBe(false);
+    // The draft reassurance is guidance, not an accusation, so it is here from the start and does
+    // not restate what the summary names once a send is actually refused.
+    expect(host.textContent).toContain('Saving a draft keeps what you have written');
+    expect(host.textContent).not.toContain('Answer every required question before submitting');
 
     component.setText('question-1', 'Shoulders are tight.');
     component.setNumber('question-2', '8');
@@ -419,7 +424,7 @@ describe('MyCheckIns validation display', () => {
   it('names every outstanding reason at once when a blocked submit is attempted', async () => {
     const { fixture, host } = await opened();
 
-    submitForm(host, 'form.answer-form');
+    press(host, 'Submit check-in');
     await settle(fixture);
 
     const summary = announced(host);
@@ -434,7 +439,7 @@ describe('MyCheckIns validation display', () => {
   it('clears a corrected question’s reason and leaves the other standing', async () => {
     const { fixture, host } = await opened();
 
-    submitForm(host, 'form.answer-form');
+    press(host, 'Submit check-in');
     await settle(fixture);
 
     type(host, '#q-question-1', 'Shoulders are tight.');
@@ -464,11 +469,40 @@ describe('MyCheckIns validation display', () => {
     expect(control().getAttribute('aria-describedby')).toBeNull();
   });
 
-  it('points the disabled submit at the summary region so its state is explicable', async () => {
+  it('keeps the submit control operable while the check-in is incomplete', async () => {
     const { host } = await opened();
     const submit = query<HTMLButtonElement>(host, 'button[type="submit"]');
 
-    expect(submit.disabled).toBe(true);
+    expect(submit.disabled).toBe(false);
     expect(submit.getAttribute('aria-describedby')).toBe('answer-summary');
+  });
+
+  it('moves focus to the summary when a send is refused', async () => {
+    const { fixture, host } = await opened();
+
+    press(host, 'Submit check-in');
+    await settle(fixture);
+
+    expect(focusedId()).toBe('answer-summary');
+  });
+
+  it('does not reach the API when a refused send is attempted', async () => {
+    const save = vi.fn(() => of(detail(null)));
+    const submitResponse = vi.fn(() => of(detail(null)));
+    const { fixture, host, component } = await render({
+      getOwnCheckInResponse: vi.fn(() => of(detail(null))),
+      saveOwnCheckInDraftResponse: save as never,
+      submitOwnCheckInResponse: submitResponse as never,
+    });
+    await component.open('assignment-1');
+    await settle(fixture);
+
+    press(host, 'Submit check-in');
+    await settle(fixture);
+
+    // A refused send saves nothing and submits nothing: the draft is untouched either way.
+    expect(save).not.toHaveBeenCalled();
+    expect(submitResponse).not.toHaveBeenCalled();
+    expect(announced(host)).toContain('How is your body feeling?');
   });
 });

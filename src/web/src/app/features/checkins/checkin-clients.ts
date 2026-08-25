@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -96,6 +96,8 @@ export class CheckInClients {
   /** Decides when each assign-form reason is due on screen. See `FormAttempt` for the rule. */
   protected readonly attempt = new FormAttempt();
 
+  private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
+
   protected assignmentFieldErrors(field: string): string[] {
     return this.assignmentValidation().byField[field] ?? [];
   }
@@ -141,13 +143,19 @@ export class CheckInClients {
   }
 
   /**
-   * A refused submit reveals every outstanding reason at once and says so in the summary region.
-   * It deliberately does not write into `error`: that channel reports what the server said, and a
-   * reason the form worked out for itself has never been near the server.
+   * A refused submit reveals every outstanding reason at once, says so in the summary region, and
+   * moves focus there so the refusal is where the user already is. It deliberately does not write
+   * into `error`: that channel reports what the server said, and a reason the form worked out for
+   * itself has never been near the server.
+   *
+   * The button stays operable while the form is invalid. A disabled one cannot be clicked, is not
+   * reached by Enter, and in Chrome cannot take focus at all, so it can neither be acted on nor
+   * explain itself — measured in Phase 6A-6.
    */
   protected async assign(): Promise<void> {
     this.attempt.attempt();
     if (this.assignmentErrors().length > 0) {
+      this.summary()?.nativeElement.focus();
       return;
     }
 

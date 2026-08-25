@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -68,6 +68,8 @@ export class CheckInForms {
 
   /** Decides when each builder reason is due on screen. See `FormAttempt` for the rule. */
   protected readonly attempt = new FormAttempt();
+
+  private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
 
   /**
    * Every outstanding reason in one list, form-level first and then question by question, which is
@@ -257,12 +259,15 @@ export class CheckInForms {
   }
 
   /**
-   * A refused save reveals every outstanding reason at once and names them in the summary region,
-   * rather than writing a derived reason into `error`, which reports what the server said.
+   * A refused save reveals every outstanding reason at once, names them in the summary region and
+   * moves focus there, rather than writing a derived reason into `error`, which reports what the
+   * server said. The button stays operable while the draft is invalid — see `assign` in
+   * `checkin-clients` for what a disabled one costs.
    */
   protected async save(): Promise<void> {
     this.attempt.attempt();
     if (!this.validation().isValid) {
+      this.summary()?.nativeElement.focus();
       return;
     }
 

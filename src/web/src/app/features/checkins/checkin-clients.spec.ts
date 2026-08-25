@@ -15,11 +15,12 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
   announced,
   choose,
+  focusedId,
   leave,
   leaveAt,
+  press,
   query,
   settle,
-  submitForm,
   type,
 } from '../../../testing/dom';
 import { CheckInClients } from './checkin-clients';
@@ -339,9 +340,11 @@ describe('CheckInClients', () => {
   /**
    * Drives the real controls rather than the component fields. The assignment draft used to be a
    * plain object read by a computed, so filling the form left the computed on its cached value and
-   * Assign stayed disabled forever: the form validated correctly and the screen was still dead.
+   * the form could never become valid however it was completed: it validated correctly and the
+   * screen was still dead. Validity is now read from what the screen says is outstanding, since the
+   * submit button no longer reports it — a disabled button could not be reached to say anything.
    */
-  it('enables Assign once a published version and a due date are chosen', async () => {
+  it('tracks validity as the assign form is filled in', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-08-22T09:00:00Z'));
     try {
@@ -352,17 +355,10 @@ describe('CheckInClients', () => {
       await component.selectClient('client-1');
       await settle(fixture);
 
-      const submit = host.querySelector<HTMLButtonElement>(
-        'form.builder-form button[type="submit"]',
-      );
-      expect(submit).not.toBeNull();
-      expect(submit!.disabled).toBe(true);
-
       choose(host, 'select[name="formVersionId"]', 'version-1');
       await settle(fixture);
       // One field alone is not enough. The due date's reason waits for the due date to be left,
       // rather than accusing the user of missing a field they have not reached yet.
-      expect(submit!.disabled).toBe(true);
       expect(host.textContent).not.toContain('Choose a due date.');
 
       leave(host, 'Due date');
@@ -372,33 +368,34 @@ describe('CheckInClients', () => {
       type(host, 'input[name="dueDate"]', '2026-08-24');
       await settle(fixture);
 
-      expect(submit!.disabled).toBe(false);
       expect(host.textContent).not.toContain('Choose a due date.');
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('keeps Assign disabled for a due date that has already passed', async () => {
+  it('refuses a due date that has already passed', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-08-22T09:00:00Z'));
     try {
+      const assignCheckIn = vi.fn(() => of({}));
       const { fixture, host, component } = await render({
         listCheckInForms: vi.fn(() => of({ total: 1, items: [PUBLISHED_FORM] })),
+        assignCheckIn: assignCheckIn as never,
       });
 
       await component.selectClient('client-1');
       await settle(fixture);
 
-      const submit = host.querySelector<HTMLButtonElement>(
-        'form.builder-form button[type="submit"]',
-      );
       choose(host, 'select[name="formVersionId"]', 'version-1');
       type(host, 'input[name="dueDate"]', '2026-08-21');
       leave(host, 'Due date');
       await settle(fixture);
 
-      expect(submit!.disabled).toBe(true);
+      press(host, 'Assign');
+      await settle(fixture);
+
+      expect(assignCheckIn).not.toHaveBeenCalled();
       expect(host.textContent).toContain('The due date cannot be in the past.');
     } finally {
       vi.useRealTimers();
@@ -496,7 +493,7 @@ describe('CheckInClients validation display', () => {
   it('names every outstanding reason at once when a blocked submit is attempted', async () => {
     const { fixture, host } = await assignForm();
 
-    submitForm(host, 'form.builder-form');
+    press(host, 'Assign');
     await settle(fixture);
 
     const summary = announced(host);
@@ -510,7 +507,7 @@ describe('CheckInClients validation display', () => {
   it('clears a corrected field’s reason and leaves the other standing', async () => {
     const { fixture, host } = await assignForm();
 
-    submitForm(host, 'form.builder-form');
+    press(host, 'Assign');
     await settle(fixture);
 
     choose(host, 'select[name="formVersionId"]', 'version-1');
@@ -541,12 +538,65 @@ describe('CheckInClients validation display', () => {
     expect(control().getAttribute('aria-describedby')).toBeNull();
   });
 
-  /** A disabled control that says nothing about why is the thing the summary region exists to fix. */
-  it('points the disabled submit at the summary region so its state is explicable', async () => {
+  /**
+   * A disabled submit cannot be clicked, is not reachable by Enter, and in Chrome cannot even take
+   * focus — so it can neither be acted on nor explain itself, and the summary it pointed at could
+   * never be reached. The control stays operable and the attempt is refused out loud instead.
+   */
+  it('keeps the submit control operable while the form is invalid', async () => {
     const { host } = await assignForm();
     const submit = query<HTMLButtonElement>(host, 'form.builder-form button[type="submit"]');
 
-    expect(submit.disabled).toBe(true);
+    expect(submit.disabled).toBe(false);
     expect(submit.getAttribute('aria-describedby')).toBe('assign-summary');
+  });
+
+  it('moves focus to the summary when a submit is refused, so the refusal is where the user is', async () => {
+    const { fixture, host } = await assignForm();
+
+    press(host, 'Assign');
+    await settle(fixture);
+
+    expect(focusedId()).toBe('assign-summary');
+  });
+
+  it('does not reach the API when a refused submit is attempted', async () => {
+    const assignCheckIn = vi.fn(() => of({}));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-22T09:00:00Z'));
+    const { fixture, host, component } = await render({
+      listCheckInForms: vi.fn(() => of({ total: 1, items: [PUBLISHED_FORM] })),
+      assignCheckIn: assignCheckIn as never,
+    });
+    await component.selectClient('client-1');
+    await settle(fixture);
+
+    press(host, 'Assign');
+    await settle(fixture);
+
+    expect(assignCheckIn).not.toHaveBeenCalled();
+    expect(announced(host)).toContain('Choose a due date.');
+  });
+
+  it('assigns for real once the form is complete, and clears the summary', async () => {
+    const assignCheckIn = vi.fn(() => of({}));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-22T09:00:00Z'));
+    const { fixture, host, component } = await render({
+      listCheckInForms: vi.fn(() => of({ total: 1, items: [PUBLISHED_FORM] })),
+      assignCheckIn: assignCheckIn as never,
+    });
+    await component.selectClient('client-1');
+    await settle(fixture);
+
+    choose(host, 'select[name="formVersionId"]', 'version-1');
+    type(host, 'input[name="dueDate"]', '2026-08-24');
+    await settle(fixture);
+
+    press(host, 'Assign');
+    await settle(fixture);
+
+    expect(assignCheckIn).toHaveBeenCalledOnce();
+    expect(announced(host)).toBe('');
   });
 });

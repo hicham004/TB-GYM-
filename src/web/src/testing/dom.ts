@@ -8,6 +8,12 @@ import type { ComponentFixture } from '@angular/core/testing';
  * for that distinction: `checkin-clients` computed its assign-form errors from a plain field, so
  * the computed never re-evaluated, Assign stayed disabled however the form was filled in, and 88
  * green tests reported nothing because not one of them touched a control.
+ *
+ * Phase 6A-6 paid for it a second time, one level up. A `submitForm` helper here dispatched a
+ * `submit` event straight at the form, which made the 6A-5 summary region test green — while a real
+ * browser fires no such event when the form's default button is disabled, and will not even focus
+ * that button. The helper is gone deliberately: driving an interaction no user can perform is the
+ * same defect as calling a method no template calls. Press the button.
  */
 
 export type Control = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -142,15 +148,12 @@ export function leaveAt(host: ParentNode, selector: string): Control {
 }
 
 /**
- * Submits a form the way a keyboard does, without going through the submit button. The button is
- * deliberately disabled while the form is invalid, so a blocked submit cannot be produced by
- * clicking it — the form's own submit event is the path that remains, and it is the one that has to
- * reveal what is outstanding.
+ * The id of whatever currently holds focus, for asserting that a refused submit moved focus to the
+ * place that explains why.
  */
-export function submitForm(host: ParentNode, selector = 'form'): HTMLFormElement {
-  const form = query<HTMLFormElement>(host, selector);
-  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-  return form;
+export function focusedId(): string {
+  const active = document.activeElement;
+  return active === null ? '' : (active.id ?? '');
 }
 
 /**

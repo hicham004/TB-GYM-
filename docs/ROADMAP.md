@@ -226,9 +226,10 @@ Dependencies: Phase 1 tenancy; can overlap Phases 3-5 after access policies stab
 
 ### Phase 6A: Check-ins (complete)
 
-Status: complete through 6A-5, implemented 2026-08-24 and 2026-08-25 — check-in authoring, client
-responses, live-browser verification and hardening, Angular interaction-test coverage, and the
-application-wide form-validation display convention.
+Status: complete through 6A-6, implemented 2026-08-24 to 2026-08-26 — check-in authoring, client
+responses, live-browser verification and hardening, Angular interaction-test coverage, the
+application-wide form-validation display convention, and the disabled-submit correction that made
+its summary region reachable.
 
 6A-1 (authoring) and 6A-2 (responses) are implemented and are the first production consumers of
 `CoachingFeature.CheckIns`. See ADR 0017 (authoring) and ADR 0016 (responses), plus
@@ -264,6 +265,15 @@ application-wide form-validation display convention.
   and named by the submit button's `aria-describedby`. Touched state is one shared mechanism,
   `core/forms/form-attempt.ts`. See `ARCHITECTURE.md` section 8.
 
+- 6A-6: the disabled-submit correction. 6A-5 kept submit buttons disabled while a form was invalid,
+  which made its own summary region unreachable — measured in Chrome 150: a disabled default button
+  receives no click, is not activated by Enter, and cannot take focus, so nothing could ever
+  populate the summary and the button could not explain itself. Its tests passed only by dispatching
+  a `submit` event no user can produce. Submit controls are now disabled solely while a request is
+  in flight; a refused attempt reaches no API, fills the summary, and moves focus to it. The
+  `submitForm` test helper was deleted rather than kept, because driving an interaction no user can
+  perform is the same defect as calling a method no template calls.
+
 Exit: a submitted check-in still renders the exact wording it was asked in after a later version is
 published, and no answer is scored, rated or interpreted anywhere. A refused read names its reason
 and is never shown as an empty list.
@@ -281,10 +291,46 @@ interpretation, exports, a cross-client outstanding-check-in view, comparing mor
 charting one question over time, and retrofitting the validation convention onto the 8 remaining
 `ngModel` templates and 12 reactive-forms templates that have no derived-reason lists today.
 
-Known and left open at the end of 6A: five feature components still carry no Angular spec —
-`dashboard`, `clients/client-details`, `training/client-training`, `training/exercise-library` and
-`training/program-builder`; and the `Phase3TrainingWorkflowTests` partial-class convention in
-`tests/backend/TB.Gym.Api.IntegrationTests` remains undocumented as a deliberate pattern.
+#### Known and left open at the end of Phase 6A
+
+Each verified against the repository on 2026-08-26. None is a check-in defect; they are recorded
+here because they were found during 6A and would otherwise be re-discovered.
+
+1. **Console noise on the coach's client detail view.** Opening a client with no nutrition or
+   progress data logs one 403 for `/api/nutrition/.../plans` and four 404s for `/api/progress/...`.
+   `client-details` composes `ClientNutrition`, `ProgressDashboardView` and `ProgressView`, and each
+   child loads its own data on init without first asking whether the client has any. Pre-existing
+   Phase 4/5 behaviour; the requests are correctly authorized and correctly refused, so this is
+   noise, not a leak.
+2. **`Phase3TrainingWorkflowTests` is a partial class spanning 16 files** in
+   `tests/backend/TB.Gym.Api.IntegrationTests`, holding **71 of the suite's 80** integration tests —
+   including every Phase 4, 5 and 6A test. New phases keep extending a class named for Phase 3.
+   Pre-existing since Phase 3 and undocumented as a deliberate pattern; renaming it is scope creep,
+   but nobody should assume the name describes the contents.
+3. **Five feature components carry no Angular spec**: `dashboard`, `clients/client-details`,
+   `training/client-training`, `training/exercise-library`, `training/program-builder`.
+4. **The form-validation convention is not retrofitted.** 8 remaining `ngModel` templates and all 12
+   reactive-forms templates still render server errors only. Deliberate: they have no derived-reason
+   lists to mistime, so they are not wrong today. See `ARCHITECTURE.md` section 8.
+5. **`client-training`'s "Apply reviewed preview" button is disabled by the same condition that
+   renders its coverage message**, which is the defect 6A-6 fixed in check-ins: a disabled control
+   cannot be pressed, reached by Enter, or focused, so it cannot explain itself. Left because
+   deciding what `applyProgression` should do outside coverage is a Phase 3 domain question.
+6. **`AccountEmailSender` and `InvitationDelivery` bypass the notification outbox entirely.** Two
+   Phase 1 delivery paths that reference no outbox type at all, parallel to the Phase 2 commercial
+   outbox. Relevant to 6B; they are deliberately not merged now, because the outbox has no
+   dispatcher yet and moving them would claim a delivery guarantee that does not exist.
+7. **Ports 5134 and 4200 are held by Docker Desktop forwards** (`com.docker.backend`, `wslrelay`)
+   dating from 2026-08-17. **5134 serves a stale pre-Phase-4 OpenAPI document.** Any contract
+   regeneration must start a fresh API on another port with `ASPNETCORE_ENVIRONMENT=Development` and
+   `TB_GYM_OPENAPI_URL`; regenerating against 5134 silently produces a contract several phases old.
+8. **`base44/` encoding is settled, not open** — 37 genuinely mojibake files, deliberately not
+   rewritten, with the project's own source verified clean. Recorded in `ARCHITECTURE.md` section 10
+   so it is not investigated a third time.
+
+Fixed during 6A-4 and 6A-5, no longer open: the check-in status badge running into the submitted
+date, the missing form version on the client's own check-in list, the "Workspace Workspace" topbar,
+and the assign form announcing its outstanding reasons on a form nobody had touched.
 
 - Persist tenant-scoped conversations, participants, messages, read state, and moderation
   metadata.

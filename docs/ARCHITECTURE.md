@@ -320,10 +320,18 @@ plain text — never `role="alert"`. It is linked to its control with `aria-desc
 control carries `aria-invalid="true"` for exactly as long as the reason is showing.
 
 Each form has one `role="alert"` summary region, present in the DOM from first render so the live
-region is registered before anything lands in it, and populated only when a submit is refused,
-naming everything outstanding at once. Submit controls stay disabled while a form is invalid, and
-carry `aria-describedby` pointing at that summary, so the disabled state is explicable rather than
-mute.
+region is registered before anything lands in it, `tabindex="-1"` so it can take focus without
+entering the tab order, and populated only when a submit is refused, naming everything outstanding
+at once. A refused submit moves focus to it, so the refusal is where the user already is.
+
+**Submit controls are not disabled by invalidity.** They are disabled only while a request is in
+flight. Phase 6A-5 shipped the opposite and Phase 6A-6 measured it in Chrome 150: with the form's
+default button disabled, pressing Enter in a field fires no `submit` event, a real mouse click on
+the button fires no `click` event, and the button cannot take focus at all — so it can neither be
+acted on nor announce why it is refusing, and the summary it pointed at was unreachable. The
+6A-5 tests passed only because they dispatched a `submit` event directly, which no user can do.
+An invalid form now lets the attempt happen and refuses it out loud: nothing reaches the API, the
+summary fills, and focus moves there.
 
 `role="alert"` is an assertive live region, so it is reserved for the two cases where something has
 just happened: a server error, and a refused submit. Using it for text that is already present when
@@ -352,6 +360,14 @@ rather than a standing property of the form: `today-nutrition` sets a per-meal e
 `save(slot)`; `client-intake-form` sets `localError` only inside `save()`/`complete()`, which is
 already this convention's summary-region shape on a reactive form; and `client-training` renders a
 server-computed coverage verdict that only exists once a progression preview has been requested.
+
+The `client-training` exclusion was re-examined in 6A-6 and confirmed: a coverage verdict is the
+server's answer to a preview the user just asked for, so an assertive region is right for it, and
+it carries no derived per-field reasons. But its **Apply reviewed preview** button is disabled by
+exactly the condition that renders the verdict, which is the same defect 6A-6 fixed in check-ins —
+a control that cannot be pressed, reached, or focused while the thing explaining it sits next to
+it. That is recorded as known and left, because it is Phase 3 training code and deciding what
+`applyProgression` should do outside coverage is a domain question, not a display one.
 
 Phase 1 transport contracts are generated from the running API's OpenAPI document with
 `npm run api:generate` and checked in for deterministic Angular builds. The API client maps
@@ -444,6 +460,30 @@ Scale in this order:
 5. Extract a module into a service only when it needs independent scale, ownership, release
    cadence, or isolation. Give the service ownership of its data and accept asynchronous
    consistency explicitly.
+
+### Source encoding: settled, do not re-investigate
+
+Measured in Phase 6A-6 and recorded so this is not opened a third time.
+
+**`base44/` is mojibake-corrupted: 37 files, and it stays that way.** They carry the full
+signature — `â€` sequences from UTF-8 em dashes and curly quotes decoded as CP1252, `ðŸ` from
+mangled emoji, `Â` prefixes, and a BOM in all 37. The corruption is present in the initial commit
+`a256840`, the only commit that has ever touched `base44/`, so it was imported already broken and
+predates this repository's own code. It is double-encoded but *well-formed* UTF-8, which is exactly
+what the PowerShell 5.1 ANSI round-trip produces: corruption that compiles and reviews clean.
+`base44/` is a preserved legacy reference, so it is deliberately not rewritten.
+
+**The project's own source is clean.** Across 411 tracked non-`base44` source files: zero invalid
+UTF-8, zero mojibake signatures, and all 4 tracked `.ps1` files pure ASCII. BOMs on 31 `.cs` and
+20 `.csproj` files are the .NET SDK's own convention, not corruption.
+
+Two earlier sweeps reported this wrongly, both because of the measuring tool rather than the files.
+`LC_ALL=C grep -P` **errors out** ("-P supports only unibyte and UTF-8 locales") and, piped to
+`wc -l`, reports zero as though it had found nothing; and byte escapes like `\xC3\x82` in a
+`git grep -P` pattern match those code points as characters, not as raw bytes. Verify encoding by
+decoding the file and inspecting code points — `Buffer.compare(Buffer.from(text,'utf8'), buf)` for
+validity, and a search for `â€`/`ðŸ`/`Â`+continuation for mojibake — never with a byte-class grep
+under a C locale.
 
 ## 11. Testing strategy
 

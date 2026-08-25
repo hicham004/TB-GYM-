@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
@@ -89,6 +89,8 @@ export class MyCheckIns {
 
   /** Decides when each question's reason is due on screen. See `FormAttempt` for the rule. */
   protected readonly attempt = new FormAttempt();
+
+  private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
 
   /**
    * Every outstanding reason paired with the question it belongs to. The summary names the question
@@ -202,6 +204,9 @@ export class MyCheckIns {
     this.attempt.attempt();
     const draft = this.draft();
     if (!draft || !this.editable() || !this.guard().canSubmit) {
+      // A refused send saves nothing and submits nothing, and the refusal takes focus. The button
+      // stays operable while the check-in is incomplete — see `assign` in `checkin-clients`.
+      this.summary()?.nativeElement.focus();
       return;
     }
 

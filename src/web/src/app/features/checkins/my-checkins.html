@@ -172,8 +172,9 @@
 
           @if (editable()) {
             <!-- The one assertive region on this form: present from the start so the live region is
-                 registered, empty until a send is actually refused. -->
-            <p class="error summary" id="answer-summary" role="alert">
+                 registered, empty until a send is actually refused. `tabindex="-1"` so the refusal
+                 can take focus without entering the tab order. -->
+            <p class="error summary" id="answer-summary" role="alert" tabindex="-1" #summary>
               @if (attempt.wasTried() && outstanding().length > 0) {
                 <ng-container i18n>This check-in cannot be sent yet:</ng-container>
                 @for (item of outstanding(); track $index) {
@@ -186,21 +187,24 @@
               <button type="button" class="link" [disabled]="saving()" (click)="saveDraft()" i18n>
                 Save draft
               </button>
+              <!-- Disabled only while the request is in flight; see checkin-clients.html. -->
               <button
                 type="submit"
                 class="primary-button"
                 aria-describedby="answer-summary"
-                [disabled]="saving() || !guard().canSubmit"
+                [disabled]="saving()"
                 i18n
               >
                 Submit check-in
               </button>
             </div>
-            @if (!guard().canSubmit) {
-              <p class="hint" i18n>
-                Answer every required question before submitting. Your draft is saved either way.
-              </p>
-            }
+            <!-- Reassurance about drafts, which nothing else says. It no longer restates the
+                 required-answer rule: the summary names what is outstanding once a send is refused,
+                 and each question carries its own reason, so saying it here as well told someone
+                 they had missed something before they had answered anything. -->
+            <p class="hint" i18n>
+              Saving a draft keeps what you have written, even when it is not finished.
+            </p>
           }
         </form>
       } @else if (denial()) {
