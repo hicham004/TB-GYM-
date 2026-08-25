@@ -52,8 +52,17 @@ export interface FormDraft {
 export interface DraftValidation {
   formErrors: string[];
   questionErrors: Record<string, string[]>;
+  /**
+   * The same form-level reasons keyed by the control each belongs to, so a message can wait for its
+   * own field to be touched rather than appearing on a pristine form. `form` holds the reasons with
+   * no control of their own — how many questions a draft has is not a field anyone can leave.
+   */
+  byField: Record<string, string[]>;
   isValid: boolean;
 }
+
+/** The field key for reasons that belong to the form as a whole rather than to one control. */
+export const FORM_LEVEL = 'form';
 
 export interface AssignmentDraft {
   clientProfileId: string;
@@ -146,23 +155,26 @@ export function stepDividesRange(minimum: number, maximum: number, step: number)
 }
 
 export function validateDraft(draft: FormDraft): DraftValidation {
-  const formErrors: string[] = [];
+  const byField: Record<string, string[]> = {};
   const questionErrors: Record<string, string[]> = {};
+  const add = (field: string, message: string): void => {
+    byField[field] = [...(byField[field] ?? []), message];
+  };
 
   if (draft.title.trim().length === 0) {
-    formErrors.push($localize`A title is required.`);
+    add('title', $localize`A title is required.`);
   } else if (draft.title.trim().length > CHECK_IN_LIMITS.titleLength) {
-    formErrors.push($localize`The title is too long.`);
+    add('title', $localize`The title is too long.`);
   }
 
   if (draft.description.trim().length > CHECK_IN_LIMITS.descriptionLength) {
-    formErrors.push($localize`The description is too long.`);
+    add('description', $localize`The description is too long.`);
   }
 
   if (draft.questions.length === 0) {
-    formErrors.push($localize`Add at least one question.`);
+    add(FORM_LEVEL, $localize`Add at least one question.`);
   } else if (draft.questions.length > CHECK_IN_LIMITS.maximumQuestions) {
-    formErrors.push($localize`A check-in cannot have more than 100 questions.`);
+    add(FORM_LEVEL, $localize`A check-in cannot have more than 100 questions.`);
   }
 
   for (const question of draft.questions) {
@@ -172,9 +184,12 @@ export function validateDraft(draft: FormDraft): DraftValidation {
     }
   }
 
+  // Field order, not insertion order, so the summary reads the way the form is laid out.
+  const formErrors = ['title', 'description', FORM_LEVEL].flatMap((field) => byField[field] ?? []);
   return {
     formErrors,
     questionErrors,
+    byField,
     isValid: formErrors.length === 0 && Object.keys(questionErrors).length === 0,
   };
 }
@@ -253,24 +268,44 @@ function validateOptions(options: readonly OptionDraft[]): string[] {
   return errors;
 }
 
-/** A due date already past in the workspace's own calendar asks for something undeliverable. */
-export function validateAssignment(draft: AssignmentDraft, workspaceToday: string): string[] {
-  const errors: string[] = [];
+export interface AssignmentValidation {
+  /** Every outstanding reason, in field order: what a refused submit names in its summary. */
+  errors: string[];
+  byField: Record<string, string[]>;
+  isValid: boolean;
+}
+
+/**
+ * A due date already past in the workspace's own calendar asks for something undeliverable.
+ *
+ * The client is validated but keyed as form-level: it is chosen from the list beside the form, not
+ * from a control inside it, so there is nothing for the user to leave and no field to describe.
+ */
+export function validateAssignment(
+  draft: AssignmentDraft,
+  workspaceToday: string,
+): AssignmentValidation {
+  const byField: Record<string, string[]> = {};
+  const add = (field: string, message: string): void => {
+    byField[field] = [...(byField[field] ?? []), message];
+  };
+
   if (draft.clientProfileId.length === 0) {
-    errors.push($localize`Choose a client.`);
+    add(FORM_LEVEL, $localize`Choose a client.`);
   }
 
   if (draft.formVersionId.length === 0) {
-    errors.push($localize`Choose a published version to assign.`);
+    add('formVersionId', $localize`Choose a published version to assign.`);
   }
 
   if (draft.dueDate.length === 0) {
-    errors.push($localize`Choose a due date.`);
+    add('dueDate', $localize`Choose a due date.`);
   } else if (draft.dueDate < workspaceToday) {
-    errors.push($localize`The due date cannot be in the past.`);
+    add('dueDate', $localize`The due date cannot be in the past.`);
   }
 
-  return errors;
+  const errors = [FORM_LEVEL, 'formVersionId', 'dueDate'].flatMap((field) => byField[field] ?? []);
+  return { errors, byField, isValid: errors.length === 0 };
 }
 
 export function toCreateRequest(draft: FormDraft): CreateCheckInFormRequest {

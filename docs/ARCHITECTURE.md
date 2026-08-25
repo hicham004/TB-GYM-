@@ -309,14 +309,49 @@ The Angular 22 application is standalone and feature-oriented:
 - English source text is marked for Angular extraction and layouts use logical CSS properties
   so a later Arabic locale can provide RTL presentation without component rewrites.
 
-**Open decision — inline field validation.** The application has no touched-state convention: no
-template consults `touched`, `ng-touched`, or `control.invalid`, and every form reports its
-outstanding reasons as soon as the form is invalid. On a pristine form this renders `role="alert"`
-text before the user has typed anything, which is noise for sighted users and an unprompted
-announcement for assistive technology. Phase 6A-4 deliberately did not invent a convention for one
-screen, because a validation-display rule applied inconsistently is worse than one applied
-consistently badly. Choosing one — most likely "show a field's error once it is touched or once
-submission has been attempted" — is a whole-application decision and belongs to its own chunk.
+**Ratified convention — inline field validation.** A *derived* validation reason is one the form
+works out for itself from what has been entered: "choose a due date", "this question has to be
+answered". It is distinct from a *server* error, which reports what the backend actually said. The
+two are displayed differently because they are different events.
+
+A derived field- or question-level reason appears once that field has been left, or once a submit
+has been attempted, whichever comes first. Once shown it stays and updates live. It renders as
+plain text — never `role="alert"`. It is linked to its control with `aria-describedby`, and the
+control carries `aria-invalid="true"` for exactly as long as the reason is showing.
+
+Each form has one `role="alert"` summary region, present in the DOM from first render so the live
+region is registered before anything lands in it, and populated only when a submit is refused,
+naming everything outstanding at once. Submit controls stay disabled while a form is invalid, and
+carry `aria-describedby` pointing at that summary, so the disabled state is explicable rather than
+mute.
+
+`role="alert"` is an assertive live region, so it is reserved for the two cases where something has
+just happened: a server error, and a refused submit. Using it for text that is already present when
+it renders is an anti-pattern — announcement is inconsistent across assistive technologies, and the
+region re-fires on every keystroke as the reason is re-evaluated. That is what the four in-scope
+sites did before this chunk.
+
+Touched state is tracked by `core/forms/form-attempt.ts`, one `FormAttempt` per form, keyed by field
+name. `shows(field, messages)` is the single expression the text, `aria-invalid`, and
+`aria-describedby` all read, so they cannot drift apart. Reasons with no control of their own — how
+many questions a draft has, which client is selected — are keyed form-level and only a submit
+attempt reveals them, because there is nothing for the user to leave.
+
+Derived reasons never write into the `error` signal. That channel carries what the server said, and
+a reason the form worked out for itself has never been near the server.
+
+Phase 6A-5 applied this to the four sites that rendered derived reasons on a pristine form, all in
+`features/checkins/` and spread across three templates. The remaining 8 `ngModel` templates (11
+carry `ngModel`, 3 are the ones converted here) and all 12 reactive-forms templates have **not**
+been retrofitted, and that is deliberate: they render server errors only, so they have no
+derived-reason lists to mistime and are not currently wrong today. They adopt this convention when
+they next gain derived validation or are otherwise changed.
+
+Three sites were examined and excluded, because each reports an action that has already happened
+rather than a standing property of the form: `today-nutrition` sets a per-meal error only inside
+`save(slot)`; `client-intake-form` sets `localError` only inside `save()`/`complete()`, which is
+already this convention's summary-region shape on a reactive form; and `client-training` renders a
+server-computed coverage verdict that only exists once a progression preview has been requested.
 
 Phase 1 transport contracts are generated from the running API's OpenAPI document with
 `npm run api:generate` and checked in for deterministic Angular builds. The API client maps

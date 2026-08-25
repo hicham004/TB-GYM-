@@ -9,6 +9,7 @@ import type {
   CheckInFormVersionView,
   CheckInQuestionType,
 } from '../../core/api/generated';
+import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
@@ -65,6 +66,23 @@ export class CheckInForms {
 
   protected readonly validation = computed(() => validateDraft(this.draft()));
 
+  /** Decides when each builder reason is due on screen. See `FormAttempt` for the rule. */
+  protected readonly attempt = new FormAttempt();
+
+  /**
+   * Every outstanding reason in one list, form-level first and then question by question, which is
+   * what the summary region names once a save has been refused.
+   */
+  protected readonly outstanding = computed(() => {
+    const validation = this.validation();
+    return [
+      ...validation.formErrors,
+      ...this.draft().questions.flatMap(
+        (question) => validation.questionErrors[question.key] ?? [],
+      ),
+    ];
+  });
+
   /** The open draft of the selected lineage, if it has one. At most one exists by construction. */
   protected readonly openDraft = computed(
     () => this.selected()?.versions.find((version) => version.status === 'Draft') ?? null,
@@ -92,11 +110,21 @@ export class CheckInForms {
     return this.validation().questionErrors[question.key] ?? [];
   }
 
+  protected formFieldErrors(field: string): string[] {
+    return this.validation().byField[field] ?? [];
+  }
+
+  /** One touched-state key per question, kept distinct from the form's own field names. */
+  protected questionField(question: QuestionDraft): string {
+    return `question:${question.key}`;
+  }
+
   protected startNewForm(): void {
     this.creating.set(true);
     this.selected.set(null);
     this.editingVersion.set(null);
     this.draft.set(emptyForm());
+    this.attempt.reset();
     this.clearMessages();
   }
 
@@ -104,6 +132,7 @@ export class CheckInForms {
     this.creating.set(false);
     this.editingVersion.set(null);
     this.draft.set(emptyForm());
+    this.attempt.reset();
     this.clearMessages();
   }
 
@@ -136,6 +165,8 @@ export class CheckInForms {
       this.editingVersion.set(version);
       this.draft.set(draftFromVersion(version));
       this.creating.set(false);
+      // A different version is a different form: its reasons are earned again from scratch.
+      this.attempt.reset();
     } catch (error) {
       this.error.set(apiErrorMessage(error, $localize`This version could not be loaded.`));
     } finally {
@@ -225,9 +256,13 @@ export class CheckInForms {
     }));
   }
 
+  /**
+   * A refused save reveals every outstanding reason at once and names them in the summary region,
+   * rather than writing a derived reason into `error`, which reports what the server said.
+   */
   protected async save(): Promise<void> {
+    this.attempt.attempt();
     if (!this.validation().isValid) {
-      this.error.set($localize`Fix the highlighted problems before saving.`);
       return;
     }
 
@@ -242,6 +277,7 @@ export class CheckInForms {
         );
         this.selected.set(created);
         this.creating.set(false);
+        this.attempt.reset();
         this.notice.set($localize`Check-in form created as a draft.`);
         await this.loadForms();
       } else {

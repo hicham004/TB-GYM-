@@ -12,7 +12,7 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { settle } from '../../../testing/dom';
+import { announced, leaveAt, query, settle, submitForm, type } from '../../../testing/dom';
 import { MyCheckIns } from './my-checkins';
 
 const TEXT_KEY = 'a'.repeat(32);
@@ -369,5 +369,106 @@ describe('MyCheckIns', () => {
 
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     expect(host.textContent).toContain('Your check-ins could not be loaded.');
+  });
+});
+
+/** The reason rendered against one question, found by the id that question's control points at. */
+function reasonFor(host: HTMLElement, questionId: string): string {
+  return (host.querySelector(`#q-${questionId}-reason`)?.textContent ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * The client's answer sheet under the ratified validation convention. Every question here is
+ * required, so a freshly opened check-in has two outstanding reasons — and must show neither until
+ * the client has either left that question or tried to send the whole thing.
+ */
+describe('MyCheckIns validation display', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  async function opened() {
+    const rendered = await render({
+      getOwnCheckInResponse: vi.fn(() => of(detail(null))),
+    });
+    await rendered.component.open('assignment-1');
+    await settle(rendered.fixture);
+    return rendered;
+  }
+
+  it('announces nothing and shows no reason on a freshly opened check-in', async () => {
+    const { host } = await opened();
+
+    expect(announced(host)).toBe('');
+    expect(host.textContent).not.toContain('This question has to be answered.');
+  });
+
+  it('reveals a question’s reason when it is left, and only that question’s', async () => {
+    const { fixture, host } = await opened();
+
+    leaveAt(host, '#q-question-1');
+    await settle(fixture);
+
+    expect(reasonFor(host, 'question-1')).toContain('This question has to be answered.');
+    expect(reasonFor(host, 'question-2')).toBe('');
+    expect(announced(host)).toBe('');
+  });
+
+  it('names every outstanding reason at once when a blocked submit is attempted', async () => {
+    const { fixture, host } = await opened();
+
+    submitForm(host, 'form.answer-form');
+    await settle(fixture);
+
+    const summary = announced(host);
+    // The summary names the questions, not just the rule, because "answer it" alone does not say
+    // which one is outstanding when two are.
+    expect(summary).toContain('How is your body feeling?');
+    expect(summary).toContain('Sleep quality');
+    expect(reasonFor(host, 'question-1')).toContain('This question has to be answered.');
+    expect(reasonFor(host, 'question-2')).toContain('This question has to be answered.');
+  });
+
+  it('clears a corrected question’s reason and leaves the other standing', async () => {
+    const { fixture, host } = await opened();
+
+    submitForm(host, 'form.answer-form');
+    await settle(fixture);
+
+    type(host, '#q-question-1', 'Shoulders are tight.');
+    await settle(fixture);
+
+    expect(reasonFor(host, 'question-1')).toBe('');
+    expect(reasonFor(host, 'question-2')).toContain('This question has to be answered.');
+  });
+
+  it('carries aria-invalid and aria-describedby exactly while the reason is showing', async () => {
+    const { fixture, host } = await opened();
+    const control = () => query<HTMLInputElement>(host, '#q-question-1');
+
+    expect(control().getAttribute('aria-invalid')).toBeNull();
+    expect(control().getAttribute('aria-describedby')).toBeNull();
+
+    leaveAt(host, '#q-question-1');
+    await settle(fixture);
+
+    expect(control().getAttribute('aria-invalid')).toBe('true');
+    expect(control().getAttribute('aria-describedby')).toBe('q-question-1-reason');
+
+    type(host, '#q-question-1', 'Shoulders are tight.');
+    await settle(fixture);
+
+    expect(control().getAttribute('aria-invalid')).toBeNull();
+    expect(control().getAttribute('aria-describedby')).toBeNull();
+  });
+
+  it('points the disabled submit at the summary region so its state is explicable', async () => {
+    const { host } = await opened();
+    const submit = query<HTMLButtonElement>(host, 'button[type="submit"]');
+
+    expect(submit.disabled).toBe(true);
+    expect(submit.getAttribute('aria-describedby')).toBe('answer-summary');
   });
 });

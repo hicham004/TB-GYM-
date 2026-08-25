@@ -36,12 +36,21 @@
       } @else {
         <h3 i18n>Assign a check-in</h3>
         <form class="builder-form" (ngSubmit)="assign()">
+          @let versionReasons = assignmentFieldErrors('formVersionId');
+          @let showsVersion = attempt.shows('formVersionId', versionReasons);
+          @let dueDateReasons = assignmentFieldErrors('dueDate');
+          @let showsDueDate = attempt.shows('dueDate', dueDateReasons);
+
           <label>
             <span i18n>Published form</span>
             <select
+              id="assign-version"
               name="formVersionId"
               [ngModel]="assignment().formVersionId"
               (ngModelChange)="setAssignmentVersion($event)"
+              (blur)="attempt.touch('formVersionId')"
+              [attr.aria-invalid]="showsVersion ? 'true' : null"
+              [attr.aria-describedby]="showsVersion ? 'assign-version-reason' : null"
             >
               <option value="" i18n>Choose a form…</option>
               @for (form of assignableForms(); track form.id) {
@@ -51,22 +60,54 @@
               }
             </select>
           </label>
+          <!-- Plain text, not role="alert": this is already on screen when it is read, so an
+               assertive region would announce inconsistently and re-fire on every keystroke. -->
+          @if (showsVersion) {
+            <p class="field-reason" id="assign-version-reason">
+              @for (message of versionReasons; track message) {
+                <span>{{ message }}</span>
+              }
+            </p>
+          }
+
           <label>
             <span i18n>Due date</span>
             <input
               type="date"
+              id="assign-due-date"
               name="dueDate"
               [ngModel]="assignment().dueDate"
               (ngModelChange)="setAssignmentDueDate($event)"
+              (blur)="attempt.touch('dueDate')"
+              [attr.aria-invalid]="showsDueDate ? 'true' : null"
+              [attr.aria-describedby]="showsDueDate ? 'assign-due-date-reason' : null"
             />
           </label>
-          @for (message of assignmentErrors(); track message) {
-            <p class="error" role="alert">{{ message }}</p>
+          @if (showsDueDate) {
+            <p class="field-reason" id="assign-due-date-reason">
+              @for (message of dueDateReasons; track message) {
+                <span>{{ message }}</span>
+              }
+            </p>
           }
+
+          <!-- The one assertive region on this form. It exists from the start so the live region is
+               registered before anything lands in it, and it stays empty until a submit is refused:
+               that is the moment the user did something and it did not happen. -->
+          <p class="error summary" id="assign-summary" role="alert">
+            @if (attempt.wasTried() && assignmentErrors().length > 0) {
+              <ng-container i18n>This check-in cannot be assigned yet:</ng-container>
+              @for (message of assignmentErrors(); track message) {
+                <span>{{ message }}</span>
+              }
+            }
+          </p>
+
           <div class="actions">
             <button
               type="submit"
               class="primary-button"
+              aria-describedby="assign-summary"
               [disabled]="saving() || assignmentErrors().length > 0"
               i18n
             >

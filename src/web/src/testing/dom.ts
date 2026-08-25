@@ -124,6 +124,47 @@ export function type(host: ParentNode, selector: string, value: string): Control
   return write(query<Control>(host, selector), value);
 }
 
+/**
+ * Leaves the control captioned `label`, which is what makes a field-level validation message due.
+ * Blur does not bubble, so it is dispatched on the control itself, exactly where the binding sits.
+ */
+export function leave(host: ParentNode, label: string): Control {
+  const control = field<Control>(host, label);
+  control.dispatchEvent(new Event('blur'));
+  return control;
+}
+
+/** Leaves a control found by selector, for the ones no label points at. */
+export function leaveAt(host: ParentNode, selector: string): Control {
+  const control = query<Control>(host, selector);
+  control.dispatchEvent(new Event('blur'));
+  return control;
+}
+
+/**
+ * Submits a form the way a keyboard does, without going through the submit button. The button is
+ * deliberately disabled while the form is invalid, so a blocked submit cannot be produced by
+ * clicking it — the form's own submit event is the path that remains, and it is the one that has to
+ * reveal what is outstanding.
+ */
+export function submitForm(host: ParentNode, selector = 'form'): HTMLFormElement {
+  const form = query<HTMLFormElement>(host, selector);
+  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  return form;
+}
+
+/**
+ * The text of every assertive live region on screen. A form that has just rendered must announce
+ * nothing, and the region itself still exists — an empty `role="alert"` is what lets a later message
+ * be announced at all — so absence of text is the assertion, not absence of the element.
+ */
+export function announced(host: ParentNode): string {
+  return Array.from(host.querySelectorAll('[role="alert"]'))
+    .map((region) => normalize(region.textContent))
+    .filter((message) => message.length > 0)
+    .join(' ');
+}
+
 /** Picks an option in a select found by selector. */
 export function choose(host: ParentNode, selector: string, value: string): HTMLSelectElement {
   return write(query<HTMLSelectElement>(host, selector), value);

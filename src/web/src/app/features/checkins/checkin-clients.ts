@@ -13,6 +13,7 @@ import type {
   CheckInResponseDetail,
 } from '../../core/api/generated';
 import type { ClientSummary } from '../../core/api/api.models';
+import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { validateAssignment, type AssignmentDraft } from './checkin-builder.models';
@@ -83,12 +84,21 @@ export class CheckInClients {
       .filter((entry) => entry.response !== null && entry.response.status !== 'Draft'),
   );
 
-  protected readonly assignmentErrors = computed(() =>
+  protected readonly assignmentValidation = computed(() =>
     validateAssignment(
       { ...this.assignment(), clientProfileId: this.selectedClientId() },
       this.workspaceToday(),
     ),
   );
+
+  protected readonly assignmentErrors = computed(() => this.assignmentValidation().errors);
+
+  /** Decides when each assign-form reason is due on screen. See `FormAttempt` for the rule. */
+  protected readonly attempt = new FormAttempt();
+
+  protected assignmentFieldErrors(field: string): string[] {
+    return this.assignmentValidation().byField[field] ?? [];
+  }
 
   constructor() {
     effect(() => {
@@ -124,12 +134,20 @@ export class CheckInClients {
     this.comparison.set(null);
     this.firstResponseId = '';
     this.secondResponseId = '';
+    // A different client is a different form, so it starts pristine rather than inheriting the
+    // reasons the previous client's half-filled form had earned.
+    this.attempt.reset();
     await this.loadAssignments();
   }
 
+  /**
+   * A refused submit reveals every outstanding reason at once and says so in the summary region.
+   * It deliberately does not write into `error`: that channel reports what the server said, and a
+   * reason the form worked out for itself has never been near the server.
+   */
   protected async assign(): Promise<void> {
+    this.attempt.attempt();
     if (this.assignmentErrors().length > 0) {
-      this.error.set(this.assignmentErrors()[0]);
       return;
     }
 
@@ -146,6 +164,8 @@ export class CheckInClients {
       );
       this.notice.set($localize`Check-in assigned.`);
       this.assignment.set(emptyAssignment());
+      // The form is empty again, so its reasons are not yet owed a second time.
+      this.attempt.reset();
       await this.loadAssignments();
     } catch (error) {
       this.error.set(apiErrorMessage(error, $localize`This check-in could not be assigned.`));

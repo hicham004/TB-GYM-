@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CheckInFormVersionView } from '../../core/api/generated';
 import {
+  FORM_LEVEL,
   draftFromVersion,
   emptyForm,
   emptyQuestion,
@@ -226,15 +227,32 @@ describe('check-in assignment form', () => {
     const today = '2026-08-25';
 
     expect(
-      validateAssignment({ clientProfileId: '', formVersionId: '', dueDate: '' }, today),
+      validateAssignment({ clientProfileId: '', formVersionId: '', dueDate: '' }, today).errors,
     ).toEqual(['Choose a client.', 'Choose a published version to assign.', 'Choose a due date.']);
 
     expect(
       validateAssignment(
         { clientProfileId: 'client-1', formVersionId: 'version-1', dueDate: '2026-08-24' },
         today,
-      ),
+      ).errors,
     ).toEqual(['The due date cannot be in the past.']);
+  });
+
+  /**
+   * Each reason is keyed by the control it belongs to, so a message can wait for its own field to be
+   * left rather than appearing on a form nobody has touched. The client has no control in this form,
+   * so its reason is form-level and only a submit attempt can reveal it.
+   */
+  it('keys each reason to the control it belongs to', () => {
+    const validation = validateAssignment(
+      { clientProfileId: '', formVersionId: '', dueDate: '2026-08-24' },
+      '2026-08-25',
+    );
+
+    expect(validation.byField['formVersionId']).toEqual(['Choose a published version to assign.']);
+    expect(validation.byField['dueDate']).toEqual(['The due date cannot be in the past.']);
+    expect(validation.byField[FORM_LEVEL]).toEqual(['Choose a client.']);
+    expect(validation.isValid).toBe(false);
   });
 
   it('accepts today, so the boundary is the workspace date and not "strictly future"', () => {
@@ -244,7 +262,7 @@ describe('check-in assignment form', () => {
       validateAssignment(
         { clientProfileId: 'client-1', formVersionId: 'version-1', dueDate: today },
         today,
-      ),
+      ).errors,
     ).toEqual([]);
   });
 });

@@ -53,6 +53,32 @@
   margin-block: 0.25rem 0;
 }
 
+/*
+ * A derived validation reason: the same voice as .error, but plain text rather than a live region.
+ * Each reason is its own span so several against one control read as a list rather than a run-on.
+ */
+.field-reason {
+  color: var(--danger, #b3261e);
+  display: grid;
+  font-size: 0.875rem;
+  gap: 0.125rem;
+  margin-block: 0.25rem 0;
+}
+
+/*
+ * The submit-attempt summary. It stays in the DOM from first render so the live region is
+ * registered before anything lands in it, and collapses while empty rather than reserving a gap on
+ * a form that has not been refused anything.
+ */
+.summary {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.summary:empty {
+  display: none;
+}
+
 .notice {
   color: var(--success, #1b5e20);
   margin-block: 0.25rem 0;

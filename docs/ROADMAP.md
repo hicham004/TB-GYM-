@@ -224,7 +224,11 @@ calculations.
 
 Dependencies: Phase 1 tenancy; can overlap Phases 3-5 after access policies stabilize.
 
-### Phase 6A: Check-ins (in progress)
+### Phase 6A: Check-ins (complete)
+
+Status: complete through 6A-5, implemented 2026-08-24 and 2026-08-25 — check-in authoring, client
+responses, live-browser verification and hardening, Angular interaction-test coverage, and the
+application-wide form-validation display convention.
 
 6A-1 (authoring) and 6A-2 (responses) are implemented and are the first production consumers of
 `CoachingFeature.CheckIns`. See ADR 0017 (authoring) and ADR 0016 (responses), plus
@@ -246,14 +250,41 @@ Dependencies: Phase 1 tenancy; can overlap Phases 3-5 after access policies stab
   fixed with regression tests that drive the rendered controls rather than the component fields.
   The authoring-route entitlement deviation is ratified in ADR 0017 rather than left in a comment.
 
+- 6A-4: Angular interaction-test coverage, no new surface. Before it, 18 spec files existed and only
+  6 touched the DOM, with 8 of 13 features carrying no spec at all — which is why a dead Assign
+  button shipped behind a green suite. It adds `src/testing/dom.ts` and 21 spec files that drive
+  each feature's primary action through its rendered controls. Two more dead controls were found in
+  the commercial screens and fixed.
+
+- 6A-5: the form-validation display convention, no new surface. Of 35 `role="alert"` occurrences
+  across 27 templates, 4 rendered *derived* validation reasons on a pristine form; the rest report
+  server errors or completed actions and are correct as assertive announcements. The four are now
+  plain text gated on touched-or-submit-attempted, linked to their controls by `aria-describedby`
+  with `aria-invalid`, with one `role="alert"` summary per form populated only by a refused submit
+  and named by the submit button's `aria-describedby`. Touched state is one shared mechanism,
+  `core/forms/form-attempt.ts`. See `ARCHITECTURE.md` section 8.
+
 Exit: a submitted check-in still renders the exact wording it was asked in after a later version is
 published, and no answer is scored, rated or interpreted anywhere. A refused read names its reason
 and is never shown as an empty list.
 
-Deferred to 6B or later: recurring scheduling, tasks and habits, reminders and notifications,
-comments or chat on a check-in, signatures, file uploads, conditional branching, AI interpretation,
-exports, a cross-client outstanding-check-in view, and comparing more than two responses or charting
-one question over time.
+Ratified in Phase 6A and carried forward: the authoring-route entitlement deviation (ADR 0017); the
+entitlement-lapse rule, under which a lapsed client keeps neither read nor write access to check-ins
+including ones already submitted, and the refusal names its own reason; snapshot-by-immutability,
+where publishing freezes a version at the database rather than copying it per assignment;
+`QuestionKey` as the stable cross-version question identity that makes comparison possible; and the
+form-validation display convention above.
+
+Explicitly deferred to 6B or later: recurring scheduling, tasks and habits, reminders and
+notifications, comments or chat on a check-in, signatures, file uploads, conditional branching, AI
+interpretation, exports, a cross-client outstanding-check-in view, comparing more than two responses,
+charting one question over time, and retrofitting the validation convention onto the 8 remaining
+`ngModel` templates and 12 reactive-forms templates that have no derived-reason lists today.
+
+Known and left open at the end of 6A: five feature components still carry no Angular spec —
+`dashboard`, `clients/client-details`, `training/client-training`, `training/exercise-library` and
+`training/program-builder`; and the `Phase3TrainingWorkflowTests` partial-class convention in
+`tests/backend/TB.Gym.Api.IntegrationTests` remains undocumented as a deliberate pattern.
 
 - Persist tenant-scoped conversations, participants, messages, read state, and moderation
   metadata.

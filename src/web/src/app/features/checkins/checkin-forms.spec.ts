@@ -10,6 +10,16 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import {
+  announced,
+  leave,
+  leaveAt,
+  press,
+  query,
+  submitForm,
+  fill,
+  settle as settleDom,
+} from '../../../testing/dom';
 import { CheckInForms } from './checkin-forms';
 
 const QUESTION_KEY = 'a'.repeat(32);
@@ -221,5 +231,125 @@ describe('CheckInForms', () => {
     component.setTitle('Weekly check-in');
     await settle(fixture);
     expect(component.validation().isValid).toBe(true);
+  });
+});
+
+/** The reason rendered against one control, found by the id that control points at. */
+function reasonAt(host: HTMLElement, id: string): string {
+  return (host.querySelector(`#${id}-reason`)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * The id of the nth question's prompt input, so a question can be addressed without knowing its
+ * local key. Addressed by id rather than by name because `[name]` on an `ngModel` control binds the
+ * directive's own input and never reaches the DOM at all.
+ */
+function questionId(host: HTMLElement, index: number): string {
+  return Array.from(host.querySelectorAll<HTMLInputElement>('input[id^="q-"]'))[index].id;
+}
+
+/**
+ * The builder under the ratified validation convention. Two of the four in-scope sites live here:
+ * the form-level reasons above the question list, and the per-question reasons under each question.
+ */
+describe('CheckInForms validation display', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  async function newForm() {
+    const rendered = await render();
+    rendered.component.startNewForm();
+    await settleDom(rendered.fixture);
+    return rendered;
+  }
+
+  it('announces nothing and shows no reason on a form nobody has touched', async () => {
+    const { host } = await newForm();
+
+    expect(announced(host)).toBe('');
+    expect(host.textContent).not.toContain('A title is required.');
+    expect(host.textContent).not.toContain('A question needs a prompt.');
+  });
+
+  it('reveals the title’s reason when the title is left, and only the title’s', async () => {
+    const { fixture, host } = await newForm();
+
+    leave(host, 'Title');
+    await settleDom(fixture);
+
+    expect(reasonAt(host, 'builder-title')).toContain('A title is required.');
+    expect(host.textContent).not.toContain('A question needs a prompt.');
+    expect(announced(host)).toBe('');
+  });
+
+  it('reveals one question’s reason when that question is left, and not its neighbour’s', async () => {
+    const { fixture, host } = await newForm();
+
+    press(host, 'Add question');
+    await settleDom(fixture);
+
+    const first = questionId(host, 0);
+    const second = questionId(host, 1);
+    leaveAt(host, `#${first}`);
+    await settleDom(fixture);
+
+    expect(reasonAt(host, first)).toContain('A question needs a prompt.');
+    expect(reasonAt(host, second)).toBe('');
+    expect(announced(host)).toBe('');
+  });
+
+  it('names every outstanding reason at once when a blocked submit is attempted', async () => {
+    const { fixture, host } = await newForm();
+
+    submitForm(host, 'form.builder-form');
+    await settleDom(fixture);
+
+    const summary = announced(host);
+    expect(summary).toContain('A title is required.');
+    expect(summary).toContain('A question needs a prompt.');
+    expect(reasonAt(host, 'builder-title')).toContain('A title is required.');
+    expect(reasonAt(host, questionId(host, 0))).toContain('A question needs a prompt.');
+  });
+
+  it('clears a corrected field’s reason and leaves the question’s standing', async () => {
+    const { fixture, host } = await newForm();
+
+    submitForm(host, 'form.builder-form');
+    await settleDom(fixture);
+
+    fill(host, 'Title', 'Weekly check-in');
+    await settleDom(fixture);
+
+    expect(reasonAt(host, 'builder-title')).toBe('');
+    expect(reasonAt(host, questionId(host, 0))).toContain('A question needs a prompt.');
+  });
+
+  it('carries aria-invalid and aria-describedby exactly while the reason is showing', async () => {
+    const { fixture, host } = await newForm();
+    const control = () => query<HTMLInputElement>(host, 'input[name="title"]');
+
+    expect(control().getAttribute('aria-invalid')).toBeNull();
+    expect(control().getAttribute('aria-describedby')).toBeNull();
+
+    leave(host, 'Title');
+    await settleDom(fixture);
+
+    expect(control().getAttribute('aria-invalid')).toBe('true');
+    expect(control().getAttribute('aria-describedby')).toBe('builder-title-reason');
+
+    fill(host, 'Title', 'Weekly check-in');
+    await settleDom(fixture);
+
+    expect(control().getAttribute('aria-invalid')).toBeNull();
+    expect(control().getAttribute('aria-describedby')).toBeNull();
+  });
+
+  it('points the disabled submit at the summary region so its state is explicable', async () => {
+    const { host } = await newForm();
+    const submit = query<HTMLButtonElement>(host, 'form.builder-form button[type="submit"]');
+
+    expect(submit.disabled).toBe(true);
+    expect(submit.getAttribute('aria-describedby')).toBe('builder-summary');
   });
 });

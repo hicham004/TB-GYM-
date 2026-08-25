@@ -12,7 +12,16 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { choose, settle, type } from '../../../testing/dom';
+import {
+  announced,
+  choose,
+  leave,
+  leaveAt,
+  query,
+  settle,
+  submitForm,
+  type,
+} from '../../../testing/dom';
 import { CheckInClients } from './checkin-clients';
 
 const SHARED_KEY = 'a'.repeat(32);
@@ -351,8 +360,13 @@ describe('CheckInClients', () => {
 
       choose(host, 'select[name="formVersionId"]', 'version-1');
       await settle(fixture);
-      // One field alone is not enough, and the outstanding reason is still on screen.
+      // One field alone is not enough. The due date's reason waits for the due date to be left,
+      // rather than accusing the user of missing a field they have not reached yet.
       expect(submit!.disabled).toBe(true);
+      expect(host.textContent).not.toContain('Choose a due date.');
+
+      leave(host, 'Due date');
+      await settle(fixture);
       expect(host.textContent).toContain('Choose a due date.');
 
       type(host, 'input[name="dueDate"]', '2026-08-24');
@@ -381,6 +395,7 @@ describe('CheckInClients', () => {
       );
       choose(host, 'select[name="formVersionId"]', 'version-1');
       type(host, 'input[name="dueDate"]', '2026-08-21');
+      leave(host, 'Due date');
       await settle(fixture);
 
       expect(submit!.disabled).toBe(true);
@@ -423,5 +438,115 @@ describe('CheckInClients', () => {
 
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     expect(host.textContent).toContain("This client's check-ins could not be loaded.");
+  });
+});
+
+/** The reason rendered against one field, found by the id the field's control points at. */
+function reasonFor(host: HTMLElement, field: string): string {
+  return (host.querySelector(`#assign-${field}-reason`)?.textContent ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * The assign form under the ratified validation convention: a derived reason waits for its own field
+ * to be left or for a submit to be refused, renders as plain text, and is announced only by the one
+ * summary region — which speaks only because the user just tried something and it did not happen.
+ */
+describe('CheckInClients validation display', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  async function assignForm() {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-22T09:00:00Z'));
+    const rendered = await render({
+      listCheckInForms: vi.fn(() => of({ total: 1, items: [PUBLISHED_FORM] })),
+    });
+    await rendered.component.selectClient('client-1');
+    await settle(rendered.fixture);
+    return rendered;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('announces nothing and shows no reason on a form nobody has touched', async () => {
+    const { host } = await assignForm();
+
+    expect(announced(host)).toBe('');
+    expect(host.textContent).not.toContain('Choose a due date.');
+    expect(host.textContent).not.toContain('Choose a published version to assign.');
+  });
+
+  it('reveals a field’s reason when that field is left, and only that field’s', async () => {
+    const { fixture, host } = await assignForm();
+
+    leave(host, 'Due date');
+    await settle(fixture);
+
+    expect(reasonFor(host, 'due-date')).toContain('Choose a due date.');
+    expect(reasonFor(host, 'version')).toBe('');
+    // Plain text, not an announcement: it was already on screen the moment it appeared.
+    expect(announced(host)).toBe('');
+  });
+
+  it('names every outstanding reason at once when a blocked submit is attempted', async () => {
+    const { fixture, host } = await assignForm();
+
+    submitForm(host, 'form.builder-form');
+    await settle(fixture);
+
+    const summary = announced(host);
+    expect(summary).toContain('Choose a published version to assign.');
+    expect(summary).toContain('Choose a due date.');
+    // And each reason also takes its place against its own field.
+    expect(reasonFor(host, 'version')).toContain('Choose a published version to assign.');
+    expect(reasonFor(host, 'due-date')).toContain('Choose a due date.');
+  });
+
+  it('clears a corrected field’s reason and leaves the other standing', async () => {
+    const { fixture, host } = await assignForm();
+
+    submitForm(host, 'form.builder-form');
+    await settle(fixture);
+
+    choose(host, 'select[name="formVersionId"]', 'version-1');
+    await settle(fixture);
+
+    expect(reasonFor(host, 'version')).toBe('');
+    expect(reasonFor(host, 'due-date')).toContain('Choose a due date.');
+  });
+
+  it('carries aria-invalid and aria-describedby exactly while the reason is showing', async () => {
+    const { fixture, host } = await assignForm();
+    const control = () => query<HTMLInputElement>(host, 'input[name="dueDate"]');
+
+    expect(control().getAttribute('aria-invalid')).toBeNull();
+    expect(control().getAttribute('aria-describedby')).toBeNull();
+
+    leaveAt(host, 'input[name="dueDate"]');
+    await settle(fixture);
+
+    expect(control().getAttribute('aria-invalid')).toBe('true');
+    expect(control().getAttribute('aria-describedby')).toBe('assign-due-date-reason');
+    expect(query(host, '#assign-due-date-reason').textContent).toContain('Choose a due date.');
+
+    type(host, 'input[name="dueDate"]', '2026-08-24');
+    await settle(fixture);
+
+    expect(control().getAttribute('aria-invalid')).toBeNull();
+    expect(control().getAttribute('aria-describedby')).toBeNull();
+  });
+
+  /** A disabled control that says nothing about why is the thing the summary region exists to fix. */
+  it('points the disabled submit at the summary region so its state is explicable', async () => {
+    const { host } = await assignForm();
+    const submit = query<HTMLButtonElement>(host, 'form.builder-form button[type="submit"]');
+
+    expect(submit.disabled).toBe(true);
+    expect(submit.getAttribute('aria-describedby')).toBe('assign-summary');
   });
 });

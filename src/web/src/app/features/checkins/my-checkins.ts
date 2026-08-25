@@ -7,6 +7,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
 import { ownCheckInDenialMessage } from '../../core/i18n/display-labels';
 import type { CheckInAssignmentView, CheckInResponseDetail } from '../../core/api/generated';
+import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { isChoice } from './checkin-builder.models';
@@ -86,8 +87,39 @@ export class MyCheckIns {
 
   protected isChoice = isChoice;
 
+  /** Decides when each question's reason is due on screen. See `FormAttempt` for the rule. */
+  protected readonly attempt = new FormAttempt();
+
+  /**
+   * Every outstanding reason paired with the question it belongs to. The summary names the question
+   * as well as the rule, because "this question has to be answered" does not say which one when two
+   * of them are outstanding.
+   */
+  protected readonly outstanding = computed(() => {
+    const detail = this.detail();
+    if (detail === null) {
+      return [];
+    }
+
+    const prompts = new Map(
+      detail.version.questions.map((question) => [question.questionKey, question.prompt]),
+    );
+    const fromServer = this.serverIssues();
+    const source = fromServer.length > 0 ? fromServer : this.guard().issues;
+    return source.map((issue) => ({
+      questionKey: issue.questionKey,
+      prompt: prompts.get(issue.questionKey) ?? '',
+      message: issue.message,
+    }));
+  });
+
   protected questionIssues(questionKey: string): string[] {
     return this.issues()[questionKey] ?? [];
+  }
+
+  /** One touched-state key per question, matching the key its reasons are grouped under. */
+  protected questionField(questionKey: string): string {
+    return `question:${questionKey}`;
   }
 
   protected answerFor(questionId: string): AnswerDraft | null {
@@ -105,6 +137,8 @@ export class MyCheckIns {
       const detail = await firstValueFrom(this.api.getOwnCheckInResponse(assignmentId));
       this.detail.set(detail);
       this.draft.set(responseDraftFromDetail(detail));
+      // A newly opened check-in is pristine, whatever the last one had earned.
+      this.attempt.reset();
     } catch (error) {
       this.detail.set(null);
       this.draft.set(null);
@@ -163,8 +197,11 @@ export class MyCheckIns {
    * the draft exactly as it was and lists every reason.
    */
   protected async submit(): Promise<void> {
+    // Recorded before the guards: trying to send an incomplete check-in is exactly the moment every
+    // outstanding reason becomes due, whether or not the attempt gets as far as the server.
+    this.attempt.attempt();
     const draft = this.draft();
-    if (!draft || !this.editable()) {
+    if (!draft || !this.editable() || !this.guard().canSubmit) {
       return;
     }
 
@@ -189,6 +226,7 @@ export class MyCheckIns {
       );
       this.detail.set(submitted);
       this.draft.set(responseDraftFromDetail(submitted));
+      this.attempt.reset();
       this.notice.set($localize`Check-in submitted. It can no longer be changed.`);
     } catch (error) {
       const failures = submissionFailures(error);

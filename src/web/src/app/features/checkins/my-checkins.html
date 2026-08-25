@@ -78,36 +78,53 @@
                 }
 
                 @let answer = answerFor(question.id);
+                @let reasons = questionIssues(question.questionKey);
+                @let showsReasons = attempt.shows(questionField(question.questionKey), reasons);
+                @let reasonId = showsReasons ? 'q-' + question.id + '-reason' : null;
+                @let invalid = showsReasons ? 'true' : null;
+                @let field = questionField(question.questionKey);
 
                 @switch (question.questionType) {
                   @case ('ShortText') {
                     <input
                       type="text"
+                      [id]="'q-' + question.id"
                       [name]="'q-' + question.id"
                       [ngModel]="answer?.textValue ?? ''"
                       (ngModelChange)="setText(question.id, $event)"
+                      (blur)="attempt.touch(field)"
                       [disabled]="!editable()"
+                      [attr.aria-invalid]="invalid"
+                      [attr.aria-describedby]="reasonId"
                     />
                   }
                   @case ('LongText') {
                     <textarea
                       rows="3"
+                      [id]="'q-' + question.id"
                       [name]="'q-' + question.id"
                       [ngModel]="answer?.textValue ?? ''"
                       (ngModelChange)="setText(question.id, $event)"
+                      (blur)="attempt.touch(field)"
                       [disabled]="!editable()"
+                      [attr.aria-invalid]="invalid"
+                      [attr.aria-describedby]="reasonId"
                     ></textarea>
                   }
                   @case ('NumericScale') {
                     <input
                       type="number"
+                      [id]="'q-' + question.id"
                       [name]="'q-' + question.id"
                       [ngModel]="answer?.numericValue"
                       (ngModelChange)="setNumber(question.id, $event)"
+                      (blur)="attempt.touch(field)"
                       [min]="question.scaleMinimum"
                       [max]="question.scaleMaximum"
                       [step]="question.scaleStep"
                       [disabled]="!editable()"
+                      [attr.aria-invalid]="invalid"
+                      [attr.aria-describedby]="reasonId"
                     />
                     <span class="detail" i18n
                       >{{ question.scaleMinimum }} to {{ question.scaleMaximum }} in steps of
@@ -115,7 +132,14 @@
                     >
                   }
                   @default {
-                    <div class="choices">
+                    <!-- A choice group is one control to the user, so the whole group carries the
+                         invalid state and the description, not each radio separately. -->
+                    <div
+                      class="choices"
+                      role="group"
+                      [attr.aria-invalid]="invalid"
+                      [attr.aria-describedby]="reasonId"
+                    >
                       @for (option of question.options; track option.id) {
                         <label class="inline">
                           <input
@@ -124,6 +148,7 @@
                             [value]="option.id"
                             [checked]="isSelected(question.id, option.id)"
                             (change)="toggleOption(question.id, option.id)"
+                            (blur)="attempt.touch(field)"
                             [disabled]="!editable()"
                           />
                           <span>{{ option.label }}</span>
@@ -133,14 +158,30 @@
                   }
                 }
 
-                @for (issue of questionIssues(question.questionKey); track issue) {
-                  <p class="error" role="alert">{{ issue }}</p>
+                <!-- Plain text: already on screen when read, so no assertive region. -->
+                @if (showsReasons) {
+                  <p class="field-reason" [id]="'q-' + question.id + '-reason'">
+                    @for (issue of reasons; track issue) {
+                      <span>{{ issue }}</span>
+                    }
+                  </p>
                 }
               </li>
             }
           </ol>
 
           @if (editable()) {
+            <!-- The one assertive region on this form: present from the start so the live region is
+                 registered, empty until a send is actually refused. -->
+            <p class="error summary" id="answer-summary" role="alert">
+              @if (attempt.wasTried() && outstanding().length > 0) {
+                <ng-container i18n>This check-in cannot be sent yet:</ng-container>
+                @for (item of outstanding(); track $index) {
+                  <span>{{ item.prompt }} — {{ item.message }}</span>
+                }
+              }
+            </p>
+
             <div class="actions">
               <button type="button" class="link" [disabled]="saving()" (click)="saveDraft()" i18n>
                 Save draft
@@ -148,6 +189,7 @@
               <button
                 type="submit"
                 class="primary-button"
+                aria-describedby="answer-summary"
                 [disabled]="saving() || !guard().canSubmit"
                 i18n
               >

@@ -107,31 +107,67 @@
           </h4>
 
           @if (creating()) {
+            @let titleReasons = formFieldErrors('title');
+            @let showsTitle = attempt.shows('title', titleReasons);
+            @let descriptionReasons = formFieldErrors('description');
+            @let showsDescription = attempt.shows('description', descriptionReasons);
+
             <label>
               <span i18n>Title</span>
               <input
                 type="text"
+                id="builder-title"
                 name="title"
                 [ngModel]="draft().title"
                 (ngModelChange)="setTitle($event)"
+                (blur)="attempt.touch('title')"
                 [maxlength]="limits.titleLength"
+                [attr.aria-invalid]="showsTitle ? 'true' : null"
+                [attr.aria-describedby]="showsTitle ? 'builder-title-reason' : null"
                 required
               />
             </label>
+            <!-- Plain text: already on screen when read, so no assertive region. -->
+            @if (showsTitle) {
+              <p class="field-reason" id="builder-title-reason">
+                @for (message of titleReasons; track message) {
+                  <span>{{ message }}</span>
+                }
+              </p>
+            }
+
             <label>
               <span i18n>Description</span>
               <textarea
+                id="builder-description"
                 name="description"
                 rows="2"
                 [ngModel]="draft().description"
                 (ngModelChange)="setDescription($event)"
+                (blur)="attempt.touch('description')"
                 [maxlength]="limits.descriptionLength"
+                [attr.aria-invalid]="showsDescription ? 'true' : null"
+                [attr.aria-describedby]="showsDescription ? 'builder-description-reason' : null"
               ></textarea>
             </label>
+            @if (showsDescription) {
+              <p class="field-reason" id="builder-description-reason">
+                @for (message of descriptionReasons; track message) {
+                  <span>{{ message }}</span>
+                }
+              </p>
+            }
           }
 
-          @for (formError of validation().formErrors; track formError) {
-            <p class="error" role="alert">{{ formError }}</p>
+          <!-- Reasons belonging to the draft as a whole rather than to any one control. Nothing can
+               be blurred to earn these, so only a refused submit reveals them. -->
+          @let structuralReasons = formFieldErrors('form');
+          @if (attempt.wasTried() && structuralReasons.length > 0) {
+            <p class="field-reason" id="builder-form-reason">
+              @for (message of structuralReasons; track message) {
+                <span>{{ message }}</span>
+              }
+            </p>
           }
 
           <ol class="questions">
@@ -161,15 +197,22 @@
                   }
                 </div>
 
+                @let questionReasons = questionErrors(question);
+                @let showsQuestion = attempt.shows(questionField(question), questionReasons);
+
                 <label>
                   <span i18n>Prompt</span>
                   <input
                     type="text"
+                    [id]="'q-' + question.key"
                     [name]="'prompt-' + question.key"
                     [ngModel]="question.prompt"
                     (ngModelChange)="setPrompt(index, $event)"
+                    (blur)="attempt.touch(questionField(question))"
                     [maxlength]="limits.promptLength"
                     [disabled]="readOnly"
+                    [attr.aria-invalid]="showsQuestion ? 'true' : null"
+                    [attr.aria-describedby]="showsQuestion ? 'q-' + question.key + '-reason' : null"
                   />
                 </label>
 
@@ -251,19 +294,35 @@
                   </div>
                 }
 
-                @for (questionError of questionErrors(question); track questionError) {
-                  <p class="error" role="alert">{{ questionError }}</p>
+                @if (showsQuestion) {
+                  <p class="field-reason" [id]="'q-' + question.key + '-reason'">
+                    @for (message of questionReasons; track message) {
+                      <span>{{ message }}</span>
+                    }
+                  </p>
                 }
               </li>
             }
           </ol>
 
           @if (!readOnly) {
+            <!-- The one assertive region on this form: present from the start so the live region is
+                 registered, empty until a save is actually refused. -->
+            <p class="error summary" id="builder-summary" role="alert">
+              @if (attempt.wasTried() && outstanding().length > 0) {
+                <ng-container i18n>This draft cannot be saved yet:</ng-container>
+                @for (message of outstanding(); track $index) {
+                  <span>{{ message }}</span>
+                }
+              }
+            </p>
+
             <div class="actions">
               <button type="button" class="link" (click)="addQuestion()" i18n>Add question</button>
               <button
                 type="submit"
                 class="primary-button"
+                aria-describedby="builder-summary"
                 [disabled]="saving() || !validation().isValid"
                 i18n
               >
