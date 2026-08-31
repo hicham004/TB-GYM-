@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using TB.Gym.Modules.Media;
 
@@ -58,20 +59,63 @@ public sealed partial class Phase3TrainingWorkflowTests
     internal sealed class StorageFaultSwitch
     {
         public bool FailDeletes { get; set; }
+
+        public int PutCount => Volatile.Read(ref putCount);
+
+        public int DeleteCount => Volatile.Read(ref deleteCount);
+
+        public IReadOnlyCollection<string> StoredKeys => storedKeys.Keys.ToArray();
+
+        private readonly ConcurrentDictionary<string, byte> storedKeys = new(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<int, byte> failedDeleteCalls = new();
+        private int putCount;
+        private int deleteCount;
+
+        public void FailDeleteCall(int callNumber) => failedDeleteCalls[callNumber] = 0;
+
+        public void AllowDeletes()
+        {
+            FailDeletes = false;
+            failedDeleteCalls.Clear();
+        }
+
+        public void RecordPut(string objectKey)
+        {
+            Interlocked.Increment(ref putCount);
+            storedKeys[objectKey] = 0;
+        }
+
+        public bool ShouldFailDelete()
+        {
+            var callNumber = Interlocked.Increment(ref deleteCount);
+            return FailDeletes || failedDeleteCalls.ContainsKey(callNumber);
+        }
+
+        public void RecordDelete(string objectKey) => storedKeys.TryRemove(objectKey, out _);
     }
 
     private sealed class FaultInjectingObjectStorage(IObjectStorage inner, StorageFaultSwitch faults)
         : IObjectStorage
     {
-        public Task<StoredObject> PutAsync(ObjectUpload upload, CancellationToken cancellationToken) =>
-            inner.PutAsync(upload, cancellationToken);
+        public async Task<StoredObject> PutAsync(ObjectUpload upload, CancellationToken cancellationToken)
+        {
+            var stored = await inner.PutAsync(upload, cancellationToken);
+            faults.RecordPut(stored.ObjectKey);
+            return stored;
+        }
 
         public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken) =>
             inner.OpenReadAsync(objectKey, cancellationToken);
 
-        public Task DeleteAsync(string objectKey, CancellationToken cancellationToken) =>
-            faults.FailDeletes
-                ? throw new IOException("The object store is unavailable.")
-                : inner.DeleteAsync(objectKey, cancellationToken);
+        public async Task DeleteAsync(string objectKey, CancellationToken cancellationToken)
+        {
+            if (faults.ShouldFailDelete())
+            {
+                throw new IOException("The object store is unavailable.");
+            }
+
+            await inner.DeleteAsync(objectKey, cancellationToken);
+            faults.RecordDelete(objectKey);
+        }
     }
 }

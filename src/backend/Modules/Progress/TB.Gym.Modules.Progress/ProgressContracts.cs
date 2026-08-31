@@ -74,6 +74,14 @@ public enum ProgressPhotoCommandStatus
     Conflict = 4,
     Forbidden = 5,
     RateLimited = 6,
+
+    /// <summary>
+    /// The upload could not be admitted because a dependency it needs — the malware scanner — is
+    /// unavailable, so no photo was recorded. Kept apart from <see cref="Invalid"/>, which blames
+    /// the file, and from <see cref="Conflict"/>, which claims something already exists: nothing
+    /// exists, and the same date and pose can be used again once uploads work.
+    /// </summary>
+    Unavailable = 7,
 }
 
 public sealed record RecordBodyweightRequest(

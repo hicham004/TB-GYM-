@@ -126,10 +126,16 @@ internal static class CheckInViewFactory
             assignment.CreatedAtUtc,
             assignment.CreatedByUserId);
 
+    /// <summary>
+    /// Projects a response for one audience. <paramref name="withholdAnswers"/> is set for a coach
+    /// reading a draft: the status and the fact that a draft exists are permitted, the answers are
+    /// not, and the withholding is stated so an empty list is never mistaken for an empty draft.
+    /// </summary>
     public static CheckInResponseView Response(
         CheckInResponse response,
         DateOnly dueDate,
-        IReadOnlyDictionary<Guid, CheckInQuestion> questions) =>
+        IReadOnlyDictionary<Guid, CheckInQuestion> questions,
+        bool withholdAnswers = false) =>
         new(
             response.Id,
             response.AssignmentId,
@@ -140,11 +146,14 @@ internal static class CheckInViewFactory
             response.IsLate(dueDate),
             response.ReviewedAtUtc,
             response.ReviewedByUserId,
-            [.. response.Answers
-                .Where(answer => questions.ContainsKey(answer.QuestionId))
-                .Select(answer => Answer(answer, questions[answer.QuestionId]))
-                .OrderBy(answer => answer.QuestionId)],
-            response.Version);
+            withholdAnswers
+                ? []
+                : [.. response.Answers
+                    .Where(answer => questions.ContainsKey(answer.QuestionId))
+                    .Select(answer => Answer(answer, questions[answer.QuestionId]))
+                    .OrderBy(answer => answer.QuestionId)],
+            response.Version,
+            withholdAnswers);
 
     public static CheckInAnswerView Answer(CheckInAnswer answer, CheckInQuestion question)
     {

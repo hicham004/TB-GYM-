@@ -19,6 +19,7 @@ function workspace(overrides: Partial<WorkspaceDetails> = {}): WorkspaceDetails 
     defaultCulture: 'en-LB',
     defaultCurrencyCode: 'USD',
     weekStartsOn: 'Monday',
+    currentDate: '2026-08-22',
     version: 5,
     ...overrides,
   };

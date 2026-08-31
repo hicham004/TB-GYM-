@@ -8,6 +8,10 @@ public interface IObjectStorage
 
     Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Deletes the key idempotently. A missing key is success so durable reconciliation can safely
+    /// repeat a deletion whose storage result outlived its database transaction.
+    /// </summary>
     Task DeleteAsync(string objectKey, CancellationToken cancellationToken);
 }
 
@@ -21,12 +25,20 @@ public interface IMediaPurgeService
 }
 
 /// <summary>
-/// What one sweep did. <paramref name="Failed"/> assets remain tombstoned, due, and retryable.
+/// What one sweep did. Failed assets or ingest objects remain due and retryable.
 /// </summary>
 public sealed record MediaPurgeOutcome(int Claimed, int Purged, int Failed);
 
 public interface IMediaScanner
 {
+    /// <summary>
+    /// Whether a real scanner is configured. A deployment without one still refuses every upload —
+    /// scanning fails closed — but this separates "this file was rejected" from "this installation
+    /// cannot accept uploads at all", which are a client error and a server condition respectively
+    /// and must not be reported as the same thing.
+    /// </summary>
+    bool IsAvailable { get; }
+
     Task<MediaScanResult> ScanAsync(
         string objectKey,
         string verifiedContentType,

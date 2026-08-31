@@ -1,6 +1,6 @@
 # TB Gym Architecture
 
-Status: Phase 5B-1 body measurements implemented, 2026-08-23
+Status: Phase 6A check-ins complete, 2026-08-26; Phase 5/6 audit remediation applied, 2026-08-29
 
 ## 1. Architectural style
 
@@ -135,6 +135,18 @@ Progress photos (5B-2) and their thumbnails (5B-3) reuse the Media pipeline with
 assembly referencing Media; the combined dashboard (5B-4) is a read-side projection in
 Infrastructure that owns no tables. See ADRs 0011-0013.
 
+An uploaded image is bounded by its decoded dimensions, not by its compressed size: a few kilobytes
+of PNG or JPEG can describe a bitmap of gigabytes, so the codec header is checked against
+`MediaUploadPolicy.TryValidateDecodedImage` — 8 000 px per edge, 30 megapixels, approximately 120 MB
+for one RGBA pixel buffer — before any pixel buffer is allocated. That number is not peak process
+memory: orientation can require a second full bitmap and codec/encoder data, managed streams and the
+thumbnail add more. The per-tenant upload gate is retained and the decode/re-encode section also has
+a configurable, startup-validated process-wide concurrency cap. A progress photo is recorded only
+against a media asset that reached `Ready`; a refused or unscannable upload commits no photo. Each
+object is reserved durably before storage and ends attached, confirmed deleted, or retained as
+quota-counted cleanup state for the purge sweep, so a failed attempt never loses an object key or
+occupies the client's date-and-pose uniqueness slot. See ADR 0011.
+
 Phase 5B-6 closes the one correction the model could not express. A bodyweight observation's
 measurement date is its identity — the unique index is keyed on it and a trigger refuses to change
 it — so a mis-dated entry is corrected by void-and-replace rather than by editing the date. The
@@ -196,8 +208,15 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   in the readable `XSRF-TOKEN` cookie, which Angular sends as `X-XSRF-TOKEN`.
 - Failed API authorization returns 401 or 403, never an HTML redirect.
 - Password lockout and unique email are enabled; production requires confirmed email.
-- Public authentication is rate-limited by source address. Sensitive authenticated writes
-  are rate-limited by actor/workspace, and authenticated API responses use `no-store`.
+- Public authentication is rate-limited by source address. Sensitive authenticated writes and media
+  uploads are rate-limited by the **signed-in user id alone**, and authenticated API responses use
+  `no-store`. The limiter runs after `UseAuthentication`, because a partition on `context.User` is
+  meaningless before the cookie has been read: running it first left every authenticated write in a
+  source-address bucket. The workspace is deliberately not part of the key. It could only come from
+  the raw `X-Tenant-Id` header, which is untrusted by design and is not verified until the tenant
+  authorization handler runs later — so mixing it in let a caller reset their own allowance by
+  varying a header they control, and a limit whose partition the attacker chooses is not a limit.
+  One bucket per user is strictly tighter than one per user and workspace.
 - Tenant policies verify membership on every scoped request. A UI role check is cosmetic.
 - Account authentication and coaching-feature access are separate. An unpaid client can
   authenticate and view permitted profile/account data. `ICoachingFeatureAccessService`
@@ -231,6 +250,20 @@ content path and is covered by that same cookie, so it needs no grant, route pat
 its own. The variant is selected only after the grant has been unprotected and the parent asset has
 been authorized, inside the same method, so a rendition can never be reached by a caller who could
 not already reach the original.
+
+Active membership of the asset's tenant is the first thing every media authorization decision
+establishes, for the subject of a progress photo as much as for a coach. Authentication plus an
+unexpired grant is not sufficient: a grant may be configured for as long as four hours, so a check
+that trusted user identity alone let a removed or deactivated member keep reading that workspace's
+images until the cookie expired. Rechecking on every original and every thumbnail request is what
+makes removal take effect immediately rather than eventually.
+
+A screen that shows many protected thumbnails needs one grant per asset before the browser can
+fetch any of them, and asking per tile is one request per asset. `POST /api/media/access` is the
+bounded alternative: it accepts at most 32 asset ids, authorizes each through exactly the decision
+the single-asset route makes, and sets one path-scoped cookie per granted asset. It is a transport
+convenience and nothing more — no grant's scope is widened, no URL becomes public, and an asset the
+caller may not read is absent from the result rather than reported.
 
 The grant carries its absolute expiry inside the protected payload and the content endpoint
 compares that expiry against `IClock`, so expiry is deterministic and testable rather than
@@ -420,8 +453,9 @@ Phase 3 provides a local streaming object-store adapter and a development signat
 Production fails media publication closed until a real scanning adapter is configured.
 Phase 3 also enforces request-size, endpoint rate/concurrency, and configurable workspace
 quota limits, and tombstones historically referenced media. The local storage implementation
-is not the production object-store decision; managed object storage, scanner, CDN/private
-delivery, and orphan cleanup remain Phase 6 work.
+is not the production object-store decision; managed object storage, scanner, and CDN/private
+delivery remain later production work. Incomplete local ingestion is now durably reconciled rather
+than left to provider-level orphan discovery.
 
 Retention processing is now in the application. One in-process `BackgroundService` — the only
 hosted service in this repository — sweeps tombstoned media whose retention has elapsed, deleting
@@ -429,10 +463,15 @@ derivative objects before originals and recording completion. It is deliberately
 a job platform: it holds no queue, no schedule table, and no dispatch abstraction, and it is not a
 foundation for notification-outbox delivery, which needs durable semantics it does not have. Several
 API replicas may run it because each sweep claims rows with `FOR UPDATE SKIP LOCKED`, per workspace
-so the tenant write-scope guard stays in force for every write it makes. Storage allowances count
-originals and derivatives, count tombstoned bytes still on disk, exclude purged bytes, and are
+so the tenant write-scope guard stays in force for every write it makes. The same sweep first
+reclaims due incomplete-ingest reservations, including a crashed pre-write reservation after its
+15-minute lease. Storage allowances count originals, derivatives, tombstoned bytes still on disk,
+and non-purged ingest reservations; they exclude only purged/deleted bytes and are
 checked and committed inside one transaction holding a transaction-scoped advisory lock keyed on the
-workspace, so concurrent uploads cannot jointly exceed a limit.
+workspace, so concurrent uploads cannot jointly exceed a limit. Admission orders concurrent durable
+reservations by creation instant and id: a candidate counts reservations ahead of it, while every
+later candidate observes the winner as committed asset bytes. This avoids symmetric rejection when
+exactly one valid upload fits without weakening the hard limit.
 
 ## 10. Operations and scaling
 
@@ -473,9 +512,9 @@ predates this repository's own code. It is double-encoded but *well-formed* UTF-
 what the PowerShell 5.1 ANSI round-trip produces: corruption that compiles and reviews clean.
 `base44/` is a preserved legacy reference, so it is deliberately not rewritten.
 
-**The project's own source is clean.** Across 411 tracked non-`base44` source files: zero invalid
-UTF-8, zero mojibake signatures, and all 4 tracked `.ps1` files pure ASCII. BOMs on 31 `.cs` and
-20 `.csproj` files are the .NET SDK's own convention, not corruption.
+**The project's own source is clean.** A repository-wide scan of tracked non-`base44` source found
+zero invalid UTF-8, zero mojibake signatures, and every tracked `.ps1` file pure ASCII. BOMs on
+SDK-generated .NET files are the SDK's own convention, not corruption.
 
 Two earlier sweeps reported this wrongly, both because of the measuring tool rather than the files.
 `LC_ALL=C grep -P` **errors out** ("-P supports only unibyte and UTF-8 locales") and, piped to
@@ -614,5 +653,14 @@ A refused read is rendered from the `accessReason` the 403 carries, in the audie
 and it replaces the list it was refused rather than sitting above an empty one — a client who may
 not read their two submissions is never told they have none, and a blocked coach is never told
 nothing was assigned. Only an unexplained failure falls back to a generic error.
+
+An unsubmitted draft is private to the client writing it. The coach's read returns the response, its
+status and its dates with no answers and an explicit `AnswersWithheld`, decided once in the backend
+mapping rather than by the screen; the client's own read is complete. The coach's assignment list
+carries each response's status so the screen needs no per-assignment read, and every asynchronous
+result on that screen checks which client it was requested for before it writes anything, so a
+reply that arrives after the coach has moved on is discarded rather than shown under the wrong name.
+Due-date validation reads the workspace's own `currentDate` from `GET /api/workspace` rather than
+deriving today from the browser clock, which is a different calendar around midnight.
 
 See ADR 0017 for authoring and ADR 0016 for responses.

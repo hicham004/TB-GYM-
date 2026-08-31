@@ -134,7 +134,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         DateTimeOffset? ReviewedAtUtc,
         Guid? ReviewedByUserId,
         Phase6Answer[] Answers,
-        uint Version);
+        uint Version,
+        // Set when the audience may know a response exists but not what it says: a coach reading a
+        // draft. It separates "nothing was written" from "this is not yours to read yet".
+        bool AnswersWithheld);
 
     private sealed record Phase6ResponseDetail(
         Phase6Assignment Assignment,

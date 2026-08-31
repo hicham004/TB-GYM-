@@ -73,6 +73,11 @@ export interface WorkspaceDetails {
   defaultCulture: string;
   defaultCurrencyCode: string;
   weekStartsOn: DayOfWeek;
+  /**
+   * Today in the workspace's own calendar, as the server resolved it. Date rules are decided in
+   * this frame, so a form that needs "today" reads it here rather than from the browser clock.
+   */
+  currentDate: string;
   version: number;
 }
 

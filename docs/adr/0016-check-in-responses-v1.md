@@ -62,6 +62,34 @@ returns **every** failure together: required answers, numeric range, numeric ste
 membership, and single-choice arity. Reporting the first failure only would make a ten-question form
 a ten-round conversation.
 
+**A draft is private to the client who is writing it.** Submission is what makes an answer a record
+addressed to the coach; before it, what has been typed is working material and half a sentence read
+out of context is worse than no sentence. The coach's read of an unsubmitted response therefore
+returns the response with its status, its identity and its dates, and **no answers at all**, with
+`AnswersWithheld` set so an empty list is never mistaken for a client who started and wrote nothing.
+The client's own read is unchanged and complete: this is privacy from the coach, not from everyone.
+
+The redaction is in the mapping the API contract is built from — `CheckInResponseApplicationService`
+decides the audience once, in `ToDetail` — rather than in the screen that renders it. Angular hiding
+a field is presentation; a coach reading the JSON directly is what the rule has to hold against. The
+coach's assignment list is built from `CheckInAssignmentResponseSummary`, which carries status and
+dates and has no field an answer could travel in.
+
+**Concurrent first saves are settled by the unique index, not by the pre-check.** Two saves that
+both find no response both try to start one; the unique index on `(TenantId, AssignmentId)` admits
+exactly one and the loser receives a stable `409` with code `CheckInResponseAlreadyStarted`. Only
+that violation is caught — an unrelated `DbUpdateException` stays a failure rather than being
+reported as a conflict that did not happen. This is the same shape the concurrent submit and review
+already used; the first save was the one path that had no equivalent and produced a `500`.
+
+**The assignment list carries response status, and is paged.** A coach's screen needs to know which
+check-ins are outstanding, submitted and reviewed. It used to work that out by listing the
+assignments and then fetching every response in full — one request per assignment, growing without
+limit with the relationship, and reading draft content on the way. The status now travels with the
+list, and reading one response's content is a separate, separately authorized request for one
+assignment. The list is paged (default 50, maximum 200) with the total reported, because an
+assignment list grows for the life of the coaching relationship.
+
 **Review is a state change plus an append-only event, and never touches an answer.** Re-reviewing is
 refused. A unique index on `(ResponseId, EventType)` is what actually settles a concurrent submit or
 review: both racers pass the in-memory check and exactly one commits.

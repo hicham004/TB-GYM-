@@ -288,6 +288,79 @@ public static class MediaUploadPolicy
     public const long MaximumImageBytes = 15 * 1024 * 1024;
     public const long MaximumVideoBytes = 500 * 1024 * 1024;
 
+    /// <summary>
+    /// The widest and tallest image the decoder is allowed to expand an upload into.
+    /// </summary>
+    /// <remarks>
+    /// The compressed byte cap does not bound decoded memory: PNG and JPEG both express an
+    /// enormous uniform bitmap in a few kilobytes, so a 40 KB file can demand gigabytes of RAM the
+    /// moment it is decoded. These are the bounds that actually hold, and they are checked against
+    /// the encoded header before a single pixel is allocated.
+    /// </remarks>
+    public const int MaximumImageWidth = 8_000;
+
+    public const int MaximumImageHeight = 8_000;
+
+    /// <summary>
+    /// 30 megapixels: enough detail for the progress-photo use case while keeping one four-byte
+    /// decoded pixel buffer at a documented 120 MB ceiling.
+    /// </summary>
+    public const long MaximumImagePixels = 30_000_000;
+
+    /// <summary>
+    /// RGBA8888, the colour type the sanitiser decodes into. Stated rather than assumed, because
+    /// the decoded-size arithmetic below is only meaningful against a known pixel width.
+    /// </summary>
+    public const int DecodedBytesPerPixel = 4;
+
+    /// <summary>
+    /// 120 MB, the product of the pixel ceiling and the bytes each pixel occupies once decoded.
+    /// This is one pixel buffer, not the process peak: orientation can require a second full bitmap,
+    /// and codec/encoder buffers, managed output streams, and the thumbnail surface add more. Both
+    /// per-tenant upload admission and a configurable process-wide decode limit bound concurrency;
+    /// the pixel and concurrency limits are engineering policy parameters, not a memory forecast.
+    /// </summary>
+    public const long MaximumDecodedImageBytes = MaximumImagePixels * DecodedBytesPerPixel;
+
+    /// <summary>
+    /// Whether an image of these encoded dimensions may be decoded, and how many bytes that would
+    /// take. Called with the dimensions the codec read out of the header, so a pathological image
+    /// is refused while it is still only a few kilobytes on disk.
+    /// </summary>
+    /// <remarks>
+    /// The dimension guards run first and are what make the multiplications safe: both factors are
+    /// bounded by <see cref="MaximumImageWidth"/>/<see cref="MaximumImageHeight"/> before they are
+    /// multiplied, so the 64-bit products cannot overflow whatever a malformed header claims. The
+    /// arithmetic is <c>checked</c> anyway, so a future change to those bounds fails loudly instead
+    /// of wrapping into a small number that passes.
+    /// </remarks>
+    public static bool TryValidateDecodedImage(int width, int height, out long decodedBytes)
+    {
+        decodedBytes = 0;
+        if (width <= 0 ||
+            height <= 0 ||
+            width > MaximumImageWidth ||
+            height > MaximumImageHeight)
+        {
+            return false;
+        }
+
+        var pixels = checked((long)width * height);
+        if (pixels > MaximumImagePixels)
+        {
+            return false;
+        }
+
+        var bytes = checked(pixels * DecodedBytesPerPixel);
+        if (bytes > MaximumDecodedImageBytes)
+        {
+            return false;
+        }
+
+        decodedBytes = bytes;
+        return true;
+    }
+
     public static MediaFileValidation Validate(
         string fileName,
         string declaredContentType,

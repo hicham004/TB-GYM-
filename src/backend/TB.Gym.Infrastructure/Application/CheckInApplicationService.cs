@@ -73,6 +73,19 @@ internal sealed class CheckInApplicationService(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        // `"questions": null` deserializes to a null list. Guarded explicitly, because reaching the
+        // domain with it produces a null reference and a 500 for what is a malformed request.
+        if (request.Questions is null)
+        {
+            return InvalidForm("questions", "A check-in form requires a list of questions.");
+        }
+
+        if (request.Questions.Any(question => question is null))
+        {
+            return InvalidForm("questions", "A question cannot be null.");
+        }
+
         if (request.Questions.Any(question => question.QuestionKey is not null))
         {
             return InvalidForm(
@@ -158,6 +171,11 @@ internal sealed class CheckInApplicationService(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (request.Questions is null || request.Questions.Any(question => question is null))
+        {
+            return InvalidVersion("questions", "A check-in draft requires a list of questions.");
+        }
+
         var version = await LoadVersionAsync(versionId, tracking: true, cancellationToken);
         if (version is null || version.FormId != formId)
         {
@@ -170,6 +188,17 @@ internal sealed class CheckInApplicationService(
         if (form is null)
         {
             return new CheckInVersionCommandResult(CheckInCommandStatus.NotFound);
+        }
+
+        // An archived lineage is closed to editing. The domain refuses renaming, deriving and
+        // publishing on an archived form, but a draft's questions live on the version rather than
+        // the form, so nothing on this path would have stopped a save. Refused here, server-side,
+        // because Angular hiding the button is presentation and not the rule.
+        if (form.IsArchived)
+        {
+            return ConflictVersion(
+                "CheckInFormArchived",
+                "An archived check-in form cannot be edited. Restore it first.");
         }
 
         if (version.Status != CheckInFormVersionStatus.Draft)
@@ -319,6 +348,17 @@ internal sealed class CheckInApplicationService(
             return new CheckInVersionCommandResult(CheckInCommandStatus.Forbidden);
         }
 
+        // Checked before anything is mutated, and with its own code. The domain refuses this too,
+        // but only once `form.MarkPublished` runs — after `version.Publish` has already frozen the
+        // version in memory — and it surfaced as "CheckInVersionPublished", which names the wrong
+        // reason for a caller deciding what to do about it.
+        if (form.IsArchived)
+        {
+            return ConflictVersion(
+                "CheckInFormArchived",
+                "An archived check-in form cannot be published. Restore it first.");
+        }
+
         try
         {
             dbContext.Entry(version).Property(item => item.Version).OriginalValue = request.Version;
@@ -431,6 +471,8 @@ internal sealed class CheckInApplicationService(
 
     public async Task<CheckInAssignmentListResult> ListClientAssignmentsAsync(
         Guid clientProfileId,
+        int skip,
+        int take,
         CancellationToken cancellationToken)
     {
         var access = await ResolveClientAccessAsync(clientProfileId, cancellationToken);
@@ -438,7 +480,7 @@ internal sealed class CheckInApplicationService(
             ? new CheckInAssignmentListResult(access.Status, AccessReason: access.Reason)
             : new CheckInAssignmentListResult(
                 CheckInCommandStatus.Success,
-                await BuildListAsync(clientProfileId, cancellationToken));
+                await BuildListAsync(clientProfileId, skip, take, cancellationToken));
     }
 
     public async Task<CheckInAssignmentDetailResult> GetClientAssignmentAsync(
@@ -452,14 +494,17 @@ internal sealed class CheckInApplicationService(
             : await BuildDetailResultAsync(clientProfileId, assignmentId, cancellationToken);
     }
 
-    public async Task<CheckInAssignmentListResult> ListOwnAssignmentsAsync(CancellationToken cancellationToken)
+    public async Task<CheckInAssignmentListResult> ListOwnAssignmentsAsync(
+        int skip,
+        int take,
+        CancellationToken cancellationToken)
     {
         var access = await ResolveOwnAccessAsync(cancellationToken);
         return access.Status != CheckInCommandStatus.Success
             ? new CheckInAssignmentListResult(access.Status, AccessReason: access.Reason)
             : new CheckInAssignmentListResult(
                 CheckInCommandStatus.Success,
-                await BuildListAsync(access.ClientProfileId, cancellationToken));
+                await BuildListAsync(access.ClientProfileId, skip, take, cancellationToken));
     }
 
     public async Task<CheckInAssignmentDetailResult> GetOwnAssignmentAsync(
@@ -539,15 +584,32 @@ internal sealed class CheckInApplicationService(
                 await RequireAssignmentDetailAsync(assignment.Id, cancellationToken));
     }
 
+    /// <summary>
+    /// A bounded page of assignments, each already carrying the state of its response.
+    /// </summary>
+    /// <remarks>
+    /// The response status is resolved here, in the same statement, because the alternative is what
+    /// the coach screen used to do: list the assignments and then fetch every response in full just
+    /// to decide which badge to draw. That is one request per assignment, it grows without limit
+    /// with the client's history, and it made the coach read draft content they had no business
+    /// seeing. The summary carries status and dates only; opening one response is still a separate
+    /// request.
+    /// </remarks>
     private async Task<CheckInAssignmentListView> BuildListAsync(
         Guid clientProfileId,
+        int skip,
+        int take,
         CancellationToken cancellationToken)
     {
-        var assignments = await dbContext.CheckInAssignments
+        var owned = dbContext.CheckInAssignments
             .AsNoTracking()
-            .Where(item => item.ClientProfileId == clientProfileId)
-            .OrderBy(item => item.DueDate)
-            .ThenBy(item => item.Id)
+            .Where(item => item.ClientProfileId == clientProfileId);
+        var total = await owned.LongCountAsync(cancellationToken);
+        var rows = await owned
+            .OrderByDescending(item => item.DueDate)
+            .ThenByDescending(item => item.Id)
+            .Skip(skip)
+            .Take(take)
             .Join(
                 dbContext.CheckInFormVersions.AsNoTracking(),
                 item => item.FormVersionId,
@@ -557,18 +619,46 @@ internal sealed class CheckInApplicationService(
                 dbContext.CheckInForms.AsNoTracking(),
                 pair => pair.Assignment.FormId,
                 form => form.Id,
-                (pair, form) => new CheckInAssignmentView(
-                    pair.Assignment.Id,
-                    pair.Assignment.FormId,
-                    form.Title,
-                    pair.Assignment.FormVersionId,
-                    pair.VersionNumber,
-                    pair.Assignment.ClientProfileId,
-                    pair.Assignment.DueDate,
-                    pair.Assignment.CreatedAtUtc,
-                    pair.Assignment.CreatedByUserId))
+                (pair, form) => new { pair.Assignment, pair.VersionNumber, form.Title })
+            .Select(row => new AssignmentRow(
+                new CheckInAssignmentView(
+                    row.Assignment.Id,
+                    row.Assignment.FormId,
+                    row.Title,
+                    row.Assignment.FormVersionId,
+                    row.VersionNumber,
+                    row.Assignment.ClientProfileId,
+                    row.Assignment.DueDate,
+                    row.Assignment.CreatedAtUtc,
+                    row.Assignment.CreatedByUserId),
+                dbContext.CheckInResponses
+                    .Where(response => response.AssignmentId == row.Assignment.Id)
+                    .Select(response => new ResponseStatusRow(
+                        response.Id,
+                        response.Status,
+                        response.SubmittedDate,
+                        response.SubmittedAtUtc,
+                        response.ReviewedAtUtc))
+                    .FirstOrDefault()))
             .ToArrayAsync(cancellationToken);
-        return new CheckInAssignmentListView(clientProfileId, assignments);
+
+        return new CheckInAssignmentListView(
+            clientProfileId,
+            total,
+            [.. rows.Select(row => new CheckInAssignmentListItem(
+                row.Assignment,
+                row.Response is null
+                    ? null
+                    : new CheckInAssignmentResponseSummary(
+                        row.Response.Id,
+                        row.Response.Status,
+                        row.Response.SubmittedDate,
+                        row.Response.SubmittedAtUtc,
+                        row.Response.ReviewedAtUtc,
+                        // Lateness is derived from the stored workspace-local submission date
+                        // against the due date, never persisted, exactly as the detail view does.
+                        row.Response.SubmittedDate is { } submitted &&
+                        submitted > row.Assignment.DueDate)))]);
     }
 
     /// <summary>
@@ -751,4 +841,15 @@ internal sealed class CheckInApplicationService(
         Guid FormId,
         int VersionNumber,
         CheckInFormVersionStatus Status);
+
+    private sealed record ResponseStatusRow(
+        Guid Id,
+        CheckInResponseStatus Status,
+        DateOnly? SubmittedDate,
+        DateTimeOffset? SubmittedAtUtc,
+        DateTimeOffset? ReviewedAtUtc);
+
+    private sealed record AssignmentRow(
+        CheckInAssignmentView Assignment,
+        ResponseStatusRow? Response);
 }

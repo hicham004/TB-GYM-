@@ -7,7 +7,7 @@ import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
 import { clientCheckInDenialMessage } from '../../core/i18n/display-labels';
 import type {
   CheckInAnswerView,
-  CheckInAssignmentView,
+  CheckInAssignmentListItem,
   CheckInComparisonView,
   CheckInFormSummary,
   CheckInResponseDetail,
@@ -34,11 +34,21 @@ export class CheckInClients {
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private loadedTenantId: string | null = null;
+  private contextGeneration = 0;
+  private selectionGeneration = 0;
+  private listGeneration = 0;
+  private detailGeneration = 0;
+  private comparisonGeneration = 0;
+  private loadingGeneration = 0;
+  private savingGeneration = 0;
 
+  private readonly workspaceToday = signal('');
   protected readonly clients = signal<ClientSummary[]>([]);
   protected readonly forms = signal<CheckInFormSummary[]>([]);
-  protected readonly assignments = signal<CheckInAssignmentView[]>([]);
-  protected readonly responses = signal<Record<string, CheckInResponseDetail>>({});
+  protected readonly assignments = signal<CheckInAssignmentListItem[]>([]);
+  /** How many assignments exist beyond the page that was loaded, so the list can say so. */
+  protected readonly assignmentTotal = signal(0);
+  protected readonly assignmentPageSize = 50;
   protected readonly detail = signal<CheckInResponseDetail | null>(null);
   protected readonly comparison = signal<CheckInComparisonView | null>(null);
   protected readonly loading = signal(false);
@@ -73,15 +83,11 @@ export class CheckInClients {
 
   /**
    * Only submitted or reviewed check-ins can be compared, so a draft is never offered as an option
-   * the server would then refuse.
+   * the server would then refuse. The status comes from the list itself, so nothing has to be
+   * fetched to work this out.
    */
   protected readonly comparable = computed(() =>
-    this.assignments()
-      .map((assignment) => ({
-        assignment,
-        response: this.responses()[assignment.id]?.response ?? null,
-      }))
-      .filter((entry) => entry.response !== null && entry.response.status !== 'Draft'),
+    this.assignments().filter((item) => item.response !== null && item.response.status !== 'Draft'),
   );
 
   protected readonly assignmentValidation = computed(() =>
@@ -105,9 +111,15 @@ export class CheckInClients {
   constructor() {
     effect(() => {
       const tenantId = this.tenants.selectedTenantId();
-      if (tenantId && tenantId !== this.loadedTenantId) {
-        this.loadedTenantId = tenantId;
-        void this.loadContext();
+      if (tenantId === this.loadedTenantId) {
+        return;
+      }
+
+      this.loadedTenantId = tenantId;
+      const generation = ++this.contextGeneration;
+      this.resetActiveClient();
+      if (tenantId !== null) {
+        void this.loadContext(tenantId, generation);
       }
     });
   }
@@ -131,7 +143,13 @@ export class CheckInClients {
   }
 
   protected async selectClient(clientId: string): Promise<void> {
+    const tenantId = this.loadedTenantId;
+    const generation = ++this.selectionGeneration;
+    ++this.savingGeneration;
+    this.saving.set(false);
     this.selectedClientId.set(clientId);
+    this.assignments.set([]);
+    this.assignmentTotal.set(0);
     this.detail.set(null);
     this.comparison.set(null);
     this.firstResponseId = '';
@@ -139,7 +157,19 @@ export class CheckInClients {
     // A different client is a different form, so it starts pristine rather than inheriting the
     // reasons the previous client's half-filled form had earned.
     this.attempt.reset();
-    await this.loadAssignments();
+    this.clearMessages();
+    await this.loadAssignments(clientId, tenantId, generation, true);
+  }
+
+  protected async loadMoreAssignments(): Promise<void> {
+    const clientId = this.selectedClientId();
+    const tenantId = this.loadedTenantId;
+    const generation = this.selectionGeneration;
+    if (!clientId || this.assignments().length >= this.assignmentTotal()) {
+      return;
+    }
+
+    await this.loadAssignments(clientId, tenantId, generation, false);
   }
 
   /**
@@ -159,44 +189,72 @@ export class CheckInClients {
       return;
     }
 
+    const tenantId = this.loadedTenantId;
+    const clientId = this.selectedClientId();
+    const selectionGeneration = this.selectionGeneration;
+    const draft = { ...this.assignment() };
+    const operation = ++this.savingGeneration;
     this.saving.set(true);
     this.clearMessages();
     try {
       await this.csrf.refresh();
-      const draft = this.assignment();
+      if (!this.ownsSelection(tenantId, clientId, selectionGeneration)) {
+        return;
+      }
+
       await firstValueFrom(
-        this.api.assignCheckIn(this.selectedClientId(), {
+        this.api.assignCheckIn(clientId, {
           formVersionId: draft.formVersionId,
           dueDate: draft.dueDate,
         }),
       );
+      if (!this.ownsSaving(operation, tenantId, clientId, selectionGeneration)) {
+        return;
+      }
+
       this.notice.set($localize`Check-in assigned.`);
       this.assignment.set(emptyAssignment());
       // The form is empty again, so its reasons are not yet owed a second time.
       this.attempt.reset();
-      await this.loadAssignments();
+      await this.loadAssignments(clientId, tenantId, selectionGeneration, true);
     } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`This check-in could not be assigned.`));
+      if (this.ownsSaving(operation, tenantId, clientId, selectionGeneration)) {
+        this.error.set(apiErrorMessage(error, $localize`This check-in could not be assigned.`));
+      }
     } finally {
-      this.saving.set(false);
+      if (this.savingGeneration === operation) {
+        this.saving.set(false);
+      }
     }
   }
 
+  /**
+   * The only place a full response is read, and only for the one check-in the coach opened. The
+   * list gets its statuses from the list endpoint, so nothing here runs per assignment.
+   */
   protected async openResponse(assignmentId: string): Promise<void> {
-    this.loading.set(true);
+    const tenantId = this.loadedTenantId;
+    const clientId = this.selectedClientId();
+    const selectionGeneration = this.selectionGeneration;
+    const request = ++this.detailGeneration;
+    ++this.comparisonGeneration;
+    const loading = this.beginLoading();
     this.clearMessages();
     this.comparison.set(null);
     try {
-      this.detail.set(
-        await firstValueFrom(
-          this.api.getClientCheckInResponse(this.selectedClientId(), assignmentId),
-        ),
+      const detail = await firstValueFrom(
+        this.api.getClientCheckInResponse(clientId, assignmentId),
       );
+      if (this.ownsDetail(request, tenantId, clientId, selectionGeneration)) {
+        this.detail.set(detail);
+      }
     } catch (error) {
-      this.detail.set(null);
-      this.error.set(apiErrorMessage(error, $localize`This check-in could not be loaded.`));
+      if (this.ownsDetail(request, tenantId, clientId, selectionGeneration)) {
+        this.detail.set(null);
+        this.error.set(apiErrorMessage(error, $localize`This check-in could not be loaded.`));
+      }
     } finally {
-      this.loading.set(false);
+      this.endLoading(loading);
     }
   }
 
@@ -207,24 +265,36 @@ export class CheckInClients {
       return;
     }
 
+    const tenantId = this.loadedTenantId;
+    const clientId = this.selectedClientId();
+    const selectionGeneration = this.selectionGeneration;
+    const assignmentId = detail.assignment.id;
+    const responseVersion = Number(detail.response.version);
+    const operation = ++this.savingGeneration;
+    ++this.detailGeneration;
     this.saving.set(true);
     this.clearMessages();
     try {
       await this.csrf.refresh();
-      this.detail.set(
-        await firstValueFrom(
-          this.api.reviewCheckInResponse(
-            this.selectedClientId(),
-            detail.assignment.id,
-            Number(detail.response.version),
-          ),
-        ),
+      if (!this.ownsSelection(tenantId, clientId, selectionGeneration)) {
+        return;
+      }
+
+      const reviewed = await firstValueFrom(
+        this.api.reviewCheckInResponse(clientId, assignmentId, responseVersion),
       );
-      this.notice.set($localize`Marked as reviewed.`);
+      if (this.ownsSaving(operation, tenantId, clientId, selectionGeneration)) {
+        this.detail.set(reviewed);
+        this.notice.set($localize`Marked as reviewed.`);
+      }
     } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`This check-in could not be reviewed.`));
+      if (this.ownsSaving(operation, tenantId, clientId, selectionGeneration)) {
+        this.error.set(apiErrorMessage(error, $localize`This check-in could not be reviewed.`));
+      }
     } finally {
-      this.saving.set(false);
+      if (this.savingGeneration === operation) {
+        this.saving.set(false);
+      }
     }
   }
 
@@ -234,110 +304,208 @@ export class CheckInClients {
       return;
     }
 
-    this.loading.set(true);
+    const tenantId = this.loadedTenantId;
+    const clientId = this.selectedClientId();
+    const selectionGeneration = this.selectionGeneration;
+    const firstResponseId = this.firstResponseId;
+    const secondResponseId = this.secondResponseId;
+    const request = ++this.comparisonGeneration;
+    ++this.detailGeneration;
+    const loading = this.beginLoading();
     this.clearMessages();
     try {
-      this.comparison.set(
-        await firstValueFrom(
-          this.api.compareCheckInResponses(
-            this.selectedClientId(),
-            this.firstResponseId,
-            this.secondResponseId,
-          ),
-        ),
+      const comparison = await firstValueFrom(
+        this.api.compareCheckInResponses(clientId, firstResponseId, secondResponseId),
       );
-      this.detail.set(null);
+      if (this.ownsComparison(request, tenantId, clientId, selectionGeneration)) {
+        this.comparison.set(comparison);
+        this.detail.set(null);
+      }
     } catch (error) {
-      this.comparison.set(null);
-      this.error.set(apiErrorMessage(error, $localize`These check-ins could not be compared.`));
+      if (this.ownsComparison(request, tenantId, clientId, selectionGeneration)) {
+        this.comparison.set(null);
+        this.error.set(apiErrorMessage(error, $localize`These check-ins could not be compared.`));
+      }
     } finally {
-      this.loading.set(false);
+      this.endLoading(loading);
+    }
+  }
+
+  private async loadContext(tenantId: string, generation: number): Promise<void> {
+    const loading = this.beginLoading();
+    this.clearMessages();
+    try {
+      // The workspace's own current date comes with its settings. The browser's calendar is not
+      // the workspace calendar, and a due date is judged in the workspace's time zone by the
+      // server, so deriving "today" here from `new Date()` disagreed with it around midnight.
+      const [clients, forms, workspace] = await Promise.all([
+        firstValueFrom(this.api.getClients()),
+        firstValueFrom(this.api.listCheckInForms()),
+        firstValueFrom(this.api.getWorkspace()),
+      ]);
+      if (this.loadedTenantId !== tenantId || this.contextGeneration !== generation) {
+        return;
+      }
+
+      this.clients.set(clients);
+      this.forms.set(forms.items);
+      this.workspaceToday.set(workspace.currentDate);
+    } catch (error) {
+      if (this.loadedTenantId === tenantId && this.contextGeneration === generation) {
+        this.error.set(apiErrorMessage(error, $localize`Check-in data could not be loaded.`));
+      }
+    } finally {
+      this.endLoading(loading);
     }
   }
 
   /**
-   * Today in the browser's own calendar. It is only used to keep an obviously past due date out of
-   * the form; the server decides the real boundary in the workspace time zone.
+   * One request per client, not one per assignment. The list carries each response's status, which
+   * is everything the badges and the comparison picker need; draft answers are not in it and are
+   * not the coach's to read until the client submits.
    */
-  private workspaceToday(): string {
-    return new Date().toISOString().slice(0, 10);
-  }
-
-  private async loadContext(): Promise<void> {
-    this.loading.set(true);
-    this.clearMessages();
-    try {
-      const [clients, forms] = await Promise.all([
-        firstValueFrom(this.api.getClients()),
-        firstValueFrom(this.api.listCheckInForms()),
-      ]);
-      this.clients.set(clients);
-      this.forms.set(forms.items);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Check-in data could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
-  }
-
-  private async loadAssignments(): Promise<void> {
-    if (!this.selectedClientId()) {
-      this.assignments.set([]);
-      this.responses.set({});
+  private async loadAssignments(
+    clientId: string,
+    tenantId: string | null,
+    selectionGeneration: number,
+    reset: boolean,
+  ): Promise<void> {
+    if (!clientId) {
+      if (reset) {
+        this.assignments.set([]);
+        this.assignmentTotal.set(0);
+      }
       return;
     }
 
-    this.loading.set(true);
+    const skip = reset ? 0 : this.assignments().length;
+    const request = ++this.listGeneration;
+    const loading = this.beginLoading();
     try {
       const list = await firstValueFrom(
-        this.api.listClientCheckInAssignments(this.selectedClientId()),
+        this.api.listClientCheckInAssignments(clientId, skip, this.assignmentPageSize),
       );
-      this.assignments.set(list.assignments);
+      if (!this.ownsList(request, tenantId, clientId, selectionGeneration)) {
+        return;
+      }
 
-      // Each assignment's response is loaded so the list can show its real state and the comparison
-      // can offer only submitted ones. One that cannot be read is simply left out rather than
-      // failing the whole screen.
-      const loaded = await Promise.all(
-        list.assignments.map(async (assignment) => {
-          try {
-            return [
-              assignment.id,
-              await firstValueFrom(
-                this.api.getClientCheckInResponse(this.selectedClientId(), assignment.id),
-              ),
-            ] as const;
-          } catch {
-            return null;
-          }
-        }),
-      );
-      this.responses.set(
-        Object.fromEntries(
-          loaded.filter((entry) => entry !== null) as (readonly [string, CheckInResponseDetail])[],
-        ),
-      );
+      this.assignments.set(reset ? list.items : appendUnique(this.assignments(), list.items));
+      this.assignmentTotal.set(Number(list.total));
     } catch (error) {
-      this.assignments.set([]);
-      this.responses.set({});
+      // A refusal that arrives after the coach moved on belongs to the client they left, so it must
+      // not blank or explain away the one they are looking at now.
+      if (!this.ownsList(request, tenantId, clientId, selectionGeneration)) {
+        return;
+      }
+
       const reason = featureAccessReason(error);
       if (reason === null) {
+        if (reset) {
+          this.assignments.set([]);
+          this.assignmentTotal.set(0);
+        }
         this.error.set(
           apiErrorMessage(error, $localize`This client's check-ins could not be loaded.`),
         );
       } else {
+        this.assignments.set([]);
+        this.assignmentTotal.set(0);
         this.denial.set(clientCheckInDenialMessage(reason));
       }
     } finally {
-      this.loading.set(false);
+      this.endLoading(loading);
     }
   }
 
-  protected statusOf(assignmentId: string): string | null {
-    return this.responses()[assignmentId]?.response?.status ?? null;
+  private resetActiveClient(): void {
+    ++this.selectionGeneration;
+    ++this.listGeneration;
+    ++this.detailGeneration;
+    ++this.comparisonGeneration;
+    ++this.savingGeneration;
+    ++this.loadingGeneration;
+    this.selectedClientId.set('');
+    this.clients.set([]);
+    this.forms.set([]);
+    this.assignments.set([]);
+    this.assignmentTotal.set(0);
+    this.detail.set(null);
+    this.comparison.set(null);
+    this.loading.set(false);
+    this.saving.set(false);
+    this.clearMessages();
   }
 
-  protected isLate(assignmentId: string): boolean {
-    return this.responses()[assignmentId]?.response?.isLate ?? false;
+  private ownsSelection(
+    tenantId: string | null,
+    clientId: string,
+    selectionGeneration: number,
+  ): boolean {
+    return (
+      tenantId !== null &&
+      this.loadedTenantId === tenantId &&
+      this.selectedClientId() === clientId &&
+      this.selectionGeneration === selectionGeneration
+    );
+  }
+
+  private ownsList(
+    request: number,
+    tenantId: string | null,
+    clientId: string,
+    selectionGeneration: number,
+  ): boolean {
+    return (
+      this.listGeneration === request && this.ownsSelection(tenantId, clientId, selectionGeneration)
+    );
+  }
+
+  private ownsDetail(
+    request: number,
+    tenantId: string | null,
+    clientId: string,
+    selectionGeneration: number,
+  ): boolean {
+    return (
+      this.detailGeneration === request &&
+      this.ownsSelection(tenantId, clientId, selectionGeneration)
+    );
+  }
+
+  private ownsComparison(
+    request: number,
+    tenantId: string | null,
+    clientId: string,
+    selectionGeneration: number,
+  ): boolean {
+    return (
+      this.comparisonGeneration === request &&
+      this.ownsSelection(tenantId, clientId, selectionGeneration)
+    );
+  }
+
+  private ownsSaving(
+    operation: number,
+    tenantId: string | null,
+    clientId: string,
+    selectionGeneration: number,
+  ): boolean {
+    return (
+      this.savingGeneration === operation &&
+      this.ownsSelection(tenantId, clientId, selectionGeneration)
+    );
+  }
+
+  private beginLoading(): number {
+    const generation = ++this.loadingGeneration;
+    this.loading.set(true);
+    return generation;
+  }
+
+  private endLoading(generation: number): void {
+    if (this.loadingGeneration === generation) {
+      this.loading.set(false);
+    }
   }
 
   private clearMessages(): void {
@@ -349,4 +517,22 @@ export class CheckInClients {
 
 function emptyAssignment(): AssignmentDraft {
   return { clientProfileId: '', formVersionId: '', dueDate: '' };
+}
+
+function appendUnique(
+  current: readonly CheckInAssignmentListItem[],
+  incoming: readonly CheckInAssignmentListItem[],
+): CheckInAssignmentListItem[] {
+  const ids = new Set(current.map((item) => item.assignment.id));
+  return [
+    ...current,
+    ...incoming.filter((item) => {
+      if (ids.has(item.assignment.id)) {
+        return false;
+      }
+
+      ids.add(item.assignment.id);
+      return true;
+    }),
+  ];
 }

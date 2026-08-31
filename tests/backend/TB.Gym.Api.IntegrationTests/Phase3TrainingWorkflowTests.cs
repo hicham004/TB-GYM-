@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
+using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Nutrition;
 using TB.Gym.SharedKernel;
 
@@ -35,6 +36,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     private MutableTestClock? testClock;
     private SensitiveLogCapture? sensitiveLogCapture;
     private StorageFaultSwitch? storageFaults;
+    private InsertBarrier? insertBarrier;
+    private ScannerSwitch? scannerSwitch;
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -59,6 +62,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         sensitiveLogCapture = logCapture;
         var storageFaults = new StorageFaultSwitch();
         this.storageFaults = storageFaults;
+        var barrier = new InsertBarrier();
+        insertBarrier = barrier;
+        var scanner = new ScannerSwitch();
+        scannerSwitch = scanner;
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");
@@ -92,10 +99,17 @@ public sealed partial class Phase3TrainingWorkflowTests
                 services.AddSingleton<IAiMealDraftProvider, InvalidSchemaAiMealDraftProvider>();
                 services.AddSingleton<INutritionDataProvider, FibreRichTestNutritionDataProvider>();
                 services.AddSingleton<ILoggerProvider>(logCapture);
+                services.AddTransient<IStartupFilter, TestRemoteAddressStartupFilter>();
                 services.AddSingleton<TodayQueryCounter>();
-                services.AddDbContext<GymDbContext>((provider, options) =>
-                    options.AddInterceptors(provider.GetRequiredService<TodayQueryCounter>()));
+                services.AddSingleton(barrier);
+                services.AddDbContext<GymDbContext>((provider, options) => options.AddInterceptors(
+                    provider.GetRequiredService<TodayQueryCounter>(),
+                    provider.GetRequiredService<InsertBarrier>()));
                 Phase5B5DecorateObjectStorage(services, storageFaults);
+                // A scanner the test can switch off, so an unavailable-scanner deployment can be
+                // exercised without leaving Development, which the rest of the harness needs.
+                services.RemoveAll<IMediaScanner>();
+                services.AddSingleton<IMediaScanner>(new SwitchableMediaScanner(scanner));
             });
         });
     }

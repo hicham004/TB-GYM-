@@ -38,6 +38,17 @@ sweep works one workspace at a time, each in its own scope, because the tenant w
 refuses to let one scope write rows from two workspaces — and a background sweep that bypassed that
 guard would be exactly the hole the guard exists to close.
 
+**`Media:PurgeBatchSize` is a global cap on one sweep, not a per-workspace one.** It was written as
+if it were global and implemented as if it were not: the sweep selected up to `batchSize` workspaces
+and then allowed each of them `batchSize` assets, so one pass could do `batchSize²` work — 625 assets
+at the default 25 — and hold row locks across storage calls for the whole of it, which is the exact
+quantity this option exists to bound. Workspaces with work due now share one budget: each receives an
+equal share (at least one), and a running remainder stops the sweep the moment the total is reached.
+Nothing unclaimed is lost, because a row that stays tombstoned and due is picked up by the next
+sweep, so a backlog drains over several passes rather than in one long transaction. The candidate
+query is bounded by `Take`, so no unbounded set is materialised, and `FOR UPDATE SKIP LOCKED` is
+untouched.
+
 Order per asset is derivatives first, then the original, then completion. Deleting an object that is
 already gone counts as success, so a partial purge can be replayed. Any storage failure records the
 reason on the row and leaves it tombstoned, due, and retryable; nothing is swallowed and an asset is
@@ -53,8 +64,11 @@ denial, so it is asserted for the client and the coach on both variants.
 **Quota accounting, exactly.** The allowance counts the original *and* every derivative, because
 both are real objects. It counts tombstoned-but-not-yet-purged bytes, because those are still
 physically stored and pretending otherwise would let a workspace overshoot by everything awaiting
-deletion — the unsafe direction to be wrong in. It excludes purged bytes, which is what finally
-releases the space. External embeds occupy nothing and are not counted.
+deletion — the unsafe direction to be wrong in. The same rule now includes every non-purged
+`MediaIngestObject`: its conservative reservation before a write and its confirmed actual length
+afterward remain charged until admission transfers ownership or storage confirms deletion. It
+excludes purged bytes, which is what finally releases the space. External embeds occupy nothing and
+are not counted.
 
 A per-client progress-photo allowance is added alongside the workspace one, default 500 MB, validated
 between one maximum-size image and the workspace allowance. Both are enforced: an upload must fit
@@ -66,7 +80,17 @@ transaction holding a transaction-scoped PostgreSQL advisory lock keyed on the w
 workspace also serialises its clients, so one lock covers both allowances and no lock ordering can
 deadlock, and the lock is released by commit or rollback so a crash cannot leak it. It is taken after
 the bytes are stored, so it is held for the decision rather than for the whole ingest; an upload that
-loses the race has its objects deleted and its row never committed.
+loses the race commits no asset. Each object is either confirmed deleted or remains in durable,
+quota-counted cleanup state for the reconciliation sweep.
+
+Concurrent durable reservations need an admission order as well as a lock. If each candidate counted
+every peer reservation at the decision point, two uploads that each fit alone could both see the
+other and both reject. Reservations are therefore ordered by their persisted creation instant and id.
+Under the workspace lock a candidate counts every committed object and each non-purged reservation
+ahead of it, but not candidates behind it. A later candidate cannot overshoot: it acquires the lock
+after the winner commits and then counts those same bytes as an asset. Normal allowance measurements
+still count every non-purged reservation. The cross-replica quota race consequently has one winner
+and one stable `409`, never two winners or a symmetric double rejection.
 
 Rejection is a `409` carrying a stable `code` — `MediaWorkspaceStorageExceeded` or
 `ClientProgressPhotoStorageExceeded` — rather than a validation problem that reads as though the file
@@ -86,5 +110,6 @@ claim and finalise in separate transactions, not to widen the batch.
 
 Deferred: a coach-facing view of storage usage and what is pending deletion, alerting on assets stuck
 pending after repeated failures, an administrative force-purge, restoring a tombstoned asset before
-its retention elapses, counting bytes toward an allowance at reservation rather than at commit, and
-purging orphaned objects that have no row at all.
+its retention elapses, and provider-level inventory reconciliation for objects created outside the
+application's generated-key/reservation contract. Pre-write reservation, durable incomplete-ingest
+cleanup, and reservation-based quota accounting are delivered.

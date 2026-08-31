@@ -213,7 +213,7 @@ the unique index becomes partial on active rows so a freed date can be logged ag
 `docs/adr/0015-bodyweight-date-correction-v1.md`.
 
 Explicitly deferred to a later phase: photo comparison, device/wearable import, a coach-facing
-storage-usage view, alerting on assets stuck pending purge, purging orphaned objects with no row,
+storage-usage view, alerting on assets stuck pending purge, provider-level inventory reconciliation,
 voiding a bodyweight observation without a replacement, bulk re-dating, and the same date correction
 for body measurements and progress photos. Previously deferred: mesocycle-aligned summaries and
 change statistics, subscription/program period linking, date-adjustment impact analysis,
@@ -291,6 +291,51 @@ interpretation, exports, a cross-client outstanding-check-in view, comparing mor
 charting one question over time, and retrofitting the validation convention onto the 8 remaining
 `ngModel` templates and 12 reactive-forms templates that have no derived-reason lists today.
 
+#### Phase 5/6 audit remediation (2026-08-29)
+
+A deep review of Phases 5 and 6 found defects in already-shipped surfaces. No new feature scope: every
+change below closes something that was wrong, and each carries a regression test that fails against
+the behaviour it replaced.
+
+- **Draft privacy.** A coach's read of an unsubmitted check-in returned the client's answers. The
+  redaction is in the backend mapping; the coach sees status and dates with `AnswersWithheld`. See
+  ADR 0016.
+- **Media access revalidates membership.** A progress-photo grant has a configurable bounded
+  lifetime and the subject's own check trusted user identity alone, so a removed member kept reading
+  that workspace's images until it expired. Every original and thumbnail request now establishes
+  active membership first. See ADR 0011.
+- **Decoded-image limits.** The compressed byte cap never bounded decoded memory. 8 000 px per edge
+  and 30 megapixels are checked against the codec header before allocation; 120 MB describes one
+  RGBA buffer, not peak memory. Per-tenant upload serialization and a configurable process-wide
+  decode cap bound concurrency. See ADR 0011.
+- **Media readiness.** A refused or unscannable upload reported success and a progress photo was
+  recorded against it, occupying the date/pose slot with no readable image. It now fails truthfully
+  (`503` unavailable/operational scanner, `400` actual refusal) and commits nothing. Every accepted
+  key is attached, confirmed deleted, or retained as quota-counted durable cleanup state; the purge
+  sweep reconciles the latter. A readiness check reports an unconfigured scanner as `Degraded`.
+  See ADR 0011.
+- **Duplicate progress-photo race.** The cleanup replayed the failed insert on the same tracked
+  context and escaped as a `500`, leaving the ready orphan it existed to prevent. See ADR 0011.
+- **Dashboard thumbnails.** Protected paths were bound to `img.src` with no grant, so a first visit
+  showed nothing. A bounded preview (8 per pose) plus one bounded batch grant. See ADR 0013.
+- **Dashboard range and training denominator.** Weekly figures were computed over a widened read.
+  Cancelled mesocycles now retain executed sessions and their completed/in-progress history in both
+  denominator and numerator, while withdrawing unexecuted sessions. See ADR 0013.
+- **Archived check-in forms** are refused server-side on save, publish and rename and render every
+  version, including a Draft, read-only until Restore; form metadata is edited through the rename
+  operation with the form's own token. See ADR 0017.
+- **Concurrent first draft save** returns one draft and one stable `409`.
+- **Check-in assignment lists** carry response status only, sort deterministically newest-first,
+  and load bounded pages through every assignment on both coach and client screens. Generation
+  ownership prevents stale list/detail/mutation/comparison results crossing clients or workspaces.
+- **Workspace-local today** travels on `WorkspaceDetails.CurrentDate` so due-date validation agrees
+  with the server across midnight.
+- **Purge sweep cap** is global rather than per workspace. See ADR 0014.
+- **Inherited cross-cutting hardening, not a Phase 6 feature:** the rate limiter ran before
+  `UseAuthentication` and partitioned on the raw `X-Tenant-Id` header, so authenticated writes fell
+  into a source-address bucket a caller could reset at will. It now runs after authentication and
+  partitions on the signed-in user id alone. See `ARCHITECTURE.md` section 6.
+
 #### Known and left open at the end of Phase 6A
 
 Each verified against the repository on 2026-08-26. None is a check-in defect; they are recorded
@@ -302,11 +347,11 @@ here because they were found during 6A and would otherwise be re-discovered.
    child loads its own data on init without first asking whether the client has any. Pre-existing
    Phase 4/5 behaviour; the requests are correctly authorized and correctly refused, so this is
    noise, not a leak.
-2. **`Phase3TrainingWorkflowTests` is a partial class spanning 16 files** in
-   `tests/backend/TB.Gym.Api.IntegrationTests`, holding **71 of the suite's 80** integration tests —
-   including every Phase 4, 5 and 6A test. New phases keep extending a class named for Phase 3.
-   Pre-existing since Phase 3 and undocumented as a deliberate pattern; renaming it is scope creep,
-   but nobody should assume the name describes the contents.
+2. **`Phase3TrainingWorkflowTests` is a partial class spanning many files** in
+   `tests/backend/TB.Gym.Api.IntegrationTests`, holding most of the integration suite — including
+   later-phase tests. New phases keep extending a class named for Phase 3. Pre-existing since Phase
+   3 and undocumented as a deliberate pattern; renaming it is scope creep, but nobody should assume
+   the name describes the contents.
 3. **Five feature components carry no Angular spec**: `dashboard`, `clients/client-details`,
    `training/client-training`, `training/exercise-library`, `training/program-builder`.
 4. **The form-validation convention is not retrofitted.** 8 remaining `ngModel` templates and all 12
@@ -337,8 +382,10 @@ and the assign form announcing its outstanding reasons on a form nobody had touc
 - Complete SignalR authorization, reconnect/catch-up, delivery, and scale-out tests.
 - Run outbox dispatch in a separate worker; add retries, dead-letter visibility, templates,
   consent, quiet hours, and channel preferences.
-- Implement production object storage, upload scanning, transformations, signed URLs,
-  retention, quotas, and orphan cleanup.
+- Implement production object storage, production upload scanning, provider inventory
+  reconciliation, signed URLs, and the production retention/operations controls. Reservation-backed
+  incomplete-ingest cleanup, transformations, quotas, and application-known purge are already
+  delivered.
 - Integrate one email and one WhatsApp provider behind existing ports.
 
 Exit: realtime delivery is convenient but persisted state remains correct during disconnects,

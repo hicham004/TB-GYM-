@@ -581,6 +581,9 @@ public static class ProgressEndpoints
         ProgressPhotoCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),
         ProgressPhotoCommandStatus.Forbidden => Results.Forbid(),
         ProgressPhotoCommandStatus.RateLimited => Results.Problem(statusCode: StatusCodes.Status429TooManyRequests, title: result.Message ?? "Too many progress photo uploads."),
+        // Nothing was stored and nothing was recorded, so the same date and pose remain free. The
+        // scanner's own verdict stays server-side; only the fact of unavailability travels.
+        ProgressPhotoCommandStatus.Unavailable => Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: result.Message ?? "Progress photo uploads are unavailable.", extensions: result.Code is null ? null : new Dictionary<string, object?> { ["code"] = result.Code }),
         ProgressPhotoCommandStatus.Conflict => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: result.Message ?? "The progress photo conflicts with current state.", extensions: result.Code is null ? null : new Dictionary<string, object?> { ["code"] = result.Code }),
         _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
     };

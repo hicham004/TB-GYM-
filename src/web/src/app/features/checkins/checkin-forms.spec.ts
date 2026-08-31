@@ -59,6 +59,13 @@ function version(
 }
 
 function details(...versions: CheckInFormVersionView[]): CheckInFormDetails {
+  return archivedDetails(false, ...versions);
+}
+
+function archivedDetails(
+  isArchived: boolean,
+  ...versions: CheckInFormVersionView[]
+): CheckInFormDetails {
   const published = versions.filter((item) => item.status === 'Published');
   const latest = published.at(-1) ?? null;
   return {
@@ -67,7 +74,7 @@ function details(...versions: CheckInFormVersionView[]): CheckInFormDetails {
       title: 'Weekly check-in',
       description: null,
       status: latest === null ? 'Draft' : 'Published',
-      isArchived: false,
+      isArchived,
       currentVersionNumber: versions.length,
       draftVersionId: versions.find((item) => item.status === 'Draft')?.id ?? null,
       latestPublishedVersionId: latest?.id ?? null,
@@ -107,6 +114,7 @@ interface Harness {
   setPrompt(index: number, prompt: string): void;
   setTitle(title: string): void;
   validation(): { isValid: boolean };
+  startRename(): void;
 }
 
 async function render(api: Partial<ApiClient> = {}) {
@@ -134,6 +142,13 @@ async function render(api: Partial<ApiClient> = {}) {
     host: fixture.nativeElement as HTMLElement,
     component: fixture.componentInstance as unknown as Harness,
   };
+}
+
+/** Every button caption on screen, in order, so a test can assert on what is offered. */
+function captions(host: ParentNode): string[] {
+  return Array.from(host.querySelectorAll('button')).map((item) =>
+    (item.textContent ?? '').replace(/\s+/g, ' ').trim(),
+  );
 }
 
 describe('CheckInForms', () => {
@@ -166,6 +181,124 @@ describe('CheckInForms', () => {
     expect(text).toContain('Publishing freezes a version permanently');
   });
 
+  /**
+   * An archived lineage is closed server-side: saving a draft, publishing, deriving and assigning
+   * are all refused. The screen must not offer an action it knows will be refused — that is a dead
+   * control with an error message behind it, which is the defect this pass is closing elsewhere.
+   */
+  it('offers no editing action on an archived form', async () => {
+    const draft = version('v2', 2, 'Draft');
+    const published = version('v1', 1, 'Published');
+    const { fixture, host, component } = await render({
+      getCheckInForm: vi.fn(() => of(archivedDetails(true, published, draft))),
+      getCheckInFormVersion: vi.fn((_formId, versionId) =>
+        of(versionId === draft.id ? draft : published),
+      ) as never,
+      restoreCheckInForm: vi.fn(() => of(details(published, draft))) as never,
+    });
+
+    await component.openForm('form-1');
+    await settle(fixture);
+
+    expect(host.textContent).toContain('This form is archived.');
+    // Asserted on the controls themselves: the standing hint about publishing is prose that stays
+    // whatever the lineage's state, and a text search would match it and pass for the wrong reason.
+    expect(captions(host)).toEqual(['New form', 'Weekly check-in', 'Restore', 'View', 'View']);
+
+    // The second View is the archived draft. It is readable, but its draft status must not reopen
+    // editing while the lineage is archived.
+    const viewButtons = [...host.querySelectorAll<HTMLButtonElement>('button')].filter(
+      (button) => button.textContent?.trim() === 'View',
+    );
+    viewButtons[1].click();
+    await settle(fixture);
+
+    expect(host.textContent).toContain('Version 2 (read-only)');
+    expect(
+      [
+        ...host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+          '.builder-form input, .builder-form textarea, .builder-form select',
+        ),
+      ].every((control) => control.disabled),
+    ).toBe(true);
+    expect(captions(host)).not.toContain('Save draft');
+    expect(captions(host)).not.toContain('Add question');
+
+    press(host, 'Close');
+    press(host, 'Restore');
+    await settle(fixture);
+    await component.editVersion(draft.id);
+    await settle(fixture);
+
+    expect(host.textContent).toContain('Editing draft version 2');
+    expect(
+      [
+        ...host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+          '.builder-form input, .builder-form textarea, .builder-form select',
+        ),
+      ].every((control) => !control.disabled),
+    ).toBe(true);
+    expect(captions(host)).toContain('Save draft');
+  });
+
+  it('archives through the API and reflects the closed lineage', async () => {
+    const published = version('v1', 1, 'Published');
+    const archiveCheckInForm = vi.fn(() => of(archivedDetails(true, published)));
+    const { fixture, host, component } = await render({
+      getCheckInForm: vi.fn(() => of(details(published))),
+      archiveCheckInForm: archiveCheckInForm as never,
+    });
+
+    await component.openForm('form-1');
+    await settle(fixture);
+
+    press(host, 'Archive');
+    await settle(fixture);
+
+    expect(archiveCheckInForm).toHaveBeenCalledWith('form-1', 2);
+    expect(host.textContent).toContain('This form is archived.');
+    expect(host.textContent).not.toContain('New draft from this');
+  });
+
+  /**
+   * The title and description belong to the lineage, so they are saved against the form's own
+   * concurrency token through the rename operation, not folded into a draft save that carries the
+   * version's token.
+   */
+  it('persists an edited title and description through the rename operation', async () => {
+    const published = version('v1', 1, 'Published');
+    const renamed = details(published);
+    renamed.form.title = 'Fortnightly check-in';
+    renamed.form.description = 'Every other Monday.';
+    const renameCheckInForm = vi.fn(() => of(renamed));
+    const { fixture, host, component } = await render({
+      getCheckInForm: vi.fn(() => of(details(published))),
+      renameCheckInForm: renameCheckInForm as never,
+    });
+
+    await component.openForm('form-1');
+    await settle(fixture);
+
+    press(host, 'Edit details');
+    await settle(fixture);
+
+    fill(host, 'Title', 'Fortnightly check-in');
+    fill(host, 'Description', 'Every other Monday.');
+    await settle(fixture);
+
+    press(host, 'Save details');
+    await settle(fixture);
+
+    expect(renameCheckInForm).toHaveBeenCalledWith('form-1', {
+      title: 'Fortnightly check-in',
+      description: 'Every other Monday.',
+      version: 2,
+    });
+    // And the saved values are what the screen shows afterwards.
+    expect(host.textContent).toContain('Fortnightly check-in');
+    expect(host.textContent).toContain('Every other Monday.');
+  });
+
   it('offers a new draft once the lineage has no open draft', async () => {
     const published = version('v1', 1, 'Published');
     const { fixture, host, component } = await render({
@@ -189,8 +322,8 @@ describe('CheckInForms', () => {
     await component.editVersion('v1');
     await settle(fixture);
 
-    expect(host.textContent).toContain('published, read-only');
-    expect(host.textContent).toContain('Create a new draft from it to change anything.');
+    expect(host.textContent).toContain('Version 1 (read-only)');
+    expect(host.textContent).toContain('This version is read-only.');
     expect(host.querySelector('button[type="submit"]')).toBeNull();
     expect(host.querySelector<HTMLInputElement>('input[type="text"]')?.disabled).toBe(true);
   });

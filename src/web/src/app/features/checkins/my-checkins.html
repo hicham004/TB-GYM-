@@ -19,17 +19,36 @@
         <p class="empty" i18n>You have no check-ins right now.</p>
       } @else {
         <ul class="assignments">
-          @for (assignment of assignments(); track assignment.id) {
+          @for (item of assignments(); track item.assignment.id) {
             <li>
               <!-- The version number is part of the client's own record: the coach's list shows
                    it, and two check-ins with the same title can ask different questions. -->
-              <button type="button" class="link" (click)="open(assignment.id)">
-                {{ assignment.formTitle }} (v{{ assignment.formVersionNumber }})
+              <button type="button" class="link" (click)="open(item.assignment.id)">
+                {{ item.assignment.formTitle }} (v{{ item.assignment.formVersionNumber }})
               </button>
-              <span class="detail" i18n>Due {{ assignment.dueDate | date: 'mediumDate' }}</span>
+              <span class="detail" i18n
+                >Due {{ item.assignment.dueDate | date: 'mediumDate' }}</span
+              >
+              @if (item.response; as response) {
+                <span class="badge">{{ response.status }}</span>
+              }
             </li>
           }
         </ul>
+        <p class="detail" i18n>
+          Showing {{ assignments().length }} of {{ assignmentTotal() }} check-ins, newest first.
+        </p>
+        @if (assignmentTotal() > assignments().length) {
+          <button
+            type="button"
+            class="link"
+            [disabled]="loading()"
+            (click)="loadMoreAssignments()"
+            i18n
+          >
+            Load more check-ins
+          </button>
+        }
       }
     </article>
 

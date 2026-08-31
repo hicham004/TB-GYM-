@@ -23,6 +23,22 @@ public interface IMediaApplicationService
 
     Task<MediaAccessResult> CreateAccessAsync(Guid assetId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Grants access to several assets in one authorized call, each still bound to its own asset
+    /// and its own content path.
+    /// </summary>
+    /// <remarks>
+    /// A screen that displays many protected thumbnails would otherwise issue one grant request per
+    /// tile, which is unbounded in the number of assets shown. This is bounded instead: the request
+    /// carries at most <see cref="MediaAccessBatchPolicy.MaximumAssets"/> ids and each one is
+    /// authorized separately by exactly the same decision as the single-asset route. An asset the
+    /// caller may not read is omitted from the result rather than reported, so the batch cannot be
+    /// used to probe for assets.
+    /// </remarks>
+    Task<MediaAccessBatchResult> CreateAccessBatchAsync(
+        IReadOnlyList<Guid> assetIds,
+        CancellationToken cancellationToken);
+
     Task<MediaContentResult> OpenContentAsync(
         Guid assetId,
         string grant,
@@ -97,6 +113,55 @@ public sealed record MediaAccessResult(
     // browser's clock, so a skewed client would discard a grant the server still honours.
     TimeSpan? GrantLifetime = null);
 
+/// <summary>
+/// The ids a caller may present to <see cref="IMediaApplicationService.CreateAccessBatchAsync"/>.
+/// </summary>
+public sealed record MediaAccessBatchRequest(IReadOnlyList<Guid> AssetIds);
+
+/// <summary>
+/// One granted asset. <see cref="BrowserGrant"/> becomes a cookie scoped to that asset's own
+/// content path, so the batch issues one path-scoped grant per asset rather than one broad one.
+/// </summary>
+public sealed record MediaAccessGrant(
+    Guid AssetId,
+    MediaAccessView Access,
+    string BrowserGrant);
+
+/// <summary>
+/// What the batch route returns: the access views for the assets that were granted. The grants
+/// themselves travel as one path-scoped cookie per asset and never appear in the body.
+/// </summary>
+public sealed record MediaAccessBatchView(IReadOnlyList<MediaAccessView> Items);
+
+/// <summary>
+/// Only the assets the caller may read. An id that was unknown, not ready, or refused is simply
+/// absent, which is the same non-disclosure the single-asset route applies.
+/// </summary>
+public sealed record MediaAccessBatchResult(
+    MediaAccessBatchStatus Status,
+    IReadOnlyList<MediaAccessGrant> Grants,
+    TimeSpan? GrantLifetime = null);
+
+public enum MediaAccessBatchStatus
+{
+    Success = 1,
+
+    /// <summary>More ids than the policy accepts, or none at all.</summary>
+    Invalid = 2,
+}
+
+/// <summary>
+/// How many assets one batch grant may cover. The progress dashboard's bounded photo preview is
+/// the caller this was sized for — three poses of at most eight tiles each, which is 24 — and the
+/// remaining headroom keeps the cap from being exactly one screen's worth. Each granted asset costs
+/// one <c>Set-Cookie</c> header, so an unbounded batch would exhaust a browser's per-domain cookie
+/// budget as surely as it would the response header limit.
+/// </summary>
+public static class MediaAccessBatchPolicy
+{
+    public const int MaximumAssets = 32;
+}
+
 public sealed record MediaCommandResult(
     MediaCommandStatus Status,
     MediaAssetView? Asset = null,
@@ -119,6 +184,14 @@ public enum MediaCommandStatus
     /// itself was rejected: nothing is wrong with the upload, there is simply no room for it.
     /// </summary>
     QuotaExceeded = 6,
+
+    /// <summary>
+    /// A dependency the upload cannot proceed without — the malware scanner — is not configured or
+    /// could not be reached. Distinct from <see cref="Invalid"/> because nothing is wrong with the
+    /// request: this deployment cannot accept any upload until the dependency is available, and
+    /// saying so is what makes the closed state honest instead of blaming the file.
+    /// </summary>
+    Unavailable = 7,
 }
 
 /// <summary>
@@ -165,10 +238,27 @@ public sealed class MediaStorageOptions
     public int PurgeIntervalSeconds { get; set; } = 900;
 
     /// <summary>
-    /// The most assets one sweep claims. Each batch holds row locks for the duration of its storage
-    /// calls, so this bounds how long another replica can be kept waiting.
+    /// The most assets one sweep claims in total, across every workspace it visits. Each batch
+    /// holds row locks for the duration of its storage calls, so this bounds how long another
+    /// replica can be kept waiting. Workspaces with work due share this budget rather than each
+    /// receiving it, so the ceiling is the number written here and not a multiple of it.
     /// </summary>
     public int PurgeBatchSize { get; set; } = 25;
+
+    /// <summary>
+    /// Engineering policy: maximum progress-photo decodes admitted across this API process.
+    /// Decoding can hold an RGBA bitmap, an orientation copy, Skia encoding buffers, managed output
+    /// streams and a thumbnail surface at once, so the per-tenant upload gate is not a process-wide
+    /// memory bound when many workspaces upload together.
+    /// </summary>
+    public int MaxConcurrentProgressPhotoDecodes { get; set; } = 2;
+
+    /// <summary>
+    /// Engineering policy for one immediate compensating storage delete. Cleanup uses its own
+    /// token rather than the request token; exceeding this bound leaves durable state for the
+    /// reconciliation sweep instead of holding the request indefinitely.
+    /// </summary>
+    public int IngestCleanupAttemptTimeoutSeconds { get; set; } = 30;
 
     /// <summary>
     /// Whether the sweep runs at all. Disabled in tests that drive the purge explicitly, so a

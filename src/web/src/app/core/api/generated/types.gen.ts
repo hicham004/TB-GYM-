@@ -339,9 +339,24 @@ export type CheckInAssignmentDetail = {
   version: CheckInFormVersionView;
 };
 
+export type CheckInAssignmentListItem = {
+  assignment: CheckInAssignmentView;
+  response: null | CheckInAssignmentResponseSummary;
+};
+
 export type CheckInAssignmentListView = {
   clientProfileId: string;
-  assignments: Array<CheckInAssignmentView>;
+  total: number | string;
+  items: Array<CheckInAssignmentListItem>;
+};
+
+export type CheckInAssignmentResponseSummary = {
+  responseId: string;
+  status: CheckInResponseStatus;
+  submittedDate: null | string;
+  submittedAtUtc: null | string;
+  reviewedAtUtc: null | string;
+  isLate: boolean;
 };
 
 export type CheckInAssignmentView = {
@@ -510,6 +525,7 @@ export type CheckInResponseView = {
   reviewedByUserId: null | string;
   answers: Array<CheckInAnswerView>;
   version: number | string;
+  answersWithheld?: boolean;
 };
 
 export type ClientCommercialOverview = {
@@ -932,6 +948,7 @@ export type DashboardPhotosSection = {
   poses: Array<DashboardPhotoPoseTimeline>;
   photoCount: number | string;
   missingThumbnailCount: number | string;
+  previewPhotoCount: number | string;
 };
 
 export type DashboardPhotoView = {
@@ -1293,6 +1310,14 @@ export type MealPlanTemplateSummary = {
 export type MeasurementType = 'Waist' | 'Chest' | 'Hips' | 'Thigh' | 'Arm' | 'BodyFatPercentage';
 
 export type MeasurementUnit = 'Centimetre' | 'Inch' | 'Percent';
+
+export type MediaAccessBatchRequest = {
+  assetIds: Array<string>;
+};
+
+export type MediaAccessBatchView = {
+  items: Array<MediaAccessView>;
+};
 
 export type MediaAccessView = {
   assetId: string;
@@ -2145,6 +2170,7 @@ export type WorkspaceDetails = {
   defaultCulture: string;
   defaultCurrencyCode: string;
   weekStartsOn: DayOfWeek;
+  currentDate: string;
   version: number | string;
 };
 
@@ -6404,7 +6430,10 @@ export type ListClientCheckInAssignmentsData = {
   path: {
     clientProfileId: string;
   };
-  query?: never;
+  query?: {
+    skip?: number | string;
+    take?: number | string;
+  };
   url: '/api/checkins/clients/{clientProfileId}/assignments';
 };
 
@@ -6508,7 +6537,10 @@ export type GetClientCheckInAssignmentResponse =
 export type ListOwnCheckInAssignmentsData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    skip?: number | string;
+    take?: number | string;
+  };
   url: '/api/checkins/me/assignments';
 };
 
@@ -6935,3 +6967,30 @@ export type CreatePrivateMediaAccessResponses = {
 
 export type CreatePrivateMediaAccessResponse =
   CreatePrivateMediaAccessResponses[keyof CreatePrivateMediaAccessResponses];
+
+export type CreatePrivateMediaAccessBatchData = {
+  body: MediaAccessBatchRequest;
+  path?: never;
+  query?: never;
+  url: '/api/media/access';
+};
+
+export type CreatePrivateMediaAccessBatchErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+};
+
+export type CreatePrivateMediaAccessBatchError =
+  CreatePrivateMediaAccessBatchErrors[keyof CreatePrivateMediaAccessBatchErrors];
+
+export type CreatePrivateMediaAccessBatchResponses = {
+  /**
+   * OK
+   */
+  200: MediaAccessBatchView;
+};
+
+export type CreatePrivateMediaAccessBatchResponse =
+  CreatePrivateMediaAccessBatchResponses[keyof CreatePrivateMediaAccessBatchResponses];

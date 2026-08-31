@@ -61,6 +61,11 @@ export interface DashboardPhotos {
   poses: { pose: ProgressPhotoPose; photos: DashboardPhoto[] }[];
   photoCount: number;
   missingThumbnailCount: number;
+  /**
+   * How many tiles the timelines actually carry. Lower than `photoCount` once a pose has more
+   * photos in the window than the server previews, so the view can say which it is showing.
+   */
+  previewPhotoCount: number;
 }
 
 /**
@@ -187,7 +192,19 @@ function mapPhotos(value: ContractPhotos): DashboardPhotos {
     })),
     photoCount: Number(value.photoCount),
     missingThumbnailCount: Number(value.missingThumbnailCount),
+    previewPhotoCount: Number(value.previewPhotoCount),
   };
+}
+
+/**
+ * The media assets whose previews the dashboard is about to display. Each one needs its own
+ * short-lived path-scoped grant before the browser may fetch it, and they are requested together
+ * in one bounded call rather than one request per tile.
+ */
+export function previewAssetIds(dashboard: ProgressDashboard): string[] {
+  return dashboard.photos.poses.flatMap((pose) =>
+    pose.photos.filter((photo) => photo.thumbnailUrl !== null).map((photo) => photo.mediaAssetId),
+  );
 }
 
 function mapDashboardPhoto(value: ContractDashboardPhoto): DashboardPhoto {

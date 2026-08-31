@@ -104,5 +104,33 @@ public sealed partial class GymDbContext
             });
             ConfigureTenantEntity(entity);
         });
+
+        builder.Entity<MediaIngestObject>(entity =>
+        {
+            entity.ToTable("IngestObjects", "media");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.StorageKey).HasMaxLength(500);
+            entity.Property(item => item.Purpose).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.PurgeFailureCode).HasMaxLength(100);
+            entity.HasIndex(item => new { item.Status, item.PurgeAfterUtc });
+            entity.HasIndex(item => new { item.TenantId, item.StorageKey })
+                .IsUnique()
+                .HasFilter("\"StorageKey\" IS NOT NULL");
+            entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.Status });
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_MediaIngestObjects_Bytes",
+                    "\"AccountedBytes\" > 0 AND \"AccountedBytes\" <= 524288000");
+                table.HasCheckConstraint(
+                    "CK_MediaIngestObjects_Purged",
+                    "(\"Status\" = 'Purged') = (\"PurgedAtUtc\" IS NOT NULL AND \"StorageKey\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_MediaIngestObjects_Client",
+                    "\"Purpose\" <> 'ProgressPhoto' OR \"ClientProfileId\" IS NOT NULL");
+            });
+            ConfigureTenantEntity(entity);
+        });
     }
 }

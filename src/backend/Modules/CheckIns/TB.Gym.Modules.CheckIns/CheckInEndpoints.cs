@@ -196,9 +196,15 @@ public static class CheckInEndpoints
 
         coach.MapGet("", async (
             Guid clientProfileId,
+            int? skip,
+            int? take,
             ICheckInApplicationService service,
             CancellationToken token) =>
-            ToListResult(await service.ListClientAssignmentsAsync(clientProfileId, token)))
+            ToListResult(await service.ListClientAssignmentsAsync(
+                clientProfileId,
+                NormalizeSkip(skip),
+                NormalizeTake(take),
+                token)))
         .WithName("ListClientCheckInAssignments")
         .Produces<CheckInAssignmentListView>()
         .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -244,9 +250,14 @@ public static class CheckInEndpoints
             .WithTags(CheckInsModule.Name);
 
         client.MapGet("", async (
+            int? skip,
+            int? take,
             ICheckInApplicationService service,
             CancellationToken token) =>
-            ToListResult(await service.ListOwnAssignmentsAsync(token)))
+            ToListResult(await service.ListOwnAssignmentsAsync(
+                NormalizeSkip(skip),
+                NormalizeTake(take),
+                token)))
         .WithName("ListOwnCheckInAssignments")
         .Produces<CheckInAssignmentListView>()
         .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -262,6 +273,15 @@ public static class CheckInEndpoints
         .ProducesProblem(StatusCodes.Status403Forbidden)
         .ProducesProblem(StatusCodes.Status404NotFound);
     }
+
+    // An assignment list grows for the life of the coaching relationship, so it is paged rather than
+    // returned whole. The page size is clamped here so a caller cannot ask for the unbounded set.
+    private static int NormalizeSkip(int? skip) => Math.Max(skip ?? 0, 0);
+
+    private static int NormalizeTake(int? take) => Math.Clamp(
+        take ?? CheckInAssignmentListLimits.DefaultPageSize,
+        1,
+        CheckInAssignmentListLimits.MaximumPageSize);
 
     private static IResult ToFormResult(CheckInFormCommandResult result) => result.Status switch
     {

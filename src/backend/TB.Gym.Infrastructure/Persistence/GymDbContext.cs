@@ -88,6 +88,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<MediaAssetDerivative> MediaAssetDerivatives => Set<MediaAssetDerivative>();
 
+    public DbSet<MediaIngestObject> MediaIngestObjects => Set<MediaIngestObject>();
+
     public DbSet<StrengthMaxRecord> StrengthMaxRecords => Set<StrengthMaxRecord>();
 
     public DbSet<MesocycleWorkingMaxSnapshot> MesocycleWorkingMaxSnapshots => Set<MesocycleWorkingMaxSnapshot>();
@@ -691,7 +693,9 @@ public sealed partial class GymDbContext(
                 item.ClientProfileId,
                 item.PhotoDate,
                 item.Pose,
-            }).IsUnique();
+            })
+                .IsUnique()
+                .HasDatabaseName(DatabaseConstraintNames.OneProgressPhotoPerDateAndPose);
             entity.HasIndex(item => new { item.TenantId, item.MediaAssetId }).IsUnique();
             entity.HasOne<ClientProfile>()
                 .WithMany()

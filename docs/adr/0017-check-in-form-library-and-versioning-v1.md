@@ -108,6 +108,28 @@ later edit reach backwards into an existing assignment.
 Archiving is a separate reversible flag rather than a third status value, so restoring a form never
 has to guess which of Draft or Published it was.
 
+**Archiving closes the whole lineage to writing, and the server is what closes it.** The flag lives
+on `CheckInForm` and the questions live on `CheckInFormVersion`, so saving a draft's questions was
+the one editing path that never looked at it: renaming, deriving and assigning were all refused by
+the domain, and a draft save on an archived form succeeded. `SaveDraftAsync` now refuses it with
+code `CheckInFormArchived`. Publishing was refused too, but only once `form.MarkPublished` ran —
+after `version.Publish` had already frozen the version in memory — and it surfaced as
+`CheckInVersionPublished`, which names the wrong reason for a caller deciding what to do about it;
+it is now checked before anything is mutated and reports the archive. The builder stops offering
+Edit, Publish, New-draft-from-this and rename on an archived lineage and offers Restore instead, but
+that is presentation: every one of those is refused server-side whether or not a button exists.
+
+**A form's title and description are lineage properties, edited through the rename operation.** They
+are not part of a draft save, which carries the *version's* concurrency token: bundling two
+aggregates into one request would let a conflict on either leave the other half written. Renaming
+carries the form's own token and is refused whole. The builder exposes it as an explicit action on
+the selected form rather than as fields inside the version editor, because changing the title also
+changes what every published version of that lineage displays, which is not a version-scoped edit.
+
+**Malformed authoring payloads are bad requests.** `"questions": null` deserializes to a null list
+and reached the domain as a null reference, so a malformed body produced a `500`. Both
+`CreateFormAsync` and `SaveDraftAsync` guard it explicitly and return `400`.
+
 Rolling this migration back discards every authored form, published version and assignment in the
 workspace; there is nowhere else that content lives. That is stated in the `Down` method rather than
 left to fail at runtime.

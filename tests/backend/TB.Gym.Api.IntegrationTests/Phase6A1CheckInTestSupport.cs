@@ -14,7 +14,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     private static readonly string[] EquipmentOptions = ["Barbell", "Dumbbell"];
     private static readonly string[] ExpectedQuestionTypes =
         ["ShortText", "LongText", "SingleChoice", "MultipleChoice", "NumericScale"];
-    private static readonly int[] ExpectedAssignedVersions = [1, 2];
+    // Assignment lists are newest due date first, so the later v2 assignment precedes v1.
+    private static readonly int[] ExpectedAssignedVersions = [2, 1];
     private static readonly string[] RacingEdits = ["Edit A.", "Edit B."];
 
     /// <summary>
@@ -247,7 +248,26 @@ public sealed partial class Phase3TrainingWorkflowTests
 
     private sealed record Phase6AssignmentDetail(Phase6Assignment Assignment, Phase6Version Version);
 
-    private sealed record Phase6AssignmentList(Guid ClientProfileId, Phase6Assignment[] Assignments);
+    /// <summary>
+    /// The response status the list now carries, so a caller does not have to read every response
+    /// in full to render a badge. It carries no answer and no draft text.
+    /// </summary>
+    private sealed record Phase6AssignmentResponseSummary(
+        Guid ResponseId,
+        string Status,
+        DateOnly? SubmittedDate,
+        DateTimeOffset? SubmittedAtUtc,
+        DateTimeOffset? ReviewedAtUtc,
+        bool IsLate);
+
+    private sealed record Phase6AssignmentListItem(
+        Phase6Assignment Assignment,
+        Phase6AssignmentResponseSummary? Response);
+
+    private sealed record Phase6AssignmentList(
+        Guid ClientProfileId,
+        long Total,
+        Phase6AssignmentListItem[] Items);
 
     private sealed record Phase6Problem(string? Code, string? AccessReason);
 }

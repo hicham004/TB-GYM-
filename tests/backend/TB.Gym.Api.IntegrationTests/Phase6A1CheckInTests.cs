@@ -66,9 +66,12 @@ public sealed partial class Phase3TrainingWorkflowTests
         // The client reads what they were asked. This surface is read-only in this chunk.
         var clientList = await clientA.GetFromJsonAsync<Phase6AssignmentList>("/api/checkins/me/assignments")
             ?? throw new AssertFailedException("Client assignment list was empty.");
-        Assert.HasCount(1, clientList.Assignments);
-        Assert.AreEqual(firstAssignment.Assignment.Id, clientList.Assignments[0].Id);
-        Assert.AreEqual("Weekly check-in", clientList.Assignments[0].FormTitle);
+        Assert.HasCount(1, clientList.Items);
+        Assert.AreEqual(1L, clientList.Total);
+        Assert.AreEqual(firstAssignment.Assignment.Id, clientList.Items[0].Assignment.Id);
+        Assert.AreEqual("Weekly check-in", clientList.Items[0].Assignment.FormTitle);
+        // Nothing has been answered, so the list says so rather than implying an empty draft row.
+        Assert.IsNull(clientList.Items[0].Response);
 
         var clientDetail = await clientA.GetFromJsonAsync<Phase6AssignmentDetail>(
             $"/api/checkins/me/assignments/{firstAssignment.Assignment.Id}")
@@ -145,10 +148,10 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         var bothAssignments = await clientA.GetFromJsonAsync<Phase6AssignmentList>("/api/checkins/me/assignments")
             ?? throw new AssertFailedException("Client assignment list was empty.");
-        Assert.HasCount(2, bothAssignments.Assignments);
+        Assert.HasCount(2, bothAssignments.Items);
         CollectionAssert.AreEqual(
             ExpectedAssignedVersions,
-            bothAssignments.Assignments.Select(assignment => assignment.FormVersionNumber).ToArray());
+            bothAssignments.Items.Select(item => item.Assignment.FormVersionNumber).ToArray());
 
         // The same form on the same due date is a duplicate, not a second check-in.
         var duplicate = await Phase6AssignAsync(coach, clientAId, secondVersion.Id, secondDueDate);
@@ -238,7 +241,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         // The entitled client reads their own list; the unentitled one is refused with the reason.
         var list = await entitled.GetFromJsonAsync<Phase6AssignmentList>("/api/checkins/me/assignments")
             ?? throw new AssertFailedException("Assignment list was empty.");
-        Assert.HasCount(1, list.Assignments);
+        Assert.HasCount(1, list.Items);
 
         var denied = await unentitled.GetAsync("/api/checkins/me/assignments");
         Assert.AreEqual(HttpStatusCode.Forbidden, denied.StatusCode);

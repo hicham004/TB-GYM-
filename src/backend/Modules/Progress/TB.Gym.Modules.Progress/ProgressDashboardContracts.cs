@@ -103,11 +103,37 @@ public sealed record DashboardPhotoPoseTimeline(
     ProgressPhotoPose Pose,
     IReadOnlyList<DashboardPhotoView> Photos);
 
+/// <summary>
+/// The photo timelines, bounded to a preview, together with the true totals for the window.
+/// </summary>
+/// <remarks>
+/// <see cref="PhotoCount"/> counts every active photo in the requested range;
+/// <see cref="PreviewPhotoCount"/> counts the tiles actually carried in <see cref="Poses"/>. They
+/// differ once a pose has more than <see cref="DashboardPhotoPolicy.MaximumPreviewPhotosPerPose"/>
+/// photos in the window, and both are stated so a viewer reports "the most recent 8 of 23" rather
+/// than presenting a truncated list as the whole history.
+/// </remarks>
 public sealed record DashboardPhotosSection(
     IReadOnlyList<DashboardPhotoPoseTimeline> Poses,
     int PhotoCount,
     // Photos whose rendition is missing, so a viewer can say why some tiles cannot preview.
-    int MissingThumbnailCount);
+    int MissingThumbnailCount,
+    int PreviewPhotoCount);
+
+/// <summary>
+/// How much of a photo timeline the dashboard previews.
+/// </summary>
+/// <remarks>
+/// Each tile is a protected image whose bytes need a short-lived, path-scoped media grant, and
+/// grants are issued in one bounded batch rather than one request per tile. Eight per pose across
+/// the three poses is 24 assets, which sits inside that batch ceiling with room to spare, and is
+/// already more history than a summary tile strip can usefully show. The full set stays on the
+/// progress page, which pages through it properly.
+/// </remarks>
+public static class DashboardPhotoPolicy
+{
+    public const int MaximumPreviewPhotosPerPose = 8;
+}
 
 /// <summary>
 /// Counts of what the client logged, each against the number of days it was counted over. No

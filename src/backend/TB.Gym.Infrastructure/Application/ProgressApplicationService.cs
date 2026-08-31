@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Media;
@@ -951,6 +952,9 @@ internal sealed partial class ProgressApplicationService(
             cancellationToken,
             MediaPurpose.ProgressPhoto,
             clientProfileId);
+        // A media asset that did not reach Ready is not a photo. The command fails here, before any
+        // ProgressPhoto row exists, so a rejected or unscannable upload can never occupy this
+        // client's date/pose slot and block the retry that would have succeeded.
         if (stored.Status != MediaCommandStatus.Success || stored.Asset is null)
         {
             return stored.Status switch
@@ -973,8 +977,26 @@ internal sealed partial class ProgressApplicationService(
                 MediaCommandStatus.QuotaExceeded => PhotoConflict(
                     stored.Code ?? MediaQuotaCodes.WorkspaceStorageExceeded,
                     stored.Message ?? "The storage allowance is full."),
+                // The workspace cannot scan uploads, so it cannot accept one. Passed through as a
+                // server condition rather than reported as a bad file, and carrying no scanner
+                // detail of its own.
+                MediaCommandStatus.Unavailable => new ProgressPhotoCommandResult(
+                    ProgressPhotoCommandStatus.Unavailable,
+                    Code: "ProgressPhotoUploadUnavailable",
+                    Message: stored.Message ?? "Progress photo uploads are unavailable. Try again later."),
                 _ => new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.NotFound),
             };
+        }
+
+        if (stored.Asset.Status != MediaAssetStatus.Ready)
+        {
+            // Defence in depth against a future upload path that commits an asset in some other
+            // state: the association is only ever made to bytes that are ready to serve.
+            await TombstoneOrphanedAssetAsync(stored.Asset.Id, cancellationToken);
+            return new ProgressPhotoCommandResult(
+                ProgressPhotoCommandStatus.Unavailable,
+                Code: "ProgressPhotoUploadUnavailable",
+                Message: "Progress photo uploads are unavailable. Try again later.");
         }
 
         var photo = ProgressPhoto.Record(
@@ -990,16 +1012,32 @@ internal sealed partial class ProgressApplicationService(
             await dbContext.SaveChangesAsync(cancellationToken);
             return new ProgressPhotoCommandResult(ProgressPhotoCommandStatus.Success, ToPhotoView(photo));
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception) when (IsProgressPhotoDuplicate(exception))
         {
-            // Two simultaneous uploads for the same date and pose: the loser's bytes would
-            // otherwise be orphaned, so tombstone the asset for the existing retention sweep.
+            // Two simultaneous uploads for the same date and pose. Only the unique index is caught:
+            // any other database failure is a real fault and must not be reported as a duplicate.
+            //
+            // The failed insert is detached first. It is still tracked as Added, so the cleanup
+            // save below would replay it, hit the same violation and escape as a 500 — leaving the
+            // loser's bytes ready and orphaned, which is the state this cleanup exists to prevent.
+            dbContext.Entry(photo).State = EntityState.Detached;
             await TombstoneOrphanedAssetAsync(stored.Asset.Id, cancellationToken);
             return PhotoConflict(
                 "ProgressPhotoAlreadyExists",
                 "A photo already exists for that local date and pose.");
         }
     }
+
+    /// <summary>
+    /// The one database failure that means "someone else got there first". Everything else is a
+    /// fault and stays one.
+    /// </summary>
+    internal static bool IsProgressPhotoDuplicate(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: DatabaseConstraintNames.OneProgressPhotoPerDateAndPose,
+        };
 
     private async Task<ProgressPhotoCommandResult> RemovePhotoAsync(
         Guid clientProfileId,

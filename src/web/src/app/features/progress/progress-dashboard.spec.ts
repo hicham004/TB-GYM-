@@ -1,11 +1,17 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { type Observable, of, throwError } from 'rxjs';
+import { type Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
+import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { settle } from '../../../testing/dom';
 import { ProgressDashboardView } from './progress-dashboard';
-import { mapProgressDashboard, type ProgressDashboard } from './progress-dashboard.models';
+import {
+  mapProgressDashboard,
+  previewAssetIds,
+  type ProgressDashboard,
+} from './progress-dashboard.models';
 
 function contract(overrides: Record<string, unknown> = {}): never {
   return {
@@ -68,6 +74,7 @@ function contract(overrides: Record<string, unknown> = {}): never {
       ],
       photoCount: '2',
       missingThumbnailCount: '1',
+      previewPhotoCount: '2',
     },
     nutrition: {
       feature: 'Nutrition',
@@ -104,7 +111,7 @@ const emptySections = {
     observedDayCount: '0',
   },
   measurements: { measurements: [], observedDayCount: '0' },
-  photos: { poses: [], photoCount: '0', missingThumbnailCount: '0' },
+  photos: { poses: [], photoCount: '0', missingThumbnailCount: '0', previewPhotoCount: '0' },
   nutrition: {
     feature: 'Nutrition',
     availability: 'Unavailable',
@@ -114,20 +121,75 @@ const emptySections = {
   training: { feature: 'Training', availability: 'Unavailable', reason: 'Expired', context: null },
 };
 
-async function render(result: Observable<ProgressDashboard>) {
+async function render(
+  result: Observable<ProgressDashboard>,
+  api: Partial<ApiClient> = {},
+): Promise<HTMLElement> {
+  return (await renderWith(result, api)).host;
+}
+
+async function renderWith(result: Observable<ProgressDashboard>, api: Partial<ApiClient> = {}) {
+  const selectedTenantId = signal('tenant-1');
+  const createMediaAccessBatch = vi.fn((assetIds: string[]) =>
+    of({ items: assetIds.map((assetId) => ({ assetId })) }),
+  );
   await TestBed.configureTestingModule({
     imports: [ProgressDashboardView],
     providers: [
-      { provide: ApiClient, useValue: { getMyProgressDashboard: vi.fn(() => result) } },
-      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      {
+        provide: ApiClient,
+        useValue: {
+          getMyProgressDashboard: vi.fn(() => result),
+          createMediaAccessBatch,
+          ...api,
+        },
+      },
+      { provide: TenantStore, useValue: { selectedTenantId } },
+      { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ProgressDashboardView);
-  fixture.detectChanges();
-  await fixture.whenStable();
-  fixture.detectChanges();
-  return fixture.nativeElement as HTMLElement;
+  await settle(fixture);
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    createMediaAccessBatch,
+    selectedTenantId,
+  };
+}
+
+function twoPreviewDashboard(): ProgressDashboard {
+  return mapProgressDashboard(
+    contract({
+      photos: {
+        poses: [
+          {
+            pose: 'Front',
+            photos: [
+              {
+                id: 'photo-1',
+                photoDate: '2026-08-22',
+                pose: 'Front',
+                mediaAssetId: 'asset-1',
+                thumbnailUrl: '/api/media/asset-1/content/thumbnail',
+              },
+              {
+                id: 'photo-2',
+                photoDate: '2026-08-21',
+                pose: 'Front',
+                mediaAssetId: 'asset-2',
+                thumbnailUrl: '/api/media/asset-2/content/thumbnail',
+              },
+            ],
+          },
+        ],
+        photoCount: '2',
+        missingThumbnailCount: '0',
+        previewPhotoCount: '2',
+      },
+    }),
+  );
 }
 
 describe('progress dashboard mapping', () => {
@@ -238,5 +300,165 @@ describe('ProgressDashboardView states', () => {
 
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     expect(host.textContent).not.toContain('Nothing has been recorded');
+  });
+});
+
+/**
+ * A thumbnail path is not a public URL. The content route needs a short-lived, path-scoped grant
+ * cookie, and the dashboard used to bind the paths straight to `img.src` without ever asking for
+ * one — so on a fresh session every tile was a refused request.
+ */
+describe('ProgressDashboardView media grants', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('requests one bounded batch of grants for exactly the assets it will display', async () => {
+    const { host, createMediaAccessBatch } = await renderWith(of(mapProgressDashboard(contract())));
+
+    // One request, not one per tile, and only the photo that actually has a rendition.
+    expect(createMediaAccessBatch).toHaveBeenCalledOnce();
+    expect(createMediaAccessBatch).toHaveBeenCalledWith(['asset-1']);
+    expect(host.querySelectorAll('img.thumbnail')).toHaveLength(1);
+  });
+
+  it('binds every preview only when every exact asset grant is returned', async () => {
+    const dashboard = twoPreviewDashboard();
+    const host = await render(of(dashboard));
+
+    expect(host.querySelectorAll('img.thumbnail')).toHaveLength(2);
+  });
+
+  it('binds only the asset ids present in a partial batch response', async () => {
+    const dashboard = twoPreviewDashboard();
+    const host = await render(of(dashboard), {
+      createMediaAccessBatch: vi.fn(() => of({ items: [{ assetId: 'asset-2' }] })) as never,
+    });
+
+    const images = [...host.querySelectorAll<HTMLImageElement>('img.thumbnail')];
+    expect(images).toHaveLength(1);
+    expect(images[0].getAttribute('src')).toContain('asset-2');
+    expect(host.querySelectorAll('.no-preview')).toHaveLength(1);
+  });
+
+  it('binds no preview after an empty successful batch response', async () => {
+    const host = await render(of(twoPreviewDashboard()), {
+      createMediaAccessBatch: vi.fn(() => of({ items: [] })) as never,
+    });
+
+    expect(host.querySelectorAll('img.thumbnail')).toHaveLength(0);
+    expect(host.querySelectorAll('.no-preview')).toHaveLength(2);
+  });
+
+  it('does not ask for grants when there is nothing to preview', async () => {
+    const { createMediaAccessBatch } = await renderWith(
+      of(mapProgressDashboard(contract(emptySections))),
+    );
+
+    expect(createMediaAccessBatch).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Without a grant the browser would request bytes it cannot have and draw a broken tile. The
+   * figures are still worth showing, so the dashboard renders and the previews say so instead.
+   */
+  it('leaves previews unbound rather than requesting bytes it has no grant for', async () => {
+    const { host } = await renderWith(of(mapProgressDashboard(contract())), {
+      createMediaAccessBatch: vi.fn(() => throwError(() => new Error('denied'))) as never,
+    });
+
+    expect(host.querySelectorAll('img.thumbnail')).toHaveLength(0);
+    expect(host.textContent).toContain('Preview unavailable');
+    // The rest of the dashboard is unaffected: a missing preview is not a failed dashboard.
+    expect(host.textContent).toContain('Logged on 6 of the last 7 days');
+  });
+
+  it('ignores a grant response that resolves after the workspace has reloaded', async () => {
+    const oldGrant = new Subject<{ items: { assetId: string }[] }>();
+    const current = mapProgressDashboard(
+      contract({
+        photos: {
+          poses: [
+            {
+              pose: 'Side',
+              photos: [
+                {
+                  id: 'photo-current',
+                  photoDate: '2026-08-22',
+                  pose: 'Side',
+                  mediaAssetId: 'asset-current',
+                  thumbnailUrl: '/api/media/asset-current/content/thumbnail',
+                },
+              ],
+            },
+          ],
+          photoCount: '1',
+          missingThumbnailCount: '0',
+          previewPhotoCount: '1',
+        },
+      }),
+    );
+    const getDashboard = vi
+      .fn()
+      .mockReturnValueOnce(of(mapProgressDashboard(contract())))
+      .mockReturnValueOnce(of(current));
+    const createMediaAccessBatch = vi
+      .fn()
+      .mockReturnValueOnce(oldGrant)
+      .mockReturnValueOnce(of({ items: [{ assetId: 'asset-current' }] }));
+    const rendered = await renderWith(of(current), {
+      getMyProgressDashboard: getDashboard as never,
+      createMediaAccessBatch: createMediaAccessBatch as never,
+    });
+
+    rendered.selectedTenantId.set('tenant-2');
+    await settle(rendered.fixture);
+    oldGrant.next({ items: [{ assetId: 'asset-1' }] });
+    oldGrant.complete();
+    await settle(rendered.fixture);
+
+    const images = [...rendered.host.querySelectorAll<HTMLImageElement>('img.thumbnail')];
+    expect(images).toHaveLength(1);
+    expect(images[0].getAttribute('src')).toContain('asset-current');
+    expect(rendered.host.textContent).toContain('Side');
+  });
+
+  it('says how many photos the bounded preview left out', async () => {
+    const host = await render(
+      of(
+        mapProgressDashboard(
+          contract({
+            photos: {
+              poses: [
+                {
+                  pose: 'Front',
+                  photos: [
+                    {
+                      id: 'photo-1',
+                      photoDate: '2026-08-22',
+                      pose: 'Front',
+                      mediaAssetId: 'asset-1',
+                      thumbnailUrl: '/api/media/asset-1/content/thumbnail',
+                    },
+                  ],
+                },
+              ],
+              // 23 in the window, 1 previewed: the difference is stated rather than a truncated
+              // strip being presented as the whole period.
+              photoCount: '23',
+              missingThumbnailCount: '0',
+              previewPhotoCount: '1',
+            },
+          }),
+        ),
+      ),
+    );
+
+    expect(host.textContent).toContain('Showing the most recent 1 of 23 photos');
+  });
+
+  it('names only the assets that carry a rendition', () => {
+    expect(previewAssetIds(mapProgressDashboard(contract()))).toEqual(['asset-1']);
+    expect(previewAssetIds(mapProgressDashboard(contract(emptySections)))).toEqual([]);
   });
 });

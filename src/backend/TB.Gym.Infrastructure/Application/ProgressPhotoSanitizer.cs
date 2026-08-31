@@ -14,9 +14,19 @@ namespace TB.Gym.Infrastructure.Application;
 /// before the metadata is discarded. Otherwise a portrait photo would display rotated once the
 /// EXIF orientation tag is gone. The thumbnail is produced in this same pass, from the decoded and
 /// already-uprighted bitmap, so the untrusted original is decoded exactly once and the rendition
-/// inherits the sanitised pixels rather than re-reading anything the uploader supplied. Decoding
-/// needs the whole image in memory, which is bounded by the image upload limit and the
-/// per-workspace upload concurrency gate.
+/// inherits the sanitised pixels rather than re-reading anything the uploader supplied.
+/// <para>
+/// Decoding needs the whole image in memory, and the compressed byte cap does not bound that: a
+/// few kilobytes of PNG or JPEG can describe a bitmap of gigabytes. The encoded dimensions are
+/// therefore read from the codec header and checked against
+/// <see cref="MediaUploadPolicy.TryValidateDecodedImage"/> before any pixel buffer is allocated,
+/// which bounds each full-resolution pixel buffer. It does not claim to equal process peak memory:
+/// orientation can hold a second full bitmap, and Skia codec/encoder data, managed output streams,
+/// and the thumbnail surface add to both. Callers therefore apply a process-wide decode admission
+/// limit as well as the per-tenant upload gate. Catching
+/// <see cref="OutOfMemoryException"/> is deliberately not that boundary and is not attempted: by
+/// the time it is raised the allocation has already been demanded.
+/// </para>
 /// </remarks>
 internal static class ProgressPhotoSanitizer
 {
@@ -39,6 +49,7 @@ internal static class ProgressPhotoSanitizer
         sanitized = null;
         MemoryStream? image = null;
         MemoryStream? thumbnail = null;
+        SKBitmap? rotated = null;
         try
         {
             using var managed = new SKManagedStream(source);
@@ -48,13 +59,6 @@ internal static class ProgressPhotoSanitizer
                 return false;
             }
 
-            using var decoded = SKBitmap.Decode(codec);
-            if (decoded is null)
-            {
-                return false;
-            }
-
-            using var upright = ApplyOrientation(decoded, codec.EncodedOrigin);
             var format = verifiedContentType switch
             {
                 "image/jpeg" => SKEncodedImageFormat.Jpeg,
@@ -65,6 +69,36 @@ internal static class ProgressPhotoSanitizer
             {
                 return false;
             }
+
+            // The header says how large the bitmap will be before anything is allocated for it.
+            // Everything below this line is bounded by that answer.
+            if (!MediaUploadPolicy.TryValidateDecodedImage(codec.Info.Width, codec.Info.Height, out _))
+            {
+                return false;
+            }
+
+            // Pin the destination colour type to the four-byte format the admission arithmetic
+            // bounds. Trusting a codec-selected destination here would let a future format choose
+            // a wider pixel representation without changing the policy that approved its size.
+            var decodeInfo = new SKImageInfo(
+                codec.Info.Width,
+                codec.Info.Height,
+                SKColorType.Rgba8888,
+                SKAlphaType.Premul);
+            using var decoded = SKBitmap.Decode(codec, decodeInfo);
+            if (decoded is null)
+            {
+                return false;
+            }
+
+            // Only an image whose pixels are not already upright is copied. Copying the common case
+            // as well would hold a second full bitmap for no benefit and double the peak footprint
+            // the limit above was chosen against.
+            var origin = codec.EncodedOrigin;
+            rotated = origin is SKEncodedOrigin.TopLeft or SKEncodedOrigin.Default
+                ? null
+                : ApplyOrientation(decoded, origin);
+            var upright = rotated ?? decoded;
 
             using (var full = SKImage.FromBitmap(upright))
             {
@@ -88,12 +122,13 @@ internal static class ProgressPhotoSanitizer
             thumbnail = null;
             return true;
         }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or OutOfMemoryException)
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
             return false;
         }
         finally
         {
+            rotated?.Dispose();
             image?.Dispose();
             thumbnail?.Dispose();
         }
@@ -134,15 +169,11 @@ internal static class ProgressPhotoSanitizer
     }
 
     /// <summary>
-    /// Rewrites the pixels so the image is upright without relying on an orientation tag.
+    /// Rewrites the pixels so the image is upright without relying on an orientation tag. Only
+    /// called for an origin that actually needs it; an already-upright bitmap is used as it is.
     /// </summary>
     private static SKBitmap ApplyOrientation(SKBitmap source, SKEncodedOrigin origin)
     {
-        if (origin is SKEncodedOrigin.TopLeft or SKEncodedOrigin.Default)
-        {
-            return source.Copy();
-        }
-
         var swapsAxes = origin is SKEncodedOrigin.LeftTop
             or SKEncodedOrigin.RightTop
             or SKEncodedOrigin.RightBottom

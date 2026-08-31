@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
 import { ownCheckInDenialMessage } from '../../core/i18n/display-labels';
-import type { CheckInAssignmentView, CheckInResponseDetail } from '../../core/api/generated';
+import type { CheckInAssignmentListItem, CheckInResponseDetail } from '../../core/api/generated';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -41,8 +41,15 @@ export class MyCheckIns {
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private loadedTenantId: string | null = null;
+  private contextGeneration = 0;
+  private listGeneration = 0;
+  private openGeneration = 0;
+  private mutationGeneration = 0;
+  private loadingGeneration = 0;
 
-  protected readonly assignments = signal<CheckInAssignmentView[]>([]);
+  protected readonly assignments = signal<CheckInAssignmentListItem[]>([]);
+  protected readonly assignmentTotal = signal(0);
+  protected readonly assignmentPageSize = 50;
   protected readonly detail = signal<CheckInResponseDetail | null>(null);
   protected readonly draft = signal<ResponseDraft | null>(null);
   protected readonly serverIssues = signal<SubmissionIssue[]>([]);
@@ -78,9 +85,15 @@ export class MyCheckIns {
   constructor() {
     effect(() => {
       const tenantId = this.tenants.selectedTenantId();
-      if (tenantId && tenantId !== this.loadedTenantId) {
-        this.loadedTenantId = tenantId;
-        void this.loadAssignments();
+      if (tenantId === this.loadedTenantId) {
+        return;
+      }
+
+      this.loadedTenantId = tenantId;
+      const generation = ++this.contextGeneration;
+      this.resetForWorkspace();
+      if (tenantId !== null) {
+        void this.loadAssignments(tenantId, generation, true);
       }
     });
   }
@@ -133,15 +146,28 @@ export class MyCheckIns {
   }
 
   protected async open(assignmentId: string): Promise<void> {
-    this.loading.set(true);
+    const tenantId = this.loadedTenantId;
+    const contextGeneration = this.contextGeneration;
+    const request = ++this.openGeneration;
+    ++this.mutationGeneration;
+    this.saving.set(false);
+    const loading = this.beginLoading();
     this.clearMessages();
     try {
       const detail = await firstValueFrom(this.api.getOwnCheckInResponse(assignmentId));
+      if (!this.ownsOpen(request, tenantId, contextGeneration)) {
+        return;
+      }
+
       this.detail.set(detail);
       this.draft.set(responseDraftFromDetail(detail));
       // A newly opened check-in is pristine, whatever the last one had earned.
       this.attempt.reset();
     } catch (error) {
+      if (!this.ownsOpen(request, tenantId, contextGeneration)) {
+        return;
+      }
+
       this.detail.set(null);
       this.draft.set(null);
       const reason = featureAccessReason(error);
@@ -151,7 +177,18 @@ export class MyCheckIns {
         this.denial.set(ownCheckInDenialMessage(reason));
       }
     } finally {
-      this.loading.set(false);
+      this.endLoading(loading);
+    }
+  }
+
+  protected async loadMoreAssignments(): Promise<void> {
+    if (this.assignments().length >= this.assignmentTotal()) {
+      return;
+    }
+
+    const tenantId = this.loadedTenantId;
+    if (tenantId !== null) {
+      await this.loadAssignments(tenantId, this.contextGeneration, false);
     }
   }
 
@@ -177,20 +214,36 @@ export class MyCheckIns {
       return;
     }
 
+    const tenantId = this.loadedTenantId;
+    const contextGeneration = this.contextGeneration;
+    const operation = ++this.mutationGeneration;
+    ++this.openGeneration;
     this.saving.set(true);
     this.clearMessages();
     try {
       await this.csrf.refresh();
+      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+        return;
+      }
+
       const saved = await firstValueFrom(
         this.api.saveOwnCheckInDraftResponse(draft.assignmentId, toSaveRequest(draft)),
       );
+      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+        return;
+      }
+
       this.detail.set(saved);
       this.draft.set(responseDraftFromDetail(saved));
       this.notice.set($localize`Draft saved. You can come back and finish it later.`);
     } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`This draft could not be saved.`));
+      if (this.ownsMutation(operation, tenantId, contextGeneration)) {
+        this.error.set(apiErrorMessage(error, $localize`This draft could not be saved.`));
+      }
     } finally {
-      this.saving.set(false);
+      if (this.mutationGeneration === operation) {
+        this.saving.set(false);
+      }
     }
   }
 
@@ -210,13 +263,25 @@ export class MyCheckIns {
       return;
     }
 
+    const tenantId = this.loadedTenantId;
+    const contextGeneration = this.contextGeneration;
+    const operation = ++this.mutationGeneration;
+    ++this.openGeneration;
     this.saving.set(true);
     this.clearMessages();
     try {
       await this.csrf.refresh();
+      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+        return;
+      }
+
       const saved = await firstValueFrom(
         this.api.saveOwnCheckInDraftResponse(draft.assignmentId, toSaveRequest(draft)),
       );
+      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+        return;
+      }
+
       this.detail.set(saved);
       this.draft.set(responseDraftFromDetail(saved));
 
@@ -229,11 +294,19 @@ export class MyCheckIns {
       const submitted = await firstValueFrom(
         this.api.submitOwnCheckInResponse(draft.assignmentId, version),
       );
+      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+        return;
+      }
+
       this.detail.set(submitted);
       this.draft.set(responseDraftFromDetail(submitted));
       this.attempt.reset();
       this.notice.set($localize`Check-in submitted. It can no longer be changed.`);
     } catch (error) {
+      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+        return;
+      }
+
       const failures = submissionFailures(error);
       if (failures.length > 0) {
         this.serverIssues.set(issuesFromServer(failures));
@@ -242,7 +315,9 @@ export class MyCheckIns {
         this.error.set(apiErrorMessage(error, $localize`This check-in could not be submitted.`));
       }
     } finally {
-      this.saving.set(false);
+      if (this.mutationGeneration === operation) {
+        this.saving.set(false);
+      }
     }
   }
 
@@ -261,25 +336,97 @@ export class MyCheckIns {
     );
   }
 
-  private async loadAssignments(): Promise<void> {
-    this.loading.set(true);
-    this.clearMessages();
-    // This runs on a workspace switch, so an answer sheet opened in the previous workspace must
-    // not survive into the next one. The shell also routes away, but that is its choice, not ours.
-    this.detail.set(null);
-    this.draft.set(null);
+  private async loadAssignments(
+    tenantId: string,
+    contextGeneration: number,
+    reset: boolean,
+  ): Promise<void> {
+    const request = ++this.listGeneration;
+    const loading = this.beginLoading();
+    if (reset) {
+      this.clearMessages();
+    }
+
+    const skip = reset ? 0 : this.assignments().length;
     try {
-      const list = await firstValueFrom(this.api.listOwnCheckInAssignments());
-      this.assignments.set(list.assignments);
+      const list = await firstValueFrom(
+        this.api.listOwnCheckInAssignments(skip, this.assignmentPageSize),
+      );
+      if (!this.ownsList(request, tenantId, contextGeneration)) {
+        return;
+      }
+
+      this.assignments.set(reset ? list.items : appendUnique(this.assignments(), list.items));
+      this.assignmentTotal.set(Number(list.total));
     } catch (error) {
-      this.assignments.set([]);
+      if (!this.ownsList(request, tenantId, contextGeneration)) {
+        return;
+      }
+
       const reason = featureAccessReason(error);
       if (reason === null) {
+        if (reset) {
+          this.assignments.set([]);
+          this.assignmentTotal.set(0);
+        }
         this.error.set(apiErrorMessage(error, $localize`Your check-ins could not be loaded.`));
       } else {
+        this.assignments.set([]);
+        this.assignmentTotal.set(0);
         this.denial.set(ownCheckInDenialMessage(reason));
       }
     } finally {
+      this.endLoading(loading);
+    }
+  }
+
+  private resetForWorkspace(): void {
+    ++this.listGeneration;
+    ++this.openGeneration;
+    ++this.mutationGeneration;
+    ++this.loadingGeneration;
+    this.assignments.set([]);
+    this.assignmentTotal.set(0);
+    this.detail.set(null);
+    this.draft.set(null);
+    this.loading.set(false);
+    this.saving.set(false);
+    this.attempt.reset();
+    this.clearMessages();
+  }
+
+  private ownsContext(tenantId: string | null, contextGeneration: number): boolean {
+    return (
+      tenantId !== null &&
+      this.loadedTenantId === tenantId &&
+      this.contextGeneration === contextGeneration
+    );
+  }
+
+  private ownsList(request: number, tenantId: string, contextGeneration: number): boolean {
+    return this.listGeneration === request && this.ownsContext(tenantId, contextGeneration);
+  }
+
+  private ownsOpen(request: number, tenantId: string | null, contextGeneration: number): boolean {
+    return this.openGeneration === request && this.ownsContext(tenantId, contextGeneration);
+  }
+
+  private ownsMutation(
+    operation: number,
+    tenantId: string | null,
+    contextGeneration: number,
+  ): boolean {
+    return this.mutationGeneration === operation && this.ownsContext(tenantId, contextGeneration);
+  }
+
+  private beginLoading(): number {
+    const generation = ++this.loadingGeneration;
+    this.loading.set(true);
+    return generation;
+  }
+
+  private endLoading(generation: number): void {
+    if (this.loadingGeneration === generation) {
       this.loading.set(false);
     }
   }
@@ -291,6 +438,24 @@ export class MyCheckIns {
     this.denial.set(null);
     this.serverIssues.set([]);
   }
+}
+
+function appendUnique(
+  current: readonly CheckInAssignmentListItem[],
+  incoming: readonly CheckInAssignmentListItem[],
+): CheckInAssignmentListItem[] {
+  const ids = new Set(current.map((item) => item.assignment.id));
+  return [
+    ...current,
+    ...incoming.filter((item) => {
+      if (ids.has(item.assignment.id)) {
+        return false;
+      }
+
+      ids.add(item.assignment.id);
+      return true;
+    }),
+  ];
 }
 
 /**

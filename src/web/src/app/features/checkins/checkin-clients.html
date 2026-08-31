@@ -125,23 +125,39 @@
           <p class="empty" i18n>Nothing assigned to this client yet.</p>
         } @else {
           <ul class="assignments">
-            @for (item of assignments(); track item.id) {
+            @for (item of assignments(); track item.assignment.id) {
               <li>
-                <button type="button" class="link" (click)="openResponse(item.id)">
-                  {{ item.formTitle }} (v{{ item.formVersionNumber }})
+                <button type="button" class="link" (click)="openResponse(item.assignment.id)">
+                  {{ item.assignment.formTitle }} (v{{ item.assignment.formVersionNumber }})
                 </button>
-                <span class="detail" i18n>Due {{ item.dueDate | date: 'mediumDate' }}</span>
-                @if (statusOf(item.id); as status) {
-                  <span class="badge">{{ status }}</span>
+                <span class="detail" i18n
+                  >Due {{ item.assignment.dueDate | date: 'mediumDate' }}</span
+                >
+                @if (item.response; as response) {
+                  <span class="badge">{{ response.status }}</span>
+                  @if (response.isLate) {
+                    <span class="badge late" i18n>After the due date</span>
+                  }
                 } @else {
                   <span class="badge muted" i18n>Not started</span>
-                }
-                @if (isLate(item.id)) {
-                  <span class="badge late" i18n>After the due date</span>
                 }
               </li>
             }
           </ul>
+          <p class="detail" i18n>
+            Showing {{ assignments().length }} of {{ assignmentTotal() }} check-ins, newest first.
+          </p>
+          @if (assignmentTotal() > assignments().length) {
+            <button
+              type="button"
+              class="link"
+              [disabled]="loading()"
+              (click)="loadMoreAssignments()"
+              i18n
+            >
+              Load more check-ins
+            </button>
+          }
         }
 
         @if (comparable().length >= 2) {
@@ -151,8 +167,8 @@
               <span i18n>First</span>
               <select name="first" [(ngModel)]="firstResponseId">
                 <option value="" i18n>Choose…</option>
-                @for (entry of comparable(); track entry.response!.id) {
-                  <option [value]="entry.response!.id">
+                @for (entry of comparable(); track entry.response!.responseId) {
+                  <option [value]="entry.response!.responseId">
                     {{ entry.assignment.formTitle }} · {{ entry.assignment.dueDate }}
                   </option>
                 }
@@ -162,8 +178,8 @@
               <span i18n>Second</span>
               <select name="second" [(ngModel)]="secondResponseId">
                 <option value="" i18n>Choose…</option>
-                @for (entry of comparable(); track entry.response!.id) {
-                  <option [value]="entry.response!.id">
+                @for (entry of comparable(); track entry.response!.responseId) {
+                  <option [value]="entry.response!.responseId">
                     {{ entry.assignment.formTitle }} · {{ entry.assignment.dueDate }}
                   </option>
                 }
@@ -204,26 +220,30 @@
           }
         </p>
 
-        @if (response.status === 'Draft') {
+        <!-- A withheld draft is not an empty one. The server sends no answers at all while the
+             response is a draft, so the questions are not listed either: rendering them with "No
+             answer" beside each would state something about the client's draft that is not known
+             and is not the coach's to know. -->
+        @if (response.answersWithheld) {
           <p class="hint" i18n>
-            This client has started a draft but has not submitted it. Draft answers are theirs until
-            they submit.
+            This client has started a draft but has not submitted it. What they have written stays
+            theirs until they do.
           </p>
+        } @else {
+          <ol class="questions">
+            @for (question of view.version.questions; track question.id) {
+              <li class="answer">
+                <p class="prompt">{{ question.prompt }}</p>
+                @let recorded = answerText(response, question.id);
+                @if (recorded === '') {
+                  <p class="detail" i18n>No answer</p>
+                } @else {
+                  <p>{{ recorded }}</p>
+                }
+              </li>
+            }
+          </ol>
         }
-
-        <ol class="questions">
-          @for (question of view.version.questions; track question.id) {
-            <li class="answer">
-              <p class="prompt">{{ question.prompt }}</p>
-              @let recorded = answerText(response, question.id);
-              @if (recorded === '') {
-                <p class="detail" i18n>No answer</p>
-              } @else {
-                <p>{{ recorded }}</p>
-              }
-            </li>
-          }
-        </ol>
 
         @if (response.status === 'Submitted') {
           <div class="actions">

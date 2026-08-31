@@ -177,11 +177,17 @@ internal sealed partial class ProgressApplicationService
                 window.ToExclusive)
             : [];
 
+        // The weekly grid keeps whole workspace weeks so the columns line up, but every figure in it
+        // is taken from `windowObservations` — the requested range — rather than from the widened
+        // read. A partial first or last week therefore reports the days inside [from, toExclusive)
+        // and nothing else; an observation the day before `from` is not part of a number the caller
+        // asked to see. The widened read exists only so the trend has its documented warm-up and so
+        // the grouping is one query.
         var weeks = new List<BodyweightWeekView>();
         for (var weekStart = firstWeekStart; weekStart < weekEndExclusive; weekStart = weekStart.AddDays(7))
         {
             var nextWeek = weekStart.AddDays(7);
-            var samples = observations
+            var samples = windowObservations
                 .Where(item => item.MeasurementDate >= weekStart && item.MeasurementDate < nextWeek)
                 .ToArray();
             decimal? meanKilograms = samples.Length == 0
@@ -297,11 +303,19 @@ internal sealed partial class ProgressApplicationService
                     derivative.Variant == MediaDerivativeVariant.Thumbnail)))
             .ToArrayAsync(cancellationToken);
 
+        // The timeline is a bounded preview, not the whole window. Every tile is a protected image
+        // that needs its own short-lived path-scoped grant before a browser can fetch it, so an
+        // unbounded timeline would demand an unbounded number of grants and cookies. The most
+        // recent few per pose are shown; `PhotoCount` still reports the true total so the viewer
+        // can say how many were left out and send the reader to the progress page for the rest.
         var poses = photos
             .GroupBy(item => item.Pose)
             .Select(group => new DashboardPhotoPoseTimeline(
                 group.Key,
                 group
+                    .OrderByDescending(item => item.PhotoDate)
+                    .Take(DashboardPhotoPolicy.MaximumPreviewPhotosPerPose)
+                    .OrderBy(item => item.PhotoDate)
                     .Select(item => new DashboardPhotoView(
                         item.Id,
                         item.PhotoDate,
@@ -316,7 +330,8 @@ internal sealed partial class ProgressApplicationService
         return new DashboardPhotosSection(
             poses,
             photos.Length,
-            photos.Count(item => !item.HasThumbnail));
+            photos.Count(item => !item.HasThumbnail),
+            poses.Sum(pose => pose.Photos.Count));
     }
 
     private async Task<DashboardEntitledSection<DashboardNutritionContext>> BuildDashboardNutritionAsync(
@@ -366,9 +381,11 @@ internal sealed partial class ProgressApplicationService
             return Unavailable<DashboardTrainingContext>(decision);
         }
 
-        // Cancelled programming is excluded so the denominator counts work the client was actually
-        // asked to do rather than sessions that were withdrawn.
-        var scheduled = await (
+        // Non-cancelled programming contributes every scheduled session. After cancellation, an
+        // unexecuted session is withdrawn, but a session with an execution remains the denominator
+        // for that immutable historical fact. The one-to-one session/execution key makes this a
+        // single population rather than two independently filtered counts.
+        var sessions = await (
             from session in dbContext.TrainingSessions.AsNoTracking()
             join week in dbContext.MesocycleWeeks.AsNoTracking()
                 on new { session.TenantId, Id = session.MesocycleWeekId }
@@ -376,34 +393,32 @@ internal sealed partial class ProgressApplicationService
             join mesocycle in dbContext.TrainingMesocycles.AsNoTracking()
                 on new { week.TenantId, Id = week.MesocycleId }
                 equals new { mesocycle.TenantId, mesocycle.Id }
+            join execution in dbContext.WorkoutExecutions.AsNoTracking()
+                on new { session.TenantId, Id = session.Id }
+                equals new { execution.TenantId, Id = execution.TrainingSessionId }
+                into executionGroup
+            from execution in executionGroup.DefaultIfEmpty()
             where mesocycle.ClientProfileId == clientProfileId &&
-                  mesocycle.Status != MesocycleStatus.Cancelled &&
+                  (mesocycle.Status != MesocycleStatus.Cancelled || execution != null) &&
                   session.ScheduledDate >= window.From &&
                   session.ScheduledDate < window.ToExclusive
-            select session.ScheduledDate)
+            select new DashboardTrainingSession(
+                session.ScheduledDate,
+                execution == null ? null : (WorkoutExecutionStatus?)execution.Status))
             .ToArrayAsync(cancellationToken);
-
-        var executions = await dbContext.WorkoutExecutions
-            .AsNoTracking()
-            .Where(item =>
-                item.ClientProfileId == clientProfileId &&
-                item.ScheduledDateSnapshot >= window.From &&
-                item.ScheduledDateSnapshot < window.ToExclusive)
-            .Select(item => new DashboardLoggedDay(
-                item.ScheduledDateSnapshot,
-                item.Status == WorkoutExecutionStatus.Completed))
-            .ToArrayAsync(cancellationToken);
-
-        var completed = executions.Where(item => item.IsCompleted).ToArray();
+        var completed = sessions
+            .Where(item => item.ExecutionStatus == WorkoutExecutionStatus.Completed)
+            .ToArray();
+        var inProgress = sessions.Count(item => item.ExecutionStatus == WorkoutExecutionStatus.InProgress);
         return Available(decision, new DashboardTrainingContext(
             window.RecentFrom,
             window.ToExclusive,
             window.RecentDayCount,
-            scheduled.Count(date => date >= window.RecentFrom),
+            sessions.Count(item => item.Date >= window.RecentFrom),
             completed.Count(item => item.Date >= window.RecentFrom),
-            scheduled.Length,
+            sessions.Length,
             completed.Length,
-            executions.Length - completed.Length,
+            inProgress,
             completed.Length == 0 ? null : completed.Max(item => item.Date)));
     }
 
@@ -442,6 +457,10 @@ internal sealed partial class ProgressApplicationService
     }
 
     private sealed record DashboardLoggedDay(DateOnly Date, bool IsCompleted);
+
+    private sealed record DashboardTrainingSession(
+        DateOnly Date,
+        WorkoutExecutionStatus? ExecutionStatus);
 
     private sealed record DashboardPhotoRow(
         Guid Id,

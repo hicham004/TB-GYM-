@@ -67,6 +67,16 @@ public sealed record CheckInAnswerView(
     decimal? NumericValue,
     IReadOnlyList<CheckInAnswerChoiceView> Choices);
 
+/// <summary>
+/// One response as an audience is permitted to see it.
+/// </summary>
+/// <remarks>
+/// <see cref="AnswersWithheld"/> distinguishes "this response has no answers" from "you may not read
+/// this response's answers". A coach reading a client's unsubmitted draft receives the second: the
+/// row exists, its status says Draft, and <see cref="Answers"/> is empty because the content is
+/// still the client's own, not because nothing has been typed. Returning an empty list without
+/// saying so would let a coach conclude the client had started and written nothing.
+/// </remarks>
 public sealed record CheckInResponseView(
     Guid Id,
     Guid AssignmentId,
@@ -78,7 +88,8 @@ public sealed record CheckInResponseView(
     DateTimeOffset? ReviewedAtUtc,
     Guid? ReviewedByUserId,
     IReadOnlyList<CheckInAnswerView> Answers,
-    uint Version);
+    uint Version,
+    bool AnswersWithheld = false);
 
 /// <summary>
 /// The assignment, the exact version it named, and the response so far. A null

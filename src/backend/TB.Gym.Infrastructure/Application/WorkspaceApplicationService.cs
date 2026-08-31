@@ -127,11 +127,12 @@ internal sealed class WorkspaceApplicationService(
             return null;
         }
 
-        return await dbContext.Tenants
+        var tenant = await dbContext.Tenants
             .AsNoTracking()
-            .Where(tenant => tenant.Id == tenantContext.TenantId && tenant.IsActive)
-            .Select(tenant => ToDetails(tenant))
-            .SingleOrDefaultAsync(cancellationToken);
+            .SingleOrDefaultAsync(
+                item => item.Id == tenantContext.TenantId && item.IsActive,
+                cancellationToken);
+        return tenant is null ? null : ToDetails(tenant);
     }
 
     public async Task<WorkspaceUpdateResult> UpdateCurrentAsync(
@@ -244,7 +245,7 @@ internal sealed class WorkspaceApplicationService(
         return $"{slugBase}-{suffix}";
     }
 
-    private static WorkspaceDetails ToDetails(Tenant tenant) =>
+    private WorkspaceDetails ToDetails(Tenant tenant) =>
         new(
             tenant.Id,
             tenant.Name,
@@ -253,5 +254,14 @@ internal sealed class WorkspaceApplicationService(
             tenant.DefaultCulture,
             tenant.DefaultCurrencyCode,
             tenant.WeekStartsOn,
+            // The workspace-local date, resolved from IClock through the workspace's own zone, so a
+            // browser never has to work out what "today" means here.
+            WorkspaceLocalDate(tenant),
             tenant.Version);
+
+    private DateOnly WorkspaceLocalDate(Tenant tenant) =>
+        DateOnly.FromDateTime(
+            TimeZoneInfo
+                .ConvertTime(clock.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(tenant.TimeZoneId))
+                .DateTime);
 }

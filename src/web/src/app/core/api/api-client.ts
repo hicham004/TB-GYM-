@@ -433,6 +433,19 @@ export class ApiClient {
     return this.http.post<Phase3Contracts.MediaAccessView>(`/api/media/${assetId}/access`, {});
   }
 
+  /**
+   * Grants several protected assets in one call. The server sets one path-scoped grant cookie per
+   * asset, so a screen full of thumbnails becomes one request instead of one per tile. Bounded by
+   * the server at 32 ids; callers pass a set they have already bounded.
+   */
+  createMediaAccessBatch(
+    assetIds: readonly string[],
+  ): Observable<Phase3Contracts.MediaAccessBatchView> {
+    return this.http.post<Phase3Contracts.MediaAccessBatchView>('/api/media/access', {
+      assetIds: [...assetIds],
+    });
+  }
+
   deleteMedia(
     assetId: string,
     request: Phase3Contracts.DeleteMediaRequest,
@@ -1157,9 +1170,12 @@ export class ApiClient {
 
   listClientCheckInAssignments(
     clientId: string,
+    skip = 0,
+    take = 50,
   ): Observable<Phase3Contracts.CheckInAssignmentListView> {
     return this.http.get<Phase3Contracts.CheckInAssignmentListView>(
       `/api/checkins/clients/${clientId}/assignments`,
+      { params: { skip, take } },
     );
   }
 
@@ -1173,8 +1189,16 @@ export class ApiClient {
     );
   }
 
-  listOwnCheckInAssignments(): Observable<Phase3Contracts.CheckInAssignmentListView> {
-    return this.http.get<Phase3Contracts.CheckInAssignmentListView>('/api/checkins/me/assignments');
+  listOwnCheckInAssignments(
+    skip = 0,
+    take = 50,
+  ): Observable<Phase3Contracts.CheckInAssignmentListView> {
+    return this.http.get<Phase3Contracts.CheckInAssignmentListView>(
+      '/api/checkins/me/assignments',
+      {
+        params: { skip, take },
+      },
+    );
   }
 
   getOwnCheckInResponse(assignmentId: string): Observable<Phase3Contracts.CheckInResponseDetail> {

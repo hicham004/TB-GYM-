@@ -95,13 +95,26 @@
             preview and can only be opened from the progress page.
           </p>
         }
+        @if (view.photos.previewPhotoCount < view.photos.photoCount) {
+          <p class="detail" i18n>
+            Showing the most recent {{ view.photos.previewPhotoCount }} of
+            {{ view.photos.photoCount }} photos in this period. The rest are on the progress page.
+          </p>
+        }
         @for (pose of view.photos.poses; track pose.pose) {
           <div class="pose">
             <h4>{{ pose.pose }}</h4>
             <ul class="timeline">
               @for (photo of pose.photos; track photo.id) {
                 <li>
-                  @if (photo.thumbnailUrl === null) {
+                  <!-- Two reasons a tile cannot show: the photo has no rendition at all, or the
+                       media grants this page needs were not issued. Either way the path is left
+                       unbound, because binding it would ask the browser for protected bytes it has
+                       no grant for and draw a broken image. The count above says how many photos
+                       are in the first case. -->
+                  @if (
+                    photo.thumbnailUrl === null || !grantedPreviewIds().has(photo.mediaAssetId)
+                  ) {
                     <span class="no-preview" i18n>Preview unavailable</span>
                   } @else {
                     <img

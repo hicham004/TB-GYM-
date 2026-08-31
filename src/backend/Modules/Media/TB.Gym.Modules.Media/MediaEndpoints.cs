@@ -98,18 +98,7 @@ public static class MediaEndpoints
             var result = await service.CreateAccessAsync(assetId, cancellationToken);
             if (result.Status == MediaAccessStatus.Success && result.BrowserGrant is not null)
             {
-                context.Response.Cookies.Append(
-                    MediaAccessCookie.Name,
-                    result.BrowserGrant,
-                    new CookieOptions
-                    {
-                        HttpOnly = true,
-                        IsEssential = true,
-                        Secure = context.Request.IsHttps,
-                        SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Strict,
-                        Path = MediaAccessCookie.Path(assetId),
-                        MaxAge = result.GrantLifetime,
-                    });
+                AppendGrantCookie(context, assetId, result.BrowserGrant, result.GrantLifetime);
             }
 
             return result.Status switch
@@ -125,6 +114,43 @@ public static class MediaEndpoints
         .Produces(StatusCodes.Status403Forbidden)
         .Produces(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict);
+
+        // A screen showing many protected thumbnails needs one grant per asset before the browser
+        // can fetch any of them. Asking per tile is one request per asset and grows with the
+        // timeline; this is the bounded alternative, capped at MediaAccessBatchPolicy.MaximumAssets
+        // and authorized asset by asset exactly as the route above is.
+        member.MapPost("/access", async (
+            MediaAccessBatchRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IMediaApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            if (request?.AssetIds is null)
+            {
+                return InvalidBatch();
+            }
+
+            var result = await service.CreateAccessBatchAsync(request.AssetIds, cancellationToken);
+            if (result.Status != MediaAccessBatchStatus.Success)
+            {
+                return InvalidBatch();
+            }
+
+            foreach (var grant in result.Grants)
+            {
+                // One cookie per asset, each scoped to that asset's own content path. The batch is
+                // a transport convenience; it does not widen a single grant's scope.
+                AppendGrantCookie(context, grant.AssetId, grant.BrowserGrant, result.GrantLifetime);
+            }
+
+            return Results.Ok(new MediaAccessBatchView(
+                [.. result.Grants.Select(grant => grant.Access)]));
+        })
+        .WithName("CreatePrivateMediaAccessBatch")
+        .Produces<MediaAccessBatchView>()
+        .ProducesValidationProblem();
 
         endpoints.MapGet("/api/media/{assetId:guid}/content", async (
             Guid assetId,
@@ -158,6 +184,31 @@ public static class MediaEndpoints
 
         return endpoints;
     }
+
+    private static void AppendGrantCookie(
+        HttpContext context,
+        Guid assetId,
+        string browserGrant,
+        TimeSpan? lifetime) =>
+        context.Response.Cookies.Append(
+            MediaAccessCookie.Name,
+            browserGrant,
+            new CookieOptions
+            {
+                HttpOnly = true,
+                IsEssential = true,
+                Secure = context.Request.IsHttps,
+                SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Strict,
+                Path = MediaAccessCookie.Path(assetId),
+                MaxAge = lifetime,
+            });
+
+    private static IResult InvalidBatch() =>
+        Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["assetIds"] =
+                [$"Between 1 and {MediaAccessBatchPolicy.MaximumAssets} media assets may be granted at once."],
+        });
 
     private static async Task<IResult> StreamGrantedAsync(
         HttpContext context,
@@ -274,6 +325,11 @@ public static class MediaEndpoints
             MediaCommandStatus.Invalid => Results.ValidationProblem(
                 result.Errors ?? new Dictionary<string, string[]>()),
             MediaCommandStatus.RateLimited => Results.StatusCode(StatusCodes.Status429TooManyRequests),
+            // The installation cannot scan, so it cannot publish. That is a server condition and
+            // says so, rather than blaming a file that was never inspected.
+            MediaCommandStatus.Unavailable => Results.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: result.Message ?? "Media uploads are unavailable."),
             // A full allowance is a conflict with stored state, not a malformed request, and it
             // carries a stable code so the client can tell the caller which limit was reached.
             MediaCommandStatus.QuotaExceeded => Results.Problem(

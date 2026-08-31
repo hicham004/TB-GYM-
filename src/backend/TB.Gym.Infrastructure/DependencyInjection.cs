@@ -186,6 +186,12 @@ public static class DependencyInjection
                 options => options.PurgeBatchSize is >= 1 and <= 1000,
                 "Media:PurgeBatchSize must be between 1 and 1000.")
             .Validate(
+                options => options.MaxConcurrentProgressPhotoDecodes is >= 1 and <= 8,
+                "Media:MaxConcurrentProgressPhotoDecodes must be between 1 and 8.")
+            .Validate(
+                options => options.IngestCleanupAttemptTimeoutSeconds is >= 1 and <= 120,
+                "Media:IngestCleanupAttemptTimeoutSeconds must be between 1 and 120.")
+            .Validate(
                 // The lower bound is deliberately a minute: sub-minute grants expire inside normal
                 // request latency and produce intermittent playback failures rather than security.
                 options => options.AccessLifetimeSeconds is >= 60 and <= 14400,
@@ -212,39 +218,25 @@ public static class DependencyInjection
                         AutoReplenishment = true,
                     }));
             options.AddPolicy(RateLimitPolicies.SensitiveWrite, context =>
-            {
-                var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                    ?? context.Connection.RemoteIpAddress?.ToString()
-                    ?? "unknown";
-                var workspace = context.Request.Headers[TenantHeaders.TenantId].FirstOrDefault()
-                    ?? "none";
-                return RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: $"{actor}:{workspace}",
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ActorPartitionKey(context, "write"),
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 60,
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0,
                         AutoReplenishment = true,
-                    });
-            });
+                    }));
             options.AddPolicy(RateLimitPolicies.MediaUpload, context =>
-            {
-                var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                    ?? context.Connection.RemoteIpAddress?.ToString()
-                    ?? "unknown";
-                var workspace = context.Request.Headers[TenantHeaders.TenantId].FirstOrDefault()
-                    ?? "none";
-                return RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: $"media:{actor}:{workspace}",
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ActorPartitionKey(context, "media"),
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 10,
                         Window = TimeSpan.FromHours(1),
                         QueueLimit = 0,
                         AutoReplenishment = true,
-                    });
-            });
+                    }));
         });
 
         var supportedCultures = new[]
@@ -261,8 +253,38 @@ public static class DependencyInjection
 
         services.AddHealthChecks()
             .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])
-            .AddCheck<PostgresHealthCheck>("postgres", tags: ["ready"]);
+            .AddCheck<PostgresHealthCheck>("postgres", tags: ["ready"])
+            // Degraded, never unhealthy: an unscannable deployment refuses uploads but serves
+            // everything else, so this makes the closed state visible without removing the
+            // instance from rotation.
+            .AddCheck<MediaScannerHealthCheck>("media-scanner", tags: ["ready"]);
 
         return services;
+    }
+
+    /// <summary>
+    /// The bucket an authenticated-write policy counts against.
+    /// </summary>
+    /// <remarks>
+    /// It is the signed-in user's own id, and nothing the caller supplies. The previous key mixed in
+    /// the raw <c>X-Tenant-Id</c> request header, which is untrusted by design and is not verified
+    /// until the tenant authorization handler runs well after this point — so a caller could reset
+    /// their own allowance simply by varying that header, and an actor limit an attacker chooses the
+    /// partition of is not a limit. The workspace dimension is gone rather than guessed at: one
+    /// bucket per user is strictly tighter than one per user and workspace, and there is nothing
+    /// verified here to split it by.
+    /// <para>
+    /// The source address remains the fallback for a request that is somehow unauthenticated on an
+    /// authenticated route — the policies are only attached to routes behind a tenant policy, so it
+    /// should not be reachable, but a limiter that fails open on a null claim would be worse than
+    /// one that groups those requests by connection.
+    /// </para>
+    /// </remarks>
+    private static string ActorPartitionKey(HttpContext context, string scope)
+    {
+        var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return userId is { Length: > 0 }
+            ? $"{scope}:user:{userId}"
+            : $"{scope}:address:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
     }
 }

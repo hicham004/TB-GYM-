@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Media;
@@ -22,9 +23,28 @@ internal sealed class MediaApplicationService(
     ICurrentUser currentUser,
     IMutableTenantContext tenantContext,
     ICoachingFeatureAccessService featureAccessService,
-    IClock clock)
+    IClock clock,
+    ILogger<MediaApplicationService> logger)
     : IMediaApplicationService
 {
+    /// <summary>
+    /// A refused upload is worth recording, but only as a shape: the purpose and whether a scanner
+    /// exists at all. The scanner's key, version, failure code, the object key and the file name
+    /// are all deliberately absent, because a progress photo's very existence is client health data
+    /// and a scanner's verdict names the content it inspected.
+    /// </summary>
+    private static readonly Action<ILogger, MediaPurpose, bool, Exception?> LogScanRefused =
+        LoggerMessage.Define<MediaPurpose, bool>(
+            LogLevel.Warning,
+            new EventId(5502, "MediaScanRefused"),
+            "A {Purpose} upload received a scanner refusal during ingestion. Scanner available: {ScannerAvailable}.");
+
+    private static readonly Action<ILogger, MediaPurpose, Exception?> LogScanUnavailable =
+        LoggerMessage.Define<MediaPurpose>(
+            LogLevel.Warning,
+            new EventId(5503, "MediaScanUnavailable"),
+            "A {Purpose} upload could not be scanned because the scanner failed operationally.");
+
     private readonly ITimeLimitedDataProtector tokenProtector = dataProtectionProvider
         // Kept in lockstep with the payload version so a format change makes stale grants
         // undecryptable rather than merely unparseable.
@@ -42,13 +62,19 @@ internal sealed class MediaApplicationService(
         MediaPurpose purpose = MediaPurpose.ExerciseMedia,
         Guid? clientProfileId = null)
     {
-        string? objectKey = null;
-        string? thumbnailKey = null;
+        var ingestObjects = new List<MediaIngestObject>();
         try
         {
             if (currentUser.UserId is not { } ownerUserId)
             {
                 return new MediaCommandResult(MediaCommandStatus.NotFound);
+            }
+
+            // Fail before accepting a byte. A deployment that already knows it cannot scan must not
+            // create a storage object merely to delete it again and call that fail-closed.
+            if (!scanner.IsAvailable)
+            {
+                return ScannerUnavailable();
             }
 
             using var uploadLease = uploadConcurrencyGate.TryEnter(tenantContext.TenantId);
@@ -74,8 +100,16 @@ internal sealed class MediaApplicationService(
             var acceptedBytes = purpose == MediaPurpose.ProgressPhoto
                 ? MediaUploadPolicy.MaximumImageBytes
                 : MediaUploadPolicy.MaximumVideoBytes;
-            objectKey = $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}";
             var quotaBoundsTheStream = remainingBytes < acceptedBytes;
+            var objectKey = $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}";
+            var originalReservation = await ReserveIngestObjectAsync(
+                objectKey,
+                Math.Min(acceptedBytes, remainingBytes),
+                purpose,
+                clientProfileId,
+                cancellationToken);
+            ingestObjects.Add(originalReservation);
+
             StoredObject stored;
             try
             {
@@ -94,32 +128,51 @@ internal sealed class MediaApplicationService(
                 // own limit, so this is a full workspace and must say so. Reporting it as an
                 // oversized file would blame the upload for a condition it did not cause. The
                 // storage layer removes its own partial object, so nothing is left behind.
-                objectKey = null;
+                await CleanupIngestObjectsAsync(ingestObjects);
                 return QuotaExceeded(
                     MediaQuotaCodes.WorkspaceStorageExceeded,
                     "The workspace media-storage allowance is full.");
             }
 
+            originalReservation.ConfirmStored(stored.Length, clock.UtcNow);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
             var validation = MediaUploadPolicy.Validate(fileName, contentType, stored.Length, stored.Signature);
             ProgressPhotoRendition? rendition = null;
             if (purpose == MediaPurpose.ProgressPhoto)
             {
+                using var decodeLease = uploadConcurrencyGate.TryEnterProgressPhotoDecode();
+                if (decodeLease is null)
+                {
+                    await CleanupIngestObjectsAsync(ingestObjects);
+                    return new MediaCommandResult(MediaCommandStatus.RateLimited);
+                }
+
                 // Re-encode the pixels so EXIF/GPS never reaches permanent storage, and render the
                 // thumbnail from those same sanitised pixels. The ingest stream stayed bounded
                 // above, the original object is deleted, and both sets of stored bytes are
                 // re-validated and scanned below, so no protection is skipped.
-                rendition = await SanitizeProgressPhotoAsync(stored, validation, cancellationToken);
+                rendition = await SanitizeProgressPhotoAsync(
+                    stored,
+                    validation,
+                    clientProfileId,
+                    ingestObjects,
+                    cancellationToken);
                 if (rendition is null)
                 {
-                    await objectStorage.DeleteAsync(stored.ObjectKey, cancellationToken);
-                    objectKey = null;
+                    await CleanupIngestObjectsAsync(ingestObjects);
                     return Invalid("file", "The progress photo could not be processed as a valid image.");
                 }
 
-                await objectStorage.DeleteAsync(stored.ObjectKey, cancellationToken);
-                stored = rendition.Image;
-                objectKey = stored.ObjectKey;
-                thumbnailKey = rendition.Thumbnail.ObjectKey;
+                if (!await CleanupIngestObjectAsync(originalReservation))
+                {
+                    await CleanupIngestObjectsAsync(ingestObjects);
+                    return new MediaCommandResult(
+                        MediaCommandStatus.Unavailable,
+                        Message: "Media storage cleanup is pending. Try the upload again later.");
+                }
+
+                stored = rendition.Image.Stored;
             }
 
             var asset = MediaAsset.RegisterUpload(
@@ -134,72 +187,110 @@ internal sealed class MediaApplicationService(
                 stored.Sha256,
                 stored.ObjectKey,
                 purpose);
-            var scan = await scanner.ScanAsync(stored.ObjectKey, validation.VerifiedContentType, cancellationToken);
-            if (rendition is not null && scan.IsAllowed)
+            MediaScanResult scan;
+            try
             {
-                // The thumbnail is bytes this workspace actually stores and serves, so the scanner
-                // runs against it too. A rendition the scanner refuses fails the whole upload
-                // closed rather than being quietly dropped, because the two share a source image.
-                var thumbnailScan = await scanner.ScanAsync(
-                    rendition.Thumbnail.ObjectKey,
-                    MediaThumbnailPolicy.ContentType,
-                    cancellationToken);
-                if (!thumbnailScan.IsAllowed)
+                scan = await scanner.ScanAsync(stored.ObjectKey, validation.VerifiedContentType, cancellationToken);
+                if (rendition is not null && scan.IsAllowed)
                 {
-                    scan = thumbnailScan;
+                    // The thumbnail is bytes this workspace actually stores and serves, so the
+                    // scanner runs against it too. A rendition refusal fails the whole upload.
+                    var thumbnailScan = await scanner.ScanAsync(
+                        rendition.Thumbnail.Stored.ObjectKey,
+                        MediaThumbnailPolicy.ContentType,
+                        cancellationToken);
+                    if (!thumbnailScan.IsAllowed)
+                    {
+                        scan = thumbnailScan;
+                    }
                 }
             }
-
-            if (!scan.IsAllowed && thumbnailKey is not null)
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                await objectStorage.DeleteAsync(thumbnailKey, cancellationToken);
-                thumbnailKey = null;
-                rendition = null;
+                await CleanupIngestObjectsAsync(ingestObjects);
+                LogScanUnavailable(logger, purpose, null);
+                return ScannerUnavailable();
+            }
+            catch (Exception exception) when (IsScannerOperationalFailure(exception))
+            {
+                await CleanupIngestObjectsAsync(ingestObjects);
+                LogScanUnavailable(logger, purpose, null);
+                return ScannerUnavailable();
             }
 
-            asset.RecordScan(scan);
+            if (!scan.IsAllowed)
+            {
+                // The upload fails, and it fails as an upload rather than as a stored asset in a
+                // dead state. Reporting success for bytes the scanner refused is what let a caller
+                // build a record on top of an unusable asset — a progress photo that occupied its
+                // date/pose slot for ever without a readable image behind it.
+                //
+                // Every accepted object is independently deleted or left as immediately due durable
+                // cleanup state. Partial success cannot make the remaining key undiscoverable.
+                await CleanupIngestObjectsAsync(ingestObjects);
+                LogScanRefused(logger, purpose, scanner.IsAvailable, null);
+                return Invalid(
+                    "file",
+                    "This file was rejected. Any accepted bytes have been deleted or scheduled for secure cleanup.");
+            }
+
+            try
+            {
+                asset.RecordScan(scan);
+            }
+            catch (ArgumentException)
+            {
+                // A malformed provider result is an operational scanner failure, not evidence that
+                // the caller supplied an invalid file.
+                await CleanupIngestObjectsAsync(ingestObjects);
+                LogScanUnavailable(logger, purpose, null);
+                return ScannerUnavailable();
+            }
             var derivative = rendition is null
                 ? null
                 : MediaAssetDerivative.RegisterThumbnail(
                     tenantContext.TenantId,
                     asset.Id,
-                    rendition.Thumbnail.Length,
-                    rendition.Thumbnail.Sha256,
-                    rendition.Thumbnail.ObjectKey,
+                    rendition.Thumbnail.Stored.Length,
+                    rendition.Thumbnail.Stored.Sha256,
+                    rendition.Thumbnail.Stored.ObjectKey,
                     rendition.Width,
                     rendition.Height);
 
-            var admitted = await AdmitWithinQuotaAsync(asset, derivative, clientProfileId, cancellationToken);
+            var attachmentReservations = rendition is null
+                ? new[] { originalReservation }
+                : new[] { rendition.Image.Reservation, rendition.Thumbnail.Reservation };
+
+            var admitted = await AdmitWithinQuotaAsync(
+                asset,
+                derivative,
+                clientProfileId,
+                attachmentReservations,
+                cancellationToken);
             if (admitted is not null)
             {
-                // Rejected after the bytes were written, so remove them: the row that would have
-                // accounted for them is never committed.
-                if (thumbnailKey is not null)
-                {
-                    await objectStorage.DeleteAsync(thumbnailKey, cancellationToken);
-                    thumbnailKey = null;
-                }
-
-                await objectStorage.DeleteAsync(objectKey, cancellationToken);
-                objectKey = null;
+                await CleanupIngestObjectsAsync(ingestObjects);
                 return admitted;
             }
 
             return Success(asset);
         }
+        catch (OperationCanceledException)
+        {
+            await CleanupIngestObjectsAsync(ingestObjects);
+            throw;
+        }
         catch (ArgumentException exception)
         {
-            if (objectKey is not null)
-            {
-                await objectStorage.DeleteAsync(objectKey, cancellationToken);
-            }
-
-            if (thumbnailKey is not null)
-            {
-                await objectStorage.DeleteAsync(thumbnailKey, cancellationToken);
-            }
-
+            await CleanupIngestObjectsAsync(ingestObjects);
             return Invalid("file", exception.Message);
+        }
+        catch (Exception exception) when (IsStorageOperationalFailure(exception))
+        {
+            await CleanupIngestObjectsAsync(ingestObjects);
+            return new MediaCommandResult(
+                MediaCommandStatus.Unavailable,
+                Message: "Media storage is temporarily unavailable. Try again later.");
         }
     }
 
@@ -307,6 +398,39 @@ internal sealed class MediaApplicationService(
                 thumbnailUrl),
             grant,
             accessLifetime);
+    }
+
+    /// <summary>
+    /// Grants several assets at once, each through the same decision the single-asset route makes.
+    /// </summary>
+    /// <remarks>
+    /// Nothing here is a shortcut around authorization: the loop calls <see cref="CreateAccessAsync"/>
+    /// per asset, so a caller gets exactly the grants they would have got one request at a time. The
+    /// only thing this removes is the round trip. Refused, unknown and not-yet-ready assets are
+    /// omitted without distinction, so a batch reveals no more than the caller already knew.
+    /// </remarks>
+    public async Task<MediaAccessBatchResult> CreateAccessBatchAsync(
+        IReadOnlyList<Guid> assetIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(assetIds);
+        var distinct = assetIds.Distinct().ToArray();
+        if (distinct.Length is 0 || distinct.Length > MediaAccessBatchPolicy.MaximumAssets)
+        {
+            return new MediaAccessBatchResult(MediaAccessBatchStatus.Invalid, []);
+        }
+
+        var grants = new List<MediaAccessGrant>(distinct.Length);
+        foreach (var assetId in distinct)
+        {
+            var result = await CreateAccessAsync(assetId, cancellationToken);
+            if (result is { Status: MediaAccessStatus.Success, Access: { } access, BrowserGrant: { } grant })
+            {
+                grants.Add(new MediaAccessGrant(assetId, access, grant));
+            }
+        }
+
+        return new MediaAccessBatchResult(MediaAccessBatchStatus.Success, grants, accessLifetime);
     }
 
     public Task<MediaContentResult> OpenContentAsync(
@@ -423,7 +547,10 @@ internal sealed class MediaApplicationService(
     /// unsafe direction to be wrong in. Purged bytes are excluded, which is what finally releases
     /// the space. External embeds occupy nothing and are not counted.
     /// </remarks>
-    private async Task<long> MeasureWorkspaceBytesAsync(CancellationToken cancellationToken)
+    private async Task<long> MeasureWorkspaceBytesAsync(
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<Guid>? excludedIngestIds = null,
+        IngestAdmissionPriority? admissionPriority = null)
     {
         var assetBytes = await dbContext.MediaAssets.AsNoTracking()
             .Where(item =>
@@ -434,7 +561,13 @@ internal sealed class MediaApplicationService(
         var derivativeBytes = await dbContext.MediaAssetDerivatives.AsNoTracking()
             .Where(item => item.PurgedAtUtc == null)
             .SumAsync(item => item.Length, cancellationToken);
-        return assetBytes + derivativeBytes;
+        var ingestBytes = await MeasureIngestBytesAsync(
+            dbContext.MediaIngestObjects.AsNoTracking()
+                .Where(item => item.Status != MediaIngestObjectStatus.Purged),
+            excludedIngestIds,
+            admissionPriority,
+            cancellationToken);
+        return assetBytes + derivativeBytes + ingestBytes;
     }
 
     /// <summary>
@@ -442,7 +575,9 @@ internal sealed class MediaApplicationService(
     /// </summary>
     private async Task<long> MeasureClientProgressPhotoBytesAsync(
         Guid clientProfileId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<Guid>? excludedIngestIds = null,
+        IngestAdmissionPriority? admissionPriority = null)
     {
         var assetBytes = await (
             from photo in dbContext.ProgressPhotos.AsNoTracking()
@@ -462,7 +597,55 @@ internal sealed class MediaApplicationService(
             where photo.ClientProfileId == clientProfileId && derivative.PurgedAtUtc == null
             select derivative.Length)
             .SumAsync(cancellationToken);
-        return assetBytes + derivativeBytes;
+        var ingestBytes = await MeasureIngestBytesAsync(
+            dbContext.MediaIngestObjects.AsNoTracking()
+                .Where(item =>
+                    item.ClientProfileId == clientProfileId &&
+                    item.Status != MediaIngestObjectStatus.Purged),
+            excludedIngestIds,
+            admissionPriority,
+            cancellationToken);
+        return assetBytes + derivativeBytes + ingestBytes;
+    }
+
+    /// <summary>
+    /// Measures all durable reservations normally. During the serialized admission decision it
+    /// measures only reservations ahead of the candidate in a stable queue.
+    /// </summary>
+    /// <remarks>
+    /// Counting every peer reservation for every simultaneous candidate creates symmetric
+    /// rejection: each upload can fit alone, but both see the other's bytes and neither wins. The
+    /// advisory lock still serializes commits, so an earlier queued candidate may ignore later
+    /// reservations; every later candidate then observes the winner as committed asset bytes. This
+    /// preserves the hard allowance while giving a deterministic winner. Outside admission, every
+    /// non-purged reservation continues to count.
+    /// </remarks>
+    private static async Task<long> MeasureIngestBytesAsync(
+        IQueryable<MediaIngestObject> ingestQuery,
+        IReadOnlyCollection<Guid>? excludedIngestIds,
+        IngestAdmissionPriority? admissionPriority,
+        CancellationToken cancellationToken)
+    {
+        if (excludedIngestIds is { Count: > 0 })
+        {
+            ingestQuery = ingestQuery.Where(item => !excludedIngestIds.Contains(item.Id));
+        }
+
+        if (admissionPriority is null)
+        {
+            return await ingestQuery.SumAsync(item => item.AccountedBytes, cancellationToken);
+        }
+
+        var earlierBytes = await ingestQuery
+            .Where(item => item.CreatedAtUtc < admissionPriority.CreatedAtUtc)
+            .SumAsync(item => item.AccountedBytes, cancellationToken);
+        var sameInstant = await ingestQuery
+            .Where(item => item.CreatedAtUtc == admissionPriority.CreatedAtUtc)
+            .Select(item => new IngestUsage(item.Id, item.AccountedBytes))
+            .ToArrayAsync(cancellationToken);
+        return earlierBytes + sameInstant
+            .Where(item => item.Id.CompareTo(admissionPriority.Id) < 0)
+            .Sum(item => item.AccountedBytes);
     }
 
     /// <summary>
@@ -481,6 +664,7 @@ internal sealed class MediaApplicationService(
         MediaAsset asset,
         MediaAssetDerivative? derivative,
         Guid? clientProfileId,
+        IReadOnlyCollection<MediaIngestObject> attachmentReservations,
         CancellationToken cancellationToken)
     {
         // The connection retries on transient failure, and that strategy owns transaction
@@ -494,7 +678,18 @@ internal sealed class MediaApplicationService(
                 cancellationToken);
 
             var incoming = (asset.Length ?? 0L) + (derivative?.Length ?? 0L);
-            if (await MeasureWorkspaceBytesAsync(cancellationToken) + incoming
+            var attachmentIds = attachmentReservations.Select(item => item.Id).ToArray();
+            var firstReservation = attachmentReservations
+                .OrderBy(item => item.CreatedAtUtc)
+                .ThenBy(item => item.Id)
+                .First();
+            var admissionPriority = new IngestAdmissionPriority(
+                firstReservation.CreatedAtUtc,
+                firstReservation.Id);
+            if (await MeasureWorkspaceBytesAsync(
+                    cancellationToken,
+                    attachmentIds,
+                    admissionPriority) + incoming
                 > storageOptions.MaxWorkspaceStorageBytes)
             {
                 await transaction.RollbackAsync(cancellationToken);
@@ -504,7 +699,11 @@ internal sealed class MediaApplicationService(
             }
 
             if (clientProfileId is { } client &&
-                await MeasureClientProgressPhotoBytesAsync(client, cancellationToken) + incoming
+                await MeasureClientProgressPhotoBytesAsync(
+                    client,
+                    cancellationToken,
+                    attachmentIds,
+                    admissionPriority) + incoming
                 > storageOptions.MaxClientProgressPhotoBytes)
             {
                 await transaction.RollbackAsync(cancellationToken);
@@ -518,6 +717,11 @@ internal sealed class MediaApplicationService(
             {
                 dbContext.MediaAssetDerivatives.Add(derivative);
             }
+
+            // Once this transaction commits, the keys belong to the asset and derivative. Removing
+            // the ingest reservations in that same commit avoids both double accounting and a gap
+            // in which neither durable record owns them.
+            dbContext.MediaIngestObjects.RemoveRange(attachmentReservations);
 
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -597,13 +801,7 @@ internal sealed class MediaApplicationService(
             return await IsProgressPhotoAuthorizedAsync(assetId, userId, cancellationToken);
         }
 
-        var role = await dbContext.TenantMemberships.AsNoTracking()
-            .Where(item =>
-                item.TenantId == tenantContext.TenantId &&
-                item.UserId == userId &&
-                item.Status == MembershipStatus.Active)
-            .Select(item => (TenantRole?)item.Role)
-            .SingleOrDefaultAsync(cancellationToken);
+        var role = await ActiveMembershipRoleAsync(userId, cancellationToken);
         if (role is TenantRole.Owner or TenantRole.Coach)
         {
             return true;
@@ -677,10 +875,12 @@ internal sealed class MediaApplicationService(
     private async Task<ProgressPhotoRendition?> SanitizeProgressPhotoAsync(
         StoredObject stored,
         MediaFileValidation validation,
+        Guid? clientProfileId,
+        ICollection<MediaIngestObject> ingestObjects,
         CancellationToken cancellationToken)
     {
         SanitizedProgressPhoto? produced = null;
-        StoredObject? rewritten = null;
+        IngestStoredObject? rewritten = null;
         try
         {
             await using (var original = await objectStorage.OpenReadAsync(stored.ObjectKey, cancellationToken))
@@ -696,6 +896,9 @@ internal sealed class MediaApplicationService(
                 produced.Image,
                 validation.VerifiedContentType,
                 validation.MaximumBytes,
+                MediaPurpose.ProgressPhoto,
+                clientProfileId,
+                ingestObjects,
                 cancellationToken);
             if (rewritten is null)
             {
@@ -708,11 +911,13 @@ internal sealed class MediaApplicationService(
                 produced.Thumbnail,
                 MediaThumbnailPolicy.ContentType,
                 MediaUploadPolicy.MaximumImageBytes,
+                MediaPurpose.ProgressPhoto,
+                clientProfileId,
+                ingestObjects,
                 cancellationToken);
             if (thumbnail is null)
             {
-                // The sanitised original is reclaimed below rather than left behind without the
-                // rendition this method promised alongside it.
+                await CleanupIngestObjectAsync(rewritten.Reservation);
                 return null;
             }
 
@@ -726,11 +931,6 @@ internal sealed class MediaApplicationService(
         }
         finally
         {
-            if (rewritten is not null)
-            {
-                await objectStorage.DeleteAsync(rewritten.ObjectKey, cancellationToken);
-            }
-
             if (produced is not null)
             {
                 await produced.DisposeAsync();
@@ -742,21 +942,34 @@ internal sealed class MediaApplicationService(
     /// Stores re-encoded bytes and keeps them only if the stored object still passes the upload
     /// policy for its declared image type; anything else is deleted rather than trusted.
     /// </summary>
-    private async Task<StoredObject?> StoreValidatedAsync(
+    private async Task<IngestStoredObject?> StoreValidatedAsync(
         Stream content,
         string verifiedContentType,
         long maximumBytes,
+        MediaPurpose purpose,
+        Guid? clientProfileId,
+        ICollection<MediaIngestObject> ingestObjects,
         CancellationToken cancellationToken)
     {
         content.Position = 0;
+        var objectKey = $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}";
+        var reservation = await ReserveIngestObjectAsync(
+            objectKey,
+            Math.Min(maximumBytes, content.Length),
+            purpose,
+            clientProfileId,
+            cancellationToken);
+        ingestObjects.Add(reservation);
         var stored = await objectStorage.PutAsync(
             new ObjectUpload(
-                $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}",
+                objectKey,
                 verifiedContentType,
                 content,
                 tenantContext.TenantId,
                 maximumBytes),
             cancellationToken);
+        reservation.ConfirmStored(stored.Length, clock.UtcNow);
+        await dbContext.SaveChangesAsync(cancellationToken);
         try
         {
             MediaUploadPolicy.Validate(
@@ -764,14 +977,123 @@ internal sealed class MediaApplicationService(
                 verifiedContentType,
                 stored.Length,
                 stored.Signature);
-            return stored;
+            return new IngestStoredObject(stored, reservation);
         }
         catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
         {
-            await objectStorage.DeleteAsync(stored.ObjectKey, cancellationToken);
+            await CleanupIngestObjectAsync(reservation);
             return null;
         }
     }
+
+    private async Task<MediaIngestObject> ReserveIngestObjectAsync(
+        string objectKey,
+        long reservedBytes,
+        MediaPurpose purpose,
+        Guid? clientProfileId,
+        CancellationToken cancellationToken)
+    {
+        var reservation = MediaIngestObject.Reserve(
+            tenantContext.TenantId,
+            objectKey,
+            reservedBytes,
+            purpose,
+            clientProfileId,
+            clock.UtcNow);
+        dbContext.MediaIngestObjects.Add(reservation);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return reservation;
+    }
+
+    private async Task<bool> CleanupIngestObjectsAsync(IEnumerable<MediaIngestObject> objects)
+    {
+        var allPurged = true;
+        foreach (var ingestObject in objects.DistinctBy(item => item.Id))
+        {
+            allPurged &= await CleanupIngestObjectAsync(ingestObject);
+        }
+
+        return allPurged;
+    }
+
+    /// <summary>
+    /// Makes cleanup durable before touching storage, then attempts deletion with an internal,
+    /// bounded token. Storage failure leaves the key immediately due for the reconciliation sweep.
+    /// </summary>
+    private async Task<bool> CleanupIngestObjectAsync(MediaIngestObject ingestObject)
+    {
+        if (ingestObject.Status == MediaIngestObjectStatus.Purged)
+        {
+            return true;
+        }
+
+        // One request makes one immediate attempt per object. A failed attempt is already durable
+        // and immediately due; retrying it again in a later compensation branch of the same request
+        // would turn a persistent provider outage into repeated work and obscure the failure state
+        // the reconciliation sweep is responsible for.
+        if (ingestObject.Status == MediaIngestObjectStatus.CleanupPending &&
+            ingestObject.LastPurgeAttemptAtUtc is not null)
+        {
+            return false;
+        }
+
+        var now = clock.UtcNow;
+        // The sweep must not claim the same row while this request is deleting it. Its lease is a
+        // little longer than the storage timeout so the timeout handler can make it immediately
+        // due; if the process dies instead, reconciliation takes over after this short bound.
+        var cleanupTimeout = TimeSpan.FromSeconds(storageOptions.IngestCleanupAttemptTimeoutSeconds);
+        ingestObject.BeginImmediatePurgeAttempt(now, cleanupTimeout.Add(TimeSpan.FromSeconds(5)));
+        await dbContext.SaveChangesAsync(CancellationToken.None);
+
+        try
+        {
+            using var cleanupCancellation = new CancellationTokenSource(cleanupTimeout);
+            if (ingestObject.StorageKey is { } storageKey)
+            {
+                await objectStorage.DeleteAsync(storageKey, cleanupCancellation.Token);
+            }
+
+            ingestObject.ScheduleCleanup(clock.UtcNow);
+            ingestObject.CompletePurge(clock.UtcNow);
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+            return true;
+        }
+        catch (Exception exception) when (IsStorageCleanupFailure(exception))
+        {
+            ingestObject.RecordPurgeFailure(clock.UtcNow, StorageFailureCode(exception));
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+            return false;
+        }
+    }
+
+    private static bool IsScannerOperationalFailure(Exception exception) => exception is
+        IOException or
+        TimeoutException or
+        HttpRequestException or
+        InvalidOperationException;
+
+    private static bool IsStorageOperationalFailure(Exception exception) => exception is
+        IOException or
+        TimeoutException or
+        UnauthorizedAccessException;
+
+    private static bool IsStorageCleanupFailure(Exception exception) =>
+        exception is OperationCanceledException or ArgumentException ||
+        IsStorageOperationalFailure(exception);
+
+    private static string StorageFailureCode(Exception exception) => exception switch
+    {
+        OperationCanceledException => "storage_timeout",
+        UnauthorizedAccessException => "storage_access_denied",
+        IOException => "storage_io_error",
+        ArgumentException => "storage_key_invalid",
+        _ => "storage_unavailable",
+    };
+
+    private static MediaCommandResult ScannerUnavailable() =>
+        new(
+            MediaCommandStatus.Unavailable,
+            Message: "Media uploads are unavailable. Try again later.");
 
     private static string ExtensionFor(string verifiedContentType) => verifiedContentType switch
     {
@@ -784,11 +1106,25 @@ internal sealed class MediaApplicationService(
     /// workspace only while the coaching relationship is not blocked. Removed photos stop being
     /// readable by the coach but remain readable by the client who owns them.
     /// </summary>
+    /// <remarks>
+    /// Active membership of the asset's workspace is required first, of every caller including the
+    /// subject of the photo. Authentication plus an unexpired grant is not enough: the grant is
+    /// minted once and may be configured for as long as four hours, so a subject whose membership
+    /// was deactivated or removed in the meantime would otherwise keep reading their own images from
+    /// that workspace until it expired. Checking here, on every original and every thumbnail
+    /// request, is what makes removal take effect immediately instead of eventually.
+    /// </remarks>
     private async Task<bool> IsProgressPhotoAuthorizedAsync(
         Guid assetId,
         Guid userId,
         CancellationToken cancellationToken)
     {
+        var role = await ActiveMembershipRoleAsync(userId, cancellationToken);
+        if (role is null)
+        {
+            return false;
+        }
+
         var photo = await dbContext.ProgressPhotos.AsNoTracking()
             .Where(item => item.MediaAssetId == assetId)
             .Select(item => new { item.ClientProfileId, item.Status })
@@ -817,15 +1153,24 @@ internal sealed class MediaApplicationService(
             return false;
         }
 
-        var role = await dbContext.TenantMemberships.AsNoTracking()
+        return role is TenantRole.Owner or TenantRole.Coach;
+    }
+
+    /// <summary>
+    /// The caller's role in the currently bound tenant, or null when they hold no active membership
+    /// of it. Every media authorization decision starts here, so a removed or deactivated member is
+    /// refused by the same statement whatever kind of asset they are asking for.
+    /// </summary>
+    private async Task<TenantRole?> ActiveMembershipRoleAsync(
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        await dbContext.TenantMemberships.AsNoTracking()
             .Where(item =>
                 item.TenantId == tenantContext.TenantId &&
                 item.UserId == userId &&
                 item.Status == MembershipStatus.Active)
             .Select(item => (TenantRole?)item.Role)
             .SingleOrDefaultAsync(cancellationToken);
-        return role is TenantRole.Owner or TenantRole.Coach;
-    }
 
     // The expiry travels inside the protected payload so the business decision is made against
     // IClock and stays deterministic under a test clock. The data-protection envelope keeps its
@@ -906,8 +1251,16 @@ internal sealed class MediaApplicationService(
     /// and its thumbnail rendition, plus the dimensions the rendition was scaled to.
     /// </summary>
     private sealed record ProgressPhotoRendition(
-        StoredObject Image,
-        StoredObject Thumbnail,
+        IngestStoredObject Image,
+        IngestStoredObject Thumbnail,
         int Width,
         int Height);
+
+    private sealed record IngestStoredObject(
+        StoredObject Stored,
+        MediaIngestObject Reservation);
+
+    private sealed record IngestAdmissionPriority(DateTimeOffset CreatedAtUtc, Guid Id);
+
+    private sealed record IngestUsage(Guid Id, long AccountedBytes);
 }

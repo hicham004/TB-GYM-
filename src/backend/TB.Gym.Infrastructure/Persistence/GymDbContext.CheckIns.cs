@@ -205,7 +205,9 @@ public sealed partial class GymDbContext
             entity.Property(item => item.SubmittedDate).HasColumnType("date");
 
             // Exactly one response per assignment: answering is not something a client can start twice.
-            entity.HasIndex(item => new { item.TenantId, item.AssignmentId }).IsUnique();
+            entity.HasIndex(item => new { item.TenantId, item.AssignmentId })
+                .IsUnique()
+                .HasDatabaseName(DatabaseConstraintNames.OneCheckInResponsePerAssignment);
             entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.Status });
             entity.HasIndex(item => new { item.TenantId, item.FormVersionId });
 
@@ -323,7 +325,9 @@ public sealed partial class GymDbContext
 
             // At most one submit and one review per response, so the history cannot claim a response
             // was submitted twice even if a caller found a way to ask for it.
-            entity.HasIndex(item => new { item.TenantId, item.ResponseId, item.EventType }).IsUnique();
+            entity.HasIndex(item => new { item.TenantId, item.ResponseId, item.EventType })
+                .IsUnique()
+                .HasDatabaseName(DatabaseConstraintNames.OneCheckInResponseEventPerType);
             entity.HasOne<CheckInResponse>()
                 .WithMany()
                 .HasForeignKey(item => new { item.TenantId, item.ResponseId })

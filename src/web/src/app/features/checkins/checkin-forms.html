@@ -38,9 +38,76 @@
 
     <article class="panel builder">
       @if (selected(); as details) {
-        <h3>{{ details.form.title }}</h3>
+        <h3>
+          {{ details.form.title }}
+          @if (isArchived()) {
+            <span class="badge muted" i18n>Archived</span>
+          }
+        </h3>
         @if (details.form.description) {
           <p class="detail">{{ details.form.description }}</p>
+        }
+
+        <!-- The title and description belong to the lineage rather than to a version, so they are
+             changed here and saved against the form's own concurrency token. -->
+        @if (renaming()) {
+          <form class="builder-form" (ngSubmit)="renameForm()">
+            <label>
+              <span i18n>Title</span>
+              <input
+                type="text"
+                id="rename-title"
+                name="renameTitle"
+                [ngModel]="renameTitle()"
+                (ngModelChange)="setRenameTitle($event)"
+                [maxlength]="limits.titleLength"
+                required
+              />
+            </label>
+            <label>
+              <span i18n>Description</span>
+              <textarea
+                id="rename-description"
+                name="renameDescription"
+                rows="2"
+                [ngModel]="renameDescription()"
+                (ngModelChange)="setRenameDescription($event)"
+                [maxlength]="limits.descriptionLength"
+              ></textarea>
+            </label>
+            <div class="actions">
+              <button type="submit" class="primary-button" [disabled]="saving()" i18n>
+                Save details
+              </button>
+              <button type="button" class="link" (click)="cancelRename()" i18n>Cancel</button>
+            </div>
+          </form>
+        } @else {
+          <div class="actions">
+            @if (!isArchived()) {
+              <button type="button" class="link" (click)="startRename()" i18n>Edit details</button>
+              <button
+                type="button"
+                class="link danger"
+                [disabled]="saving()"
+                (click)="archiveForm()"
+                i18n
+              >
+                Archive
+              </button>
+            } @else {
+              <button type="button" class="link" [disabled]="saving()" (click)="restoreForm()" i18n>
+                Restore
+              </button>
+            }
+          </div>
+        }
+
+        @if (isArchived()) {
+          <p class="hint" i18n>
+            This form is archived. It cannot be edited, published or assigned until it is restored.
+            Everything already assigned from it is untouched.
+          </p>
         }
 
         <ul class="versions">
@@ -49,7 +116,13 @@
               <span i18n>Version {{ version.versionNumber }}</span>
               <span class="badge">{{ version.status }}</span>
               <span class="detail" i18n>{{ version.questionCount }} question(s)</span>
-              @if (version.status === 'Draft') {
+              <!-- An archived lineage offers reading only. The server refuses each of these too;
+                   the screen simply stops offering an action that would be refused. -->
+              @if (isArchived()) {
+                <button type="button" class="link" (click)="editVersion(version.id)" i18n>
+                  View
+                </button>
+              } @else if (version.status === 'Draft') {
                 <button type="button" class="link" (click)="editVersion(version.id)" i18n>
                   Edit
                 </button>
@@ -91,16 +164,14 @@
 
       @if (creating() || editingVersion(); as _) {
         @let version = editingVersion();
-        @let readOnly = version !== null && version.status !== 'Draft';
+        @let readOnly = version !== null && (version.status !== 'Draft' || isArchived());
 
         <form class="builder-form" (ngSubmit)="save()">
           <h4>
             @if (creating()) {
               <ng-container i18n>New check-in form</ng-container>
             } @else if (readOnly) {
-              <ng-container i18n
-                >Version {{ version!.versionNumber }} (published, read-only)</ng-container
-              >
+              <ng-container i18n>Version {{ version!.versionNumber }} (read-only)</ng-container>
             } @else {
               <ng-container i18n>Editing draft version {{ version!.versionNumber }}</ng-container>
             }
@@ -334,7 +405,8 @@
             </div>
           } @else {
             <p class="hint" i18n>
-              This version is published and frozen. Create a new draft from it to change anything.
+              This version is read-only. Restore an archived form, or create a draft from a
+              published version, before changing it.
             </p>
             <button type="button" class="link" (click)="cancelEditing()" i18n>Close</button>
           }

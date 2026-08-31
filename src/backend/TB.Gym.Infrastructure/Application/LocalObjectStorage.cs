@@ -133,6 +133,8 @@ internal sealed class LocalObjectStorage : IObjectStorage
 
 internal sealed class DevelopmentMediaScanner : IMediaScanner
 {
+    public bool IsAvailable => true;
+
     public Task<MediaScanResult> ScanAsync(
         string objectKey,
         string verifiedContentType,
@@ -149,6 +151,8 @@ internal sealed class DevelopmentMediaScanner : IMediaScanner
 
 internal sealed class UnavailableMediaScanner : IMediaScanner
 {
+    public bool IsAvailable => false;
+
     public Task<MediaScanResult> ScanAsync(
         string objectKey,
         string verifiedContentType,

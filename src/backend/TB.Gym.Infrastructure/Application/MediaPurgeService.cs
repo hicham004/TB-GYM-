@@ -8,13 +8,13 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Infrastructure.Application;
 
 /// <summary>
-/// Physically deletes the objects behind media that has been tombstoned long enough.
+/// Physically deletes objects behind due media tombstones and incomplete-ingest reservations.
 /// </summary>
 /// <remarks>
-/// This is a sweep over existing rows, not a second lifecycle. An asset moves Active -> Tombstoned
-/// (with <c>PurgeAfterUtc</c> set by <see cref="MediaAsset.MarkTombstoned"/>) -> Purged, or stays
-/// visibly tombstoned with an attempt count and the last failure code so a stuck object can be
-/// found. Nothing here invents a new tombstone concept or a job record.
+/// This is a reconciliation sweep, not a job platform. An asset moves Active -> Tombstoned (with
+/// <c>PurgeAfterUtc</c> set by <see cref="MediaAsset.MarkTombstoned"/>) -> Purged, or stays visibly
+/// tombstoned with failure evidence. A pre-admission object is represented separately by durable
+/// ingest ownership and moves Reserved/CleanupPending -> Purged. Neither path invents a queued job.
 /// <para>
 /// The sweep works one workspace at a time, each in its own scope. That is not an optimisation: the
 /// tenant write-scope guard refuses to let a single scope write rows belonging to two workspaces,
@@ -37,6 +37,20 @@ internal sealed class MediaPurgeService(
             new EventId(5501, "MediaPurgeFailed"),
             "Media purge failed for asset {AssetId} with {FailureCode} after {AttemptCount} attempts over {DerivativeCount} derivatives.");
 
+    /// <summary>
+    /// Claims and purges at most <paramref name="batchSize"/> objects in total across every
+    /// workspace, sharing that budget between the workspaces that have work due.
+    /// </summary>
+    /// <remarks>
+    /// The cap is global, not per workspace. Selecting up to <paramref name="batchSize"/> workspaces
+    /// and then allowing each of them <paramref name="batchSize"/> assets would let one sweep do
+    /// <c>batchSize²</c> work — 625 assets at the default 25 — and hold row locks for the whole of
+    /// it, which is exactly the bound this option exists to state. Each workspace instead receives
+    /// an equal share of the budget, and the running remainder stops the sweep the moment the total
+    /// is reached. Nothing unclaimed is lost: a row that stays tombstoned and due is picked up by
+    /// the next sweep, so a backlog drains over several passes instead of in one long transaction.
+    /// The candidate query is itself bounded by <c>Take</c>, so no unbounded set is materialised.
+    /// </remarks>
     public async Task<MediaPurgeOutcome> PurgeDueAsync(int batchSize, CancellationToken cancellationToken)
     {
         if (batchSize <= 0)
@@ -45,21 +59,43 @@ internal sealed class MediaPurgeService(
         }
 
         var now = clock.UtcNow;
+        // At most `batchSize` workspaces: one sweep cannot claim more objects than that anyway, so
+        // reading further tenant ids would only load rows this pass could never use.
         var tenantIds = await DueAssets(dbContext, now)
             .Select(item => item.TenantId)
+            .Concat(DueIngestObjects(dbContext, now).Select(item => item.TenantId))
             .Distinct()
+            .OrderBy(id => id)
             .Take(batchSize)
             .ToListAsync(cancellationToken);
+        if (tenantIds.Count == 0)
+        {
+            return new MediaPurgeOutcome(0, 0, 0);
+        }
 
+        // An equal share, at least one each, so a workspace with a large backlog cannot starve the
+        // others out of a sweep it happens to be listed first in.
+        var share = Math.Max(1, batchSize / tenantIds.Count);
+        var remaining = batchSize;
         var claimed = 0;
         var purged = 0;
         var failed = 0;
         foreach (var tenantId in tenantIds)
         {
-            var outcome = await PurgeTenantAsync(tenantId, now, batchSize, cancellationToken);
+            if (remaining <= 0)
+            {
+                break;
+            }
+
+            var outcome = await PurgeTenantAsync(
+                tenantId,
+                now,
+                Math.Min(share, remaining),
+                cancellationToken);
             claimed += outcome.Claimed;
             purged += outcome.Purged;
             failed += outcome.Failed;
+            remaining -= outcome.Claimed;
         }
 
         return new MediaPurgeOutcome(claimed, purged, failed);
@@ -79,6 +115,16 @@ internal sealed class MediaPurgeService(
                 item.Status == MediaAssetStatus.Tombstoned &&
                 item.Source == MediaSource.Upload &&
                 item.PurgeAfterUtc != null &&
+                item.PurgeAfterUtc <= now);
+
+    private static IQueryable<MediaIngestObject> DueIngestObjects(
+        GymDbContext context,
+        DateTimeOffset now) =>
+        context.MediaIngestObjects
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(item =>
+                item.Status != MediaIngestObjectStatus.Purged &&
                 item.PurgeAfterUtc <= now);
 
     private async Task<MediaPurgeOutcome> PurgeTenantAsync(
@@ -103,7 +149,26 @@ internal sealed class MediaPurgeService(
             // FOR UPDATE SKIP LOCKED is what makes several API replicas safe: each sweep locks the
             // rows it claims for the life of its transaction, and any other sweep steps over them
             // instead of blocking or double-deleting the same object.
-            var claimed = await context.MediaAssets
+            // Incomplete ingests are reclaimed first because their bytes have no active media
+            // consumer. A pre-write reservation is also eligible after its lease: deletion is
+            // idempotent, so it is safe whether the process died before or after storage accepted
+            // the key.
+            var claimedIngest = await context.MediaIngestObjects
+                .FromSql($"""
+                    SELECT *, xmin FROM media."IngestObjects"
+                    WHERE "TenantId" = {tenantId}
+                      AND "Status" <> 'Purged'
+                      AND "PurgeAfterUtc" <= {now}
+                    ORDER BY "PurgeAfterUtc"
+                    LIMIT {batchSize}
+                    FOR UPDATE SKIP LOCKED
+                    """)
+                .ToListAsync(cancellationToken);
+
+            var remaining = batchSize - claimedIngest.Count;
+            var claimedAssets = remaining <= 0
+                ? []
+                : await context.MediaAssets
                 // xmin is a system column and is not covered by *, but EF maps it as the optimistic
                 // concurrency token, so it has to be selected explicitly.
                 .FromSql($"""
@@ -114,14 +179,31 @@ internal sealed class MediaPurgeService(
                       AND "PurgeAfterUtc" IS NOT NULL
                       AND "PurgeAfterUtc" <= {now}
                     ORDER BY "PurgeAfterUtc"
-                    LIMIT {batchSize}
+                    LIMIT {remaining}
                     FOR UPDATE SKIP LOCKED
                     """)
                 .ToListAsync(cancellationToken);
 
             var purged = 0;
             var failed = 0;
-            foreach (var asset in claimed)
+            foreach (var ingestObject in claimedIngest)
+            {
+                if (await TryPurgeIngestObjectAsync(
+                    context,
+                    objectStorage,
+                    ingestObject,
+                    now,
+                    cancellationToken))
+                {
+                    purged++;
+                }
+                else
+                {
+                    failed++;
+                }
+            }
+
+            foreach (var asset in claimedAssets)
             {
                 if (await TryPurgeAsync(context, objectStorage, asset, now, cancellationToken))
                 {
@@ -134,8 +216,47 @@ internal sealed class MediaPurgeService(
             }
 
             await transaction.CommitAsync(cancellationToken);
-            return new MediaPurgeOutcome(claimed.Count, purged, failed);
+            return new MediaPurgeOutcome(claimedIngest.Count + claimedAssets.Count, purged, failed);
         });
+    }
+
+    private async Task<bool> TryPurgeIngestObjectAsync(
+        GymDbContext context,
+        IObjectStorage objectStorage,
+        MediaIngestObject ingestObject,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            ingestObject.BeginPurgeAttempt(now);
+            await context.SaveChangesAsync(cancellationToken);
+            if (ingestObject.StorageKey is { } storageKey)
+            {
+                await objectStorage.DeleteAsync(storageKey, cancellationToken);
+            }
+
+            ingestObject.CompletePurge(now);
+            await context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException
+                                              or UnauthorizedAccessException
+                                              or InvalidOperationException
+                                              or ArgumentException)
+        {
+            context.Entry(ingestObject).State = EntityState.Unchanged;
+            ingestObject.RecordPurgeFailure(now, PurgeFailureCode(exception));
+            await context.SaveChangesAsync(cancellationToken);
+            LogPurgeFailure(
+                logger,
+                ingestObject.Id,
+                PurgeFailureCode(exception),
+                ingestObject.PurgeAttemptCount,
+                0,
+                null);
+            return false;
+        }
     }
 
     private async Task<bool> TryPurgeAsync(

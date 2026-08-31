@@ -54,6 +54,17 @@ public enum WorkspaceRegistrationStatus
     Conflict = 4,
 }
 
+/// <summary>
+/// The workspace's settings, including the calendar date it currently is there.
+/// </summary>
+/// <remarks>
+/// <paramref name="CurrentDate"/> is the workspace-local today, resolved on the server from
+/// <c>IClock</c> through <paramref name="TimeZoneId"/>. It is carried here because every date rule
+/// in the product is decided in the workspace frame and the browser's own calendar is not that
+/// frame: a coach in Beirut just after midnight has a UTC date that is still yesterday, so a client
+/// computing "today" locally would refuse a due date the server accepts, or offer one it refuses.
+/// The server remains authoritative; this exists so the form agrees with it instead of guessing.
+/// </remarks>
 public sealed record WorkspaceDetails(
     Guid Id,
     string Name,
@@ -62,6 +73,7 @@ public sealed record WorkspaceDetails(
     string DefaultCulture,
     string DefaultCurrencyCode,
     DayOfWeek WeekStartsOn,
+    DateOnly CurrentDate,
     uint Version);
 
 public sealed record UpdateWorkspaceRequest(

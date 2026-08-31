@@ -48,7 +48,6 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 });
 app.UseTbGymSecurityHeaders();
 app.UseRequestLocalization();
-app.UseRateLimiter();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -56,6 +55,12 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseAuthentication();
+
+// After authentication, deliberately. The per-actor policies partition on the signed-in user, and
+// running the limiter first left `HttpContext.User` unauthenticated, so every authenticated write
+// silently fell back to a source-address partition. Placed before platform access and
+// authorization so a rejected request still costs nothing but the cookie decode.
+app.UseRateLimiter();
 app.UseTbGymPlatformAccess();
 app.UseAuthorization();
 

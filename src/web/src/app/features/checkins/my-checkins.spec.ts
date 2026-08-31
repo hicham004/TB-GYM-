@@ -1,10 +1,11 @@
-import { signal } from '@angular/core';
+import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
+  CheckInAssignmentListView,
   CheckInAssignmentView,
   CheckInQuestionView,
   CheckInResponseDetail,
@@ -56,6 +57,17 @@ const ASSIGNMENT: CheckInAssignmentView = {
   assignedByUserId: 'coach-1',
 };
 
+function ownList(
+  total: number,
+  ...assignments: CheckInAssignmentView[]
+): CheckInAssignmentListView {
+  return {
+    clientProfileId: 'client-1',
+    total,
+    items: assignments.map((assignment) => ({ assignment, response: null })),
+  };
+}
+
 function detail(response: CheckInResponseView | null): CheckInResponseDetail {
   return {
     assignment: ASSIGNMENT,
@@ -100,9 +112,18 @@ interface Harness {
   submit(): Promise<void>;
   guard(): { canSubmit: boolean };
   questionIssues(questionKey: string): string[];
+  saveDraft(): Promise<void>;
+  loadMoreAssignments(): Promise<void>;
 }
 
-async function render(api: Partial<ApiClient>) {
+async function render(
+  api: Partial<ApiClient>,
+  options: {
+    selectedTenantId?: WritableSignal<string | null>;
+    csrfRefresh?: () => Promise<void>;
+  } = {},
+) {
+  const selectedTenantId = options.selectedTenantId ?? signal<string | null>('tenant-1');
   await TestBed.configureTestingModule({
     imports: [MyCheckIns],
     providers: [
@@ -110,13 +131,20 @@ async function render(api: Partial<ApiClient>) {
         provide: ApiClient,
         useValue: {
           listOwnCheckInAssignments: vi.fn(() =>
-            of({ clientProfileId: 'client-1', assignments: [ASSIGNMENT] }),
+            of({
+              clientProfileId: 'client-1',
+              total: 1,
+              items: [{ assignment: ASSIGNMENT, response: null }],
+            }),
           ),
           ...api,
         },
       },
-      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
-      { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: TenantStore, useValue: { selectedTenantId } },
+      {
+        provide: CsrfService,
+        useValue: { refresh: vi.fn(options.csrfRefresh ?? (() => Promise.resolve())) },
+      },
     ],
   }).compileComponents();
 
@@ -126,6 +154,7 @@ async function render(api: Partial<ApiClient>) {
     fixture,
     host: fixture.nativeElement as HTMLElement,
     component: fixture.componentInstance as unknown as Harness,
+    selectedTenantId,
   };
 }
 
@@ -173,6 +202,63 @@ describe('MyCheckIns', () => {
     const summary = host.querySelector('.badge-row');
     expect(summary).not.toBeNull();
     expect(summary!.textContent).not.toContain('SubmittedSubmitted');
+  });
+
+  it('keeps assignment B when assignment A resolves last', async () => {
+    const first = new Subject<CheckInResponseDetail>();
+    const second = new Subject<CheckInResponseDetail>();
+    const firstDetail = detail(
+      response({
+        answers: [
+          {
+            questionId: TEXT_QUESTION.id,
+            questionKey: TEXT_KEY,
+            questionType: 'ShortText',
+            textValue: 'Older assignment A',
+            numericValue: null,
+            choices: [],
+          },
+        ],
+      }),
+    );
+    const secondDetail = detail(
+      response({
+        assignmentId: 'assignment-2',
+        answers: [
+          {
+            questionId: TEXT_QUESTION.id,
+            questionKey: TEXT_KEY,
+            questionType: 'ShortText',
+            textValue: 'Current assignment B',
+            numericValue: null,
+            choices: [],
+          },
+        ],
+      }),
+    );
+    secondDetail.assignment = {
+      ...ASSIGNMENT,
+      id: 'assignment-2',
+      formTitle: 'Second check-in',
+    };
+    const { fixture, host, component } = await render({
+      getOwnCheckInResponse: vi.fn((assignmentId: string) =>
+        assignmentId === ASSIGNMENT.id ? first : second,
+      ) as never,
+    });
+
+    const pendingFirst = component.open(ASSIGNMENT.id);
+    const pendingSecond = component.open('assignment-2');
+    second.next(secondDetail);
+    second.complete();
+    first.next(firstDetail);
+    first.complete();
+    await Promise.all([pendingFirst, pendingSecond]);
+    await settle(fixture);
+
+    expect(query<HTMLInputElement>(host, '#q-question-1').value).toBe('Current assignment B');
+    expect(query<HTMLInputElement>(host, '#q-question-1').value).not.toBe('Older assignment A');
+    expect(host.textContent).not.toContain('Loading your check-ins');
   });
 
   it('blocks submission until every required question is answered', async () => {
@@ -313,6 +399,158 @@ describe('MyCheckIns', () => {
 
     expect(component.questionIssues(TEXT_KEY)).toContain('This question has to be answered.');
     expect(component.questionIssues(SCALE_KEY)).toContain('Answer between 1 and 10.');
+  });
+
+  it('discards an assignment page from the workspace the client left', async () => {
+    const selectedTenantId = signal<string | null>('tenant-1');
+    const oldWorkspace = new Subject<CheckInAssignmentListView>();
+    const newWorkspace = new Subject<CheckInAssignmentListView>();
+    const currentAssignment = { ...ASSIGNMENT, id: 'current', formTitle: 'Current workspace form' };
+    const oldAssignment = { ...ASSIGNMENT, id: 'old', formTitle: 'Old workspace form' };
+    const listAssignments = vi
+      .fn()
+      .mockReturnValueOnce(oldWorkspace)
+      .mockReturnValueOnce(newWorkspace);
+    const { fixture, host } = await render(
+      { listOwnCheckInAssignments: listAssignments as never },
+      { selectedTenantId },
+    );
+
+    selectedTenantId.set('tenant-2');
+    fixture.detectChanges();
+    newWorkspace.next(ownList(1, currentAssignment));
+    newWorkspace.complete();
+    oldWorkspace.next(ownList(1, oldAssignment));
+    oldWorkspace.complete();
+    await settle(fixture);
+
+    expect(host.textContent).toContain('Current workspace form');
+    expect(host.textContent).not.toContain('Old workspace form');
+  });
+
+  it('discards an open response after the workspace changes', async () => {
+    const selectedTenantId = signal<string | null>('tenant-1');
+    const staleDetail = new Subject<CheckInResponseDetail>();
+    const { fixture, host, component } = await render(
+      { getOwnCheckInResponse: vi.fn(() => staleDetail) },
+      { selectedTenantId },
+    );
+
+    const pending = component.open(ASSIGNMENT.id);
+    selectedTenantId.set('tenant-2');
+    fixture.detectChanges();
+    staleDetail.next(
+      detail(
+        response({
+          answers: [
+            {
+              questionId: TEXT_QUESTION.id,
+              questionKey: TEXT_KEY,
+              questionType: 'ShortText',
+              textValue: 'Old workspace answer',
+              numericValue: null,
+              choices: [],
+            },
+          ],
+        }),
+      ),
+    );
+    staleDetail.complete();
+    await pending;
+    await settle(fixture);
+
+    expect(host.textContent).not.toContain('Old workspace answer');
+    expect(host.textContent).toContain('Choose a check-in to answer it.');
+  });
+
+  it('does not save a draft after the workspace changes during CSRF refresh', async () => {
+    let releaseCsrf!: () => void;
+    const csrf = new Promise<void>((resolve) => {
+      releaseCsrf = resolve;
+    });
+    const selectedTenantId = signal<string | null>('tenant-1');
+    const save = vi.fn(() => of(detail(response())));
+    const { fixture, component } = await render(
+      {
+        getOwnCheckInResponse: vi.fn(() => of(detail(response()))),
+        saveOwnCheckInDraftResponse: save as never,
+      },
+      { selectedTenantId, csrfRefresh: () => csrf },
+    );
+    await component.open(ASSIGNMENT.id);
+    component.setText(TEXT_QUESTION.id, 'A private draft');
+
+    const pending = component.saveDraft();
+    selectedTenantId.set('tenant-2');
+    fixture.detectChanges();
+    releaseCsrf();
+    await pending;
+    await settle(fixture);
+
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('does not submit after the workspace changes during CSRF refresh', async () => {
+    let releaseCsrf!: () => void;
+    const csrf = new Promise<void>((resolve) => {
+      releaseCsrf = resolve;
+    });
+    const selectedTenantId = signal<string | null>('tenant-1');
+    const save = vi.fn(() => of(detail(response())));
+    const submit = vi.fn(() => of(detail(response({ status: 'Submitted' }))));
+    const { fixture, component } = await render(
+      {
+        getOwnCheckInResponse: vi.fn(() => of(detail(response()))),
+        saveOwnCheckInDraftResponse: save as never,
+        submitOwnCheckInResponse: submit as never,
+      },
+      { selectedTenantId, csrfRefresh: () => csrf },
+    );
+    await component.open(ASSIGNMENT.id);
+    component.setText(TEXT_QUESTION.id, 'Ready');
+    component.setNumber(SCALE_QUESTION.id, '8');
+
+    const pending = component.submit();
+    selectedTenantId.set('tenant-2');
+    fixture.detectChanges();
+    releaseCsrf();
+    await pending;
+    await settle(fixture);
+
+    expect(save).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('loads all assignment pages without duplicates and clears them on workspace reload', async () => {
+    const selectedTenantId = signal<string | null>('tenant-1');
+    const rows = Array.from({ length: 51 }, (_, index) => ({
+      ...ASSIGNMENT,
+      id: `page-${index}`,
+      formTitle: `Paged own check-in ${index}`,
+    }));
+    const other = { ...ASSIGNMENT, id: 'other', formTitle: 'Other workspace check-in' };
+    const listAssignments = vi.fn((_skip: number, _take: number) => {
+      const skip = _skip;
+      return selectedTenantId() === 'tenant-1'
+        ? of(ownList(51, ...rows.slice(skip, skip + _take)))
+        : of(ownList(1, other));
+    });
+    const { fixture, host, component } = await render(
+      { listOwnCheckInAssignments: listAssignments as never },
+      { selectedTenantId },
+    );
+
+    expect(host.textContent).toContain('Showing 50 of 51 check-ins, newest first.');
+    await component.loadMoreAssignments();
+    await settle(fixture);
+    expect(host.querySelectorAll('ul.assignments > li')).toHaveLength(51);
+    expect(host.textContent).toContain('Showing 51 of 51 check-ins, newest first.');
+
+    selectedTenantId.set('tenant-2');
+    await settle(fixture);
+    expect(host.querySelectorAll('ul.assignments > li')).toHaveLength(1);
+    expect(host.textContent).toContain('Other workspace check-in');
+    expect(host.textContent).not.toContain('Paged own check-in 0');
   });
 
   it('reports a load failure instead of rendering a blank form', async () => {

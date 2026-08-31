@@ -435,9 +435,26 @@ lifetime is configurable (60 seconds to 4 hours, default 1800) so that pausing a
 demo video does not fail mid-playback. External embeds are validated YouTube/Vimeo IDs. Production publication fails closed until a scanner is configured. Local
 Docker storage is development infrastructure, not the production object-store decision.
 
+**MED-005** An unexpired grant is not a licence. Every content and rendition request re-establishes
+active membership of the asset's tenant before anything else, so removing or deactivating a
+membership closes access at once rather than when the grant expires. Several assets may be granted
+in one bounded call (at most 32), each authorized separately and each receiving its own path-scoped
+cookie; no grant is ever widened and no media URL is public.
+
+**MED-006** An image is bounded by what it decodes to, not by what it compresses to. Encoded
+dimensions are read from the codec header and refused before allocation above 8 000 px per edge,
+30 megapixels, or approximately 120 MB for one RGBA pixel buffer. This is not a peak-memory claim:
+orientation can require a second full bitmap and codec/encoder/stream/rendition allocations add to
+it. One upload per tenant and a configurable process-wide decode cap bound concurrency. A scanner
+refusal, an unavailable deployment, or an operational scanner failure commits no asset or photo;
+`400` is reserved for an actual refusal and `503` for scanner availability/failure, without exposing
+provider details.
+
 **PRG-007** A progress photo belongs to one tenant, client, workspace-local date, and pose,
-enforced by a unique index. It is readable by the client it depicts and, only while the
-coaching relationship is not blocked, by an Owner/Coach of that workspace; it never appears
+enforced by a unique index, and exists only once its media asset is `Ready` — a refused or
+unscannable upload records no photo and leaves the date and pose free for a retry. It is readable
+by the client it depicts while they hold an active membership of that workspace, and, only while
+the coaching relationship is not blocked, by an Owner/Coach of it; it never appears
 in the coach exercise-media library. Uploads are images only. Removal is one-way and audited:
 the row and its media association are retained, the coach view loses it, and the owning client
 keeps it in their own history. Uploaded photos are re-encoded from their pixels before permanent
@@ -464,13 +481,18 @@ omitted, never partly populated. Photo timelines address only the thumbnail rend
 without one is reported as having no preview rather than falling back to the original. Counts are
 reported with the span they were counted over; no adherence score, percentage, streak or rating is
 derived, and no relationship between domains is stated or implied.
+For training counts, non-cancelled mesocycles contribute scheduled sessions normally. A cancelled
+mesocycle contributes only sessions that have a `WorkoutExecution`; completed/in-progress statuses
+remain historical numerators and each such execution's session remains in the denominator, while
+never-started withdrawn sessions are excluded. Cancellation therefore yields `1 of 1`, never `0 of
+0` or `1 of 0`, after one completed workout and mutates no training history.
 
-**MED-005** Upload bodies are streamed with explicit application and Nginx limits, endpoint
+**MED-007** Upload bodies are streamed with explicit application and Nginx limits, endpoint
 rate/concurrency controls, and a configurable workspace-byte quota. Deleting historically
 referenced media creates a tombstone and retains bytes. A later retention worker may purge
 only when no protected snapshot requires the object and the approved retention period elapsed.
 
-**MED-006** Removing a progress photo tombstones its media asset on the shared retention, so its
+**MED-008** Removing a progress photo tombstones its media asset on the shared retention, so its
 bytes are scheduled for deletion; the owning client keeps reading it until they are actually gone.
 Purge is a one-way progression on existing rows — Tombstoned with a due date, then Purged — never a
 second tombstone concept. Media that is not tombstoned, retained indefinitely for historical
@@ -497,12 +519,23 @@ projection, dashboard bodyweight section, and the onboarding earliest-observatio
 voided rows, while the audit read still resolves them with the void attached so the correction stays
 visible rather than erased.
 
-**MED-007** A storage allowance counts the original and every derivative, counts tombstoned bytes
+**MED-009** A storage allowance counts the original and every derivative, counts tombstoned bytes
 that are not yet purged because they are still physically stored, and excludes purged bytes. Uploads
 are bounded by both the workspace allowance and a per-client progress-photo allowance. The
 measurement, the decision and the insert happen in one transaction under a transaction-scoped
 advisory lock keyed on the workspace, so two concurrent uploads cannot both pass the same check. A
-full allowance is a conflict carrying a stable code, not a validation failure blamed on the file.
+stable reservation order prevents two individually fitting uploads from both rejecting each other:
+admission counts reservations ahead of the candidate, and a later candidate sees any winner as
+committed asset bytes. A full allowance is a conflict carrying a stable code, not a validation
+failure blamed on the file.
+
+**MED-010** Before every object-store put, ingestion persists the generated key and a conservative
+byte reservation. A successful put ends with that key atomically attached to an asset/derivative,
+positively deleted and marked Purged, or retained in immediately due durable cleanup state; a
+crashed live reservation becomes due after 15 minutes. Non-purged ingest bytes count toward the
+workspace and applicable client allowance. Compensation uses an independent bounded token, handles
+original and derivative keys independently, and deletion is idempotent. Reconciliation clears a key
+and releases quota only after storage confirms deletion.
 
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and
@@ -662,6 +695,12 @@ Question and option text is never denormalised into an answer.
 and may be saved repeatedly. Structure is still enforced. Submission validates the whole response in
 one pass — required answers, numeric range, numeric step, choice membership, single-choice arity —
 and returns every failure at once rather than the first.
+
+**CHK-013** A draft is private to the client writing it. Submission is what makes an answer a record
+addressed to the coach; until then the coach may know that a draft exists and see its status and
+dates, and receives no answer content, stated explicitly so an empty answer list is never read as a
+client who wrote nothing. The client's own read is complete. An archived form refuses every editing
+operation — save, publish and rename — server-side, whatever a screen chooses to offer.
 
 **CHK-009** Review is a state change plus an append-only event carrying actor and time. It never
 touches an answer, and re-reviewing is refused.

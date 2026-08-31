@@ -64,6 +64,22 @@ export class CheckInForms {
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
 
+  /**
+   * The lineage's title and description while they are being renamed. They belong to the form, not
+   * to any one version, so they are edited from the form panel and saved through the rename
+   * operation with the form's own concurrency token — never bundled into a draft save, which
+   * carries the version's token and would leave two aggregates half-written on a conflict.
+   */
+  protected readonly renaming = signal(false);
+  protected readonly renameTitle = signal('');
+  protected readonly renameDescription = signal('');
+
+  /**
+   * An archived lineage is closed: the server refuses editing, publishing, deriving and assigning
+   * on it, so the screen offers none of those and offers restoring instead.
+   */
+  protected readonly isArchived = computed(() => this.selected()?.form.isArchived === true);
+
   protected readonly validation = computed(() => validateDraft(this.draft()));
 
   /** Decides when each builder reason is due on screen. See `FormAttempt` for the rule. */
@@ -146,10 +162,123 @@ export class CheckInForms {
       this.selected.set(details);
       this.creating.set(false);
       this.editingVersion.set(null);
+      this.renaming.set(false);
     } catch (error) {
       this.error.set(apiErrorMessage(error, $localize`This check-in form could not be loaded.`));
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  protected startRename(): void {
+    const details = this.selected();
+    if (!details) {
+      return;
+    }
+
+    this.renameTitle.set(details.form.title);
+    this.renameDescription.set(details.form.description ?? '');
+    this.renaming.set(true);
+    this.clearMessages();
+  }
+
+  protected cancelRename(): void {
+    this.renaming.set(false);
+  }
+
+  protected setRenameTitle(title: string): void {
+    this.renameTitle.set(title);
+  }
+
+  protected setRenameDescription(description: string): void {
+    this.renameDescription.set(description);
+  }
+
+  /**
+   * Persists the lineage's title and description against the form's own concurrency token. A
+   * conflict is reported and nothing is written, so the two values can never end up half-saved.
+   */
+  protected async renameForm(): Promise<void> {
+    const details = this.selected();
+    if (!details) {
+      return;
+    }
+
+    const title = this.renameTitle().trim();
+    if (title.length === 0) {
+      this.error.set($localize`A title is required.`);
+      return;
+    }
+
+    this.saving.set(true);
+    this.clearMessages();
+    try {
+      await this.csrf.refresh();
+      const description = this.renameDescription().trim();
+      const saved = await firstValueFrom(
+        this.api.renameCheckInForm(details.form.id, {
+          title,
+          description: description.length > 0 ? description : null,
+          version: Number(details.form.version),
+        }),
+      );
+      this.selected.set(saved);
+      this.renaming.set(false);
+      this.notice.set($localize`Check-in form renamed.`);
+      await this.loadForms();
+    } catch (error) {
+      this.error.set(apiErrorMessage(error, $localize`This check-in form could not be renamed.`));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  /** Archiving is reversible and closes the lineage to editing, publishing and assignment. */
+  protected archiveForm(): Promise<void> {
+    return this.setArchived(true);
+  }
+
+  protected restoreForm(): Promise<void> {
+    return this.setArchived(false);
+  }
+
+  private async setArchived(archived: boolean): Promise<void> {
+    const details = this.selected();
+    if (!details) {
+      return;
+    }
+
+    this.saving.set(true);
+    this.clearMessages();
+    try {
+      await this.csrf.refresh();
+      const version = Number(details.form.version);
+      const saved = await firstValueFrom(
+        archived
+          ? this.api.archiveCheckInForm(details.form.id, version)
+          : this.api.restoreCheckInForm(details.form.id, version),
+      );
+      this.selected.set(saved);
+      // An archived lineage offers no editor, so anything open on it is closed rather than left
+      // pointing at a version the server will now refuse to save.
+      this.editingVersion.set(null);
+      this.notice.set(
+        archived
+          ? $localize`Check-in form archived. It can no longer be edited or assigned.`
+          : $localize`Check-in form restored.`,
+      );
+      await this.loadForms();
+    } catch (error) {
+      this.error.set(
+        apiErrorMessage(
+          error,
+          archived
+            ? $localize`This check-in form could not be archived.`
+            : $localize`This check-in form could not be restored.`,
+        ),
+      );
+    } finally {
+      this.saving.set(false);
     }
   }
 

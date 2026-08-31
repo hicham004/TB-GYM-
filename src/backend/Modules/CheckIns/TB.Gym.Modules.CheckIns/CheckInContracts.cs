@@ -56,6 +56,8 @@ public interface ICheckInApplicationService
 
     Task<CheckInAssignmentListResult> ListClientAssignmentsAsync(
         Guid clientProfileId,
+        int skip,
+        int take,
         CancellationToken cancellationToken);
 
     Task<CheckInAssignmentDetailResult> GetClientAssignmentAsync(
@@ -63,7 +65,10 @@ public interface ICheckInApplicationService
         Guid assignmentId,
         CancellationToken cancellationToken);
 
-    Task<CheckInAssignmentListResult> ListOwnAssignmentsAsync(CancellationToken cancellationToken);
+    Task<CheckInAssignmentListResult> ListOwnAssignmentsAsync(
+        int skip,
+        int take,
+        CancellationToken cancellationToken);
 
     Task<CheckInAssignmentDetailResult> GetOwnAssignmentAsync(
         Guid assignmentId,
@@ -169,9 +174,48 @@ public sealed record CheckInAssignmentView(
     DateTimeOffset AssignedAtUtc,
     Guid? AssignedByUserId);
 
+/// <summary>
+/// The minimum a list needs to state what happened to an assignment, and nothing more.
+/// </summary>
+/// <remarks>
+/// Deliberately carries no answer, no text and no concurrency token. A coach's list is built from
+/// this, so an unsubmitted draft contributes its status and its dates and nothing a client typed;
+/// reading a response's content is a separate, separately authorized request for one assignment.
+/// </remarks>
+public sealed record CheckInAssignmentResponseSummary(
+    Guid ResponseId,
+    CheckInResponseStatus Status,
+    DateOnly? SubmittedDate,
+    DateTimeOffset? SubmittedAtUtc,
+    DateTimeOffset? ReviewedAtUtc,
+    bool IsLate);
+
+/// <summary>
+/// One row of an assignment list: the assignment, and the state of its response if one exists.
+/// </summary>
+/// <remarks>
+/// The status travels with the list so a caller does not have to fetch every response in full just
+/// to render a badge. A null <see cref="Response"/> means the client has not started; there is no
+/// empty draft row waiting for them.
+/// </remarks>
+public sealed record CheckInAssignmentListItem(
+    CheckInAssignmentView Assignment,
+    CheckInAssignmentResponseSummary? Response);
+
+/// <summary>
+/// A bounded page of one client's assignments. <see cref="Total"/> is the whole count so a caller
+/// can say how many were not returned rather than presenting a page as the entire history.
+/// </summary>
 public sealed record CheckInAssignmentListView(
     Guid ClientProfileId,
-    IReadOnlyList<CheckInAssignmentView> Assignments);
+    long Total,
+    IReadOnlyList<CheckInAssignmentListItem> Items);
+
+public static class CheckInAssignmentListLimits
+{
+    public const int DefaultPageSize = 50;
+    public const int MaximumPageSize = 200;
+}
 
 /// <summary>
 /// One assignment together with the exact version content the client was asked. The version is
