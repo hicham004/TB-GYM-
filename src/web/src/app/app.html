@@ -45,6 +45,20 @@
         @if (tenants.isOwner()) {
           <a routerLink="/workspace" routerLinkActive="active" i18n>Workspace</a>
         }
+        <!-- Every active member has an inbox, whatever their role in the workspace. The count is
+             announced in words rather than left as a bare number beside the link, so it is not read
+             out as "Notifications 3" with no explanation of what 3 is. -->
+        @if (notifications.isAvailable()) {
+          <a routerLink="/notifications" routerLinkActive="active" class="with-badge">
+            <span i18n>Notifications</span>
+            @if (notifications.unread() > 0) {
+              <span class="badge" aria-hidden="true">{{ notifications.unread() }}</span>
+              <span class="visually-hidden" i18n
+                >{{ notifications.unread() }} unread notifications</span
+              >
+            }
+          </a>
+        }
       </nav>
 
       <div class="session-controls">

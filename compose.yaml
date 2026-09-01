@@ -41,6 +41,27 @@ services:
       postgres:
         condition: service_healthy
 
+  # A second composition root of the same monolith, not a microservice: same image base, same
+  # database, same domain assemblies, no HTTP surface and no migrations of its own. It waits for the
+  # API because the API is what applies migrations locally; in production migrations are a separate
+  # deployment step and the worker simply retries until the schema is there.
+  worker:
+    build:
+      context: .
+      dockerfile: src/backend/TB.Gym.Worker/Dockerfile
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__Database: Host=postgres;Port=5432;Database=${POSTGRES_DB:-tbgym};Username=${POSTGRES_USER:-tbgym};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      Notifications__Dispatch__PollIntervalSeconds: ${TB_GYM_NOTIFICATION_POLL_SECONDS:-5}
+      Notifications__Dispatch__BatchSize: ${TB_GYM_NOTIFICATION_BATCH_SIZE:-25}
+      Notifications__Dispatch__ClaimLeaseSeconds: ${TB_GYM_NOTIFICATION_LEASE_SECONDS:-120}
+      Notifications__Dispatch__MaximumAttempts: ${TB_GYM_NOTIFICATION_MAX_ATTEMPTS:-6}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+
   web:
     build:
       context: .

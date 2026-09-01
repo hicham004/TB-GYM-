@@ -70,6 +70,10 @@ public sealed partial class GymDbContext(
 
     public DbSet<NotificationOutboxItem> NotificationOutboxItems => Set<NotificationOutboxItem>();
 
+    public DbSet<Notification> Notifications => Set<Notification>();
+
+    public DbSet<NotificationDeliveryAttempt> NotificationDeliveryAttempts => Set<NotificationDeliveryAttempt>();
+
     public DbSet<LegalDocumentVersion> LegalDocumentVersions => Set<LegalDocumentVersion>();
 
     public DbSet<LegalConsentAcceptance> LegalConsentAcceptances => Set<LegalConsentAcceptance>();
@@ -805,6 +809,48 @@ public sealed partial class GymDbContext(
         }
 
         RejectAppendOnlyMutations<CheckInResponseEvent>("Check-in response events are append-only.");
+
+        // Delivery history is the only thing that can explain a dead-lettered notification later, so
+        // an attempt is never deleted and a finished one is never rewritten. The database trigger is
+        // the guarantee; this catches the mistake in the code path that made it.
+        if (ChangeTracker.Entries<NotificationDeliveryAttempt>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Notification delivery attempts are never deleted.");
+        }
+
+        foreach (var entry in ChangeTracker.Entries<NotificationDeliveryAttempt>()
+                     .Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<NotificationDeliveryOutcome>(nameof(NotificationDeliveryAttempt.Outcome))
+                != NotificationDeliveryOutcome.Started)
+            {
+                throw new InvalidOperationException("A completed notification delivery attempt is immutable.");
+            }
+        }
+
+        // A rendered notification is a historical snapshot of what somebody was told. Only read
+        // state may change after it is written, and it is never removed.
+        if (ChangeTracker.Entries<Notification>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Notifications are never deleted.");
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Notification>()
+                     .Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.Property(item => item.Title).IsModified ||
+                entry.Property(item => item.Body).IsModified ||
+                entry.Property(item => item.TemplateKey).IsModified ||
+                entry.Property(item => item.TemplateVersion).IsModified ||
+                entry.Property(item => item.Culture).IsModified ||
+                entry.Property(item => item.Kind).IsModified ||
+                entry.Property(item => item.RecipientUserId).IsModified ||
+                entry.Property(item => item.SourceOutboxItemId).IsModified)
+            {
+                throw new InvalidOperationException(
+                    "A delivered notification is a snapshot; only its read state can change.");
+            }
+        }
 
         if (ChangeTracker.Entries<CheckInResponse>().Any(item => item.State == EntityState.Deleted))
         {

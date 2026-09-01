@@ -728,6 +728,13 @@ export type CoachRegistrationResponse = {
   developmentConfirmationUrl: null | string;
 };
 
+export type CommercialNotificationKind =
+  | 'PaymentRequired'
+  | 'EnrollmentActivated'
+  | 'EnrollmentEndingSoon'
+  | 'EnrollmentExpired'
+  | 'EnrollmentRenewed';
+
 export type CompleteClientOnboardingRequest = {
   intake: UpdateClientIntakeRequest;
   initialBodyweightValue: number | string;
@@ -1418,6 +1425,41 @@ export type MuscleGroup =
   | 'Other';
 
 export type MuscleRole = 'Primary' | 'Secondary';
+
+export type NotificationDeadLetterPage = {
+  total: number | string;
+  items: Array<NotificationDeadLetterView>;
+};
+
+export type NotificationDeadLetterView = {
+  outboxItemId: string;
+  kind: CommercialNotificationKind;
+  scheduledAtUtc: string;
+  attemptCount: number | string;
+  deadLetteredAtUtc: null | string;
+  failureCode: null | string;
+};
+
+export type NotificationPage = {
+  total: number | string;
+  unreadTotal: number | string;
+  items: Array<NotificationView>;
+};
+
+export type NotificationUnreadCount = {
+  unread: number | string;
+};
+
+export type NotificationView = {
+  id: string;
+  kind: CommercialNotificationKind;
+  title: string;
+  body: string;
+  createdAtUtc: string;
+  readAtUtc: null | string;
+  isRead: boolean;
+  version: number | string;
+};
 
 export type NutritionCalculationView = {
   id: string;
@@ -2429,6 +2471,26 @@ export type StreamPrivateMediaThumbnailResponses = {
    */
   200: unknown;
 };
+
+export type ListWorkspaceNotificationDeadLettersData = {
+  body?: never;
+  path?: never;
+  query?: {
+    skip?: number | string;
+    take?: number | string;
+  };
+  url: '/api/workspace/notification-dead-letters';
+};
+
+export type ListWorkspaceNotificationDeadLettersResponses = {
+  /**
+   * OK
+   */
+  200: NotificationDeadLetterPage;
+};
+
+export type ListWorkspaceNotificationDeadLettersResponse =
+  ListWorkspaceNotificationDeadLettersResponses[keyof ListWorkspaceNotificationDeadLettersResponses];
 
 export type GetCsrfTokenData = {
   body?: never;
@@ -6994,3 +7056,73 @@ export type CreatePrivateMediaAccessBatchResponses = {
 
 export type CreatePrivateMediaAccessBatchResponse =
   CreatePrivateMediaAccessBatchResponses[keyof CreatePrivateMediaAccessBatchResponses];
+
+export type ListOwnNotificationsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    skip?: number | string;
+    take?: number | string;
+  };
+  url: '/api/notifications';
+};
+
+export type ListOwnNotificationsResponses = {
+  /**
+   * OK
+   */
+  200: NotificationPage;
+};
+
+export type ListOwnNotificationsResponse =
+  ListOwnNotificationsResponses[keyof ListOwnNotificationsResponses];
+
+export type GetOwnUnreadNotificationCountData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/notifications/unread-count';
+};
+
+export type GetOwnUnreadNotificationCountResponses = {
+  /**
+   * OK
+   */
+  200: NotificationUnreadCount;
+};
+
+export type GetOwnUnreadNotificationCountResponse =
+  GetOwnUnreadNotificationCountResponses[keyof GetOwnUnreadNotificationCountResponses];
+
+export type MarkOwnNotificationReadData = {
+  body?: never;
+  path: {
+    notificationId: string;
+  };
+  query?: never;
+  url: '/api/notifications/{notificationId}/read';
+};
+
+export type MarkOwnNotificationReadErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type MarkOwnNotificationReadError =
+  MarkOwnNotificationReadErrors[keyof MarkOwnNotificationReadErrors];
+
+export type MarkOwnNotificationReadResponses = {
+  /**
+   * OK
+   */
+  200: NotificationView;
+};
+
+export type MarkOwnNotificationReadResponse =
+  MarkOwnNotificationReadResponses[keyof MarkOwnNotificationReadResponses];

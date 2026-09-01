@@ -1,0 +1,73 @@
+.notifications {
+  display: grid;
+  gap: 1rem;
+}
+
+.page-head {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.page-head h2 {
+  margin: 0;
+}
+
+.feed {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.feed li {
+  border: 1px solid var(--border, #d8dde3);
+  border-radius: 0.75rem;
+  padding-block: 0.75rem;
+  padding-inline: 1rem;
+}
+
+/* Unread is carried by a border weight, a marker glyph and the word "Unread", never by colour
+   alone: a reader who cannot distinguish the two colours still sees which is which. Logical
+   properties so a right-to-left locale needs no rewrite. */
+.feed li.unread {
+  border-inline-start-width: 4px;
+}
+
+.feed li.read h3 {
+  font-weight: 500;
+}
+
+.feed h3 {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 0 0.25rem;
+}
+
+.feed p {
+  margin-block: 0 0.25rem;
+}
+
+.state {
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.state-unread {
+  font-weight: 700;
+}
+
+.detail,
+.empty {
+  color: var(--muted, #4c565f);
+  font-size: 0.9rem;
+}
+
+.error:empty {
+  display: none;
+}

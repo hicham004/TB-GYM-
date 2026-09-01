@@ -142,11 +142,18 @@ public sealed class Phase2CommercialDomainTests
 
         Assert.AreEqual(NotificationOutboxStatus.Pending, item.Status);
         Assert.AreEqual("Asia/Beirut", item.TenantTimeZoneId);
-        item.MarkDispatched(Now.AddDays(3));
+        Assert.AreEqual(Now.AddDays(3), item.NextAttemptAtUtc);
+
+        // Phase 6B-1: dispatch is a claimed operation, so completing one requires the lease token it
+        // was issued with. A completed item cannot be dispatched again or failed afterwards.
+        var claim = item.Claim(Now.AddDays(3), TimeSpan.FromMinutes(2));
+        item.MarkDispatched(claim, Now.AddDays(3));
         Assert.AreEqual(NotificationOutboxStatus.Dispatched, item.Status);
         Assert.AreEqual(1, item.AttemptCount);
-        Assert.ThrowsExactly<InvalidOperationException>(() => item.MarkDispatched(Now.AddDays(3)));
-        Assert.ThrowsExactly<InvalidOperationException>(() => item.MarkFailed("provider-error"));
+        Assert.IsNull(item.ClaimToken);
+        Assert.ThrowsExactly<InvalidOperationException>(() => item.MarkDispatched(claim, Now.AddDays(3)));
+        Assert.ThrowsExactly<InvalidOperationException>(
+            () => item.MarkRetrying(claim, Now.AddDays(4), "notification-dispatch-transient"));
     }
 
     [TestMethod]

@@ -1,6 +1,7 @@
 # TB Gym Architecture
 
-Status: Phase 6A check-ins complete, 2026-08-26; Phase 5/6 audit remediation applied, 2026-08-29
+Status: Phase 6A check-ins complete, 2026-08-26; Phase 5/6 audit remediation applied, 2026-08-29;
+Phase 6B-1 notification dispatch and in-app inbox complete, 2026-08-31
 
 ## 1. Architectural style
 
@@ -41,6 +42,7 @@ src/backend/
   BuildingBlocks/        Very small shared kernel
   Modules/               One assembly per bounded module
   TB.Gym.Api/             HTTP composition root and host
+  TB.Gym.Worker/         Background composition root; notification dispatch, no HTTP surface
   TB.Gym.Infrastructure/ EF Core, Identity stores, security, providers
 src/web/                  Angular standalone application
 tests/backend/            Domain, architecture, and API integration tests
@@ -67,7 +69,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Strength | Append-only max history, canonical RPE/RIR, versioned estimates, recommendations, rounding |
 | Check-ins | Form lineages, immutable published versions, stable question keys, assignments, typed client answers, one-way submission/review, comparison projections |
 | Messaging | Tenant-scoped coach/client conversations and messages |
-| Notifications | Idempotent outbox, delivery scheduling, email and future channel ports |
+| Notifications | Idempotent outbox, durable dispatch, versioned templates, per-channel delivery attempts, in-app notifications and read state, future channel ports |
 | Media | Object metadata, signature/scanner lifecycle, protected access, subordinate renditions, external embeds, retention |
 | Gamification | Tenant theme, levels, ranks and auditable experience events |
 | Integrations | AI, payment, nutrition-data and other external provider contracts |
@@ -89,6 +91,13 @@ The API is the composition root and may reference modules to map endpoints. Infr
 may reference modules to implement persistence and external ports. A module may reference
 only the shared kernel and platform framework libraries, never another module assembly.
 `TB.Gym.Architecture.Tests` enforces the no-module-to-module-reference rule.
+
+`TB.Gym.Worker` is a **second composition root of the same monolith, not a microservice**. It shares
+the database, the domain assemblies and the tenant guards with the API; what it does not share is the
+HTTP surface. It may reference Infrastructure and the modules, and nothing may reference it back —
+which is what the architecture tests assert, along with the absence of any broker, bus, scheduler or
+second database. It hosts no endpoints and runs no migrations. See
+`docs/adr/0018-notification-dispatch-and-in-app-inbox-v1.md`.
 
 Additional rules:
 
@@ -436,13 +445,64 @@ membership, persistence, delivery acknowledgements, and reconnect behavior remai
 work. Scale-out adds a managed SignalR service or Redis backplane only when multiple API
 replicas require it.
 
-Commercial notifications now persist an outbox item atomically with enrollment/payment state.
-Each item retains the tenant time zone used to calculate its UTC schedule and a unique
-deduplication key. A completed/cancelled item cannot be dispatched again, and activation
-cancels a still-pending payment-required item without deleting its history. Production flow
-remains: dispatch from a worker, record each attempt, retry transient failures with backoff,
-and re-evaluate eligibility before sending delayed items. Phase 2 proves scheduling but
-deliberately does not claim provider delivery. WhatsApp is not implemented.
+Commercial notifications persist an outbox item atomically with enrollment/payment state. Each item
+retains the tenant time zone used to calculate its UTC schedule and a unique deduplication key. A
+completed/cancelled item cannot be dispatched again, and activation cancels a still-pending
+payment-required item without deleting its history.
+
+**Phase 6B-1 gives that outbox a reader.** `TB.Gym.Worker` is a separate .NET Worker Service process
+— a second composition root, not a microservice — that sweeps due intents on a `PeriodicTimer`,
+starting with one immediate sweep, never overlapping ticks, and surviving an unavailable database or
+an unmigrated schema by retrying on the next tick rather than ending its loop.
+
+Four facts are kept apart, and the separation is the design: the **outbox item** is a durable
+scheduled intent; the **notification** is what one person was actually told; the **delivery attempt**
+is one try at one channel; and **read state** is the reader's own act. Provider acknowledgement is
+never recorded as read state.
+
+Claiming is PostgreSQL, not application coordination. A short transaction locks due rows with
+`FOR UPDATE SKIP LOCKED`, re-establishes eligibility from the authoritative rows, writes a unique
+claim token and expiry, and starts an attempt row; nothing external happens while that lock is held.
+After that transaction commits, materialization re-establishes eligibility again from authoritative
+state in its own transaction. That second check prevents the claim from becoming a durable permission
+to send after payment, cancellation, membership, block or other relevant state changes. The
+notification row, the successful attempt and the completed outbox row then commit together or not at
+all. Every finalization presents its claim token, so a worker whose lease expired cannot overwrite the
+newer claimant's result. A crash leaves either a terminal result or a `Processing` item whose lease
+expires and is reclaimed, with the interrupted attempt recorded as `Abandoned` before its replacement
+is considered — no item can become permanently invisible.
+
+Several replicas are safe because of that, and because the sweep's only global read is a read-only
+list of workspace ids: every tenant-owned write happens in a fresh scope after `SetTenant`, so the
+`SaveChanges` write-scope guard stays in force. The batch cap is global rather than per workspace.
+Workspace selection uses effective due age plus durable last-service history, not tenant GUID order;
+equal first shares prevent a busy workspace from taking the budget, and unused shares are
+redistributed without exceeding the cap.
+
+In-app delivery is **at least once with an idempotent write**: a unique
+`(TenantId, SourceOutboxItemId)` index makes a replay after a crash at any boundary complete the
+outbox row instead of writing a second notification. That is a local database property and does not
+generalise — a future external provider will be at-least-once with a stable idempotency key and
+provider-specific reconciliation, never exactly-once.
+
+Templates are a code-owned, versioned allowlist: no Razor, no HTML, no database-authored markup, no
+user-influenced format string, and no client name, price, currency, product, date, identifier or
+payload content in any wording. The rendered title and body are snapshotted onto the notification, so
+a later template version never rewrites what somebody was already told.
+
+Retry is the named `notification-exponential-v1` policy. With the default maximum of six, failures
+after attempts 1–5 wait 1m, 5m, 15m, 1h and 6h, and attempt 6 dead-letters. A configured maximum from
+7 through 20 repeats the 6h ceiling until that maximum; a lower configured maximum dead-letters at
+that attempt. Every started attempt counts, including an abandoned lease, and no replacement may
+create maximum + 1. Permanent failures dead-letter immediately. Suppression and dead-lettering are
+different terminal facts. A pre-claim suppression starts no attempt; if authoritative state changes
+after the claim commits, the already-started attempt remains in history and completes as `Suppressed`.
+Tenant owners get a bounded dead-letter view carrying an id, a kind, instants, an attempt count and a
+stable failure code — no recipient, payload, wording or exception. `AccountEmailSender` and
+`InvitationDelivery` keep their existing behaviour:
+their links carry single-use credentials, which do not belong in a durable replayable queue row.
+Email and WhatsApp are still not implemented. See
+`docs/adr/0018-notification-dispatch-and-in-app-inbox-v1.md`.
 
 Media, nutrition data, AI, and payment providers sit behind module-owned ports. Provider
 payloads and credentials do not leak into domain objects. AI output is untrusted input: it
@@ -458,10 +518,11 @@ delivery remain later production work. Incomplete local ingestion is now durably
 than left to provider-level orphan discovery.
 
 Retention processing is now in the application. One in-process `BackgroundService` — the only
-hosted service in this repository — sweeps tombstoned media whose retention has elapsed, deleting
+hosted service inside the API — sweeps tombstoned media whose retention has elapsed, deleting
 derivative objects before originals and recording completion. It is deliberately minimal and is not
-a job platform: it holds no queue, no schedule table, and no dispatch abstraction, and it is not a
-foundation for notification-outbox delivery, which needs durable semantics it does not have. Several
+a job platform: it holds no queue, no schedule table, and no dispatch abstraction, and it was never a
+foundation for notification-outbox delivery, which needed durable semantics it does not have —
+Phase 6B-1 built those separately in `TB.Gym.Worker` rather than generalising this loop. Several
 API replicas may run it because each sweep claims rows with `FOR UPDATE SKIP LOCKED`, per workspace
 so the tenant write-scope guard stays in force for every write it makes. The same sweep first
 reclaims due incomplete-ingest reservations, including a crashed pre-write reservation after its
@@ -664,3 +725,36 @@ Due-date validation reads the workspace's own `currentDate` from `GET /api/works
 deriving today from the browser clock, which is a different calendar around midnight.
 
 See ADR 0017 for authoring and ADR 0016 for responses.
+
+## 15. Phase 6B-1 notification flow
+
+```text
+commercial event
+  -> NotificationOutboxItem (durable scheduled intent, tenant time zone, deduplication key)
+       Pending -> Processing -> Dispatched | DeadLettered, or Cancelled from either
+  -> Worker sweep: FOR UPDATE SKIP LOCKED, eligibility recheck, claim token + lease
+        -> NotificationDeliveryAttempt (per channel, per attempt, immutable once completed)
+  -> post-claim eligibility recheck, then versioned code-owned template rendered once
+  -> Notification (tenant-owned snapshot for one recipient)
+  -> ReadAtUtc (the reader's own act, never a provider acknowledgement)
+```
+
+The Angular surface is one lazy route at `/notifications`, offered to every active member whatever
+their role, plus an unread badge in the topbar. The badge and the inbox are both scoped to the
+recipient-and-workspace pair: whenever that pair changes, both are cleared *before* anything is
+fetched, and every asynchronous reply — list, Load More, unread count, mark-read success and
+mark-read failure — checks which pair it was asked for before it writes. Without that, a slow reply
+for the workspace the user has just left lands on top of the current one.
+
+Load More advances its server offset by the number of server rows consumed, not the number of unique
+rows rendered. An insertion between pages can make adjacent pages overlap; de-duplication keeps DOM
+keys unique while the consumed offset still advances until the bounded result set is exhausted.
+
+Unread is carried by a border weight, a marker glyph and the word "Unread", never by colour alone,
+and the badge count is announced in words beside the link rather than left as a bare number. Marking
+read is idempotent and is the only write the screen makes. There is no polling and no SignalR in this
+slice: an in-app notification is passive persisted state, read when the screen is opened.
+
+The dead-letter view is owner-only, bounded and paginated, and returns identifiers, a kind, instants,
+an attempt count and a stable failure code — never a recipient, a payload, rendered wording or an
+exception. See ADR 0018.

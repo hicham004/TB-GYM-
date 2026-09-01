@@ -20,6 +20,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\backend\TB.Gym.Api\TB.Gym.Api.csproj" />
+    <!-- The Worker's own loop is under test: a sweep that dies on an unavailable database and never
+         comes back is the failure mode a durable dispatcher exists to avoid, and only the real
+         BackgroundService can prove it does not. -->
+    <ProjectReference Include="..\..\..\src\backend\TB.Gym.Worker\TB.Gym.Worker.csproj" />
   </ItemGroup>
 
 </Project>

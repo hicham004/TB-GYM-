@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
 import { AuthStore } from './core/auth/auth.store';
+import { NotificationStore } from './core/notifications/notification.store';
 import { TenantStore } from './core/tenancy/tenant.store';
 import { settle } from '../testing/dom';
 
@@ -23,11 +24,26 @@ const MEMBERSHIP = {
   role: 'Owner' as const,
 };
 
-async function render(options: { signedIn?: boolean; owner?: boolean } = {}) {
+async function render(options: { signedIn?: boolean; owner?: boolean; unread?: number } = {}) {
+  const clear = vi.fn();
   await TestBed.configureTestingModule({
     imports: [App],
     providers: [
-      provideRouter([]),
+      // A catch-all so signing out can navigate to /auth/sign-in without the router rejecting the
+      // URL. The shell itself is what is under test; where it navigates to is a routing concern.
+      provideRouter([{ path: '**', children: [] }]),
+      {
+        provide: NotificationStore,
+        useValue: {
+          unread: signal(options.unread ?? 0),
+          loading: signal(false),
+          isAvailable: signal(Boolean(options.signedIn)),
+          clear,
+          refresh: vi.fn().mockResolvedValue(undefined),
+          set: vi.fn(),
+          decrement: vi.fn(),
+        },
+      },
       {
         provide: AuthStore,
         useValue: {
@@ -54,7 +70,7 @@ async function render(options: { signedIn?: boolean; owner?: boolean } = {}) {
 
   const fixture = TestBed.createComponent(App);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement };
+  return { fixture, host: fixture.nativeElement as HTMLElement, clear };
 }
 
 describe('App', () => {
@@ -97,5 +113,57 @@ describe('App', () => {
     );
     expect(options).toHaveLength(1);
     expect(options[0].textContent).toContain('TB Gym');
+  });
+
+  it('offers the notifications link to every active member', async () => {
+    const { host } = await render({ signedIn: true, owner: true });
+
+    const link = host.querySelector('nav a[href="/notifications"]');
+    expect(link).not.toBeNull();
+    expect(link?.textContent).toContain('Notifications');
+  });
+
+  it('hides the notifications link when nobody is signed in', async () => {
+    const { host } = await render();
+
+    expect(host.querySelector('nav a[href="/notifications"]')).toBeNull();
+  });
+
+  it('shows no badge when nothing is unread', async () => {
+    const { host } = await render({ signedIn: true, unread: 0 });
+
+    expect(host.querySelector('nav a[href="/notifications"] .badge')).toBeNull();
+    expect(host.querySelector('nav a[href="/notifications"]')?.textContent).not.toContain('unread');
+  });
+
+  it('announces one unread notification in words as well as in the badge', async () => {
+    const { host } = await render({ signedIn: true, unread: 1 });
+
+    expect(host.querySelector('nav a[href="/notifications"] .badge')?.textContent?.trim()).toBe(
+      '1',
+    );
+    // The number alone would be announced as "Notifications 1" with no explanation of what 1 is.
+    expect(
+      host.querySelector('nav a[href="/notifications"] .visually-hidden')?.textContent,
+    ).toContain('1 unread notifications');
+  });
+
+  it('shows a badge for many unread notifications', async () => {
+    const { host } = await render({ signedIn: true, unread: 12 });
+
+    expect(host.querySelector('nav a[href="/notifications"] .badge')?.textContent?.trim()).toBe(
+      '12',
+    );
+  });
+
+  it('clears the badge as part of signing out', async () => {
+    const { host, clear } = await render({ signedIn: true, unread: 4 });
+
+    const signOut = Array.from(host.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.trim() === 'Sign out',
+    );
+    signOut?.click();
+
+    expect(clear).toHaveBeenCalled();
   });
 });

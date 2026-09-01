@@ -16,6 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Referenced so the host assemblies land in the test output and their composition direction can
+         be asserted. ReferenceOutputAssembly is left on deliberately: the check is about what the
+         built artefacts reference, which is exactly what the runtime metadata records. -->
+    <ProjectReference Include="..\..\..\src\backend\TB.Gym.Infrastructure\TB.Gym.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\TB.Gym.Worker\TB.Gym.Worker.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\CheckIns\TB.Gym.Modules.CheckIns\TB.Gym.Modules.CheckIns.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Clients\TB.Gym.Modules.Clients\TB.Gym.Modules.Clients.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\ExerciseLibrary\TB.Gym.Modules.ExerciseLibrary\TB.Gym.Modules.ExerciseLibrary.csproj" />
@@ -32,6 +37,12 @@
     <ProjectReference Include="..\..\..\src\backend\Modules\Subscriptions\TB.Gym.Modules.Subscriptions\TB.Gym.Modules.Subscriptions.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Tenancy\TB.Gym.Modules.Tenancy\TB.Gym.Modules.Tenancy.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Training\TB.Gym.Modules.Training\TB.Gym.Modules.Training.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\src\backend\TB.Gym.Worker\Dockerfile"
+          Link="Worker.Dockerfile"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

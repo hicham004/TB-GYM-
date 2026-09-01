@@ -71,6 +71,36 @@ nav a.active,
   color: var(--text);
 }
 
+nav a.with-badge {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+/* A count, not a status colour: the badge is a number a reader can see and the same number is
+   announced in words beside it, so nothing here depends on being able to distinguish a colour. */
+.badge {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border, #d8dde3);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 1.1rem;
+  padding: 3px 6px;
+  text-align: center;
+}
+
+.visually-hidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
 .session-controls {
   gap: 12px;
 }

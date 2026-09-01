@@ -14,6 +14,7 @@ using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Messaging;
+using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
@@ -105,6 +106,7 @@ app.MapProgressModule();
 app.MapCheckInsModule();
 app.MapCheckInResponses();
 app.MapMediaModule();
+app.MapNotificationsModule();
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization(AuthorizationPolicies.TenantMember);
 
 await app.InitializeDatabaseAsync();

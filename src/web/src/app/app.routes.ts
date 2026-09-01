@@ -64,6 +64,16 @@ export const routes: Routes = [
       import('./features/checkins/checkins.routes').then((module) => module.checkInRoutes),
   },
   {
+    // Every active member of a workspace has an inbox, whatever their role, so this sits behind the
+    // plain authenticated guard rather than a role guard.
+    path: 'notifications',
+    canActivate: [authGuard],
+    loadChildren: () =>
+      import('./features/notifications/notifications.routes').then(
+        (module) => module.notificationRoutes,
+      ),
+  },
+  {
     path: 'profile',
     canActivate: [authGuard, clientGuard],
     title: $localize`My profile | TB Gym`,

@@ -1,0 +1,73 @@
+<section class="notifications">
+  <div class="page-head">
+    <h2 i18n>Notifications</h2>
+    <button type="button" class="link" [disabled]="loading()" (click)="reload()" i18n>
+      Refresh
+    </button>
+  </div>
+
+  <!-- Present from first render so the live region is registered before anything lands in it, and
+       populated only when the server actually refused something. -->
+  <p class="error" role="alert">{{ error() }}</p>
+
+  <p class="detail" role="status">
+    @if (loading()) {
+      <span i18n>Loading your notifications…</span>
+    } @else if (loadedCount() > 0) {
+      <span i18n
+        >Showing {{ loadedCount() }} of {{ total() }} notifications, newest first.
+        {{ unread() }} unread.</span
+      >
+    }
+  </p>
+
+  @if (isEmpty()) {
+    <p class="empty" i18n>You have no notifications in this workspace yet.</p>
+  } @else {
+    <ul class="feed">
+      @for (item of items(); track item.id) {
+        <li [class.unread]="!item.isRead" [class.read]="item.isRead">
+          <article>
+            <h3>
+              {{ item.title }}
+              <!-- Read state is announced in words as well as shown by the marker and the weight,
+                   so it never depends on colour alone. -->
+              <span class="state" [class.state-unread]="!item.isRead">
+                @if (item.isRead) {
+                  <span i18n>Read</span>
+                } @else {
+                  <span aria-hidden="true">&#9679;</span>
+                  <span i18n>Unread</span>
+                }
+              </span>
+            </h3>
+            <p>{{ item.body }}</p>
+            <p class="detail">
+              <time [attr.datetime]="item.createdAtUtc">{{
+                item.createdAtUtc | date: 'medium'
+              }}</time>
+            </p>
+            @if (!item.isRead) {
+              <button
+                type="button"
+                class="link"
+                [disabled]="busyId() === item.id"
+                [attr.aria-label]="'Mark as read: ' + item.title"
+                (click)="markRead(item)"
+                i18n
+              >
+                Mark as read
+              </button>
+            }
+          </article>
+        </li>
+      }
+    </ul>
+
+    @if (hasMore()) {
+      <button type="button" class="link" [disabled]="loadingMore()" (click)="loadMore()" i18n>
+        Load more notifications
+      </button>
+    }
+  }
+</section>

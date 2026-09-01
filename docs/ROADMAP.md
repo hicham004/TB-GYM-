@@ -363,8 +363,10 @@ here because they were found during 6A and would otherwise be re-discovered.
    deciding what `applyProgression` should do outside coverage is a Phase 3 domain question.
 6. **`AccountEmailSender` and `InvitationDelivery` bypass the notification outbox entirely.** Two
    Phase 1 delivery paths that reference no outbox type at all, parallel to the Phase 2 commercial
-   outbox. Relevant to 6B; they are deliberately not merged now, because the outbox has no
-   dispatcher yet and moving them would claim a delivery guarantee that does not exist.
+   outbox. Still open after 6B-1, and now for a sharper reason than "there is no dispatcher": their
+   links carry single-use credentials, and the outbox is a durable, replayable, operator-visible
+   queue row that a dead-letter view exposes and a worker may retry. Merging them requires a
+   tokenless design in which the sender mints the token at send time. See ADR 0018.
 7. **Ports 5134 and 4200 are held by Docker Desktop forwards** (`com.docker.backend`, `wslrelay`)
    dating from 2026-08-17. **5134 serves a stale pre-Phase-4 OpenAPI document.** Any contract
    regeneration must start a fresh API on another port with `ASPNETCORE_ENVIRONMENT=Development` and
@@ -377,11 +379,73 @@ Fixed during 6A-4 and 6A-5, no longer open: the check-in status badge running in
 date, the missing form version on the client's own check-in list, the "Workspace Workspace" topbar,
 and the assign form announcing its outstanding reasons on a form nobody had touched.
 
+### Phase 6B-1: Notification dispatch and in-app inbox (complete)
+
+Status: complete, implemented 2026-08-31. See
+`docs/adr/0018-notification-dispatch-and-in-app-inbox-v1.md`, `ARCHITECTURE.md` sections 4, 9 and 15,
+and `DOMAIN-RULES.md` **NOT-001** to **NOT-008**.
+
+The Phase 2 outbox finally has a reader. This slice is deliberately the record of delivery rather
+than a delivery channel: it builds what can answer *what was sent, to whom, whether it worked, and
+whether anybody has seen it* before any channel that can fail in interesting ways is added.
+
+- **A separate Worker process.** `src/backend/TB.Gym.Worker` is a `Microsoft.NET.Sdk.Worker` service
+  and a second composition root of the same monolith, not a microservice: same database, same domain
+  assemblies, same tenant guards, no HTTP surface, no migrations, and a narrow registration path that
+  does not drag in the API's cookie authentication, antiforgery, rate limiting or endpoint services.
+  It runs under an explicitly anonymous background identity. Its container uses the .NET 10 ASP.NET
+  runtime because Infrastructure transitively requires `Microsoft.AspNetCore.App`, but exposes no
+  port and starts no HTTP listener. Architecture and live-container smoke checks guard that contract.
+  `MediaPurgeWorker` is untouched.
+- **Four separate facts.** Scheduled intent, domain notification, per-channel delivery attempt, and
+  the reader's own read state. Provider acknowledgement is never stored as read state.
+- **Durable multi-replica claiming.** `FOR UPDATE SKIP LOCKED`, a unique claim token with an expiry,
+  a global batch cap, and fair ordering by effective due age plus durable service history rather than
+  tenant GUID. Unused workspace shares are redistributed inside the same global cap. Eligibility is
+  checked inside the claim transaction and again after claim commit, inside materialization, so the
+  claim cannot authorize stale delivery after a payment, cancellation, membership or block change.
+  Materialization commits the notification, terminal attempt and completed or cancelled outbox row
+  together, with no lock held between the two transactions. A crash leaves either a terminal result
+  or a lease that expires and is reclaimed, with the interrupted attempt recorded as `Abandoned`
+  first.
+- **At-least-once, stated plainly.** A unique notification-per-source-intent constraint makes replay
+  idempotent locally. This is not claimed to generalise to a future external provider.
+- **Retry, suppression and dead letters.** The named `notification-exponential-v1` default schedule
+  waits 1m, 5m, 15m, 1h and 6h after attempts 1–5, then dead-letters attempt 6. Configured maxima are
+  1–20; above six the 6h ceiling repeats until the maximum. Every started attempt, including an
+  abandoned lease, counts and maximum + 1 is impossible. Permanent failures dead-letter on their
+  first attempt. Pre-claim suppression starts no attempt; post-claim suppression preserves and
+  completes the already-started attempt as `Suppressed`. Stable, bounded, non-sensitive failure codes
+  are used throughout.
+- **Safe templates.** A code-owned, versioned, English-only allowlist with no Razor, HTML,
+  database-authored markup or user-controlled format string, and no name, price, currency, product,
+  date, identifier or payload content in any wording. Rendered text is snapshotted per notification.
+- **Tenant-member inbox.** `GET /api/notifications`, `GET /api/notifications/unread-count`,
+  `POST /api/notifications/{id}/read`, plus an owner-only bounded dead-letter view carrying no
+  recipient, payload, wording or exception.
+- **Angular.** A lazy `/notifications` route for every active member, an accessible unread badge,
+  bounded Load More whose server offset advances by consumed rows even when overlapping pages are
+  de-duplicated, mark-read, and generation ownership so no stale reply can cross a workspace or
+  account boundary. No polling and no SignalR.
+
+Exit: two Worker replicas racing on one intent produce one notification and one terminal dispatch; a
+crashed claim always becomes visible again; a stale claimant can finalize nothing; and no recipient,
+payload or rendered wording reaches an operational view or a log.
+
+Explicitly deferred from 6B-1 and still open: email/SMTP/WhatsApp adapters and provider
+reconciliation; channel preferences, quiet hours, marketing consent and WhatsApp opt-in (they wait
+for the first interruptive channel); migrating account-confirmation, password-reset and invitation
+delivery onto the outbox, which needs a tokenless design first; manual dead-letter replay;
+localisation beyond English; chat conversations and messages; SignalR sending, groups, reconnect and
+scale-out; recurring check-in scheduling and reminders; and any generic background-job framework.
+
+### Phase 6B remaining
+
 - Persist tenant-scoped conversations, participants, messages, read state, and moderation
   metadata.
 - Complete SignalR authorization, reconnect/catch-up, delivery, and scale-out tests.
-- Run outbox dispatch in a separate worker; add retries, dead-letter visibility, templates,
-  consent, quiet hours, and channel preferences.
+- Add channel preferences, quiet hours and consent alongside the first interruptive channel, and
+  design tokenless delivery so account/reset/invitation mail can join the outbox.
 - Implement production object storage, production upload scanning, provider inventory
   reconciliation, signed URLs, and the production retention/operations controls. Reservation-backed
   incomplete-ingest cleanup, transformations, quotas, and application-known purge are already

@@ -3,6 +3,7 @@
   <Folder Name="/src/backend/">
     <Project Path="src/backend/TB.Gym.Api/TB.Gym.Api.csproj" />
     <Project Path="src/backend/TB.Gym.Infrastructure/TB.Gym.Infrastructure.csproj" />
+    <Project Path="src/backend/TB.Gym.Worker/TB.Gym.Worker.csproj" />
   </Folder>
   <Folder Name="/src/backend/BuildingBlocks/">
     <Project Path="src/backend/BuildingBlocks/TB.Gym.SharedKernel/TB.Gym.SharedKernel.csproj" />

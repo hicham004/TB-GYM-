@@ -411,7 +411,58 @@ delivery and carry server timestamps, sender, edit/delete status, and delivery m
 
 **NOT-001** In-app, email, and WhatsApp notifications share a domain notification but maintain
 separate delivery attempts. Retries are idempotent; provider acknowledgement is not confused
-with user read status.
+with user read status. Phase 6B-1 implements this for the in-app channel: the scheduled outbox
+intent, the domain notification, each channel delivery attempt, and the reader's `ReadAtUtc` are
+four separate facts, and no code writes a delivery outcome into read state.
+
+**NOT-002** An outbox item is a durable scheduled intent, never evidence of delivery. Its lifecycle
+is `Pending -> Processing -> Dispatched | DeadLettered`, with a retryable failure returning it to
+`Pending` at a later attempt instant, and `Cancelled` reachable from either non-terminal state. A
+terminal item holds no live claim and accepts no further transition.
+
+**NOT-003** Cancellation and dead-lettering are different facts. Cancelled means the business reason
+for the notification no longer holds and carries a stable suppression code. If that is known before
+claiming, no attempt is started. If authoritative state changes after a claim commits, the already
+started attempt is preserved and completed as `Suppressed`; no new attempt is created. Dead-lettered
+means the intent was eligible and could not be safely processed — a corrupt payload, an unknown
+payload schema version, a missing template, an impossible aggregate mismatch, or an exhausted retry
+schedule.
+
+**NOT-004** Dispatch is claimed, leased and at least once. A claim carries a unique token, an expiry
+and the current attempt number; every finalization presents that token, so a worker whose lease
+expired cannot overwrite a newer claimant's result. An expired lease is reclaimed and its unfinished
+attempt is recorded as `Abandoned` before a replacement is considered. `MaximumAttempts` bounds all
+started attempts, including abandoned and suppressed attempts, so reclaiming at the maximum
+dead-letters without creating maximum + 1. No item may become permanently invisible. In-app
+materialization is made idempotent by a unique notification-per-source-intent constraint; an external
+provider will be at-least-once with a stable idempotency key, never exactly-once. With the default
+maximum of six, attempts 1–5 retry after 1m, 5m, 15m, 1h and 6h, and attempt 6 dead-letters. Allowed
+configured maxima are 1–20; above six, the 6h ceiling repeats until the configured maximum.
+
+**NOT-005** Eligibility is re-established server-side both inside the claim transaction and again in
+the materialization transaction before a delayed notification is rendered: active workspace,
+unblocked recipient account, active membership, a client profile still linked to the recipient, an
+unblocked workspace relationship, an enrollment that is not cancelled, and the kind's own state.
+The committed claim is not continuing authorization to deliver stale state. Today is calculated in
+the workspace's **current** configured time zone; the zone stored on the outbox row is scheduling
+provenance only. `ICoachingFeatureAccessService` is not the decision, because `PaymentRequired`
+describes a state in which feature access is denied.
+
+**NOT-006** Notification wording is a code-owned, versioned allowlist. It carries no client name,
+price, currency, product or offer name, date, database identifier, health data or payload content,
+and no user-controlled format string. The rendered title and body are snapshotted onto the
+notification, so a later template version never rewrites what somebody was already told. A renewal
+notice must not imply paid or active access, because a renewal may still be awaiting payment.
+
+**NOT-007** A notification belongs to one recipient in one workspace. Only that recipient may list
+or mark it, and workspace membership alone — including the owner's — grants no access to another
+member's notifications. Marking read is idempotent and one-way. Dead-letter visibility is owner-only,
+bounded, and carries no recipient, payload, wording or exception.
+
+**NOT-008** Account confirmation, password-reset and invitation delivery stay outside the generic
+outbox. Their links carry single-use credentials, and the outbox is a durable, replayable,
+operator-visible queue row; a token there would become a credential store with no designed retention.
+Merging them requires a tokenless design in which the sender mints the token at send time.
 
 **MED-001** Object bytes live in object storage; the database owns metadata, tenant, purpose,
 content type, size, checksum, status, and retention. Upload authorization validates type and
@@ -587,6 +638,12 @@ At minimum, later migrations should enforce:
 | Selection belongs to the question it answers | Composite FK `(TenantId, QuestionId, QuestionOptionId)` |
 | One-way check-in response lifecycle and frozen submitted answers | Application guard plus PostgreSQL trigger |
 | One submit and one review per response | Unique `(TenantId, ResponseId, EventType)` |
+| One in-app notification per outbox intent | Unique `(TenantId, SourceOutboxItemId)` |
+| One delivery attempt per intent, channel and number | Unique `(TenantId, OutboxItemId, Channel, AttemptNumber)` |
+| A live claim only on a Processing outbox item | Check on `ClaimToken`/`ClaimExpiresAtUtc`/`Status` |
+| Terminal outbox instants match the status | Checks pairing `Dispatched`/`DeadLettered` with their instants |
+| Immutable completed delivery attempts and delivered wording | Application guard plus PostgreSQL trigger |
+| Notification child belongs to an intent of the same workspace | Composite FK `(TenantId, OutboxItemId)` |
 
 Database constraints complement domain validation. Friendly validation happens before save,
 and constraint violations are translated into stable API problem responses.

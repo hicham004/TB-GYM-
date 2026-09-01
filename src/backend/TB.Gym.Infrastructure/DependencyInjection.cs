@@ -22,6 +22,7 @@ using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.ExerciseLibrary;
 using TB.Gym.Modules.Media;
+using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
@@ -168,6 +169,11 @@ public static class DependencyInjection
             : new UnavailableMediaScanner());
         services.AddScoped<IMediaPurgeService, MediaPurgeService>();
         services.AddHostedService<MediaPurgeWorker>();
+        services.AddScoped<INotificationApplicationService, NotificationApplicationService>();
+        // The API composes the dispatcher so that integration tests can drive one sweep
+        // deterministically. It runs no notification sweep of its own: dispatch is the Worker
+        // process's job, and the API deliberately hosts no timer for it.
+        services.AddNotificationDispatch(configuration);
         services.AddOptions<MediaStorageOptions>()
             .Bind(configuration.GetSection(MediaStorageOptions.SectionName))
             .Validate(

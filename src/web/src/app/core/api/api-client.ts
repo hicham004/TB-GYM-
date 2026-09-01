@@ -26,6 +26,15 @@ import {
 } from '../../features/progress/progress.models';
 import type { ProgressPhotoPose } from '../../features/progress/progress.models';
 import { mapProgressDashboard } from '../../features/progress/progress-dashboard.models';
+import {
+  mapNotification,
+  mapNotificationPage,
+  mapUnreadCount,
+} from '../../features/notifications/notification.models';
+import type {
+  NotificationItem,
+  NotificationPage,
+} from '../../features/notifications/notification.models';
 import type {
   ClientCommercialOverview as ContractClientCommercialOverview,
   ClientEnrollmentView as ContractClientEnrollmentView,
@@ -1079,6 +1088,24 @@ export class ApiClient {
         `/api/progress/clients/${clientId}/measurements/${measurementId}/history`,
       )
       .pipe(map(mapMeasurementHistory));
+  }
+
+  listNotifications(skip = 0, take = 25): Observable<NotificationPage> {
+    return this.http
+      .get<Phase3Contracts.NotificationPage>('/api/notifications', { params: { skip, take } })
+      .pipe(map(mapNotificationPage));
+  }
+
+  getUnreadNotificationCount(): Observable<number> {
+    return this.http
+      .get<Phase3Contracts.NotificationUnreadCount>('/api/notifications/unread-count')
+      .pipe(map(mapUnreadCount));
+  }
+
+  markNotificationRead(notificationId: string): Observable<NotificationItem> {
+    return this.http
+      .post<Phase3Contracts.NotificationView>(`/api/notifications/${notificationId}/read`, null)
+      .pipe(map(mapNotification));
   }
 
   listCheckInForms(skip = 0, take = 100): Observable<Phase3Contracts.CheckInFormPage> {

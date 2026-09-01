@@ -80,4 +80,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build --file src/backend/TB.Gym.Api/Dockerfile --tag tb-gym-api:ci .
+      - run: docker build --file src/backend/TB.Gym.Worker/Dockerfile --tag tb-gym-worker:ci .
+      - name: Start the built Worker image
+        run: |
+          docker run --detach --name tb-gym-worker-ci-smoke \
+            --env 'ConnectionStrings__Database=Host=unused;Database=unused;Username=unused;Password=unused' \
+            --env Notifications__Dispatch__Enabled=false \
+            tb-gym-worker:ci
+          trap 'docker rm --force tb-gym-worker-ci-smoke >/dev/null 2>&1 || true' EXIT
+          sleep 3
+          test "$(docker inspect --format '{{.State.Running}}' tb-gym-worker-ci-smoke)" = "true"
+          docker logs tb-gym-worker-ci-smoke 2>&1 | grep 'Notification dispatch is disabled by configuration.'
       - run: docker build --file src/web/Dockerfile --tag tb-gym-web:ci .

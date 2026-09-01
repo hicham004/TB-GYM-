@@ -895,8 +895,12 @@ internal sealed class CommercialApplicationService(
         string eventKey,
         DateTimeOffset scheduledAtUtc)
     {
+        // Identifiers and a schema version, and nothing else. Every fact the dispatcher needs is
+        // re-read from the authoritative rows when the item comes due, because a payload written days
+        // earlier describes a world that may have moved; and no token, address, name, amount or
+        // health-adjacent value belongs in a durable, replayable, operator-visible queue row.
         var payload = JsonSerializer.Serialize(
-            new { enrollmentId = enrollment.Id, clientProfileId = enrollment.ClientProfileId },
+            new CommercialNotificationPayload(enrollment.Id, enrollment.ClientProfileId),
             PayloadJsonOptions);
         dbContext.NotificationOutboxItems.Add(NotificationOutboxItem.Schedule(
             enrollment.TenantId,

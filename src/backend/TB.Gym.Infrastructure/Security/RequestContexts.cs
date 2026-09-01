@@ -20,6 +20,21 @@ internal sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentU
             : null;
 }
 
+/// <summary>
+/// The identity a background process writes under: none.
+/// </summary>
+/// <remarks>
+/// A sweep is not acting for anybody. Reporting the coach or the client whose enrollment produced the
+/// notification would put a person's identifier on audit rows for a decision they did not make, so
+/// the audit stamp records no actor at all and the process is recognisable by that absence.
+/// </remarks>
+internal sealed class BackgroundSystemUser : ICurrentUser
+{
+    public bool IsAuthenticated => false;
+
+    public Guid? UserId => null;
+}
+
 internal sealed class TenantContext : IMutableTenantContext
 {
     public bool HasTenant => TenantId != Guid.Empty;
