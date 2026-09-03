@@ -35,6 +35,21 @@ import type {
   NotificationItem,
   NotificationPage,
 } from '../../features/notifications/notification.models';
+import {
+  mapConversationDetail,
+  mapConversationPage,
+  mapMessage,
+  mapMessagePage,
+  mapMessagingUnreadCount,
+  mapReadState,
+} from '../../features/messaging/messaging.models';
+import type {
+  ConversationDetail,
+  ConversationPage,
+  ConversationReadState,
+  Message,
+  MessagePage,
+} from '../../features/messaging/messaging.models';
 import type {
   ClientCommercialOverview as ContractClientCommercialOverview,
   ClientEnrollmentView as ContractClientEnrollmentView,
@@ -1106,6 +1121,123 @@ export class ApiClient {
     return this.http
       .post<Phase3Contracts.NotificationView>(`/api/notifications/${notificationId}/read`, null)
       .pipe(map(mapNotification));
+  }
+
+  listConversations(
+    beforeActivityAtUtc?: string | null,
+    beforeConversationId?: string | null,
+    take = 25,
+  ): Observable<ConversationPage> {
+    // Both halves of the keyset cursor or neither: the API refuses one without the other, because a
+    // half cursor cannot identify a position.
+    const params: Record<string, string | number> =
+      beforeActivityAtUtc && beforeConversationId
+        ? { beforeActivityAtUtc, beforeConversationId, take }
+        : { take };
+    return this.http
+      .get<Phase3Contracts.ConversationPage>('/api/messaging/conversations', { params })
+      .pipe(map(mapConversationPage));
+  }
+
+  createDirectConversation(
+    clientProfileId: string,
+    idempotencyKey: string,
+  ): Observable<ConversationDetail> {
+    return this.http
+      .post<Phase3Contracts.ConversationDetail>('/api/messaging/conversations', {
+        clientProfileId,
+        idempotencyKey,
+      })
+      .pipe(map(mapConversationDetail));
+  }
+
+  listConversationMessages(
+    conversationId: string,
+    beforeSequence?: number | null,
+    take = 50,
+  ): Observable<MessagePage> {
+    const params: Record<string, string | number> =
+      beforeSequence === null || beforeSequence === undefined ? { take } : { beforeSequence, take };
+    return this.http
+      .get<Phase3Contracts.MessagePage>(`/api/messaging/conversations/${conversationId}/messages`, {
+        params,
+      })
+      .pipe(map(mapMessagePage));
+  }
+
+  sendConversationMessage(
+    conversationId: string,
+    body: string,
+    idempotencyKey: string,
+  ): Observable<Message> {
+    return this.http
+      .post<Phase3Contracts.MessageView>(
+        `/api/messaging/conversations/${conversationId}/messages`,
+        { body, idempotencyKey },
+      )
+      .pipe(map(mapMessage));
+  }
+
+  editConversationMessage(
+    conversationId: string,
+    messageId: string,
+    body: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+  ): Observable<Message> {
+    return this.http
+      .post<Phase3Contracts.MessageView>(
+        `/api/messaging/conversations/${conversationId}/messages/${messageId}/edit`,
+        { body, expectedVersion, idempotencyKey },
+      )
+      .pipe(map(mapMessage));
+  }
+
+  deleteConversationMessage(
+    conversationId: string,
+    messageId: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+  ): Observable<Message> {
+    return this.http
+      .post<Phase3Contracts.MessageView>(
+        `/api/messaging/conversations/${conversationId}/messages/${messageId}/delete`,
+        { expectedVersion, idempotencyKey },
+      )
+      .pipe(map(mapMessage));
+  }
+
+  moderateConversationMessage(
+    conversationId: string,
+    messageId: string,
+    reason: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+  ): Observable<Message> {
+    return this.http
+      .post<Phase3Contracts.MessageView>(
+        `/api/messaging/conversations/${conversationId}/messages/${messageId}/moderate`,
+        { reason, expectedVersion, idempotencyKey },
+      )
+      .pipe(map(mapMessage));
+  }
+
+  advanceConversationReadCursor(
+    conversationId: string,
+    throughSequence: number,
+  ): Observable<ConversationReadState> {
+    return this.http
+      .post<Phase3Contracts.ConversationReadState>(
+        `/api/messaging/conversations/${conversationId}/read`,
+        { throughSequence },
+      )
+      .pipe(map(mapReadState));
+  }
+
+  getMessagingUnreadCount(): Observable<number> {
+    return this.http
+      .get<Phase3Contracts.MessagingUnreadCount>('/api/messaging/unread-count')
+      .pipe(map(mapMessagingUnreadCount));
   }
 
   listCheckInForms(skip = 0, take = 100): Observable<Phase3Contracts.CheckInFormPage> {

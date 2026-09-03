@@ -1,0 +1,369 @@
+<section class="messages">
+  <div class="page-head">
+    <h2 i18n>Messages</h2>
+    <button
+      type="button"
+      class="link"
+      [disabled]="listLoading() || threadLoading()"
+      (click)="refresh()"
+      i18n
+    >
+      Refresh
+    </button>
+  </div>
+
+  <!-- Present from first render so the live region is registered before anything lands in it, and
+       populated only when the server actually refused something. -->
+  <p class="error" role="alert">{{ error() }}</p>
+
+  <p class="detail" role="status">
+    @if (listLoading()) {
+      <span i18n>Loading your conversations…</span>
+    } @else if (threadLoading()) {
+      <span i18n>Loading this conversation…</span>
+    } @else if (conversations().length > 0) {
+      <span i18n
+        >{{ conversations().length }} conversations. {{ unread() }} unread messages in this
+        workspace.</span
+      >
+    }
+  </p>
+
+  <div class="layout">
+    <nav class="conversation-list" aria-label="Conversations" i18n-aria-label>
+      @if (listIsEmpty()) {
+        <p class="empty" i18n>
+          You have no conversations in this workspace yet. A coach starts a conversation with a
+          client.
+        </p>
+      } @else {
+        <ul>
+          @for (conversation of conversations(); track conversation.id) {
+            <li
+              [class.selected]="conversation.id === selectedId()"
+              [class.unavailable]="!conversation.isAvailable"
+            >
+              <button
+                type="button"
+                class="conversation"
+                [attr.aria-current]="conversation.id === selectedId() ? 'true' : null"
+                [attr.aria-label]="conversationLabel(conversation)"
+                (click)="select(conversation)"
+              >
+                <span class="who">{{ conversation.counterpart.displayName }}</span>
+                <!-- Unread is carried by the word, a marker glyph and a border weight, never by
+                     colour alone. -->
+                @if (conversation.unreadCount > 0) {
+                  <span class="badge">
+                    <span aria-hidden="true">&#9679;</span>
+                    <span i18n>{{ conversation.unreadCount }} unread</span>
+                  </span>
+                }
+                <span class="preview">
+                  @if (!conversation.isAvailable) {
+                    <span class="state" i18n>Unavailable</span>
+                  } @else if (conversation.lastMessage === null) {
+                    <span class="state" i18n>No messages yet</span>
+                  } @else if (conversation.lastMessage.isDeleted) {
+                    <span class="state" i18n>Message removed</span>
+                  } @else {
+                    {{ conversation.lastMessage.body }}
+                  }
+                </span>
+                <span class="when">
+                  <time [attr.datetime]="conversation.lastActivityAtUtc">{{
+                    conversation.lastActivityAtUtc | date: 'short'
+                  }}</time>
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+
+        @if (conversationsHasMore()) {
+          <button
+            type="button"
+            class="link"
+            [disabled]="listLoadingMore()"
+            (click)="loadMoreConversations()"
+            i18n
+          >
+            Load more conversations
+          </button>
+        }
+      }
+    </nav>
+
+    <div class="thread">
+      @if (selectedId() === null) {
+        <p class="empty" i18n>Choose a conversation to read it.</p>
+      } @else if (deniedReason() !== null || selected()?.isAvailable === false) {
+        <!-- A refusal replaces the thread rather than sitting above an empty one: "closed" and
+             "nothing was said" are different facts. -->
+        <p class="denied" role="status">{{ denialMessage() }}</p>
+      } @else {
+        <h3>
+          <span i18n>Conversation with</span>
+          {{ selected()?.counterpart?.displayName }}
+        </h3>
+
+        <p class="thread-unread detail" role="status">
+          @if (conversationUnread() > 0) {
+            <span i18n>{{ conversationUnread() }} unread in this conversation.</span>
+          } @else {
+            <span i18n>Nothing unread in this conversation.</span>
+          }
+        </p>
+
+        @if (hasOlder()) {
+          <button
+            type="button"
+            class="link"
+            [disabled]="threadLoadingOlder()"
+            (click)="loadOlder()"
+            i18n
+          >
+            Load older messages
+          </button>
+        }
+
+        @if (messages().length === 0 && !threadLoading()) {
+          <p class="empty" i18n>No messages yet. Write the first one.</p>
+        }
+
+        <ol class="feed">
+          @for (message of messages(); track message.id) {
+            <li
+              [class.mine]="message.isFromCaller"
+              [class.theirs]="!message.isFromCaller"
+              [class.removed]="message.isDeleted"
+              [class.unread]="message.isUnreadByCaller"
+            >
+              <article>
+                <h4>
+                  @if (message.isFromCaller) {
+                    <span i18n>You</span>
+                  } @else {
+                    {{ selected()?.counterpart?.displayName }}
+                  }
+                  @if (message.isUnreadByCaller) {
+                    <span class="state">
+                      <span aria-hidden="true">&#9679;</span>
+                      <span i18n>Unread</span>
+                    </span>
+                  }
+                </h4>
+
+                @if (message.isDeleted) {
+                  <p class="state removed-body">{{ removalLabel(message) }}</p>
+                } @else if (editingId() === message.id) {
+                  @let editReasons = editIssues();
+                  @let showsEdit = editAttempt.shows('editDraft', editReasons);
+                  <form class="edit-form" (ngSubmit)="saveEdit(message)">
+                    <label>
+                      <span i18n>Edit message</span>
+                      <textarea
+                        rows="3"
+                        id="edit-draft"
+                        name="editDraft"
+                        [ngModel]="editDraft()"
+                        (ngModelChange)="editDraft.set($event)"
+                        (blur)="editAttempt.touch('editDraft')"
+                        [attr.aria-invalid]="showsEdit ? 'true' : null"
+                        [attr.aria-describedby]="showsEdit ? 'edit-draft-reason' : null"
+                      ></textarea>
+                    </label>
+                    @if (showsEdit) {
+                      <!-- Plain text, not role="alert": this reason is already on screen when it
+                           renders, and an assertive region re-fires on every keystroke. -->
+                      <p class="reason" id="edit-draft-reason">{{ editReasons[0] }}</p>
+                    }
+                    <p
+                      class="error summary"
+                      id="edit-summary"
+                      role="alert"
+                      tabindex="-1"
+                      #editSummary
+                    >
+                      @if (editAttempt.wasTried() && editReasons.length > 0) {
+                        <ng-container i18n>This edit cannot be saved yet:</ng-container>
+                        <span>{{ editReasons[0] }}</span>
+                      }
+                    </p>
+                    <div class="actions">
+                      <!-- Disabled only while the request is in flight. An invalid form lets the
+                           attempt happen and refuses it out loud; see ARCHITECTURE.md section 8. -->
+                      <button
+                        type="submit"
+                        class="primary-button compact"
+                        aria-describedby="edit-summary"
+                        [disabled]="busy()"
+                        i18n
+                      >
+                        Save changes
+                      </button>
+                      <button type="button" class="link" (click)="cancelEdit()" i18n>Cancel</button>
+                    </div>
+                  </form>
+                } @else {
+                  <!-- Interpolation, never innerHTML: a body that looks like markup is shown as the
+                       characters it is. -->
+                  <p class="body">{{ message.body }}</p>
+                }
+
+                <p class="detail">
+                  <time [attr.datetime]="message.sentAtUtc">{{
+                    message.sentAtUtc | date: 'medium'
+                  }}</time>
+                  @if (message.editedAtUtc !== null && !message.isDeleted) {
+                    <span class="state" i18n>Edited</span>
+                  }
+                </p>
+
+                @if (!message.isDeleted && editingId() !== message.id) {
+                  <div class="actions">
+                    @if (message.canEdit) {
+                      <button
+                        type="button"
+                        class="link"
+                        [attr.aria-label]="editLabel(message)"
+                        [disabled]="busy()"
+                        (click)="startEdit(message)"
+                        i18n
+                      >
+                        Edit
+                      </button>
+                    }
+                    @if (message.canDelete) {
+                      <button
+                        type="button"
+                        class="link"
+                        [attr.aria-label]="deleteLabel(message)"
+                        [disabled]="busy()"
+                        (click)="remove(message)"
+                        i18n
+                      >
+                        Remove
+                      </button>
+                    }
+                    @if (message.canModerate) {
+                      <button
+                        type="button"
+                        class="link"
+                        [attr.aria-label]="moderateLabel(message)"
+                        [disabled]="busy()"
+                        (click)="startModeration(message)"
+                        i18n
+                      >
+                        Remove as coach
+                      </button>
+                    }
+                  </div>
+                }
+
+                @if (moderatingId() === message.id) {
+                  @let reasonIssues = moderationIssues();
+                  @let showsReason = moderationAttempt.shows('moderationReason', reasonIssues);
+                  <form class="moderation" (ngSubmit)="moderate(message)">
+                    <label>
+                      <span i18n>Reason for removing this message</span>
+                      <input
+                        type="text"
+                        id="moderation-reason"
+                        name="moderationReason"
+                        [maxlength]="maximumReason"
+                        [ngModel]="moderationReason()"
+                        (ngModelChange)="moderationReason.set($event)"
+                        (blur)="moderationAttempt.touch('moderationReason')"
+                        [attr.aria-invalid]="showsReason ? 'true' : null"
+                        [attr.aria-describedby]="showsReason ? 'moderation-reason-reason' : null"
+                      />
+                    </label>
+                    @if (showsReason) {
+                      <p class="reason" id="moderation-reason-reason">{{ reasonIssues[0] }}</p>
+                    }
+                    <p class="detail" i18n>
+                      The reason is kept for your records and is never shown to the other person.
+                    </p>
+                    <p
+                      class="error summary"
+                      id="moderation-summary"
+                      role="alert"
+                      tabindex="-1"
+                      #moderationSummary
+                    >
+                      @if (moderationAttempt.wasTried() && reasonIssues.length > 0) {
+                        <ng-container i18n>This message cannot be removed yet:</ng-container>
+                        <span>{{ reasonIssues[0] }}</span>
+                      }
+                    </p>
+                    <div class="actions">
+                      <button
+                        type="submit"
+                        class="primary-button compact"
+                        aria-describedby="moderation-summary"
+                        [disabled]="busy()"
+                        i18n
+                      >
+                        Confirm removal
+                      </button>
+                      <button type="button" class="link" (click)="cancelModeration()" i18n>
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                }
+              </article>
+            </li>
+          }
+        </ol>
+
+        @let composerReasons = composerIssues();
+        @let showsComposer = composerAttempt.shows('draft', composerReasons);
+        <form class="composer" (ngSubmit)="send()">
+          <label>
+            <span i18n>Write a message</span>
+            <textarea
+              rows="3"
+              id="draft"
+              name="draft"
+              [maxlength]="maximumLength"
+              [ngModel]="draft()"
+              (ngModelChange)="draft.set($event)"
+              (blur)="composerAttempt.touch('draft')"
+              [attr.aria-invalid]="showsComposer ? 'true' : null"
+              [attr.aria-describedby]="showsComposer ? 'draft-reason' : null"
+            ></textarea>
+          </label>
+          @if (showsComposer) {
+            <p class="reason" id="draft-reason">{{ composerReasons[0] }}</p>
+          }
+          <p class="detail" role="status" i18n>
+            {{ remaining() }} of {{ maximumLength }} characters left. Plain text only.
+          </p>
+          <p
+            class="error summary"
+            id="composer-summary"
+            role="alert"
+            tabindex="-1"
+            #composerSummary
+          >
+            @if (composerAttempt.wasTried() && composerReasons.length > 0) {
+              <ng-container i18n>This message cannot be sent yet:</ng-container>
+              <span>{{ composerReasons[0] }}</span>
+            }
+          </p>
+          <button
+            type="submit"
+            class="primary-button"
+            aria-describedby="composer-summary"
+            [disabled]="busy()"
+            i18n
+          >
+            Send message
+          </button>
+        </form>
+      }
+    </div>
+  </div>
+</section>

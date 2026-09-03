@@ -64,6 +64,15 @@ export const routes: Routes = [
       import('./features/checkins/checkins.routes').then((module) => module.checkInRoutes),
   },
   {
+    // Both sides of a conversation are active members of the workspace, whatever their role, so this
+    // sits behind the plain authenticated guard. Who may open which conversation is an explicit
+    // participant row the API checks, and a route guard could never stand in for it.
+    path: 'messages',
+    canActivate: [authGuard],
+    loadChildren: () =>
+      import('./features/messaging/messages.routes').then((module) => module.messagingRoutes),
+  },
+  {
     // Every active member of a workspace has an inbox, whatever their role, so this sits behind the
     // plain authenticated guard rather than a role guard.
     path: 'notifications',

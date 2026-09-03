@@ -8,6 +8,7 @@ using TB.Gym.Modules.ExerciseLibrary;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Media;
+using TB.Gym.Modules.Messaging;
 using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.Nutrition;
 using TB.Gym.Modules.Progress;
@@ -214,6 +215,18 @@ public sealed partial class GymDbContext(
 
     public DbSet<CheckInResponseEvent> CheckInResponseEvents => Set<CheckInResponseEvent>();
 
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+
+    public DbSet<ConversationParticipant> ConversationParticipants => Set<ConversationParticipant>();
+
+    public DbSet<Message> Messages => Set<Message>();
+
+    public DbSet<MessageRevision> MessageRevisions => Set<MessageRevision>();
+
+    public DbSet<MessageDeletionEvent> MessageDeletionEvents => Set<MessageDeletionEvent>();
+
+    public DbSet<MessagingCommandRecord> MessagingCommandRecords => Set<MessagingCommandRecord>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -232,6 +245,7 @@ public sealed partial class GymDbContext(
         ConfigureTraining(builder);
         ConfigureNutrition(builder);
         ConfigureCheckIns(builder);
+        ConfigureMessaging(builder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -809,6 +823,54 @@ public sealed partial class GymDbContext(
         }
 
         RejectAppendOnlyMutations<CheckInResponseEvent>("Check-in response events are append-only.");
+
+        // Messaging history. A revision is what a message said at one point, a deletion event is the
+        // fact that somebody removed it, and a command record is a spent idempotency key: all three
+        // are written once and never rewritten. Database triggers are the guarantee; these catch the
+        // mistake in the code path that made it, with a message that names the intended operation.
+        RejectAppendOnlyMutations<MessageRevision>("Message revisions are immutable.");
+        RejectAppendOnlyMutations<MessageDeletionEvent>("Message deletion events are append-only.");
+        RejectAppendOnlyMutations<MessagingCommandRecord>("Messaging command records are append-only.");
+
+        if (ChangeTracker.Entries<Conversation>().Any(item => item.State == EntityState.Deleted) ||
+            ChangeTracker.Entries<ConversationParticipant>().Any(item => item.State == EntityState.Deleted) ||
+            ChangeTracker.Entries<Message>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException(
+                "Conversations, participants and messages are never deleted; removal is recorded state.");
+        }
+
+        // Removal is one-way. Restoring a message would republish something somebody deliberately
+        // took back, or reverse a moderation without any record that it was reversed.
+        foreach (var entry in ChangeTracker.Entries<Message>().Where(item => item.State == EntityState.Modified))
+        {
+            var wasDeleted = entry.OriginalValues.GetValue<DateTimeOffset?>(nameof(Message.DeletedAtUtc));
+            if (wasDeleted is null)
+            {
+                continue;
+            }
+
+            if (entry.Entity.DeletedAtUtc is null)
+            {
+                throw new InvalidOperationException("A removed message cannot be restored.");
+            }
+
+            if (entry.Property(item => item.CurrentRevisionNumber).IsModified)
+            {
+                throw new InvalidOperationException("A removed message cannot be edited.");
+            }
+        }
+
+        // A cursor is one participant's own progress and only ever moves forward.
+        foreach (var entry in ChangeTracker.Entries<ConversationParticipant>()
+                     .Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.Entity.LastReadSequence <
+                entry.OriginalValues.GetValue<long>(nameof(ConversationParticipant.LastReadSequence)))
+            {
+                throw new InvalidOperationException("A conversation read cursor cannot move backwards.");
+            }
+        }
 
         // Delivery history is the only thing that can explain a dead-lettered notification later, so
         // an attempt is never deleted and a finished one is never rewritten. The database trigger is

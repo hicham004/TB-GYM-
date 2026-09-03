@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
 import { AuthStore } from './core/auth/auth.store';
+import { MessageUnreadStore } from './core/messaging/message-unread.store';
 import { NotificationStore } from './core/notifications/notification.store';
 import { TenantStore } from './core/tenancy/tenant.store';
 import { settle } from '../testing/dom';
@@ -24,8 +25,16 @@ const MEMBERSHIP = {
   role: 'Owner' as const,
 };
 
-async function render(options: { signedIn?: boolean; owner?: boolean; unread?: number } = {}) {
+async function render(
+  options: {
+    signedIn?: boolean;
+    owner?: boolean;
+    unread?: number;
+    unreadMessages?: number;
+  } = {},
+) {
   const clear = vi.fn();
+  const clearMessages = vi.fn();
   await TestBed.configureTestingModule({
     imports: [App],
     providers: [
@@ -42,6 +51,17 @@ async function render(options: { signedIn?: boolean; owner?: boolean; unread?: n
           refresh: vi.fn().mockResolvedValue(undefined),
           set: vi.fn(),
           decrement: vi.fn(),
+        },
+      },
+      {
+        provide: MessageUnreadStore,
+        useValue: {
+          unread: signal(options.unreadMessages ?? 0),
+          loading: signal(false),
+          isAvailable: signal(Boolean(options.signedIn)),
+          clear: clearMessages,
+          refresh: vi.fn().mockResolvedValue(undefined),
+          set: vi.fn(),
         },
       },
       {
@@ -70,7 +90,7 @@ async function render(options: { signedIn?: boolean; owner?: boolean; unread?: n
 
   const fixture = TestBed.createComponent(App);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, clear };
+  return { fixture, host: fixture.nativeElement as HTMLElement, clear, clearMessages };
 }
 
 describe('App', () => {
@@ -157,7 +177,11 @@ describe('App', () => {
   });
 
   it('clears the badge as part of signing out', async () => {
-    const { host, clear } = await render({ signedIn: true, unread: 4 });
+    const { host, clear, clearMessages } = await render({
+      signedIn: true,
+      unread: 4,
+      unreadMessages: 2,
+    });
 
     const signOut = Array.from(host.querySelectorAll('button')).find(
       (candidate) => candidate.textContent?.trim() === 'Sign out',
@@ -165,5 +189,55 @@ describe('App', () => {
     signOut?.click();
 
     expect(clear).toHaveBeenCalled();
+    expect(clearMessages).toHaveBeenCalled();
+  });
+
+  it('offers the messages link to every active member', async () => {
+    const { host } = await render({ signedIn: true, owner: true });
+
+    const link = host.querySelector('nav a[href="/messages"]');
+    expect(link).not.toBeNull();
+    expect(link?.textContent).toContain('Messages');
+  });
+
+  it('hides the messages link when nobody is signed in', async () => {
+    const { host } = await render();
+
+    expect(host.querySelector('nav a[href="/messages"]')).toBeNull();
+  });
+
+  it('shows no message badge when nothing is unread', async () => {
+    const { host } = await render({ signedIn: true, unreadMessages: 0 });
+
+    expect(host.querySelector('nav a[href="/messages"] .badge')).toBeNull();
+    expect(host.querySelector('nav a[href="/messages"]')?.textContent).not.toContain('unread');
+  });
+
+  it('announces one unread message in words as well as in the badge', async () => {
+    const { host } = await render({ signedIn: true, unreadMessages: 1 });
+
+    expect(host.querySelector('nav a[href="/messages"] .badge')?.textContent?.trim()).toBe('1');
+    expect(host.querySelector('nav a[href="/messages"] .visually-hidden')?.textContent).toContain(
+      '1 unread messages',
+    );
+  });
+
+  it('shows a badge for many unread messages', async () => {
+    const { host } = await render({ signedIn: true, unreadMessages: 9 });
+
+    expect(host.querySelector('nav a[href="/messages"] .badge')?.textContent?.trim()).toBe('9');
+  });
+
+  /**
+   * Two counts, two badges. Summing an unread notification and an unread message would produce a
+   * number nobody could explain or act on, so the topbar keeps them apart.
+   */
+  it('keeps the message badge separate from the notification badge', async () => {
+    const { host } = await render({ signedIn: true, unread: 4, unreadMessages: 2 });
+
+    expect(host.querySelector('nav a[href="/notifications"] .badge')?.textContent?.trim()).toBe(
+      '4',
+    );
+    expect(host.querySelector('nav a[href="/messages"] .badge')?.textContent?.trim()).toBe('2');
   });
 });

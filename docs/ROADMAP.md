@@ -436,14 +436,78 @@ Explicitly deferred from 6B-1 and still open: email/SMTP/WhatsApp adapters and p
 reconciliation; channel preferences, quiet hours, marketing consent and WhatsApp opt-in (they wait
 for the first interruptive channel); migrating account-confirmation, password-reset and invitation
 delivery onto the outbox, which needs a tokenless design first; manual dead-letter replay;
-localisation beyond English; chat conversations and messages; SignalR sending, groups, reconnect and
-scale-out; recurring check-in scheduling and reminders; and any generic background-job framework.
+localisation beyond English; SignalR sending, groups, reconnect and scale-out; recurring check-in
+scheduling and reminders; and any generic background-job framework. Chat conversations and messages
+were delivered by 6B-2A below.
+
+Explicitly deferred from 6B-2A and still open: SignalR sending, group membership, acknowledgements,
+reconnect/catch-up and scale-out; polling; group conversations; multiple coaches in one conversation;
+participant add/remove/reassignment; client-created conversations; typing indicators; online presence;
+reactions; attachments, images, files, voice notes and video; Markdown, HTML, previews and link
+unfurling; message search; push, email, SMS and WhatsApp delivery; notification preference changes;
+end-to-end encryption claims; retention, export and legal deletion workflows; check-in comments; and
+AI summaries.
+
+### Phase 6B-2A: persisted direct messaging (complete)
+
+Status: complete, implemented 2026-09-01. See
+`docs/adr/0019-persisted-direct-messaging-v1.md` and `DOMAIN-RULES.md` MSG-001 through MSG-011.
+
+- **Persistence before delivery.** PostgreSQL is the source of truth and `ChatHub` gained nothing:
+  it is still an empty authorized shell, and an architecture test says so. A channel built first can
+  send and cannot say what was sent, to whom or whether anybody saw it, and a chat living only in a
+  socket frame is lost by the first disconnect.
+- **One conversation shape.** Direct, exactly two explicit and immutable participants — one active
+  Owner or Coach, one linked Client — governed by the tenant-local client profile's Messaging
+  entitlement. At most one per `(TenantId, ClientProfileId, CoachUserId)`, with concurrent creation
+  returning the same conversation. A second coach opens their own thread and never sees the first.
+- **Participation and entitlement are separate requirements**, both mandatory on every operation.
+  Unknown, wrong-workspace and same-workspace non-participant are one indistinguishable 404; a denied
+  participant gets the stable feature-access refusal with no content. Nothing is deleted to refuse.
+- **Locked sequence allocation.** A counter on the conversation row, incremented under `FOR UPDATE`
+  inside the sending transaction, with `UNIQUE (TenantId, ConversationId, Sequence)` behind it.
+  Committed sequences are unique, gap-free and ordered; a rolled-back send returns its number.
+- **One idempotency table for every command**, keyed on `(TenantId, IdempotencyKey)` alone and bound
+  to a fingerprint of the normalized payload, so a key cannot be spent twice or across command kinds.
+  The key is locked before any aggregate, in one order everywhere, so two requests sharing a key but
+  no aggregate are still settled by it; the browser retains its key across a failed attempt so a
+  retry after a lost response is the same command.
+- **Append-only revisions and one-way removal.** Bodies live only in `MessageRevisions`; the message
+  names the current revision number. Sender-only editing with no invented time window; two
+  distinguishable removal kinds, a required and never-disclosed moderation reason, and an append-only
+  removal event. A moderator removes and never edits.
+- **Read state is the participant's own act**, monotonic, clamped at the newest committed sequence,
+  advanced under its own row lock, and never written from any delivery outcome.
+- **Keyset pagination** on both lists, plain-text-only bodies, and no message content, reason, name
+  or address anywhere in a log.
+- **Angular.** A lazy `/messages` route for every active member, a separate accessible unread badge,
+  conversation list, thread, stable Load older, composer, edit, delete, coach moderation, explicit
+  read advancement, and generation ownership over account, workspace and conversation. No polling and
+  no SignalR.
+
+Exit: two concurrent sends commit unique gap-free sequences; an identical retry writes one message; a
+failed commit leaves nothing behind and gives its sequence back; a non-participant coach in the same
+workspace sees a 404; and no message body or removal reason reaches a log.
+
+A review-remediation pass on 2026-09-01 closed four classes of defect the first implementation had
+claimed but not held: the idempotency namespace was only serialized where two requests happened to
+share an aggregate; several invariants ADR 0019 called impossible were unenforced text columns or
+missing cross-row checks; three handlers validated their payload before resolving authorization, and
+the conversation listing read bodies it then suppressed; and the browser minted a fresh command key
+on every click, so a retry after a lost response duplicated the original write. Each was reproduced
+by a failing deterministic test before it was fixed. Final independent review also closed the
+remaining revision-side bypass: the exact `1..CurrentRevisionNumber` chain is now asserted when either
+the message root changes or a revision is inserted, so an unreferenced future revision cannot commit.
+The same independent review closed both directions of a conversation-tip bypass: the allocator now
+starts empty and advances one position at a time, each later message requires its predecessor, and a
+deferred assertion on both sides requires `LastSequence` and `LastMessageId` to identify the newest
+stored message.
 
 ### Phase 6B remaining
 
-- Persist tenant-scoped conversations, participants, messages, read state, and moderation
-  metadata.
-- Complete SignalR authorization, reconnect/catch-up, delivery, and scale-out tests.
+- Complete SignalR authorization, reconnect/catch-up, delivery, and scale-out tests: 6B-2B adds
+  sending, per-conversation groups, connection mapping, catch-up from the sequences 6B-2A commits,
+  and delivery acknowledgement recorded separately from read state.
 - Add channel preferences, quiet hours and consent alongside the first interruptive channel, and
   design tokenless delivery so account/reset/invitation mail can join the outbox.
 - Implement production object storage, production upload scanning, provider inventory

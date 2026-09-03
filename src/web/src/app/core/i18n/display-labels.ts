@@ -6,6 +6,7 @@ import type {
   MediaAssetStatus,
   MediaKind,
   MediaSource,
+  MessageDeletionKind,
   MesocycleStatus,
   MovementPattern,
   StrengthMaxKind,
@@ -211,4 +212,53 @@ export function clientCheckInDenialMessage(reason: FeatureAccessReason): string 
     PlatformBlocked: $localize`This client's account access is blocked, so their check-ins cannot be read.`,
   };
   return labels[reason];
+}
+
+/**
+ * Why a conversation is closed, said to the client themselves. A denial and an empty thread are
+ * different facts, so a refused conversation must never render as one with nothing in it.
+ */
+export function ownMessagingDenialMessage(reason: FeatureAccessReason): string {
+  const labels: Record<FeatureAccessReason, string> = {
+    Granted: $localize`Messaging is not available in this workspace right now.`,
+    MembershipInactive: $localize`You are no longer an active member of this workspace, so its messages are closed.`,
+    RelationshipBlocked: $localize`Your coach has paused your access to this workspace, so messaging is closed.`,
+    NoEntitlement: $localize`Messaging is not part of your current plan in this workspace.`,
+    PaymentRequired: $localize`Your enrollment is awaiting payment, so messaging is closed for now.`,
+    NotStarted: $localize`Your enrollment has not started yet, so messaging is not open yet.`,
+    Expired: $localize`Your enrollment has ended, so this conversation is closed. Nothing has been deleted.`,
+    Paused: $localize`Your enrollment is paused, so messaging is closed for now.`,
+    Cancelled: $localize`Your enrollment was cancelled, so this conversation is closed. Nothing has been deleted.`,
+    PlatformBlocked: $localize`Your account access is blocked, so messaging is closed.`,
+  };
+  return labels[reason];
+}
+
+/** The same decision as the coach reads it, about one client conversation. */
+export function clientMessagingDenialMessage(reason: FeatureAccessReason): string {
+  const labels: Record<FeatureAccessReason, string> = {
+    Granted: $localize`This conversation is not available.`,
+    MembershipInactive: $localize`This client is no longer an active member of the workspace, so this conversation is closed.`,
+    RelationshipBlocked: $localize`You have blocked this client, so this conversation is closed until you unblock them.`,
+    NoEntitlement: $localize`Messaging is not part of this client's current plan, so this conversation is closed.`,
+    PaymentRequired: $localize`This client's enrollment is awaiting payment, so this conversation is closed.`,
+    NotStarted: $localize`This client's enrollment has not started yet, so this conversation is not open yet.`,
+    Expired: $localize`This client's enrollment has ended, so this conversation is closed. Nothing has been deleted.`,
+    Paused: $localize`This client's enrollment is paused, so this conversation is closed.`,
+    Cancelled: $localize`This client's enrollment was cancelled, so this conversation is closed. Nothing has been deleted.`,
+    PlatformBlocked: $localize`This client's account access is blocked, so this conversation is closed.`,
+  };
+  return labels[reason];
+}
+
+/** How a removed message is described, without naming who removed it to the other participant. */
+export function messageRemovalLabel(kind: MessageDeletionKind | null): string {
+  switch (kind) {
+    case 'SenderRemoved':
+      return $localize`Message removed by its sender`;
+    case 'CoachModerated':
+      return $localize`Message removed by the coach`;
+    default:
+      return $localize`Message removed`;
+  }
 }

@@ -51,6 +51,10 @@ export type AddWorkoutNoteRequest = {
   text: string;
 };
 
+export type AdvanceReadCursorRequest = {
+  throughSequence: number | string;
+};
+
 export type AiDraftStatus = 'Pending' | 'Failed' | 'AwaitingCoachReview' | 'Approved' | 'Rejected';
 
 export type AiIngredientMappingRequest = {
@@ -759,6 +763,64 @@ export type ConfirmEmailRequest = {
   code: string;
 };
 
+export type ConversationCounterpart = {
+  userId: string;
+  displayName: string;
+  role: ConversationParticipantRole;
+};
+
+export type ConversationDetail = {
+  conversation: ConversationSummary;
+  readState: ConversationReadState;
+};
+
+export type ConversationMessagePreview = {
+  messageId: string;
+  sequence: number | string;
+  senderUserId: string;
+  isFromCaller: boolean;
+  sentAtUtc: string;
+  body: null | string;
+  isDeleted: boolean;
+  deletionKind: null | MessageDeletionKind;
+};
+
+export type ConversationPage = {
+  items: Array<ConversationSummary>;
+  hasMore: boolean;
+  nextBeforeActivityAtUtc: null | string;
+  nextBeforeConversationId: null | string;
+};
+
+export type ConversationParticipantRole = 'Coach' | 'Client';
+
+export type ConversationReadState = {
+  conversationId: string;
+  userId: string;
+  role: ConversationParticipantRole;
+  lastReadSequence: number | string;
+  lastReadAtUtc: null | string;
+  unreadCount: number | string;
+  latestSequence: number | string;
+};
+
+export type ConversationSummary = {
+  id: string;
+  clientProfileId: string;
+  counterpart: ConversationCounterpart;
+  callerRole: ConversationParticipantRole;
+  canModerate: boolean;
+  startedAtUtc: string;
+  lastActivityAtUtc: string;
+  lastSequence: number | string;
+  unreadCount: number | string;
+  lastReadSequence: number | string;
+  lastReadAtUtc: null | string;
+  isAvailable: boolean;
+  accessReason: FeatureAccessReason;
+  lastMessage: null | ConversationMessagePreview;
+};
+
 export type CookingFactorKind = 'Yield' | 'Retention';
 
 export type CookingFactorPage = {
@@ -819,6 +881,11 @@ export type CreateCookingFactorRequest = {
   fromBasis: PreparationBasis;
   toBasis: PreparationBasis;
   factor: number | string;
+};
+
+export type CreateDirectConversationRequest = {
+  clientProfileId: string;
+  idempotencyKey: string;
 };
 
 export type CreateExerciseRequest = {
@@ -987,9 +1054,20 @@ export type DeleteMediaRequest = {
   version: number | string;
 };
 
+export type DeleteMessageRequest = {
+  expectedVersion: number | string;
+  idempotencyKey: string;
+};
+
 export type DeriveCheckInDraftRequest = {
   sourceVersionId: string;
   formVersion: number | string;
+};
+
+export type EditMessageRequest = {
+  body: string;
+  expectedVersion: number | string;
+  idempotencyKey: string;
 };
 
 export type EffectiveEnrollmentStatus =
@@ -1391,6 +1469,51 @@ export type MesocycleSummary = {
   status: MesocycleStatus;
   revealAllWeeks: boolean;
   version: number | string;
+};
+
+export type MessageDeletionKind = 'SenderRemoved' | 'CoachModerated';
+
+export type MessageDeliveryState = 'Persisted';
+
+export type MessagePage = {
+  conversationId: string;
+  items: Array<MessageView>;
+  hasOlder: boolean;
+  oldestSequence: null | number | string;
+  latestSequence: number | string;
+  readState: ConversationReadState;
+};
+
+export type MessageView = {
+  id: string;
+  conversationId: string;
+  sequence: number | string;
+  senderUserId: string;
+  isFromCaller: boolean;
+  sentAtUtc: string;
+  availableAtUtc: string;
+  editedAtUtc: null | string;
+  revisionNumber: number | string;
+  body: null | string;
+  isDeleted: boolean;
+  deletionKind: null | MessageDeletionKind;
+  deletedAtUtc: null | string;
+  deliveryState: MessageDeliveryState;
+  canEdit: boolean;
+  canDelete: boolean;
+  canModerate: boolean;
+  isUnreadByCaller: boolean;
+  version: number | string;
+};
+
+export type MessagingUnreadCount = {
+  unread: number | string;
+};
+
+export type ModerateMessageRequest = {
+  reason: string;
+  expectedVersion: number | string;
+  idempotencyKey: string;
 };
 
 export type MovementPattern =
@@ -1908,6 +2031,11 @@ export type SaveSessionTemplateRequest = {
   name: string;
   sourceTemplateVersionId: string;
   sourceTemplateSessionId: string;
+};
+
+export type SendMessageRequest = {
+  body: string;
+  idempotencyKey: string;
 };
 
 export type SetExerciseArchivedRequest = {
@@ -2471,6 +2599,23 @@ export type StreamPrivateMediaThumbnailResponses = {
    */
   200: unknown;
 };
+
+export type GetOwnMessagingUnreadCountData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/messaging/unread-count';
+};
+
+export type GetOwnMessagingUnreadCountResponses = {
+  /**
+   * OK
+   */
+  200: MessagingUnreadCount;
+};
+
+export type GetOwnMessagingUnreadCountResponse =
+  GetOwnMessagingUnreadCountResponses[keyof GetOwnMessagingUnreadCountResponses];
 
 export type ListWorkspaceNotificationDeadLettersData = {
   body?: never;
@@ -7056,6 +7201,320 @@ export type CreatePrivateMediaAccessBatchResponses = {
 
 export type CreatePrivateMediaAccessBatchResponse =
   CreatePrivateMediaAccessBatchResponses[keyof CreatePrivateMediaAccessBatchResponses];
+
+export type ListOwnConversationsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    beforeActivityAtUtc?: string;
+    beforeConversationId?: string;
+    take?: number | string;
+  };
+  url: '/api/messaging/conversations';
+};
+
+export type ListOwnConversationsErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+};
+
+export type ListOwnConversationsError =
+  ListOwnConversationsErrors[keyof ListOwnConversationsErrors];
+
+export type ListOwnConversationsResponses = {
+  /**
+   * OK
+   */
+  200: ConversationPage;
+};
+
+export type ListOwnConversationsResponse =
+  ListOwnConversationsResponses[keyof ListOwnConversationsResponses];
+
+export type CreateDirectConversationData = {
+  body: CreateDirectConversationRequest;
+  path?: never;
+  query?: never;
+  url: '/api/messaging/conversations';
+};
+
+export type CreateDirectConversationErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CreateDirectConversationError =
+  CreateDirectConversationErrors[keyof CreateDirectConversationErrors];
+
+export type CreateDirectConversationResponses = {
+  /**
+   * OK
+   */
+  200: ConversationDetail;
+};
+
+export type CreateDirectConversationResponse =
+  CreateDirectConversationResponses[keyof CreateDirectConversationResponses];
+
+export type ListConversationMessagesData = {
+  body?: never;
+  path: {
+    conversationId: string;
+  };
+  query?: {
+    beforeSequence?: number | string;
+    take?: number | string;
+  };
+  url: '/api/messaging/conversations/{conversationId}/messages';
+};
+
+export type ListConversationMessagesErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type ListConversationMessagesError =
+  ListConversationMessagesErrors[keyof ListConversationMessagesErrors];
+
+export type ListConversationMessagesResponses = {
+  /**
+   * OK
+   */
+  200: MessagePage;
+};
+
+export type ListConversationMessagesResponse =
+  ListConversationMessagesResponses[keyof ListConversationMessagesResponses];
+
+export type SendConversationMessageData = {
+  body: SendMessageRequest;
+  path: {
+    conversationId: string;
+  };
+  query?: never;
+  url: '/api/messaging/conversations/{conversationId}/messages';
+};
+
+export type SendConversationMessageErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SendConversationMessageError =
+  SendConversationMessageErrors[keyof SendConversationMessageErrors];
+
+export type SendConversationMessageResponses = {
+  /**
+   * OK
+   */
+  200: MessageView;
+};
+
+export type SendConversationMessageResponse =
+  SendConversationMessageResponses[keyof SendConversationMessageResponses];
+
+export type EditConversationMessageData = {
+  body: EditMessageRequest;
+  path: {
+    conversationId: string;
+    messageId: string;
+  };
+  query?: never;
+  url: '/api/messaging/conversations/{conversationId}/messages/{messageId}/edit';
+};
+
+export type EditConversationMessageErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type EditConversationMessageError =
+  EditConversationMessageErrors[keyof EditConversationMessageErrors];
+
+export type EditConversationMessageResponses = {
+  /**
+   * OK
+   */
+  200: MessageView;
+};
+
+export type EditConversationMessageResponse =
+  EditConversationMessageResponses[keyof EditConversationMessageResponses];
+
+export type DeleteOwnConversationMessageData = {
+  body: DeleteMessageRequest;
+  path: {
+    conversationId: string;
+    messageId: string;
+  };
+  query?: never;
+  url: '/api/messaging/conversations/{conversationId}/messages/{messageId}/delete';
+};
+
+export type DeleteOwnConversationMessageErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type DeleteOwnConversationMessageError =
+  DeleteOwnConversationMessageErrors[keyof DeleteOwnConversationMessageErrors];
+
+export type DeleteOwnConversationMessageResponses = {
+  /**
+   * OK
+   */
+  200: MessageView;
+};
+
+export type DeleteOwnConversationMessageResponse =
+  DeleteOwnConversationMessageResponses[keyof DeleteOwnConversationMessageResponses];
+
+export type ModerateConversationMessageData = {
+  body: ModerateMessageRequest;
+  path: {
+    conversationId: string;
+    messageId: string;
+  };
+  query?: never;
+  url: '/api/messaging/conversations/{conversationId}/messages/{messageId}/moderate';
+};
+
+export type ModerateConversationMessageErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ModerateConversationMessageError =
+  ModerateConversationMessageErrors[keyof ModerateConversationMessageErrors];
+
+export type ModerateConversationMessageResponses = {
+  /**
+   * OK
+   */
+  200: MessageView;
+};
+
+export type ModerateConversationMessageResponse =
+  ModerateConversationMessageResponses[keyof ModerateConversationMessageResponses];
+
+export type AdvanceOwnConversationReadCursorData = {
+  body: AdvanceReadCursorRequest;
+  path: {
+    conversationId: string;
+  };
+  query?: never;
+  url: '/api/messaging/conversations/{conversationId}/read';
+};
+
+export type AdvanceOwnConversationReadCursorErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type AdvanceOwnConversationReadCursorError =
+  AdvanceOwnConversationReadCursorErrors[keyof AdvanceOwnConversationReadCursorErrors];
+
+export type AdvanceOwnConversationReadCursorResponses = {
+  /**
+   * OK
+   */
+  200: ConversationReadState;
+};
+
+export type AdvanceOwnConversationReadCursorResponse =
+  AdvanceOwnConversationReadCursorResponses[keyof AdvanceOwnConversationReadCursorResponses];
 
 export type ListOwnNotificationsData = {
   body?: never;

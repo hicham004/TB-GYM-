@@ -407,7 +407,85 @@ must be 10-300 centimetres and body fat 1-75 percent.
 
 **MSG-001** A conversation belongs to a tenant and an explicit participant set. A tenant
 membership alone does not grant access to every conversation. Messages are persisted before
-delivery and carry server timestamps, sender, edit/delete status, and delivery metadata.
+delivery and carry server timestamps, sender, edit/delete status, and delivery metadata. Phase 6B-2A
+implements this for direct conversations; see `docs/adr/0019-persisted-direct-messaging-v1.md`.
+
+**MSG-002** A Phase 6B-2A conversation is direct and has exactly two participants: one active Owner
+or Coach, and one linked Client. The tenant-local client profile it names is whose Messaging
+entitlement governs it. The participant set is immutable in this slice — there is no add, remove,
+reassign, leave, invite, second coach, archive or close. At most one conversation exists per
+`(TenantId, ClientProfileId, CoachUserId)`; concurrent creation returns the same conversation rather
+than a second. A different coach opens their own thread with the same client and is never given
+access to the first. Only an Owner or Coach may create one; a client replies after a coach has.
+
+**MSG-003** Every read and write requires two separate things: an explicit participant row, and a
+current `ICoachingFeatureAccessService` decision for `CoachingFeature.Messaging` on the
+conversation's client profile. Neither is sufficient alone. Both are resolved **before** the payload
+is validated, so a malformed cursor, a blank moderation reason or a negative read sequence never
+distinguishes an unknown conversation from a real one the caller is not in; and the conversation
+listing decides access before it queries any message row, rather than reading bodies and then
+suppressing them. Entitlement belongs to the client's
+enrollment, so when it lapses the conversation closes for both sides. Unknown conversation, wrong
+workspace and same-workspace non-participant are one indistinguishable `404`; a denied participant
+receives the stable feature-access refusal with no message content. Nothing is deleted to produce a
+refusal, and restoring access restores the thread.
+
+**MSG-004** A message body is plain text: CRLF and CR normalized to LF, outer whitespace trimmed,
+blank refused, control characters other than LF and TAB refused, at most 2 000 characters after
+normalization. There is no HTML, Markdown, linkification, attachment, embed, database-authored markup
+or user-controlled template anywhere in the path, and the browser renders it as text.
+
+**MSG-005** Every message carries a positive `Sequence`, unique and gap-free within its conversation.
+It is allocated from a counter on the conversation row under a `FOR UPDATE` lock inside the sending
+transaction, never by `MAX(sequence) + 1`. A rolled-back send returns its number. The message, its
+first revision, the sequence, the conversation activity update and the spent idempotency key commit
+together or not at all. Every instant is server-owned; none is accepted from a browser.
+
+**MSG-006** Every messaging command carries a UUID idempotency key, bound to a fingerprint of the
+normalized payload — workspace, conversation, actor and normalized body or reason. One key is spent
+per workspace across every command type, so a key spent on a send cannot be honoured as an edit. An
+identical sequential or concurrent retry returns the original result; a reused key with changed
+content conflicts and writes nothing. A concurrency token is deliberately not part of the
+fingerprint, so an honest retry after a lost response is not a conflict.
+
+The key is serialized in its own right: every command locks `(TenantId, IdempotencyKey)` first,
+rereads the committed command record, and only then takes an aggregate lock — the direct-conversation
+pair, the conversation row, or the participant row. The order never varies. Two requests sharing a
+key but no aggregate — two conversations, two client pairs, two command types — are settled by that
+lock and by nothing else, and concurrent identical edits and removals replay the winner rather than
+reporting a stale version. A unique-constraint violation is translated in every path and never
+reaches a caller as a server error. The browser retains its key for as long as the attempt is
+unchanged, so clicking again after a lost response is the same command and not a second one.
+
+**MSG-007** A message is never hard-deleted and its body lives only in append-only `MessageRevision`
+rows; the message names which revision number is current. Only the sender may edit, only while the
+message is not removed, with optimistic concurrency and an idempotency key; an edit appends the next
+revision and retains every earlier one. There is no edit-time window. No ordinary API returns an
+earlier revision.
+
+**MSG-008** Removal is one way, idempotent, and of two distinguishable kinds. `SenderRemoved` is the
+sender taking back their own message and carries no reason. `CoachModerated` is the explicit coach
+participant removing the other participant's message and requires a bounded reason that is retained
+for audit, never returned to the other participant, and never logged. A moderator removes and never
+edits. A non-participant Owner or Coach has no moderation power. A removed message keeps its place,
+its sequence and its metadata, loses its body, and cannot be edited or restored.
+
+**MSG-009** Read state is one participant's own act: a monotonic `LastReadSequence` and
+`LastReadAtUtc` on their participant row, never on the conversation and never written from a
+delivery or provider acknowledgement. A participant advances only their own cursor and it never
+regresses. A sequence beyond the newest committed message is clamped down to it; a negative sequence
+is refused. Unread counts only messages written by the other participant, beyond the caller's cursor,
+not removed, in a conversation the caller participates in and may currently access. Sending is not
+reading, and sending does not mark anything read for anybody else.
+
+**MSG-010** Phase 6B-2A claims only that a message was persisted and made available for authorized
+catch-up. `Delivered` and `Read` are not states a successful REST command establishes. Realtime and
+provider acknowledgement columns exist, are null throughout this slice, and are written by later
+phases — never into read state.
+
+**MSG-011** Message bodies, revision bodies, moderation reasons, participant names, email addresses
+and client identifiers never appear in logs, analytics, exceptions, notification payloads or
+operational diagnostics. A conversation list returns a counterpart display name and nothing else.
 
 **NOT-001** In-app, email, and WhatsApp notifications share a domain notification but maintain
 separate delivery attempts. Retries are idempotent; provider acknowledgement is not confused
@@ -644,6 +722,20 @@ At minimum, later migrations should enforce:
 | Terminal outbox instants match the status | Checks pairing `Dispatched`/`DeadLettered` with their instants |
 | Immutable completed delivery attempts and delivered wording | Application guard plus PostgreSQL trigger |
 | Notification child belongs to an intent of the same workspace | Composite FK `(TenantId, OutboxItemId)` |
+| One direct conversation per workspace, client and coach | Unique `(TenantId, ClientProfileId, CoachUserId)` |
+| Exactly one Coach side and one Client side per conversation | Unique `(TenantId, ConversationId, Role)` plus a deferred constraint trigger |
+| A message sender is an explicit participant of that conversation | Composite FK `(TenantId, ConversationId, SenderUserId)` |
+| Positive, unique, gap-free message sequence per conversation | Check and unique index, one-step allocator trigger, predecessor assertion, and empty-at-creation rule |
+| Conversation tip equals the newest committed message | Deferred constraint trigger on both the conversation and inserted messages |
+| One revision per message and revision number | Unique `(TenantId, MessageId, RevisionNumber)` |
+| Exactly the contiguous revision chain `1..CurrentRevisionNumber` | Deferred constraint trigger on both the message root and inserted revisions |
+| Immutable message revisions, removal events and spent idempotency keys | Application guard plus PostgreSQL trigger refusing update and delete |
+| No hard deletion of conversations, participants or messages | PostgreSQL trigger refusing delete |
+| One-way message removal, and no editing a removed message | PostgreSQL trigger comparing OLD and NEW |
+| Conversation sequence allocator advances at most one position and activity never rewinds | PostgreSQL trigger comparing OLD and NEW |
+| A participant read cursor never regresses and is never negative | Check `LastReadSequence >= 0` plus PostgreSQL trigger |
+| One removal event per message | Unique `(TenantId, MessageId)` |
+| One spent messaging idempotency key per workspace | Unique `(TenantId, IdempotencyKey)` |
 
 Database constraints complement domain validation. Friendly validation happens before save,
 and constraint violations are translated into stable API problem responses.

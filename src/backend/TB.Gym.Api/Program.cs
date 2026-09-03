@@ -106,6 +106,7 @@ app.MapProgressModule();
 app.MapCheckInsModule();
 app.MapCheckInResponses();
 app.MapMediaModule();
+app.MapMessagingModule();
 app.MapNotificationsModule();
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization(AuthorizationPolicies.TenantMember);
 

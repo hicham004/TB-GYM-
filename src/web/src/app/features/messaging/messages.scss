@@ -1,0 +1,191 @@
+.messages {
+  display: grid;
+  gap: 1rem;
+}
+
+.page-head {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.page-head h2 {
+  margin: 0;
+}
+
+/* Logical properties throughout, so a right-to-left locale needs no rewrite. */
+.layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
+}
+
+@media (max-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.conversation-list ul {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.conversation-list li {
+  border: 1px solid var(--border, #d8dde3);
+  border-radius: 0.75rem;
+}
+
+/* Selection and unread are both carried by structure — a border weight plus the word beside it —
+   rather than by colour alone. */
+.conversation-list li.selected {
+  border-inline-start-width: 4px;
+}
+
+.conversation-list li.unavailable .who {
+  font-style: italic;
+}
+
+.conversation {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  display: grid;
+  gap: 0.25rem;
+  inline-size: 100%;
+  padding-block: 0.75rem;
+  padding-inline: 1rem;
+  text-align: start;
+}
+
+.conversation .who {
+  font-weight: 600;
+}
+
+.conversation .preview {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation .when {
+  font-size: 0.8rem;
+}
+
+.badge {
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 600;
+  gap: 0.25rem;
+}
+
+.thread {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.feed {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.feed li {
+  border: 1px solid var(--border, #d8dde3);
+  border-radius: 0.75rem;
+  padding-block: 0.75rem;
+  padding-inline: 1rem;
+}
+
+.feed li.mine {
+  margin-inline-start: 2rem;
+}
+
+.feed li.theirs {
+  margin-inline-end: 2rem;
+}
+
+.feed li.unread {
+  border-inline-start-width: 4px;
+}
+
+.feed li.removed .removed-body {
+  font-style: italic;
+}
+
+.feed h4 {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 0 0.25rem;
+}
+
+.feed p {
+  margin-block: 0 0.25rem;
+}
+
+/* Newlines are meaningful in a message and the body is plain text, so it is wrapped rather than
+   collapsed. `pre-wrap` renders the characters; it does not interpret them. */
+.body {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.state {
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.composer,
+.edit-form,
+.moderation {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.composer label,
+.edit-form label,
+.moderation label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.composer textarea,
+.edit-form textarea,
+.moderation input {
+  inline-size: 100%;
+}
+
+/* A derived reason is plain text, not an assertive region: it is already on screen when it renders
+   and re-announcing it on every keystroke is the anti-pattern 6A-5 removed. */
+.reason {
+  font-size: 0.9rem;
+}
+
+.summary:empty {
+  display: none;
+}
+
+.detail {
+  font-size: 0.85rem;
+}
+
+.empty,
+.denied {
+  margin: 0;
+}

@@ -3,6 +3,7 @@ import { Component, inject, LOCALE_ID, OnInit, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthStore } from './core/auth/auth.store';
 import { tenantRoleLabel } from './core/i18n/display-labels';
+import { MessageUnreadStore } from './core/messaging/message-unread.store';
 import { NotificationStore } from './core/notifications/notification.store';
 import { TenantStore } from './core/tenancy/tenant.store';
 
@@ -19,6 +20,7 @@ export class App implements OnInit {
   protected readonly auth = inject(AuthStore);
   protected readonly tenants = inject(TenantStore);
   protected readonly notifications = inject(NotificationStore);
+  protected readonly messages = inject(MessageUnreadStore);
   protected readonly menuOpen = signal(false);
   protected readonly roleLabel = tenantRoleLabel;
 
@@ -40,6 +42,8 @@ export class App implements OnInit {
     // Cleared here as well as by the store's own effect on the signed-in user, so the badge is gone
     // before the sign-out request completes rather than one change-detection pass afterwards.
     this.notifications.clear();
+    // Message unread is a separate count with a separate source, so it is cleared separately.
+    this.messages.clear();
     await this.auth.logout();
     await this.router.navigateByUrl('/auth/sign-in');
   }

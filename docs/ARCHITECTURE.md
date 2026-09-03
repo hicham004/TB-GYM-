@@ -1,7 +1,8 @@
 # TB Gym Architecture
 
 Status: Phase 6A check-ins complete, 2026-08-26; Phase 5/6 audit remediation applied, 2026-08-29;
-Phase 6B-1 notification dispatch and in-app inbox complete, 2026-08-31
+Phase 6B-1 notification dispatch and in-app inbox complete, 2026-08-31; Phase 6B-2A persisted
+direct messaging complete, 2026-09-01
 
 ## 1. Architectural style
 
@@ -68,7 +69,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Progress | Daily bodyweight, weekly summaries, measurements, dated progress photos and progress views |
 | Strength | Append-only max history, canonical RPE/RIR, versioned estimates, recommendations, rounding |
 | Check-ins | Form lineages, immutable published versions, stable question keys, assignments, typed client answers, one-way submission/review, comparison projections |
-| Messaging | Tenant-scoped coach/client conversations and messages |
+| Messaging | Tenant-scoped direct coach/client conversations, explicit participants, message history, immutable revisions, one-way removal and moderation, per-participant read state |
 | Notifications | Idempotent outbox, durable dispatch, versioned templates, per-channel delivery attempts, in-app notifications and read state, future channel ports |
 | Media | Object metadata, signature/scanner lifecycle, protected access, subordinate renditions, external embeds, retention |
 | Gamification | Tenant theme, levels, ranks and auditable experience events |
@@ -440,10 +441,12 @@ integration interceptor measures 21 SQL commands for the complete authenticated 
 
 ## 9. Realtime, jobs, and integrations
 
-`ChatHub` proves SignalR hosting and tenant authorization readiness; full conversation
-membership, persistence, delivery acknowledgements, and reconnect behavior remain future
-work. Scale-out adds a managed SignalR service or Redis backplane only when multiple API
-replicas require it.
+`ChatHub` is still an authorized SignalR hosting shell with no methods. **Phase 6B-2A built the
+persisted model underneath it and added no realtime behaviour at all** — see section 16 and
+`docs/adr/0019-persisted-direct-messaging-v1.md`. Group membership, connection mapping, delivery
+acknowledgement and reconnect/catch-up are Phase 6B-2B, and will read the sequences 6B-2A already
+commits. Scale-out adds a managed SignalR service or Redis backplane only when multiple API replicas
+require it.
 
 Commercial notifications persist an outbox item atomically with enrollment/payment state. Each item
 retains the tenant time zone used to calculate its UTC schedule and a unique deduplication key. A
@@ -758,3 +761,88 @@ slice: an in-app notification is passive persisted state, read when the screen i
 The dead-letter view is owner-only, bounded and paginated, and returns identifiers, a kind, instants,
 an attempt count and a stable failure code — never a recipient, a payload, rendered wording or an
 exception. See ADR 0018.
+
+## 16. Phase 6B-2A persisted messaging flow
+
+```text
+coach opens a direct conversation with a linked client
+  -> Conversation (TenantId, ClientProfileId, CoachUserId) — at most one, ever
+       + exactly two ConversationParticipants (one Coach side, one Client side), immutable
+  -> send: row lock on the conversation allocates the next Sequence
+       -> Message (no body) + immutable MessageRevision 1 + activity update + spent idempotency key,
+          all in one transaction
+  -> edit: append MessageRevision n+1, bump CurrentRevisionNumber, stamp EditedAtUtc
+  -> remove: one way, SenderRemoved or CoachModerated, plus an append-only MessageDeletionEvent
+  -> read:  the participant's own LastReadSequence, monotonic, clamped to the newest committed
+```
+
+Persistence comes before delivery, and the reason is the same one Phase 6B-1 gave for notifications:
+a channel built first can send and cannot say what was sent, to whom, or whether anybody saw it. A
+chat that exists only in a socket frame is additionally lost by the first disconnect, and edit,
+removal and moderation are properties of a stored message that a channel cannot express.
+
+**Two separate requirements gate every operation**, and both must hold: an explicit
+`ConversationParticipant` row, and a current `CoachingFeature.Messaging` decision for the
+conversation's client profile. Workspace membership grants neither, so another Owner or Coach of the
+same workspace is refused exactly as a stranger is — `404`, indistinguishable from an unknown
+conversation and from another workspace's. A known participant whose entitlement is denied receives
+the ordinary `403` carrying its stable reason and no content. Nothing is deleted to produce a
+refusal, so restoring access restores the thread.
+
+**One lock order, everywhere.** Every command takes a transaction-scoped advisory lock on
+`(TenantId, IdempotencyKey)` first, rereads the command record from committed state, and only then
+takes an aggregate lock. Locking only the aggregates was not enough: one key presented against two
+conversations, two client pairs or two command types shares no aggregate, so nothing serialized it,
+and concurrent identical edits or removals collided on the message's `xmin` and were told their
+version was stale when they should have been replayed. With the key lock in front, an identical retry
+replays the original result and a reused key carrying different content receives the stable conflict
+— never a unique-constraint violation surfaced as a server error.
+
+**Sequences are allocated under a row lock**, not by `MAX(sequence) + 1`. The allocator is a column
+on the conversation, incremented inside the sending transaction under `FOR UPDATE` — the second lock,
+after the key — so committed sequences are unique, gap-free and in commit order, and a rolled-back
+attempt returns its number rather than leaving a hole.
+`UNIQUE (TenantId, ConversationId, Sequence)` is one guarantee behind it. Database triggers also
+require a conversation to start with an empty sequence, restrict each allocator update to one
+position, require an inserted message after sequence one to have its predecessor, and assert from
+both sides at commit that `(LastSequence, LastMessageId)` names the highest stored message. Raw SQL
+therefore cannot manufacture an unread position or commit a message beyond the durable tip.
+
+**A message body never lives on the message row.** Bodies are append-only `MessageRevision` rows and
+the message names only which revision number is current, resolved through
+`(TenantId, MessageId, RevisionNumber)` — a key that already contains the tenant and the message, so
+pointing at another workspace's revision is not expressible rather than merely refused, and no
+circular foreign key is needed. A deferred constraint runs from both the message root and every
+inserted revision, so the stored rows must be exactly the contiguous chain
+`1..CurrentRevisionNumber`; neither a missing current revision nor an unreferenced future revision
+can commit. Removal is one way, comes in two distinguishable kinds, keeps the
+message in place with no body, and is recorded as an append-only event carrying the actor, the
+instant, the reason and the revision number at the time. A moderator removes and never edits.
+
+**Read state belongs to the participant**, never to the conversation and never to a delivery
+outcome. The cursor only moves forward, is advanced under its own row lock so concurrent advances
+resolve to the greater sequence, and a sequence beyond the newest committed message is **clamped**
+down to it rather than refused — a message committed between rendering and reporting is a race, not a
+caller error. A deferred constraint trigger refuses a raw write that would push the cursor past the
+conversation's newest committed sequence, which would otherwise silently hide the next message.
+
+**Authorization is resolved before the payload is validated**, on every conversation operation and in
+the conversation listing. Answering a malformed request differently from a well-formed one is an
+oracle for whether an identifier exists, and fetching an unavailable conversation's bodies before
+filtering them out of the response is not the same as never fetching them.
+
+Both lists are keyset-paginated: conversations by `(LastActivityAtUtc, Id)` with both cursor halves
+required, and history by sequence, retrieved newest-first for the index and returned oldest-first for
+the reader.
+
+The Angular surface is one lazy route at `/messages` for every active member, plus a **separate**
+unread badge in the topbar. Message unread and notification unread are counted and shown apart: one
+is a workspace event somebody scheduled, the other is a person waiting for a reply, and a single
+badge summing them could be neither explained nor acted on. Every piece of state on that screen
+belongs to one account, one workspace and one conversation; all three are cleared before anything is
+fetched when any of them changes, and every asynchronous reply — list, history, send, edit, delete,
+moderation, read cursor and unread count — checks which of the three it was asked for before it
+writes. There is no polling and no SignalR.
+
+Message bodies, revision bodies, moderation reasons, names and addresses reach no log, analytics,
+exception or operational view. See `docs/adr/0019-persisted-direct-messaging-v1.md`.
