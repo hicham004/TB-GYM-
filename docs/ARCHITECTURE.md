@@ -57,24 +57,24 @@ into additional projects only when that produces a measurable boundary benefit.
 
 ## 3. Bounded modules
 
-| Module | Owns |
-| --- | --- |
-| Identity | Global account, credential, lockout, platform roles, sessions, legal consent |
-| Tenancy | Coach workspace, membership, tenant role, tenant lifecycle |
-| Clients | Tenant-specific profile, onboarding/intake, relationship block state/history |
-| Invitations | Invite lifecycle, prefilled fields, acceptance and account linking |
-| Subscriptions | Products, immutable offers, enrollments, entitlement coverage, payments, renewal |
-| Training | Immutable template versions, assigned mesocycle snapshots, prescriptions, executions, actuals |
-| Exercise Library | Tenant exercise metadata, muscles, tags, approved alternatives, media associations |
-| Nutrition | Versioned foods/cooking factors, immutable recipes and meal-plan versions, assigned client snapshots, daily actuals, energy/macro calculations, structured allergens, reviewed AI drafts |
-| Progress | Daily bodyweight, weekly summaries, measurements, dated progress photos and progress views |
-| Strength | Append-only max history, canonical RPE/RIR, versioned estimates, recommendations, rounding |
-| Check-ins | Form lineages, immutable published versions, stable question keys, assignments, typed client answers, one-way submission/review, comparison projections |
-| Messaging | Tenant-scoped direct coach/client conversations, explicit participants, message history, immutable revisions, one-way removal and moderation, per-participant read state |
-| Notifications | Idempotent outbox, durable dispatch, versioned templates, per-channel delivery attempts, in-app notifications and read state, future channel ports |
-| Media | Object metadata, signature/scanner lifecycle, protected access, subordinate renditions, external embeds, retention |
-| Gamification | Tenant theme, levels, ranks and auditable experience events |
-| Integrations | AI, payment, nutrition-data and other external provider contracts |
+| Module           | Owns                                                                                                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity         | Global account, credential, lockout, platform roles, sessions, legal consent                                                                                                             |
+| Tenancy          | Coach workspace, membership, tenant role, tenant lifecycle                                                                                                                               |
+| Clients          | Tenant-specific profile, onboarding/intake, relationship block state/history                                                                                                             |
+| Invitations      | Invite lifecycle, prefilled fields, acceptance and account linking                                                                                                                       |
+| Subscriptions    | Products, immutable offers, enrollments, entitlement coverage, payments, renewal                                                                                                         |
+| Training         | Immutable template versions, assigned mesocycle snapshots, prescriptions, executions, actuals                                                                                            |
+| Exercise Library | Tenant exercise metadata, muscles, tags, approved alternatives, media associations                                                                                                       |
+| Nutrition        | Versioned foods/cooking factors, immutable recipes and meal-plan versions, assigned client snapshots, daily actuals, energy/macro calculations, structured allergens, reviewed AI drafts |
+| Progress         | Daily bodyweight, weekly summaries, measurements, dated progress photos and progress views                                                                                               |
+| Strength         | Append-only max history, canonical RPE/RIR, versioned estimates, recommendations, rounding                                                                                               |
+| Check-ins        | Form lineages, immutable published versions, stable question keys, assignments, typed client answers, one-way submission/review, comparison projections                                  |
+| Messaging        | Tenant-scoped direct coach/client conversations, explicit participants, message history, immutable revisions, one-way removal and moderation, per-participant read state                 |
+| Notifications    | Idempotent outbox, durable dispatch, versioned templates, per-channel delivery attempts, in-app notifications and read state, future channel ports                                       |
+| Media            | Object metadata, signature/scanner lifecycle, protected access, subordinate renditions, external embeds, retention                                                                       |
+| Gamification     | Tenant theme, levels, ranks and auditable experience events                                                                                                                              |
+| Integrations     | AI, payment, nutrition-data and other external provider contracts                                                                                                                        |
 
 Theme and gamification currently share one boundary because theme-driven labels and rewards
 are one optional presentation capability. Split them only if their lifecycles diverge.
@@ -353,9 +353,9 @@ The Angular 22 application is standalone and feature-oriented:
 - English source text is marked for Angular extraction and layouts use logical CSS properties
   so a later Arabic locale can provide RTL presentation without component rewrites.
 
-**Ratified convention — inline field validation.** A *derived* validation reason is one the form
+**Ratified convention — inline field validation.** A _derived_ validation reason is one the form
 works out for itself from what has been entered: "choose a due date", "this question has to be
-answered". It is distinct from a *server* error, which reports what the backend actually said. The
+answered". It is distinct from a _server_ error, which reports what the backend actually said. The
 two are displayed differently because they are different events.
 
 A derived field- or question-level reason appears once that field has been left, or once a submit
@@ -582,7 +582,7 @@ Measured in Phase 6A-6 and recorded so this is not opened a third time.
 signature — `â€` sequences from UTF-8 em dashes and curly quotes decoded as CP1252, `ðŸ` from
 mangled emoji, `Â` prefixes, and a BOM in all 37. The corruption is present in the initial commit
 `a256840`, the only commit that has ever touched `base44/`, so it was imported already broken and
-predates this repository's own code. It is double-encoded but *well-formed* UTF-8, which is exactly
+predates this repository's own code. It is double-encoded but _well-formed_ UTF-8, which is exactly
 what the PowerShell 5.1 ANSI round-trip produces: corruption that compiles and reviews clean.
 `base44/` is a preserved legacy reference, so it is deliberately not rewritten.
 
@@ -754,7 +754,7 @@ commercial event
 
 The Angular surface is one lazy route at `/notifications`, offered to every active member whatever
 their role, plus an unread badge in the topbar. The badge and the inbox are both scoped to the
-recipient-and-workspace pair: whenever that pair changes, both are cleared *before* anything is
+recipient-and-workspace pair: whenever that pair changes, both are cleared _before_ anything is
 fetched, and every asynchronous reply — list, Load More, unread count, mark-read success and
 mark-read failure — checks which pair it was asked for before it writes. Without that, a slow reply
 for the workspace the user has just left lands on top of the current one.
@@ -892,13 +892,15 @@ command transaction, so a rollback returns the number and committed positions ar
 **The event carries no content.** It holds identifiers, a position, a stable kind and a server instant.
 What a participant may see is materialized at delivery and catch-up time, from the live tables, after
 that participant's current authorization has succeeded — so an event that outlives somebody's access
-can never be replayed into content.
+can never be replayed into content. A deferred database assertion maps each source command type to its
+exact event kind; all non-creation mutations are not treated as interchangeable.
 
 **Four facts stay apart.** Persisted, Published, application-acknowledged and read. `Published` means
 the hub accepted the frame and is never called `Delivered`. `RealtimeAcknowledged` means the other
-participant's *application* accepted a current safe projection; a sender acknowledging their own event
+participant's _application_ accepted a current safe projection; a sender acknowledging their own event
 never sets it, and no acknowledgement touches read state. Provider acknowledgement has no channel and
-a trigger refuses to set its column.
+a trigger refuses to set its column. The message timestamp is checked at commit against the earliest
+append-only counterpart acknowledgement, so neither side of that relationship can be forged alone.
 
 **Delivery is at least once by design.** A crash after the hub accepted a frame and before the row is
 finalized produces a duplicate after the lease is reclaimed. The client discards it by event identity;
@@ -915,7 +917,10 @@ never change. A WebSocket handshake is not protected by CORS, so `/hubs` is chec
 origin allowlist before authentication; outside Development an empty list fails startup.
 
 **Subscribe, then read.** The overlap between the two is deliberate and deduplicated; the other order
-has a window in which an event reaches nobody and is never asked for again.
+has a window in which an event reaches nobody and is never asked for again. Catch-up ownership is per
+conversation generation, so a slow request for the thread being left cannot suppress the new thread's
+read. Failed catch-up and acknowledgement calls retry with bounded jitter without waiting for another
+frame, and the per-run page limit yields before continuing rather than truncating history.
 
 **The API hosts the sweep.** Publishing needs an `IHubContext`, which is only useful in a process that
 holds connections, so `TB.Gym.Worker` keeps no hub, no listener, no exposed port and no Redis

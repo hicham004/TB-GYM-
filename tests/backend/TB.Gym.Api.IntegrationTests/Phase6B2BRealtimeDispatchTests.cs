@@ -720,6 +720,56 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
     }
 
     [TestMethod]
+    public async Task APartiallyOverlappingConcurrentAcknowledgementDoesNotLoseTheUniqueEvent()
+    {
+        var thread = await OpenThreadAsync("concurrent-ack-overlap");
+        var firstMessage = await SendMessageAsync(thread.Coach, thread.ConversationId, "first ack");
+        var secondMessage = await SendMessageAsync(thread.Coach, thread.ConversationId, "second ack");
+        var events = await EventsAsync(thread.ConversationId);
+        var firstEvent = events.Single(item => item.MessageId == firstMessage.Id);
+        var secondEvent = events.Single(item => item.MessageId == secondMessage.Id);
+        var otherTab = await SecondSessionAsync(thread.Workspace.ClientEmail, thread.Workspace.TenantId);
+
+        await RefreshCsrfAsync(thread.Client);
+        await RefreshCsrfAsync(otherTab);
+
+        // The batch has already executed its "which ACKs exist?" query when it is held. The other
+        // tab then commits the overlapping event. A handler that treats the resulting unique
+        // violation as success for the whole batch rolls back the unrelated second event too.
+        Barrier.ArmFirstAfterExecution("RealtimeAcknowledgements");
+        var batch = PostAcknowledgementAsync(
+            thread.Client,
+            thread.ConversationId,
+            firstEvent.EventSequence,
+            secondEvent.EventSequence);
+        await Barrier.ArrivedAsync(1);
+
+        var overlap = await PostAcknowledgementAsync(
+            otherTab,
+            thread.ConversationId,
+            firstEvent.EventSequence);
+        await AssertStatusAsync(overlap, HttpStatusCode.OK);
+        Barrier.Disarm();
+
+        await AssertStatusAsync(await batch, HttpStatusCode.OK);
+        Assert.AreEqual(
+            2L,
+            await ScalarAsync<long>(
+                """
+                SELECT count(*) FROM messaging."RealtimeAcknowledgements"
+                WHERE "ConversationId" = @conversationId
+                  AND "AcknowledgedByUserId" = @userId
+                  AND "RealtimeEventId" IN (@firstEventId, @secondEventId)
+                """,
+                ("conversationId", thread.ConversationId),
+                ("userId", thread.Workspace.ClientUserId),
+                ("firstEventId", firstEvent.Id),
+                ("secondEventId", secondEvent.Id)),
+            "The overlap is idempotent, but the non-overlapping event must still be committed.");
+        Assert.IsNotNull(await RealtimeAcknowledgedAtAsync(secondMessage.Id));
+    }
+
+    [TestMethod]
     public async Task AcknowledgementChangesNeitherReadCursorNorUnreadCount()
     {
         var thread = await OpenThreadAsync("ack-not-read");

@@ -687,7 +687,9 @@ internal sealed class MessagingApplicationService(
             items,
             hasMore,
             items.Length == 0 ? null : items[^1].EventSequence,
-            conversation.LastEventSequence));
+            Math.Max(
+                conversation.LastEventSequence,
+                items.Length == 0 ? 0 : items[^1].EventSequence)));
     }
 
     public async Task<RealtimeAcknowledgementCommandResult> AcknowledgeRealtimeEventsAsync(
@@ -757,31 +759,41 @@ internal sealed class MessagingApplicationService(
         }
 
         var eventIds = addressed.Select(item => item.Id).ToArray();
-        var already = await dbContext.MessagingRealtimeAcknowledgements
-            .AsNoTracking()
-            .Where(item =>
-                eventIds.Contains(item.RealtimeEventId) &&
-                item.AcknowledgedByUserId == participant.UserId)
-            .Select(item => item.RealtimeEventId)
-            .ToListAsync(cancellationToken);
-        var alreadyAcknowledged = already.ToHashSet();
-        var pending = addressed.Where(item => !alreadyAcknowledged.Contains(item.Id)).ToArray();
-        if (pending.Length == 0)
-        {
-            return RealtimeAcknowledgementCommandResult.Success(new RealtimeAcknowledgementResult(
-                conversationId,
-                0,
-                alreadyAcknowledged.Count,
-                conversation.LastEventSequence));
-        }
 
         var accepted = await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             dbContext.ChangeTracker.Clear();
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
             var now = clock.UtcNow;
-            var messageIds = pending
-                .Where(item => item.MessageId is not null)
+            var insertedEventIds = new HashSet<Guid>();
+
+            // The unique key is the concurrency primitive, but a conflict on one event must not roll
+            // back unrelated events in the same bounded batch. PostgreSQL resolves each insert
+            // independently: an overlapping tab contributes zero rows for that event while every
+            // non-overlapping event still commits in this transaction.
+            foreach (var item in addressed)
+            {
+                var acknowledgementId = Guid.CreateVersion7();
+                var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                    INSERT INTO messaging."RealtimeAcknowledgements"
+                        ("Id", "TenantId", "ConversationId", "RealtimeEventId",
+                         "AcknowledgedByUserId", "AcknowledgedAtUtc", "CreatedAtUtc",
+                         "CreatedByUserId", "UpdatedAtUtc", "UpdatedByUserId")
+                    VALUES ({acknowledgementId}, {tenantContext.TenantId}, {conversationId}, {item.Id},
+                            {participant.UserId}, {now}, {now}, {participant.UserId}, {now},
+                            {participant.UserId})
+                    ON CONFLICT ("TenantId", "RealtimeEventId", "AcknowledgedByUserId") DO NOTHING
+                    """,
+                    cancellationToken);
+                if (inserted == 1)
+                {
+                    insertedEventIds.Add(item.Id);
+                }
+            }
+
+            var messageIds = addressed
+                .Where(item => insertedEventIds.Contains(item.Id) && item.MessageId is not null)
                 .Select(item => item.MessageId!.Value)
                 .Distinct()
                 .ToArray();
@@ -790,16 +802,6 @@ internal sealed class MessagingApplicationService(
                 : await dbContext.Messages
                     .Where(message => messageIds.Contains(message.Id))
                     .ToListAsync(cancellationToken);
-
-            foreach (var item in pending)
-            {
-                dbContext.MessagingRealtimeAcknowledgements.Add(MessagingRealtimeAcknowledgement.Record(
-                    tenantContext.TenantId,
-                    conversationId,
-                    item.Id,
-                    participant.UserId,
-                    now));
-            }
 
             // The counterpart-delivery timestamp, and the one rule that keeps it honest: it is set
             // only from an acknowledgement by somebody who is not the sender. A second tab of the
@@ -811,22 +813,10 @@ internal sealed class MessagingApplicationService(
                 message.AcknowledgeRealtimeDelivery(participant.UserId, now);
             }
 
-            try
-            {
-                await dbContext.SaveChangesAsync(cancellationToken);
-            }
-            catch (DbUpdateException exception) when (IsUniqueViolation(exception))
-            {
-                // A concurrent duplicate. The unique key made one durable fact of it, which is the
-                // correct outcome for an idempotent acknowledgement; nothing is retried and nothing
-                // is reported as an error.
-                await transaction.RollbackAsync(cancellationToken);
-                dbContext.ChangeTracker.Clear();
-                return 0;
-            }
+            await dbContext.SaveChangesAsync(cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
-            return pending.Length;
+            return insertedEventIds.Count;
         });
 
         dbContext.ChangeTracker.Clear();

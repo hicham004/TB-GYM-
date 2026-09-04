@@ -514,7 +514,9 @@ no name, address, phone or profile data, no `ClientProfileId`, no rendered wordi
 payload and no exception text. What a participant may see is materialized at delivery and catch-up
 time, from the live tables, **after** that participant's current authorization has succeeded. Event,
 publication, attempt and acknowledgement tables are not a shadow message store. There is no
-read-receipt event: the read cursor is one person's own act, reported by that person over REST.
+read-receipt event: the read cursor is one person's own act, reported by that person over REST. The
+database maps every command type to exactly one event kind; being merely "not a creation" is not a
+sufficient match.
 
 **MSG-015** Publication, application acknowledgement, human read and provider acknowledgement are four
 separate facts and no code writes one from another. `Published` means the hub — and behind it possibly
@@ -525,7 +527,9 @@ REST; it does not mean a person saw it. The counterpart timestamp is set once, f
 and is never moved. An acknowledgement from the sender's own tab is a real acknowledgement of that
 event and evidence about nobody else, so it never sets the counterpart timestamp. Acknowledgement
 changes neither participant's read cursor nor any unread count. `ProviderAcknowledgedAtUtc` stays null
-and a trigger refuses any attempt to set it.
+and a trigger refuses any attempt to set it. A deferred database assertion derives the counterpart
+timestamp from the earliest durable acknowledgement by a user other than the sender; neither a raw
+message update nor an acknowledgement without the matching timestamp can invent the fact.
 
 **MSG-016** Realtime delivery is claimed, leased and at least once. A dispatcher claims a publication
 row with `FOR UPDATE SKIP LOCKED`, a random claim token and an expiry, and starts a durable attempt
@@ -538,7 +542,9 @@ Terminal rows are never dispatched again. A crash after the hub accepted a frame
 finalized may produce a duplicate after lease recovery; that is the deliberate trade, and client
 deduplication by event identity plus durable catch-up is what makes it harmless. Nothing claims
 exactly-once network delivery. The named schedule is `messaging-realtime-backoff-v1`: 5s, 30s, 2m, 10m,
-then the ceiling repeats to the configured maximum, every instant from `IClock`.
+then the ceiling repeats to the configured maximum, every instant from `IClock`. An attempt row is
+inserted only as `Started`; a completed outcome is the one permitted update, after which it is
+immutable.
 
 **MSG-017** Current authorization is re-established from PostgreSQL immediately after a claim commits
 and immediately before materialization: active tenant membership, platform block, workspace
@@ -575,8 +581,12 @@ authorization is identical to opening that conversation now. Acknowledgement is 
 antiforgery-protected batch of at most 100 positions; the server derives the acknowledging participant
 from the authenticated principal, only an event actually addressed to and currently visible to that
 participant can be acknowledged, and a unique key makes duplicates and concurrent retries one durable
-append-only fact. Nothing about a cursor, an event, a body or an acknowledgement is written to browser
-storage.
+append-only fact. A conflict on one position does not roll back other positions in the same batch.
+Catch-up and acknowledgement failures schedule bounded, jittered, generation-owned retries even if no
+later socket event arrives; changing threads cannot let an old in-flight catch-up suppress the new
+thread's read. The defensive per-run page bound yields and continues from the durable cursor rather
+than truncating history. Nothing about a cursor, an event, a body or an acknowledgement is written to
+browser storage.
 
 **MSG-021** One API replica may use the in-process lifetime manager. More than one declared replica
 requires a Redis backplane and **fails startup** without one, because otherwise each frame reaches only
@@ -795,50 +805,55 @@ coach-configurable progression theme is the safe default.
 
 At minimum, later migrations should enforce:
 
-| Invariant | Database protection |
-| --- | --- |
-| One membership per tenant/user | Unique `(TenantId, UserId)` |
-| One client identity link per tenant | Filtered unique `(TenantId, UserId)` |
-| One tenant client email | Unique normalized `(TenantId, Email)` per approved policy |
-| No conflicting entitlement coverage | Partial GiST exclusion on tenant, client, feature, date range |
-| Valid service period | Check `EndExclusive > Start` |
-| Immutable offer/enrollment money and dates | Application guard plus PostgreSQL trigger |
-| Append-only payments/block events/consents | Application guard plus PostgreSQL trigger |
-| Idempotent assignments/payments/notifications | Tenant-scoped unique command/deduplication keys |
-| One daily bodyweight | Unique `(TenantId, ClientId, LocalDate)` |
-| Positive bodyweight/height/load | Check constraints with approved limits |
-| One completion per assigned day | Unique `(TenantId, AssignmentDayId, ClientId)` |
-| Valid macro inputs | Non-negative checks; aggregate validation in domain transaction |
-| Tenant-safe child relationship | Composite FK including `TenantId` where practical |
-| Concurrency | PostgreSQL `xmin` token plus conflict handling |
-| Immutable published check-in version and its questions/options | PostgreSQL trigger refusing update and delete |
-| Contiguous check-in question/option order and per-version key uniqueness | Deferred constraint triggers checked at commit |
-| One check-in response per assignment | Unique `(TenantId, AssignmentId)` |
-| One answer per question per response | Unique `(TenantId, ResponseId, QuestionId)` |
-| Answer belongs to a question of the answered version | Composite FK `(TenantId, FormVersionId, QuestionId, QuestionType)` |
-| Selection belongs to the question it answers | Composite FK `(TenantId, QuestionId, QuestionOptionId)` |
-| One-way check-in response lifecycle and frozen submitted answers | Application guard plus PostgreSQL trigger |
-| One submit and one review per response | Unique `(TenantId, ResponseId, EventType)` |
-| One in-app notification per outbox intent | Unique `(TenantId, SourceOutboxItemId)` |
-| One delivery attempt per intent, channel and number | Unique `(TenantId, OutboxItemId, Channel, AttemptNumber)` |
-| A live claim only on a Processing outbox item | Check on `ClaimToken`/`ClaimExpiresAtUtc`/`Status` |
-| Terminal outbox instants match the status | Checks pairing `Dispatched`/`DeadLettered` with their instants |
-| Immutable completed delivery attempts and delivered wording | Application guard plus PostgreSQL trigger |
-| Notification child belongs to an intent of the same workspace | Composite FK `(TenantId, OutboxItemId)` |
-| One direct conversation per workspace, client and coach | Unique `(TenantId, ClientProfileId, CoachUserId)` |
-| Exactly one Coach side and one Client side per conversation | Unique `(TenantId, ConversationId, Role)` plus a deferred constraint trigger |
-| A message sender is an explicit participant of that conversation | Composite FK `(TenantId, ConversationId, SenderUserId)` |
-| Positive, unique, gap-free message sequence per conversation | Check and unique index, one-step allocator trigger, predecessor assertion, and empty-at-creation rule |
-| Conversation tip equals the newest committed message | Deferred constraint trigger on both the conversation and inserted messages |
-| One revision per message and revision number | Unique `(TenantId, MessageId, RevisionNumber)` |
-| Exactly the contiguous revision chain `1..CurrentRevisionNumber` | Deferred constraint trigger on both the message root and inserted revisions |
-| Immutable message revisions, removal events and spent idempotency keys | Application guard plus PostgreSQL trigger refusing update and delete |
-| No hard deletion of conversations, participants or messages | PostgreSQL trigger refusing delete |
-| One-way message removal, and no editing a removed message | PostgreSQL trigger comparing OLD and NEW |
-| Conversation sequence allocator advances at most one position and activity never rewinds | PostgreSQL trigger comparing OLD and NEW |
-| A participant read cursor never regresses and is never negative | Check `LastReadSequence >= 0` plus PostgreSQL trigger |
-| One removal event per message | Unique `(TenantId, MessageId)` |
-| One spent messaging idempotency key per workspace | Unique `(TenantId, IdempotencyKey)` |
+| Invariant                                                                                                            | Database protection                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| One membership per tenant/user                                                                                       | Unique `(TenantId, UserId)`                                                                           |
+| One client identity link per tenant                                                                                  | Filtered unique `(TenantId, UserId)`                                                                  |
+| One tenant client email                                                                                              | Unique normalized `(TenantId, Email)` per approved policy                                             |
+| No conflicting entitlement coverage                                                                                  | Partial GiST exclusion on tenant, client, feature, date range                                         |
+| Valid service period                                                                                                 | Check `EndExclusive > Start`                                                                          |
+| Immutable offer/enrollment money and dates                                                                           | Application guard plus PostgreSQL trigger                                                             |
+| Append-only payments/block events/consents                                                                           | Application guard plus PostgreSQL trigger                                                             |
+| Idempotent assignments/payments/notifications                                                                        | Tenant-scoped unique command/deduplication keys                                                       |
+| One daily bodyweight                                                                                                 | Unique `(TenantId, ClientId, LocalDate)`                                                              |
+| Positive bodyweight/height/load                                                                                      | Check constraints with approved limits                                                                |
+| One completion per assigned day                                                                                      | Unique `(TenantId, AssignmentDayId, ClientId)`                                                        |
+| Valid macro inputs                                                                                                   | Non-negative checks; aggregate validation in domain transaction                                       |
+| Tenant-safe child relationship                                                                                       | Composite FK including `TenantId` where practical                                                     |
+| Concurrency                                                                                                          | PostgreSQL `xmin` token plus conflict handling                                                        |
+| Immutable published check-in version and its questions/options                                                       | PostgreSQL trigger refusing update and delete                                                         |
+| Contiguous check-in question/option order and per-version key uniqueness                                             | Deferred constraint triggers checked at commit                                                        |
+| One check-in response per assignment                                                                                 | Unique `(TenantId, AssignmentId)`                                                                     |
+| One answer per question per response                                                                                 | Unique `(TenantId, ResponseId, QuestionId)`                                                           |
+| Answer belongs to a question of the answered version                                                                 | Composite FK `(TenantId, FormVersionId, QuestionId, QuestionType)`                                    |
+| Selection belongs to the question it answers                                                                         | Composite FK `(TenantId, QuestionId, QuestionOptionId)`                                               |
+| One-way check-in response lifecycle and frozen submitted answers                                                     | Application guard plus PostgreSQL trigger                                                             |
+| One submit and one review per response                                                                               | Unique `(TenantId, ResponseId, EventType)`                                                            |
+| One in-app notification per outbox intent                                                                            | Unique `(TenantId, SourceOutboxItemId)`                                                               |
+| One delivery attempt per intent, channel and number                                                                  | Unique `(TenantId, OutboxItemId, Channel, AttemptNumber)`                                             |
+| A live claim only on a Processing outbox item                                                                        | Check on `ClaimToken`/`ClaimExpiresAtUtc`/`Status`                                                    |
+| Terminal outbox instants match the status                                                                            | Checks pairing `Dispatched`/`DeadLettered` with their instants                                        |
+| Immutable completed delivery attempts and delivered wording                                                          | Application guard plus PostgreSQL trigger                                                             |
+| Notification child belongs to an intent of the same workspace                                                        | Composite FK `(TenantId, OutboxItemId)`                                                               |
+| One direct conversation per workspace, client and coach                                                              | Unique `(TenantId, ClientProfileId, CoachUserId)`                                                     |
+| Exactly one Coach side and one Client side per conversation                                                          | Unique `(TenantId, ConversationId, Role)` plus a deferred constraint trigger                          |
+| A message sender is an explicit participant of that conversation                                                     | Composite FK `(TenantId, ConversationId, SenderUserId)`                                               |
+| Positive, unique, gap-free message sequence per conversation                                                         | Check and unique index, one-step allocator trigger, predecessor assertion, and empty-at-creation rule |
+| Conversation tip equals the newest committed message                                                                 | Deferred constraint trigger on both the conversation and inserted messages                            |
+| One revision per message and revision number                                                                         | Unique `(TenantId, MessageId, RevisionNumber)`                                                        |
+| Exactly the contiguous revision chain `1..CurrentRevisionNumber`                                                     | Deferred constraint trigger on both the message root and inserted revisions                           |
+| Immutable message revisions, removal events and spent idempotency keys                                               | Application guard plus PostgreSQL trigger refusing update and delete                                  |
+| No hard deletion of conversations, participants or messages                                                          | PostgreSQL trigger refusing delete                                                                    |
+| One-way message removal, and no editing a removed message                                                            | PostgreSQL trigger comparing OLD and NEW                                                              |
+| Conversation sequence allocator advances at most one position and activity never rewinds                             | PostgreSQL trigger comparing OLD and NEW                                                              |
+| A participant read cursor never regresses and is never negative                                                      | Check `LastReadSequence >= 0` plus PostgreSQL trigger                                                 |
+| One removal event per message                                                                                        | Unique `(TenantId, MessageId)`                                                                        |
+| One spent messaging idempotency key per workspace                                                                    | Unique `(TenantId, IdempotencyKey)`                                                                   |
+| One realtime event per source command, with the exact command-to-kind mapping                                        | Unique `(TenantId, SourceCommandRecordId)` plus deferred source assertion                             |
+| Every conversation participant has publication state for every event                                                 | Composite participant FKs plus deferred recipient-completeness assertion                              |
+| Every realtime attempt starts as `Started`, is completed once, and belongs to the contiguous `1..AttemptCount` chain | PostgreSQL insert/update/delete guard plus deferred chain assertion                                   |
+| One application acknowledgement per addressed event and participant                                                  | Composite recipient FK plus unique `(TenantId, RealtimeEventId, AcknowledgedByUserId)`                |
+| A message counterpart timestamp equals its earliest durable counterpart acknowledgement                              | Deferred assertion on both messages and acknowledgement inserts                                       |
 
 Database constraints complement domain validation. Friendly validation happens before save,
 and constraint violations are translated into stable API problem responses.

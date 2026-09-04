@@ -258,7 +258,7 @@ its summary region reachable.
   the commercial screens and fixed.
 
 - 6A-5: the form-validation display convention, no new surface. Of 35 `role="alert"` occurrences
-  across 27 templates, 4 rendered *derived* validation reasons on a pristine form; the rest report
+  across 27 templates, 4 rendered _derived_ validation reasons on a pristine form; the rest report
   server errors or completed actions and are correct as assertive announcements. The four are now
   plain text gated on touched-or-submit-attempted, linked to their controls by `aria-describedby`
   with `aria-invalid`, with one `role="alert"` summary per form populated only by a refused submit
@@ -386,8 +386,8 @@ Status: complete, implemented 2026-08-31. See
 and `DOMAIN-RULES.md` **NOT-001** to **NOT-008**.
 
 The Phase 2 outbox finally has a reader. This slice is deliberately the record of delivery rather
-than a delivery channel: it builds what can answer *what was sent, to whom, whether it worked, and
-whether anybody has seen it* before any channel that can fail in interesting ways is added.
+than a delivery channel: it builds what can answer _what was sent, to whom, whether it worked, and
+whether anybody has seen it_ before any channel that can fail in interesting ways is added.
 
 - **A separate Worker process.** `src/backend/TB.Gym.Worker` is a `Microsoft.NET.Sdk.Worker` service
   and a second composition root of the same monolith, not a microservice: same database, same domain
@@ -527,7 +527,7 @@ MSG-021.
   a participant may see is materialized at delivery and catch-up time, after that participant's
   current authorization has succeeded.
 - **Four facts kept apart.** Persisted, Published (the hub accepted the frame — never "Delivered"),
-  application-acknowledged (the *other* participant's application merged a current safe projection),
+  application-acknowledged (the _other_ participant's application merged a current safe projection),
   and read. A sender acknowledging their own event never sets the counterpart timestamp; no
   acknowledgement touches read state; provider acknowledgement stays null and a trigger enforces it.
 - **Claimed, leased, at least once.** `FOR UPDATE SKIP LOCKED`, a random claim token and expiry, a
@@ -551,8 +551,16 @@ MSG-021.
 - **Angular.** One root-scoped connection per account and workspace, its own cancellable jittered
   retry for the initial `start()` that `withAutomaticReconnect` does not provide, generation ownership
   over every callback, rejoin-then-catch-up on reconnect, gap recovery, terminal deletion, coalesced
-  invalidations with no polling timer, and bounded idempotent acknowledgement batches. Nothing is
-  written to browser storage.
+  invalidations with no polling timer, and bounded idempotent acknowledgement batches. Failed
+  catch-up and acknowledgement calls retry without needing a later frame, a superseded catch-up cannot
+  suppress the newly selected thread, and a defensive page bound yields and continues rather than
+  truncating history. Nothing is written to browser storage.
+
+Independent review added the forward-only `Phase6B2BRealtimeIntegrityHardening` migration after the
+published 6B-2B migration. It closes exact command-to-event-kind matching, requires attempt rows to be
+inserted as `Started`, and derives the message counterpart timestamp from its durable ACK facts. The
+ACK write path now resolves a concurrent duplicate per event, so one overlap cannot roll back unrelated
+positions from the same bounded batch.
 
 Exit: two dispatchers racing on one backlog claim each row once; an expired claim is reclaimed and its
 stale claimant finalizes nothing; a crash after publication duplicates identifiably rather than losing

@@ -38,8 +38,8 @@ happens after newer messages have been sent. A client resuming from the message 
 ask for it: the message it concerns is already behind the cursor, and the screen would keep showing a
 sentence somebody replaced.
 
-So the message sequence says *which messages exist* and never moves; the event sequence says *what has
-happened* and is what a reconnecting client resumes from. An edit takes a new event position and keeps
+So the message sequence says _which messages exist_ and never moves; the event sequence says _what has
+happened_ and is what a reconnecting client resumes from. An edit takes a new event position and keeps
 its message's original one. Both counters are advanced under the same conversation row lock, inside
 the command's own transaction, so a rolled-back command gives its number back and committed positions
 are unique, gap-free and in commit order.
@@ -61,19 +61,19 @@ not a shadow message store.
 
 ### Four facts, kept apart
 
-| Fact | Where it lives | What it means |
-| --- | --- | --- |
-| Persisted | `Message.AvailableAtUtc` | Committed and available to an authorized reader who asks |
-| Published | `RealtimeRecipients.PublishedAtUtc` | The hub, and behind it possibly Redis, accepted the frame |
+| Fact                     | Where it lives                                                                | What it means                                                                                    |
+| ------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Persisted                | `Message.AvailableAtUtc`                                                      | Committed and available to an authorized reader who asks                                         |
+| Published                | `RealtimeRecipients.PublishedAtUtc`                                           | The hub, and behind it possibly Redis, accepted the frame                                        |
 | Application acknowledged | `RealtimeAcknowledgements`, and once onto `Message.RealtimeAcknowledgedAtUtc` | The **other participant's application** accepted a current safe projection and said so over REST |
-| Read | `ConversationParticipant.LastReadSequence` | A person looked |
+| Read                     | `ConversationParticipant.LastReadSequence`                                    | A person looked                                                                                  |
 
 A fifth, provider acknowledgement, has no channel yet: `ProviderAcknowledgedAtUtc` stays null and a
 trigger refuses any attempt to set it.
 
 `Published` is never called `Delivered`. Nobody's browser has been asked, and a socket that accepted a
 write can be gone by the time the bytes reach it. `MessageDeliveryState` gains exactly one member,
-`RealtimeAcknowledged`, and it means the counterpart's *application* had it — live or through
+`RealtimeAcknowledged`, and it means the counterpart's _application_ had it — live or through
 catch-up — not that a person saw it. An acknowledgement from the sender's own second tab is a real
 acknowledgement of that event and evidence about nobody else, so the aggregate refuses to write the
 counterpart timestamp from it. The timestamp is written once, from the server clock, and a trigger
@@ -212,29 +212,29 @@ Reconnect always reconciles from PostgreSQL, because Redis cannot replay a lost 
 
 ## Database protections
 
-| Invariant | Protection |
-| --- | --- |
-| One realtime event per conversation event position | Unique `(TenantId, ConversationId, EventSequence)` |
-| One event per source mutation | Unique `(TenantId, SourceCommandRecordId)` |
-| Positive, gap-free event positions and an honest tip | Check `EventSequence >= 1`; a new conversation cannot be created with event history; the allocator advances one position at a time and never rewinds; and a deferred constraint trigger on both `Conversations` and inserted `RealtimeEvents` requires `LastEventSequence` to identify the newest stored event and every event after the first to have its predecessor |
-| An event describes the mutation that produced it | Deferred trigger comparing the event's conversation, message, kind and revision with its source command record and the message row |
-| Every kind but a creation names exactly one message | Check tying `MessageId`, `MessageSequence` and `MessageRevisionNumber` to each other and to `Kind` |
-| No event can name another tenant's conversation, message or command | Composite FKs `(TenantId, ConversationId)`, `(TenantId, MessageId, ConversationId)` and `(TenantId, SourceCommandRecordId)` |
-| Publication state is unique per event and participant | Unique `(TenantId, RealtimeEventId, RecipientUserId)` |
-| A recipient is an explicit participant of that exact conversation | Composite FK `(TenantId, ConversationId, RecipientUserId)` → `ConversationParticipants` |
-| Every participant gets publication state | Deferred trigger on both `RealtimeEvents` and `RealtimeRecipients` comparing recipient count with participant count |
-| Publication state starts pending, never rewinds, never leaves a terminal status | Trigger comparing OLD and NEW |
-| A claim consumes exactly one attempt, including a reclaim | Trigger tying a newly issued claim token to `AttemptCount + 1` |
-| Attempt numbers are positive, unique, append-only and bounded | Unique `(TenantId, RecipientId, AttemptNumber)`; checks `1..20`; trigger refusing UPDATE of a completed attempt and refusing DELETE |
-| Attempts are the contiguous chain `1..AttemptCount` | Deferred trigger on both `RealtimeRecipients` and `RealtimeAttempts` |
-| Status, lease, publication, completion and failure-code combinations are valid | Checks tying `ClaimToken`/`ClaimExpiresAtUtc` to `Processing`, `PublishedAtUtc` to `Published`, `CompletedAtUtc` to the terminal set, and a failure code to the suppressed and dead-lettered set |
-| One acknowledgement per event and participant | Unique `(TenantId, RealtimeEventId, AcknowledgedByUserId)` |
-| Only an event addressed to that participant can be acknowledged | Composite FK `(TenantId, RealtimeEventId, AcknowledgedByUserId)` → `RealtimeRecipients (TenantId, RealtimeEventId, RecipientUserId)` |
-| Events and acknowledgements are append-only | Trigger refusing UPDATE and DELETE |
-| Publication state and attempts are never deleted | Trigger refusing DELETE |
-| The counterpart-delivery instant is written once and never moved | Trigger on `Messages` comparing OLD and NEW |
-| No provider has acknowledged anything | Trigger refusing a non-null `ProviderAcknowledgedAtUtc` |
-| Every 6B-2A protection | Unchanged; the revision-chain, conversation-tip, removal-agreement and read-cursor triggers are re-asserted against the upgraded schema |
+| Invariant                                                                                                | Protection                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One realtime event per conversation event position                                                       | Unique `(TenantId, ConversationId, EventSequence)`                                                                                                                                                                                                                                                                                                                     |
+| One event per source mutation                                                                            | Unique `(TenantId, SourceCommandRecordId)`                                                                                                                                                                                                                                                                                                                             |
+| Positive, gap-free event positions and an honest tip                                                     | Check `EventSequence >= 1`; a new conversation cannot be created with event history; the allocator advances one position at a time and never rewinds; and a deferred constraint trigger on both `Conversations` and inserted `RealtimeEvents` requires `LastEventSequence` to identify the newest stored event and every event after the first to have its predecessor |
+| An event describes the mutation that produced it                                                         | Deferred trigger comparing the event's conversation, message, exact command-to-kind mapping and revision with its source command record and the message row                                                                                                                                                                                                            |
+| Every kind but a creation names exactly one message                                                      | Check tying `MessageId`, `MessageSequence` and `MessageRevisionNumber` to each other and to `Kind`                                                                                                                                                                                                                                                                     |
+| No event can name another tenant's conversation, message or command                                      | Composite FKs `(TenantId, ConversationId)`, `(TenantId, MessageId, ConversationId)` and `(TenantId, SourceCommandRecordId)`                                                                                                                                                                                                                                            |
+| Publication state is unique per event and participant                                                    | Unique `(TenantId, RealtimeEventId, RecipientUserId)`                                                                                                                                                                                                                                                                                                                  |
+| A recipient is an explicit participant of that exact conversation                                        | Composite FK `(TenantId, ConversationId, RecipientUserId)` → `ConversationParticipants`                                                                                                                                                                                                                                                                                |
+| Every participant gets publication state                                                                 | Deferred trigger on both `RealtimeEvents` and `RealtimeRecipients` comparing recipient count with participant count                                                                                                                                                                                                                                                    |
+| Publication state starts pending, never rewinds, never leaves a terminal status                          | Trigger comparing OLD and NEW                                                                                                                                                                                                                                                                                                                                          |
+| A claim consumes exactly one attempt, including a reclaim                                                | Trigger tying a newly issued claim token to `AttemptCount + 1`                                                                                                                                                                                                                                                                                                         |
+| Attempt numbers are positive, unique, append-only and bounded                                            | Unique `(TenantId, RecipientId, AttemptNumber)`; checks `1..20`; trigger requiring INSERT as `Started`, refusing UPDATE of a completed attempt and refusing DELETE                                                                                                                                                                                                     |
+| Attempts are the contiguous chain `1..AttemptCount`                                                      | Deferred trigger on both `RealtimeRecipients` and `RealtimeAttempts`                                                                                                                                                                                                                                                                                                   |
+| Status, lease, publication, completion and failure-code combinations are valid                           | Checks tying `ClaimToken`/`ClaimExpiresAtUtc` to `Processing`, `PublishedAtUtc` to `Published`, `CompletedAtUtc` to the terminal set, and a failure code to the suppressed and dead-lettered set                                                                                                                                                                       |
+| One acknowledgement per event and participant                                                            | Unique `(TenantId, RealtimeEventId, AcknowledgedByUserId)`                                                                                                                                                                                                                                                                                                             |
+| Only an event addressed to that participant can be acknowledged                                          | Composite FK `(TenantId, RealtimeEventId, AcknowledgedByUserId)` → `RealtimeRecipients (TenantId, RealtimeEventId, RecipientUserId)`                                                                                                                                                                                                                                   |
+| Events and acknowledgements are append-only                                                              | Trigger refusing UPDATE and DELETE                                                                                                                                                                                                                                                                                                                                     |
+| Publication state and attempts are never deleted                                                         | Trigger refusing DELETE                                                                                                                                                                                                                                                                                                                                                |
+| The counterpart-delivery instant is written once, never moved and backed by the earliest counterpart ACK | Trigger on `Messages` comparing OLD and NEW plus a deferred assertion on both messages and acknowledgement inserts                                                                                                                                                                                                                                                     |
+| No provider has acknowledged anything                                                                    | Trigger refusing a non-null `ProviderAcknowledgedAtUtc` on INSERT and UPDATE                                                                                                                                                                                                                                                                                           |
+| Every 6B-2A protection                                                                                   | Unchanged; the revision-chain, conversation-tip, removal-agreement and read-cursor triggers are re-asserted against the upgraded schema                                                                                                                                                                                                                                |
 
 Several are **deferred** constraint triggers rather than immediate ones, because the facts they check
 are only true at commit: a conversation and its creation event, an event and its recipient rows, and a
@@ -247,6 +247,10 @@ alternate key on `CommandRecords (TenantId, Id)` so an event can name its source
 triggers above. It fabricates no delivery claim: existing 6B-2A conversations start at event cursor
 zero with no events and no acknowledgements, and their current state is established by the ordinary
 REST read the client performs before it merges any delta.
+
+`Phase6B2BRealtimeIntegrityHardening` is a forward repair after the delivery migration was published.
+It makes command-to-kind matching exact, requires attempt inserts to begin `Started`, and binds the
+message counterpart timestamp to its durable acknowledgement facts. It changes no stored content.
 
 The revert drops only what this slice added. Unlike the 6B-2A revert it destroys no conversation,
 message, revision, removal record or read position — what it loses is the record of what was published
@@ -278,7 +282,10 @@ PostgreSQL. A gap runs bounded catch-up rather than skipping the missing positio
 invalidations are coalesced into one bounded refresh; there is no polling timer anywhere. Deletion is
 terminal for content and a stale revision loses, so no late event can put back a body somebody took
 back. Acknowledgements are queued only after an event has actually been merged, batched to the server
-bound, retried idempotently, and never advance read state.
+bound, retried idempotently, and never advance read state. A catch-up or acknowledgement failure owns a
+bounded jittered retry even if no later frame arrives; switching conversations can start the new
+generation's catch-up while the old request winds down. A defensive per-run page limit yields and
+continues from the cursor instead of silently ending the history read.
 
 Nothing is written to local or session storage: not a body, not an event, not a cursor, not a pending
 acknowledgement, not a connection identifier and not a credential. The existing REST command
@@ -289,12 +296,12 @@ updates are off. Refresh to see new messages", never that anything was lost, and
 
 ## Dependencies and images
 
-| Dependency | Version | Licence | Where | Why |
-| --- | --- | --- | --- | --- |
-| `Microsoft.AspNetCore.SignalR.StackExchangeRedis` | 10.0.11 | MIT | `TB.Gym.Api` only | The backplane. Referenced by the API alone so it never travels into the Worker image. |
-| `Microsoft.AspNetCore.SignalR.Client` | 10.0.11 | MIT | integration tests only | So the critical path is exercised over a real WebSocket with a real cookie, rather than by invoking hub methods directly. |
-| `@microsoft/signalr` | 10.0.11 exact | MIT | `src/web` | The browser client, pinned exactly in the lockfile. |
-| `redis` | `8.2.2-alpine`, pinned | BSD-3-Clause | `compose.yaml`, CI, tests | The backplane image. Never `latest`: a backplane that silently changed version between a passing run and a failing one is a variable nobody can hold still. |
+| Dependency                                        | Version                | Licence      | Where                     | Why                                                                                                                                                         |
+| ------------------------------------------------- | ---------------------- | ------------ | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Microsoft.AspNetCore.SignalR.StackExchangeRedis` | 10.0.11                | MIT          | `TB.Gym.Api` only         | The backplane. Referenced by the API alone so it never travels into the Worker image.                                                                       |
+| `Microsoft.AspNetCore.SignalR.Client`             | 10.0.11                | MIT          | integration tests only    | So the critical path is exercised over a real WebSocket with a real cookie, rather than by invoking hub methods directly.                                   |
+| `@microsoft/signalr`                              | 10.0.11 exact          | MIT          | `src/web`                 | The browser client, pinned exactly in the lockfile.                                                                                                         |
+| `redis`                                           | `8.2.2-alpine`, pinned | BSD-3-Clause | `compose.yaml`, CI, tests | The backplane image. Never `latest`: a backplane that silently changed version between a passing run and a failing one is a variable nobody can hold still. |
 
 The SignalR server core is already in `Microsoft.AspNetCore.App`; no obsolete SignalR package was
 added. Redis holds no application data and is declared with persistence switched off.

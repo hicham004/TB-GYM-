@@ -588,6 +588,59 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
     }
 
     [TestMethod]
+    public async Task TheDatabaseRefusesAnEventKindThatDoesNotMatchItsSourceCommand()
+    {
+        var thread = await OpenThreadAsync("event-command-kind");
+        var sourceCommand = await UnusedCommandRecordAsync(thread);
+        var tip = await ConversationEventTipAsync(thread.ConversationId);
+        var eventId = Guid.CreateVersion7();
+        var messageId = await ScalarAsync<Guid>(
+            """SELECT "MessageId" FROM messaging."CommandRecords" WHERE "Id" = @id""",
+            ("id", sourceCommand));
+        var messageSequence = await ScalarAsync<long>(
+            """
+            SELECT m."Sequence" FROM messaging."Messages" m
+            JOIN messaging."CommandRecords" r ON r."MessageId" = m."Id"
+            WHERE r."Id" = @id
+            """,
+            ("id", sourceCommand));
+
+        // UnusedCommandRecordAsync produces a repeated DeleteMessage command. MessageEdited is a
+        // structurally valid non-creation event for the same message, so only an exact command-kind
+        // mapping can reject this lie. The old Boolean creation/non-creation check accepted it.
+        var rejection = await ExpectRejectionAsync(
+            $"""
+            UPDATE messaging."Conversations" SET "LastEventSequence" = "LastEventSequence" + 1
+            WHERE "Id" = @conversationId;
+
+            INSERT INTO messaging."RealtimeEvents"
+                ("Id", "TenantId", "ConversationId", "EventSequence", "Kind", "MessageId",
+                 "MessageSequence", "MessageRevisionNumber", "SourceCommandRecordId", "OccurredAtUtc",
+                 "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES (@eventId, @tenantId, @conversationId,
+                    {(tip + 1).ToString(CultureInfo.InvariantCulture)}, 'MessageEdited', @messageId,
+                    @messageSequence, 1, @sourceCommand, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP);
+
+            INSERT INTO messaging."RealtimeRecipients"
+                ("Id", "TenantId", "ConversationId", "RealtimeEventId", "RecipientUserId", "Status",
+                 "AttemptCount", "NextAttemptAtUtc", "CreatedAtUtc", "UpdatedAtUtc")
+            SELECT gen_random_uuid(), @tenantId, @conversationId, @eventId, p."UserId", 'Pending', 0,
+                   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            FROM messaging."ConversationParticipants" p
+            WHERE p."TenantId" = @tenantId AND p."ConversationId" = @conversationId
+            """,
+            ("eventId", eventId),
+            ("tenantId", thread.Workspace.TenantId),
+            ("conversationId", thread.ConversationId),
+            ("messageId", messageId),
+            ("messageSequence", messageSequence),
+            ("sourceCommand", sourceCommand));
+
+        Assert.Contains("source command type", rejection.MessageText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [TestMethod]
     public async Task TheDatabaseRefusesASecondEventForOneSourceCommand()
     {
         var thread = await OpenThreadAsync("one-per-command");
@@ -610,6 +663,33 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
             ("sourceCommand", sourceCommand));
 
         Assert.AreEqual(PostgresErrorCodesUniqueViolation, rejection.SqlState);
+    }
+
+    [TestMethod]
+    public async Task TheDatabaseRefusesAnAttemptInsertedAsAlreadyCompleted()
+    {
+        var thread = await OpenThreadAsync("attempt-start-state");
+        var recipient = (await RecipientsAsync(thread.ConversationId))[0];
+        var claimToken = Guid.NewGuid();
+
+        var rejection = await ExpectRejectionAsync(
+            """
+            UPDATE messaging."RealtimeRecipients"
+            SET "Status" = 'Processing', "AttemptCount" = 1, "ClaimToken" = @claimToken,
+                "ClaimExpiresAtUtc" = CURRENT_TIMESTAMP + interval '1 minute'
+            WHERE "Id" = @recipientId;
+
+            INSERT INTO messaging."RealtimeAttempts"
+                ("Id", "TenantId", "RecipientId", "AttemptNumber", "ClaimToken", "StartedAtUtc",
+                 "CompletedAtUtc", "Outcome", "FailureCode", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES (gen_random_uuid(), @tenantId, @recipientId, 1, @claimToken, CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP, 'Published', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            ("tenantId", thread.Workspace.TenantId),
+            ("recipientId", recipient.Id),
+            ("claimToken", claimToken));
+
+        Assert.Contains("start with outcome Started", rejection.MessageText, StringComparison.OrdinalIgnoreCase);
     }
 
     [TestMethod]
@@ -690,6 +770,23 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
             """UPDATE messaging."Messages" SET "ProviderAcknowledgedAtUtc" = CURRENT_TIMESTAMP WHERE "Id" = @id""",
             ("id", message.Id));
         Assert.Contains("provider channel", providerClaim.MessageText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [TestMethod]
+    public async Task TheDatabaseRefusesInventingDeliveryWithoutItsAcknowledgementFact()
+    {
+        var thread = await OpenThreadAsync("invented-ack");
+        var message = await SendMessageAsync(thread.Coach, thread.ConversationId, "not acknowledged");
+
+        var rejection = await ExpectRejectionAsync(
+            """
+            UPDATE messaging."Messages"
+            SET "RealtimeAcknowledgedAtUtc" = CURRENT_TIMESTAMP
+            WHERE "Id" = @id
+            """,
+            ("id", message.Id));
+
+        Assert.Contains("counterpart acknowledgement", rejection.MessageText, StringComparison.OrdinalIgnoreCase);
     }
 
     [TestMethod]

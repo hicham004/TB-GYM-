@@ -95,6 +95,8 @@ const initialStartBaseDelayMs = 1000;
 const initialStartMaximumDelayMs = 30000;
 const invalidationDebounceMs = 400;
 const acknowledgementDebounceMs = 250;
+const retryBaseDelayMs = 1000;
+const retryMaximumDelayMs = 30000;
 
 /**
  * The one realtime connection for the signed-in account and the active workspace.
@@ -151,11 +153,17 @@ export class MessagingRealtimeService {
   private sink: ConversationRealtimeSink | null = null;
   /** The highest position for which every earlier position has been accepted. */
   private contiguousCursor = 0;
-  private catchingUp = false;
+  /** The exact thread generation currently reading catch-up pages. */
+  private catchUpOwner: string | null = null;
+  /** A gap noticed during an in-flight read must cause one more read after that result settles. */
+  private catchUpRequestedAgain: string | null = null;
+  private catchUpTimer: ReturnType<typeof setTimeout> | null = null;
+  private catchUpAttempt = 0;
 
   private readonly pendingAcknowledgements = new Set<number>();
   private acknowledgementTimer: ReturnType<typeof setTimeout> | null = null;
   private flushingAcknowledgements = false;
+  private acknowledgementAttempt = 0;
 
   private invalidationTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -346,13 +354,17 @@ export class MessagingRealtimeService {
 
   private async teardown(): Promise<void> {
     this.clearStartTimer();
+    this.clearCatchUpTimer();
     this.clearAcknowledgementTimer();
     this.clearInvalidationTimer();
     this.pendingAcknowledgements.clear();
     this.conversationId = null;
     this.sink = null;
     this.contiguousCursor = 0;
-    this.catchingUp = false;
+    this.catchUpOwner = null;
+    this.catchUpRequestedAgain = null;
+    this.catchUpAttempt = 0;
+    this.acknowledgementAttempt = 0;
 
     const connection = this.connection;
     this.connection = null;
@@ -409,7 +421,12 @@ export class MessagingRealtimeService {
     this.sink = null;
     this.contiguousCursor = 0;
     this.pendingAcknowledgements.clear();
+    this.clearCatchUpTimer();
     this.clearAcknowledgementTimer();
+    this.catchUpOwner = null;
+    this.catchUpRequestedAgain = null;
+    this.catchUpAttempt = 0;
+    this.acknowledgementAttempt = 0;
 
     const connection = this.connection;
     if (
@@ -439,11 +456,19 @@ export class MessagingRealtimeService {
     context: number,
     conversation: number,
   ): Promise<void> {
-    if (this.catchingUp) {
+    const owner = this.catchUpOwnerKey(conversationId, context, conversation);
+    if (this.catchUpOwner === owner) {
+      // A frame can expose a gap while an older REST response is still in flight. Remember that
+      // wake-up: the response may have taken its database snapshot before the frame committed.
+      this.catchUpRequestedAgain = owner;
       return;
     }
 
-    this.catchingUp = true;
+    // A superseded conversation must not prevent its replacement from catching up. Both requests may
+    // briefly exist, but every result is generation-checked before it can write.
+    this.catchUpOwner = owner;
+    let retry = false;
+    let continueAfterBound = false;
     try {
       for (let page = 0; page < maximumCatchUpPages; page++) {
         const result = await firstValueFrom(
@@ -462,15 +487,39 @@ export class MessagingRealtimeService {
         }
 
         if (!result.hasMore) {
+          this.catchUpAttempt = 0;
           return;
         }
       }
+
+      // Yield after a defensive bound, then continue from the durable cursor. The bound protects the
+      // browser from a pathological synchronous loop; it is not permission to truncate history.
+      continueAfterBound = true;
     } catch {
-      // A failed catch-up is not worth interrupting the reader for. The thread on screen came from
-      // the REST read, the cursor has not moved past anything unseen, and the next reconnect,
-      // selection or live event asks again.
+      // The thread on screen came from the full REST read and the cursor never passes unseen data.
+      // Retry from that cursor even if no later socket frame arrives to wake the service up.
+      retry = true;
     } finally {
-      this.catchingUp = false;
+      if (this.catchUpOwner === owner) {
+        this.catchUpOwner = null;
+        const requestedAgain = this.catchUpRequestedAgain === owner;
+        if (requestedAgain) {
+          this.catchUpRequestedAgain = null;
+        }
+
+        if (this.owns(context, conversation) && this.conversationId === conversationId) {
+          if (continueAfterBound || requestedAgain) {
+            this.scheduleCatchUp(conversationId, context, conversation, 0);
+          } else if (retry) {
+            this.scheduleCatchUp(
+              conversationId,
+              context,
+              conversation,
+              jitteredDelay(this.catchUpAttempt++, retryBaseDelayMs, retryMaximumDelayMs),
+            );
+          }
+        }
+      }
     }
   }
 
@@ -585,10 +634,11 @@ export class MessagingRealtimeService {
       return;
     }
 
-    this.acknowledgementTimer = setTimeout(() => {
-      this.acknowledgementTimer = null;
-      void this.flushAcknowledgements(this.contextGeneration, this.conversationGeneration);
-    }, acknowledgementDebounceMs);
+    this.scheduleAcknowledgementFlush(
+      this.contextGeneration,
+      this.conversationGeneration,
+      acknowledgementDebounceMs,
+    );
   }
 
   /**
@@ -610,6 +660,7 @@ export class MessagingRealtimeService {
     }
 
     this.flushingAcknowledgements = true;
+    let retry = false;
     try {
       while (this.pendingAcknowledgements.size > 0 && this.owns(context, conversation)) {
         const batch = [...this.pendingAcknowledgements]
@@ -636,13 +687,23 @@ export class MessagingRealtimeService {
             for (const sequence of batch) {
               this.pendingAcknowledgements.add(sequence);
             }
+            retry = true;
           }
 
           return;
         }
       }
+
+      this.acknowledgementAttempt = 0;
     } finally {
       this.flushingAcknowledgements = false;
+      if (retry && this.owns(context, conversation) && this.conversationId === conversationId) {
+        this.scheduleAcknowledgementFlush(
+          context,
+          conversation,
+          jitteredDelay(this.acknowledgementAttempt++, retryBaseDelayMs, retryMaximumDelayMs),
+        );
+      }
     }
   }
 
@@ -656,6 +717,33 @@ export class MessagingRealtimeService {
     return this.contextGeneration === context && this.conversationGeneration === conversation;
   }
 
+  private catchUpOwnerKey(conversationId: string, context: number, conversation: number): string {
+    return `${context}|${conversation}|${conversationId}`;
+  }
+
+  private scheduleCatchUp(
+    conversationId: string,
+    context: number,
+    conversation: number,
+    delay: number,
+  ): void {
+    this.clearCatchUpTimer();
+    this.catchUpTimer = setTimeout(() => {
+      this.catchUpTimer = null;
+      if (this.owns(context, conversation) && this.conversationId === conversationId) {
+        void this.catchUp(conversationId, context, conversation);
+      }
+    }, delay);
+  }
+
+  private scheduleAcknowledgementFlush(context: number, conversation: number, delay: number): void {
+    this.clearAcknowledgementTimer();
+    this.acknowledgementTimer = setTimeout(() => {
+      this.acknowledgementTimer = null;
+      void this.flushAcknowledgements(context, conversation);
+    }, delay);
+  }
+
   private clearStartTimer(): void {
     if (this.startTimer !== null) {
       clearTimeout(this.startTimer);
@@ -667,6 +755,13 @@ export class MessagingRealtimeService {
     if (this.acknowledgementTimer !== null) {
       clearTimeout(this.acknowledgementTimer);
       this.acknowledgementTimer = null;
+    }
+  }
+
+  private clearCatchUpTimer(): void {
+    if (this.catchUpTimer !== null) {
+      clearTimeout(this.catchUpTimer);
+      this.catchUpTimer = null;
     }
   }
 

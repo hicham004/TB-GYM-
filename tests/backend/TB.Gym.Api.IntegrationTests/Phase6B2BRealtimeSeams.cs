@@ -417,6 +417,8 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
         private string? fragment;
         private int participants;
         private int arrived;
+        private int maximumHeld;
+        private bool holdAfterExecution;
         private TaskCompletionSource? release;
 
         public void Arm(string commandFragment, int participantCount)
@@ -425,7 +427,28 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
             {
                 fragment = commandFragment;
                 participants = participantCount;
+                maximumHeld = participantCount;
                 arrived = 0;
+                holdAfterExecution = false;
+                arrivals.Clear();
+                release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+        }
+
+        /// <summary>
+        /// Holds only the first matching reader after PostgreSQL has executed it, until
+        /// <see cref="Disarm"/>. Later matches pass through. This makes a read/write race
+        /// deterministic without preventing the competing request from committing.
+        /// </summary>
+        public void ArmFirstAfterExecution(string commandFragment)
+        {
+            lock (sync)
+            {
+                fragment = commandFragment;
+                participants = int.MaxValue;
+                maximumHeld = 1;
+                arrived = 0;
+                holdAfterExecution = true;
                 arrivals.Clear();
                 release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             }
@@ -447,6 +470,7 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
             lock (sync)
             {
                 fragment = null;
+                holdAfterExecution = false;
                 release?.TrySetResult();
                 release = null;
             }
@@ -490,14 +514,53 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
             CommandEventData eventData,
             InterceptionResult<DbDataReader> result,
             CancellationToken cancellationToken = default) =>
-            HoldAsync(command, result, cancellationToken);
+            HoldBeforeExecutionAsync(command, result, cancellationToken);
+
+        public override ValueTask<DbDataReader> ReaderExecutedAsync(
+            DbCommand command,
+            CommandExecutedEventData eventData,
+            DbDataReader result,
+            CancellationToken cancellationToken = default) =>
+            HoldAfterExecutionAsync(command, result, cancellationToken);
 
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
             DbCommand command,
             CommandEventData eventData,
             InterceptionResult<int> result,
             CancellationToken cancellationToken = default) =>
-            HoldAsync(command, result, cancellationToken);
+            HoldBeforeExecutionAsync(command, result, cancellationToken);
+
+        private ValueTask<TResult> HoldBeforeExecutionAsync<TResult>(
+            DbCommand command,
+            TResult result,
+            CancellationToken cancellationToken)
+        {
+            lock (sync)
+            {
+                if (holdAfterExecution)
+                {
+                    return ValueTask.FromResult(result);
+                }
+            }
+
+            return HoldAsync(command, result, cancellationToken);
+        }
+
+        private ValueTask<TResult> HoldAfterExecutionAsync<TResult>(
+            DbCommand command,
+            TResult result,
+            CancellationToken cancellationToken)
+        {
+            lock (sync)
+            {
+                if (!holdAfterExecution)
+                {
+                    return ValueTask.FromResult(result);
+                }
+            }
+
+            return HoldAsync(command, result, cancellationToken);
+        }
 
         private async ValueTask<TResult> HoldAsync<TResult>(
             DbCommand command,
@@ -508,6 +571,11 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
             lock (sync)
             {
                 if (fragment is null || !command.CommandText.Contains(fragment, StringComparison.Ordinal))
+                {
+                    return result;
+                }
+
+                if (arrived >= maximumHeld)
                 {
                     return result;
                 }

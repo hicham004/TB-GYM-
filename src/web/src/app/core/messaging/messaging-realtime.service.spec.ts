@@ -1,6 +1,6 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../api/api-client';
 import type { CurrentUser, TenantMembership } from '../api/api.models';
@@ -473,6 +473,49 @@ describe('MessagingRealtimeService', () => {
     expect(harness.accepted.map((item) => item.eventSequence)).toEqual([1, 2, 3, 4, 5]);
   });
 
+  it('starts catch-up for a newly selected conversation while the old request is still in flight', async () => {
+    const firstConversation = new Subject<RealtimeEventPage>();
+    const harness = build((api) => {
+      api['listConversationRealtimeEvents'] = vi
+        .fn()
+        .mockReturnValueOnce(firstConversation)
+        .mockReturnValue(of(page([], { conversationId: 'conversation-2' })));
+    });
+    await flush();
+
+    const oldOpen = harness.service.openConversation('conversation-1', 0, harness.sink);
+    await flush();
+    expect(harness.listRealtimeEvents).toHaveBeenCalledTimes(1);
+
+    await harness.service.openConversation('conversation-2', 0, harness.sink);
+    await flush();
+
+    expect(harness.listRealtimeEvents).toHaveBeenCalledTimes(2);
+    expect(harness.listRealtimeEvents.mock.calls[1][0]).toBe('conversation-2');
+
+    firstConversation.next(page([]));
+    firstConversation.complete();
+    await oldOpen;
+  });
+
+  it('retries a failed catch-up without waiting for another socket event', async () => {
+    const harness = build((api) => {
+      api['listConversationRealtimeEvents'] = vi
+        .fn()
+        .mockReturnValueOnce(throwError(() => new Error('offline')))
+        .mockReturnValue(of(page([event(1)])));
+    });
+    await flush();
+
+    await harness.service.openConversation('conversation-1', 0, harness.sink);
+    expect(harness.listRealtimeEvents).toHaveBeenCalledTimes(1);
+
+    await flush(2000);
+
+    expect(harness.listRealtimeEvents).toHaveBeenCalledTimes(2);
+    expect(harness.accepted.map((item) => item.eventSequence)).toEqual([1]);
+  });
+
   it('closes a conversation by leaving its group and forgetting its cursor', async () => {
     const harness = build();
     await flush();
@@ -612,7 +655,7 @@ describe('MessagingRealtimeService', () => {
     await flush();
 
     harness.connection().emit('RealtimeEvent', event(1));
-    await flush(1000);
+    await flush(500);
     expect(harness.acknowledge).toHaveBeenCalledTimes(1);
 
     // The failed batch is still owned, so the next accepted event flushes both.
@@ -621,6 +664,34 @@ describe('MessagingRealtimeService', () => {
 
     expect(harness.acknowledge).toHaveBeenCalledTimes(2);
     expect(harness.acknowledge.mock.calls[1][1]).toEqual([1, 2]);
+  });
+
+  it('retries a failed acknowledgement without requiring another event to arrive', async () => {
+    const harness = build((api) => {
+      api['acknowledgeConversationRealtimeEvents'] = vi
+        .fn()
+        .mockReturnValueOnce(throwError(() => new Error('offline')))
+        .mockReturnValue(
+          of({
+            conversationId: 'conversation-1',
+            accepted: 1,
+            alreadyAcknowledged: 0,
+            latestEventSequence: 1,
+          }),
+        );
+    });
+    await flush();
+    await harness.service.openConversation('conversation-1', 0, harness.sink);
+    await flush();
+
+    harness.connection().emit('RealtimeEvent', event(1));
+    await flush(500);
+    expect(harness.acknowledge).toHaveBeenCalledTimes(1);
+
+    await flush(2000);
+
+    expect(harness.acknowledge).toHaveBeenCalledTimes(2);
+    expect(harness.acknowledge.mock.calls[1][1]).toEqual([1]);
   });
 
   it('does not resurrect acknowledgements for a conversation the reader has left', async () => {
