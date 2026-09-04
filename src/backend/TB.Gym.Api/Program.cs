@@ -34,7 +34,7 @@ builder.Logging.AddJsonConsole(options =>
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
-builder.Services.AddSignalR();
+builder.AddTbGymRealtimeMessaging();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(
         new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)));
@@ -48,6 +48,10 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
 });
 app.UseTbGymSecurityHeaders();
+// Before authentication, so a hub handshake from a disallowed origin is refused before a cookie is
+// decoded. A WebSocket upgrade is not protected by the same-origin policy, so this is the check that
+// stops another site opening an authenticated socket as the signed-in user.
+app.UseTbGymMessagingHubOrigin();
 app.UseRequestLocalization();
 
 if (!app.Environment.IsDevelopment())
@@ -108,7 +112,8 @@ app.MapCheckInResponses();
 app.MapMediaModule();
 app.MapMessagingModule();
 app.MapNotificationsModule();
-app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization(AuthorizationPolicies.TenantMember);
+app.MapTbGymChatHub();
+app.LogRealtimeTopology();
 
 await app.InitializeDatabaseAsync();
 await app.RunAsync();

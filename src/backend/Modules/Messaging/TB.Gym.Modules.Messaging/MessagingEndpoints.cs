@@ -206,7 +206,77 @@ public static class MessagingEndpoints
         .ProducesProblem(StatusCodes.Status403Forbidden)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
+
+        MapRealtime(messages);
     }
+
+    /// <summary>
+    /// Catch-up and application acknowledgement.
+    /// </summary>
+    /// <remarks>
+    /// Both are ordinary cookie-authenticated REST, on purpose. A socket frame is a convenience that
+    /// may be lost, duplicated or arrive out of order; what makes realtime safe is that everything it
+    /// carries can also be re-read from PostgreSQL, and that the client tells the server what it
+    /// actually accepted through the same authenticated, antiforgery-protected channel every other
+    /// write uses.
+    /// </remarks>
+    private static void MapRealtime(RouteGroupBuilder messages)
+    {
+        messages.MapGet("/realtime-events", async (
+            Guid conversationId,
+            long? afterEventSequence,
+            int? take,
+            IMessagingApplicationService service,
+            CancellationToken token) =>
+            ToRealtimePageResult(await service.ListRealtimeEventsAsync(
+                conversationId,
+                afterEventSequence,
+                MessagingRealtimePaging.NormalizeEventTake(take),
+                token)))
+        .WithName("ListConversationRealtimeEvents")
+        .Produces<RealtimeEventPage>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status403Forbidden)
+        .ProducesProblem(StatusCodes.Status404NotFound);
+
+        messages.MapPost("/realtime-acknowledgements", async (
+            Guid conversationId,
+            AcknowledgeRealtimeEventsRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IMessagingApplicationService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToAcknowledgementResult(
+                await service.AcknowledgeRealtimeEventsAsync(conversationId, request, token));
+        })
+        .WithName("AcknowledgeConversationRealtimeEvents")
+        .Produces<RealtimeAcknowledgementResult>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status403Forbidden)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
+    }
+
+    private static IResult ToRealtimePageResult(RealtimeEventPageResult result) => result.Status switch
+    {
+        MessagingCommandStatus.Success => Results.Ok(result.Page),
+        MessagingCommandStatus.NotFound => Results.NotFound(),
+        MessagingCommandStatus.Invalid => Validation(result.Field, result.Detail),
+        MessagingCommandStatus.Forbidden => Denied(result.AccessReason),
+        _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+    };
+
+    private static IResult ToAcknowledgementResult(RealtimeAcknowledgementCommandResult result) =>
+        result.Status switch
+        {
+            MessagingCommandStatus.Success => Results.Ok(result.Acknowledgement),
+            MessagingCommandStatus.NotFound => Results.NotFound(),
+            MessagingCommandStatus.Invalid => Validation(result.Field, result.Detail),
+            MessagingCommandStatus.Forbidden => Denied(result.AccessReason),
+            _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+        };
 
     private static IResult ToConversationResult(ConversationCommandResult result) => result.Status switch
     {

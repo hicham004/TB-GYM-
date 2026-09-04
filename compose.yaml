@@ -17,6 +17,24 @@ services:
       timeout: 5s
       retries: 12
 
+  # The SignalR backplane, and only that. It is not a cache, not a queue and not a source of truth:
+  # a send that happens while it is down is lost, which is exactly why the realtime event lives in
+  # PostgreSQL and an authorized client can catch up on it afterwards. Nothing here is expected to
+  # survive a restart, so persistence is switched off rather than left to write files nobody reads.
+  #
+  # The tag is pinned deliberately. `latest` would let a backplane change version between a passing
+  # run and a failing one, which is the sort of variable that makes a delivery bug unreproducible.
+  redis:
+    image: redis:8.2.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
   api:
     build:
       context: .
@@ -32,6 +50,16 @@ services:
       Seed__Enabled: ${TB_GYM_SEED_ENABLED:-true}
       Seed__AdminEmail: ${TB_GYM_ADMIN_EMAIL:-admin@tbgym.local}
       Seed__AdminPassword: ${TB_GYM_ADMIN_PASSWORD:-}
+      # Realtime messaging. The local stack runs one API replica, so the in-process lifetime manager
+      # is a correct backplane and Redis is only reached when the mode is switched to it. Declaring
+      # more than one replica without switching the mode fails startup on purpose.
+      Messaging__Realtime__ScaleOut: ${TB_GYM_REALTIME_SCALE_OUT:-SingleProcess}
+      Messaging__Realtime__ApiReplicaCount: ${TB_GYM_API_REPLICAS:-1}
+      Messaging__Realtime__RedisConnectionString: redis:6379
+      # The origin the Angular container is served from. Explicit because a WebSocket handshake is
+      # not protected by CORS, and a wildcard with credentials would let any site open an
+      # authenticated socket as the signed-in user.
+      Messaging__Realtime__AllowedOrigins__0: ${TB_GYM_HUB_ORIGIN:-http://localhost:4200}
     ports:
       - "5134:8080"
     volumes:
@@ -40,11 +68,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # A second composition root of the same monolith, not a microservice: same image base, same
   # database, same domain assemblies, no HTTP surface and no migrations of its own. It waits for the
   # API because the API is what applies migrations locally; in production migrations are a separate
   # deployment step and the worker simply retries until the schema is there.
+  #
+  # It deliberately has no Redis dependency, no hub and no exposed port. Realtime publication needs an
+  # IHubContext, which is only useful in a process that holds connections, so that sweep runs in the
+  # API host and this one stays what it was.
   worker:
     build:
       context: .

@@ -2,7 +2,8 @@
 
 Status: Phase 6A check-ins complete, 2026-08-26; Phase 5/6 audit remediation applied, 2026-08-29;
 Phase 6B-1 notification dispatch and in-app inbox complete, 2026-08-31; Phase 6B-2A persisted
-direct messaging complete, 2026-09-01
+direct messaging complete, 2026-09-01; Phase 6B-2B authorized realtime messaging delivery complete,
+2026-09-04
 
 ## 1. Architectural style
 
@@ -441,12 +442,21 @@ integration interceptor measures 21 SQL commands for the complete authenticated 
 
 ## 9. Realtime, jobs, and integrations
 
-`ChatHub` is still an authorized SignalR hosting shell with no methods. **Phase 6B-2A built the
-persisted model underneath it and added no realtime behaviour at all** — see section 16 and
-`docs/adr/0019-persisted-direct-messaging-v1.md`. Group membership, connection mapping, delivery
-acknowledgement and reconnect/catch-up are Phase 6B-2B, and will read the sequences 6B-2A already
-commits. Scale-out adds a managed SignalR service or Redis backplane only when multiple API replicas
-require it.
+**Phase 6B-2A built the persisted model; Phase 6B-2B added the channel over it** — see sections 16 and
+17, `docs/adr/0019-persisted-direct-messaging-v1.md` and
+`docs/adr/0020-authorized-realtime-messaging-delivery.md`.
+
+`ChatHub` is now a strongly typed hub with exactly three members: `OnConnectedAsync`,
+`SubscribeConversation` and `UnsubscribeConversation`. Every domain mutation stays on REST, where the
+cookie authentication, antiforgery, idempotency key, optimistic concurrency and authorization stack
+already are. An architecture test enumerates the hub's surface exhaustively and asserts every
+parameter is a `Guid`, so a client can name a conversation and never a group, a user or a recipient.
+
+One API replica needs no backplane. More than one declared replica requires Redis and refuses to start
+without it, because otherwise each frame reaches only the replica that published it. Transport
+fallback stays enabled, so a multi-replica production deployment needs load-balancer session affinity.
+Redis is a backplane and nothing else: a send during an outage is lost, and PostgreSQL plus catch-up —
+not Redis — is what makes that survivable.
 
 Commercial notifications persist an outbox item atomically with enrollment/payment state. Each item
 retains the tenant time zone used to calculate its UTC schedule and a unique deduplication key. A
@@ -842,7 +852,78 @@ badge summing them could be neither explained nor acted on. Every piece of state
 belongs to one account, one workspace and one conversation; all three are cleared before anything is
 fetched when any of them changes, and every asynchronous reply — list, history, send, edit, delete,
 moderation, read cursor and unread count — checks which of the three it was asked for before it
-writes. There is no polling and no SignalR.
+writes. Phase 6B-2B added realtime delivery to that screen;
+there is still no polling.
 
 Message bodies, revision bodies, moderation reasons, names and addresses reach no log, analytics,
 exception or operational view. See `docs/adr/0019-persisted-direct-messaging-v1.md`.
+
+## 17. Phase 6B-2B authorized realtime messaging delivery
+
+```text
+REST command (cookie, antiforgery, idempotency key, concurrency, authorization)
+  -> one transaction, on the conversation row lock:
+       message / revision / removal state  +  RealtimeEvent (content-free, next event position)
+       + one RealtimeRecipient per explicit participant  + spent idempotency key
+  -> API-hosted sweep, per replica:
+       FOR UPDATE SKIP LOCKED  ->  claim token + lease  ->  RealtimeAttempt (started)
+       -> re-read authorization from PostgreSQL
+            denied  -> suppress with a stable code; no body is ever loaded
+            allowed -> materialize the caller-specific safe projection
+       -> IHubContext -> in-process manager, or Redis backplane across replicas
+            full event   -> tenant + conversation + user group (open thread merges it)
+            invalidation -> tenant + user group        (closed thread refreshes its row)
+       -> finalize: attempt Published, recipient Published
+  -> browser: subscribe, then catch up, then acknowledge what it actually merged
+       POST /realtime-acknowledgements -> append-only fact
+            -> counterpart's Message.RealtimeAcknowledgedAtUtc, set once, never moved
+```
+
+**The channel is a convenience over a record that is already correct without it.** PostgreSQL commits
+before anything is sent, and a SignalR or Redis failure afterwards cannot roll the command back,
+cannot turn a settled idempotent retry into an error, and cannot allocate a second anything.
+
+**Two sequences, because they answer two questions.** The message sequence says which messages exist.
+The event sequence says what has happened, and is the only thing a reconnecting client can resume
+from: an edit or removal of an old message happens after newer messages, so a client resuming from the
+message sequence would never ask for it. Both advance under the same conversation row lock inside the
+command transaction, so a rollback returns the number and committed positions are gap-free.
+
+**The event carries no content.** It holds identifiers, a position, a stable kind and a server instant.
+What a participant may see is materialized at delivery and catch-up time, from the live tables, after
+that participant's current authorization has succeeded — so an event that outlives somebody's access
+can never be replayed into content.
+
+**Four facts stay apart.** Persisted, Published, application-acknowledged and read. `Published` means
+the hub accepted the frame and is never called `Delivered`. `RealtimeAcknowledged` means the other
+participant's *application* accepted a current safe projection; a sender acknowledging their own event
+never sets it, and no acknowledgement touches read state. Provider acknowledgement has no channel and
+a trigger refuses to set its column.
+
+**Delivery is at least once by design.** A crash after the hub accepted a frame and before the row is
+finalized produces a duplicate after the lease is reclaimed. The client discards it by event identity;
+silent loss would have no such remedy.
+
+**Authorization is re-read, and groups are routing.** SignalR caches the principal for the life of a
+connection, so membership, blocks, participation and the Messaging decision are re-read on connect, on
+every hub method, and again immediately before materialization. Groups are transient, lost on
+reconnect, and never authority.
+
+**The browser cannot send a tenant header on a WebSocket**, so the workspace arrives as `?tenantId=`
+routing input, is verified against PostgreSQL once, and is then a server-owned binding a connection can
+never change. A WebSocket handshake is not protected by CORS, so `/hubs` is checked against an explicit
+origin allowlist before authentication; outside Development an empty list fails startup.
+
+**Subscribe, then read.** The overlap between the two is deliberate and deduplicated; the other order
+has a window in which an event reaches nobody and is never asked for again.
+
+**The API hosts the sweep.** Publishing needs an `IHubContext`, which is only useful in a process that
+holds connections, so `TB.Gym.Worker` keeps no hub, no listener, no exposed port and no Redis
+dependency — asserted on the assemblies and on the built image.
+
+**One replica needs no backplane; more than one fails startup without Redis.** Transport fallback stays
+on, so multi-replica production needs load-balancer session affinity. Redis is a backplane and nothing
+else: a send during an outage is lost, and PostgreSQL plus catch-up is what makes that survivable. The
+backplane connection string is never logged, and the backplane's own endpoint chatter is filtered out.
+
+See `docs/adr/0020-authorized-realtime-messaging-delivery.md`.

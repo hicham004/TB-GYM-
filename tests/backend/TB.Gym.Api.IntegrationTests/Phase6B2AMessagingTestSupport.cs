@@ -76,6 +76,10 @@ public sealed partial class Phase6B2AMessagingTests
                 ["ConnectionStrings:Database"] = databaseConnection,
                 ["Database:ApplyMigrationsOnStartup"] = "true",
                 ["Seed:Enabled"] = "false",
+                // Phase 6B-2B added an API-hosted realtime sweep. It is switched off here for the same
+                // reason the media purge is: a background tick must not race an assertion about what one
+                // request did. The realtime rows these commands write are still written.
+                ["Messaging:Realtime:Enabled"] = "false",
                 ["Application:PublicBaseUrl"] = "http://localhost:4200",
                 ["Media:StorageRoot"] = Path.Combine(Path.GetTempPath(), databaseName, "media"),
                 // Nothing in this slice runs in the background, and a media tick must not race an

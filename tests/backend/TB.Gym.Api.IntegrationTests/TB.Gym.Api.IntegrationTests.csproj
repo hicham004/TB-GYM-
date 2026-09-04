@@ -9,6 +9,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <!-- The real SignalR client, so the critical realtime path is exercised over an actual network
+         connection with an actual cookie and an actual WebSocket handshake. Invoking hub methods
+         directly, or driving them through TestServer internals, would prove the C# works and prove
+         nothing about the path a browser takes. -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
     <PackageReference Include="MSTest" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="SkiaSharp" />

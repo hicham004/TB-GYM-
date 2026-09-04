@@ -6,6 +6,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <!-- Referenced here rather than in Infrastructure on purpose: the backplane is an HTTP-host
+         concern, and keeping it out of Infrastructure keeps it out of the Worker image, which must
+         stay a background process with no listener, no hub and no Redis dependency. -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

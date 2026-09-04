@@ -76,6 +76,19 @@ public sealed class Conversation : TenantEntity
     public long LastSequence { get; private set; }
 
     /// <summary>
+    /// The newest realtime event position this conversation has committed. Zero until the first
+    /// event, which is also what a conversation created before Phase 6B-2B honestly reports.
+    /// </summary>
+    /// <remarks>
+    /// A second allocator, deliberately, because it answers a different question. The message
+    /// sequence says which messages exist; this says what has happened. An edit or a removal of an
+    /// old message is a new thing that happened about an old position, so it has a new event number
+    /// and keeps the message's original one — and a client resuming from the message sequence alone
+    /// would never learn about it, because the message it concerns is already behind the cursor.
+    /// </remarks>
+    public long LastEventSequence { get; private set; }
+
+    /// <summary>
     /// What the conversation list orders by, newest first, with the identifier as tie-breaker. It is
     /// server-owned and never accepted from a browser.
     /// </summary>
@@ -110,6 +123,22 @@ public sealed class Conversation : TenantEntity
     {
         LastSequence += 1;
         return LastSequence;
+    }
+
+    /// <summary>
+    /// Allocates the next realtime event position, under the same row lock and the same discipline as
+    /// <see cref="AllocateNextSequence"/>.
+    /// </summary>
+    /// <remarks>
+    /// Because the counter is an ordinary column advanced inside the command's own transaction, a
+    /// rolled-back command gives its number back: committed event positions are unique, gap-free and
+    /// in commit order, which is exactly what a catch-up cursor needs in order to be able to say "I
+    /// have everything up to here" rather than "I have seen these".
+    /// </remarks>
+    public long AllocateNextEventSequence()
+    {
+        LastEventSequence += 1;
+        return LastEventSequence;
     }
 
     /// <summary>

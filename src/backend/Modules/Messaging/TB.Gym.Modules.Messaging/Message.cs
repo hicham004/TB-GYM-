@@ -17,15 +17,25 @@ public enum MessageDeletionKind
 /// How far a message has actually got.
 /// </summary>
 /// <remarks>
-/// Phase 6B-2A can truthfully claim exactly one thing: the message is committed to PostgreSQL and
+/// Two states, and both of them are careful about what they claim.
+/// <para>
+/// <see cref="Persisted"/> is Phase 6B-2A's one claim: the message is committed to PostgreSQL and
 /// available to an authorized reader who asks for it. It is deliberately not called "Delivered",
-/// because a REST command that returned 200 has told nobody anything. Phase 6B-2B adds realtime
-/// acknowledgement as a further state; a later channel adds provider acknowledgement. None of them
-/// is read state, which belongs to <see cref="ConversationParticipant"/>.
+/// because a REST command that returned 200 has told nobody anything.
+/// </para>
+/// <para>
+/// <see cref="RealtimeAcknowledged"/> is Phase 6B-2B's, and it means exactly this: the <b>other
+/// participant's application</b> accepted a current safe projection of an event about this message —
+/// live over the socket or later through catch-up — and said so over REST. It does not mean a person
+/// saw it, opened it or read it. An acknowledgement from the sender's own second tab never produces
+/// it. Provider acknowledgement is a fourth fact that nothing in this phase writes, and read state is
+/// a fifth that belongs to <see cref="ConversationParticipant"/> and to nothing else.
+/// </para>
 /// </remarks>
 public enum MessageDeliveryState
 {
     Persisted = 1,
+    RealtimeAcknowledged = 2,
 }
 
 /// <summary>
@@ -94,8 +104,8 @@ public sealed class Message : TenantEntity
     public DateTimeOffset AvailableAtUtc { get; private set; }
 
     /// <summary>
-    /// Reserved for Phase 6B-2B and null throughout this slice: no realtime channel has acknowledged
-    /// anything, because there is no realtime channel.
+    /// When the <b>other participant's application</b> first accepted a current safe projection of an
+    /// event about this message. Null until then, and never a claim that a person read it.
     /// </summary>
     public DateTimeOffset? RealtimeAcknowledgedAtUtc { get; private set; }
 
@@ -123,6 +133,46 @@ public sealed class Message : TenantEntity
     public string? ModerationReason { get; private set; }
 
     public bool IsDeleted => DeletedAtUtc is not null;
+
+    /// <summary>
+    /// What this message's delivery can currently be truthfully said to be.
+    /// </summary>
+    public MessageDeliveryState DeliveryState => RealtimeAcknowledgedAtUtc is null
+        ? MessageDeliveryState.Persisted
+        : MessageDeliveryState.RealtimeAcknowledged;
+
+    /// <summary>
+    /// Records that the counterpart's application accepted an event about this message.
+    /// </summary>
+    /// <remarks>
+    /// Written once, from the server clock, and never overwritten: the interesting instant is the
+    /// first time the other side had it, and a later acknowledgement — a reconnect, a second device,
+    /// a duplicate after a claim was reclaimed — must not move it forward and pretend delivery was
+    /// slower than it was. Delivery is at least once by design, so repetition is normal and has to be
+    /// harmless.
+    /// <para>
+    /// <paramref name="acknowledgedByUserId"/> is checked here rather than only at the call site,
+    /// because the one thing this column must never become is "my own tab got my own message back".
+    /// The sender acknowledging their own event is a real and expected acknowledgement of that event;
+    /// it is simply not evidence about the counterpart, and this returns false for it.
+    /// </para>
+    /// </remarks>
+    /// <returns><see langword="true"/> when this call set the timestamp.</returns>
+    public bool AcknowledgeRealtimeDelivery(Guid acknowledgedByUserId, DateTimeOffset now)
+    {
+        if (acknowledgedByUserId == Guid.Empty || acknowledgedByUserId == SenderUserId)
+        {
+            return false;
+        }
+
+        if (RealtimeAcknowledgedAtUtc is not null)
+        {
+            return false;
+        }
+
+        RealtimeAcknowledgedAtUtc = now < AvailableAtUtc ? AvailableAtUtc : now;
+        return true;
+    }
 
     /// <summary>
     /// Creates the message and its first, immutable revision together. There is no state in which a

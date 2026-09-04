@@ -2204,6 +2204,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("LastActivityAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<long>("LastEventSequence")
+                        .HasColumnType("bigint");
+
                     b.Property<Guid?>("LastMessageId")
                         .HasColumnType("uuid");
 
@@ -2250,6 +2253,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_Conversations_Activity", "\"LastActivityAtUtc\" >= \"StartedAtUtc\"");
 
                             t.HasCheckConstraint("CK_Conversations_DistinctParticipants", "\"CoachUserId\" <> \"ClientUserId\"");
+
+                            t.HasCheckConstraint("CK_Conversations_LastEventSequence", "\"LastEventSequence\" >= 0");
 
                             t.HasCheckConstraint("CK_Conversations_LastMessage", "(\"LastMessageId\" IS NULL) = (\"LastSequence\" = 0)");
 
@@ -2637,6 +2642,316 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_MessagingCommandRecords_Fingerprint", "\"PayloadFingerprint\" ~ '^[0-9a-f]{64}$'");
 
                             t.HasCheckConstraint("CK_MessagingCommandRecords_Message", "(\"MessageId\" IS NULL) = (\"CommandType\" = 'CreateConversation')");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Messaging.MessagingRealtimeAcknowledgement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AcknowledgedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AcknowledgedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RealtimeEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcknowledgedByUserId");
+
+                    b.HasIndex("TenantId", "ConversationId", "AcknowledgedAtUtc")
+                        .HasDatabaseName("IX_RealtimeAcks_TenantId_ConversationId_AcknowledgedAtUtc");
+
+                    b.HasIndex("TenantId", "RealtimeEventId", "AcknowledgedByUserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RealtimeAcks_TenantId_RealtimeEventId_AcknowledgedByUserId");
+
+                    b.HasIndex("TenantId", "RealtimeEventId", "ConversationId");
+
+                    b.ToTable("RealtimeAcknowledgements", "messaging");
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Messaging.MessagingRealtimeAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ClaimToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "RecipientId", "AttemptNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RealtimeAttempts_TenantId_RecipientId_AttemptNumber");
+
+                    b.ToTable("RealtimeAttempts", "messaging", t =>
+                        {
+                            t.HasCheckConstraint("CK_RealtimeAttempts_AttemptNumber", "\"AttemptNumber\" >= 1 AND \"AttemptNumber\" <= 20");
+
+                            t.HasCheckConstraint("CK_RealtimeAttempts_Completion", "(\"CompletedAtUtc\" IS NOT NULL) = (\"Outcome\" <> 'Started') AND (\"CompletedAtUtc\" IS NULL OR \"CompletedAtUtc\" >= \"StartedAtUtc\")");
+
+                            t.HasCheckConstraint("CK_RealtimeAttempts_FailureCode", "(\"Outcome\" IN ('Started', 'Published') AND \"FailureCode\" IS NULL) OR (\"Outcome\" NOT IN ('Started', 'Published') AND \"FailureCode\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_RealtimeAttempts_OutcomeValue", "\"Outcome\" IN ('Started', 'Published', 'TransientFailure', 'PermanentFailure', 'Abandoned', 'Suppressed')");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Messaging.MessagingRealtimeEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("EventSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("MessageRevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("MessageSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SourceCommandRecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "SourceCommandRecordId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RealtimeEvents_TenantId_SourceCommandRecordId");
+
+                    b.HasIndex("TenantId", "ConversationId", "EventSequence")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RealtimeEvents_TenantId_ConversationId_EventSequence");
+
+                    b.HasIndex("TenantId", "MessageId", "ConversationId");
+
+                    b.ToTable("RealtimeEvents", "messaging", t =>
+                        {
+                            t.HasCheckConstraint("CK_RealtimeEvents_EventSequence", "\"EventSequence\" >= 1");
+
+                            t.HasCheckConstraint("CK_RealtimeEvents_KindValue", "\"Kind\" IN ('ConversationCreated', 'MessageSent', 'MessageEdited', 'MessageSenderRemoved', 'MessageCoachModerated')");
+
+                            t.HasCheckConstraint("CK_RealtimeEvents_Message", "(\"MessageId\" IS NULL) = (\"Kind\" = 'ConversationCreated') AND (\"MessageId\" IS NULL) = (\"MessageSequence\" IS NULL) AND (\"MessageId\" IS NULL) = (\"MessageRevisionNumber\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_RealtimeEvents_MessagePosition", "(\"MessageSequence\" IS NULL OR \"MessageSequence\" >= 1) AND (\"MessageRevisionNumber\" IS NULL OR \"MessageRevisionNumber\" >= 1)");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Messaging.MessagingRealtimeRecipient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("ClaimExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClaimToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RealtimeEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ConversationId", "RecipientUserId")
+                        .HasDatabaseName("IX_RealtimeRecipients_TenantId_ConversationId_RecipientUserId");
+
+                    b.HasIndex("TenantId", "RealtimeEventId", "ConversationId");
+
+                    b.HasIndex("TenantId", "Status", "NextAttemptAtUtc")
+                        .HasDatabaseName("IX_RealtimeRecipients_TenantId_Status_NextAttemptAtUtc");
+
+                    b.ToTable("RealtimeRecipients", "messaging", t =>
+                        {
+                            t.HasCheckConstraint("CK_RealtimeRecipients_AttemptCount", "\"AttemptCount\" >= 0 AND \"AttemptCount\" <= 20");
+
+                            t.HasCheckConstraint("CK_RealtimeRecipients_Claim", "(\"ClaimToken\" IS NOT NULL) = (\"Status\" = 'Processing') AND (\"ClaimToken\" IS NULL) = (\"ClaimExpiresAtUtc\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_RealtimeRecipients_Completed", "(\"CompletedAtUtc\" IS NOT NULL) = (\"Status\" IN ('Published', 'Suppressed', 'DeadLettered'))");
+
+                            t.HasCheckConstraint("CK_RealtimeRecipients_FailureCode", "(\"Status\" = 'Published' AND \"FailureCode\" IS NULL) OR (\"Status\" IN ('Suppressed', 'DeadLettered') AND \"FailureCode\" IS NOT NULL) OR \"Status\" IN ('Pending', 'Processing')");
+
+                            t.HasCheckConstraint("CK_RealtimeRecipients_Published", "(\"PublishedAtUtc\" IS NOT NULL) = (\"Status\" = 'Published')");
+
+                            t.HasCheckConstraint("CK_RealtimeRecipients_PublishedAttempt", "\"PublishedAtUtc\" IS NULL OR \"AttemptCount\" >= 1");
+
+                            t.HasCheckConstraint("CK_RealtimeRecipients_StatusValue", "\"Status\" IN ('Pending', 'Processing', 'Published', 'Suppressed', 'DeadLettered')");
                         });
                 });
 
@@ -8202,6 +8517,79 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "MessageId", "ConversationId")
                         .HasPrincipalKey("TenantId", "Id", "ConversationId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Messaging.MessagingRealtimeAcknowledgement", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("AcknowledgedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Messaging.MessagingRealtimeRecipient", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "RealtimeEventId", "AcknowledgedByUserId")
+                        .HasPrincipalKey("TenantId", "RealtimeEventId", "RecipientUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Messaging.MessagingRealtimeEvent", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "RealtimeEventId", "ConversationId")
+                        .HasPrincipalKey("TenantId", "Id", "ConversationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Messaging.MessagingRealtimeAttempt", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Messaging.MessagingRealtimeRecipient", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "RecipientId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Messaging.MessagingRealtimeEvent", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Messaging.Conversation", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ConversationId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Messaging.MessagingCommandRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SourceCommandRecordId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Messaging.Message", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "MessageId", "ConversationId")
+                        .HasPrincipalKey("TenantId", "Id", "ConversationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Messaging.MessagingRealtimeRecipient", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Messaging.ConversationParticipant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ConversationId", "RecipientUserId")
+                        .HasPrincipalKey("TenantId", "ConversationId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Messaging.MessagingRealtimeEvent", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "RealtimeEventId", "ConversationId")
+                        .HasPrincipalKey("TenantId", "Id", "ConversationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Notifications.Notification", b =>

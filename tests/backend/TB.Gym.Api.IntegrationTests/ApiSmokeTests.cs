@@ -104,6 +104,10 @@ public sealed class ApiSmokeTests
                 builder.UseSetting("Seed:Enabled", "true");
                 builder.UseSetting("Seed:AdminEmail", "admin@example.test");
                 builder.UseSetting("Seed:AdminPassword", generatedTestPassword);
+                // Phase 6B-2B made an unconfigured hub origin a startup failure outside Development,
+                // and that check runs first. Configuring one keeps this test about what it says it is
+                // about: production refusing a development-only seed.
+                builder.UseSetting("Messaging:Realtime:AllowedOrigins:0", "https://app.example.test");
                 builder.ConfigureAppConfiguration((_, configuration) =>
                     configuration.AddInMemoryCollection(new Dictionary<string, string?>
                     {
@@ -112,6 +116,7 @@ public sealed class ApiSmokeTests
                         ["Seed:Enabled"] = "true",
                         ["Seed:AdminEmail"] = "admin@example.test",
                         ["Seed:AdminPassword"] = generatedTestPassword,
+                        ["Messaging:Realtime:AllowedOrigins:0"] = "https://app.example.test",
                     }));
             });
 

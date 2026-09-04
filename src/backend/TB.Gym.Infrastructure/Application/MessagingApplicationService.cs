@@ -179,6 +179,7 @@ internal sealed class MessagingApplicationService(
 
                 var now = clock.UtcNow;
                 Guid targetId;
+                Conversation? created = null;
                 if (existing is { } found)
                 {
                     targetId = found;
@@ -194,9 +195,10 @@ internal sealed class MessagingApplicationService(
                     dbContext.Conversations.Add(conversation);
                     dbContext.ConversationParticipants.AddRange(conversation.CreateDirectParticipants());
                     targetId = conversation.Id;
+                    created = conversation;
                 }
 
-                dbContext.MessagingCommandRecords.Add(MessagingCommandRecord.Record(
+                var record = MessagingCommandRecord.Record(
                     tenantContext.TenantId,
                     request.IdempotencyKey,
                     MessagingCommandType.CreateConversation,
@@ -204,7 +206,22 @@ internal sealed class MessagingApplicationService(
                     coachUserId,
                     targetId,
                     messageId: null,
-                    now));
+                    now);
+                dbContext.MessagingCommandRecords.Add(record);
+                // Only a conversation that was actually created is an event. A fresh key presented
+                // against a conversation that already exists returns it and changes nothing
+                // externally visible, so publishing "a conversation was created" would be a lie the
+                // other side would have to reconcile against a thread it already had.
+                if (created is not null)
+                {
+                    EmitRealtimeEvent(
+                        created,
+                        MessagingRealtimeEventKind.ConversationCreated,
+                        message: null,
+                        record,
+                        now);
+                }
+
                 return new CommandOutcome<ConversationCommandResult>(null, targetId);
             },
             successAsync: id => ConversationSuccessAsync(id, coachUserId, cancellationToken),
@@ -270,6 +287,10 @@ internal sealed class MessagingApplicationService(
             hasOlder,
             views.Length == 0 ? null : views[0].Sequence,
             conversation.LastSequence,
+            // The realtime watermark this read establishes. The browser subscribes to the
+            // conversation and then catches up from here, so an event committed between this read
+            // and that subscription is returned rather than lost.
+            conversation.LastEventSequence,
             await ReadStateAsync(conversation, participant, cancellationToken)));
     }
 
@@ -329,7 +350,7 @@ internal sealed class MessagingApplicationService(
 
                 dbContext.Messages.Add(message);
                 dbContext.MessageRevisions.Add(initialRevision);
-                dbContext.MessagingCommandRecords.Add(MessagingCommandRecord.Record(
+                var record = MessagingCommandRecord.Record(
                     tenantContext.TenantId,
                     request.IdempotencyKey,
                     MessagingCommandType.SendMessage,
@@ -337,7 +358,18 @@ internal sealed class MessagingApplicationService(
                     senderUserId,
                     conversationId,
                     message.Id,
-                    now));
+                    now);
+                dbContext.MessagingCommandRecords.Add(record);
+                // The realtime event commits with the message, the revision, the sequence, the
+                // activity update and the spent key, or none of them commits. A publication intent
+                // written after the command's transaction is a message that exists and an event that
+                // does not, which is exactly the gap a reconnecting client cannot detect.
+                EmitRealtimeEvent(
+                    conversation,
+                    MessagingRealtimeEventKind.MessageSent,
+                    message,
+                    record,
+                    now);
                 return new CommandOutcome<MessageCommandResult>(null, message.Id);
             },
             cancellationToken);
@@ -377,6 +409,14 @@ internal sealed class MessagingApplicationService(
             participant,
             async token =>
             {
+                // The conversation row lock, taken before the message is touched. An edit allocates
+                // an event position from the same counter a send does, so it queues behind concurrent
+                // sends in exactly the same way; taking it in the same order everywhere is what keeps
+                // two commands able to wait for each other without being able to deadlock.
+                await LockConversationAsync(conversationId, token);
+                var conversation = await dbContext.Conversations
+                    .SingleAsync(item => item.Id == conversationId, token);
+
                 var message = await dbContext.Messages
                     .SingleOrDefaultAsync(
                         item => item.Id == messageId && item.ConversationId == conversationId,
@@ -410,7 +450,7 @@ internal sealed class MessagingApplicationService(
                 dbContext.Entry(message).Property(item => item.Version).OriginalValue = request.ExpectedVersion;
                 var now = clock.UtcNow;
                 dbContext.MessageRevisions.Add(message.Edit(participant.UserId, body, now));
-                dbContext.MessagingCommandRecords.Add(MessagingCommandRecord.Record(
+                var record = MessagingCommandRecord.Record(
                     tenantContext.TenantId,
                     request.IdempotencyKey,
                     MessagingCommandType.EditMessage,
@@ -418,7 +458,18 @@ internal sealed class MessagingApplicationService(
                     participant.UserId,
                     conversationId,
                     messageId,
-                    now));
+                    now);
+                dbContext.MessagingCommandRecords.Add(record);
+                // A new event position for an old message position. This is the whole reason the two
+                // counters are separate: newer messages have been sent since, so a client resuming
+                // from the message sequence would never ask for this and would keep showing the
+                // sentence that was replaced.
+                EmitRealtimeEvent(
+                    conversation,
+                    MessagingRealtimeEventKind.MessageEdited,
+                    message,
+                    record,
+                    now);
                 return new CommandOutcome<MessageCommandResult>(null, messageId);
             },
             cancellationToken);
@@ -559,6 +610,282 @@ internal sealed class MessagingApplicationService(
         return new MessagingUnreadCount(unread.Values.Sum());
     }
 
+    // ---------- realtime catch-up and acknowledgement ----------
+
+    public async Task<RealtimeEventPageResult> ListRealtimeEventsAsync(
+        Guid conversationId,
+        long? afterEventSequence,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        // Resolve before validate, exactly as every other conversation operation does. A malformed
+        // cursor must not distinguish an unknown conversation from a real one the caller is not in.
+        var access = await ResolveAsync(conversationId, cancellationToken);
+        if (access.Status != MessagingCommandStatus.Success)
+        {
+            return access.Status == MessagingCommandStatus.Forbidden
+                ? RealtimeEventPageResult.Forbidden(access.Reason!.Value)
+                : RealtimeEventPageResult.NotFound();
+        }
+
+        if (afterEventSequence is < 0)
+        {
+            return RealtimeEventPageResult.Invalid(
+                "afterEventSequence",
+                "A realtime cursor cannot be negative.");
+        }
+
+        var conversation = access.Conversation!;
+        var participant = access.Participant!;
+        var normalizedTake = MessagingRealtimePaging.NormalizeEventTake(take);
+        var after = afterEventSequence ?? 0;
+
+        // Only events this participant was actually addressed by, which for a direct conversation is
+        // every one of them; the join is what keeps that a property of the data rather than of a
+        // comment. Ascending, because a catch-up cursor advances forwards.
+        var rows = await (
+            from realtimeEvent in dbContext.MessagingRealtimeEvents.AsNoTracking()
+            join recipient in dbContext.MessagingRealtimeRecipients.AsNoTracking()
+                on new { realtimeEvent.TenantId, RealtimeEventId = realtimeEvent.Id }
+                equals new { recipient.TenantId, recipient.RealtimeEventId }
+            where realtimeEvent.ConversationId == conversationId &&
+                  realtimeEvent.EventSequence > after &&
+                  recipient.RecipientUserId == participant.UserId
+            orderby realtimeEvent.EventSequence
+            select realtimeEvent)
+            .Take(normalizedTake + 1)
+            .ToListAsync(cancellationToken);
+
+        var hasMore = rows.Count > normalizedTake;
+        if (hasMore)
+        {
+            rows = rows.Take(normalizedTake).ToList();
+        }
+
+        // The current safe projection, loaded now and only now. The event row holds identifiers; the
+        // body it implies is fetched after this caller's current authorization has already succeeded,
+        // so an event that outlived somebody's access can never be replayed into content.
+        var projections = await MessagingMessageProjection.ProjectManyAsync(
+            dbContext,
+            [.. rows.Where(item => item.MessageId is not null).Select(item => item.MessageId!.Value)],
+            participant,
+            cancellationToken);
+
+        var items = rows
+            .Select(item => new RealtimeEventView(
+                item.TenantId,
+                item.ConversationId,
+                item.Id,
+                item.EventSequence,
+                item.Kind,
+                item.OccurredAtUtc,
+                item.MessageId is { } messageId ? projections.GetValueOrDefault(messageId) : null))
+            .ToArray();
+
+        return RealtimeEventPageResult.Success(new RealtimeEventPage(
+            conversationId,
+            items,
+            hasMore,
+            items.Length == 0 ? null : items[^1].EventSequence,
+            conversation.LastEventSequence));
+    }
+
+    public async Task<RealtimeAcknowledgementCommandResult> AcknowledgeRealtimeEventsAsync(
+        Guid conversationId,
+        AcknowledgeRealtimeEventsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var access = await ResolveAsync(conversationId, cancellationToken);
+        if (access.Status != MessagingCommandStatus.Success)
+        {
+            return access.Status == MessagingCommandStatus.Forbidden
+                ? RealtimeAcknowledgementCommandResult.Forbidden(access.Reason!.Value)
+                : RealtimeAcknowledgementCommandResult.NotFound();
+        }
+
+        // Bounded and deterministic. Duplicates in one request collapse, a negative or zero position
+        // names no event and is refused outright, and an oversized batch is a request error rather
+        // than an unbounded amount of work somebody can ask for.
+        var requested = request.EventSequences ?? [];
+        if (requested.Count > MessagingRealtimePaging.MaximumAcknowledgementBatch)
+        {
+            return RealtimeAcknowledgementCommandResult.Invalid(
+                "eventSequences",
+                $"At most {MessagingRealtimePaging.MaximumAcknowledgementBatch} events can be acknowledged at once.");
+        }
+
+        if (requested.Any(sequence => sequence < 1))
+        {
+            return RealtimeAcknowledgementCommandResult.Invalid(
+                "eventSequences",
+                "A realtime event position is a positive number.");
+        }
+
+        var conversation = access.Conversation!;
+        var participant = access.Participant!;
+        var sequences = requested.Distinct().ToArray();
+        if (sequences.Length == 0)
+        {
+            return RealtimeAcknowledgementCommandResult.Success(new RealtimeAcknowledgementResult(
+                conversationId,
+                0,
+                0,
+                conversation.LastEventSequence));
+        }
+
+        // Only events actually addressed to this participant, in this conversation. The join to the
+        // recipient row is the same fact the acknowledgement's foreign key enforces; doing it here
+        // as well means an unaddressed position is silently ignored rather than reaching the database
+        // as a constraint violation.
+        var addressed = await (
+            from realtimeEvent in dbContext.MessagingRealtimeEvents.AsNoTracking()
+            join recipient in dbContext.MessagingRealtimeRecipients.AsNoTracking()
+                on new { realtimeEvent.TenantId, RealtimeEventId = realtimeEvent.Id }
+                equals new { recipient.TenantId, recipient.RealtimeEventId }
+            where realtimeEvent.ConversationId == conversationId &&
+                  sequences.Contains(realtimeEvent.EventSequence) &&
+                  recipient.RecipientUserId == participant.UserId
+            select new { realtimeEvent.Id, realtimeEvent.MessageId })
+            .ToListAsync(cancellationToken);
+        if (addressed.Count == 0)
+        {
+            return RealtimeAcknowledgementCommandResult.Success(new RealtimeAcknowledgementResult(
+                conversationId,
+                0,
+                0,
+                conversation.LastEventSequence));
+        }
+
+        var eventIds = addressed.Select(item => item.Id).ToArray();
+        var already = await dbContext.MessagingRealtimeAcknowledgements
+            .AsNoTracking()
+            .Where(item =>
+                eventIds.Contains(item.RealtimeEventId) &&
+                item.AcknowledgedByUserId == participant.UserId)
+            .Select(item => item.RealtimeEventId)
+            .ToListAsync(cancellationToken);
+        var alreadyAcknowledged = already.ToHashSet();
+        var pending = addressed.Where(item => !alreadyAcknowledged.Contains(item.Id)).ToArray();
+        if (pending.Length == 0)
+        {
+            return RealtimeAcknowledgementCommandResult.Success(new RealtimeAcknowledgementResult(
+                conversationId,
+                0,
+                alreadyAcknowledged.Count,
+                conversation.LastEventSequence));
+        }
+
+        var accepted = await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            dbContext.ChangeTracker.Clear();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            var now = clock.UtcNow;
+            var messageIds = pending
+                .Where(item => item.MessageId is not null)
+                .Select(item => item.MessageId!.Value)
+                .Distinct()
+                .ToArray();
+            var messages = messageIds.Length == 0
+                ? []
+                : await dbContext.Messages
+                    .Where(message => messageIds.Contains(message.Id))
+                    .ToListAsync(cancellationToken);
+
+            foreach (var item in pending)
+            {
+                dbContext.MessagingRealtimeAcknowledgements.Add(MessagingRealtimeAcknowledgement.Record(
+                    tenantContext.TenantId,
+                    conversationId,
+                    item.Id,
+                    participant.UserId,
+                    now));
+            }
+
+            // The counterpart-delivery timestamp, and the one rule that keeps it honest: it is set
+            // only from an acknowledgement by somebody who is not the sender. A second tab of the
+            // sender's own browser acknowledging its own event is a real acknowledgement of that
+            // event and evidence about nobody else, so the aggregate refuses to write it. It is also
+            // written once and never moved, because at-least-once delivery makes repetition normal.
+            foreach (var message in messages)
+            {
+                message.AcknowledgeRealtimeDelivery(participant.UserId, now);
+            }
+
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+            {
+                // A concurrent duplicate. The unique key made one durable fact of it, which is the
+                // correct outcome for an idempotent acknowledgement; nothing is retried and nothing
+                // is reported as an error.
+                await transaction.RollbackAsync(cancellationToken);
+                dbContext.ChangeTracker.Clear();
+                return 0;
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return pending.Length;
+        });
+
+        dbContext.ChangeTracker.Clear();
+        // Read back rather than counting what was attempted, so a concurrent duplicate reports the
+        // same settled truth as the request that won.
+        var settled = await dbContext.MessagingRealtimeAcknowledgements
+            .AsNoTracking()
+            .CountAsync(
+                item => eventIds.Contains(item.RealtimeEventId) &&
+                        item.AcknowledgedByUserId == participant.UserId,
+                cancellationToken);
+        return RealtimeAcknowledgementCommandResult.Success(new RealtimeAcknowledgementResult(
+            conversationId,
+            accepted,
+            settled - accepted,
+            conversation.LastEventSequence));
+    }
+
+    /// <summary>
+    /// Writes the durable realtime event and one publication state per explicit participant, inside
+    /// the command's own transaction.
+    /// </summary>
+    /// <remarks>
+    /// The conversation must already be tracked and its row already locked by the caller, because the
+    /// event position comes from the same allocator discipline the message sequence uses: read,
+    /// increment and write under the row lock, so committed positions are unique, gap-free and in
+    /// commit order and a rolled-back command gives its number back.
+    /// <para>
+    /// Nothing here reads or copies a body, a previous revision or a moderation reason. The event is
+    /// identifiers, a position, a kind and an instant; what a participant is allowed to see is built
+    /// later, from the live tables, after that participant's authorization has been re-established.
+    /// </para>
+    /// </remarks>
+    private void EmitRealtimeEvent(
+        Conversation conversation,
+        MessagingRealtimeEventKind kind,
+        Message? message,
+        MessagingCommandRecord sourceCommand,
+        DateTimeOffset now)
+    {
+        var realtimeEvent = MessagingRealtimeEvent.Record(
+            tenantContext.TenantId,
+            conversation.Id,
+            conversation.AllocateNextEventSequence(),
+            kind,
+            message?.Id,
+            message?.Sequence,
+            message?.CurrentRevisionNumber,
+            sourceCommand.Id,
+            now);
+        dbContext.MessagingRealtimeEvents.Add(realtimeEvent);
+        // Both sides get a row, including whoever caused the event: their own other tabs still have
+        // to be told, and giving the actor a row is what makes a sender acknowledgement expressible
+        // without letting it be mistaken for the counterpart's.
+        dbContext.MessagingRealtimeRecipients.AddRange(realtimeEvent.CreateRecipients(
+            [conversation.CoachUserId, conversation.ClientUserId],
+            now));
+    }
+
     // ---------- shared removal path ----------
 
     /// <summary>
@@ -612,6 +939,12 @@ internal sealed class MessagingApplicationService(
             participant,
             async token =>
             {
+                // Same lock order as every other command: the key, then the conversation row whose
+                // event counter this removal may advance, then the message.
+                await LockConversationAsync(conversationId, token);
+                var conversation = await dbContext.Conversations
+                    .SingleAsync(item => item.Id == conversationId, token);
+
                 var message = await dbContext.Messages
                     .SingleOrDefaultAsync(
                         item => item.Id == messageId && item.ConversationId == conversationId,
@@ -648,6 +981,7 @@ internal sealed class MessagingApplicationService(
                 }
 
                 var now = clock.UtcNow;
+                var removedNow = false;
                 if (!message.IsDeleted)
                 {
                     if (message.Version != expectedVersion)
@@ -662,13 +996,14 @@ internal sealed class MessagingApplicationService(
                     if (recorded is not null)
                     {
                         dbContext.MessageDeletionEvents.Add(recorded);
+                        removedNow = true;
                     }
                 }
 
                 // Removal is idempotent: a repeated request against an already-removed message
                 // reports the current removed state instead of failing, because the caller's intent
                 // has already been satisfied. The key is still spent, so a later retry replays.
-                dbContext.MessagingCommandRecords.Add(MessagingCommandRecord.Record(
+                var record = MessagingCommandRecord.Record(
                     tenantContext.TenantId,
                     idempotencyKey,
                     commandType,
@@ -676,7 +1011,23 @@ internal sealed class MessagingApplicationService(
                     participant.UserId,
                     conversationId,
                     messageId,
-                    now));
+                    now);
+                dbContext.MessagingCommandRecords.Add(record);
+                // Only an actual removal is an event. A second request against a message that was
+                // already removed satisfies the caller and changes nothing, so it allocates no event
+                // position and gives the other side nothing to reconcile.
+                if (removedNow)
+                {
+                    EmitRealtimeEvent(
+                        conversation,
+                        isModeration
+                            ? MessagingRealtimeEventKind.MessageCoachModerated
+                            : MessagingRealtimeEventKind.MessageSenderRemoved,
+                        message,
+                        record,
+                        now);
+                }
+
                 return new CommandOutcome<MessageCommandResult>(null, messageId);
             },
             cancellationToken);
@@ -1112,69 +1463,21 @@ internal sealed class MessagingApplicationService(
     /// The current body of each message that still has one. A removed message is not asked for at all,
     /// so its retained revisions cannot escape through this path.
     /// </summary>
-    private async Task<Dictionary<Guid, string>> CurrentBodiesAsync(
+    private Task<Dictionary<Guid, string>> CurrentBodiesAsync(
         IReadOnlyList<Message> messages,
-        CancellationToken cancellationToken)
-    {
-        var ids = messages
-            .Where(message => !message.IsDeleted)
-            .Select(message => message.Id)
-            .ToArray();
-        if (ids.Length == 0)
-        {
-            return [];
-        }
+        CancellationToken cancellationToken) =>
+        MessagingMessageProjection.CurrentBodiesAsync(dbContext, messages, cancellationToken);
 
-        return await (
-            from revision in dbContext.MessageRevisions.AsNoTracking()
-            join message in dbContext.Messages.AsNoTracking()
-                on new { revision.TenantId, revision.MessageId, revision.RevisionNumber }
-                equals new
-                {
-                    message.TenantId,
-                    MessageId = message.Id,
-                    RevisionNumber = message.CurrentRevisionNumber,
-                }
-            where ids.Contains(message.Id)
-            select new { message.Id, revision.Body })
-            .ToDictionaryAsync(item => item.Id, item => item.Body, cancellationToken);
-    }
-
+    /// <summary>
+    /// One caller-safe message. Shared with the realtime dispatcher and the catch-up endpoint, so
+    /// there is exactly one place that decides a removed message loses its body and that a moderation
+    /// reason reaches nobody.
+    /// </summary>
     private static MessageView ToView(
         Message message,
         ConversationParticipant participant,
-        IReadOnlyDictionary<Guid, string> bodies)
-    {
-        var isFromCaller = message.SenderUserId == participant.UserId;
-        return new MessageView(
-            message.Id,
-            message.ConversationId,
-            message.Sequence,
-            message.SenderUserId,
-            isFromCaller,
-            message.SentAtUtc,
-            message.AvailableAtUtc,
-            message.EditedAtUtc,
-            message.CurrentRevisionNumber,
-            // A removed message keeps its place and its metadata and loses its body. The moderation
-            // reason is never projected at all, by anybody, so no participant-facing response can
-            // carry it.
-            message.IsDeleted ? null : bodies.GetValueOrDefault(message.Id),
-            message.IsDeleted,
-            message.DeletionKind,
-            message.DeletedAtUtc,
-            // The only claim this slice can truthfully make. There is no realtime channel to have
-            // acknowledged anything and no provider to have accepted it, so both acknowledgement
-            // columns are null and neither is read here; Phase 6B-2B is where a second state appears.
-            MessageDeliveryState.Persisted,
-            CanEdit: isFromCaller && !message.IsDeleted,
-            CanDelete: isFromCaller && !message.IsDeleted,
-            CanModerate: participant.CanModerate && !isFromCaller && !message.IsDeleted,
-            // The same rule the unread count aggregates, applied to one message, so the thread can
-            // mark where the reader left off without a second definition of "unread".
-            IsUnreadByCaller: participant.CountsAsUnread(message),
-            message.Version);
-    }
+        IReadOnlyDictionary<Guid, string> bodies) =>
+        MessagingMessageProjection.ToView(message, participant, bodies);
 
     private async Task<ConversationReadState> ReadStateAsync(
         Conversation conversation,

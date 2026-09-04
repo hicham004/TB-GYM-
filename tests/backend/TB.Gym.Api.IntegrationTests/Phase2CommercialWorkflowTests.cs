@@ -37,12 +37,17 @@ public sealed class Phase2CommercialWorkflowTests
                 builder.UseSetting("ConnectionStrings:Database", databaseConnection);
                 builder.UseSetting("Database:ApplyMigrationsOnStartup", "true");
                 builder.UseSetting("Seed:Enabled", "false");
+                builder.UseSetting("Messaging:Realtime:Enabled", "false");
                 builder.ConfigureAppConfiguration((_, configuration) =>
                     configuration.AddInMemoryCollection(new Dictionary<string, string?>
                     {
                         ["ConnectionStrings:Database"] = databaseConnection,
                         ["Database:ApplyMigrationsOnStartup"] = "true",
                         ["Seed:Enabled"] = "false",
+                        // Phase 6B-2B added an API-hosted realtime sweep. It is switched off here for the same
+                        // reason the media purge is: a background tick must not race an assertion about what one
+                        // request did. The realtime rows these commands write are still written.
+                        ["Messaging:Realtime:Enabled"] = "false",
                         ["Application:PublicBaseUrl"] = "http://localhost:4200",
                     }));
             });

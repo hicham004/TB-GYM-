@@ -29,6 +29,27 @@
     }
   </p>
 
+  <!-- What the live channel is doing, and deliberately nothing more. None of these says a message is
+       missing: every message is stored, this screen reads them over HTTP, and reconnecting reconciles
+       from the server. "Connected" is also never rendered as "delivered" or "seen" — the channel
+       being up says nothing about what the other person has. -->
+  <p class="realtime-state detail" role="status" data-testid="realtime-state">
+    @switch (realtimeState()) {
+      @case ('connected') {
+        <span i18n>Live updates are on.</span>
+      }
+      @case ('connecting') {
+        <span i18n>Connecting for live updates…</span>
+      }
+      @case ('reconnecting') {
+        <span i18n>Reconnecting for live updates. Nothing has been lost.</span>
+      }
+      @case ('offline') {
+        <span i18n>Live updates are off. Refresh to see new messages.</span>
+      }
+    }
+  </p>
+
   <div class="layout">
     <nav class="conversation-list" aria-label="Conversations" i18n-aria-label>
       @if (listIsEmpty()) {

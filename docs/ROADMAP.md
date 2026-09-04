@@ -440,13 +440,18 @@ localisation beyond English; SignalR sending, groups, reconnect and scale-out; r
 scheduling and reminders; and any generic background-job framework. Chat conversations and messages
 were delivered by 6B-2A below.
 
-Explicitly deferred from 6B-2A and still open: SignalR sending, group membership, acknowledgements,
-reconnect/catch-up and scale-out; polling; group conversations; multiple coaches in one conversation;
-participant add/remove/reassignment; client-created conversations; typing indicators; online presence;
-reactions; attachments, images, files, voice notes and video; Markdown, HTML, previews and link
-unfurling; message search; push, email, SMS and WhatsApp delivery; notification preference changes;
-end-to-end encryption claims; retention, export and legal deletion workflows; check-in comments; and
-AI summaries.
+SignalR sending, group membership, acknowledgements, reconnect/catch-up and scale-out were delivered
+by 6B-2B below.
+
+Explicitly deferred from 6B-2A and 6B-2B and still open: client polling; group conversations;
+multiple coaches in one conversation; participant add/remove/reassignment; client-created
+conversations; typing indicators; online presence; reactions, group counts and retained connection
+identifiers; attachments, images, files, voice notes and video; Markdown, HTML, previews and link
+unfurling; message search; push, email, SMS and WhatsApp delivery and provider acknowledgement;
+notification preference changes and quiet hours; end-to-end encryption claims; retention, export and
+legal deletion workflows; read receipts and any automatic read advancement; check-in comments; AI
+summaries; a manual replay UI or generic operations console; and any generic event bus, job framework,
+Redis cache or new cloud-managed service.
 
 ### Phase 6B-2A: persisted direct messaging (complete)
 
@@ -503,11 +508,61 @@ starts empty and advances one position at a time, each later message requires it
 deferred assertion on both sides requires `LastSequence` and `LastMessageId` to identify the newest
 stored message.
 
+### Phase 6B-2B: authorized realtime messaging delivery (complete)
+
+Status: complete, implemented 2026-09-04. See
+`docs/adr/0020-authorized-realtime-messaging-delivery.md` and `DOMAIN-RULES.md` MSG-012 through
+MSG-021.
+
+- **PostgreSQL before the socket.** Every successful 6B-2A command now writes one content-free
+  realtime event and one publication row per explicit participant in the same transaction as the
+  mutation. REST stays the only authoritative mutation path; the hub adds no write and no
+  acknowledgement. A SignalR or Redis failure afterwards changes nothing about the command that
+  already succeeded.
+- **Two sequences.** A second gap-free allocator on the conversation answers "what has happened",
+  separately from the message sequence's "which messages exist". An edit or removal of an old message
+  takes a new event position and keeps its original message position, which is the only way a client
+  resuming from a cursor can ever learn about it.
+- **Content-free events.** Identifiers, a position, a stable kind and a server instant. The projection
+  a participant may see is materialized at delivery and catch-up time, after that participant's
+  current authorization has succeeded.
+- **Four facts kept apart.** Persisted, Published (the hub accepted the frame — never "Delivered"),
+  application-acknowledged (the *other* participant's application merged a current safe projection),
+  and read. A sender acknowledging their own event never sets the counterpart timestamp; no
+  acknowledgement touches read state; provider acknowledgement stays null and a trigger enforces it.
+- **Claimed, leased, at least once.** `FOR UPDATE SKIP LOCKED`, a random claim token and expiry, a
+  durable attempt started before anything leaves the process, re-authorization immediately before
+  materialization, and the named `messaging-realtime-backoff-v1` schedule. Every started attempt
+  counts including abandoned ones, maximum + 1 is impossible, terminal rows never restart, and a
+  stale claimant can finalize nothing.
+- **Hub, binding and origins.** A strongly typed hub with only `OnConnectedAsync`,
+  `SubscribeConversation` and `UnsubscribeConversation`. The workspace arrives as `?tenantId=` routing
+  input because a browser cannot header a WebSocket, is verified against PostgreSQL once, and becomes
+  a binding the connection can never change. Group names are server-computed; a client passes a
+  conversation identifier and nothing else. `/hubs` is checked against an explicit origin allowlist
+  before authentication, and an empty list fails startup outside Development.
+- **Subscribe, then catch up.** Bounded ascending keyset paging on the event position, at most 100 per
+  page, looped until caught up. The deliberate overlap is deduplicated by event identity; the other
+  order loses events committed between the read and the join.
+- **Scale-out.** One replica uses the in-process lifetime manager; more than one declared replica
+  requires Redis and fails startup without it. Transport fallback stays on, so multi-replica
+  production requires load-balancer session affinity. Redis is a backplane only — a send during an
+  outage is lost, and PostgreSQL plus catch-up is what makes that survivable.
+- **Angular.** One root-scoped connection per account and workspace, its own cancellable jittered
+  retry for the initial `start()` that `withAutomaticReconnect` does not provide, generation ownership
+  over every callback, rejoin-then-catch-up on reconnect, gap recovery, terminal deletion, coalesced
+  invalidations with no polling timer, and bounded idempotent acknowledgement batches. Nothing is
+  written to browser storage.
+
+Exit: two dispatchers racing on one backlog claim each row once; an expired claim is reclaimed and its
+stale claimant finalizes nothing; a crash after publication duplicates identifiably rather than losing
+anything; membership removal, a workspace block and entitlement loss each suppress publication before
+any body is loaded; a client connected to one API replica receives an event published by another
+through a real Redis backplane; a Redis outage leaves PostgreSQL correct and the sweep alive; and no
+message body, moderation reason, participant identity or backplane endpoint reaches any log.
+
 ### Phase 6B remaining
 
-- Complete SignalR authorization, reconnect/catch-up, delivery, and scale-out tests: 6B-2B adds
-  sending, per-conversation groups, connection mapping, catch-up from the sequences 6B-2A commits,
-  and delivery acknowledgement recorded separately from read state.
 - Add channel preferences, quiet hours and consent alongside the first interruptive channel, and
   design tokenless delivery so account/reset/invitation mail can join the outbox.
 - Implement production object storage, production upload scanning, provider inventory

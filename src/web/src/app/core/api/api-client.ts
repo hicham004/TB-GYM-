@@ -42,6 +42,8 @@ import {
   mapMessagePage,
   mapMessagingUnreadCount,
   mapReadState,
+  mapRealtimeAcknowledgement,
+  mapRealtimeEventPage,
 } from '../../features/messaging/messaging.models';
 import type {
   ConversationDetail,
@@ -49,6 +51,8 @@ import type {
   ConversationReadState,
   Message,
   MessagePage,
+  RealtimeAcknowledgement,
+  RealtimeEventPage,
 } from '../../features/messaging/messaging.models';
 import type {
   ClientCommercialOverview as ContractClientCommercialOverview,
@@ -1238,6 +1242,45 @@ export class ApiClient {
     return this.http
       .get<Phase3Contracts.MessagingUnreadCount>('/api/messaging/unread-count')
       .pipe(map(mapMessagingUnreadCount));
+  }
+
+  /**
+   * One bounded page of realtime events, ascending from a cursor.
+   *
+   * The cursor is the conversation's event position, never a message sequence: an edit or a removal
+   * of an old message is a new event about an old position, and asking by message sequence would
+   * never return it.
+   */
+  listConversationRealtimeEvents(
+    conversationId: string,
+    afterEventSequence: number,
+    take = 100,
+  ): Observable<RealtimeEventPage> {
+    return this.http
+      .get<Phase3Contracts.RealtimeEventPage>(
+        `/api/messaging/conversations/${conversationId}/realtime-events`,
+        { params: { afterEventSequence, take } },
+      )
+      .pipe(map(mapRealtimeEventPage));
+  }
+
+  /**
+   * Records that this application accepted the named events.
+   *
+   * No user identifier is sent: the server derives the acknowledging participant from the session.
+   * This is called only after an event has been validated and merged, because accepting a transport
+   * frame is not the same as having it.
+   */
+  acknowledgeConversationRealtimeEvents(
+    conversationId: string,
+    eventSequences: readonly number[],
+  ): Observable<RealtimeAcknowledgement> {
+    return this.http
+      .post<Phase3Contracts.RealtimeAcknowledgementResult>(
+        `/api/messaging/conversations/${conversationId}/realtime-acknowledgements`,
+        { eventSequences },
+      )
+      .pipe(map(mapRealtimeAcknowledgement));
   }
 
   listCheckInForms(skip = 0, take = 100): Observable<Phase3Contracts.CheckInFormPage> {

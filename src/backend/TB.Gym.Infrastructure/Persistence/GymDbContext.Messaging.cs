@@ -79,6 +79,12 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_Conversations_LastSequence",
                     "\"LastSequence\" >= 0");
+                // The second allocator, added by Phase 6B-2B. Zero is the honest starting value for a
+                // conversation created before realtime events existed: it has no events, and its
+                // current state was established by the ordinary REST read rather than by a delta.
+                table.HasCheckConstraint(
+                    "CK_Conversations_LastEventSequence",
+                    "\"LastEventSequence\" >= 0");
                 // The allocator and the activity pointer move together, so a conversation cannot
                 // claim messages it has no newest message for, or the reverse.
                 table.HasCheckConstraint(
@@ -309,6 +315,10 @@ public sealed partial class GymDbContext
         {
             entity.ToTable("CommandRecords", "messaging");
             entity.HasKey(record => record.Id);
+            // Phase 6B-2B points a realtime event at the command that produced it, so the key it
+            // references has to carry the workspace: an event naming another tenant's command record
+            // is then inexpressible rather than merely wrong.
+            entity.HasAlternateKey(record => new { record.TenantId, record.Id });
             // One spent key per workspace, whatever it was spent on. A key used for a send cannot
             // later be honoured as an edit, because there is one index rather than one per command.
             entity.HasIndex(record => new { record.TenantId, record.IdempotencyKey })

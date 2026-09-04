@@ -51,4 +51,37 @@ internal static class DatabaseConstraintNames
     /// </summary>
     public const string OneMessagingCommandPerKey =
         "IX_CommandRecords_TenantId_IdempotencyKey";
+
+    /// <summary>
+    /// One realtime event per conversation event position. The catch-up cursor is only resumable
+    /// because this is unique and, with the deferred tip trigger, gap-free.
+    /// </summary>
+    public const string OneRealtimeEventPerConversationSequence =
+        "IX_RealtimeEvents_TenantId_ConversationId_EventSequence";
+
+    /// <summary>
+    /// One realtime event per source mutation. A settled idempotent replay returns the original
+    /// result and cannot allocate a second event; this is the database saying so.
+    /// </summary>
+    public const string OneRealtimeEventPerSourceCommand =
+        "IX_RealtimeEvents_TenantId_SourceCommandRecordId";
+
+    public const string OneRealtimeAttemptPerNumber =
+        "IX_RealtimeAttempts_TenantId_RecipientId_AttemptNumber";
+
+    /// <summary>
+    /// One acknowledgement per event and participant.
+    /// </summary>
+    /// <remarks>
+    /// Abbreviated deliberately. PostgreSQL truncates an identifier at 63 characters, so the name
+    /// this convention would otherwise produce is not the name the database ends up with — and a
+    /// constant that does not match the object it names is worse than no constant, because the next
+    /// person to compare against it gets a silent miss rather than an error.
+    /// </remarks>
+    public const string OneRealtimeAcknowledgementPerRecipient =
+        "IX_RealtimeAcks_TenantId_RealtimeEventId_AcknowledgedByUserId";
+
+    /// <summary>The acknowledgement read path, abbreviated for the same reason.</summary>
+    public const string RealtimeAcknowledgementsByConversation =
+        "IX_RealtimeAcks_TenantId_ConversationId_AcknowledgedAtUtc";
 }

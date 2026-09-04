@@ -227,6 +227,16 @@ public sealed partial class GymDbContext(
 
     public DbSet<MessagingCommandRecord> MessagingCommandRecords => Set<MessagingCommandRecord>();
 
+    public DbSet<MessagingRealtimeEvent> MessagingRealtimeEvents => Set<MessagingRealtimeEvent>();
+
+    public DbSet<MessagingRealtimeRecipient> MessagingRealtimeRecipients =>
+        Set<MessagingRealtimeRecipient>();
+
+    public DbSet<MessagingRealtimeAttempt> MessagingRealtimeAttempts => Set<MessagingRealtimeAttempt>();
+
+    public DbSet<MessagingRealtimeAcknowledgement> MessagingRealtimeAcknowledgements =>
+        Set<MessagingRealtimeAcknowledgement>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -246,6 +256,7 @@ public sealed partial class GymDbContext(
         ConfigureNutrition(builder);
         ConfigureCheckIns(builder);
         ConfigureMessaging(builder);
+        ConfigureMessagingRealtime(builder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -831,6 +842,33 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<MessageRevision>("Message revisions are immutable.");
         RejectAppendOnlyMutations<MessageDeletionEvent>("Message deletion events are append-only.");
         RejectAppendOnlyMutations<MessagingCommandRecord>("Messaging command records are append-only.");
+
+        // Realtime delivery history. A realtime event is what happened; an acknowledgement is that
+        // somebody's application accepted it. Neither is ever rewritten or removed, because the two
+        // things they are used for afterwards — resuming a client from a cursor, and explaining why
+        // a message was or was not delivered — both depend on the record being complete.
+        RejectAppendOnlyMutations<MessagingRealtimeEvent>("Realtime messaging events are immutable.");
+        RejectAppendOnlyMutations<MessagingRealtimeAcknowledgement>(
+            "Realtime acknowledgements are append-only.");
+
+        if (ChangeTracker.Entries<MessagingRealtimeRecipient>().Any(item => item.State == EntityState.Deleted) ||
+            ChangeTracker.Entries<MessagingRealtimeAttempt>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException(
+                "Realtime publication state and attempt history are never deleted; a terminal outcome is recorded state.");
+        }
+
+        // A completed attempt is a historical fact. Rewriting one is how a dead letter turns into a
+        // success nobody can contradict afterwards.
+        foreach (var entry in ChangeTracker.Entries<MessagingRealtimeAttempt>()
+                     .Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<MessagingRealtimeOutcome>(nameof(MessagingRealtimeAttempt.Outcome))
+                != MessagingRealtimeOutcome.Started)
+            {
+                throw new InvalidOperationException("A completed realtime attempt is immutable.");
+            }
+        }
 
         if (ChangeTracker.Entries<Conversation>().Any(item => item.State == EntityState.Deleted) ||
             ChangeTracker.Entries<ConversationParticipant>().Any(item => item.State == EntityState.Deleted) ||

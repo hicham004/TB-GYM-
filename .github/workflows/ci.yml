@@ -15,6 +15,11 @@ jobs:
     env:
       ConnectionStrings__Database: Host=localhost;Port=5433;Database=postgres;Username=tbgym
       TB_GYM_TEST_ADMIN_CONNECTION: Host=localhost;Port=5433;Database=postgres;Username=tbgym;Pooling=false
+      TB_GYM_REQUIRE_POSTGRES_TESTS: "true"
+      # The realtime suite starts its own pinned Redis container per test, because the outage test
+      # stops one and the suite runs methods in parallel. This makes a missing Docker daemon a
+      # failure rather than a quietly skipped proof of the scale-out path.
+      TB_GYM_REQUIRE_REDIS_TESTS: "true"
     services:
       postgres:
         image: postgres:18.4-alpine
@@ -31,6 +36,10 @@ jobs:
           --health-retries 12
     steps:
       - uses: actions/checkout@v4
+      # Pulled once, up front, so a test that starts its own backplane is not also waiting on a
+      # registry. Pinned to the same tag compose.yaml uses.
+      - name: Pre-pull the pinned Redis image
+        run: docker pull redis:8.2.2-alpine
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -91,4 +100,55 @@ jobs:
           sleep 3
           test "$(docker inspect --format '{{.State.Running}}' tb-gym-worker-ci-smoke)" = "true"
           docker logs tb-gym-worker-ci-smoke 2>&1 | grep 'Notification dispatch is disabled by configuration.'
+      # Phase 6B-2B added realtime delivery to the API and deliberately nothing to the Worker. This
+      # is what says so about the artefact rather than about the source: no exposed port, no hub, no
+      # Redis client in the image, and no realtime startup line.
+      - name: The Worker image has no listener, no hub and no backplane
+        run: |
+          test -z "$(docker image inspect tb-gym-worker:ci --format '{{json .Config.ExposedPorts}}' | grep -v null || true)"
+          docker run --rm --entrypoint sh tb-gym-worker:ci -c 'ls /app | grep -i signalr' && exit 1 || true
+          docker run --rm --entrypoint sh tb-gym-worker:ci -c 'ls /app | grep -i "StackExchange.Redis"' && exit 1 || true
+          docker logs tb-gym-worker-ci-smoke 2>&1 | grep -q 'Realtime messaging' && exit 1 || true
+      - name: The API image starts with a Redis backplane and one declared replica each
+        run: |
+          docker network create tb-gym-ci-net
+          trap 'docker rm --force tb-gym-redis-ci tb-gym-api-ci >/dev/null 2>&1 || true; docker network rm tb-gym-ci-net >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name tb-gym-redis-ci --network tb-gym-ci-net \
+            redis:8.2.2-alpine redis-server --save '' --appendonly no
+          for _ in $(seq 1 30); do
+            docker exec tb-gym-redis-ci redis-cli ping >/dev/null 2>&1 && break
+            sleep 1
+          done
+          # Several declared replicas with a backplane: the API must start.
+          docker run --detach --name tb-gym-api-ci --network tb-gym-ci-net \
+            --env ASPNETCORE_ENVIRONMENT=Production \
+            --env 'ConnectionStrings__Database=Host=unused;Database=unused;Username=unused;Password=unused' \
+            --env Database__ApplyMigrationsOnStartup=false \
+            --env Messaging__Realtime__Enabled=false \
+            --env Messaging__Realtime__ScaleOut=Redis \
+            --env Messaging__Realtime__ApiReplicaCount=2 \
+            --env Messaging__Realtime__RedisConnectionString=tb-gym-redis-ci:6379 \
+            --env Messaging__Realtime__AllowedOrigins__0=https://app.example.com \
+            tb-gym-api:ci
+          sleep 6
+          test "$(docker inspect --format '{{.State.Running}}' tb-gym-api-ci)" = "true"
+          docker logs tb-gym-api-ci 2>&1 | grep 'Realtime messaging is configured for Redis'
+          # And the backplane endpoint is never printed.
+          docker logs tb-gym-api-ci 2>&1 | grep -q 'tb-gym-redis-ci:6379' && exit 1 || true
+          docker rm --force tb-gym-api-ci >/dev/null
+          # Several declared replicas without a backplane: the API must refuse to start.
+          docker run --name tb-gym-api-ci --network tb-gym-ci-net \
+            --env ASPNETCORE_ENVIRONMENT=Production \
+            --env 'ConnectionStrings__Database=Host=unused;Database=unused;Username=unused;Password=unused' \
+            --env Database__ApplyMigrationsOnStartup=false \
+            --env Messaging__Realtime__ApiReplicaCount=3 \
+            --env Messaging__Realtime__AllowedOrigins__0=https://app.example.com \
+            tb-gym-api:ci && exit 1 || true
+          docker logs tb-gym-api-ci 2>&1 | grep 'ScaleOut must be Redis'
       - run: docker build --file src/web/Dockerfile --tag tb-gym-web:ci .
+      - name: The compose stack is valid, including the pinned backplane
+        env:
+          POSTGRES_PASSWORD: compose-config-check
+        run: |
+          docker compose config --quiet
+          docker compose config | grep 'image: redis:8.2.2-alpine'

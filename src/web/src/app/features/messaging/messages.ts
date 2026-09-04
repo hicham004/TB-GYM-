@@ -13,15 +13,21 @@ import {
   ownMessagingDenialMessage,
 } from '../../core/i18n/display-labels';
 import { MessageUnreadStore } from '../../core/messaging/message-unread.store';
+import {
+  MessagingRealtimeService,
+  type ConversationRealtimeSink,
+} from '../../core/messaging/messaging-realtime.service';
 import { CommandKeys } from './command-keys';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
+  isNewerProjection,
   mergeNewer,
   mergeOlder,
   type Conversation,
   type Message,
   type MessagePage,
+  type RealtimeEvent,
 } from './messaging.models';
 
 const conversationPageSize = 25;
@@ -60,6 +66,7 @@ export class Messages {
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
   private readonly unreadStore = inject(MessageUnreadStore);
+  private readonly realtime = inject(MessagingRealtimeService);
 
   /** Bumped whenever the recipient or the workspace changes. */
   private contextGeneration = 0;
@@ -97,6 +104,18 @@ export class Messages {
   protected readonly maximumLength = maximumMessageLength;
   protected readonly maximumReason = maximumReasonLength;
   protected readonly unread = this.unreadStore.unread;
+
+  /**
+   * The channel's state, for the accessible status line.
+   *
+   * It says whether live updates are arriving, never that messages are missing: everything is
+   * persisted, and a reconnect reconciles from the server. A reader who is offline is behind, not
+   * short of anything.
+   */
+  protected readonly realtimeState = this.realtime.state;
+
+  /** How many coalesced refreshes have been consumed, so an invalidation is acted on once. */
+  private handledListRefresh = 0;
 
   // One FormAttempt per form, so leaving the composer never reveals the edit form's reason and a
   // refused edit never fills the composer's summary.
@@ -165,6 +184,65 @@ export class Messages {
         void this.loadConversations(generation);
       }
     });
+
+    // A compact invalidation means something changed in a conversation this member is in. The
+    // service has already coalesced the burst; this turns one coalesced signal into one bounded
+    // list and unread refresh. There is no timer here and nothing polls.
+    effect(() => {
+      const requests = this.realtime.listRefreshRequests();
+      if (requests === this.handledListRefresh) {
+        return;
+      }
+
+      this.handledListRefresh = requests;
+      const generation = this.contextGeneration;
+      if (this.contextKey() !== null) {
+        void this.refreshList(generation);
+      }
+    });
+  }
+
+  /**
+   * Merges one realtime event into the thread on screen.
+   *
+   * Returns whether the event was actually applied, which is what the service uses to decide whether
+   * this application may honestly acknowledge it. Everything about the merge is defensive, because
+   * delivery is at least once and out of order: a duplicate after a reclaimed publication, a
+   * catch-up page overlapping a live frame, an edit whose event arrives after a later message.
+   */
+  private readonly threadSink: ConversationRealtimeSink = {
+    apply: (event: RealtimeEvent) => this.applyRealtimeEvent(event),
+  };
+
+  private applyRealtimeEvent(event: RealtimeEvent): boolean {
+    if (event.conversationId !== this.selectedId() || event.message === null) {
+      // A conversation-created event carries no message and needs no thread merge; the list refresh
+      // the compact signal triggers is what makes the new thread appear.
+      return false;
+    }
+
+    const incoming = event.message;
+    const current = this.messages().find((message) => message.id === incoming.id);
+    // Removal is terminal for content and a stale revision loses. Without this, an edit event that
+    // arrived late would put back a sentence a later edit replaced, or a body a removal took away.
+    if (!isNewerProjection(current, incoming)) {
+      return false;
+    }
+
+    this.messages.update((loaded) => mergeNewer(loaded, [incoming]));
+    this.latestSequence.set(Math.max(this.latestSequence(), incoming.sequence));
+    this.applyToPreview(incoming);
+    if (this.editingId() === incoming.id && incoming.isDeleted) {
+      // The message being edited was removed underneath. Keeping the form open would offer to save
+      // an edit the server has already made impossible.
+      this.cancelEdit();
+    }
+
+    if (this.moderatingId() === incoming.id && incoming.isDeleted) {
+      this.cancelModeration();
+    }
+
+    return true;
   }
 
   /** Why this conversation is closed, in the audience's own words. */
@@ -568,6 +646,19 @@ export class Messages {
     }
   }
 
+  /**
+   * Re-reads the bounded conversation list and the unread badge, and nothing else.
+   *
+   * This is what a coalesced invalidation and a reconnect both resolve to. It deliberately does not
+   * reload the open thread: that thread has its own event cursor and catches up through it, and
+   * refetching its history on every arriving message would be a polling loop with extra steps. The
+   * badge is not refreshed here either — `MessageUnreadStore` owns that count and reacts to the same
+   * coalesced signal, so refreshing it here would send the same request twice.
+   */
+  private async refreshList(generation: number): Promise<void> {
+    await this.loadConversations(generation);
+  }
+
   private async loadConversations(generation: number): Promise<void> {
     const request = ++this.listRequest;
     // This supersedes any Load-more already in flight. Its own `finally` is guarded on being the
@@ -619,6 +710,18 @@ export class Messages {
       }
 
       this.applyPage(page);
+      // Subscribe, then catch up from the watermark this read just established. The overlap between
+      // the two is deliberate and harmless; the other order leaves a window in which an event
+      // committed after the read and before the join reaches nobody and is never asked for again.
+      await this.realtime.openConversation(
+        conversationId,
+        page.latestEventSequence,
+        this.threadSink,
+      );
+      if (!this.ownsThread(generation, thread, request)) {
+        return;
+      }
+
       // Read advancement is explicit and happens only after the messages have actually been
       // displayed. Sending, receiving and any future delivery acknowledgement are not reading, and
       // none of them writes this cursor.
@@ -797,6 +900,10 @@ export class Messages {
 
   private resetThread(): void {
     ++this.historyRequest;
+    // The socket subscription belongs to the thread, so it goes with it. A connection left in a
+    // conversation group the reader has closed would keep receiving frames for a thread nothing is
+    // showing, and the next thread's cursor would start behind them.
+    void this.realtime.closeConversation();
     this.selectedId.set(null);
     this.messages.set([]);
     this.hasOlder.set(false);

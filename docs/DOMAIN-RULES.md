@@ -487,6 +487,109 @@ phases — never into read state.
 and client identifiers never appear in logs, analytics, exceptions, notification payloads or
 operational diagnostics. A conversation list returns a counterpart display name and nothing else.
 
+**MSG-012** PostgreSQL commits before anything is sent. Every successful externally visible messaging
+mutation — conversation created, message sent, edited, sender-removed, coach-moderated — writes one
+content-free realtime event and one publication row per explicit participant **in the same
+transaction** as the mutation. REST remains the only authoritative mutation path; the hub adds no
+write and no acknowledgement. A SignalR or Redis failure after that commit never rolls the command
+back, never turns a settled idempotent retry into an error, never allocates a second message,
+revision, deletion event or realtime event, and never claims human read or provider delivery. An
+identical replay returns the settled result and emits no second event; a conflicting key reuse writes
+nothing. A removal repeated against an already-removed message, and a create against a conversation
+that already exists, change nothing and therefore emit nothing.
+
+**MSG-013** A conversation owns a second gap-free allocator, `LastEventSequence`, separate from the
+message sequence. The message sequence says which messages exist; the event sequence says what has
+happened, and is the only thing a reconnecting client can resume from. An edit or a removal of an old
+message takes a new event position and keeps that message's original position — a client resuming from
+the message sequence would never ask for it. Both counters advance under the conversation row lock
+inside the command transaction, so a rolled-back command returns its number and committed positions
+are unique, gap-free and in commit order. A conversation created before Phase 6B-2B reports event
+cursor zero, which is honest: it has no events, and its current state comes from the full REST read.
+
+**MSG-014** A realtime event stores routing and audit facts only: tenant, conversation, event
+position, stable kind, affected message identity/position/revision where applicable, the source
+command record, and the server instant. It stores no body, no previous revision, no moderation reason,
+no name, address, phone or profile data, no `ClientProfileId`, no rendered wording, no serialized
+payload and no exception text. What a participant may see is materialized at delivery and catch-up
+time, from the live tables, **after** that participant's current authorization has succeeded. Event,
+publication, attempt and acknowledgement tables are not a shadow message store. There is no
+read-receipt event: the read cursor is one person's own act, reported by that person over REST.
+
+**MSG-015** Publication, application acknowledgement, human read and provider acknowledgement are four
+separate facts and no code writes one from another. `Published` means the hub — and behind it possibly
+a Redis backplane — accepted the frame; it is never called `Delivered`.
+`MessageDeliveryState.RealtimeAcknowledged` means the **other participant's application** accepted a
+current safe projection of an event about that message, live or through catch-up, and said so over
+REST; it does not mean a person saw it. The counterpart timestamp is set once, from the server clock,
+and is never moved. An acknowledgement from the sender's own tab is a real acknowledgement of that
+event and evidence about nobody else, so it never sets the counterpart timestamp. Acknowledgement
+changes neither participant's read cursor nor any unread count. `ProviderAcknowledgedAtUtc` stays null
+and a trigger refuses any attempt to set it.
+
+**MSG-016** Realtime delivery is claimed, leased and at least once. A dispatcher claims a publication
+row with `FOR UPDATE SKIP LOCKED`, a random claim token and an expiry, and starts a durable attempt
+before anything leaves the process. Every finalization presents that token, so a worker whose lease
+expired cannot overwrite a newer claimant's result. An expired lease is reclaimed and its unfinished
+attempt recorded as `Abandoned` before a replacement is considered. Every started attempt counts,
+including abandoned and suppressed ones, so reclaiming at `MaximumAttempts` dead-letters using the real
+last attempt and never creates maximum + 1 — including for configured maxima beyond the backoff table.
+Terminal rows are never dispatched again. A crash after the hub accepted a frame and before the row is
+finalized may produce a duplicate after lease recovery; that is the deliberate trade, and client
+deduplication by event identity plus durable catch-up is what makes it harmless. Nothing claims
+exactly-once network delivery. The named schedule is `messaging-realtime-backoff-v1`: 5s, 30s, 2m, 10m,
+then the ceiling repeats to the configured maximum, every instant from `IClock`.
+
+**MSG-017** Current authorization is re-established from PostgreSQL immediately after a claim commits
+and immediately before materialization: active tenant membership, platform block, workspace
+relationship block, explicit participation and the `CoachingFeature.Messaging` decision. A committed
+claim is a lease, not continuing permission to deliver stale state. A denied recipient is suppressed
+with a stable content-free code and no body is loaded, sent or logged — not loaded and then discarded,
+which is a different thing. The durable event survives suppression, and a later catch-up returns it if
+that participant's authorization comes back.
+
+**MSG-018** The hub exposes only lifecycle and subscription. A browser cannot put a custom header on a
+WebSocket, so the workspace arrives as `?tenantId=<guid>`: routing input, never authorization. It is
+read once, must be exactly one non-empty GUID — missing, malformed, empty or duplicated fails closed —
+and is replaced by a server-owned binding that exists only after active membership has been read from
+PostgreSQL. A connection can never change workspace. Group names are computed by the server from that
+verified binding; a client may pass a conversation identifier and nothing else, and there is no method
+that accepts a group name, a user identifier or a recipient. Groups are routing, never ongoing
+authority: they are transient, lost on reconnect, and correctness never depends on a group having been
+left or on an in-memory connection registry. Authorization is re-run on every hub method and before
+every dispatched frame. Connection identifiers are never persisted, group counts are never presence,
+and there is no typing indicator, presence, reaction or online status.
+
+**MSG-019** A WebSocket handshake is not protected by CORS, so `/hubs` requests are checked against an
+explicit allowed-origin list before authentication. There is no wildcard, and a request with no
+`Origin` is refused whenever the list is configured. Outside Development an empty list fails startup.
+SignalR Trace logging and detailed errors stay off outside Development, and message content is never
+logged at any level.
+
+**MSG-020** A client subscribes to a conversation **before** it reads catch-up, from the watermark the
+full thread read established. The overlap is deliberate and deduplicated by event identity; the other
+order leaves a window in which an event committed between the read and the join reaches nobody and is
+never asked for again. Catch-up is bounded keyset paging on the event position, at most 100 per page,
+strictly ascending and contiguous, looped until caught up and never silently truncated. Its
+authorization is identical to opening that conversation now. Acknowledgement is an
+antiforgery-protected batch of at most 100 positions; the server derives the acknowledging participant
+from the authenticated principal, only an event actually addressed to and currently visible to that
+participant can be acknowledged, and a unique key makes duplicates and concurrent retries one durable
+append-only fact. Nothing about a cursor, an event, a body or an acknowledgement is written to browser
+storage.
+
+**MSG-021** One API replica may use the in-process lifetime manager. More than one declared replica
+requires a Redis backplane and **fails startup** without one, because otherwise each frame reaches only
+the replica that published it. Redis mode without an endpoint, and an unknown scale-out mode, also fail
+startup. The connection string is never logged. Transport fallback stays enabled, so a multi-replica
+production deployment requires load-balancer session affinity; the WebSockets-only, skip-negotiation
+exception is deliberately not taken. Redis is a backplane and nothing else — not a cache, not a queue,
+not a store. A send during an outage is lost for good; the REST command and the durable event already
+committed, the attempt is retried under its policy, the hosted loop survives, and reconnect reconciles
+from PostgreSQL because Redis cannot replay a lost send. Realtime publication that needs `IHubContext`
+runs in the API host; the notification Worker keeps no hub, no listener, no exposed port and no Redis
+dependency.
+
 **NOT-001** In-app, email, and WhatsApp notifications share a domain notification but maintain
 separate delivery attempts. Retries are idempotent; provider acknowledgement is not confused
 with user read status. Phase 6B-1 implements this for the in-app channel: the scheduled outbox

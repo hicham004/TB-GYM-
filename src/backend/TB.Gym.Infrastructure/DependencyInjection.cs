@@ -154,6 +154,7 @@ public static class DependencyInjection
         services.AddScoped<ICheckInApplicationService, CheckInApplicationService>();
         services.AddScoped<ICheckInResponseApplicationService, CheckInResponseApplicationService>();
         services.AddScoped<IMessagingApplicationService, MessagingApplicationService>();
+        services.AddTbGymMessagingRealtime(configuration, environment);
         services.AddHttpClient<INutritionDataProvider, UsdaFoodDataCentralProvider>((provider, client) =>
         {
             var configured = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<UsdaFoodDataCentralOptions>>().Value.BaseUrl;

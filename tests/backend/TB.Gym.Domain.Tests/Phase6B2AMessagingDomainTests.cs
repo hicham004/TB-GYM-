@@ -759,13 +759,31 @@ public sealed class Phase6B2AMessagingDomainTests
         Assert.IsEmpty(writable, $"MessageDeletionEvent exposes public setters: {string.Join(", ", writable)}");
     }
 
+    /// <summary>
+    /// Phase 6B-2B adds the second delivery state and no more.
+    /// </summary>
+    /// <remarks>
+    /// The set is asserted exactly because the pressure on this enum is always to add a state
+    /// somebody wants the screen to show. <c>Delivered</c> would claim something about a network
+    /// nobody can observe from the server, and <c>Read</c> would be delivery data written into what a
+    /// person did — the defect DOMAIN-RULES NOT-001 has warned about since Phase 1. Read state lives
+    /// on the participant row and is written only by the person who read.
+    /// </remarks>
     [TestMethod]
-    public void ThisSliceClaimsOnlyThatAMessageWasPersisted()
+    public void DeliveryStatesAreExactlyPersistedAndRealtimeAcknowledged()
     {
-        // MessageDeliveryState has exactly one member. A "Delivered" or "Read" state would be a claim
-        // no code in this slice can substantiate: nothing has been sent anywhere.
-        MessageDeliveryState[] expected = [MessageDeliveryState.Persisted];
+        MessageDeliveryState[] expected =
+        [
+            MessageDeliveryState.Persisted,
+            MessageDeliveryState.RealtimeAcknowledged,
+        ];
         CollectionAssert.AreEqual(expected, Enum.GetValues<MessageDeliveryState>());
+
+        var message = NewMessage(out _);
+        Assert.AreEqual(
+            MessageDeliveryState.Persisted,
+            message.DeliveryState,
+            "A message nobody has acknowledged claims persistence and nothing else.");
     }
 
     // ---------- fixtures ----------

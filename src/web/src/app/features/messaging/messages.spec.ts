@@ -7,6 +7,10 @@ import { ApiClient } from '../../core/api/api-client';
 import type { CurrentUser, TenantMembership } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { MessageUnreadStore } from '../../core/messaging/message-unread.store';
+import {
+  MessagingRealtimeService,
+  type ConversationRealtimeSink,
+} from '../../core/messaging/messaging-realtime.service';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, field, press, query, settle } from '../../../testing/dom';
@@ -98,6 +102,7 @@ function message(sequence: number, overrides: Partial<Message> = {}): Message {
     canModerate: true,
     isUnreadByCaller: false,
     version: 1,
+    deliveryState: 'Persisted',
     ...overrides,
   };
 }
@@ -127,6 +132,7 @@ function messagePage(items: readonly Message[], overrides: Partial<MessagePage> 
     hasOlder: false,
     oldestSequence: items.length > 0 ? items[0].sequence : null,
     latestSequence: items.length > 0 ? items[items.length - 1].sequence : 0,
+    latestEventSequence: items.length > 0 ? items[items.length - 1].sequence : 0,
     readState: readState(),
     ...overrides,
   };
@@ -148,15 +154,71 @@ interface ApiMocks {
 
 interface Harness extends ApiMocks {
   host: HTMLElement;
+  realtime: RealtimeStub;
   fixture: Awaited<ReturnType<typeof TestBed.createComponent<Messages>>>;
   user: WritableSignal<CurrentUser | null>;
   membership: WritableSignal<TenantMembership | undefined>;
   unreadRefresh: ReturnType<typeof vi.fn>;
 }
 
+/**
+ * A stand-in for the realtime service that records what the screen asked it to do and lets a test
+ * push an event through the sink the screen handed over.
+ *
+ * The real service opens a socket. What these tests are about is what the screen does with an event
+ * once it has one, so the transport is replaced and the connection behaviour is proved separately in
+ * `messaging-realtime.service.spec.ts`.
+ */
+class RealtimeStub {
+  readonly state = signal<'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline'>(
+    'connected',
+  );
+  readonly listRefreshRequests = signal(0);
+  readonly opened: { conversationId: string; fromEventSequence: number }[] = [];
+  closed = 0;
+  private sink: ConversationRealtimeSink | null = null;
+
+  async openConversation(
+    conversationId: string,
+    fromEventSequence: number,
+    sink: ConversationRealtimeSink,
+  ): Promise<void> {
+    this.opened.push({ conversationId, fromEventSequence });
+    this.sink = sink;
+  }
+
+  async closeConversation(): Promise<void> {
+    this.closed++;
+    this.sink = null;
+  }
+
+  async shutdown(): Promise<void> {
+    await this.closeConversation();
+  }
+
+  /** Delivers one event to the screen and reports whether it merged it. */
+  deliver(event: Parameters<ConversationRealtimeSink['apply']>[0]): boolean {
+    if (this.sink === null) {
+      throw new Error('No conversation is open.');
+    }
+
+    return this.sink.apply(event);
+  }
+
+  get isOpen(): boolean {
+    return this.sink !== null;
+  }
+
+  /** Coalesced invalidation, as the real service emits it after debouncing. */
+  invalidate(): void {
+    this.listRefreshRequests.update((count) => count + 1);
+  }
+}
+
 async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
   const user = signal<CurrentUser | null>(COACH);
   const membership = signal<TenantMembership | undefined>(ALPHA);
+  const realtime = new RealtimeStub();
   const api: ApiMocks = {
     listConversations: vi.fn(() => of(conversationPage([]))),
     listConversationMessages: vi.fn(() => of(messagePage([]))),
@@ -190,6 +252,7 @@ async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
           clear: vi.fn(),
         },
       },
+      { provide: MessagingRealtimeService, useValue: realtime },
     ],
   }).compileComponents();
 
@@ -198,6 +261,7 @@ async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
   return {
     ...api,
     unreadRefresh,
+    realtime,
     fixture,
     host: fixture.nativeElement as HTMLElement,
     user,
@@ -1682,5 +1746,229 @@ describe('Messages', () => {
     expect(query(harness.host, '.thread-unread').textContent).toContain('4 unread');
     expect(harness.unreadRefresh).not.toHaveBeenCalled();
     expect(harness.host.textContent).toContain('5 unread');
+  });
+
+  // ---------- realtime, from the screen's side ----------
+
+  describe('realtime', () => {
+    it('subscribes before catching up, from the watermark the thread read established', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        api.listConversationMessages.mockReturnValue(
+          of(messagePage([message(1)], { latestEventSequence: 12 })),
+        );
+      });
+
+      await open(harness);
+
+      expect(harness.realtime.opened).toEqual([
+        { conversationId: 'conversation-1', fromEventSequence: 12 },
+      ]);
+    });
+
+    it('merges a live event into the thread and the list preview', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        api.listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+      });
+      await open(harness);
+
+      const accepted = harness.realtime.deliver({
+        tenantId: ALPHA.tenantId,
+        conversationId: 'conversation-1',
+        eventId: 'event-2',
+        eventSequence: 2,
+        kind: 'MessageSent',
+        occurredAtUtc: '2026-09-01T09:05:00.000Z',
+        message: message(2, { body: 'Arrived over the socket' }),
+      });
+      await settle(harness.fixture);
+
+      expect(accepted).toBe(true);
+      expect(bodies(harness.host)).toContain('Arrived over the socket');
+    });
+
+    it('rejects a stale revision so an old edit cannot replace a newer one', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        api.listConversationMessages.mockReturnValue(
+          of(messagePage([message(1, { body: 'The newest text', revisionNumber: 3 })])),
+        );
+      });
+      await open(harness);
+
+      const accepted = harness.realtime.deliver({
+        tenantId: ALPHA.tenantId,
+        conversationId: 'conversation-1',
+        eventId: 'event-2',
+        eventSequence: 2,
+        kind: 'MessageEdited',
+        occurredAtUtc: '2026-09-01T09:05:00.000Z',
+        message: message(1, { body: 'An older text', revisionNumber: 2 }),
+      });
+      await settle(harness.fixture);
+
+      expect(accepted).toBe(false);
+      expect(bodies(harness.host)).toContain('The newest text');
+      expect(harness.host.textContent).not.toContain('An older text');
+    });
+
+    it('treats a removal as terminal, so no later event puts the body back', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        api.listConversationMessages.mockReturnValue(
+          of(messagePage([message(1, { body: 'Taken back' })])),
+        );
+      });
+      await open(harness);
+
+      harness.realtime.deliver({
+        tenantId: ALPHA.tenantId,
+        conversationId: 'conversation-1',
+        eventId: 'event-2',
+        eventSequence: 2,
+        kind: 'MessageCoachModerated',
+        occurredAtUtc: '2026-09-01T09:05:00.000Z',
+        message: message(1, {
+          body: null,
+          isDeleted: true,
+          deletionKind: 'CoachModerated',
+          deletedAtUtc: '2026-09-01T09:05:00.000Z',
+          revisionNumber: 1,
+        }),
+      });
+      await settle(harness.fixture);
+      expect(harness.host.textContent).not.toContain('Taken back');
+
+      // A late edit event for the same message, carrying the body again.
+      const resurrect = harness.realtime.deliver({
+        tenantId: ALPHA.tenantId,
+        conversationId: 'conversation-1',
+        eventId: 'event-3',
+        eventSequence: 3,
+        kind: 'MessageEdited',
+        occurredAtUtc: '2026-09-01T09:06:00.000Z',
+        message: message(1, { body: 'Taken back', revisionNumber: 5 }),
+      });
+      await settle(harness.fixture);
+
+      expect(resurrect).toBe(false);
+      expect(harness.host.textContent).not.toContain('Taken back');
+    });
+
+    it('ignores an event for a conversation that is not the one on screen', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        api.listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+      });
+      await open(harness);
+
+      const accepted = harness.realtime.deliver({
+        tenantId: ALPHA.tenantId,
+        conversationId: 'conversation-9',
+        eventId: 'event-2',
+        eventSequence: 2,
+        kind: 'MessageSent',
+        occurredAtUtc: '2026-09-01T09:05:00.000Z',
+        message: message(2, { conversationId: 'conversation-9', body: 'Somebody else' }),
+      });
+      await settle(harness.fixture);
+
+      expect(accepted).toBe(false);
+      expect(harness.host.textContent).not.toContain('Somebody else');
+    });
+
+    it('closes the subscription when the thread changes and when the workspace changes', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(
+          of(conversationPage([conversation(), conversation(SECOND)])),
+        );
+        api.listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+      });
+      await open(harness);
+      const closedAfterFirst = harness.realtime.closed;
+
+      await open(harness, 'Nadia Khoury');
+      expect(harness.realtime.closed).toBeGreaterThan(closedAfterFirst);
+      expect(harness.realtime.opened.map((item) => item.conversationId)).toEqual([
+        'conversation-1',
+        'conversation-2',
+      ]);
+
+      harness.membership.set(BETA);
+      await settle(harness.fixture);
+      expect(harness.realtime.isOpen).toBe(false);
+    });
+
+    it('refreshes the bounded list once per coalesced invalidation and never polls', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+      });
+      const initialCalls = harness.listConversations.mock.calls.length;
+
+      harness.realtime.invalidate();
+      await settle(harness.fixture);
+
+      expect(harness.listConversations.mock.calls.length).toBe(initialCalls + 1);
+
+      // Nothing schedules another read on its own.
+      await settle(harness.fixture);
+      expect(harness.listConversations.mock.calls.length).toBe(initialCalls + 1);
+    });
+
+    it('never advances read state from a realtime event', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        api.listConversationMessages.mockReturnValue(
+          of(
+            messagePage([message(1)], {
+              readState: readState({ lastReadSequence: 1, unreadCount: 0, latestSequence: 1 }),
+            }),
+          ),
+        );
+      });
+      await open(harness);
+      const advancesAfterOpen = harness.advanceConversationReadCursor.mock.calls.length;
+
+      harness.realtime.deliver({
+        tenantId: ALPHA.tenantId,
+        conversationId: 'conversation-1',
+        eventId: 'event-2',
+        eventSequence: 2,
+        kind: 'MessageSent',
+        occurredAtUtc: '2026-09-01T09:05:00.000Z',
+        message: message(2, { isUnreadByCaller: true }),
+      });
+      await settle(harness.fixture);
+
+      expect(harness.advanceConversationReadCursor.mock.calls.length).toBe(advancesAfterOpen);
+    });
+
+    it('shows the channel state without claiming anything was lost', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+      });
+
+      harness.realtime.state.set('reconnecting');
+      await settle(harness.fixture);
+      const state = query(harness.host, '[data-testid="realtime-state"]');
+      expect(state.textContent).toContain('Reconnecting');
+      expect(state.textContent).toContain('Nothing has been lost');
+      expect(state.getAttribute('role')).toBe('status');
+
+      harness.realtime.state.set('offline');
+      await settle(harness.fixture);
+      expect(query(harness.host, '[data-testid="realtime-state"]').textContent).toContain(
+        'Live updates are off',
+      );
+
+      harness.realtime.state.set('connected');
+      await settle(harness.fixture);
+      const connected = query(harness.host, '[data-testid="realtime-state"]').textContent ?? '';
+      expect(connected).toContain('Live updates are on');
+      // "Connected" is never rendered as delivery or as a read receipt.
+      expect(connected.toLowerCase()).not.toContain('delivered');
+      expect(connected.toLowerCase()).not.toContain('seen');
+    });
   });
 });

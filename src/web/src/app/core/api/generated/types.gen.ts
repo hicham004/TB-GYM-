@@ -15,6 +15,10 @@ export type AcceptLegalDocumentRequest = {
   tenantId: null | string;
 };
 
+export type AcknowledgeRealtimeEventsRequest = {
+  eventSequences: Array<number | string>;
+};
+
 export type AddFoodVersionRequest = {
   basisQuantity: number | string;
   basisUnit: FoodQuantityUnit;
@@ -1473,7 +1477,7 @@ export type MesocycleSummary = {
 
 export type MessageDeletionKind = 'SenderRemoved' | 'CoachModerated';
 
-export type MessageDeliveryState = 'Persisted';
+export type MessageDeliveryState = 'Persisted' | 'RealtimeAcknowledged';
 
 export type MessagePage = {
   conversationId: string;
@@ -1481,6 +1485,7 @@ export type MessagePage = {
   hasOlder: boolean;
   oldestSequence: null | number | string;
   latestSequence: number | string;
+  latestEventSequence: number | string;
   readState: ConversationReadState;
 };
 
@@ -1505,6 +1510,13 @@ export type MessageView = {
   isUnreadByCaller: boolean;
   version: number | string;
 };
+
+export type MessagingRealtimeEventKind =
+  | 'ConversationCreated'
+  | 'MessageSent'
+  | 'MessageEdited'
+  | 'MessageSenderRemoved'
+  | 'MessageCoachModerated';
 
 export type MessagingUnreadCount = {
   unread: number | string;
@@ -1839,6 +1851,31 @@ export type PublicInvitationDetails = {
   status: InvitationStatus;
   expiresAtUtc: string;
   requiresExistingAccountSignIn: boolean;
+};
+
+export type RealtimeAcknowledgementResult = {
+  conversationId: string;
+  accepted: number | string;
+  alreadyAcknowledged: number | string;
+  latestEventSequence: number | string;
+};
+
+export type RealtimeEventPage = {
+  conversationId: string;
+  items: Array<RealtimeEventView>;
+  hasMore: boolean;
+  nextAfterEventSequence: null | number | string;
+  latestEventSequence: number | string;
+};
+
+export type RealtimeEventView = {
+  tenantId: string;
+  conversationId: string;
+  eventId: string;
+  eventSequence: number | string;
+  kind: MessagingRealtimeEventKind;
+  occurredAtUtc: string;
+  message: null | MessageView;
 };
 
 export type RecipeIngredientRequest = {
@@ -7515,6 +7552,83 @@ export type AdvanceOwnConversationReadCursorResponses = {
 
 export type AdvanceOwnConversationReadCursorResponse =
   AdvanceOwnConversationReadCursorResponses[keyof AdvanceOwnConversationReadCursorResponses];
+
+export type ListConversationRealtimeEventsData = {
+  body?: never;
+  path: {
+    conversationId: string;
+  };
+  query?: {
+    afterEventSequence?: number | string;
+    take?: number | string;
+  };
+  url: '/api/messaging/conversations/{conversationId}/realtime-events';
+};
+
+export type ListConversationRealtimeEventsErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type ListConversationRealtimeEventsError =
+  ListConversationRealtimeEventsErrors[keyof ListConversationRealtimeEventsErrors];
+
+export type ListConversationRealtimeEventsResponses = {
+  /**
+   * OK
+   */
+  200: RealtimeEventPage;
+};
+
+export type ListConversationRealtimeEventsResponse =
+  ListConversationRealtimeEventsResponses[keyof ListConversationRealtimeEventsResponses];
+
+export type AcknowledgeConversationRealtimeEventsData = {
+  body: AcknowledgeRealtimeEventsRequest;
+  path: {
+    conversationId: string;
+  };
+  query?: never;
+  url: '/api/messaging/conversations/{conversationId}/realtime-acknowledgements';
+};
+
+export type AcknowledgeConversationRealtimeEventsErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type AcknowledgeConversationRealtimeEventsError =
+  AcknowledgeConversationRealtimeEventsErrors[keyof AcknowledgeConversationRealtimeEventsErrors];
+
+export type AcknowledgeConversationRealtimeEventsResponses = {
+  /**
+   * OK
+   */
+  200: RealtimeAcknowledgementResult;
+};
+
+export type AcknowledgeConversationRealtimeEventsResponse =
+  AcknowledgeConversationRealtimeEventsResponses[keyof AcknowledgeConversationRealtimeEventsResponses];
 
 export type ListOwnNotificationsData = {
   body?: never;

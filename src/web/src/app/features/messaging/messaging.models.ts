@@ -7,9 +7,14 @@ import type {
   ConversationSummary as ContractConversationSummary,
   FeatureAccessReason,
   MessageDeletionKind,
+  MessageDeliveryState,
   MessagePage as ContractMessagePage,
   MessageView as ContractMessageView,
+  MessagingRealtimeEventKind,
   MessagingUnreadCount as ContractUnreadCount,
+  RealtimeAcknowledgementResult as ContractAcknowledgementResult,
+  RealtimeEventPage as ContractRealtimeEventPage,
+  RealtimeEventView as ContractRealtimeEventView,
 } from '../../core/api/generated';
 
 /**
@@ -83,6 +88,44 @@ export interface Message {
   readonly canModerate: boolean;
   readonly isUnreadByCaller: boolean;
   readonly version: number;
+  /**
+   * `Persisted`, or `RealtimeAcknowledged` once the other participant's application accepted an
+   * event about this message. Neither says a person read it, and neither is ever rendered as
+   * "delivered" or "seen".
+   */
+  readonly deliveryState: MessageDeliveryState;
+}
+
+/**
+ * One realtime event as this participant is allowed to see it.
+ *
+ * Identical whether it arrived over the socket or through catch-up, so the merge rule is written
+ * once. `message` is the server's current safe projection, so a removed message arrives as its
+ * tombstone with no body, and a moderation reason is never present at all.
+ */
+export interface RealtimeEvent {
+  readonly tenantId: string;
+  readonly conversationId: string;
+  readonly eventId: string;
+  readonly eventSequence: number;
+  readonly kind: MessagingRealtimeEventKind;
+  readonly occurredAtUtc: string;
+  readonly message: Message | null;
+}
+
+export interface RealtimeEventPage {
+  readonly conversationId: string;
+  readonly items: readonly RealtimeEvent[];
+  readonly hasMore: boolean;
+  readonly nextAfterEventSequence: number | null;
+  readonly latestEventSequence: number;
+}
+
+export interface RealtimeAcknowledgement {
+  readonly conversationId: string;
+  readonly accepted: number;
+  readonly alreadyAcknowledged: number;
+  readonly latestEventSequence: number;
 }
 
 export interface ConversationReadState {
@@ -101,6 +144,11 @@ export interface MessagePage {
   readonly hasOlder: boolean;
   readonly oldestSequence: number | null;
   readonly latestSequence: number;
+  /**
+   * The realtime watermark this read established. Zero for a conversation that predates realtime
+   * events, which is honest: it has none, and this read is what established its current state.
+   */
+  readonly latestEventSequence: number;
   readonly readState: ConversationReadState;
 }
 
@@ -174,7 +222,72 @@ export function mapMessage(value: ContractMessageView): Message {
     canModerate: value.canModerate,
     isUnreadByCaller: value.isUnreadByCaller,
     version: toCount(value.version),
+    deliveryState: value.deliveryState,
   };
+}
+
+export function mapRealtimeEvent(value: ContractRealtimeEventView): RealtimeEvent {
+  return {
+    tenantId: value.tenantId,
+    conversationId: value.conversationId,
+    eventId: value.eventId,
+    eventSequence: toCount(value.eventSequence),
+    kind: value.kind,
+    occurredAtUtc: value.occurredAtUtc,
+    message: value.message ? mapMessage(value.message) : null,
+  };
+}
+
+export function mapRealtimeEventPage(value: ContractRealtimeEventPage): RealtimeEventPage {
+  return {
+    conversationId: value.conversationId,
+    items: value.items.map(mapRealtimeEvent),
+    hasMore: value.hasMore,
+    nextAfterEventSequence:
+      value.nextAfterEventSequence === null || value.nextAfterEventSequence === undefined
+        ? null
+        : toCount(value.nextAfterEventSequence),
+    latestEventSequence: toCount(value.latestEventSequence),
+  };
+}
+
+export function mapRealtimeAcknowledgement(
+  value: ContractAcknowledgementResult,
+): RealtimeAcknowledgement {
+  return {
+    conversationId: value.conversationId,
+    accepted: toCount(value.accepted),
+    alreadyAcknowledged: toCount(value.alreadyAcknowledged),
+    latestEventSequence: toCount(value.latestEventSequence),
+  };
+}
+
+/**
+ * Whether an incoming projection is newer than the one already held.
+ *
+ * Delivery is at least once and out of order, so the same message can arrive several times and an
+ * older projection can arrive after a newer one — a duplicate after a reclaimed publication, a
+ * catch-up page overlapping a live frame, an edit that raced its own event. Identity alone cannot
+ * decide which to keep, so the comparison is explicit.
+ *
+ * Removal is terminal for content. Once a message is known to be removed no earlier projection may
+ * put its body back, whatever its revision says, because a body somebody deliberately took back
+ * reappearing is worse than a stale timestamp.
+ */
+export function isNewerProjection(current: Message | undefined, incoming: Message): boolean {
+  if (current === undefined) {
+    return true;
+  }
+
+  if (current.id !== incoming.id || current.conversationId !== incoming.conversationId) {
+    return false;
+  }
+
+  if (current.isDeleted) {
+    return false;
+  }
+
+  return incoming.isDeleted || incoming.revisionNumber > current.revisionNumber;
 }
 
 export function mapReadState(value: ContractReadState): ConversationReadState {
@@ -196,6 +309,7 @@ export function mapMessagePage(value: ContractMessagePage): MessagePage {
     hasOlder: value.hasOlder,
     oldestSequence: value.oldestSequence === null ? null : toCount(value.oldestSequence),
     latestSequence: toCount(value.latestSequence),
+    latestEventSequence: toCount(value.latestEventSequence),
     readState: mapReadState(value.readState),
   };
 }

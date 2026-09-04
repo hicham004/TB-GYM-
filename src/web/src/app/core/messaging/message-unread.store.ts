@@ -3,6 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../api/api-client';
 import { AuthStore } from '../auth/auth.store';
 import { TenantStore } from '../tenancy/tenant.store';
+import { MessagingRealtimeService } from './messaging-realtime.service';
 
 /**
  * The unread-message badge in the topbar, and the single place that count is owned.
@@ -22,11 +23,19 @@ export class MessageUnreadStore {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
+  /**
+   * Injected here so the badge keeps the connection alive for the whole session rather than only
+   * while the lazy `/messages` route is loaded. A member who never opens the screen still has to see
+   * the count move when somebody writes to them, and the compact invalidation that makes that happen
+   * is addressed to the connection, not to the route.
+   */
+  private readonly realtime = inject(MessagingRealtimeService);
 
   private readonly unreadState = signal(0);
   private readonly loadingState = signal(false);
   private generation = 0;
   private context: string | null = null;
+  private handledRefreshRequests = 0;
 
   readonly unread = this.unreadState.asReadonly();
   readonly loading = this.loadingState.asReadonly();
@@ -60,6 +69,22 @@ export class MessageUnreadStore {
       this.loadingState.set(false);
       if (key !== null) {
         void this.load(generation);
+      }
+    });
+
+    // One coalesced invalidation becomes one bounded re-read. The count is never derived from the
+    // event itself: an invalidation says something changed, and what the number now is is a question
+    // only the server can answer — it depends on which conversations are still accessible, which
+    // messages are still present and where this reader's cursor is.
+    effect(() => {
+      const requests = this.realtime.listRefreshRequests();
+      if (requests === this.handledRefreshRequests) {
+        return;
+      }
+
+      this.handledRefreshRequests = requests;
+      if (this.contextKey() !== null) {
+        void this.load(++this.generation);
       }
     });
   }

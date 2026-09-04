@@ -111,12 +111,23 @@ public sealed record ConversationReadState(
 /// <see cref="OldestSequence"/> is the cursor for the next older page; it is stable under insertion,
 /// because a newer message never changes which sequences are older than a given one.
 /// </remarks>
+/// <param name="LatestEventSequence">
+/// The conversation's realtime watermark at the moment this page was read.
+/// <para>
+/// It is here because a client has to be able to say "everything up to this point is already on my
+/// screen" before it starts merging deltas, and the full read is the only thing that establishes
+/// that. A conversation created before Phase 6B-2B reports zero, which is the honest answer: it has
+/// no events, and its current state came from this read rather than from a delta. Subscribing and
+/// then catching up from this watermark is what closes the window between the two.
+/// </para>
+/// </param>
 public sealed record MessagePage(
     Guid ConversationId,
     IReadOnlyList<MessageView> Items,
     bool HasOlder,
     long? OldestSequence,
     long LatestSequence,
+    long LatestEventSequence,
     ConversationReadState ReadState);
 
 /// <summary>One conversation plus the caller's own view of their position in it.</summary>
@@ -318,4 +329,32 @@ public interface IMessagingApplicationService
         CancellationToken cancellationToken);
 
     Task<MessagingUnreadCount> CountUnreadAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// One bounded, ascending page of realtime events for a conversation the caller may read now.
+    /// </summary>
+    /// <remarks>
+    /// Authorization is identical to opening the conversation: the same participation, block and
+    /// Messaging decisions, resolved before the cursor is looked at. Each event carries the
+    /// caller-specific current safe projection, materialized at read time, so a removed message
+    /// arrives as its tombstone and an old revision is never republished.
+    /// </remarks>
+    Task<RealtimeEventPageResult> ListRealtimeEventsAsync(
+        Guid conversationId,
+        long? afterEventSequence,
+        int take,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records that this caller's application accepted the named events.
+    /// </summary>
+    /// <remarks>
+    /// The acknowledging participant is the signed-in caller; no user identifier is accepted from the
+    /// request. It writes an append-only fact per event and participant, it is idempotent under a
+    /// unique key, and it changes neither participant's read cursor nor any unread count.
+    /// </remarks>
+    Task<RealtimeAcknowledgementCommandResult> AcknowledgeRealtimeEventsAsync(
+        Guid conversationId,
+        AcknowledgeRealtimeEventsRequest request,
+        CancellationToken cancellationToken);
 }
