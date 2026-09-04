@@ -1,82 +1,176 @@
 # TB Gym
 
-TB Gym is being rebuilt as a multi-tenant coaching SaaS using an Angular 22 SPA, a .NET 10
-modular-monolith API, EF Core, and PostgreSQL 18. The previous React/Base44-compatible
-application is preserved under `base44/` and is reference material only.
+A multi-tenant SaaS platform for independent fitness coaches: client onboarding, commercial
+enrollments and payments, training programmes, nutrition planning, progress tracking, check-ins,
+and realtime coach–client messaging.
 
-## Start with Docker
+Built as a .NET 10 modular monolith behind an Angular 22 single-page application, on PostgreSQL 18.
+One deployable API, one background worker, one database — with explicit module boundaries so a
+module can be extracted later if operational evidence ever justifies the cost of distributing it.
 
-Docker is the shortest complete path because it starts PostgreSQL, applies the EF
-migrations, seeds a development owner, starts the API, and serves Angular through Nginx.
+---
+
+## The engineering position
+
+The interesting problem here is not the CRUD. It is that a coaching platform holds money, health
+data and private conversations for many independent businesses in one database, and every one of
+those is a place where "mostly correct" is indistinguishable from broken until somebody is harmed
+by it.
+
+The approach this codebase takes is that **the database enforces the invariants, and the
+application is not trusted to remember them.**
+
+**Tenant isolation is structural.** Every tenant-owned row carries `TenantId`, a global query
+filter, a `SaveChanges` write-scope guard, and tenant-aware indexes. Child rows reference parents
+through _composite_ foreign keys that include the tenant, so a row pointing at another workspace's
+parent is not expressible rather than merely refused. Cross-tenant access has negative tests
+throughout.
+
+**History is append-only where it matters.** Payments, enrollment snapshots, strength maxima,
+message revisions, moderation events and legal acceptances are never mutated or hard-deleted.
+Corrections append; they do not overwrite. Database triggers refuse `UPDATE` and `DELETE` on those
+tables, so a future migration or background job cannot quietly rewrite the record either.
+
+**Concurrency is settled in PostgreSQL, not in application coordination.** Sequence allocation
+takes a row lock inside the writing transaction rather than computing `MAX + 1`. Idempotency keys
+are serialized by transaction-scoped advisory locks in one consistent order, so two requests
+sharing a key but no aggregate are still settled by it. Background dispatch claims work with
+`FOR UPDATE SKIP LOCKED` under a random claim token and a lease, so replicas divide a backlog
+instead of duplicating it, and a crashed claim becomes visible again rather than disappearing.
+Overlapping enrollment coverage is prevented by a GiST exclusion constraint.
+
+**Claims are only made when they can be substantiated.** A message that has been committed is
+`Persisted`, not `Delivered`. A frame the hub accepted is `Published`, which says nothing about
+whether a browser received it. An application acknowledgement says the other participant's client
+merged it, not that a person read it. Those are four separate durable facts and no code path writes
+one from another — because "delivery" recorded as "read" is a bug you cannot detect from the UI.
+
+**Correctness is argued in writing before it is coded.** Twenty [architecture decision
+records](docs/adr/) capture the reasoning and the rejected alternatives; 137 numbered rules in
+[DOMAIN-RULES.md](docs/DOMAIN-RULES.md) state the invariants the code and the schema must both
+uphold. Several ADRs document defects found in review and the failing test written before the fix.
+
+**927 automated tests**, none skipped: domain rules, architecture boundary enforcement, PostgreSQL
+integration tests against a real database, real-WebSocket and multi-replica Redis scale-out tests,
+and Angular interaction tests. Races are settled with deterministic barriers rather than sleeps, so
+a concurrency test that never actually contended fails loudly instead of passing by luck.
+
+---
+
+## Stack
+
+| Layer    | Choice                                                                             |
+| -------- | ---------------------------------------------------------------------------------- |
+| API      | .NET 10, C# 14, ASP.NET Core minimal APIs, SignalR                                 |
+| Data     | EF Core 10, Npgsql, PostgreSQL 18                                                  |
+| Frontend | Angular 22 standalone components, Signals, strict TypeScript, lazy routes          |
+| Realtime | SignalR with an optional Redis backplane for multi-replica deployments             |
+| Auth     | ASP.NET Core Identity, HTTP-only same-origin cookies, antiforgery on state changes |
+| Hosting  | Docker Compose: API, worker, Angular via Nginx, PostgreSQL, Redis                  |
+
+## Architecture
+
+```text
+Browser
+  |  same-origin HTTP, cookie session, XSRF token, SignalR
+  v
+Angular SPA / Nginx
+  |
+  v
+ASP.NET Core API (composition root)
+  |-- identity and tenant authorization
+  |-- application modules
+  |-- provider abstractions
+  v
+EF Core / Npgsql
+  v
+PostgreSQL (schema per module, tenant discriminator per owned row)
+```
+
+Sixteen bounded modules own their own entities, tables and vocabulary: Identity, Tenancy, Clients,
+Invitations, Subscriptions, Training, Exercise Library, Nutrition, Progress, Strength, Check-ins,
+Messaging, Notifications, Media, Gamification and Integrations. A module may reference only the
+shared kernel — never another module — and architecture tests enforce that on the built assemblies
+rather than by convention.
+
+`TB.Gym.Worker` is a second composition root of the same monolith, not a microservice: same
+database, same domain assemblies, same tenant guards, no HTTP surface. It runs durable notification
+dispatch. Realtime publication lives in the API instead, because it needs connections to publish to.
+
+## Status
+
+Phases 0 through 6B are implemented and reviewed:
+
+- **Identity and tenancy** — registration, invitation-only client onboarding, email verification,
+  workspace membership and roles, same account across multiple workspaces.
+- **Commercial** — coaching products, immutable priced offers, dated client enrollments, per-feature
+  entitlement coverage, append-only manual payments, renewal and history.
+- **Training and strength** — immutable programme template versions, assigned mesocycle snapshots,
+  prescriptions versus recorded actuals, append-only strength maxima, named and versioned
+  progression strategies with a preview/apply flow.
+- **Nutrition** — versioned foods and recipes, immutable meal-plan versions, assigned client
+  snapshots, daily actuals, named calculation formulas, structured allergens.
+- **Progress** — bodyweight and trend, body measurements, dated progress photos with EXIF-stripping
+  re-encoding, thumbnails, storage quotas and a purge worker.
+- **Check-ins** — form lineages, immutable published versions, stable question keys, typed answers,
+  one-way submission and review.
+- **Notifications** — idempotent outbox, durable claimed dispatch with retry and dead-lettering,
+  versioned templates, in-app inbox and read state.
+- **Messaging** — persisted direct conversations with append-only revisions, one-way removal and
+  coach moderation; then authorized realtime delivery with catch-up, application acknowledgement and
+  Redis-backed multi-replica scale-out.
+
+Not implemented: gamification and tenant theming, SaaS productization and tenant billing, AI
+features, recurring billing, and production provider integrations for email, WhatsApp and object
+storage. [ROADMAP.md](docs/ROADMAP.md) tracks each of these with its exit criteria, and
+[LAUNCH-CHECKLIST.md](docs/LAUNCH-CHECKLIST.md) tracks what production would still require.
+
+The `base44/` directory preserves the previous React application as reference material only. It is
+not part of the new architecture.
+
+## Running it
+
+Docker Compose is the shortest complete path — it starts PostgreSQL and Redis, applies migrations,
+starts the API and worker, and serves Angular through Nginx.
 
 ```powershell
-Copy-Item .env.example .env
-# Set a local POSTGRES_PASSWORD in .env. If seeding is enabled, also set
-# TB_GYM_ADMIN_PASSWORD to a unique local password.
+Copy-Item .env.example .env    # set POSTGRES_PASSWORD, and TB_GYM_ADMIN_PASSWORD if seeding
 docker compose up --build
 ```
 
-Open <http://localhost:4200>. The API is also exposed at
-<http://localhost:5134>; liveness is `/health/live`, readiness is `/health/ready`, and the
-development OpenAPI document is `/openapi/v1.json`.
+The application is at <http://localhost:4200> and the API at <http://localhost:5134>, with
+`/health/live`, `/health/ready` and, in development, `/openapi/v1.json`. PostgreSQL is published on
+host port `5433` so it does not collide with a native installation.
 
-Development seeding is disabled in the example configuration. To use it, enable it and set
-the local admin email and password in the ignored `.env` file.
+Register a coach from the sign-in screen to create a workspace. In development, confirmation, reset
+and invitation responses include a local action link, so the full flow can be exercised without an
+email provider.
 
-You can also register a new coach from the sign-in screen. A solo coach automatically owns
-a new workspace. Development confirmation, reset, and invitation responses include a local
-action link so the complete flow can be exercised without an external email account. A
-transactional email provider must be configured before a production launch.
+To run against a local toolchain instead, set the PostgreSQL values in `.env`, start PostgreSQL, and
+run `.\scripts\run-api.ps1` and `.\scripts\run-web.ps1` in separate terminals.
 
-The container database is exposed on host port `5433` by default, leaving the conventional
-`5432` port available for an existing native PostgreSQL installation. Services inside the
-Compose network still use PostgreSQL port `5432`.
-
-PostgreSQL 18 changed the official image data mount to `/var/lib/postgresql`; `compose.yaml`
-uses that path so the named volume persists correctly.
-
-## Run without Docker
-
-Set the PostgreSQL values in the ignored `.env`, start PostgreSQL, then run these in separate
-terminals:
-
-```powershell
-.\scripts\run-api.ps1
-.\scripts\run-web.ps1
-```
-
-The scripts use `.tools/dotnet` and `.tools/node` when present, otherwise system toolchains.
-The API is <http://localhost:5134> and Angular is <http://localhost:4200>. Automatic migration
-and development seeding are disabled by default outside the Docker environment.
-
-## Verify
+### Verification
 
 ```powershell
 .\scripts\check.ps1
 ```
 
-This restores and builds the .NET solution, runs backend tests, checks Angular formatting and
-lint, builds Angular, runs Vitest, and audits npm dependencies.
+Builds the solution in Release, runs the full backend suite against a real PostgreSQL database
+(and Redis, when Docker is available), then checks Angular formatting and lint, builds it, runs
+Vitest, and audits npm dependencies. CI runs the same gates plus EF model drift detection and
+container image smoke tests.
 
-When an API contract changes, run the development API and regenerate the checked-in Angular
-transport contracts:
+Angular transport contracts are generated from the API's OpenAPI document and checked in. When an
+API contract changes, run the development API and regenerate them with `npm run api:generate` from
+`src/web`; the generated directory is never edited by hand.
 
-```powershell
-Set-Location src\web
-npm run api:generate
-```
+## Documentation
 
-## Architecture
-
-- [Architecture](docs/ARCHITECTURE.md)
-- [Domain rules and open decisions](docs/DOMAIN-RULES.md)
-- [Delivery roadmap](docs/ROADMAP.md)
-- [Production launch checklist](docs/LAUNCH-CHECKLIST.md)
-- [Permanent coding-agent rules](AGENTS.md)
-- [Legacy application notes](base44/LEGACY.md)
-
-Phases 1 and 2 implement identity/onboarding plus the commercial foundation: coaching
-products, immutable offers, dated client enrollments, per-feature entitlements, append-only
-manual payments, renewal/history, workspace-local block state, centralized access decisions,
-notification outbox scheduling, and legal-consent architecture. Training, nutrition, chat,
-gamification, AI, recurring billing, and production provider delivery are not implemented.
+| Document                                        | Contents                                                                   |
+| ----------------------------------------------- | -------------------------------------------------------------------------- |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md)         | Module boundaries, dependency rules, persistence and security architecture |
+| [DOMAIN-RULES.md](docs/DOMAIN-RULES.md)         | 137 numbered business invariants and open decisions                        |
+| [ROADMAP.md](docs/ROADMAP.md)                   | Delivery phases with exit criteria and explicit deferrals                  |
+| [adr/](docs/adr/)                               | 20 architecture decision records, including rejected alternatives          |
+| [LAUNCH-CHECKLIST.md](docs/LAUNCH-CHECKLIST.md) | Outstanding production requirements                                        |
+| [AGENTS.md](AGENTS.md)                          | Coding standards and constraints enforced across the repository            |
