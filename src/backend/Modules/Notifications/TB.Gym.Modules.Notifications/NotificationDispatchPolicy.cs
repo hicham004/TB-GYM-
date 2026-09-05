@@ -30,6 +30,47 @@ public static class NotificationFailureCodes
 
     /// <summary>The configured email transport refused the message permanently.</summary>
     public const string EmailTransportPermanent = "notification-email-transport-permanent";
+
+    /// <summary>The provider refused because this sender is over its rate limit. Retryable.</summary>
+    public const string EmailProviderRateLimited = "notification-email-provider-rate-limited";
+
+    /// <summary>The provider did not answer inside the adapter's bounded timeout. Retryable.</summary>
+    public const string EmailProviderTimeout = "notification-email-provider-timeout";
+
+    /// <summary>The provider could not be reached, or answered with a server error. Retryable.</summary>
+    public const string EmailProviderUnavailable = "notification-email-provider-unavailable";
+
+    /// <summary>
+    /// The provider rejected the request itself — a malformed sender, an unverified domain, a
+    /// recipient it will not accept. Permanent: the same request will be rejected again.
+    /// </summary>
+    public const string EmailProviderRejected = "notification-email-provider-rejected";
+
+    /// <summary>
+    /// The provider refused this deployment's credentials or configuration.
+    /// </summary>
+    /// <remarks>
+    /// Classified retryable rather than permanent, and logged as an operational fault rather than a
+    /// message-level one. A revoked or mistyped API key is a deployment problem, not a problem with
+    /// the notification: dead-lettering every due email the moment a key rotates badly would
+    /// silently discard work that becomes deliverable again the moment somebody fixes the
+    /// configuration. The bounded retry schedule still ends in a dead letter, so nothing retries
+    /// forever, and the distinct code is what an alert is keyed on.
+    /// </remarks>
+    public const string EmailProviderUnauthorized = "notification-email-provider-unauthorized";
+
+    /// <summary>
+    /// The provider answered successfully with a body this build cannot use — no identifier, or one
+    /// that fails validation. Permanent, because accepting it would mean inventing evidence.
+    /// </summary>
+    public const string EmailProviderResponseInvalid = "notification-email-provider-response-invalid";
+
+    /// <summary>
+    /// The provider says this idempotency key was already used for a different request. Permanent:
+    /// the key is derived from the immutable message and the exact recipient, so retrying it
+    /// unchanged cannot resolve the conflict.
+    /// </summary>
+    public const string EmailProviderIdempotencyConflict = "notification-email-provider-idempotency-conflict";
 }
 
 /// <summary>
@@ -73,6 +114,14 @@ public static class NotificationSuppressionCodes
 
     /// <summary>This deployment has no configured email transport any more.</summary>
     public const string EmailChannelUnavailable = "notification-email-channel-unavailable";
+
+    /// <summary>
+    /// The recipient's current mailbox is durably suppressed by a verified permanent bounce, a
+    /// complaint, or the provider's own suppression list. Suppresses email only; the in-app delivery
+    /// of the same notification is untouched, because a mailbox refusing mail is not a member losing
+    /// what they are entitled to be told.
+    /// </summary>
+    public const string EmailAddressSuppressed = "notification-email-address-suppressed";
 
     /// <summary>The workspace time zone cannot be resolved, so quiet hours cannot be honoured.</summary>
     public const string QuietHoursUnresolvable = "notification-quiet-hours-unresolvable";
@@ -135,6 +184,29 @@ public static class NotificationRetryPolicy
 
     /// <summary>The backoff table, for tests and documentation.</summary>
     public static IReadOnlyList<TimeSpan> Schedule => Backoff;
+
+    /// <summary>
+    /// The longest this schedule can stretch between the first attempt and the last, for a given
+    /// configured maximum.
+    /// </summary>
+    /// <remarks>
+    /// Exists because a provider's idempotency key has a retention window. A schedule longer than
+    /// that window means a late retry presents a key the provider has already forgotten, and the
+    /// "duplicate" it was supposed to collapse becomes a second real message in somebody's inbox.
+    /// Startup validation compares this span against the configured retention rather than leaving it
+    /// as a documented hazard nobody would notice crossing.
+    /// </remarks>
+    public static TimeSpan MaximumRetrySpan(int maximumAttempts)
+    {
+        NotificationDispatchOptions.ValidateMaximumAttempts(maximumAttempts);
+        var span = TimeSpan.Zero;
+        for (var attemptNumber = 1; attemptNumber < maximumAttempts; attemptNumber++)
+        {
+            span += Backoff[Math.Min(attemptNumber - 1, Backoff.Length - 1)];
+        }
+
+        return span;
+    }
 }
 
 /// <summary>

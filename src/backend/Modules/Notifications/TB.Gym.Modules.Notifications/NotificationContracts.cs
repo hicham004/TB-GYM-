@@ -116,12 +116,24 @@ public interface INotificationApplicationService
 /// <paramref name="TenantTimeZoneId"/>, which is the workspace's configured IANA zone and the frame
 /// every quiet-hours decision is made in — never the browser's.
 /// </para>
+/// <para>
+/// <paramref name="EmailSuppressed"/> is the one piece of state on this screen that is not the
+/// member's own decision. A mailbox that produced a verified permanent bounce or a spam complaint
+/// stops receiving email, and without saying so the screen would show a switch that is on beside a
+/// channel that is silently doing nothing — which is worse than showing nothing at all. It is
+/// deliberately a statement and not a control: there is no way to clear it here, because a button
+/// that resumes mail to an address that complained is a decision about somebody else's mailbox and
+/// needs its own design. It is computed at read time from the member's current address, so
+/// correcting a mistyped one clears it by itself.
+/// </para>
 /// </remarks>
 public sealed record NotificationPreferenceView(
     bool InAppEnabled,
     bool EmailServiceEnabled,
     bool EmailMarketingEnabled,
     bool EmailChannelAvailable,
+    bool EmailSuppressed,
+    NotificationEmailSuppressionReason? EmailSuppressionReason,
     bool QuietHoursEnabled,
     string? QuietHoursStartLocal,
     string? QuietHoursEndLocal,

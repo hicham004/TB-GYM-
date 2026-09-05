@@ -645,11 +645,17 @@ public sealed class Phase6B3ANotificationChannelDomainTests
     // ---------- email configuration fails closed ----------
 
     /// <summary>
-    /// Production cannot silently use the captured adapter, and cannot enable a channel that has no
-    /// real provider behind it. Both are startup failures rather than a quiet no-op, because a
-    /// deployment that believes it is emailing people while messages go into a process's memory is a
-    /// far worse outcome than a process that refuses to start.
+    /// Production cannot silently use the captured adapter, and cannot enable a channel with nothing
+    /// behind it. Both are startup failures rather than a quiet no-op, because a deployment that
+    /// believes it is emailing people while messages go into a process's memory is a far worse outcome
+    /// than a process that refuses to start.
     /// </summary>
+    /// <remarks>
+    /// Phase 6B-3B added a real provider adapter, so "enabled in Production" is no longer refused
+    /// outright — it is refused unless that provider is completely configured, which
+    /// <c>Phase6B3BProviderEmailDomainTests</c> enumerates. What has not changed is that the captured
+    /// adapter is refused in Production whether or not email is switched on.
+    /// </remarks>
     [TestMethod]
     public void ProductionRefusesTheCapturedAdapterAndAnEnabledEmailChannel()
     {
@@ -660,6 +666,9 @@ public sealed class Phase6B3ANotificationChannelDomainTests
             new NotificationEmailOptions { Enabled = true, Adapter = NotificationEmailAdapters.None }.Validate(isProduction: true));
         Assert.IsNotNull(
             new NotificationEmailOptions { Enabled = true, Adapter = NotificationEmailAdapters.Captured }.Validate(isProduction: true));
+        Assert.IsNotNull(
+            new NotificationEmailOptions { Enabled = true, Adapter = NotificationEmailAdapters.Resend }.Validate(isProduction: true),
+            "The provider adapter without its secrets is as refused as no adapter at all.");
         Assert.IsNull(
             new NotificationEmailOptions().Validate(isProduction: true),
             "Disabled email with no adapter is the production default and must start.");
@@ -671,7 +680,7 @@ public sealed class Phase6B3ANotificationChannelDomainTests
         Assert.IsNotNull(
             new NotificationEmailOptions { Enabled = true, Adapter = NotificationEmailAdapters.None }.Validate(isProduction: false));
         Assert.IsNotNull(
-            new NotificationEmailOptions { Adapter = "Resend" }.Validate(isProduction: false));
+            new NotificationEmailOptions { Adapter = "Sendmail" }.Validate(isProduction: false));
         Assert.IsNotNull(
             new NotificationEmailOptions { Enabled = true, Adapter = "Smtp" }.Validate(isProduction: false));
     }

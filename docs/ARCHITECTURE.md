@@ -3,7 +3,8 @@
 Status: Phase 6A check-ins complete, 2026-08-26; Phase 5/6 audit remediation applied, 2026-08-29;
 Phase 6B-1 notification dispatch and in-app inbox complete, 2026-08-31; Phase 6B-2A persisted
 direct messaging complete, 2026-09-01; Phase 6B-2B authorized realtime messaging delivery complete,
-2026-09-04
+2026-09-04; Phase 6B-3A independent notification channels complete, 2026-09-05; Phase 6B-3B
+production transactional email, provider events and suppression complete, 2026-09-05
 
 ## 1. Architectural style
 
@@ -71,7 +72,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Strength         | Append-only max history, canonical RPE/RIR, versioned estimates, recommendations, rounding                                                                                               |
 | Check-ins        | Form lineages, immutable published versions, stable question keys, assignments, typed client answers, one-way submission/review, comparison projections                                  |
 | Messaging        | Tenant-scoped direct coach/client conversations, explicit participants, message history, immutable revisions, one-way removal and moderation, per-participant read state                 |
-| Notifications    | Idempotent outbox, durable dispatch, versioned templates, per-channel delivery attempts, in-app notifications and read state, future channel ports                                       |
+| Notifications    | Idempotent outbox, durable dispatch, versioned templates, per-channel delivery attempts, in-app notifications and read state, transactional email transport, provider events and mailbox suppression |
 | Media            | Object metadata, signature/scanner lifecycle, protected access, subordinate renditions, external embeds, retention                                                                       |
 | Gamification     | Tenant theme, levels, ranks and auditable experience events                                                                                                                              |
 | Integrations     | AI, payment, nutrition-data and other external provider contracts                                                                                                                        |
@@ -517,8 +518,9 @@ their links carry single-use credentials, which do not belong in a durable repla
 ADR 0021 designs the tokenless scheme that would let them join without one. Since Phase 6B-3A this
 retry policy, this claim protocol and this dead-letter view all belong to a **channel delivery**
 rather than to the intent, so each channel retries, suppresses and exhausts on its own; see section
-18. Email is materialized and captured behind an owned transport port with no provider, and WhatsApp
-is still not implemented. See `docs/adr/0018-notification-dispatch-and-in-app-inbox-v1.md`.
+18. Since Phase 6B-3B one real provider sits behind that owned transport port, with signed provider
+events and mailbox suppression; see section 19. WhatsApp is still not implemented. See
+`docs/adr/0018-notification-dispatch-and-in-app-inbox-v1.md`.
 
 Media, nutrition data, AI, and payment providers sit behind module-owned ports. Provider
 payloads and credentials do not leak into domain objects. AI output is untrusted input: it
@@ -980,8 +982,8 @@ single referent:
 | Channel selected          | `NotificationChannelDelivery` exists, reason snapshot | This channel was chosen for it, and the row records why.          |
 | Claimed                   | `Status = Processing` plus a live token and lease     | One dispatcher reserved it; nothing has been produced yet.        |
 | Materialized              | `Status = Materialized`, `MaterializedAtUtc`          | This channel produced its own artefact: an inbox row, or a message handed to the configured transport. Never a provider claim. |
-| Provider accepted         | `ProviderAcceptedAtUtc`, `ProviderMessageId`          | Reserved. Null in this phase; database checks refuse both.        |
-| Recipient server accepted | not modelled                                          | A future webhook fact. Deliberately absent rather than implied.   |
+| Provider accepted         | `ProviderAcceptedAtUtc`, `ProviderMessageId`          | Since 6B-3B: a real provider took responsibility for the request. |
+| Recipient server accepted | `NotificationProviderMessage.RecipientServerAcceptedAtUtc` | Since 6B-3B: an authenticated provider event, and nothing else. |
 | Application acknowledged  | messaging ACK rows (6B-2B)                            | A client merged a projection. Unrelated to email.                 |
 | Read by the user          | `Notification.ReadAtUtc`                              | The reader's own act. No delivery outcome ever writes it.         |
 | Suppressed                | `Status = Suppressed` plus a stable code              | The reason to use this channel went away. Not a failure.          |
@@ -1012,8 +1014,10 @@ instant, an end time inside a gap to where the gap finishes). The API exposes on
 `GET`/`PUT /api/notifications/preferences` for the caller's own settings: the subject comes from the
 authentication cookie, so no request shape lets a coach or owner opt somebody else in.
 
-**Email has a port and no provider.** `INotificationEmailTransport` is the seam; the only
-implementation captures in memory outside Production and contacts nothing. Configuration fails closed
+**Email has a port, and since Phase 6B-3B a provider behind it.** `INotificationEmailTransport` is the
+seam; the captured implementation below is the development and test one, and section 19 covers the
+production adapter that replaced "no provider" with one. As Phase 6B-3A shipped it, the only
+implementation captured in memory outside Production and contacted nothing. Configuration fails closed
 in both composition roots — an unknown adapter, an enabled channel with nothing behind it, or the
 captured adapter in Production each refuse startup, and production composition registers no transport
 at all rather than a disabled one somebody could resolve. The recipient address is resolved at
@@ -1032,3 +1036,125 @@ rather than the whole edit. Nothing is written to browser storage.
 
 See `docs/adr/0021-tokenless-action-email-materialization.md` for the action-email design this phase
 deliberately does not implement.
+
+## 19. Phase 6B-3B production email, provider events and suppression
+
+```text
+Worker sweep -> email delivery claimed -> final recheck (preference, quiet hours, suppression)
+  -> ResendNotificationEmailTransport: POST https://api.resend.com/emails
+       Authorization: Bearer <key>   Idempotency-Key: <intent:email:v1:fingerprint>
+  -> 2xx + id  -> delivery Materialized + ProviderAcceptedAtUtc + ProviderMessageId, in one statement
+                  -> NotificationProviderMessage (the durable, tenant-aware relationship)
+     4xx/5xx   -> classified into a stable code: transient retries, permanent dead-letters
+
+provider, later and out of order
+  -> POST /api/notifications/email/provider-events   (signed, anonymous, rate limited)
+       bound -> verify signature over raw bytes -> parse -> resolve workspace -> scope -> write
+  -> NotificationProviderEvent (append-only)  +  write-once fact on NotificationProviderMessage
+       email.delivered  -> RecipientServerAcceptedAtUtc
+       email.bounced    -> BouncedAtUtc + BounceClass; Permanent also -> NotificationEmailSuppression
+       email.complained -> ComplainedAtUtc            + NotificationEmailSuppression
+       email.opened / email.clicked -> nothing at all
+```
+
+The eleventh fact. Section 18's table listed ten and reserved two of them; this phase makes both real
+and adds one. **Provider accepted** is now written — by a 2xx carrying a usable identifier, in the same
+statement that makes the delivery terminal. **Recipient server accepted** is now modelled, on a
+different row, and only an authenticated provider event writes it. **Suppressed by the mailbox** is
+the new one: a mailbox that hard-bounced or complained stops receiving email, which is not the same
+fact as a delivery being suppressed by a recheck. There is still no `Delivered`, and an open is still
+not a read.
+
+**Provider facts live on their own root.** Phase 6B-3A made a terminal delivery immutable and a
+trigger enforces it. Provider acceptance is synchronous, so it costs that rule nothing; everything the
+provider says afterwards arrives asynchronously and out of order and accumulates on
+`NotificationProviderMessage`, with `NotificationProviderEvent` as append-only history. Every fact
+column there is **write-once**, which is what makes reordering safe: a bounce that arrives before the
+acceptance it contradicts overwrites nothing, and neither does the acceptance when it turns up second.
+
+**The adapter is owned.** `HttpClient`, one request record, one bounded response read, and no provider
+SDK anywhere in the repository — an architecture test asserts it. Timeouts are bounded and linked to
+the caller's token; the response is read to a hard byte limit and parsed with a depth limit; the one
+field taken from it is validated before it becomes a durable correlation key. Every failure is
+classified into a stable code rather than thrown, because an exception is where a response body, a URI
+or a credential would otherwise travel. The factory's own HTTP logging is removed from that client for
+the same reason: it writes the URI at `Information` and every header at `Trace`.
+
+**The webhook is authenticated by signature, not by session**, and could not be otherwise: the caller
+holds no cookie and cannot obtain an antiforgery token. The order inside the handler is the security
+property — bound, verify, parse, resolve, scope, write — so an unsigned caller reaches no parser, no
+query and no row. The signature covers the exact bytes and the signed timestamp, checked against a
+bounded tolerance in both directions so a captured event cannot be replayed later. The workspace is
+resolved from the provider's message identifier through the durable relationship and is never asserted
+by the request; the ingestion contract has no parameter that names one. Recorded, duplicate, ignored
+and unknown are one `202`, so an observer learns nothing from the answer.
+
+**Suppression is about a mailbox and stores no mailbox.** A permanent bounce, a complaint or the
+provider's own suppression list stops further email to that address; a soft bounce, a delay and a
+provider-side failure do not, and there is no threshold that promotes them. The address participates
+as an HMAC-SHA256 fingerprint under a configured key — an unsalted hash of an enumerable value is a
+synonym for it, not a pseudonym — recorded with the key id that produced it. Rotation is additive: the
+new key writes new fingerprints, every retired key stays configured and keeps matching the
+suppressions written under it, and removing one is the deliberate act that drops them. Because the
+check compares the address the member uses *now*, correcting a mistyped address clears the suppression
+by itself. Suppression affects email only; the in-app delivery of the same notification is untouched.
+There is no override, clearing or replay surface in this phase.
+
+**The idempotency key binds the message and the mailbox**, and the retry schedule is bounded by the
+provider's retention window. The provider forgets a key after 24 hours, so a schedule longer than that
+would present a key it no longer remembers and turn a deduplicated retry into a second real message;
+`Notifications:Dispatch:MaximumAttempts` is validated against the configured retention at startup in
+both composition roots, which caps it at eight. The honest guarantee remains at-least-once within that
+window, never exactly-once.
+
+**Configuration fails closed, and every rule is asserted against a real host.** A provider adapter
+without its API key, sending identity, webhook signing secret or address-fingerprint key refuses to
+start — in every environment, and whether or not the channel is switched on, because a half-configured
+provider that one flag flip would activate is the failure this exists to prevent. The endpoint must be
+HTTPS on an approved provider host in Production, relaxing only as far as loopback outside it so the
+adapter can be proven against a controlled HTTP double with no network at all. Provider secrets beside
+the captured adapter, or a webhook secret with no provider, are contradictions and refuse to start
+rather than leaving somebody to guess which half is in force. A deployment with no provider answers
+`404` on the webhook route, so a scan cannot learn which deployments send real mail.
+
+**Angular.** `/notifications/settings` gains one read-only statement: when the member's mailbox is
+suppressed it says so, in their own words, and says that their in-app notifications are unaffected and
+that updating the address on their account resumes email. It is deliberately a statement rather than a
+control — a button that resumes mail to an address that complained is a decision about somebody else's
+mailbox — and the member's own email switch is not rewritten by a bounce.
+
+### Production email prerequisites, and the checks that stay live
+
+None of this is automated and none of it mutates DNS. It is what an operator does before enabling
+`Notifications:Email` in Production, and what stays true afterwards.
+
+| Prerequisite | What it means | Why |
+| --- | --- | --- |
+| Verified sending domain | A subdomain such as `mail.example.com`, verified with the provider | A subdomain isolates transactional reputation from the root domain's other mail |
+| SPF | The provider's `include:` in the sending domain's TXT record | Receivers reject or downgrade mail from senders the domain does not authorize |
+| DKIM | The provider's public key TXT record, and signing enabled | An unsigned message cannot prove it was not altered in transit |
+| DMARC | A `_dmarc` TXT policy, starting at `p=none` with `rua` reporting and tightened once the reports are clean | Publishing enforcement before reading a week of reports is how legitimate mail gets rejected |
+| Webhook endpoint | The public `/api/notifications/email/provider-events` URL registered with the provider | Nothing establishes recipient-server acceptance, bounce or complaint without it |
+| Webhook secret rotation | Add the new secret at the provider, deploy it, remove the old one | The signature scheme accepts a list, so both are live during the overlap and no event is lost |
+| Fingerprint key rotation | Add a new key id, repoint `FingerprintKeyId`, keep the retired key configured | Removing a retired key drops the suppressions written under it and resumes mail to addresses that hard-bounced |
+
+| Ongoing check | What to watch | Why it matters |
+| --- | --- | --- |
+| Bounce rate | `NotificationProviderMessage.BouncedAtUtc` with `BounceClass = Permanent` | A rising hard-bounce rate means addresses are being collected or stored wrongly |
+| Complaint rate | `ComplainedAtUtc`, against the provider's and Gmail's published thresholds | Crossing a threshold degrades delivery for every message the domain sends |
+| Suppression growth | New `NotificationEmailSuppression` rows per day | A spike is a data-quality problem upstream, not a mail problem |
+| Rate limiting | Deliveries failing with `notification-email-provider-rate-limited` | The schedule absorbs a burst; a sustained rate needs a provider limit increase |
+| Operational faults | `notification-email-provider-unauthorized` at `Error` | A revoked or mistyped key. Alert on this one; it retries and then dead-letters |
+| Idempotency retention | `Notifications:Dispatch:MaximumAttempts` against the provider's window | Startup refuses a schedule that outruns it, so this is a review item when either changes |
+| Dead letters | The owner-only dead-letter view, per channel | Where an exhausted or permanently rejected email ends up |
+
+**Provider outage and reconciliation.** A provider outage is a transient failure like any other: the
+delivery retries on `notification-exponential-v1` and dead-letters if the outage outlasts the schedule.
+Nothing is lost, because the intent and its delivery rows are durable and the in-app notification was
+written regardless. Missed webhooks are recovered by replaying events from the provider's dashboard —
+ingestion is idempotent on the provider's event identifier, so a replay of events already recorded
+converges rather than duplicating. A message the provider accepted while acknowledgements were failing
+is identifiable by its `ProviderMessageId`, which is why that identifier is recorded synchronously
+rather than waiting for an event to supply it.
+
+See `docs/adr/0022-production-transactional-email-provider-and-events.md`.

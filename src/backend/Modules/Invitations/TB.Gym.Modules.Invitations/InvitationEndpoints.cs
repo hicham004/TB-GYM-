@@ -39,34 +39,42 @@ public static class InvitationEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // A deliberate resend takes a body, unlike the Phase 1 endpoint it replaces, and both fields
+        // are required for a reason this phase created. The idempotency key makes two concurrent
+        // presses converge on one new logical-send generation; the version makes a press issued against
+        // a stale view conflict instead of revoking a link the presser did not know existed.
         coachGroup.MapPost("/{invitationId:guid}/resend", async (
             Guid invitationId,
+            ResendClientInvitationRequest request,
             HttpContext context,
             IAntiforgery antiforgery,
             IInvitationApplicationService service,
             CancellationToken cancellationToken) =>
         {
             await antiforgery.ValidateRequestAsync(context);
-            return ToCommandResult(await service.ResendAsync(invitationId, cancellationToken));
+            return ToCommandResult(await service.ResendAsync(invitationId, request, cancellationToken));
         })
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("ResendClientInvitation")
         .Produces<InvitationSummary>()
+        .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
         coachGroup.MapPost("/{invitationId:guid}/revoke", async (
             Guid invitationId,
+            RevokeClientInvitationRequest request,
             HttpContext context,
             IAntiforgery antiforgery,
             IInvitationApplicationService service,
             CancellationToken cancellationToken) =>
         {
             await antiforgery.ValidateRequestAsync(context);
-            return ToCommandResult(await service.RevokeAsync(invitationId, cancellationToken));
+            return ToCommandResult(await service.RevokeAsync(invitationId, request, cancellationToken));
         })
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("RevokeClientInvitation")
         .Produces<InvitationSummary>()
+        .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
         endpoints.MapGet("/api/invitations/public/{token}", async (

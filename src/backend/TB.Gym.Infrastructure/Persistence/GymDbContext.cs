@@ -83,6 +83,14 @@ public sealed partial class GymDbContext(
 
     public DbSet<NotificationConsentEvent> NotificationConsentEvents => Set<NotificationConsentEvent>();
 
+    public DbSet<NotificationProviderMessage> NotificationProviderMessages =>
+        Set<NotificationProviderMessage>();
+
+    public DbSet<NotificationProviderEvent> NotificationProviderEvents => Set<NotificationProviderEvent>();
+
+    public DbSet<NotificationEmailSuppression> NotificationEmailSuppressions =>
+        Set<NotificationEmailSuppression>();
+
     public DbSet<NotificationPreferenceCommandRecord> NotificationPreferenceCommandRecords =>
         Set<NotificationPreferenceCommandRecord>();
 
@@ -855,6 +863,21 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<NotificationConsentEvent>("Notification consent evidence is append-only.");
         RejectAppendOnlyMutations<NotificationPreferenceCommandRecord>(
             "Notification preference command records are append-only.");
+
+        // What a provider said, and which mailboxes stopped accepting mail because of it. A later
+        // event never rewrites an earlier one — the facts it establishes accumulate write-once on the
+        // provider message instead — and a suppression is never edited or cleared by this
+        // application, because a control that un-suppresses a mailbox needs its own decision about
+        // who may press it.
+        RejectAppendOnlyMutations<NotificationProviderEvent>("Provider event evidence is append-only.");
+        RejectAppendOnlyMutations<NotificationEmailSuppression>(
+            "Email suppressions are append-only; there is no override or clearing surface.");
+
+        if (ChangeTracker.Entries<NotificationProviderMessage>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException(
+                "Provider message relationships are never deleted; they are what a provider event resolves through.");
+        }
 
         // Delivery history. A channel delivery's terminal outcome and its attempts are what explain
         // afterwards why somebody was or was not told something.

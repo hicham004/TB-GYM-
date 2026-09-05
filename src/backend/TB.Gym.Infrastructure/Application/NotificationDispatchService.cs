@@ -946,17 +946,29 @@ internal sealed class NotificationDispatchService(
     }
 
     /// <summary>
-    /// Resolves the recipient, renders the generic service wording, hands both to the configured
-    /// transport, and records only what happened.
+    /// Resolves the recipient, rechecks suppression, renders the generic service wording, hands both
+    /// to the configured transport, and records only what happened.
     /// </summary>
     /// <remarks>
     /// The address, the subject and the body exist as local variables for the duration of one call.
     /// None of them is written to the delivery, the attempt, the intent, a dead-letter row or a log
-    /// line; the only place the content exists at all is inside the captured development adapter's own
-    /// memory. The recipient is resolved here rather than snapshotted at scheduling time precisely so
-    /// that a queue row never holds an address.
+    /// line; with the captured adapter the content exists only in that adapter's own memory, and with
+    /// the provider adapter it exists only inside one HTTPS request. The recipient is resolved here
+    /// rather than snapshotted at scheduling time precisely so that a queue row never holds an address.
+    /// <para>
+    /// Suppression is rechecked here, at the same boundary the preference recheck uses and under the
+    /// same recipient-policy lock, because it is the same class of fact: something authoritative that
+    /// may have become true after the claim committed. A mailbox that hard-bounced or complained must
+    /// not receive one more message merely because the work was already reserved. The provider-event
+    /// route takes the same lock before it writes a suppression, so the two cannot interleave.
+    /// </para>
+    /// <para>
+    /// The mailbox is compared as a keyed fingerprint under every configured key, not just the active
+    /// one. Rotating the fingerprint key must not silently resume mail to an address that bounced
+    /// under the previous one.
+    /// </para>
     /// </remarks>
-    private static async Task<MaterializationFinalization> MaterializeEmailAsync(
+    private async Task<MaterializationFinalization> MaterializeEmailAsync(
         IServiceProvider provider,
         GymDbContext context,
         IDbContextTransaction transaction,
@@ -971,14 +983,15 @@ internal sealed class NotificationDispatchService(
         {
             // Configuration says email is available and composition disagrees. Fail closed rather than
             // retrying forever against a transport that does not exist.
-            attempt.Suppress(now, NotificationSuppressionCodes.EmailChannelUnavailable);
-            delivery.Suppress(work.ClaimToken, now, NotificationSuppressionCodes.EmailChannelUnavailable);
-            await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return new MaterializationFinalization(
-                MaterializationFinalizationKind.Suppressed,
+            return await SuppressEmailAsync(
+                context,
+                transaction,
+                work,
+                delivery,
+                attempt,
+                now,
                 NotificationSuppressionCodes.EmailChannelUnavailable,
-                AttemptNumber: attempt.AttemptNumber);
+                cancellationToken);
         }
 
         var contacts = provider.GetRequiredService<INotificationRecipientContacts>();
@@ -988,22 +1001,76 @@ internal sealed class NotificationDispatchService(
         // and teaches a mail provider that this sender writes to addresses nobody verified.
         if (contact is null || !contact.EmailConfirmed)
         {
-            attempt.Suppress(now, NotificationSuppressionCodes.EmailAddressUnavailable);
-            delivery.Suppress(work.ClaimToken, now, NotificationSuppressionCodes.EmailAddressUnavailable);
-            await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return new MaterializationFinalization(
-                MaterializationFinalizationKind.Suppressed,
+            return await SuppressEmailAsync(
+                context,
+                transaction,
+                work,
+                delivery,
+                attempt,
+                now,
                 NotificationSuppressionCodes.EmailAddressUnavailable,
-                AttemptNumber: attempt.AttemptNumber);
+                cancellationToken);
         }
 
+        var fingerprintKeys = email.Provider.ResolveFingerprintKeys();
+        if (transport.ContactsProvider && fingerprintKeys.Count == 0)
+        {
+            // A real provider with no fingerprint key cannot have its suppressions checked, and
+            // sending to a mailbox whose bounce cannot be honoured is exactly what destroys a sending
+            // reputation. Startup already refuses this configuration; failing closed here as well
+            // means a runtime options reload cannot open a hole startup would have closed.
+            return await SuppressEmailAsync(
+                context,
+                transaction,
+                work,
+                delivery,
+                attempt,
+                now,
+                NotificationSuppressionCodes.EmailChannelUnavailable,
+                cancellationToken);
+        }
+
+        string? activeFingerprint = null;
+        string? activeFingerprintKeyId = null;
+        if (fingerprintKeys.Count > 0)
+        {
+            // ResolveFingerprintKeys returns the active key first, so the leading fingerprint is the
+            // one new evidence is recorded under and the rest exist only to keep older suppressions
+            // matching across a rotation.
+            var fingerprints = NotificationAddressFingerprint.ComputeAll(fingerprintKeys, contact.EmailAddress);
+            activeFingerprint = fingerprints[0];
+            activeFingerprintKeyId = fingerprintKeys[0].KeyId;
+            var suppressed = await context.NotificationEmailSuppressions
+                .AsNoTracking()
+                .AnyAsync(
+                    candidate => candidate.UserId == work.RecipientUserId &&
+                                 fingerprints.Contains(candidate.AddressFingerprint),
+                    cancellationToken);
+            if (suppressed)
+            {
+                return await SuppressEmailAsync(
+                    context,
+                    transaction,
+                    work,
+                    delivery,
+                    attempt,
+                    now,
+                    NotificationSuppressionCodes.EmailAddressSuppressed,
+                    cancellationToken);
+            }
+        }
+
+        var logicalKey = NotificationDeliveryAttempt.BuildIdempotencyKey(
+            work.OutboxItemId,
+            NotificationChannel.Email);
         var template = NotificationTemplateCatalog.ServiceEmailV1;
         var result = await transport.SendAsync(
             new NotificationEmailMessage(
                 work.TenantId,
                 work.OutboxItemId,
-                NotificationDeliveryAttempt.BuildIdempotencyKey(work.OutboxItemId, NotificationChannel.Email),
+                activeFingerprint is null
+                    ? logicalKey
+                    : NotificationDeliveryAttempt.BuildProviderIdempotencyKey(logicalKey, activeFingerprint),
                 contact.EmailAddress,
                 template.Title,
                 template.Body),
@@ -1019,6 +1086,21 @@ internal sealed class NotificationDispatchService(
                 await context.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 return MaterializationFinalization.Materialized(attempt.AttemptNumber);
+
+            case NotificationEmailTransportOutcome.ProviderAccepted:
+                return await RecordProviderAcceptanceAsync(
+                    context,
+                    transaction,
+                    work,
+                    delivery,
+                    attempt,
+                    transport,
+                    result.ProviderMessageId,
+                    activeFingerprint,
+                    activeFingerprintKeyId,
+                    now,
+                    cancellationToken);
+
             case NotificationEmailTransportOutcome.PermanentFailure:
                 var permanent = result.FailureCode ?? NotificationFailureCodes.EmailTransportPermanent;
                 attempt.FailPermanently(now, permanent);
@@ -1029,6 +1111,7 @@ internal sealed class NotificationDispatchService(
                     MaterializationFinalizationKind.DeadLettered,
                     permanent,
                     AttemptNumber: attempt.AttemptNumber);
+
             default:
                 // Rolled back deliberately: the failure is recorded by RecordFailureAsync in a clean
                 // scope, which is also the path a thrown transport exception takes, so both look the
@@ -1039,6 +1122,96 @@ internal sealed class NotificationDispatchService(
                     result.FailureCode ?? NotificationFailureCodes.EmailTransportTransient,
                     AttemptNumber: attempt.AttemptNumber);
         }
+    }
+
+    /// <summary>
+    /// Records that a real provider took responsibility for this message, and the durable relationship
+    /// its later events will resolve through.
+    /// </summary>
+    /// <remarks>
+    /// The delivery becomes terminal and records provider acceptance in the same statement, which is
+    /// what keeps a terminal delivery immutable while still carrying the one provider fact that was
+    /// established synchronously. Everything the provider says afterwards belongs to the
+    /// <see cref="NotificationProviderMessage"/> written here.
+    /// <para>
+    /// An adapter that reports acceptance it cannot own — a capture claiming a provider identifier, an
+    /// identifier that fails validation, a send with no fingerprint to correlate a bounce through — is
+    /// a permanent failure rather than a recorded success. Writing evidence a provider did not give is
+    /// worse than not delivering.
+    /// </para>
+    /// </remarks>
+    private static async Task<MaterializationFinalization> RecordProviderAcceptanceAsync(
+        GymDbContext context,
+        IDbContextTransaction transaction,
+        ClaimedWork work,
+        NotificationChannelDelivery delivery,
+        NotificationDeliveryAttempt attempt,
+        INotificationEmailTransport transport,
+        string? providerMessageId,
+        string? activeFingerprint,
+        string? activeFingerprintKeyId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (!transport.ContactsProvider ||
+            !NotificationProviderMessageId.IsValid(providerMessageId) ||
+            activeFingerprint is null ||
+            activeFingerprintKeyId is null)
+        {
+            var invalid = NotificationFailureCodes.EmailProviderResponseInvalid;
+            attempt.FailPermanently(now, invalid);
+            delivery.MarkDeadLettered(work.ClaimToken, now, invalid);
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new MaterializationFinalization(
+                MaterializationFinalizationKind.DeadLettered,
+                invalid,
+                AttemptNumber: attempt.AttemptNumber);
+        }
+
+        attempt.Succeed(now, providerMessageId);
+        delivery.MarkMaterialized(work.ClaimToken, now, transport.AdapterName, providerMessageId);
+        context.NotificationProviderMessages.Add(NotificationProviderMessage.Record(
+            work.TenantId,
+            work.OutboxItemId,
+            work.ChannelDeliveryId,
+            work.RecipientUserId,
+            transport.AdapterName,
+            providerMessageId!,
+            activeFingerprint,
+            activeFingerprintKeyId,
+            now));
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return MaterializationFinalization.Materialized(attempt.AttemptNumber);
+    }
+
+    /// <summary>
+    /// One channel-only suppression, committed with its already-started attempt.
+    /// </summary>
+    /// <remarks>
+    /// The attempt is real history and closes as suppressed; no replacement attempt is created and no
+    /// retry is earned. In-app is not touched, ever: a mailbox refusing mail is not a member losing
+    /// what they are entitled to be told.
+    /// </remarks>
+    private static async Task<MaterializationFinalization> SuppressEmailAsync(
+        GymDbContext context,
+        IDbContextTransaction transaction,
+        ClaimedWork work,
+        NotificationChannelDelivery delivery,
+        NotificationDeliveryAttempt attempt,
+        DateTimeOffset now,
+        string reasonCode,
+        CancellationToken cancellationToken)
+    {
+        attempt.Suppress(now, reasonCode);
+        delivery.Suppress(work.ClaimToken, now, reasonCode);
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new MaterializationFinalization(
+            MaterializationFinalizationKind.Suppressed,
+            reasonCode,
+            AttemptNumber: attempt.AttemptNumber);
     }
 
     private static async Task<(NotificationChannelDelivery Delivery, NotificationOutboxItem Item)> LoadClaimedDeliveryAsync(

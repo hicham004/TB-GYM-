@@ -40,6 +40,8 @@ function preferences(overrides: Partial<NotificationPreferences> = {}): Notifica
     inAppEnabled: true,
     emailServiceEnabled: false,
     emailChannelAvailable: true,
+    emailSuppressed: false,
+    emailSuppressionReason: null,
     quietHoursEnabled: false,
     quietHoursStartLocal: null,
     quietHoursEndLocal: null,
@@ -434,6 +436,63 @@ describe('NotificationPreferencesPage', () => {
     expect(field<HTMLInputElement>(host, 'Email me about my coaching service').disabled).toBe(
       false,
     );
+  });
+
+  /**
+   * A suppressed mailbox is stated, not hidden.
+   *
+   * The alternative is a switch that is on beside a channel that has quietly stopped, which is the
+   * one outcome worse than saying so: the member believes they are being emailed, stops checking the
+   * app, and finds out when they miss a payment notice.
+   */
+  it('says when email to the member is paused, in their own words, with no way to clear it', async () => {
+    const { host } = await render(({ get }) => {
+      get.mockReturnValue(
+        of(
+          preferences({
+            emailServiceEnabled: true,
+            emailSuppressed: true,
+            emailSuppressionReason: 'PermanentBounce',
+          }),
+        ),
+      );
+    });
+
+    const notice = query(host, '[data-testid="email-suppressed"]');
+    expect(notice.textContent).toContain('Email to your address is paused');
+    expect(notice.textContent).toContain('rejected our last message');
+    expect(notice.textContent).toContain('in-app notifications are unaffected');
+
+    // The member's own decision is not rewritten by a bounce, and the switch stays theirs to set.
+    expect(field<HTMLInputElement>(host, 'Email me about my coaching service').checked).toBe(true);
+    expect(field<HTMLInputElement>(host, 'Email me about my coaching service').disabled).toBe(
+      false,
+    );
+
+    // And there is deliberately no control that resumes mail to an address that bounced.
+    expect(host.textContent).not.toContain('Resume');
+    expect(host.textContent).not.toContain('Unsuppress');
+  });
+
+  it('explains a complaint differently from a bounce', async () => {
+    const { host } = await render(({ get }) => {
+      get.mockReturnValue(
+        of(preferences({ emailSuppressed: true, emailSuppressionReason: 'Complaint' })),
+      );
+    });
+
+    expect(query(host, '[data-testid="email-suppressed"]').textContent).toContain(
+      'reported as spam',
+    );
+  });
+
+  it('says nothing about suppression when the mailbox is healthy', async () => {
+    const { host } = await render(({ get }) => {
+      get.mockReturnValue(of(preferences()));
+    });
+
+    expect(host.querySelector('[data-testid="email-suppressed"]')).toBeNull();
+    expect(host.textContent).not.toContain('is paused');
   });
 
   it('reports a failed load without leaving a half-rendered form', async () => {

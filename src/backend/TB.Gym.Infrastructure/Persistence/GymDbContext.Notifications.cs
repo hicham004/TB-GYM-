@@ -109,9 +109,17 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_NotificationChannelDeliveries_InAppHasNoProvider",
                     "\"Channel\" <> 'InApp' OR (\"TransportAdapter\" IS NULL AND \"ProviderMessageId\" IS NULL AND \"ProviderAcceptedAtUtc\" IS NULL)");
+                // Provider evidence is a matched pair, only on a materialized email, and only from an
+                // adapter that actually contacted a provider. The captured adapter is named
+                // explicitly as well as excluded by the allowlist, because "no provider was asked" is
+                // the fact being protected and it must not depend on remembering to list every future
+                // adapter correctly.
                 table.HasCheckConstraint(
                     "CK_NotificationChannelDeliveries_ProviderEvidence",
-                    "(\"ProviderMessageId\" IS NULL AND \"ProviderAcceptedAtUtc\" IS NULL) OR (\"TransportAdapter\" IS NOT NULL AND \"Status\" = 'Materialized')");
+                    "((\"ProviderMessageId\" IS NULL) = (\"ProviderAcceptedAtUtc\" IS NULL)) AND (\"ProviderMessageId\" IS NULL OR (\"Channel\" = 'Email' AND \"Status\" = 'Materialized' AND \"TransportAdapter\" IN ('resend')))");
+                table.HasCheckConstraint(
+                    "CK_NotificationChannelDeliveries_CapturedHasNoProvider",
+                    "\"TransportAdapter\" <> 'captured' OR (\"ProviderMessageId\" IS NULL AND \"ProviderAcceptedAtUtc\" IS NULL)");
                 table.HasCheckConstraint(
                     "CK_NotificationChannelDeliveries_Transport",
                     "\"TransportAdapter\" IS NULL OR (\"Channel\" = 'Email' AND \"Status\" = 'Materialized')");
@@ -216,6 +224,11 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_NotificationDeliveryAttempts_Vocabulary",
                     "\"Channel\" IN ('InApp', 'Email') AND \"Outcome\" IN ('Started', 'Succeeded', 'TransientFailure', 'PermanentFailure', 'Abandoned', 'Suppressed')");
+                // An in-app attempt has no provider, and a failed attempt was not accepted by one, so
+                // neither may carry an identifier only a provider could have returned.
+                table.HasCheckConstraint(
+                    "CK_NotificationDeliveryAttempts_ProviderEvidence",
+                    "\"ProviderMessageId\" IS NULL OR (\"Channel\" = 'Email' AND \"Outcome\" = 'Succeeded')");
             });
             ConfigureAuditable(entity);
         });
@@ -357,6 +370,164 @@ public sealed partial class GymDbContext
                     "CK_NotificationPreferenceCommands_QuietHours",
                     "(\"ResultQuietHoursEnabled\" = (\"ResultQuietHoursStartLocal\" IS NOT NULL)) AND (\"ResultQuietHoursEnabled\" = (\"ResultQuietHoursEndLocal\" IS NOT NULL)) AND (\"ResultQuietHoursEnabled\" = false OR \"ResultQuietHoursStartLocal\" <> \"ResultQuietHoursEndLocal\")");
             });
+            ConfigureAuditable(entity);
+        });
+
+        ConfigureNotificationProviderEvidence(builder);
+    }
+
+    /// <summary>
+    /// The provider-facing half of the email channel: what a provider accepted, what it said
+    /// afterwards, and which mailboxes stopped accepting mail.
+    /// </summary>
+    /// <remarks>
+    /// Three tables rather than three more columns on the delivery, and the reason is the immutability
+    /// rule Phase 6B-3A established: a terminal channel delivery may never be rewritten. Provider
+    /// acceptance is synchronous and is written in the same statement that makes the delivery
+    /// terminal; everything the provider says afterwards arrives asynchronously, out of order, and
+    /// accumulates here instead.
+    /// </remarks>
+    private void ConfigureNotificationProviderEvidence(ModelBuilder builder)
+    {
+        builder.Entity<NotificationProviderMessage>(entity =>
+        {
+            entity.ToTable("ProviderMessages", "notifications");
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => new { item.TenantId, item.Id });
+            entity.Property(item => item.Channel).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.BounceClass).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.Adapter).HasMaxLength(40).IsRequired();
+            entity.Property(item => item.ProviderMessageId).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.RecipientAddressFingerprint).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.FingerprintKeyId).HasMaxLength(40).IsRequired();
+            entity.Property(item => item.FailureCode).HasMaxLength(100);
+            // Global rather than tenant-scoped: the public webhook route resolves the workspace from
+            // this identifier, so it may only ever have one answer.
+            entity.HasIndex(item => new { item.Adapter, item.ProviderMessageId })
+                .IsUnique()
+                .HasDatabaseName(DatabaseConstraintNames.OneNotificationProviderMessagePerProviderId);
+            // At most one accepted provider request per delivery. The delivery's own terminal
+            // immutability already prevents a second one; this says so in the schema as well.
+            entity.HasIndex(item => new { item.TenantId, item.ChannelDeliveryId })
+                .IsUnique()
+                .HasDatabaseName("IX_ProviderMessages_TenantId_ChannelDeliveryId");
+            entity.HasIndex(item => new { item.TenantId, item.RecipientUserId, item.RecipientAddressFingerprint })
+                .HasDatabaseName("IX_ProviderMessages_TenantId_RecipientUserId_Fingerprint");
+            // Tenant, delivery and channel together: a provider message cannot be attached to another
+            // workspace's delivery, and cannot claim a channel that delivery does not have.
+            entity.HasOne<NotificationChannelDelivery>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ChannelDeliveryId, item.Channel })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id, item.Channel })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<NotificationOutboxItem>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.OutboxItemId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.RecipientUserId })
+                .HasPrincipalKey(item => new { item.TenantId, item.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_NotificationProviderMessages_Vocabulary",
+                    "\"Channel\" = 'Email' AND \"Adapter\" IN ('resend') AND (\"BounceClass\" IS NULL OR \"BounceClass\" IN ('Permanent', 'Transient', 'Undetermined')) AND \"EventCount\" >= 0");
+                // A fingerprint is a keyed MAC in lowercase hex. Its shape is checked because it is
+                // what suppression compares on, and a row that is not one would silently never match.
+                table.HasCheckConstraint(
+                    "CK_NotificationProviderMessages_Fingerprint",
+                    "\"RecipientAddressFingerprint\" ~ '^[0-9a-f]{64}$' AND btrim(\"FingerprintKeyId\") <> '' AND \"ProviderMessageId\" ~ '^[A-Za-z0-9_.:-]{1,200}$'");
+                table.HasCheckConstraint(
+                    "CK_NotificationProviderMessages_Bounce",
+                    "(\"BouncedAtUtc\" IS NULL) = (\"BounceClass\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_NotificationProviderMessages_Failure",
+                    "(\"FailedAtUtc\" IS NULL) = (\"FailureCode\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_NotificationProviderMessages_EventBookkeeping",
+                    "(\"EventCount\" = 0) = (\"LastEventReceivedAtUtc\" IS NULL)");
+            });
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<NotificationProviderEvent>(entity =>
+        {
+            entity.ToTable("ProviderEvents", "notifications");
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => new { item.TenantId, item.Id });
+            entity.Property(item => item.EventType).HasConversion<string>().HasMaxLength(40);
+            entity.Property(item => item.BounceClass).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.Adapter).HasMaxLength(40).IsRequired();
+            entity.Property(item => item.ProviderEventId).HasMaxLength(120).IsRequired();
+            entity.Property(item => item.FailureCode).HasMaxLength(100);
+            entity.Property(item => item.SignatureScheme).HasMaxLength(60).IsRequired();
+            // The idempotency guarantee, global for the same reason the message identifier is: an
+            // event identifier replayed against a different workspace must collide, not succeed twice.
+            entity.HasIndex(item => new { item.Adapter, item.ProviderEventId })
+                .IsUnique()
+                .HasDatabaseName(DatabaseConstraintNames.OneNotificationProviderEventPerProviderId);
+            entity.HasIndex(item => new { item.TenantId, item.ProviderMessageRecordId, item.ReceivedAtUtc })
+                .HasDatabaseName("IX_ProviderEvents_TenantId_MessageRecordId_ReceivedAtUtc");
+            entity.HasOne<NotificationProviderMessage>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ProviderMessageRecordId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_NotificationProviderEvents_Vocabulary",
+                    "\"Adapter\" IN ('resend') AND \"EventType\" IN ('ProviderAccepted', 'RecipientServerAccepted', 'Bounced', 'Complained', 'DeliveryDelayed', 'Failed', 'ProviderSuppressed') AND \"SignatureSchemeVersion\" >= 1 AND btrim(\"SignatureScheme\") <> ''");
+                table.HasCheckConstraint(
+                    "CK_NotificationProviderEvents_Bounce",
+                    "(\"EventType\" = 'Bounced') = (\"BounceClass\" IS NOT NULL)");
+                table.HasCheckConstraint(
+                    "CK_NotificationProviderEvents_EventId",
+                    "\"ProviderEventId\" ~ '^[A-Za-z0-9_.:-]{1,120}$'");
+            });
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<NotificationEmailSuppression>(entity =>
+        {
+            entity.ToTable("EmailSuppressions", "notifications");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Reason).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.AddressFingerprint).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.FingerprintKeyId).HasMaxLength(40).IsRequired();
+            // One suppression per mailbox, per member, per workspace. Keyed on the fingerprint rather
+            // than on the member, so correcting a mistyped address is not permanently punished by the
+            // bounce the old one produced.
+            entity.HasIndex(item => new { item.TenantId, item.UserId, item.AddressFingerprint })
+                .IsUnique()
+                .HasDatabaseName(DatabaseConstraintNames.OneEmailSuppressionPerAddress);
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.UserId })
+                .HasPrincipalKey(item => new { item.TenantId, item.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<NotificationProviderEvent>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.SourceProviderEventId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<NotificationProviderMessage>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.SourceProviderMessageId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_NotificationEmailSuppressions_Vocabulary",
+                "\"Reason\" IN ('PermanentBounce', 'Complaint', 'ProviderSuppressed') AND \"AddressFingerprint\" ~ '^[0-9a-f]{64}$' AND btrim(\"FingerprintKeyId\") <> ''"));
             ConfigureAuditable(entity);
         });
     }

@@ -1579,6 +1579,9 @@ export type NotificationDeadLetterView = {
   failureCode: null | string;
 };
 
+export type NotificationEmailSuppressionReason =
+  'PermanentBounce' | 'Complaint' | 'ProviderSuppressed';
+
 export type NotificationPage = {
   total: number | string;
   unreadTotal: number | string;
@@ -1590,6 +1593,8 @@ export type NotificationPreferenceView = {
   emailServiceEnabled: boolean;
   emailMarketingEnabled: boolean;
   emailChannelAvailable: boolean;
+  emailSuppressed: boolean;
+  emailSuppressionReason: null | NotificationEmailSuppressionReason;
   quietHoursEnabled: boolean;
   quietHoursStartLocal: null | string;
   quietHoursEndLocal: null | string;

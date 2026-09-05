@@ -40,6 +40,13 @@ internal sealed class CapturedNotificationEmailTransport : INotificationEmailTra
 
     public string AdapterName => NotificationEmailAdapters.CapturedAdapterName;
 
+    /// <summary>
+    /// False, and the reason this property exists. A capture contacted nobody, so it has no provider
+    /// evidence to offer, and the dispatcher refuses to record any for an adapter that says so —
+    /// before the check constraint and the trigger refuse it again.
+    /// </summary>
+    public bool ContactsProvider => false;
+
     public Task<NotificationEmailTransportResult> SendAsync(
         NotificationEmailMessage message,
         CancellationToken cancellationToken)

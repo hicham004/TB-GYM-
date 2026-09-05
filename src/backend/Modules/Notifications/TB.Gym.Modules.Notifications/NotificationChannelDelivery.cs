@@ -126,17 +126,26 @@ public sealed class NotificationChannelDelivery : TenantEntity
     public string? TransportAdapter { get; private set; }
 
     /// <summary>
-    /// Reserved for a real provider. Null throughout this phase, and a database trigger refuses any
-    /// attempt to set it, because inventing an identifier for a capture would be a lie about where it
-    /// came from.
+    /// The identifier a real provider returned for the request it accepted, or null when no provider
+    /// was contacted. The captured adapter can never set it — inventing an identifier for a capture
+    /// would be a lie about where it came from — and a database check and a trigger both refuse it.
     /// </summary>
     public string? ProviderMessageId { get; private set; }
 
     /// <summary>
-    /// Reserved for a real provider's acceptance of the message. Null throughout this phase. Provider
-    /// acceptance, recipient-server acceptance and human read are three separate facts and none is
-    /// ever written from another.
+    /// When a real provider accepted responsibility for the request.
     /// </summary>
+    /// <remarks>
+    /// Written in the same statement that makes this delivery terminal, because it is synchronous:
+    /// the provider answered before the transaction committed. Everything the provider says
+    /// afterwards — that a mail server accepted it, that it bounced, that somebody complained —
+    /// arrives asynchronously and out of order and belongs to
+    /// <see cref="NotificationProviderMessage"/>, so a terminal delivery stays immutable.
+    /// <para>
+    /// Provider acceptance, recipient-server acceptance and human read are three separate facts and
+    /// none is ever written from another.
+    /// </para>
+    /// </remarks>
     public DateTimeOffset? ProviderAcceptedAtUtc { get; private set; }
 
     /// <summary>How many times quiet hours have moved this delivery forward. Never an attempt.</summary>
@@ -289,16 +298,46 @@ public sealed class NotificationChannelDelivery : TenantEntity
     /// This channel produced its artefact. <paramref name="transportAdapter"/> names what did it, or
     /// is null for in-app, which has no transport at all.
     /// </summary>
-    public void MarkMaterialized(Guid claimToken, DateTimeOffset now, string? transportAdapter = null)
+    /// <remarks>
+    /// <paramref name="providerMessageId"/> is supplied only when a real provider accepted the
+    /// request and returned a usable identifier for it. Passing one for in-app, or for the captured
+    /// adapter, is refused here before the database refuses it: recording provider evidence for
+    /// something no provider was told about is the exact confusion the whole vocabulary exists to
+    /// prevent.
+    /// </remarks>
+    public void MarkMaterialized(
+        Guid claimToken,
+        DateTimeOffset now,
+        string? transportAdapter = null,
+        string? providerMessageId = null)
     {
         RequireClaim(claimToken);
+        var adapter = transportAdapter is null
+            ? null
+            : Normalize(transportAdapter, 40, nameof(transportAdapter));
+        if (providerMessageId is not null)
+        {
+            if (Channel != NotificationChannel.Email || !NotificationEmailAdapters.IsProviderAdapterName(adapter))
+            {
+                throw new InvalidOperationException(
+                    "Only an email delivery materialized by a real provider adapter may record provider evidence.");
+            }
+
+            if (!NotificationProviderMessageId.IsValid(providerMessageId))
+            {
+                throw new ArgumentException(
+                    "A provider message identifier must be bounded and use a safe alphabet.",
+                    nameof(providerMessageId));
+            }
+        }
+
         Status = NotificationDeliveryStatus.Materialized;
         MaterializedAtUtc = now;
         CompletedAtUtc = now;
         FailureCode = null;
-        TransportAdapter = transportAdapter is null
-            ? null
-            : Normalize(transportAdapter, 40, nameof(transportAdapter));
+        TransportAdapter = adapter;
+        ProviderMessageId = providerMessageId;
+        ProviderAcceptedAtUtc = providerMessageId is null ? null : now;
         ReleaseClaim();
     }
 

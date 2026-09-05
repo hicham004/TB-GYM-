@@ -409,11 +409,22 @@ public sealed class NotificationPreferenceCommandRecord : TenantEntity
         NotificationPreferenceView result) =>
         new(tenantId, idempotencyKey, commandType, payloadFingerprint, actorUserId, recordedAtUtc, result);
 
-    public NotificationPreferenceView ReplayResult() => new(
+    /// <summary>
+    /// The snapshotted response, with the caller's <em>current</em> suppression status overlaid.
+    /// </summary>
+    /// <remarks>
+    /// Suppression is deliberately not snapshotted. It is not a result of this command — nobody
+    /// decided it, a provider reported it — and freezing it here would let a replay tell a member
+    /// their mail is flowing hours after it stopped. Everything the command actually settled comes
+    /// from the record; this one fact is read fresh.
+    /// </remarks>
+    public NotificationPreferenceView ReplayResult(NotificationEmailSuppressionReason? suppressionReason) => new(
         InAppEnabled: true,
         ResultEmailServiceEnabled,
         ResultEmailMarketingEnabled,
         ResultEmailChannelAvailable,
+        suppressionReason is not null,
+        suppressionReason,
         ResultQuietHoursEnabled,
         NotificationLocalTime.Format(ResultQuietHoursStartLocal),
         NotificationLocalTime.Format(ResultQuietHoursEndLocal),

@@ -28,6 +28,7 @@ internal sealed class NotificationPreferenceService(
     IClock clock,
     ICurrentUser currentUser,
     ITenantContext tenantContext,
+    INotificationRecipientContacts contacts,
     IOptions<NotificationEmailOptions> emailOptions)
     : INotificationPreferenceService
 {
@@ -61,9 +62,13 @@ internal sealed class NotificationPreferenceService(
         // A member who has never opened the screen has no row, and reading their settings must not
         // create one: a GET that writes would turn every navigation into a database write and would
         // make "has this person ever decided anything" unanswerable.
+        var suppression = await ReadSuppressionReasonAsync(userId, cancellationToken);
         return preference is null
-            ? ToView(NotificationChannelPreference.CreateDefault(tenantContext.TenantId, userId), timeZoneId)
-            : ToView(preference, timeZoneId);
+            ? ToView(
+                NotificationChannelPreference.CreateDefault(tenantContext.TenantId, userId),
+                timeZoneId,
+                suppression)
+            : ToView(preference, timeZoneId, suppression);
     }
 
     public async Task<NotificationPreferenceCommandResult> UpdateOwnAsync(
@@ -140,7 +145,8 @@ internal sealed class NotificationPreferenceService(
                         userId)
                         // The caller lost a response, not a decision. Replay the response produced by
                         // that command, not mutable settings written by a later command.
-                        ? NotificationPreferenceCommandResult.Success(spent.ReplayResult())
+                        ? NotificationPreferenceCommandResult.Success(spent.ReplayResult(
+                            await ReadSuppressionReasonAsync(userId, cancellationToken)))
                         : NotificationPreferenceCommandResult.Conflict(
                             "idempotency_conflict",
                             "This request key was already used for different notification settings.");
@@ -188,7 +194,10 @@ internal sealed class NotificationPreferenceService(
                 // version returned to the caller and snapshotted by the command record. Both saves
                 // are still one transaction, so neither can become visible without the other.
                 await dbContext.SaveChangesAsync(cancellationToken);
-                var result = ToView(preference, timeZoneId);
+                var result = ToView(
+                    preference,
+                    timeZoneId,
+                    await ReadSuppressionReasonAsync(userId, cancellationToken));
                 dbContext.NotificationPreferenceCommandRecords.Add(
                     NotificationPreferenceCommandRecord.Record(
                         tenantContext.TenantId,
@@ -249,7 +258,8 @@ internal sealed class NotificationPreferenceService(
         }
 
         return winner.Matches(NotificationPreferenceCommandType.UpdateOwnPreferences, fingerprint, userId)
-            ? NotificationPreferenceCommandResult.Success(winner.ReplayResult())
+            ? NotificationPreferenceCommandResult.Success(winner.ReplayResult(
+                await ReadSuppressionReasonAsync(userId, cancellationToken)))
             : NotificationPreferenceCommandResult.Conflict(
                 "idempotency_conflict",
                 "This request key was already used for different notification settings.");
@@ -322,13 +332,53 @@ internal sealed class NotificationPreferenceService(
         return tenantContext.HasTenant && userId != Guid.Empty;
     }
 
-    private NotificationPreferenceView ToView(NotificationChannelPreference preference, string timeZoneId) => new(
+    /// <summary>
+    /// Whether this member's current mailbox is durably suppressed, and why.
+    /// </summary>
+    /// <remarks>
+    /// Resolved through the same authorized contract the dispatcher uses, and compared as a keyed
+    /// fingerprint under every configured key — so a key rotation does not make a live suppression
+    /// look cleared, and a member who corrects a mistyped address sees it clear by itself, because
+    /// the address they use now fingerprints differently. The address exists for the length of this
+    /// call and is never returned, stored or logged.
+    /// </remarks>
+    private async Task<NotificationEmailSuppressionReason?> ReadSuppressionReasonAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var keys = email.Provider.ResolveFingerprintKeys();
+        if (keys.Count == 0)
+        {
+            // No provider is configured, so nothing can have been suppressed by one.
+            return null;
+        }
+
+        var contact = await contacts.ResolveAsync(tenantContext.TenantId, userId, cancellationToken);
+        if (contact is null)
+        {
+            return null;
+        }
+
+        var fingerprints = NotificationAddressFingerprint.ComputeAll(keys, contact.EmailAddress);
+        return await dbContext.NotificationEmailSuppressions
+            .AsNoTracking()
+            .Where(item => item.UserId == userId && fingerprints.Contains(item.AddressFingerprint))
+            .Select(item => (NotificationEmailSuppressionReason?)item.Reason)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private NotificationPreferenceView ToView(
+        NotificationChannelPreference preference,
+        string timeZoneId,
+        NotificationEmailSuppressionReason? suppressionReason) => new(
         // In-app is stated rather than implied. It is always on, every supported type keeps it, and
         // this slice deliberately offers no way to switch it off.
         InAppEnabled: true,
         preference.EmailServiceEnabled,
         preference.EmailMarketingEnabled,
         email.IsAvailable,
+        suppressionReason is not null,
+        suppressionReason,
         preference.QuietHoursEnabled,
         NotificationLocalTime.Format(preference.QuietHoursStartLocal),
         NotificationLocalTime.Format(preference.QuietHoursEndLocal),

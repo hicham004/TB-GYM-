@@ -60,6 +60,17 @@ services:
       # not protected by CORS, and a wildcard with credentials would let any site open an
       # authenticated socket as the signed-in user.
       Messaging__Realtime__AllowedOrigins__0: ${TB_GYM_HUB_ORIGIN:-http://localhost:4200}
+      # Transactional email. Off by default: the local stack has no verified sending domain, and a
+      # development container that could mail a real person by accident is a worse default than one
+      # that cannot mail anybody. Setting the adapter to Resend requires every value below, and
+      # startup refuses a half-configured provider whether or not the channel is enabled.
+      Notifications__Email__Enabled: ${TB_GYM_EMAIL_ENABLED:-false}
+      Notifications__Email__Adapter: ${TB_GYM_EMAIL_ADAPTER:-None}
+      Notifications__Email__Provider__ApiKey: ${TB_GYM_EMAIL_API_KEY:-}
+      Notifications__Email__Provider__FromAddress: ${TB_GYM_EMAIL_FROM:-}
+      Notifications__Email__Provider__WebhookSigningSecret: ${TB_GYM_EMAIL_WEBHOOK_SECRET:-}
+      Notifications__Email__Provider__FingerprintKeyId: ${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-}
+      Notifications__Email__Provider__FingerprintKeys__${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-unset}: ${TB_GYM_EMAIL_FINGERPRINT_KEY:-}
     ports:
       - "5134:8080"
     volumes:
@@ -90,6 +101,17 @@ services:
       Notifications__Dispatch__BatchSize: ${TB_GYM_NOTIFICATION_BATCH_SIZE:-25}
       Notifications__Dispatch__ClaimLeaseSeconds: ${TB_GYM_NOTIFICATION_LEASE_SECONDS:-120}
       Notifications__Dispatch__MaximumAttempts: ${TB_GYM_NOTIFICATION_MAX_ATTEMPTS:-6}
+      # Transactional email. Off by default: the local stack has no verified sending domain, and a
+      # development container that could mail a real person by accident is a worse default than one
+      # that cannot mail anybody. Setting the adapter to Resend requires every value below, and
+      # startup refuses a half-configured provider whether or not the channel is enabled.
+      Notifications__Email__Enabled: ${TB_GYM_EMAIL_ENABLED:-false}
+      Notifications__Email__Adapter: ${TB_GYM_EMAIL_ADAPTER:-None}
+      Notifications__Email__Provider__ApiKey: ${TB_GYM_EMAIL_API_KEY:-}
+      Notifications__Email__Provider__FromAddress: ${TB_GYM_EMAIL_FROM:-}
+      Notifications__Email__Provider__WebhookSigningSecret: ${TB_GYM_EMAIL_WEBHOOK_SECRET:-}
+      Notifications__Email__Provider__FingerprintKeyId: ${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-}
+      Notifications__Email__Provider__FingerprintKeys__${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-unset}: ${TB_GYM_EMAIL_FINGERPRINT_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

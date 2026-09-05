@@ -74,6 +74,30 @@ export class NotificationPreferencesPage {
   protected readonly isReady = computed(() => this.preferences() !== null);
   protected readonly quietHoursEnabled = signal(false);
 
+  /**
+   * Whether this member's mailbox has stopped receiving email, and why in their own words.
+   *
+   * Rendered as a statement rather than a control. There is nothing on this screen that clears it,
+   * deliberately: a button that resumes mail to an address that complained is a decision about
+   * somebody else's mailbox. What the member can do — correct the address on their account — is what
+   * the wording points at, and doing that clears the state by itself because the server compares the
+   * address they use now.
+   */
+  protected readonly emailSuppressed = computed(() => this.preferences()?.emailSuppressed ?? false);
+
+  protected readonly emailSuppressionReason = computed(() => {
+    switch (this.preferences()?.emailSuppressionReason ?? null) {
+      case 'PermanentBounce':
+        return $localize`Your email provider rejected our last message to this address permanently.`;
+      case 'Complaint':
+        return $localize`A message to this address was reported as spam.`;
+      case 'ProviderSuppressed':
+        return $localize`Our email provider is refusing to send to this address.`;
+      default:
+        return '';
+    }
+  });
+
   private readonly contextKey = computed(() => {
     const userId = this.auth.user()?.id ?? null;
     const membership = this.tenants.selectedMembership();

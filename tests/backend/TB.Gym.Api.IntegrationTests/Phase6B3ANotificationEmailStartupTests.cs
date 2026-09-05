@@ -97,11 +97,13 @@ public sealed class Phase6B3ANotificationEmailStartupTests
     }
 
     /// <summary>
-    /// There is no production email provider in this phase, so there is nothing honest for an enabled
-    /// channel to mean in Production.
+    /// Enabling a channel with no adapter behind it is a configuration error in Production too. Phase
+    /// 6B-3B added a real provider adapter, so what Production now refuses is an enabled channel with
+    /// nothing behind it rather than an enabled channel at all; the provider's own rules are asserted
+    /// in <c>Phase6B3BProviderStartupTests</c>.
     /// </summary>
     [TestMethod]
-    public void ProductionRefusesAnEnabledEmailChannel()
+    public void ProductionRefusesAnEnabledEmailChannelWithNoAdapter()
     {
         using var factory = CreateFactory(
             new Dictionary<string, string?>
@@ -113,7 +115,7 @@ public sealed class Phase6B3ANotificationEmailStartupTests
 
         var failure = Assert.ThrowsExactly<OptionsValidationException>(() => factory.CreateClient());
 
-        Assert.Contains("until a real email provider is configured", string.Join(" ", failure.Failures));
+        Assert.Contains("requires a configured email adapter", string.Join(" ", failure.Failures));
     }
 
     /// <summary>Enabling a channel that has nothing behind it is a configuration error, not a no-op.</summary>
@@ -141,12 +143,12 @@ public sealed class Phase6B3ANotificationEmailStartupTests
         using var factory = CreateFactory(new Dictionary<string, string?>
         {
             ["Notifications:Email:Enabled"] = "true",
-            ["Notifications:Email:Adapter"] = "Resend",
+            ["Notifications:Email:Adapter"] = "Sendmail",
         });
 
         var failure = Assert.ThrowsExactly<OptionsValidationException>(() => factory.CreateClient());
 
-        Assert.Contains("must be 'None' or 'Captured'", string.Join(" ", failure.Failures));
+        Assert.Contains("must be 'None', 'Captured' or 'Resend'", string.Join(" ", failure.Failures));
     }
 
     /// <summary>Development with the captured adapter starts, and composes exactly that adapter.</summary>

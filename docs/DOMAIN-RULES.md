@@ -740,20 +740,110 @@ both passes as quiet and releasing at the first would contradict that. A local e
 occurs resolves to the instant the gap finishes. Both rules move forward, never backward, and the
 result is re-tested against the window before it is used.
 
-**NOT-016** Email in Phase 6B-3A is materialized and captured, never sent. An owned transport
-interface is the seam a provider will one day sit behind; the only implementation captures in memory
-for development and tests, contacts nothing, and reports `Captured`. The vocabulary has no
-`Delivered` or `Sent` member, because this phase can establish capture and nothing beyond it.
-`ProviderMessageId` and provider acceptance stay null, and database checks refuse to set them.
-Production email is disabled by default and **fails closed**: enabling the channel without a real
-configured provider refuses to start, and the captured adapter is refused outside Development even
-when email is disabled. No recipient address, rendered subject, rendered body, action URL or token
+**NOT-016** Email in Phase 6B-3A was materialized and captured, never sent. The captured adapter
+remains the development and test implementation, contacts nothing, and reports `Captured`;
+`ProviderMessageId` and provider acceptance stay null for it, and database checks refuse to set them
+by name as well as by allowlist. The vocabulary still has no `Delivered` or `Sent` member. What
+changed in Phase 6B-3B is only that a real provider may now sit behind the same seam and report
+`ProviderAccepted`, under NOT-017 through NOT-024; everything below about what may never be persisted
+is unchanged and applies to the provider path exactly as written. Production email is disabled by
+default and **fails closed**: an enabled channel with no adapter refuses to start, a provider adapter
+missing any of its secrets refuses to start, and the captured adapter is refused outside Development
+even when email is disabled. No recipient address, rendered subject, rendered body, action URL or token
 is written to the outbox, a channel delivery, an attempt, dead-letter data or a log; the recipient
 is resolved only at materialization through a narrow contract that itself reverifies active
 membership, and the message exists in memory for the duration of one transport call. Email wording
 is the same kind of code-owned, versioned, generic template NOT-006 requires: it may tell somebody
 to sign in to TB Gym, and may not disclose health data, payment details, client identity,
 conversation text or an invitation token.
+
+**NOT-017** Since Phase 6B-3B one production provider sits behind `INotificationEmailTransport`,
+reached through an owned `HttpClient` adapter and no provider SDK. A synchronous provider response
+may establish exactly one new fact: that the provider accepted responsibility for the request, and
+returned a verifiable identifier for it. It is recorded as `ProviderAcceptedAtUtc` and
+`ProviderMessageId` in the same statement that makes the delivery terminal, so a terminal delivery
+stays immutable. It is not delivery, not recipient-server acceptance and not read. A 2xx with no
+usable identifier is a permanent failure rather than a success, because acceptance without the
+identifier every later event correlates on could never be spoken about again, and inventing one would
+be worse. See ADR 0022.
+
+**NOT-018** Every provider failure is classified into a stable owned code before it reaches a row,
+and no provider response body, URI, header or exception object is logged. Rate limits, timeouts,
+transport failures and eligible server errors are transient and earn a retry from
+`notification-exponential-v1`. A rejected request and a reused idempotency key with a changed payload
+are permanent. Credential and configuration refusals are transient and logged as an *operational*
+fault at `Error`: a revoked key is a deployment problem rather than a problem with the notification,
+and dead-lettering every due email the moment one appears would discard work that becomes deliverable
+again as soon as somebody fixes it. The bounded schedule still ends in a dead letter, so nothing
+retries forever.
+
+**NOT-019** The provider idempotency key binds the intent, the channel and the exact mailbox, with
+the mailbox participating as a keyed fingerprint rather than as an address. Without the mailbox, a
+member who corrects a mistyped address mid-retry presents a used key with a changed payload and is
+answered with a conflict instead of a send. The provider's key retention is finite — 24 hours for the
+configured provider — so a retry schedule longer than that window would present a key the provider has
+forgotten and turn a deduplicated retry into a second real message. `MaximumAttempts` is validated
+against the configured retention at startup in both composition roots, which caps it at eight. The
+guarantee is at-least-once within that window and never exactly-once.
+
+**NOT-020** Provider events are ingested through one narrowly scoped public route, authenticated by
+an HMAC-SHA256 signature over the exact raw request body under the named scheme
+`standard-webhooks-hmac-sha256-v1`. Order is the security property: the body is bounded, then the
+signature and its signed timestamp are verified, then the body is parsed, then the workspace is
+resolved, and only then is anything written. A missing, malformed, expired, future-dated or invalid
+signature is refused before a parser runs. The signed timestamp is checked against a bounded tolerance
+in both directions, or a captured event stays valid forever and can be replayed to suppress somebody's
+mail at any later time. The route uses no cookie and no antiforgery token — the caller has neither —
+and keeps a source-address rate limit. The workspace is resolved from the provider's message
+identifier through a durable tenant-aware relationship and is never asserted by the request; the
+ingestion contract has no parameter that names a tenant, a member or a delivery. Recorded, duplicate,
+deliberately ignored and unknown-message are one indistinguishable acknowledgement.
+
+**NOT-021** Provider event history is append-only and idempotent on the provider's own event
+identifier, unique per adapter across every workspace. The provider guarantees at-least-once delivery
+and no ordering, so a repeat converges on one recorded fact and a reordering records both truthfully:
+every fact a provider event establishes is written **once** on `NotificationProviderMessage`, and a
+later event never rewrites an earlier one. A bounce arriving before the recipient-server acceptance it
+contradicts overwrites nothing, and neither does the acceptance when it turns up second. Nothing
+collapses them into a status the last writer wins. `email.opened` and `email.clicked` are not modelled
+and are never persisted in any form: an open is not a read, and recording one would begin exactly the
+tracking log the consent evidence was kept from becoming.
+
+**NOT-022** A verified permanent bounce, a complaint, or the provider's own suppression list stops
+further email to that mailbox durably. A transient or unclassified bounce, a delivery delay and a
+provider-side failure do not, and there is no threshold that promotes a run of them: an unchosen
+threshold is not a policy, and the cost of suppressing wrongly is a client who silently stops hearing
+about their payments. Suppression affects email only — the in-app delivery of the same notification is
+untouched, because a mailbox refusing mail is not a member losing what they are entitled to be told.
+It is rechecked immediately before provider submission, at the same final-materialization boundary and
+under the same recipient-policy lock the preference recheck uses, and the ingestion path takes that
+lock before writing a suppression so the two cannot interleave. There is no override, clearing or
+replay surface in this phase.
+
+**NOT-023** Suppression is keyed on a mailbox rather than on a member, so somebody who mistyped their
+address, bounced, and then corrected it starts receiving mail again; the check compares the address
+they use now, so it clears itself. No address is stored to make that possible. The mailbox
+participates as an HMAC-SHA256 fingerprint under a configured key, named
+`notification-address-fingerprint-hmac-sha256-v1`, recorded beside the id of the key that produced it —
+an ordinary unsalted hash of an email address is a synonym for the address, not a pseudonym for it,
+because the space of real addresses is small and enumerable. The fingerprint recorded at submission
+comes from the address this application resolved, never from what a provider echoes back, so a forged
+body could not redirect a suppression. Rotation is additive: a new key writes new fingerprints, every
+retired key stays configured and keeps matching the suppressions written under it, and removing a
+retired key is the one deliberate act that drops them.
+
+**NOT-024** Production email configuration fails closed and is validated at startup in both
+composition roots. A provider adapter without its API key, sending identity, webhook signing secret or
+address-fingerprint key refuses to start — in every environment and whether or not the channel is
+enabled, because a half-configured provider that one flag flip would activate is the failure this
+prevents. The endpoint must be HTTPS on an approved provider host in Production, relaxing only as far
+as loopback outside it. Contradictory configuration — provider secrets beside the captured adapter, a
+webhook secret with no provider — refuses rather than guessing which half is in force. The captured
+adapter remains refused in Production. Every secret comes from configuration or the environment, none
+has a committed default, and no validation message quotes a configured value. A deployment with no
+provider answers `404` on the webhook route. No recipient address, rendered subject or body, API key,
+signature, raw webhook body or provider diagnostic text is written to any notification column or any
+log line.
 
 **MED-001** Object bytes live in object storage; the database owns metadata, tenant, purpose,
 content type, size, checksum, status, and retention. Upload authorization validates type and
@@ -940,7 +1030,18 @@ At minimum, later migrations should enforce:
 | An attempt belongs to one channel delivery and agrees with its channel                                               | Composite FK `(TenantId, ChannelDeliveryId, Channel)`                                                 |
 | Attempt count is consistent with started attempts and never exceeds the maximum                                      | Check plus deferred chain assertion over `1..AttemptCount`                                            |
 | Only a current claimant finalizes a delivery, and a terminal row never restarts                                      | Claim-token index plus PostgreSQL trigger comparing OLD and NEW                                       |
-| No provider message ID or acceptance for an adapter that contacted no provider                                       | Checks forcing both null for in-app and for every captured outcome                                    |
+| No provider message ID or acceptance for an adapter that contacted no provider                                       | Checks forcing both null for in-app and for the captured adapter, by name and by allowlist            |
+| Provider acceptance is a matched pair, written once, only on a materialized email from a real adapter                | Check plus PostgreSQL trigger comparing OLD and NEW on the delivery                                   |
+| A provider message ID only on an email attempt that succeeded, and only one its delivery owns                        | Check plus trigger, plus a deferred assertion against the delivery                                    |
+| Provider acceptance cannot be fabricated by inserting a row                                                          | Deferred assertion that the delivery is materialized by that adapter with that identifier             |
+| One durable relationship per provider message ID, and one per email delivery                                         | Global unique `(Adapter, ProviderMessageId)` plus unique `(TenantId, ChannelDeliveryId)`              |
+| One recorded provider event per provider event ID, across every workspace                                            | Global unique `(Adapter, ProviderEventId)`                                                            |
+| Every provider fact written once; a later event never rewrites an earlier one                                        | PostgreSQL trigger refusing any change to a non-null fact column                                      |
+| Provider event history is append-only and consistent with the fact it claims                                         | Trigger refusing update and delete, plus a deferred fact assertion                                    |
+| A provider event and its message never cross a workspace                                                             | Composite FKs `(TenantId, ChannelDeliveryId, Channel)` and `(TenantId, ProviderMessageRecordId)`      |
+| One email suppression per workspace, member and address fingerprint                                                  | Unique `(TenantId, UserId, AddressFingerprint)` plus composite membership FK                          |
+| A suppression is immutable, undeletable, and matches the verified event and mailbox that caused it                   | Trigger refusing update and delete, plus a deferred evidence assertion                                |
+| Only fingerprint-shaped values reach an address column                                                               | Checks requiring lowercase 64-character hex and a non-empty key id                                    |
 | A quiet-hours deferral moves the attempt instant forward and consumes no attempt                                     | Check pairing the deferral code and instant with an unchanged attempt count                           |
 | Only vocabulary the application owns reaches a notification status or code column                                    | Enumerated checks on status, channel, purpose, transport, failure and deferral codes                  |
 | One notification preference row per member and workspace                                                             | Unique `(TenantId, UserId)` plus composite membership FK                                              |

@@ -115,14 +115,19 @@ Phases 0 through 6B are implemented and reviewed:
 - **Check-ins** — form lineages, immutable published versions, stable question keys, typed answers,
   one-way submission and review.
 - **Notifications** — idempotent outbox, durable claimed dispatch with retry and dead-lettering,
-  versioned templates, in-app inbox and read state.
+  versioned templates, in-app inbox and read state; independent per-channel delivery with member
+  preferences, quiet hours and append-only consent evidence; then production transactional email
+  through one provider, with signed provider events, and bounce and complaint suppression keyed on a
+  mailbox that is never stored.
 - **Messaging** — persisted direct conversations with append-only revisions, one-way removal and
   coach moderation; then authorized realtime delivery with catch-up, application acknowledgement and
   Redis-backed multi-replica scale-out.
 
 Not implemented: gamification and tenant theming, SaaS productization and tenant billing, AI
-features, recurring billing, and production provider integrations for email, WhatsApp and object
-storage. [ROADMAP.md](docs/ROADMAP.md) tracks each of these with its exit criteria, and
+features, recurring billing, marketing email and any unsubscribe surface, and production provider
+integrations for WhatsApp and object storage. Account confirmation, password reset and invitation
+mail still send on their own inline paths rather than through the notification outbox; ADR 0021 holds
+that design. [ROADMAP.md](docs/ROADMAP.md) tracks each of these with its exit criteria, and
 [LAUNCH-CHECKLIST.md](docs/LAUNCH-CHECKLIST.md) tracks what production would still require.
 
 The `base44/` directory preserves the previous React application as reference material only. It is

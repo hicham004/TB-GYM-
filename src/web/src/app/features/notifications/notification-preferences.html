@@ -45,6 +45,19 @@
             now; nothing will be emailed until it is.
           </p>
         }
+        <!-- Stated rather than hidden. Leaving the switch on beside a channel that has quietly
+             stopped would be the one thing worse than saying so. -->
+        @if (emailSuppressed()) {
+          <p class="detail suppressed" role="status" data-testid="email-suppressed">
+            <span i18n>Email to your address is paused.</span>
+            {{ emailSuppressionReason() }}
+            <span i18n>
+              We stopped sending so that other people's mail from TB Gym keeps arriving. Your in-app
+              notifications are unaffected. Update the email address on your account to start
+              receiving them again.
+            </span>
+          </p>
+        }
       </fieldset>
 
       <fieldset [disabled]="saving()">

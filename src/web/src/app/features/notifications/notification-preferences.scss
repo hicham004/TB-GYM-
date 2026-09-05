@@ -81,6 +81,15 @@ form {
   padding-inline-start: 0.6rem;
 }
 
+/* Heavier than a warning because it describes something that has already stopped, and still carried
+   by the wording rather than by the colour: "Email to your address is paused" says it without any
+   styling at all. */
+.detail.suppressed {
+  border-inline-start: 4px solid var(--danger, #a02020);
+  padding-inline-start: 0.6rem;
+  font-weight: 500;
+}
+
 .actions {
   display: flex;
   gap: 0.75rem;

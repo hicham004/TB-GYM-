@@ -3171,6 +3171,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_AttemptCount", "\"AttemptCount\" >= 0 AND \"DeferralCount\" >= 0 AND \"SelectionPolicyVersion\" >= 1");
 
+                            t.HasCheckConstraint("CK_NotificationChannelDeliveries_CapturedHasNoProvider", "\"TransportAdapter\" <> 'captured' OR (\"ProviderMessageId\" IS NULL AND \"ProviderAcceptedAtUtc\" IS NULL)");
+
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_Claim", "(\"ClaimToken\" IS NULL) = (\"ClaimExpiresAtUtc\" IS NULL) AND ((\"Status\" = 'Processing') = (\"ClaimToken\" IS NOT NULL))");
 
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_Completion", "(\"Status\" IN ('Materialized', 'Suppressed', 'DeadLettered')) = (\"CompletedAtUtc\" IS NOT NULL)");
@@ -3187,7 +3189,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_NextAttempt", "\"NextAttemptAtUtc\" >= \"DueAtUtc\"");
 
-                            t.HasCheckConstraint("CK_NotificationChannelDeliveries_ProviderEvidence", "(\"ProviderMessageId\" IS NULL AND \"ProviderAcceptedAtUtc\" IS NULL) OR (\"TransportAdapter\" IS NOT NULL AND \"Status\" = 'Materialized')");
+                            t.HasCheckConstraint("CK_NotificationChannelDeliveries_ProviderEvidence", "((\"ProviderMessageId\" IS NULL) = (\"ProviderAcceptedAtUtc\" IS NULL)) AND (\"ProviderMessageId\" IS NULL OR (\"Channel\" = 'Email' AND \"Status\" = 'Materialized' AND \"TransportAdapter\" IN ('resend')))");
 
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_Transport", "\"TransportAdapter\" IS NULL OR (\"Channel\" = 'Email' AND \"Status\" = 'Materialized')");
 
@@ -3448,9 +3450,85 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_NotificationDeliveryAttempts_Completion", "(\"Outcome\" = 'Started') = (\"CompletedAtUtc\" IS NULL)");
 
+                            t.HasCheckConstraint("CK_NotificationDeliveryAttempts_ProviderEvidence", "\"ProviderMessageId\" IS NULL OR (\"Channel\" = 'Email' AND \"Outcome\" = 'Succeeded')");
+
                             t.HasCheckConstraint("CK_NotificationDeliveryAttempts_Success", "(\"Outcome\" IN ('Started', 'Succeeded')) = (\"FailureCode\" IS NULL)");
 
                             t.HasCheckConstraint("CK_NotificationDeliveryAttempts_Vocabulary", "\"Channel\" IN ('InApp', 'Email') AND \"Outcome\" IN ('Started', 'Succeeded', 'TransientFailure', 'PermanentFailure', 'Abandoned', 'Suppressed')");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Notifications.NotificationEmailSuppression", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AddressFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FingerprintKeyId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("SourceProviderEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceProviderMessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("SuppressedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "SourceProviderEventId");
+
+                    b.HasIndex("TenantId", "SourceProviderMessageId");
+
+                    b.HasIndex("TenantId", "UserId", "AddressFingerprint")
+                        .IsUnique()
+                        .HasDatabaseName("IX_EmailSuppressions_TenantId_UserId_AddressFingerprint");
+
+                    b.ToTable("EmailSuppressions", "notifications", t =>
+                        {
+                            t.HasCheckConstraint("CK_NotificationEmailSuppressions_Vocabulary", "\"Reason\" IN ('PermanentBounce', 'Complaint', 'ProviderSuppressed') AND \"AddressFingerprint\" ~ '^[0-9a-f]{64}$' AND btrim(\"FingerprintKeyId\") <> ''");
                         });
                 });
 
@@ -3637,6 +3715,230 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_NotificationPreferenceCommands_QuietHours", "(\"ResultQuietHoursEnabled\" = (\"ResultQuietHoursStartLocal\" IS NOT NULL)) AND (\"ResultQuietHoursEnabled\" = (\"ResultQuietHoursEndLocal\" IS NOT NULL)) AND (\"ResultQuietHoursEnabled\" = false OR \"ResultQuietHoursStartLocal\" <> \"ResultQuietHoursEndLocal\")");
 
                             t.HasCheckConstraint("CK_NotificationPreferenceCommands_Vocabulary", "\"CommandType\" = 'UpdateOwnPreferences' AND \"ResultPolicyVersion\" >= 1 AND \"ResultPreferenceVersion\" BETWEEN 0 AND 4294967295 AND btrim(\"ResultTimeZoneId\") <> '' AND \"PayloadFingerprint\" ~ '^[0-9a-f]{64}$'");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Notifications.NotificationProviderEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Adapter")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool>("AppliedNewFact")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("BounceClass")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProviderEventId")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid>("ProviderMessageRecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SignatureScheme")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("SignatureSchemeVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Adapter", "ProviderEventId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProviderEvents_Adapter_ProviderEventId");
+
+                    b.HasIndex("TenantId", "ProviderMessageRecordId", "ReceivedAtUtc")
+                        .HasDatabaseName("IX_ProviderEvents_TenantId_MessageRecordId_ReceivedAtUtc");
+
+                    b.ToTable("ProviderEvents", "notifications", t =>
+                        {
+                            t.HasCheckConstraint("CK_NotificationProviderEvents_Bounce", "(\"EventType\" = 'Bounced') = (\"BounceClass\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_NotificationProviderEvents_EventId", "\"ProviderEventId\" ~ '^[A-Za-z0-9_.:-]{1,120}$'");
+
+                            t.HasCheckConstraint("CK_NotificationProviderEvents_Vocabulary", "\"Adapter\" IN ('resend') AND \"EventType\" IN ('ProviderAccepted', 'RecipientServerAccepted', 'Bounced', 'Complained', 'DeliveryDelayed', 'Failed', 'ProviderSuppressed') AND \"SignatureSchemeVersion\" >= 1 AND btrim(\"SignatureScheme\") <> ''");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Notifications.NotificationProviderMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Adapter")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("BounceClass")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTimeOffset?>("BouncedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<Guid>("ChannelDeliveryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ComplainedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DelayedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EventCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("FailedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FingerprintKeyId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset?>("LastEventReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OutboxItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ProviderAcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProviderMessageId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("ProviderSuppressedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RecipientAddressFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("RecipientServerAcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Adapter", "ProviderMessageId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProviderMessages_Adapter_ProviderMessageId");
+
+                    b.HasIndex("TenantId", "ChannelDeliveryId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProviderMessages_TenantId_ChannelDeliveryId");
+
+                    b.HasIndex("TenantId", "OutboxItemId");
+
+                    b.HasIndex("TenantId", "ChannelDeliveryId", "Channel");
+
+                    b.HasIndex("TenantId", "RecipientUserId", "RecipientAddressFingerprint")
+                        .HasDatabaseName("IX_ProviderMessages_TenantId_RecipientUserId_Fingerprint");
+
+                    b.ToTable("ProviderMessages", "notifications", t =>
+                        {
+                            t.HasCheckConstraint("CK_NotificationProviderMessages_Bounce", "(\"BouncedAtUtc\" IS NULL) = (\"BounceClass\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_NotificationProviderMessages_EventBookkeeping", "(\"EventCount\" = 0) = (\"LastEventReceivedAtUtc\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_NotificationProviderMessages_Failure", "(\"FailedAtUtc\" IS NULL) = (\"FailureCode\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_NotificationProviderMessages_Fingerprint", "\"RecipientAddressFingerprint\" ~ '^[0-9a-f]{64}$' AND btrim(\"FingerprintKeyId\") <> '' AND \"ProviderMessageId\" ~ '^[A-Za-z0-9_.:-]{1,200}$'");
+
+                            t.HasCheckConstraint("CK_NotificationProviderMessages_Vocabulary", "\"Channel\" = 'Email' AND \"Adapter\" IN ('resend') AND (\"BounceClass\" IS NULL OR \"BounceClass\" IN ('Permanent', 'Transient', 'Undetermined')) AND \"EventCount\" >= 0");
                         });
                 });
 
@@ -9078,6 +9380,30 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Notifications.NotificationEmailSuppression", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Notifications.NotificationProviderEvent", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SourceProviderEventId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Notifications.NotificationProviderMessage", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SourceProviderMessageId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "UserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Notifications.NotificationOutboxItem", b =>
                 {
                     b.HasOne("TB.Gym.Modules.Identity.ApplicationUser", null)
@@ -9105,6 +9431,40 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "ActorUserId")
                         .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Notifications.NotificationProviderEvent", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Notifications.NotificationProviderMessage", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ProviderMessageRecordId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Notifications.NotificationProviderMessage", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Notifications.NotificationOutboxItem", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "OutboxItemId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "RecipientUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Notifications.NotificationChannelDelivery", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ChannelDeliveryId", "Channel")
+                        .HasPrincipalKey("TenantId", "Id", "Channel")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

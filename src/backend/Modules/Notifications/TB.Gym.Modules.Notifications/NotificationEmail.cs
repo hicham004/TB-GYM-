@@ -4,21 +4,30 @@ namespace TB.Gym.Modules.Notifications;
 /// The owned seam between materializing an email and doing something with it.
 /// </summary>
 /// <remarks>
-/// The interface is the boundary a provider SDK will one day sit behind, and it is shaped so that the
-/// durable model never has to know one exists. Everything sensitive — the address, the subject, the
-/// body — is constructed in memory at materialization time, passed across this call, and dropped. It
-/// is never written to the outbox, a channel delivery, an attempt, a dead-letter row or a log.
+/// The interface is the boundary a provider sits behind, and it is shaped so that the durable model
+/// never has to know which one. Everything sensitive — the address, the subject, the body — is
+/// constructed in memory at materialization time, passed across this call, and dropped. It is never
+/// written to the outbox, a channel delivery, an attempt, a dead-letter row or a log.
 /// <para>
-/// The only implementation in this phase captures in memory for development and tests. It contacts
-/// nothing, so it returns <see cref="NotificationEmailTransportOutcome.Captured"/> and a null provider
-/// message identifier: calling a capture "delivered", "sent" or "accepted" would be a claim about a
-/// provider that was never asked.
+/// Two implementations exist. The captured adapter contacts nothing and reports
+/// <see cref="NotificationEmailTransportOutcome.Captured"/> with no provider identifier, because
+/// calling a capture "sent" or "accepted" would be a claim about a provider that was never asked.
+/// The production adapter contacts one real provider over HTTP and may report
+/// <see cref="NotificationEmailTransportOutcome.ProviderAccepted"/> together with the identifier that
+/// provider returned — which is a claim that the provider took responsibility for the request, and
+/// deliberately not a claim that any mail server accepted it or that anybody read it.
 /// </para>
 /// </remarks>
 public interface INotificationEmailTransport
 {
     /// <summary>The adapter's stable name, recorded on the delivery it materializes.</summary>
     string AdapterName { get; }
+
+    /// <summary>
+    /// Whether this adapter contacts a real provider, and may therefore report provider evidence.
+    /// The captured adapter answers false, and database checks refuse it those columns anyway.
+    /// </summary>
+    bool ContactsProvider { get; }
 
     Task<NotificationEmailTransportResult> SendAsync(
         NotificationEmailMessage message,
@@ -29,10 +38,16 @@ public interface INotificationEmailTransport
 /// One materialized email, in memory only.
 /// </summary>
 /// <remarks>
-/// Constructed immediately before the transport call and never persisted. <paramref name="IdempotencyKey"/>
-/// is stable for the intent and the channel, which is the key a real provider would be asked to
-/// deduplicate on; the honest guarantee even then is at-least-once with provider-specific
-/// reconciliation, never exactly-once.
+/// Constructed immediately before the transport call and never persisted.
+/// <para>
+/// <paramref name="IdempotencyKey"/> is the key the provider is asked to deduplicate on. It binds the
+/// intent, the channel and the exact recipient, so a retry of the same message to the same mailbox is
+/// recognisably the same request while a message to a mailbox the account has since changed is a
+/// different one — which is what keeps a legitimate later send from colliding with a key the provider
+/// still remembers. The recipient participates through a keyed fingerprint rather than through the
+/// address itself, so the key is safe to persist and quote. Even with a stable key the honest
+/// guarantee is at-least-once within the provider's own retention window, never exactly-once.
+/// </para>
 /// </remarks>
 public sealed record NotificationEmailMessage(
     Guid TenantId,
@@ -50,6 +65,14 @@ public sealed record NotificationEmailTransportResult(
     public static NotificationEmailTransportResult Captured() =>
         new(NotificationEmailTransportOutcome.Captured);
 
+    /// <summary>
+    /// A real provider returned success and a usable identifier for the request it took. The
+    /// identifier is validated by <see cref="NotificationProviderMessageId.IsValid"/> before it is
+    /// allowed anywhere near a database row.
+    /// </summary>
+    public static NotificationEmailTransportResult ProviderAccepted(string providerMessageId) =>
+        new(NotificationEmailTransportOutcome.ProviderAccepted, ProviderMessageId: providerMessageId);
+
     public static NotificationEmailTransportResult TransientFailure(string failureCode) =>
         new(NotificationEmailTransportOutcome.TransientFailure, failureCode);
 
@@ -58,9 +81,14 @@ public sealed record NotificationEmailTransportResult(
 }
 
 /// <summary>
-/// What a transport managed to do. Deliberately without a <c>Delivered</c> or <c>Sent</c> member:
-/// this phase can establish capture and nothing beyond it.
+/// What a transport managed to do.
 /// </summary>
+/// <remarks>
+/// Deliberately without a <c>Delivered</c> or <c>Sent</c> member. The strongest thing a synchronous
+/// call can establish is that the provider accepted responsibility for the request; whether a
+/// recipient's mail server then accepted the message is a separate, later, asynchronous fact that
+/// only an authenticated provider event may record.
+/// </remarks>
 public enum NotificationEmailTransportOutcome
 {
     /// <summary>The adapter took the message. No network call happened and no provider was involved.</summary>
@@ -71,6 +99,12 @@ public enum NotificationEmailTransportOutcome
 
     /// <summary>Something no amount of retrying will change. Dead-letters immediately.</summary>
     PermanentFailure = 3,
+
+    /// <summary>
+    /// A real provider accepted responsibility for the request and returned a usable identifier.
+    /// Not recipient-server acceptance, not delivery, and not read.
+    /// </summary>
+    ProviderAccepted = 4,
 }
 
 /// <summary>
@@ -106,7 +140,7 @@ public sealed record NotificationRecipientContact(string EmailAddress, bool Emai
 /// </summary>
 public static class NotificationEmailAdapters
 {
-    /// <summary>No transport. The default, and the only permitted production value in this phase.</summary>
+    /// <summary>No transport. The default, and the only value that needs no provider configuration.</summary>
     public const string None = "None";
 
     /// <summary>
@@ -115,70 +149,20 @@ public static class NotificationEmailAdapters
     /// </summary>
     public const string Captured = "Captured";
 
+    /// <summary>The one production transactional email provider this build implements. See ADR 0022.</summary>
+    public const string Resend = "Resend";
+
     /// <summary>The value recorded on a delivery the captured adapter materialized.</summary>
     public const string CapturedAdapterName = "captured";
-}
 
-/// <summary>
-/// Whether this deployment may materialize email at all, and with what.
-/// </summary>
-/// <remarks>
-/// Disabled by default. Startup validation is deliberately strict rather than forgiving:
-/// <list type="bullet">
-/// <item><description>an unknown adapter name fails startup instead of being read as "none";</description></item>
-/// <item><description><see cref="Enabled"/> with no adapter fails startup, because enabling a channel
-/// that cannot send is a configuration error and not a quiet no-op;</description></item>
-/// <item><description>the captured adapter in Production fails startup whether email is enabled or
-/// not, so production configuration can never silently use it;</description></item>
-/// <item><description><see cref="Enabled"/> in Production fails startup in this phase, because no
-/// real provider exists yet and there is nothing honest for it to mean.</description></item>
-/// </list>
-/// </remarks>
-public sealed class NotificationEmailOptions
-{
-    public const string SectionName = "Notifications:Email";
+    /// <summary>The value recorded on a delivery the production provider adapter materialized.</summary>
+    public const string ResendAdapterName = "resend";
 
-    /// <summary>Off by default. A durable channel that reaches a mailbox is opt-in for a deployment too.</summary>
-    public bool Enabled { get; set; }
+    /// <summary>Every adapter name that contacts a real provider, as recorded on a delivery.</summary>
+    public static IReadOnlyList<string> ProviderAdapterNames { get; } = [ResendAdapterName];
 
-    public string Adapter { get; set; } = NotificationEmailAdapters.None;
-
-    public bool IsKnownAdapter =>
-        string.Equals(Adapter, NotificationEmailAdapters.None, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(Adapter, NotificationEmailAdapters.Captured, StringComparison.OrdinalIgnoreCase);
-
-    public bool UsesCapturedAdapter =>
-        string.Equals(Adapter, NotificationEmailAdapters.Captured, StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Whether email may actually be planned and materialized right now.</summary>
-    public bool IsAvailable => Enabled && UsesCapturedAdapter;
-
-    /// <summary>
-    /// The startup rule, in one place so the API, the Worker and the architecture test all assert the
-    /// same thing. Returns null when the configuration is acceptable, or the reason it is not.
-    /// </summary>
-    public string? Validate(bool isProduction)
-    {
-        if (!IsKnownAdapter)
-        {
-            return $"{SectionName}:Adapter must be '{NotificationEmailAdapters.None}' or '{NotificationEmailAdapters.Captured}'.";
-        }
-
-        if (isProduction && UsesCapturedAdapter)
-        {
-            return $"{SectionName}:Adapter cannot be '{NotificationEmailAdapters.Captured}' in Production; captured email is a development and test adapter.";
-        }
-
-        if (isProduction && Enabled)
-        {
-            return $"{SectionName}:Enabled cannot be true in Production until a real email provider is configured.";
-        }
-
-        if (Enabled && !UsesCapturedAdapter)
-        {
-            return $"{SectionName}:Enabled requires a configured email adapter.";
-        }
-
-        return null;
-    }
+    /// <summary>Whether a recorded transport-adapter name is one that contacted a real provider.</summary>
+    public static bool IsProviderAdapterName(string? adapterName) =>
+        adapterName is not null &&
+        ProviderAdapterNames.Contains(adapterName, StringComparer.Ordinal);
 }

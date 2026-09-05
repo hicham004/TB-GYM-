@@ -628,18 +628,89 @@ quiet-hours deferral spends no attempt across normal, overnight, boundary, DST-g
 preference commands survive real races; cross-tenant preference, delivery and attempt relationships are
 rejected by the database; and no recipient or rendered content reaches PostgreSQL or a log.
 
+### Phase 6B-3B: production transactional email, provider events, suppression and deliverability (complete)
+
+Status: complete, implemented 2026-09-05. See
+`docs/adr/0022-production-transactional-email-provider-and-events.md`, `ARCHITECTURE.md` section 19
+and `DOMAIN-RULES.md` NOT-017 through NOT-024.
+
+- **One provider, behind the port that was already there.** Resend, reached through an owned
+  `HttpClient` adapter with no provider SDK anywhere in the repository — the retry schedule,
+  idempotency key, failure classification and logging discipline were all already decided here, and an
+  SDK would take them back. Bounded timeout and cancellation, a hard limit on how much of a response is
+  read, a depth limit on parsing it, and a validated identifier before anything becomes durable. Every
+  failure is classified into a stable code rather than thrown, and the factory's own HTTP logging is
+  removed from that client because it writes the URI at `Information` and every header at `Trace`.
+- **Provider acceptance is one fact and delivery is another.** A 2xx with a usable identifier records
+  provider acceptance, in the same statement that makes the delivery terminal, so Phase 6B-3A's
+  terminal immutability is untouched. Recipient-server acceptance, bounces, complaints, delays and
+  provider-side failures arrive asynchronously and out of order, and accumulate write-once on a
+  separate `NotificationProviderMessage` root with append-only `NotificationProviderEvent` history.
+  There is still no `Delivered`, and `email.opened` and `email.clicked` are not modelled at all.
+- **The webhook is authenticated by signature, in that order.** Bound the body, verify an HMAC-SHA256
+  signature over the exact raw bytes and its signed timestamp against a two-sided tolerance, parse,
+  resolve the workspace from a durable tenant-aware relationship, scope, write. An unsigned caller
+  reaches no parser, no query and no row. Idempotent on the provider's own event identifier, unique
+  across every workspace; duplicates converge and reordering records both facts truthfully. Recorded,
+  duplicate, ignored and unknown are one indistinguishable acknowledgement.
+- **Suppression is about a mailbox, and stores no mailbox.** A verified permanent bounce, a complaint
+  or the provider's own suppression list stops further email to that address; soft bounces, delays and
+  provider failures do not, and no threshold promotes them. The address participates as an HMAC-SHA256
+  fingerprint under a configured key with additive rotation, because an unsalted hash of an enumerable
+  value is a synonym for it rather than a pseudonym. Rechecked immediately before submission under the
+  same recipient-policy lock the preference recheck uses. Email only — in-app is untouched — and there
+  is no override, clearing or replay surface.
+- **Configuration fails closed in both composition roots.** A provider adapter without its API key,
+  sending identity, webhook signing secret or fingerprint key refuses to start, enabled or not; the
+  endpoint must be HTTPS on an approved host in Production; contradictory configuration refuses rather
+  than guessing. The retry schedule is validated against the provider's 24-hour idempotency retention,
+  which caps `MaximumAttempts` at eight. No secret has a committed default and no validation message
+  quotes one.
+- **Angular.** `/notifications/settings` states, read-only, when the member's mailbox has stopped
+  receiving email and why, that their in-app notifications are unaffected, and that correcting the
+  address on their account resumes it. A statement rather than a control, and the member's own switch
+  is not rewritten by a bounce.
+
+One forward migration ships: `Phase6B3BProviderEmailAndEvents` adds the three provider tables with
+tenant-composite foreign keys and enumerated vocabulary checks, amends the delivery and attempt guards
+so provider evidence is possible exactly once and only from an adapter that contacted a provider, and
+adds write-once, append-only and evidence-consistency triggers for the new roots.
+
+Exit: an accepted send records a real provider identifier and claims nothing more; the captured adapter
+can never record provider evidence; retries present one idempotency key; every provider response is
+classified correctly; a timeout leaks nothing; valid signed webhooks are accepted while invalid,
+expired, malformed, oversized and forged ones are refused without writing anything; duplicates converge
+and out-of-order events preserve truthful append-only history; a permanent bounce and a complaint
+suppress later email only; a corrected address is not suppressed by the old one's bounce; cross-tenant
+provider relationships are rejected by the database; a post-claim opt-out prevents the HTTP request
+entirely; production refuses missing secrets, captured configuration and insecure endpoints; direct SQL
+cannot fabricate provider acceptance, rewrite provider history or bypass suppression; and no address,
+body, key, signature or raw payload reaches PostgreSQL or a log.
+
 ### Phase 6B remaining
 
-- Integrate a production email provider behind the existing transport port, then webhooks, bounce and
-  complaint handling, suppression lists and deliverability (SPF/DKIM/DMARC) work.
 - Migrate account confirmation, password reset and invitation mail onto the tokenless design in
   ADR 0021, including the durable logical-send generation that keeps a transport retry from rotating
-  an invitation token.
+  an invitation token, and the tokenless action-email materialization it depends on.
 - Implement production object storage, production upload scanning, provider inventory
   reconciliation, signed URLs, and the production retention/operations controls. Reservation-backed
   incomplete-ingest cleanup, transformations, quotas, and application-known purge are already
   delivered.
-- Integrate one email and one WhatsApp provider behind existing ports.
+- Integrate one WhatsApp provider, and SMS or push if either is ever wanted, behind existing ports.
+  Email is delivered; see Phase 6B-3B.
+- Marketing campaigns, promotional producers, bulk mail and the unsubscribe surface RFC 8058 requires
+  of them. The `Marketing` purpose reserves the vocabulary and fails closed; nothing produces it, and
+  adding a path needs its own consent flow and Lebanese counsel on Law 81/2018 Article 32.
+- Manual dead-letter replay, and a suppression override or replay surface. Both are writes against
+  somebody else's inbox or mailbox and need their own decision about who may press them and what is
+  recorded when they do.
+- Cross-workspace suppression. A mailbox that hard-bounces in one workspace is suppressed there only;
+  propagating it would help deliverability and would also let one workspace learn something about
+  another's members, which is a privacy decision rather than an implementation detail.
+- DNS automation for SPF, DKIM and DMARC. Deliberately not automated: the prerequisites and the live
+  checks are documented in `ARCHITECTURE.md` section 19 and remain an operator responsibility.
+- A retention decision for provider-event history and dead letters. Neither holds personal data, and
+  both grow.
 
 Exit: realtime delivery is convenient but persisted state remains correct during disconnects,
 retries, duplicate callbacks, and multiple API replicas.

@@ -20,7 +20,10 @@ namespace TB.Gym.Modules.Notifications;
 /// <see cref="IdempotencyKey"/> is stable across every attempt for the same intent and channel. In-app
 /// materialization is made idempotent by a unique database constraint instead, but an external
 /// provider cannot be given a constraint — only a key it promises to deduplicate on, and even then the
-/// honest guarantee is at-least-once with provider-specific reconciliation, never exactly-once.
+/// honest guarantee is at-least-once within that provider's own retention window, never exactly-once.
+/// The key an adapter actually sends is <see cref="BuildProviderIdempotencyKey"/>, which additionally
+/// binds the exact mailbox; this column records the logical key, which is what identifies the message
+/// regardless of where it was addressed.
 /// </para>
 /// </remarks>
 public sealed class NotificationDeliveryAttempt : TenantEntity
@@ -82,22 +85,54 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
     public string? FailureCode { get; private set; }
 
     /// <summary>
-    /// Reserved for a real external provider. Nothing writes it in this phase: in-app has no provider,
-    /// and the captured email adapter contacts none, so inventing an identifier for either would be a
-    /// lie about where it came from. A database trigger refuses it.
+    /// The identifier a real external provider returned for this attempt's request, or null.
     /// </summary>
+    /// <remarks>
+    /// In-app has no provider and the captured email adapter contacts none, so inventing an
+    /// identifier for either would be a lie about where it came from; a check constraint and a
+    /// trigger both refuse it. Where it is set, it records provider acceptance for this attempt and
+    /// nothing beyond it.
+    /// </remarks>
     public string? ProviderMessageId { get; private set; }
 
     public bool IsCompleted => Outcome != NotificationDeliveryOutcome.Started;
 
     /// <summary>
-    /// The key an external provider would be asked to deduplicate on. Stable for the intent and the
-    /// channel, deliberately not for the attempt: a retry of the same intent over the same channel must
-    /// be recognisable as the same message, which is the entire purpose of the key. Two channels of one
+    /// The logical key for this intent and channel. Stable for the intent and the channel,
+    /// deliberately not for the attempt: a retry of the same intent over the same channel must be
+    /// recognisable as the same message, which is the entire purpose of the key. Two channels of one
     /// intent get different keys, because they are different messages.
     /// </summary>
     public static string BuildIdempotencyKey(Guid outboxItemId, NotificationChannel channel) =>
         $"notification:{outboxItemId:N}:{channel.ToString().ToLowerInvariant()}:v1";
+
+    /// <summary>
+    /// The key a real provider is asked to deduplicate on: the logical key, bound to the exact
+    /// mailbox the message is going to.
+    /// </summary>
+    /// <remarks>
+    /// The recipient has to participate, and it has to participate as a fingerprint. Without it, a
+    /// member who corrects a mistyped address mid-retry presents the provider with the same key and a
+    /// different payload, which the provider answers with a conflict rather than a send; with the
+    /// address itself, a queue row, a log line or a support export would end up holding a mailbox
+    /// this design spends considerable effort never storing. A truncated keyed fingerprint gives the
+    /// key exactly the sensitivity it needs — different mailbox, different key — and no more.
+    /// <para>
+    /// The result stays well inside the 256 characters the provider allows.
+    /// </para>
+    /// </remarks>
+    public static string BuildProviderIdempotencyKey(string logicalKey, string addressFingerprint)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(logicalKey);
+        if (!NotificationAddressFingerprint.IsValidFingerprint(addressFingerprint))
+        {
+            throw new ArgumentException(
+                "A provider idempotency key binds a valid address fingerprint.",
+                nameof(addressFingerprint));
+        }
+
+        return $"{logicalKey}:{addressFingerprint[..32]}";
+    }
 
     public static NotificationDeliveryAttempt Start(
         Guid tenantId,
@@ -123,10 +158,24 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
     /// </summary>
     public void Succeed(DateTimeOffset now, string? providerMessageId = null)
     {
+        if (providerMessageId is not null)
+        {
+            if (Channel != NotificationChannel.Email)
+            {
+                throw new InvalidOperationException(
+                    "Only an email attempt may record a provider message identifier.");
+            }
+
+            if (!NotificationProviderMessageId.IsValid(providerMessageId))
+            {
+                throw new ArgumentException(
+                    "A provider message identifier must be bounded and use a safe alphabet.",
+                    nameof(providerMessageId));
+            }
+        }
+
         Complete(NotificationDeliveryOutcome.Succeeded, now, null);
-        ProviderMessageId = providerMessageId is null
-            ? null
-            : Normalize(providerMessageId, 200, nameof(providerMessageId));
+        ProviderMessageId = providerMessageId;
     }
 
     public void FailTransiently(DateTimeOffset now, string failureCode) =>

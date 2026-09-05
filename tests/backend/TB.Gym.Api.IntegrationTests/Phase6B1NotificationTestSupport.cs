@@ -1075,6 +1075,9 @@ public sealed partial class Phase6B1NotificationDispatchTests
     {
         public string AdapterName => captured.AdapterName;
 
+        /// <summary>Delegated, so the seam cannot accidentally claim a provider the capture never had.</summary>
+        public bool ContactsProvider => captured.ContactsProvider;
+
         public Task<NotificationEmailTransportResult> SendAsync(
             NotificationEmailMessage message,
             CancellationToken cancellationToken) =>

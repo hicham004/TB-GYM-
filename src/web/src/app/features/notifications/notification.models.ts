@@ -1,5 +1,6 @@
 import type {
   CommercialNotificationKind,
+  NotificationEmailSuppressionReason,
   NotificationPage as ContractNotificationPage,
   NotificationPreferenceView as ContractPreferenceView,
   NotificationUnreadCount as ContractUnreadCount,
@@ -80,11 +81,18 @@ function toCount(value: number | string): number {
  *
  * The local times mean nothing without `tenantTimeZoneId`, which is the workspace's configured zone
  * and the frame every quiet-hours decision is made in — never the browser's.
+ *
+ * `emailSuppressed` is the one field here that is not the member's own decision. Their mailbox
+ * produced a permanent bounce or a spam complaint and has stopped receiving email; the screen says so
+ * rather than showing a switch that is on beside a channel that is silently doing nothing. It is a
+ * statement, not a control: there is nothing here that clears it.
  */
 export interface NotificationPreferences {
   readonly inAppEnabled: boolean;
   readonly emailServiceEnabled: boolean;
   readonly emailChannelAvailable: boolean;
+  readonly emailSuppressed: boolean;
+  readonly emailSuppressionReason: NotificationEmailSuppressionReason | null;
   readonly quietHoursEnabled: boolean;
   readonly quietHoursStartLocal: string | null;
   readonly quietHoursEndLocal: string | null;
@@ -97,6 +105,8 @@ export function mapNotificationPreferences(value: ContractPreferenceView): Notif
     inAppEnabled: value.inAppEnabled,
     emailServiceEnabled: value.emailServiceEnabled,
     emailChannelAvailable: value.emailChannelAvailable,
+    emailSuppressed: value.emailSuppressed,
+    emailSuppressionReason: value.emailSuppressionReason ?? null,
     quietHoursEnabled: value.quietHoursEnabled,
     quietHoursStartLocal: value.quietHoursStartLocal ?? null,
     quietHoursEndLocal: value.quietHoursEndLocal ?? null,

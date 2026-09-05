@@ -737,6 +737,7 @@ export type {
   NotificationChannel,
   NotificationDeadLetterPage,
   NotificationDeadLetterView,
+  NotificationEmailSuppressionReason,
   NotificationPage,
   NotificationPreferenceView,
   NotificationUnreadCount,

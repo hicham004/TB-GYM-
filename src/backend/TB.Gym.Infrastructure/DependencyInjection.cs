@@ -238,6 +238,21 @@ public static class DependencyInjection
                         QueueLimit = 0,
                         AutoReplenishment = true,
                     }));
+            // The provider webhook has no signed-in user to partition by, so it partitions by source
+            // address — which is meaningful here in a way it is not for authenticated writes, because
+            // the legitimate caller is one provider's fixed egress addresses. The allowance is
+            // generous enough for a real bounce storm and small enough that an unauthenticated caller
+            // cannot make signature verification a denial-of-service lever.
+            options.AddPolicy(RateLimitPolicies.ProviderWebhook, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 600,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
+                    }));
             options.AddPolicy(RateLimitPolicies.MediaUpload, context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: ActorPartitionKey(context, "media"),

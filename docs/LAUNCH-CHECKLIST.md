@@ -11,13 +11,32 @@ because this checklist references ASVS.
 
 ## Transactional email
 
-- [ ] Select a production transactional email provider and verify sending domain ownership.
-- [ ] Configure SPF, DKIM, and DMARC; test alignment and delivery to common Lebanese/global
+The provider, the adapter, event verification, bounce and complaint handling, suppression, retries
+and idempotency ship with Phase 6B-3B; see `ARCHITECTURE.md` section 19 and ADR 0022. What remains
+below is external setup and operations, none of which this repository automates.
+
+- [x] Select a production transactional email provider and integrate it behind the owned transport
+      port. Resend, via an owned `HttpClient` adapter with no provider SDK. (Phase 6B-3B)
+- [x] Add provider event verification, bounce/complaint handling, durable suppression, retries,
+      idempotency, template versioning and stable failure codes. (Phase 6B-3B)
+- [ ] Verify sending domain ownership with the provider, on a dedicated subdomain such as
+  `mail.example.com`, so transactional reputation is isolated from the root domain's other mail.
+- [ ] Publish SPF and DKIM for that subdomain, then DMARC starting at `p=none` with `rua` reporting;
+  read a week of reports before tightening. Test alignment and delivery to common Lebanese and global
   mailbox providers.
+- [ ] Register the public webhook endpoint `/api/notifications/email/provider-events` with the
+  provider and store its `whsec_` signing secret in the secret store. Nothing establishes
+  recipient-server acceptance, bounce or complaint without it.
+- [ ] Generate an address-fingerprint key (base64, at least 32 random bytes), set
+  `Notifications:Email:Provider:FingerprintKeyId` and the matching entry under `FingerprintKeys`, and
+  record the rotation procedure: add a new key id, repoint the active id, and keep every retired key
+  configured. Removing a retired key drops the suppressions written under it and resumes mail to
+  addresses that hard-bounced.
+- [ ] Confirm `Notifications:Dispatch:MaximumAttempts` still fits inside the provider's idempotency
+  retention window. Startup refuses a schedule that outruns it, so revisit whenever either changes.
 - [ ] Replace development captured-action URLs with production delivery and remove action
-  links from API responses outside Development.
-- [ ] Add provider event verification, bounce/complaint handling, retries, idempotency,
-  template versioning, and delivery monitoring.
+  links from API responses outside Development. Account confirmation, password reset and invitation
+  mail are still on their own inline paths; ADR 0021 holds the design for moving them.
 - [ ] Keep invitation/reset tokens, message bodies, and personal data out of logs.
 
 ## Domain, TLS, and edge
@@ -132,6 +151,17 @@ because this checklist references ASVS.
   rules where applicable, and time-zone/DST tests.
 - [ ] Do not enable WhatsApp until an approved provider, templates, consent policy, webhook
   verification, and data-processing terms exist.
+- [ ] Alert on `notification-email-provider-unauthorized`, which is logged at `Error` and means the
+  provider rejected this deployment's credentials or sending identity. It retries and then
+  dead-letters, so it is visible but not self-healing.
+- [ ] Watch permanent-bounce and complaint rates against the provider's and Gmail's published
+  thresholds, and watch new suppression rows per day. A spike in either is a data-quality problem
+  upstream rather than a mail problem.
+- [ ] Rehearse provider-outage recovery: deliveries retry on the named schedule and dead-letter if the
+  outage outlasts it, and missed webhooks are recovered by replaying events from the provider's
+  dashboard. Ingestion is idempotent on the provider's event identifier, so a replay converges.
+- [ ] Decide a retention policy for provider-event history and dead letters before either grows past
+  what an operator can read. Neither holds personal data; both accumulate.
 
 ## Release gate
 

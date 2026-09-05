@@ -31,6 +31,32 @@ internal static class DatabaseConstraintNames
     public const string OneChannelDeliveryPerIntent =
         "IX_ChannelDeliveries_TenantId_OutboxItemId_Channel";
 
+    /// <summary>
+    /// One durable relationship per provider message identifier, across every workspace.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not scoped by tenant. The public webhook route resolves a workspace *from* this
+    /// identifier, so an identifier that could exist in two workspaces would be an identifier that
+    /// resolves to two answers — and the route would have to pick one.
+    /// </remarks>
+    public const string OneNotificationProviderMessagePerProviderId =
+        "IX_ProviderMessages_Adapter_ProviderMessageId";
+
+    /// <summary>
+    /// One record per provider event identifier, across every workspace. This is what makes an
+    /// at-least-once provider's repeat delivery a no-op, and it is global for the same reason: an
+    /// event identifier replayed against a different workspace must collide, not succeed twice.
+    /// </summary>
+    public const string OneNotificationProviderEventPerProviderId =
+        "IX_ProviderEvents_Adapter_ProviderEventId";
+
+    /// <summary>
+    /// One suppression per workspace, member and address fingerprint. The ingestion path reads this
+    /// name to recognise a concurrent second event that suppressed the same mailbox first.
+    /// </summary>
+    public const string OneEmailSuppressionPerAddress =
+        "IX_EmailSuppressions_TenantId_UserId_AddressFingerprint";
+
     /// <summary>One settings row per member and workspace.</summary>
     public const string OneNotificationPreferencePerMember =
         "IX_ChannelPreferences_TenantId_UserId";

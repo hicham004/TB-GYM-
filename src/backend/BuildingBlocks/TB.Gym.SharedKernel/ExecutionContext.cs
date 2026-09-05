@@ -40,6 +40,12 @@ public static class RateLimitPolicies
     public const string SensitiveWrite = "SensitiveWrite";
 
     public const string MediaUpload = "MediaUpload";
+
+    /// <summary>
+    /// The provider-authenticated webhook route. Partitioned by source address, because there is no
+    /// signed-in user to partition by and the caller is a fixed set of provider egress addresses.
+    /// </summary>
+    public const string ProviderWebhook = "ProviderWebhook";
 }
 
 public static class TenantHeaders

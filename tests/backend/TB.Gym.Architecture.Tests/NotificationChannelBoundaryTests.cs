@@ -5,11 +5,19 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Architecture.Tests;
 
 /// <summary>
-/// The boundaries Phase 6B-3A had to hold: the Notifications module owns its own model and reaches
-/// into no other module for a recipient address; the email transport is an owned interface with no
-/// provider SDK behind it; and nothing in the durable model has anywhere to put a recipient, a subject
-/// or a body.
+/// The boundaries the email channel has to hold, in both the phases that built it.
 /// </summary>
+/// <remarks>
+/// Phase 6B-3A: the Notifications module owns its own model and reaches into no other module for a
+/// recipient address; the email transport is an owned interface; and nothing in the durable model has
+/// anywhere to put a recipient, a subject or a body.
+/// <para>
+/// Phase 6B-3B added a real provider and, with it, three boundaries worth asserting rather than
+/// assuming — that integrating a provider did not bring in its SDK, that provider acceptance and
+/// recipient-server acceptance stayed two separate facts on two separate roots, and that the
+/// provider-event vocabulary stayed owned, small and free of tracking.
+/// </para>
+/// </remarks>
 [TestClass]
 public sealed class NotificationChannelBoundaryTests
 {
@@ -20,6 +28,31 @@ public sealed class NotificationChannelBoundaryTests
 
     /// <summary>Service/transactional and marketing, kept explicitly apart.</summary>
     private static readonly string[] ExpectedPurposes = ["ServiceTransactional", "Marketing"];
+
+    /// <summary>The complete owned provider-event vocabulary, and nothing else.</summary>
+    private static readonly string[] ExpectedProviderEventTypes =
+    [
+        "ProviderAccepted", "RecipientServerAccepted", "Bounced", "Complained",
+        "DeliveryDelayed", "Failed", "ProviderSuppressed",
+    ];
+
+    private static readonly string[] ExpectedSuppressionReasons =
+        ["PermanentBounce", "Complaint", "ProviderSuppressed"];
+
+    /// <summary>
+    /// Words that must never name a provider event. Two of them are absent facts, three are facts a
+    /// different layer owns.
+    /// </summary>
+    private static readonly string[] ForbiddenProviderEventWords =
+        ["Open", "Click", "Read", "Delivered", "Sent"];
+
+    /// <summary>Method-name fragments that would amount to an un-suppression control.</summary>
+    private static readonly string[] ForbiddenSuppressionVerbs =
+        ["Clear", "Release", "Remove", "Lift", "Override", "Delete"];
+
+    /// <summary>Parameters a provider webhook must never be able to assert for itself.</summary>
+    private static readonly string[] ForbiddenIngestionParameters =
+        ["TenantId", "UserId", "RecipientUserId", "ChannelDeliveryId"];
 
     [TestMethod]
     public void NotificationsReferenceTheSharedKernelAndNoOtherModule()
@@ -42,22 +75,29 @@ public sealed class NotificationChannelBoundaryTests
     }
 
     /// <summary>
-    /// No provider SDK, anywhere. The email seam is an owned interface and the only implementation in
-    /// this phase captures in memory; adding a provider is a new implementation behind this interface
-    /// rather than a package reference that quietly starts making network calls.
+    /// No provider SDK, anywhere — now that a real provider is integrated, which is when this
+    /// assertion starts being worth making.
     /// </summary>
     /// <remarks>
+    /// Phase 6B-3B sends real email through Resend, and does it with <c>HttpClient</c> and two owned
+    /// records rather than the vendor's package. An SDK would authenticate, serialize, retry and
+    /// throw on this repository's behalf, and every one of those is already decided here: the retry
+    /// schedule is durable and named, the idempotency key is derived from domain state, failures must
+    /// be classified into stable codes before they touch a row, and no exception may carry a response
+    /// body. It would also put the provider's own types one <c>using</c> away from the domain.
+    /// <para>
     /// Checked against the central package manifest as well as the loaded assemblies, because the
     /// manifest covers every project in the repository — including the API host, whose assembly this
     /// test project deliberately does not reference.
+    /// </para>
     /// </remarks>
     [TestMethod]
-    public void NoEmailProviderPackageIsReferencedAnywhere()
+    public void NoEmailProviderSdkIsReferencedAnywhere()
     {
         string[] forbidden =
         [
             "Resend", "SendGrid", "MailKit", "MimeKit", "SimpleEmail", "Mailgun",
-            "Postmark", "FluentEmail", "Smtp",
+            "Postmark", "FluentEmail", "Smtp", "Svix", "StandardWebhooks",
         ];
 
         var manifest = File.ReadAllText(Path.Combine(RepositoryRoot(), "Directory.Packages.props"));
@@ -106,6 +146,11 @@ public sealed class NotificationChannelBoundaryTests
                      typeof(NotificationChannelPreference),
                      typeof(NotificationConsentEvent),
                      typeof(NotificationPreferenceCommandRecord),
+                     // Phase 6B-3B's provider rows are held to the same rule. The mailbox they are
+                     // about participates only as a keyed MAC, under a name that says so.
+                     typeof(NotificationProviderMessage),
+                     typeof(NotificationProviderEvent),
+                     typeof(NotificationEmailSuppression),
                  })
         {
             var properties = type.GetProperties().Select(property => property.Name).ToArray();
@@ -115,6 +160,19 @@ public sealed class NotificationChannelBoundaryTests
                     name,
                     properties,
                     $"{type.Name} can carry '{name}', which belongs only in memory at materialization.");
+            }
+        }
+
+        // The one place a mailbox is referred to at all, and it is a fingerprint by name and by type.
+        foreach (var type in new[] { typeof(NotificationProviderMessage), typeof(NotificationEmailSuppression) })
+        {
+            foreach (var property in type.GetProperties().Where(candidate =>
+                         candidate.Name.Contains("Address", StringComparison.Ordinal)))
+            {
+                Assert.EndsWith(
+                    "Fingerprint",
+                    property.Name,
+                    $"{type.Name}.{property.Name} names an address without being a fingerprint of one.");
             }
         }
 
@@ -147,13 +205,122 @@ public sealed class NotificationChannelBoundaryTests
         Assert.IsNotNull(send);
         Assert.AreEqual(message, send.GetParameters()[0].ParameterType);
 
-        // The result a transport may report carries no provider acknowledgement this phase can honour.
+        // A synchronous call can establish that the provider took responsibility, and nothing beyond
+        // it. So exactly one outcome may say "accepted", it must say whose acceptance it is, and no
+        // outcome may claim delivery or sending — neither of which a send response can know.
+        var outcomes = Enum.GetNames<NotificationEmailTransportOutcome>();
         Assert.IsFalse(
-            Enum.GetNames<NotificationEmailTransportOutcome>()
-                .Any(name => name.Contains("Deliver", StringComparison.OrdinalIgnoreCase) ||
-                             name.Contains("Sent", StringComparison.OrdinalIgnoreCase) ||
-                             name.Contains("Accepted", StringComparison.OrdinalIgnoreCase)),
-            "A transport outcome must not claim delivery, sending or provider acceptance.");
+            outcomes.Any(name => name.Contains("Deliver", StringComparison.OrdinalIgnoreCase) ||
+                                 name.Contains("Sent", StringComparison.OrdinalIgnoreCase)),
+            "A transport outcome must not claim delivery or sending; only a verified provider event can.");
+        CollectionAssert.AreEquivalent(
+            new[] { nameof(NotificationEmailTransportOutcome.ProviderAccepted) },
+            outcomes.Where(name => name.Contains("Accepted", StringComparison.OrdinalIgnoreCase)).ToArray(),
+            "Provider acceptance is the one acceptance a send response establishes.");
+        Assert.IsFalse(
+            outcomes.Any(name => name.Contains("RecipientServer", StringComparison.OrdinalIgnoreCase)),
+            "Recipient-server acceptance arrives asynchronously and is never a transport outcome.");
+    }
+
+    /// <summary>
+    /// The provider event vocabulary is owned, small, and deliberately missing two members.
+    /// </summary>
+    /// <remarks>
+    /// Open and click events are not modelled and are never persisted. An open is not a read — it is a
+    /// tracking pixel firing, which happens when a preview pane renders and does not happen when
+    /// somebody reads the message in plain text — and recording it would begin exactly the tracking
+    /// log the consent evidence was carefully kept from becoming.
+    /// </remarks>
+    [TestMethod]
+    public void TheProviderEventVocabularyIsOwnedAndExcludesTracking()
+    {
+        var events = Enum.GetNames<NotificationProviderEventType>();
+        foreach (var forbidden in ForbiddenProviderEventWords)
+        {
+            Assert.IsFalse(
+                events.Any(name => name.Contains(forbidden, StringComparison.OrdinalIgnoreCase)),
+                $"'{forbidden}' is not a provider fact this repository records.");
+        }
+
+        CollectionAssert.AreEquivalent(ExpectedProviderEventTypes, events);
+        CollectionAssert.AreEquivalent(
+            ExpectedSuppressionReasons,
+            Enum.GetNames<NotificationEmailSuppressionReason>());
+    }
+
+    /// <summary>
+    /// Provider acceptance and recipient-server acceptance are two columns on two different roots, and
+    /// nothing in the model offers a way to write one from the other.
+    /// </summary>
+    [TestMethod]
+    public void ProviderAcceptanceAndRecipientServerAcceptanceAreSeparateFacts()
+    {
+        var deliveryProperties = typeof(NotificationChannelDelivery).GetProperties()
+            .Select(property => property.Name)
+            .ToArray();
+        Assert.Contains(nameof(NotificationChannelDelivery.ProviderAcceptedAtUtc), deliveryProperties);
+        Assert.DoesNotContain(
+            "RecipientServerAcceptedAtUtc",
+            deliveryProperties,
+            "A later, asynchronous fact must not sit on the row whose terminal state is immutable.");
+
+        var messageProperties = typeof(NotificationProviderMessage).GetProperties()
+            .Select(property => property.Name)
+            .ToArray();
+        foreach (var expected in new[]
+                 {
+                     nameof(NotificationProviderMessage.ProviderAcceptedAtUtc),
+                     nameof(NotificationProviderMessage.RecipientServerAcceptedAtUtc),
+                     nameof(NotificationProviderMessage.BouncedAtUtc),
+                     nameof(NotificationProviderMessage.ComplainedAtUtc),
+                 })
+        {
+            Assert.Contains(expected, messageProperties);
+        }
+
+        Assert.DoesNotContain(
+            "ReadAtUtc",
+            messageProperties,
+            "Read is the reader's own act on their inbox row and is never inferred from a provider.");
+    }
+
+    /// <summary>
+    /// Suppression has no clearing surface, and the ingestion seam has no shape that lets a caller
+    /// name a workspace.
+    /// </summary>
+    /// <remarks>
+    /// A control that un-suppresses a mailbox is a control that can be used to keep mailing an address
+    /// that complained, so its absence is deliberate rather than unfinished. The ingestion request
+    /// carries a signature and a body and nothing else: the workspace is resolved from the durable
+    /// provider-message relationship, so there is no parameter through which an unauthenticated caller
+    /// could aim an event at somebody else's data.
+    /// </remarks>
+    [TestMethod]
+    public void SuppressionHasNoOverrideAndIngestionNamesNoWorkspace()
+    {
+        var suppression = typeof(NotificationEmailSuppression);
+        foreach (var method in suppression.GetMethods().Where(candidate => candidate.DeclaringType == suppression))
+        {
+            foreach (var forbidden in ForbiddenSuppressionVerbs)
+            {
+                Assert.DoesNotContain(
+                    forbidden,
+                    method.Name,
+                    StringComparison.OrdinalIgnoreCase,
+                    $"{method.Name} would be an un-suppression surface this phase deliberately does not have.");
+            }
+        }
+
+        var request = typeof(NotificationProviderEventRequest).GetProperties()
+            .Select(property => property.Name)
+            .ToArray();
+        foreach (var forbidden in ForbiddenIngestionParameters)
+        {
+            Assert.DoesNotContain(
+                forbidden,
+                request,
+                $"A webhook request must not name '{forbidden}'; the workspace is resolved, never asserted.");
+        }
     }
 
     /// <summary>
