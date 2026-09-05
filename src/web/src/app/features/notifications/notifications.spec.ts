@@ -1,5 +1,6 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
@@ -90,6 +91,8 @@ async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
   await TestBed.configureTestingModule({
     imports: [Notifications],
     providers: [
+      // The inbox links to the settings screen, so RouterLink needs a router to resolve against.
+      provideRouter([]),
       {
         provide: ApiClient,
         useValue: {

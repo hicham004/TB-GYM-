@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Clients;
@@ -14,10 +15,13 @@ internal sealed class CommercialApplicationService(
     IClock clock,
     ICurrentUser currentUser,
     ITenantContext tenantContext,
-    ICoachingFeatureAccessService featureAccessService)
+    ICoachingFeatureAccessService featureAccessService,
+    IOptions<NotificationEmailOptions> notificationEmailOptions)
     : ICommercialApplicationService
 {
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
+
+    private readonly NotificationEmailOptions notificationEmail = notificationEmailOptions.Value;
 
     public async Task<ProductCatalog> ListProductsAsync(CancellationToken cancellationToken)
     {
@@ -271,16 +275,10 @@ internal sealed class CommercialApplicationService(
                 if (paidAmount + amount == enrollment.PriceAmount)
                 {
                     enrollment.Activate(clock.UtcNow);
-                    var pendingPaymentNotices = await dbContext.NotificationOutboxItems
-                        .Where(item =>
-                            item.AggregateId == enrollment.Id &&
-                            item.Kind == CommercialNotificationKind.PaymentRequired &&
-                            item.Status == NotificationOutboxStatus.Pending)
-                        .ToListAsync(cancellationToken);
-                    foreach (var notice in pendingPaymentNotices)
-                    {
-                        notice.Cancel();
-                    }
+                    await CancelScheduledNotificationsAsync(
+                        enrollment.Id,
+                        CommercialNotificationKind.PaymentRequired,
+                        cancellationToken);
 
                     var context = await GetNotificationContextAsync(enrollment.ClientProfileId, cancellationToken);
                     ScheduleImmediate(
@@ -577,15 +575,7 @@ internal sealed class CommercialApplicationService(
             transition(enrollment);
             if (cancelNotifications)
             {
-                var pending = await dbContext.NotificationOutboxItems
-                    .Where(item =>
-                        item.AggregateId == enrollment.Id &&
-                        item.Status == NotificationOutboxStatus.Pending)
-                    .ToListAsync(cancellationToken);
-                foreach (var item in pending)
-                {
-                    item.Cancel();
-                }
+                await CancelScheduledNotificationsAsync(enrollment.Id, kind: null, cancellationToken);
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -837,7 +827,23 @@ internal sealed class CommercialApplicationService(
             .Where(item => item.Id == tenantContext.TenantId)
             .Select(item => item.TimeZoneId)
             .SingleAsync(cancellationToken);
-        return new NotificationContext(userId, timeZoneId);
+
+        // The recipient's own current preference, read once inside the scheduling transaction. Channel
+        // selection is a decision made when the notification is created and snapshotted on the rows it
+        // creates, so opting in later cannot resurrect notifications that were never selected for
+        // email — and opting out later is still honoured, by the dispatcher's recheck rather than here.
+        var preference = await dbContext.NotificationChannelPreferences
+            .AsNoTracking()
+            .Where(item => item.UserId == userId)
+            .Select(item => new { item.EmailServiceEnabled, item.EmailMarketingEnabled })
+            .SingleOrDefaultAsync(cancellationToken);
+        return new NotificationContext(
+            userId,
+            timeZoneId,
+            new NotificationChannelPlanInputs(
+                preference?.EmailServiceEnabled ?? false,
+                preference?.EmailMarketingEnabled ?? false,
+                notificationEmail.IsAvailable));
     }
 
     private void ScheduleEnrollmentNotifications(
@@ -888,6 +894,57 @@ internal sealed class CommercialApplicationService(
         string eventKey) =>
         Schedule(enrollment, context, kind, eventKey, clock.UtcNow);
 
+    /// <summary>
+    /// The business withdrew one or more scheduled notifications for an enrollment.
+    /// </summary>
+    /// <remarks>
+    /// The intent is marked cancelled, and every still-pending channel delivery is suppressed with a
+    /// stable code. A delivery a worker currently holds is deliberately left alone rather than pulled
+    /// out from under it: the dispatcher re-establishes eligibility before it materializes anything,
+    /// sees the cancelled intent, and closes its own claimed row honestly with the attempt it already
+    /// started. Terminal deliveries — an inbox row already written — are historical facts and are
+    /// never rewritten.
+    /// </remarks>
+    private async Task CancelScheduledNotificationsAsync(
+        Guid enrollmentId,
+        CommercialNotificationKind? kind,
+        CancellationToken cancellationToken)
+    {
+        var now = clock.UtcNow;
+        var intents = await dbContext.NotificationOutboxItems
+            .Where(item =>
+                item.AggregateId == enrollmentId &&
+                item.Status == NotificationIntentStatus.Scheduled &&
+                (kind == null || item.Kind == kind))
+            .ToListAsync(cancellationToken);
+        if (intents.Count == 0)
+        {
+            return;
+        }
+
+        var intentIds = intents.Select(item => item.Id).ToList();
+        var nonTerminalDeliveries = await dbContext.NotificationChannelDeliveries
+            .Where(delivery =>
+                intentIds.Contains(delivery.OutboxItemId) &&
+                (delivery.Status == NotificationDeliveryStatus.Pending ||
+                 delivery.Status == NotificationDeliveryStatus.Processing))
+            .ToListAsync(cancellationToken);
+
+        // An active claim is still outstanding work. Marking the intent cancelled lets that claimant's
+        // mandatory final recheck see the withdrawal; only intents whose channels are already entirely
+        // terminal remain historical scheduled facts.
+        var withOutstandingWork = nonTerminalDeliveries.Select(delivery => delivery.OutboxItemId).ToHashSet();
+        foreach (var intent in intents.Where(item => withOutstandingWork.Contains(item.Id)))
+        {
+            intent.Cancel(now);
+        }
+
+        foreach (var delivery in nonTerminalDeliveries)
+        {
+            delivery.CancelIfPending(now);
+        }
+    }
+
     private void Schedule(
         ClientEnrollment enrollment,
         NotificationContext context,
@@ -902,7 +959,7 @@ internal sealed class CommercialApplicationService(
         var payload = JsonSerializer.Serialize(
             new CommercialNotificationPayload(enrollment.Id, enrollment.ClientProfileId),
             PayloadJsonOptions);
-        dbContext.NotificationOutboxItems.Add(NotificationOutboxItem.Schedule(
+        var item = NotificationOutboxItem.Schedule(
             enrollment.TenantId,
             context.RecipientUserId,
             enrollment.Id,
@@ -910,7 +967,24 @@ internal sealed class CommercialApplicationService(
             $"enrollment:{enrollment.Id:N}:{eventKey}:v1",
             payload,
             scheduledAtUtc,
-            context.TimeZoneId));
+            context.TimeZoneId);
+        dbContext.NotificationOutboxItems.Add(item);
+
+        // The channels are selected here and written in this same transaction, so a notification never
+        // exists without the deliveries that answer for it. Each row snapshots why it was created,
+        // which is what lets historical behaviour be explained later without re-reading a preference
+        // that has since changed.
+        foreach (var selection in NotificationChannelPlanner.Plan(item.Purpose, context.ChannelPlan))
+        {
+            dbContext.NotificationChannelDeliveries.Add(NotificationChannelDelivery.Select(
+                enrollment.TenantId,
+                item.Id,
+                selection.Channel,
+                selection.Purpose,
+                selection.Reason,
+                NotificationChannelPlanner.PolicyVersion,
+                scheduledAtUtc));
+        }
     }
 
     private static DateTimeOffset ToUtc(DateOnly date, TimeOnly time, string timeZoneId)
@@ -978,5 +1052,8 @@ internal sealed class CommercialApplicationService(
     private static CommercialCommandResult Conflict(string code, string message) =>
         new(CommercialCommandStatus.Conflict, Code: code, Message: message);
 
-    private sealed record NotificationContext(Guid RecipientUserId, string TimeZoneId);
+    private sealed record NotificationContext(
+        Guid RecipientUserId,
+        string TimeZoneId,
+        NotificationChannelPlanInputs ChannelPlan);
 }

@@ -25,7 +25,8 @@ public static class WorkerDependencyInjection
 {
     public static IServiceCollection AddTbGymNotificationWorkerInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        bool isProduction)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
@@ -51,7 +52,57 @@ public static class WorkerDependencyInjection
             }));
 
         services.AddNotificationDispatch(configuration);
+        services.AddNotificationEmail(configuration, isProduction);
         return services;
+    }
+
+    /// <summary>
+    /// The email seam and its startup-validated configuration, shared by both composition roots.
+    /// </summary>
+    /// <remarks>
+    /// Email is off by default and there is no production provider in this phase, so the validation is
+    /// deliberately unforgiving: an unknown adapter name, an enabled channel with nothing behind it,
+    /// the captured development adapter in Production, or email enabled at all in Production each fail
+    /// startup. A deployment that believed it was emailing people while the messages went into a
+    /// process's memory would be a far worse outcome than a process that refuses to start.
+    /// <para>
+    /// The captured adapter is registered only when it is both configured and permitted, so production
+    /// composition contains no transport at all rather than a disabled one somebody could resolve.
+    /// </para>
+    /// </remarks>
+    internal static IServiceCollection AddNotificationEmail(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        bool isProduction)
+    {
+        services.AddOptions<NotificationEmailOptions>()
+            .Bind(configuration.GetSection(NotificationEmailOptions.SectionName))
+            .Validate(options => options.Validate(isProduction) is null, ValidationMessage(configuration, isProduction))
+            .ValidateOnStart();
+
+        var configured = new NotificationEmailOptions();
+        configuration.GetSection(NotificationEmailOptions.SectionName).Bind(configured);
+        if (!isProduction && configured.Validate(isProduction) is null && configured.UsesCapturedAdapter)
+        {
+            services.TryAddSingleton<CapturedNotificationEmailTransport>();
+            services.TryAddSingleton<INotificationEmailTransport>(provider =>
+                provider.GetRequiredService<CapturedNotificationEmailTransport>());
+        }
+
+        services.TryAddScoped<INotificationRecipientContacts, NotificationRecipientContacts>();
+        return services;
+    }
+
+    /// <summary>
+    /// The exact reason, resolved once at composition, so a refused startup says which rule it broke
+    /// rather than repeating the whole policy.
+    /// </summary>
+    private static string ValidationMessage(IConfiguration configuration, bool isProduction)
+    {
+        var configured = new NotificationEmailOptions();
+        configuration.GetSection(NotificationEmailOptions.SectionName).Bind(configured);
+        return configured.Validate(isProduction)
+            ?? $"{NotificationEmailOptions.SectionName} is not a valid email configuration.";
     }
 
     /// <summary>

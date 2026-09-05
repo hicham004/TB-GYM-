@@ -3,19 +3,24 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Modules.Notifications;
 
 /// <summary>
-/// One try at delivering one outbox intent over one channel.
+/// One try at one channel's delivery of one logical notification.
 /// </summary>
 /// <remarks>
 /// Every started attempt is persisted before any work happens, so a worker that dies leaves evidence
-/// rather than silence. A completed attempt is immutable and is never deleted: the history of what
-/// was tried, when, by which claim, and how it ended is the only thing that can explain a
-/// dead-lettered item afterwards.
+/// rather than silence. A completed attempt is immutable and is never deleted: the history of what was
+/// tried, when, by which claim, and how it ended is the only thing that can explain a dead-lettered
+/// delivery afterwards.
 /// <para>
-/// <see cref="IdempotencyKey"/> is stable across every attempt for the same intent and channel. In
-/// this slice the in-app materialization is made idempotent by a unique database constraint instead,
-/// but an external provider cannot be given a constraint — it can only be given a key it promises to
-/// deduplicate on. Even then the honest guarantee is at-least-once with provider-specific
-/// reconciliation, never exactly-once.
+/// The attempt belongs to a <see cref="NotificationChannelDelivery"/> rather than to the intent, so
+/// the retry budget, the numbering and the history of one channel are entirely its own. The channel is
+/// stored as well and is part of a composite foreign key to the delivery, which makes an attempt whose
+/// channel disagrees with its delivery structurally impossible rather than merely unlikely.
+/// </para>
+/// <para>
+/// <see cref="IdempotencyKey"/> is stable across every attempt for the same intent and channel. In-app
+/// materialization is made idempotent by a unique database constraint instead, but an external
+/// provider cannot be given a constraint — only a key it promises to deduplicate on, and even then the
+/// honest guarantee is at-least-once with provider-specific reconciliation, never exactly-once.
 /// </para>
 /// </remarks>
 public sealed class NotificationDeliveryAttempt : TenantEntity
@@ -26,7 +31,7 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
 
     private NotificationDeliveryAttempt(
         Guid tenantId,
-        Guid outboxItemId,
+        Guid channelDeliveryId,
         NotificationChannel channel,
         int attemptNumber,
         Guid claimToken,
@@ -34,9 +39,9 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
         DateTimeOffset startedAtUtc)
         : base(tenantId)
     {
-        if (outboxItemId == Guid.Empty || claimToken == Guid.Empty || !Enum.IsDefined(channel))
+        if (channelDeliveryId == Guid.Empty || claimToken == Guid.Empty || !Enum.IsDefined(channel))
         {
-            throw new ArgumentException("Outbox item, claim token, and channel are required.");
+            throw new ArgumentException("Channel delivery, claim token, and channel are required.");
         }
 
         if (attemptNumber < 1)
@@ -44,7 +49,7 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
             throw new ArgumentOutOfRangeException(nameof(attemptNumber), "Attempt numbers start at 1.");
         }
 
-        OutboxItemId = outboxItemId;
+        ChannelDeliveryId = channelDeliveryId;
         Channel = channel;
         AttemptNumber = attemptNumber;
         ClaimToken = claimToken;
@@ -53,7 +58,7 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
         Outcome = NotificationDeliveryOutcome.Started;
     }
 
-    public Guid OutboxItemId { get; private set; }
+    public Guid ChannelDeliveryId { get; private set; }
 
     public NotificationChannel Channel { get; private set; }
 
@@ -71,14 +76,15 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
     public NotificationDeliveryOutcome Outcome { get; private set; }
 
     /// <summary>
-    /// A stable, bounded classification. Never an exception message, a stack trace, or anything a
-    /// future provider returned in a response body.
+    /// A stable, bounded classification. Never an exception message, a stack trace, an address, or
+    /// anything a future provider returned in a response body.
     /// </summary>
     public string? FailureCode { get; private set; }
 
     /// <summary>
-    /// Reserved for a future external adapter. Nothing writes it in this slice; the in-app channel
-    /// has no provider and inventing an identifier for it would be a lie about where it came from.
+    /// Reserved for a real external provider. Nothing writes it in this phase: in-app has no provider,
+    /// and the captured email adapter contacts none, so inventing an identifier for either would be a
+    /// lie about where it came from. A database trigger refuses it.
     /// </summary>
     public string? ProviderMessageId { get; private set; }
 
@@ -86,8 +92,9 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
 
     /// <summary>
     /// The key an external provider would be asked to deduplicate on. Stable for the intent and the
-    /// channel, deliberately not for the attempt: a retry of the same intent must be recognisable as
-    /// the same message, which is the entire purpose of the key.
+    /// channel, deliberately not for the attempt: a retry of the same intent over the same channel must
+    /// be recognisable as the same message, which is the entire purpose of the key. Two channels of one
+    /// intent get different keys, because they are different messages.
     /// </summary>
     public static string BuildIdempotencyKey(Guid outboxItemId, NotificationChannel channel) =>
         $"notification:{outboxItemId:N}:{channel.ToString().ToLowerInvariant()}:v1";
@@ -95,19 +102,25 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
     public static NotificationDeliveryAttempt Start(
         Guid tenantId,
         Guid outboxItemId,
+        Guid channelDeliveryId,
         NotificationChannel channel,
         int attemptNumber,
         Guid claimToken,
         DateTimeOffset startedAtUtc) =>
         new(
             tenantId,
-            outboxItemId,
+            channelDeliveryId,
             channel,
             attemptNumber,
             claimToken,
             BuildIdempotencyKey(outboxItemId, channel),
             startedAtUtc);
 
+    /// <summary>
+    /// This attempt produced the channel's artefact: an inbox row, or a message the configured
+    /// transport took. Not a claim that a provider accepted it, which is why nothing here is called
+    /// delivered and why <see cref="ProviderMessageId"/> stays null without a real provider.
+    /// </summary>
     public void Succeed(DateTimeOffset now, string? providerMessageId = null)
     {
         Complete(NotificationDeliveryOutcome.Succeeded, now, null);
@@ -124,15 +137,16 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
 
     /// <summary>
     /// Authoritative state changed after this attempt was durably started but before anything was
-    /// materialized. The suppression did not fail and does not earn a retry, but the started attempt
-    /// remains a completed historical fact rather than being erased or left open forever.
+    /// materialized — including a recipient opting out of email after the claim committed. The
+    /// suppression did not fail and does not earn a retry, but the started attempt remains a completed
+    /// historical fact rather than being erased or left open forever.
     /// </summary>
     public void Suppress(DateTimeOffset now, string reasonCode) =>
         Complete(NotificationDeliveryOutcome.Suppressed, now, reasonCode);
 
     /// <summary>
     /// The claim that started this attempt expired without finishing it. Recorded before the
-    /// replacement attempt is created, so a reclaimed item shows what happened to the try it
+    /// replacement attempt is created, so a reclaimed delivery shows what happened to the try it
     /// replaced rather than appearing to have skipped an attempt number.
     /// </summary>
     public void Abandon(DateTimeOffset now, string failureCode) =>
@@ -161,12 +175,18 @@ public sealed class NotificationDeliveryAttempt : TenantEntity
 }
 
 /// <summary>
-/// Delivery channels. Only <see cref="InApp"/> exists in this slice; the enum is here so an attempt
-/// row is already channel-scoped when email or WhatsApp is added behind the existing ports.
+/// The delivery channels a notification may be selected for.
 /// </summary>
+/// <remarks>
+/// <see cref="InApp"/> is passive persisted state that interrupts nobody and is always selected.
+/// <see cref="Email"/> is the first interruptive channel: it costs money, lands in a mailbox, arrives
+/// at whatever hour it arrives, and is therefore opt-in, quiet-hours aware, and independently
+/// retried. Nothing about one channel's state is readable or writable from the other.
+/// </remarks>
 public enum NotificationChannel
 {
     InApp = 1,
+    Email = 2,
 }
 
 public enum NotificationDeliveryOutcome

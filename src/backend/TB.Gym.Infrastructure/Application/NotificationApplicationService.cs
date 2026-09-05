@@ -127,25 +127,34 @@ internal sealed class NotificationApplicationService(
             return new NotificationDeadLetterPage(0, []);
         }
 
-        var deadLettered = dbContext.NotificationOutboxItems
+        // Per channel delivery, because dead-lettering is per channel now: an intent whose inbox row
+        // was written and whose email exhausted its retries has exactly one thing to show an operator,
+        // and reporting it against the intent would either hide the failure or misrepresent the success.
+        var deadLettered = dbContext.NotificationChannelDeliveries
             .AsNoTracking()
-            .Where(item => item.Status == NotificationOutboxStatus.DeadLettered);
+            .Where(delivery => delivery.Status == NotificationDeliveryStatus.DeadLettered);
         var total = await deadLettered.LongCountAsync(cancellationToken);
         var items = await deadLettered
-            .OrderByDescending(item => item.DeadLetteredAtUtc)
-            .ThenByDescending(item => item.Id)
+            .OrderByDescending(delivery => delivery.DeadLetteredAtUtc)
+            .ThenByDescending(delivery => delivery.Id)
             .Skip(skip)
             .Take(take)
-            // The projection is the privacy boundary. Recipient, payload, rendered wording and every
-            // delivery detail are absent from the shape, so an operational view cannot become a way
-            // to read somebody else's notifications.
-            .Select(item => new NotificationDeadLetterView(
-                item.Id,
-                item.Kind,
-                item.ScheduledAtUtc,
-                item.AttemptCount,
-                item.DeadLetteredAtUtc,
-                item.FailureCode))
+            // The projection is the privacy boundary. Recipient, payload, rendered wording, address and
+            // every transport detail are absent from the shape, so an operational view cannot become a
+            // way to read somebody else's notifications.
+            .Join(
+                dbContext.NotificationOutboxItems.AsNoTracking(),
+                delivery => delivery.OutboxItemId,
+                item => item.Id,
+                (delivery, item) => new NotificationDeadLetterView(
+                    item.Id,
+                    delivery.Id,
+                    delivery.Channel,
+                    item.Kind,
+                    item.ScheduledAtUtc,
+                    delivery.AttemptCount,
+                    delivery.DeadLetteredAtUtc,
+                    delivery.FailureCode))
             .ToListAsync(cancellationToken);
 
         return new NotificationDeadLetterPage(total, items);

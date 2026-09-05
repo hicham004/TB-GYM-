@@ -12,8 +12,54 @@ public static class NotificationEndpoints
     public static IEndpointRouteBuilder MapNotificationsModule(this IEndpointRouteBuilder endpoints)
     {
         MapInbox(endpoints);
+        MapPreferences(endpoints);
         MapDeadLetters(endpoints);
         return endpoints;
+    }
+
+    /// <summary>
+    /// The caller's own notification settings, in the active workspace.
+    /// </summary>
+    /// <remarks>
+    /// Behind the tenant-member policy, which reverifies active membership of the workspace named in
+    /// the request on every call, with antiforgery on the write and the sensitive-write rate limit.
+    /// The subject is taken from the authentication cookie and never from the route or the body, so
+    /// there is deliberately no shape in which one member changes another member's settings — a coach
+    /// or an owner cannot opt somebody into email.
+    /// </remarks>
+    private static void MapPreferences(IEndpointRouteBuilder endpoints)
+    {
+        var preferences = endpoints.MapGroup("/api/notifications/preferences")
+            .RequireAuthorization(AuthorizationPolicies.TenantMember)
+            .WithTags(NotificationsModule.Name);
+
+        preferences.MapGet("", async (
+            INotificationPreferenceService service,
+            CancellationToken token) =>
+        {
+            var view = await service.GetOwnAsync(token);
+            return view is null ? Results.NotFound() : Results.Ok(view);
+        })
+        .WithName("GetOwnNotificationPreferences")
+        .Produces<NotificationPreferenceView>()
+        .ProducesProblem(StatusCodes.Status404NotFound);
+
+        preferences.MapPut("", async (
+            UpdateNotificationPreferenceRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            INotificationPreferenceService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.UpdateOwnAsync(request, token));
+        })
+        .WithName("UpdateOwnNotificationPreferences")
+        .Produces<NotificationPreferenceView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
     }
 
     /// <summary>
@@ -95,6 +141,27 @@ public static class NotificationEndpoints
         NotificationCommandStatus.Invalid => Results.ValidationProblem(new Dictionary<string, string[]>
         {
             [result.Field ?? "notification"] = [result.Message ?? "The request is not valid."],
+        }),
+        _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+    };
+
+    /// <summary>
+    /// Sanitized throughout. A validation message names a field and states a rule; it never echoes an
+    /// address, a token, a notification's wording or anything from a payload.
+    /// </summary>
+    private static IResult ToResult(NotificationPreferenceCommandResult result) => result.Status switch
+    {
+        NotificationPreferenceCommandStatus.Success => Results.Ok(result.Preference),
+        NotificationPreferenceCommandStatus.NotFound => Results.NotFound(),
+        NotificationPreferenceCommandStatus.Conflict => Results.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: result.Message ?? "Your notification settings were changed by another request.",
+            extensions: result.Field is null
+                ? null
+                : new Dictionary<string, object?> { ["code"] = result.Field }),
+        NotificationPreferenceCommandStatus.Invalid => Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            [result.Field ?? "preferences"] = [result.Message ?? "The request is not valid."],
         }),
         _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
     };

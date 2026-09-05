@@ -29,7 +29,12 @@ internal static class WorkerProgram
             options.UseUtcTimestamp = true;
         });
 
-        builder.Services.AddTbGymNotificationWorkerInfrastructure(builder.Configuration);
+        // The environment reaches composition explicitly rather than through an IWebHostEnvironment
+        // this process does not have. It decides one thing: whether the captured development email
+        // adapter and an enabled email channel are permitted, both of which are refused in Production.
+        builder.Services.AddTbGymNotificationWorkerInfrastructure(
+            builder.Configuration,
+            builder.Environment.IsProduction());
         builder.Services.AddHostedService<NotificationDispatchWorker>();
 
         var host = builder.Build();

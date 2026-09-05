@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Options;
 using TB.Gym.Modules.Notifications;
 
@@ -42,11 +43,16 @@ public sealed class NotificationDispatchWorker(
             new EventId(6002, "NotificationDispatchStarted"),
             "Notification dispatch is sweeping every {PollIntervalSeconds} seconds.");
 
-    private static readonly Action<ILogger, int, int, int, int, int, int, Exception?> LogSwept =
-        LoggerMessage.Define<int, int, int, int, int, int>(
+    // Counted per channel delivery, and named for what actually happened. "Materialized" means an
+    // inbox row was written or a message was taken by the configured transport; it is not a claim that
+    // a provider accepted anything or that a person read it. "Deferred" is quiet hours, which costs no
+    // attempt. The six counters are formatted into one field because Define takes at most six type
+    // arguments, and splitting them across two lines would leave an operator correlating them.
+    private static readonly Action<ILogger, int, string, Exception?> LogSwept =
+        LoggerMessage.Define<int, string>(
             LogLevel.Information,
             new EventId(6003, "NotificationDispatchSwept"),
-            "Notification sweep claimed {Claimed}: {Dispatched} dispatched, {Suppressed} suppressed, {Retried} retrying, {DeadLettered} dead-lettered, {Reclaimed} reclaimed.");
+            "Notification sweep claimed {Claimed} channel deliveries: {Outcome}.");
 
     private static readonly Action<ILogger, Exception?> LogSweepFailed =
         LoggerMessage.Define(
@@ -100,11 +106,9 @@ public sealed class NotificationDispatchWorker(
                 LogSwept(
                     logger,
                     outcome.Claimed,
-                    outcome.Dispatched,
-                    outcome.Suppressed,
-                    outcome.Retried,
-                    outcome.DeadLettered,
-                    outcome.Reclaimed,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{outcome.Materialized} materialized, {outcome.Suppressed} suppressed, {outcome.Retried} retrying, {outcome.DeadLettered} dead-lettered, {outcome.Reclaimed} reclaimed, {outcome.Deferred} deferred"),
                     null);
             }
         }

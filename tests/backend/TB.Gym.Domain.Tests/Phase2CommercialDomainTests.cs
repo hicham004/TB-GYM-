@@ -140,20 +140,34 @@ public sealed class Phase2CommercialDomainTests
             Now.AddDays(3),
             "Asia/Beirut");
 
-        Assert.AreEqual(NotificationOutboxStatus.Pending, item.Status);
+        Assert.AreEqual(NotificationIntentStatus.Scheduled, item.Status);
         Assert.AreEqual("Asia/Beirut", item.TenantTimeZoneId);
-        Assert.AreEqual(Now.AddDays(3), item.NextAttemptAtUtc);
+        Assert.AreEqual(Now.AddDays(3), item.ScheduledAtUtc);
+        Assert.AreEqual(NotificationPurpose.ServiceTransactional, item.Purpose);
 
-        // Phase 6B-1: dispatch is a claimed operation, so completing one requires the lease token it
-        // was issued with. A completed item cannot be dispatched again or failed afterwards.
-        var claim = item.Claim(Now.AddDays(3), TimeSpan.FromMinutes(2));
-        item.MarkDispatched(claim, Now.AddDays(3));
-        Assert.AreEqual(NotificationOutboxStatus.Dispatched, item.Status);
-        Assert.AreEqual(1, item.AttemptCount);
-        Assert.IsNull(item.ClaimToken);
-        Assert.ThrowsExactly<InvalidOperationException>(() => item.MarkDispatched(claim, Now.AddDays(3)));
+        // Phase 6B-3A: the dispatch lifecycle belongs to the channel, one row per channel, so an
+        // in-app success and an email retry can both be true at once. Completing one still requires
+        // the lease token it was issued with, and a completed delivery accepts nothing further.
+        var delivery = NotificationChannelDelivery.Select(
+            TenantId,
+            item.Id,
+            NotificationChannel.InApp,
+            item.Purpose,
+            NotificationChannelPlanner.InAppAlways,
+            NotificationChannelPlanner.PolicyVersion,
+            item.ScheduledAtUtc);
+        Assert.AreEqual(NotificationDeliveryStatus.Pending, delivery.Status);
+        Assert.AreEqual(Now.AddDays(3), delivery.NextAttemptAtUtc);
+
+        var claim = delivery.Claim(Now.AddDays(3), TimeSpan.FromMinutes(2));
+        delivery.StartAttempt(claim);
+        delivery.MarkMaterialized(claim, Now.AddDays(3));
+        Assert.AreEqual(NotificationDeliveryStatus.Materialized, delivery.Status);
+        Assert.AreEqual(1, delivery.AttemptCount);
+        Assert.IsNull(delivery.ClaimToken);
+        Assert.ThrowsExactly<InvalidOperationException>(() => delivery.MarkMaterialized(claim, Now.AddDays(3)));
         Assert.ThrowsExactly<InvalidOperationException>(
-            () => item.MarkRetrying(claim, Now.AddDays(4), "notification-dispatch-transient"));
+            () => delivery.MarkRetrying(claim, Now.AddDays(4), "notification-dispatch-transient"));
     }
 
     [TestMethod]

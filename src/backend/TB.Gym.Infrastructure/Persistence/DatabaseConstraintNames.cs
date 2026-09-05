@@ -22,7 +22,25 @@ internal static class DatabaseConstraintNames
         "IX_Notifications_TenantId_SourceOutboxItemId";
 
     public const string OneNotificationAttemptPerNumber =
-        "IX_DeliveryAttempts_TenantId_OutboxItemId_Channel_AttemptNumber";
+        "IX_DeliveryAttempts_TenantId_ChannelDeliveryId_AttemptNumber";
+
+    /// <summary>
+    /// At most one delivery per intent and channel. Channel planning reads this name to recognise a
+    /// race it lost rather than reporting a server error for a row that already says what it wanted.
+    /// </summary>
+    public const string OneChannelDeliveryPerIntent =
+        "IX_ChannelDeliveries_TenantId_OutboxItemId_Channel";
+
+    /// <summary>One settings row per member and workspace.</summary>
+    public const string OneNotificationPreferencePerMember =
+        "IX_ChannelPreferences_TenantId_UserId";
+
+    /// <summary>
+    /// One spent preference idempotency key per workspace. The update path reads this name to
+    /// recognise a concurrent identical retry and replay the winner's result.
+    /// </summary>
+    public const string OneNotificationPreferenceCommandPerKey =
+        "IX_PreferenceCommandRecords_TenantId_IdempotencyKey";
 
     /// <summary>
     /// One direct conversation per workspace, client and coach. The creation path reads this name to

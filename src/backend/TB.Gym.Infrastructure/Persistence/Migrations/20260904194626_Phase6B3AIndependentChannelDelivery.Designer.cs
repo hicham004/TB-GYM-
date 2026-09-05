@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TB.Gym.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TB.Gym.Infrastructure.Persistence;
 namespace TB.Gym.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GymDbContext))]
-    partial class GymDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260904194626_Phase6B3AIndependentChannelDelivery")]
+    partial class Phase6B3AIndependentChannelDelivery
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3162,8 +3165,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_ChannelDeliveries_TenantId_OutboxItemId_Channel");
 
-                    b.HasIndex("TenantId", "OutboxItemId", "Purpose");
-
                     b.HasIndex("TenantId", "Status", "DeadLetteredAtUtc")
                         .HasDatabaseName("IX_ChannelDeliveries_TenantId_Status_DeadLetteredAtUtc");
 
@@ -3171,15 +3172,13 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_AttemptCount", "\"AttemptCount\" >= 0 AND \"DeferralCount\" >= 0 AND \"SelectionPolicyVersion\" >= 1");
 
-                            t.HasCheckConstraint("CK_NotificationChannelDeliveries_Claim", "(\"ClaimToken\" IS NULL) = (\"ClaimExpiresAtUtc\" IS NULL) AND ((\"Status\" = 'Processing') = (\"ClaimToken\" IS NOT NULL))");
+                            t.HasCheckConstraint("CK_NotificationChannelDeliveries_Claim", "(\"ClaimToken\" IS NULL) = (\"ClaimExpiresAtUtc\" IS NULL) AND (\"ClaimToken\" IS NULL OR \"Status\" = 'Processing')");
 
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_Completion", "(\"Status\" IN ('Materialized', 'Suppressed', 'DeadLettered')) = (\"CompletedAtUtc\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_DeadLettered", "(\"Status\" = 'DeadLettered') = (\"DeadLetteredAtUtc\" IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_NotificationChannelDeliveries_Deferral", "(\"DeferredUntilUtc\" IS NULL) = (\"DeferralCode\" IS NULL) AND ((\"DeferralCount\" = 0) = (\"DeferredUntilUtc\" IS NULL))");
-
-                            t.HasCheckConstraint("CK_NotificationChannelDeliveries_Failure", "(\"Status\" = 'Materialized' AND \"FailureCode\" IS NULL) OR (\"Status\" IN ('Suppressed', 'DeadLettered') AND \"FailureCode\" IS NOT NULL) OR \"Status\" IN ('Pending', 'Processing')");
+                            t.HasCheckConstraint("CK_NotificationChannelDeliveries_Deferral", "(\"DeferredUntilUtc\" IS NULL) = (\"DeferralCode\" IS NULL)");
 
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_InAppHasNoProvider", "\"Channel\" <> 'InApp' OR (\"TransportAdapter\" IS NULL AND \"ProviderMessageId\" IS NULL AND \"ProviderAcceptedAtUtc\" IS NULL)");
 
@@ -3188,10 +3187,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_NextAttempt", "\"NextAttemptAtUtc\" >= \"DueAtUtc\"");
 
                             t.HasCheckConstraint("CK_NotificationChannelDeliveries_ProviderEvidence", "(\"ProviderMessageId\" IS NULL AND \"ProviderAcceptedAtUtc\" IS NULL) OR (\"TransportAdapter\" IS NOT NULL AND \"Status\" = 'Materialized')");
-
-                            t.HasCheckConstraint("CK_NotificationChannelDeliveries_Transport", "\"TransportAdapter\" IS NULL OR (\"Channel\" = 'Email' AND \"Status\" = 'Materialized')");
-
-                            t.HasCheckConstraint("CK_NotificationChannelDeliveries_Vocabulary", "\"Channel\" IN ('InApp', 'Email') AND \"Purpose\" IN ('ServiceTransactional', 'Marketing') AND \"Status\" IN ('Pending', 'Processing', 'Materialized', 'Suppressed', 'DeadLettered')");
                         });
                 });
 
@@ -3209,17 +3204,11 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("EmailMarketingConsentEventId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset?>("EmailMarketingDecidedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("EmailMarketingEnabled")
                         .HasColumnType("boolean");
-
-                    b.Property<Guid?>("EmailServiceConsentEventId")
-                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset?>("EmailServiceDecidedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -3267,13 +3256,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_ChannelPreferences_TenantId_UserId");
 
-                    b.HasIndex("TenantId", "UserId", "EmailMarketingConsentEventId");
-
-                    b.HasIndex("TenantId", "UserId", "EmailServiceConsentEventId");
-
                     b.ToTable("ChannelPreferences", "notifications", t =>
                         {
-                            t.HasCheckConstraint("CK_NotificationChannelPreferences_Decisions", "(\"EmailServiceDecidedAtUtc\" IS NULL) = (\"EmailServiceConsentEventId\" IS NULL) AND (\"EmailMarketingDecidedAtUtc\" IS NULL) = (\"EmailMarketingConsentEventId\" IS NULL) AND (\"EmailServiceEnabled\" = false OR \"EmailServiceConsentEventId\" IS NOT NULL) AND (\"EmailMarketingEnabled\" = false OR \"EmailMarketingConsentEventId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_NotificationChannelPreferences_Decisions", "(\"EmailServiceEnabled\" = false OR \"EmailServiceDecidedAtUtc\" IS NOT NULL) AND (\"EmailMarketingEnabled\" = false OR \"EmailMarketingDecidedAtUtc\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_NotificationChannelPreferences_PolicyVersion", "\"PolicyVersion\" >= 1");
 
@@ -3354,8 +3339,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("ConsentEvents", "notifications", t =>
                         {
                             t.HasCheckConstraint("CK_NotificationConsentEvents_OwnActor", "\"ActorUserId\" = \"UserId\" AND \"PolicyVersion\" >= 1");
-
-                            t.HasCheckConstraint("CK_NotificationConsentEvents_Vocabulary", "\"Channel\" = 'Email' AND \"Purpose\" IN ('ServiceTransactional', 'Marketing') AND \"Decision\" IN ('Granted', 'Withdrawn')");
                         });
                 });
 
@@ -3436,10 +3419,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ChannelDeliveryId", "Channel");
 
-                    b.HasIndex("TenantId", "ChannelDeliveryId", "ClaimToken")
-                        .IsUnique()
-                        .HasDatabaseName("IX_DeliveryAttempts_TenantId_ChannelDeliveryId_ClaimToken");
-
                     b.HasIndex("TenantId", "ChannelDeliveryId", "StartedAtUtc");
 
                     b.ToTable("DeliveryAttempts", "notifications", t =>
@@ -3448,9 +3427,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_NotificationDeliveryAttempts_Completion", "(\"Outcome\" = 'Started') = (\"CompletedAtUtc\" IS NULL)");
 
-                            t.HasCheckConstraint("CK_NotificationDeliveryAttempts_Success", "(\"Outcome\" IN ('Started', 'Succeeded')) = (\"FailureCode\" IS NULL)");
-
-                            t.HasCheckConstraint("CK_NotificationDeliveryAttempts_Vocabulary", "\"Channel\" IN ('InApp', 'Email') AND \"Outcome\" IN ('Started', 'Succeeded', 'TransientFailure', 'PermanentFailure', 'Abandoned', 'Suppressed')");
+                            t.HasCheckConstraint("CK_NotificationDeliveryAttempts_Success", "\"Outcome\" <> 'Succeeded' OR \"FailureCode\" IS NULL");
                         });
                 });
 
@@ -3538,8 +3515,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("OutboxItems", "notifications", t =>
                         {
                             t.HasCheckConstraint("CK_NotificationOutboxItems_Cancellation", "(\"Status\" = 'Cancelled') = (\"CancelledAtUtc\" IS NOT NULL)");
-
-                            t.HasCheckConstraint("CK_NotificationOutboxItems_Vocabulary", "\"Status\" IN ('Scheduled', 'Cancelled') AND \"Purpose\" = 'ServiceTransactional' AND \"Kind\" IN ('PaymentRequired', 'EnrollmentActivated', 'EnrollmentEndingSoon', 'EnrollmentExpired', 'EnrollmentRenewed')");
                         });
                 });
 
@@ -3576,35 +3551,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("RecordedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("ResultEmailChannelAvailable")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ResultEmailMarketingEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ResultEmailServiceEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("ResultPolicyVersion")
-                        .HasColumnType("integer");
-
-                    b.Property<long>("ResultPreferenceVersion")
-                        .HasColumnType("bigint");
-
-                    b.Property<bool>("ResultQuietHoursEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<TimeOnly?>("ResultQuietHoursEndLocal")
-                        .HasColumnType("time without time zone");
-
-                    b.Property<TimeOnly?>("ResultQuietHoursStartLocal")
-                        .HasColumnType("time without time zone");
-
-                    b.Property<string>("ResultTimeZoneId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -3626,18 +3572,11 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ActorUserId");
 
-                    b.HasIndex("TenantId", "ActorUserId");
-
                     b.HasIndex("TenantId", "IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("IX_PreferenceCommandRecords_TenantId_IdempotencyKey");
 
-                    b.ToTable("PreferenceCommandRecords", "notifications", t =>
-                        {
-                            t.HasCheckConstraint("CK_NotificationPreferenceCommands_QuietHours", "(\"ResultQuietHoursEnabled\" = (\"ResultQuietHoursStartLocal\" IS NOT NULL)) AND (\"ResultQuietHoursEnabled\" = (\"ResultQuietHoursEndLocal\" IS NOT NULL)) AND (\"ResultQuietHoursEnabled\" = false OR \"ResultQuietHoursStartLocal\" <> \"ResultQuietHoursEndLocal\")");
-
-                            t.HasCheckConstraint("CK_NotificationPreferenceCommands_Vocabulary", "\"CommandType\" = 'UpdateOwnPreferences' AND \"ResultPolicyVersion\" >= 1 AND \"ResultPreferenceVersion\" BETWEEN 0 AND 4294967295 AND btrim(\"ResultTimeZoneId\") <> '' AND \"PayloadFingerprint\" ~ '^[0-9a-f]{64}$'");
-                        });
+                    b.ToTable("PreferenceCommandRecords", "notifications");
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.AiMealDraftOperation", b =>
@@ -6781,6 +6720,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId", "UserId")
+                        .IsUnique();
+
                     b.HasIndex("UserId", "Status");
 
                     b.ToTable("Memberships", "tenancy");
@@ -9006,8 +8948,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                 {
                     b.HasOne("TB.Gym.Modules.Notifications.NotificationOutboxItem", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "OutboxItemId", "Purpose")
-                        .HasPrincipalKey("TenantId", "Id", "Purpose")
+                        .HasForeignKey("TenantId", "OutboxItemId")
+                        .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -9025,25 +8967,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "UserId")
-                        .HasPrincipalKey("TenantId", "UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("TB.Gym.Modules.Notifications.NotificationConsentEvent", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "UserId", "EmailMarketingConsentEventId")
-                        .HasPrincipalKey("TenantId", "UserId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("TB.Gym.Modules.Notifications.NotificationConsentEvent", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "UserId", "EmailServiceConsentEventId")
-                        .HasPrincipalKey("TenantId", "UserId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Notifications.NotificationConsentEvent", b =>
@@ -9057,13 +8980,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasOne("TB.Gym.Modules.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "UserId")
-                        .HasPrincipalKey("TenantId", "UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -9098,13 +9014,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "ActorUserId")
-                        .HasPrincipalKey("TenantId", "UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

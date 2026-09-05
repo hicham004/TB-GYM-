@@ -116,6 +116,12 @@ public sealed partial class Phase6B1NotificationDispatchTests
                     ClaimLeaseSeconds.ToString(CultureInfo.InvariantCulture),
                 ["Notifications:Dispatch:MaximumAttempts"] =
                     MaximumAttempts.ToString(CultureInfo.InvariantCulture),
+                // The captured development adapter, which contacts nothing. Enabled for the whole
+                // fixture because email is opt-in per member: a test that never opts anybody in gets
+                // no email delivery, so this changes nothing for the Phase 6B-1 assertions. Production
+                // refuses both of these settings at startup, which its own test asserts.
+                ["Notifications:Email:Enabled"] = "true",
+                ["Notifications:Email:Adapter"] = "Captured",
             };
             // UseSetting as well as the in-memory source: the minimal host reads its configuration
             // while building, before ConfigureAppConfiguration has been applied, so the connection
@@ -136,6 +142,14 @@ public sealed partial class Phase6B1NotificationDispatchTests
                 services.RemoveAll<INotificationDispatchCheckpoint>();
                 services.AddSingleton<INotificationDispatchCheckpoint>(dispatchCheckpointBarrier);
                 services.AddSingleton(dispatchFaults);
+                // The captured adapter, behind a switch the tests can throw. The wrapper is a test
+                // seam only: production composes the captured adapter directly, and outside
+                // Development it composes no transport at all.
+                services.RemoveAll<INotificationEmailTransport>();
+                services.AddSingleton<INotificationEmailTransport>(provider =>
+                    new SwitchableEmailTransport(
+                        provider.GetRequiredService<CapturedNotificationEmailTransport>(),
+                        provider.GetRequiredService<DispatchFaults>()));
                 services.AddDbContext<GymDbContext>((provider, options) => options.AddInterceptors(
                     provider.GetRequiredService<CommandBarrier>(),
                     provider.GetRequiredService<DispatchFaults>().Commands,
@@ -273,10 +287,77 @@ public sealed partial class Phase6B1NotificationDispatchTests
             HttpStatusCode.OK);
     }
 
+    // ---------- notification preferences ----------
+
+    private static async Task<PreferenceView> PreferencesAsync(HttpClient client)
+    {
+        var response = await client.GetAsync("/api/notifications/preferences");
+        await AssertStatusAsync(response, HttpStatusCode.OK);
+        return await RequiredJsonAsync<PreferenceView>(response);
+    }
+
+    private static async Task<HttpResponseMessage> SavePreferencesAsync(
+        HttpClient client,
+        object body)
+    {
+        await RefreshCsrfAsync(client);
+        return await client.PutAsJsonAsync("/api/notifications/preferences", body);
+    }
+
+    /// <summary>Turns service email on for one member, from their own session.</summary>
+    private static async Task<PreferenceView> EnableServiceEmailAsync(HttpClient client)
+    {
+        var current = await PreferencesAsync(client);
+        var response = await SavePreferencesAsync(client, new
+        {
+            emailServiceEnabled = true,
+            quietHoursEnabled = current.QuietHoursEnabled,
+            quietHoursStartLocal = current.QuietHoursStartLocal,
+            quietHoursEndLocal = current.QuietHoursEndLocal,
+            idempotencyKey = Guid.NewGuid(),
+            version = current.Version,
+        });
+        await AssertStatusAsync(response, HttpStatusCode.OK);
+        return await RequiredJsonAsync<PreferenceView>(response);
+    }
+
+    /// <summary>Sets a quiet-hours window for one member, from their own session.</summary>
+    private static async Task<PreferenceView> SetQuietHoursAsync(
+        HttpClient client,
+        string startLocal,
+        string endLocal)
+    {
+        var current = await PreferencesAsync(client);
+        var response = await SavePreferencesAsync(client, new
+        {
+            emailServiceEnabled = current.EmailServiceEnabled,
+            quietHoursEnabled = true,
+            quietHoursStartLocal = startLocal,
+            quietHoursEndLocal = endLocal,
+            idempotencyKey = Guid.NewGuid(),
+            version = current.Version,
+        });
+        await AssertStatusAsync(response, HttpStatusCode.OK);
+        return await RequiredJsonAsync<PreferenceView>(response);
+    }
+
+    /// <summary>
+    /// The in-memory captured adapter. It is the only place a recipient address or a rendered body
+    /// exists at all, which is exactly what the persistence and log assertions rely on.
+    /// </summary>
+    private CapturedNotificationEmailTransport CapturedEmail =>
+        RequiredFactory.Services.GetRequiredService<CapturedNotificationEmailTransport>();
+
+    /// <summary>
+    /// Invites <paramref name="email"/> and accepts it. Pass <paramref name="newAccount"/> false when
+    /// the client is already signed in, which is how the same person joins a second workspace: the
+    /// acceptance links the existing account instead of registering another one.
+    /// </summary>
     private static async Task<Acceptance> InviteAndAcceptAsync(
         HttpClient coach,
         HttpClient client,
-        string email)
+        string email,
+        bool newAccount = true)
     {
         await RefreshCsrfAsync(coach);
         var response = await coach.PostAsJsonAsync("/api/invitations", new
@@ -293,8 +374,8 @@ public sealed partial class Phase6B1NotificationDispatchTests
         var acceptance = await client.PostAsJsonAsync("/api/invitations/accept", new
         {
             token = QueryValue(invitation.DevelopmentActionUrl!, "token"),
-            displayName = "Notified Client",
-            password = Password,
+            displayName = newAccount ? "Notified Client" : null,
+            password = newAccount ? Password : null,
         });
         await AssertStatusAsync(acceptance, HttpStatusCode.OK);
         var accepted = await RequiredJsonAsync<Acceptance>(acceptance);
@@ -470,17 +551,81 @@ public sealed partial class Phase6B1NotificationDispatchTests
     }
 
     /// <summary>
-    /// Returns a terminal item to Pending. Used only to reproduce an interleaving the HTTP API cannot
-    /// produce on its own: a worker already holding an item when the request that would have
-    /// cancelled it ran. The dispatcher's own recheck is what the test is about.
+    /// Returns a terminal in-app delivery, and its intent, to a schedulable state.
     /// </summary>
-    private Task RestoreToPendingAsync(Guid outboxItemId) => ExecuteAsync(
+    /// <remarks>
+    /// Used only to reproduce an interleaving the HTTP API cannot produce on its own: a due item whose
+    /// underlying commercial state has already moved, so the dispatcher's own recheck is what the test
+    /// is about. The Phase 6B-3A guard refuses to mutate a terminal delivery — which is the point of
+    /// the guard — so the fixture disables it for the duration of this one write and restores it
+    /// immediately. The protection itself is asserted separately, by direct SQL, in
+    /// <c>Phase6B3ANotificationChannelTests</c>.
+    /// </remarks>
+    private Task RestoreToPendingAsync(Guid outboxItemId) => WithoutNotificationGuardsAsync(
         """
+        UPDATE notifications."ChannelDeliveries"
+        SET "Status" = 'Pending', "FailureCode" = NULL, "CompletedAtUtc" = NULL,
+            "MaterializedAtUtc" = NULL, "DeadLetteredAtUtc" = NULL
+        WHERE "OutboxItemId" = @id;
         UPDATE notifications."OutboxItems"
-        SET "Status" = 'Pending', "FailureCode" = NULL
-        WHERE "Id" = @id
+        SET "Status" = 'Scheduled', "CancelledAtUtc" = NULL
+        WHERE "Id" = @id;
         """,
         ("id", outboxItemId));
+
+    /// <summary>
+    /// Runs one fixture write with the immutable intent and terminal-delivery guards off, restoring
+    /// both afterwards.
+    /// </summary>
+    /// <remarks>
+    /// Three separate statements rather than one: a deferred constraint trigger leaves pending events
+    /// until its transaction ends, and PostgreSQL refuses to <c>ALTER TABLE</c> a relation that has
+    /// any. Each call is therefore its own transaction, and the guard is back on before anything the
+    /// test asserts runs.
+    /// </remarks>
+    private async Task WithoutNotificationGuardsAsync(string sql, params (string Name, object Value)[] parameters)
+    {
+        await ExecuteAsync(
+            """ALTER TABLE notifications."ChannelDeliveries" DISABLE TRIGGER protect_channel_delivery""");
+        try
+        {
+            await ExecuteAsync(
+                """ALTER TABLE notifications."OutboxItems" DISABLE TRIGGER protect_notification_intent""");
+            try
+            {
+                await ExecuteAsync(sql, parameters);
+            }
+            finally
+            {
+                await ExecuteAsync(
+                    """ALTER TABLE notifications."OutboxItems" ENABLE TRIGGER protect_notification_intent""");
+            }
+        }
+        finally
+        {
+            await ExecuteAsync(
+                """ALTER TABLE notifications."ChannelDeliveries" ENABLE TRIGGER protect_channel_delivery""");
+        }
+    }
+
+    /// <summary>
+    /// Corrupts an immutable payload for the unreadable-payload fixture, then immediately restores the
+    /// production immutability trigger. The trigger itself is covered by direct-SQL tests.
+    /// </summary>
+    private async Task WithoutIntentGuardAsync(string sql, params (string Name, object Value)[] parameters)
+    {
+        await ExecuteAsync(
+            """ALTER TABLE notifications."OutboxItems" DISABLE TRIGGER protect_notification_intent""");
+        try
+        {
+            await ExecuteAsync(sql, parameters);
+        }
+        finally
+        {
+            await ExecuteAsync(
+                """ALTER TABLE notifications."OutboxItems" ENABLE TRIGGER protect_notification_intent""");
+        }
+    }
 
     /// <summary>
     /// Builds a fresh workspace with one due intent, applies <paramref name="breakEligibility"/>, and
@@ -500,14 +645,14 @@ public sealed partial class Phase6B1NotificationDispatchTests
 
         var outcome = await SweepAsync();
         Assert.AreEqual(1, outcome.Suppressed, $"{label}: the item should have been suppressed.");
-        Assert.AreEqual(0, outcome.Dispatched, $"{label}: nothing should have been delivered.");
+        Assert.AreEqual(0, outcome.Materialized, $"{label}: nothing should have been delivered.");
         await AssertSuppressedWithAsync(intent, expectedCode);
         Assert.AreEqual(0L, await AttemptCountAsync(intent), $"{label}: suppression costs no delivery attempt.");
     }
 
     /// <summary>
     /// Holds a real committed claim, changes authoritative state on another connection, then proves
-    /// the materialization transaction rechecks and closes the already-started attempt honestly.
+    /// the materialization transaction rechecks before it durably starts an attempt.
     /// </summary>
     private async Task AssertPostClaimSuppressedAsync(
         string label,
@@ -525,8 +670,8 @@ public sealed partial class Phase6B1NotificationDispatchTests
         {
             var held = await OutboxAsync(intent);
             Assert.AreEqual("Processing", held.Status, $"{label}: the barrier must be after claim commit.");
-            Assert.AreEqual(1, held.AttemptCount);
-            Assert.AreEqual("Started", (await AttemptsAsync(intent)).Single().Outcome);
+            Assert.AreEqual(0, held.AttemptCount, $"{label}: a claim reservation is not an attempt.");
+            Assert.IsEmpty(await AttemptsAsync(intent));
 
             await changeAuthoritativeState(enrollment, workspace);
         }
@@ -540,7 +685,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
 
         Assert.AreEqual(1, outcome.Claimed);
         Assert.AreEqual(1, outcome.Suppressed);
-        Assert.AreEqual(0, outcome.Dispatched);
+        Assert.AreEqual(0, outcome.Materialized);
         await AssertSuppressedWithAsync(intent, expectedCode);
         var attempts = await AttemptsAsync(intent);
         Assert.HasCount(1, attempts);
@@ -551,7 +696,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
     private async Task AssertSuppressedWithAsync(Guid outboxItemId, string expectedCode)
     {
         var row = await OutboxAsync(outboxItemId);
-        Assert.AreEqual("Cancelled", row.Status);
+        Assert.AreEqual("Suppressed", row.Status);
         Assert.AreEqual(expectedCode, row.FailureCode);
         Assert.IsNull(row.DeadLetteredAtUtc, "Suppression is not a dead letter.");
         Assert.IsFalse(row.HasClaim);
@@ -655,7 +800,28 @@ public sealed partial class Phase6B1NotificationDispatchTests
         await command.ExecuteNonQueryAsync();
     }
 
-    private Task<string> OutboxStatusAsync(Guid outboxItemId) => ScalarAsync<string>(
+    /// <summary>
+    /// The in-app delivery's status for an intent.
+    /// </summary>
+    /// <remarks>
+    /// Phase 6B-3A moved the dispatch lifecycle from the intent onto one row per channel, so every
+    /// helper here reads the in-app delivery by default. The vocabulary moved with it: what the outbox
+    /// once called <c>Dispatched</c> is now the delivery being <c>Materialized</c>, and what it called
+    /// <c>Cancelled</c> is the delivery being <c>Suppressed</c>.
+    /// </remarks>
+    private Task<string> OutboxStatusAsync(Guid outboxItemId) => DeliveryStatusAsync(outboxItemId);
+
+    private Task<string> DeliveryStatusAsync(
+        Guid outboxItemId,
+        NotificationChannel channel = NotificationChannel.InApp) => ScalarAsync<string>(
+        """
+        SELECT "Status" FROM notifications."ChannelDeliveries"
+        WHERE "OutboxItemId" = @id AND "Channel" = @channel
+        """,
+        ("id", outboxItemId),
+        ("channel", channel.ToString()));
+
+    private Task<string> IntentStatusAsync(Guid outboxItemId) => ScalarAsync<string>(
         """SELECT "Status" FROM notifications."OutboxItems" WHERE "Id" = @id""",
         ("id", outboxItemId));
 
@@ -663,22 +829,37 @@ public sealed partial class Phase6B1NotificationDispatchTests
         """SELECT count(*) FROM notifications."Notifications" WHERE "SourceOutboxItemId" = @id""",
         ("id", outboxItemId));
 
-    private Task<long> AttemptCountAsync(Guid outboxItemId) => ScalarAsync<long>(
-        """SELECT count(*) FROM notifications."DeliveryAttempts" WHERE "OutboxItemId" = @id""",
+    private Task<long> AttemptCountAsync(
+        Guid outboxItemId,
+        NotificationChannel channel = NotificationChannel.InApp) => ScalarAsync<long>(
+        """
+        SELECT count(*) FROM notifications."DeliveryAttempts" a
+        JOIN notifications."ChannelDeliveries" d ON d."Id" = a."ChannelDeliveryId"
+        WHERE d."OutboxItemId" = @id AND d."Channel" = @channel
+        """,
+        ("id", outboxItemId),
+        ("channel", channel.ToString()));
+
+    private Task<long> ChannelDeliveryCountAsync(Guid outboxItemId) => ScalarAsync<long>(
+        """SELECT count(*) FROM notifications."ChannelDeliveries" WHERE "OutboxItemId" = @id""",
         ("id", outboxItemId));
 
-    private async Task<IReadOnlyList<AttemptRow>> AttemptsAsync(Guid outboxItemId)
+    private async Task<IReadOnlyList<AttemptRow>> AttemptsAsync(
+        Guid outboxItemId,
+        NotificationChannel channel = NotificationChannel.InApp)
     {
         await using var connection = new NpgsqlConnection(RequiredConnection);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT "AttemptNumber", "Outcome", "FailureCode", "IdempotencyKey", "ProviderMessageId"
-            FROM notifications."DeliveryAttempts"
-            WHERE "OutboxItemId" = @id
-            ORDER BY "AttemptNumber"
+            SELECT a."AttemptNumber", a."Outcome", a."FailureCode", a."IdempotencyKey", a."ProviderMessageId"
+            FROM notifications."DeliveryAttempts" a
+            JOIN notifications."ChannelDeliveries" d ON d."Id" = a."ChannelDeliveryId"
+            WHERE d."OutboxItemId" = @id AND d."Channel" = @channel
+            ORDER BY a."AttemptNumber"
             """;
         command.Parameters.AddWithValue("id", outboxItemId);
+        command.Parameters.AddWithValue("channel", channel.ToString());
         var rows = new List<AttemptRow>();
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -694,20 +875,28 @@ public sealed partial class Phase6B1NotificationDispatchTests
         return rows;
     }
 
-    private async Task<OutboxRow> OutboxAsync(Guid outboxItemId)
+    private Task<OutboxRow> OutboxAsync(Guid outboxItemId) => DeliveryAsync(outboxItemId);
+
+    private async Task<OutboxRow> DeliveryAsync(
+        Guid outboxItemId,
+        NotificationChannel channel = NotificationChannel.InApp)
     {
         await using var connection = new NpgsqlConnection(RequiredConnection);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT "Status", "AttemptCount", "NextAttemptAtUtc", "ScheduledAtUtc", "FailureCode",
-                   "ClaimToken" IS NOT NULL, "DispatchedAtUtc", "DeadLetteredAtUtc"
-            FROM notifications."OutboxItems"
-            WHERE "Id" = @id
+            SELECT d."Status", d."AttemptCount", d."NextAttemptAtUtc", o."ScheduledAtUtc", d."FailureCode",
+                   d."ClaimToken" IS NOT NULL, d."MaterializedAtUtc", d."DeadLetteredAtUtc",
+                   d."DeferralCount", d."DeferredUntilUtc", d."DeferralCode", d."TransportAdapter",
+                   d."ProviderMessageId", d."ProviderAcceptedAtUtc", d."SelectionReason", d."Purpose"
+            FROM notifications."ChannelDeliveries" d
+            JOIN notifications."OutboxItems" o ON o."Id" = d."OutboxItemId"
+            WHERE d."OutboxItemId" = @id AND d."Channel" = @channel
             """;
         command.Parameters.AddWithValue("id", outboxItemId);
+        command.Parameters.AddWithValue("channel", channel.ToString());
         await using var reader = await command.ExecuteReaderAsync();
-        Assert.IsTrue(await reader.ReadAsync(), "The outbox item was not found.");
+        Assert.IsTrue(await reader.ReadAsync(), $"The {channel} delivery was not found.");
         return new OutboxRow(
             reader.GetString(0),
             reader.GetInt32(1),
@@ -716,7 +905,15 @@ public sealed partial class Phase6B1NotificationDispatchTests
             reader.IsDBNull(4) ? null : reader.GetString(4),
             reader.GetBoolean(5),
             reader.IsDBNull(6) ? null : reader.GetFieldValue<DateTimeOffset>(6),
-            reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7));
+            reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7),
+            reader.GetInt32(8),
+            reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTimeOffset>(9),
+            reader.IsDBNull(10) ? null : reader.GetString(10),
+            reader.IsDBNull(11) ? null : reader.GetString(11),
+            reader.IsDBNull(12) ? null : reader.GetString(12),
+            reader.IsDBNull(13) ? null : reader.GetFieldValue<DateTimeOffset>(13),
+            reader.GetString(14),
+            reader.GetString(15));
     }
 
     /// <summary>The outbox intents an enrollment produced, oldest first.</summary>
@@ -822,6 +1019,10 @@ public sealed partial class Phase6B1NotificationDispatchTests
         string IdempotencyKey,
         string? ProviderMessageId);
 
+    /// <summary>
+    /// One channel delivery, in the shape the Phase 6B-1 assertions were written against plus the
+    /// deferral, transport and selection facts Phase 6B-3A added.
+    /// </summary>
     private sealed record OutboxRow(
         string Status,
         int AttemptCount,
@@ -829,8 +1030,16 @@ public sealed partial class Phase6B1NotificationDispatchTests
         DateTimeOffset ScheduledAtUtc,
         string? FailureCode,
         bool HasClaim,
-        DateTimeOffset? DispatchedAtUtc,
-        DateTimeOffset? DeadLetteredAtUtc);
+        DateTimeOffset? MaterializedAtUtc,
+        DateTimeOffset? DeadLetteredAtUtc,
+        int DeferralCount = 0,
+        DateTimeOffset? DeferredUntilUtc = null,
+        string? DeferralCode = null,
+        string? TransportAdapter = null,
+        string? ProviderMessageId = null,
+        DateTimeOffset? ProviderAcceptedAtUtc = null,
+        string SelectionReason = "",
+        string Purpose = "");
 
     private sealed record IntentRow(
         Guid Id,
@@ -838,6 +1047,42 @@ public sealed partial class Phase6B1NotificationDispatchTests
         string Status,
         string DeduplicationKey,
         DateTimeOffset ScheduledAtUtc);
+
+    private sealed record PreferenceView(
+        bool InAppEnabled,
+        bool EmailServiceEnabled,
+        bool EmailMarketingEnabled,
+        bool EmailChannelAvailable,
+        bool QuietHoursEnabled,
+        string? QuietHoursStartLocal,
+        string? QuietHoursEndLocal,
+        string TenantTimeZoneId,
+        int PolicyVersion,
+        uint Version);
+
+    /// <summary>
+    /// The captured adapter with a refusal switch in front of it.
+    /// </summary>
+    /// <remarks>
+    /// A transport that never fails proves nothing about a channel whose whole point is that it fails
+    /// independently, and there is no real provider to fail. This wraps the real captured adapter
+    /// rather than replacing it, so a test can prove that a refused send captured nothing.
+    /// </remarks>
+    internal sealed class SwitchableEmailTransport(
+        CapturedNotificationEmailTransport captured,
+        DispatchFaults faults)
+        : INotificationEmailTransport
+    {
+        public string AdapterName => captured.AdapterName;
+
+        public Task<NotificationEmailTransportResult> SendAsync(
+            NotificationEmailMessage message,
+            CancellationToken cancellationToken) =>
+            faults.FailEmailTransport
+                ? Task.FromResult(NotificationEmailTransportResult.TransientFailure(
+                    NotificationFailureCodes.EmailTransportTransient))
+                : captured.SendAsync(message, cancellationToken);
+    }
 
     /// <summary>A clock the test moves, so the retry schedule is asserted without waiting for it.</summary>
     internal sealed class MutableClock(DateTimeOffset utcNow) : IClock
@@ -1124,6 +1369,13 @@ public sealed partial class Phase6B1NotificationDispatchTests
 
         /// <summary>Refuses every connection, standing in for a database that is not there.</summary>
         public bool DatabaseUnavailable { get; set; }
+
+        /// <summary>
+        /// Makes the email transport refuse in a way that may work later. The only fault seam that
+        /// reaches the email channel, and it deliberately cannot touch in-app: an email failure that
+        /// took the inbox row with it is exactly the coupling this phase removed.
+        /// </summary>
+        public bool FailEmailTransport { get; set; }
 
         public int RefusedConnections => Volatile.Read(ref refusedConnections);
 

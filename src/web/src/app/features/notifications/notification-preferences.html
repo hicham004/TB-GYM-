@@ -1,0 +1,102 @@
+<section class="preferences">
+  <div class="page-head">
+    <h2 i18n>Notification settings</h2>
+    <button type="button" class="link" [disabled]="loading() || saving()" (click)="reload()" i18n>
+      Reload
+    </button>
+  </div>
+
+  <!-- Present from first render so the live regions are registered before anything lands in them,
+       and populated only when there is something to say. -->
+  <p class="error" role="alert">{{ error() }}</p>
+  <p class="notice" role="status">{{ notice() }}</p>
+
+  @if (loading() && !isReady()) {
+    <p class="detail" i18n>Loading your notification settings…</p>
+  }
+
+  @if (isReady()) {
+    <form [formGroup]="form" (ngSubmit)="save()" novalidate>
+      <fieldset>
+        <legend i18n>In the app</legend>
+        <p class="detail" i18n>
+          In-app notifications are always on. They wait quietly in your inbox until you open it, so
+          there is nothing here to switch off.
+        </p>
+      </fieldset>
+
+      <fieldset [disabled]="saving()">
+        <legend i18n>Email</legend>
+        <label class="check">
+          <input
+            type="checkbox"
+            formControlName="emailServiceEnabled"
+            aria-describedby="emailServiceHelp"
+          />
+          <span i18n>Email me about my coaching service</span>
+        </label>
+        <p id="emailServiceHelp" class="detail" i18n>
+          Payment, activation, renewal and expiry notices. The email says only that something is
+          waiting; you sign in to read it. You can turn this off again at any time.
+        </p>
+        @if (!emailChannelAvailable()) {
+          <p class="detail warning" i18n>
+            Email delivery is not switched on for this workspace yet. You can choose your setting
+            now; nothing will be emailed until it is.
+          </p>
+        }
+      </fieldset>
+
+      <fieldset [disabled]="saving()">
+        <legend i18n>Quiet hours</legend>
+        <label class="check">
+          <input
+            type="checkbox"
+            formControlName="quietHoursEnabled"
+            aria-describedby="quietHoursHelp"
+          />
+          <span i18n>Hold emails during quiet hours</span>
+        </label>
+        <p id="quietHoursHelp" class="detail" i18n>
+          An email that becomes due inside this window waits until the window ends instead of
+          arriving. Your in-app notifications are unaffected.
+        </p>
+
+        <div class="times">
+          <label class="field">
+            <span i18n>Quiet hours start</span>
+            <input
+              type="time"
+              formControlName="quietHoursStartLocal"
+              aria-describedby="quietHoursZone"
+            />
+          </label>
+          <label class="field">
+            <span i18n>Quiet hours end</span>
+            <input
+              type="time"
+              formControlName="quietHoursEndLocal"
+              aria-describedby="quietHoursZone"
+            />
+          </label>
+        </div>
+        <!-- The zone is stated rather than assumed: these are workspace-local times, and a member
+             travelling or working from another country would otherwise read them as their own. -->
+        <p id="quietHoursZone" class="detail" i18n>
+          Times are in this workspace's time zone, {{ timeZoneId() }}. A window may run past
+          midnight, and it ends at the "until" time rather than including it.
+        </p>
+      </fieldset>
+
+      <div class="actions">
+        <button type="submit" [disabled]="saving()">
+          @if (saving()) {
+            <span i18n>Saving…</span>
+          } @else {
+            <span i18n>Save settings</span>
+          }
+        </button>
+      </div>
+    </form>
+  }
+</section>

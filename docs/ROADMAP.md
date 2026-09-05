@@ -569,10 +569,72 @@ any body is loaded; a client connected to one API replica receives an event publ
 through a real Redis backplane; a Redis outage leaves PostgreSQL correct and the sweep alive; and no
 message body, moderation reason, participant identity or backplane endpoint reaches any log.
 
+### Phase 6B-3A: independent notification channels, preferences, quiet hours and consent (complete)
+
+Status: complete, implemented 2026-09-05. See
+`docs/adr/0021-tokenless-action-email-materialization.md`, `ARCHITECTURE.md` section 18 and
+`DOMAIN-RULES.md` NOT-001 through NOT-016.
+
+- **The lifecycle moved off the intent.** Phase 6B-1 kept one mutable dispatch lifecycle on the outbox
+  item even though attempts already named a channel, which cannot represent an in-app success beside
+  an email retry. The outbox item is now the immutable logical notification, and each selected channel
+  owns a `NotificationChannelDelivery` — unique per intent and channel — holding its own status, due
+  instant, attempt count, claim lease, retry schedule, terminal result and transport metadata. No
+  channel can block, read or complete another.
+- **Every 6B-1 guarantee preserved, now per channel.** PostgreSQL commits before side effects, exact
+  maximum-attempt enforcement, abandoned started attempts consuming capacity, post-claim suppression
+  remaining an auditable terminal attempt, stale claimants finalizing nothing, the bounded
+  `notification-exponential-v1` schedule, one global sweep cap, fair tenant scheduling, and eligibility
+  rechecked both after the claim commits and immediately before materialization.
+- **Selected once, rechecked twice.** Channel rows are written in the scheduling transaction with the
+  selection reason and policy version snapshotted. In-app is unconditional and cannot be switched off
+  here; email is off by default and requires an explicit opt-in. Opting in later never resurrects
+  historical notifications; opting out afterwards still suppresses a pending email, and an opt-out
+  after the claim commits completes the started attempt as `Suppressed` rather than sending.
+- **Purpose is explicit.** `ServiceTransactional` or `Marketing`, decided by a code-owned catalogue
+  rather than inferred from wording. Every notification this repository produces is transactional.
+  Marketing is reserved, produced by nothing, fails closed without current affirmative consent, and may
+  never ride on the service-email preference — the separation Lebanon's Law 81/2018 Article 32 makes
+  worth having structurally rather than editorially.
+- **Append-only consent.** Every email decision appends immutable evidence naming the channel, purpose,
+  decision, UTC instant, policy version, source and actor — and no IP address, user agent, address or
+  rendered message. The mutable preference points at the exact event explaining it, and a database check
+  refuses an enabled channel whose evidence does not say `Granted`.
+- **Quiet hours defer, never fail.** A half-open local window in the workspace's current IANA zone under
+  `notification-quiet-hours-v1`. Equal start and end is refused, unknown zones fail closed, both
+  daylight-saving edge cases resolve forward, and a deferral moves the due instant without spending an
+  attempt or leaving the worker polling.
+- **A port, not a provider.** `INotificationEmailTransport` with one in-memory captured adapter for
+  development and tests. Production email is disabled by default and fails closed: an unknown adapter,
+  an enabled channel with nothing behind it, or the captured adapter in Production each refuse startup.
+  No recipient, subject, body, URL or token reaches any column, dead-letter row or log; the address is
+  resolved at materialization through a narrow contract that reverifies membership. `ProviderMessageId`
+  and provider acceptance stay null, and the vocabulary says captured, never delivered.
+- **API and Angular.** `GET`/`PUT /api/notifications/preferences` for the caller's own settings only —
+  cookie-authenticated, antiforgery-protected, tenant-verified, optimistically concurrent and
+  idempotent, with no shape that lets one member opt another in. A lazy `/notifications/settings`
+  route shows the workspace zone, toggles service email, configures quiet hours, survives a failed save
+  with the user's choices intact, and never lets a stale workspace reply overwrite the current one.
+
+Two forward migrations ship: `Phase6B3AIndependentChannelDelivery` backfills an in-app delivery for
+every existing intent and reconnects historical attempts to it, preserving every legacy `Pending`,
+`Failed`, `Cancelled`, `Suppressed` and `Dispatched` fact along with inbox rows and pagination
+identities; `Phase6B3AIntegrityCorrections` adds the tenant-composite foreign keys, enumerated
+vocabulary checks, consent-evidence agreement and the immutability triggers.
+
+Exit: in-app completion and email retry are independent; email completion cannot duplicate an inbox
+row; duplicate workers cannot materialize one delivery twice; a post-claim opt-out prevents capture;
+quiet-hours deferral spends no attempt across normal, overnight, boundary, DST-gap and DST-fold cases;
+preference commands survive real races; cross-tenant preference, delivery and attempt relationships are
+rejected by the database; and no recipient or rendered content reaches PostgreSQL or a log.
+
 ### Phase 6B remaining
 
-- Add channel preferences, quiet hours and consent alongside the first interruptive channel, and
-  design tokenless delivery so account/reset/invitation mail can join the outbox.
+- Integrate a production email provider behind the existing transport port, then webhooks, bounce and
+  complaint handling, suppression lists and deliverability (SPF/DKIM/DMARC) work.
+- Migrate account confirmation, password reset and invitation mail onto the tokenless design in
+  ADR 0021, including the durable logical-send generation that keeps a transport retry from rotating
+  an invitation token.
 - Implement production object storage, production upload scanning, provider inventory
   reconciliation, signed URLs, and the production retention/operations controls. Reservation-backed
   incomplete-ingest cleanup, transformations, quotas, and application-known purge are already

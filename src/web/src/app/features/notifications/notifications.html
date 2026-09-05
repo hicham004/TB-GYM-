@@ -1,9 +1,12 @@
 <section class="notifications">
   <div class="page-head">
     <h2 i18n>Notifications</h2>
-    <button type="button" class="link" [disabled]="loading()" (click)="reload()" i18n>
-      Refresh
-    </button>
+    <div class="page-actions">
+      <a routerLink="/notifications/settings" i18n>Notification settings</a>
+      <button type="button" class="link" [disabled]="loading()" (click)="reload()" i18n>
+        Refresh
+      </button>
+    </div>
   </div>
 
   <!-- Present from first render so the live region is registered before anything lands in it, and

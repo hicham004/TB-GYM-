@@ -1,0 +1,109 @@
+.preferences {
+  display: grid;
+  gap: 1rem;
+  max-width: 720px;
+}
+
+.page-head {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.page-head h2 {
+  margin: 0;
+}
+
+fieldset {
+  border: 1px solid var(--border, #d8dde3);
+  border-radius: 0.75rem;
+  margin: 0;
+  padding-block: 0.75rem 1rem;
+  padding-inline: 1rem;
+}
+
+legend {
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding-inline: 0.35rem;
+  text-transform: uppercase;
+}
+
+form {
+  display: grid;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+/* A checkbox and its label read as one control, side by side and baseline-aligned, so the label is
+   a real click target rather than decoration beside one. */
+.check {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.check input {
+  inline-size: auto;
+  margin: 0;
+}
+
+.check span {
+  font-weight: 500;
+  margin: 0;
+}
+
+.times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block-start: 0.75rem;
+}
+
+.times .field {
+  min-inline-size: 9rem;
+}
+
+.detail {
+  color: var(--muted-text, #4c565f);
+  font-size: 0.9rem;
+  margin-block: 0.35rem 0;
+}
+
+/* Carried by a border and by its own words, never by colour alone. */
+.detail.warning {
+  border-inline-start: 3px solid var(--warning, #8a6100);
+  padding-inline-start: 0.6rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.error,
+.notice {
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.error {
+  color: var(--danger, #a3271c);
+  font-weight: 500;
+}
+
+.notice {
+  color: var(--success, #1c6b3a);
+}
+
+/* An empty live region must not reserve space or draw a border; it exists so a screen reader has
+   somewhere to hear about a change that has not happened yet. */
+.error:empty,
+.notice:empty {
+  display: none;
+}

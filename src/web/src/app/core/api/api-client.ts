@@ -29,11 +29,13 @@ import { mapProgressDashboard } from '../../features/progress/progress-dashboard
 import {
   mapNotification,
   mapNotificationPage,
+  mapNotificationPreferences,
   mapUnreadCount,
 } from '../../features/notifications/notification.models';
 import type {
   NotificationItem,
   NotificationPage,
+  NotificationPreferences,
 } from '../../features/notifications/notification.models';
 import {
   mapConversationDetail,
@@ -1125,6 +1127,24 @@ export class ApiClient {
     return this.http
       .post<Phase3Contracts.NotificationView>(`/api/notifications/${notificationId}/read`, null)
       .pipe(map(mapNotification));
+  }
+
+  getNotificationPreferences(): Observable<NotificationPreferences> {
+    return this.http
+      .get<Phase3Contracts.NotificationPreferenceView>('/api/notifications/preferences')
+      .pipe(map(mapNotificationPreferences));
+  }
+
+  /**
+   * There is no subject in the request. The API derives it from the authentication cookie, so a
+   * coach or an owner has no shape in which to opt somebody else into email.
+   */
+  updateNotificationPreferences(
+    request: Phase3Contracts.UpdateNotificationPreferenceRequest,
+  ): Observable<NotificationPreferences> {
+    return this.http
+      .put<Phase3Contracts.NotificationPreferenceView>('/api/notifications/preferences', request)
+      .pipe(map(mapNotificationPreferences));
   }
 
   listConversations(

@@ -1,6 +1,7 @@
 import type {
   CommercialNotificationKind,
   NotificationPage as ContractNotificationPage,
+  NotificationPreferenceView as ContractPreferenceView,
   NotificationUnreadCount as ContractUnreadCount,
   NotificationView as ContractNotificationView,
 } from '../../core/api/generated';
@@ -68,4 +69,38 @@ export function appendPage(
 
 function toCount(value: number | string): number {
   return typeof value === 'number' ? value : Number(value);
+}
+
+/**
+ * The signed-in member's own notification settings.
+ *
+ * `inAppEnabled` is always true and is carried rather than assumed, so the screen can state the rule
+ * instead of implying it: in-app notifications are passive persisted state, every supported type
+ * keeps them, and this slice offers no way to switch them off.
+ *
+ * The local times mean nothing without `tenantTimeZoneId`, which is the workspace's configured zone
+ * and the frame every quiet-hours decision is made in — never the browser's.
+ */
+export interface NotificationPreferences {
+  readonly inAppEnabled: boolean;
+  readonly emailServiceEnabled: boolean;
+  readonly emailChannelAvailable: boolean;
+  readonly quietHoursEnabled: boolean;
+  readonly quietHoursStartLocal: string | null;
+  readonly quietHoursEndLocal: string | null;
+  readonly tenantTimeZoneId: string;
+  readonly version: number;
+}
+
+export function mapNotificationPreferences(value: ContractPreferenceView): NotificationPreferences {
+  return {
+    inAppEnabled: value.inAppEnabled,
+    emailServiceEnabled: value.emailServiceEnabled,
+    emailChannelAvailable: value.emailChannelAvailable,
+    quietHoursEnabled: value.quietHoursEnabled,
+    quietHoursStartLocal: value.quietHoursStartLocal ?? null,
+    quietHoursEndLocal: value.quietHoursEndLocal ?? null,
+    tenantTimeZoneId: value.tenantTimeZoneId,
+    version: toCount(value.version),
+  };
 }

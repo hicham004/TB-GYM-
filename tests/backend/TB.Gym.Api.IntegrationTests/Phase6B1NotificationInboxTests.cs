@@ -158,7 +158,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         var workspace = await CreateWorkspaceAsync("deadletter");
         var enrollment = await AssignPaidLaterAsync(workspace, 120m);
         var intent = await IntentIdAsync(enrollment.Id, CommercialNotificationKind.PaymentRequired);
-        await ExecuteAsync(
+        await WithoutIntentGuardAsync(
             """UPDATE notifications."OutboxItems" SET "PayloadJson" = @payload::jsonb WHERE "Id" = @id""",
             ("id", intent),
             ("payload", $$"""{"enrollmentId":"{{enrollment.Id}}","clientProfileId":"{{workspace.ClientProfileId}}","schemaVersion":41,"note":"{{Marker}}"}"""));

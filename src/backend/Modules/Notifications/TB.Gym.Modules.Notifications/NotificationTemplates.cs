@@ -95,6 +95,36 @@ public static class NotificationTemplateCatalog
     /// <summary>Every published template, for tests and for documentation of the allowlist.</summary>
     public static IReadOnlyCollection<NotificationTemplate> Published => EnglishV1.Values;
 
+    /// <summary>
+    /// The one wording an email may carry in this phase.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately one generic template for every kind rather than five specific ones. An in-app
+    /// notification sits behind an authenticated session; an email sits in a mailbox that a phone
+    /// shows on a lock screen, that a shared computer displays, and that a mail provider stores
+    /// indefinitely. So it says only that something is waiting and where to look: no client or coach
+    /// name, no product, offer, amount, currency or date, no health data, no conversation text, no
+    /// identifier, no token and no action URL. Which of the five kinds it is is itself commercial
+    /// information about the recipient, so the email does not carry that either.
+    /// <para>
+    /// It follows that a recipient must sign in to learn anything, which is the intended trade: the
+    /// screens behind the sign-in authorize every request, and an email cannot.
+    /// </para>
+    /// </remarks>
+    public static NotificationTemplate ServiceEmailV1 { get; } = new(
+        "notification.service-email",
+        CurrentVersion,
+        DefaultCulture,
+        "You have a new TB Gym notification",
+        """
+        You have a new notification in TB Gym.
+
+        Sign in to TB Gym and open your notifications to read it.
+
+        You are receiving this because you turned on email notifications for this workspace. You can
+        turn them off again at any time in your TB Gym notification settings.
+        """);
+
     private static string LanguageOf(string culture)
     {
         if (string.IsNullOrWhiteSpace(culture))

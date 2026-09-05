@@ -73,7 +73,18 @@ public sealed partial class GymDbContext(
 
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    public DbSet<NotificationChannelDelivery> NotificationChannelDeliveries =>
+        Set<NotificationChannelDelivery>();
+
     public DbSet<NotificationDeliveryAttempt> NotificationDeliveryAttempts => Set<NotificationDeliveryAttempt>();
+
+    public DbSet<NotificationChannelPreference> NotificationChannelPreferences =>
+        Set<NotificationChannelPreference>();
+
+    public DbSet<NotificationConsentEvent> NotificationConsentEvents => Set<NotificationConsentEvent>();
+
+    public DbSet<NotificationPreferenceCommandRecord> NotificationPreferenceCommandRecords =>
+        Set<NotificationPreferenceCommandRecord>();
 
     public DbSet<LegalDocumentVersion> LegalDocumentVersions => Set<LegalDocumentVersion>();
 
@@ -346,9 +357,11 @@ public sealed partial class GymDbContext(
         {
             entity.ToTable("Memberships", "tenancy");
             entity.HasKey(membership => membership.Id);
+            // Tenant-owned dependants use this principal key so a user who exists globally but is not
+            // a member of this workspace cannot acquire workspace-scoped rows through direct SQL.
+            entity.HasAlternateKey(membership => new { membership.TenantId, membership.UserId });
             entity.Property(membership => membership.Role).HasConversion<string>().HasMaxLength(32);
             entity.Property(membership => membership.Status).HasConversion<string>().HasMaxLength(32);
-            entity.HasIndex(membership => new { membership.TenantId, membership.UserId }).IsUnique();
             entity.HasIndex(membership => new { membership.UserId, membership.Status });
             entity.HasOne<Tenant>()
                 .WithMany()
@@ -835,6 +848,35 @@ public sealed partial class GymDbContext(
 
         RejectAppendOnlyMutations<CheckInResponseEvent>("Check-in response events are append-only.");
 
+        // Notification consent evidence and spent preference keys. A withdrawal appends a row; it
+        // never rewrites the grant it withdraws, because the question a consent record has to answer
+        // afterwards is what was true at a given moment and not what is true now. Database triggers
+        // are the guarantee; these catch the mistake in the code path that made it.
+        RejectAppendOnlyMutations<NotificationConsentEvent>("Notification consent evidence is append-only.");
+        RejectAppendOnlyMutations<NotificationPreferenceCommandRecord>(
+            "Notification preference command records are append-only.");
+
+        // Delivery history. A channel delivery's terminal outcome and its attempts are what explain
+        // afterwards why somebody was or was not told something.
+        if (ChangeTracker.Entries<NotificationChannelDelivery>().Any(item => item.State == EntityState.Deleted) ||
+            ChangeTracker.Entries<NotificationDeliveryAttempt>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException(
+                "Channel delivery state and attempt history are never deleted; a terminal outcome is recorded state.");
+        }
+
+        // A completed attempt is a historical fact. Rewriting one is how a dead letter turns into a
+        // success nobody can contradict afterwards.
+        foreach (var entry in ChangeTracker.Entries<NotificationDeliveryAttempt>()
+                     .Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<NotificationDeliveryOutcome>(nameof(NotificationDeliveryAttempt.Outcome))
+                != NotificationDeliveryOutcome.Started)
+            {
+                throw new InvalidOperationException("A completed notification delivery attempt is immutable.");
+            }
+        }
+
         // Messaging history. A revision is what a message said at one point, a deletion event is the
         // fact that somebody removed it, and a command record is a spent idempotency key: all three
         // are written once and never rewritten. Database triggers are the guarantee; these catch the
@@ -907,24 +949,6 @@ public sealed partial class GymDbContext(
                 entry.OriginalValues.GetValue<long>(nameof(ConversationParticipant.LastReadSequence)))
             {
                 throw new InvalidOperationException("A conversation read cursor cannot move backwards.");
-            }
-        }
-
-        // Delivery history is the only thing that can explain a dead-lettered notification later, so
-        // an attempt is never deleted and a finished one is never rewritten. The database trigger is
-        // the guarantee; this catches the mistake in the code path that made it.
-        if (ChangeTracker.Entries<NotificationDeliveryAttempt>().Any(item => item.State == EntityState.Deleted))
-        {
-            throw new InvalidOperationException("Notification delivery attempts are never deleted.");
-        }
-
-        foreach (var entry in ChangeTracker.Entries<NotificationDeliveryAttempt>()
-                     .Where(item => item.State == EntityState.Modified))
-        {
-            if (entry.OriginalValues.GetValue<NotificationDeliveryOutcome>(nameof(NotificationDeliveryAttempt.Outcome))
-                != NotificationDeliveryOutcome.Started)
-            {
-                throw new InvalidOperationException("A completed notification delivery attempt is immutable.");
             }
         }
 

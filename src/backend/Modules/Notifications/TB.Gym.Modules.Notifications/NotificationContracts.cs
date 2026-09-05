@@ -41,17 +41,24 @@ public sealed record NotificationPage(long Total, long UnreadTotal, IReadOnlyLis
 public sealed record NotificationUnreadCount(long Unread);
 
 /// <summary>
-/// What an owner may see about a dead-lettered intent.
+/// What an owner may see about a dead-lettered channel delivery.
 /// </summary>
 /// <remarks>
-/// Deliberately almost nothing: an identifier to quote to support, the kind, when it was due, how
-/// many attempts it took, when it was given up on, and a stable code. No recipient, no address, no
-/// name, no rendered wording, no payload, no exception. A workspace owner is not automatically
-/// entitled to read a member's notifications, and an operational view is the wrong place to change
-/// that.
+/// Deliberately almost nothing: an identifier to quote to support, the kind, which channel it was,
+/// when it was due, how many attempts it took, when it was given up on, and a stable code. No
+/// recipient, no address, no name, no rendered wording, no payload, no exception. A workspace owner is
+/// not automatically entitled to read a member's notifications, and an operational view is the wrong
+/// place to change that.
+/// <para>
+/// It is per channel because dead-lettering now is: an intent whose in-app row was written and whose
+/// email exhausted its retries has exactly one thing to show an operator, and reporting it against the
+/// intent would either hide the failure or misrepresent the success.
+/// </para>
 /// </remarks>
 public sealed record NotificationDeadLetterView(
     Guid OutboxItemId,
+    Guid ChannelDeliveryId,
+    NotificationChannel Channel,
     CommercialNotificationKind Kind,
     DateTimeOffset ScheduledAtUtc,
     int AttemptCount,
@@ -97,6 +104,91 @@ public interface INotificationApplicationService
     Task<NotificationDeadLetterPage> ListDeadLettersAsync(int skip, int take, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// The signed-in member's own notification settings in the active workspace.
+/// </summary>
+/// <remarks>
+/// <paramref name="InAppEnabled"/> is always true and is present so the screen can state the rule
+/// rather than imply it: in-app notifications are passive persisted state, every supported type keeps
+/// them, and this slice deliberately offers no way to switch them off.
+/// <para>
+/// Local times are rendered as <c>HH:mm</c> and are meaningless without
+/// <paramref name="TenantTimeZoneId"/>, which is the workspace's configured IANA zone and the frame
+/// every quiet-hours decision is made in — never the browser's.
+/// </para>
+/// </remarks>
+public sealed record NotificationPreferenceView(
+    bool InAppEnabled,
+    bool EmailServiceEnabled,
+    bool EmailMarketingEnabled,
+    bool EmailChannelAvailable,
+    bool QuietHoursEnabled,
+    string? QuietHoursStartLocal,
+    string? QuietHoursEndLocal,
+    string TenantTimeZoneId,
+    int PolicyVersion,
+    uint Version);
+
+/// <summary>
+/// A member changing their own settings.
+/// </summary>
+/// <remarks>
+/// There is no subject in the body. The API derives it from the authentication cookie, so there is no
+/// shape in which one member asks to change another's — a coach or an owner cannot opt somebody into
+/// email, silently or otherwise.
+/// <para>
+/// Marketing is absent too: nothing produces marketing notifications in this phase, so there is
+/// nothing to consent to and no route that records consent for it.
+/// </para>
+/// </remarks>
+public sealed record UpdateNotificationPreferenceRequest(
+    bool EmailServiceEnabled,
+    bool QuietHoursEnabled,
+    string? QuietHoursStartLocal,
+    string? QuietHoursEndLocal,
+    Guid IdempotencyKey,
+    uint Version);
+
+public enum NotificationPreferenceCommandStatus
+{
+    Success = 1,
+    Invalid = 2,
+    Conflict = 3,
+    NotFound = 4,
+}
+
+public sealed record NotificationPreferenceCommandResult(
+    NotificationPreferenceCommandStatus Status,
+    NotificationPreferenceView? Preference = null,
+    string? Field = null,
+    string? Message = null)
+{
+    public static NotificationPreferenceCommandResult Success(NotificationPreferenceView preference) =>
+        new(NotificationPreferenceCommandStatus.Success, preference);
+
+    public static NotificationPreferenceCommandResult Invalid(string field, string message) =>
+        new(NotificationPreferenceCommandStatus.Invalid, Field: field, Message: message);
+
+    public static NotificationPreferenceCommandResult Conflict(string field, string message) =>
+        new(NotificationPreferenceCommandStatus.Conflict, Field: field, Message: message);
+
+    public static NotificationPreferenceCommandResult NotFound() =>
+        new(NotificationPreferenceCommandStatus.NotFound);
+}
+
+/// <summary>
+/// The caller's own notification settings. Every method is scoped to the active workspace and to the
+/// signed-in member; there is no method that takes a subject.
+/// </summary>
+public interface INotificationPreferenceService
+{
+    Task<NotificationPreferenceView?> GetOwnAsync(CancellationToken cancellationToken);
+
+    Task<NotificationPreferenceCommandResult> UpdateOwnAsync(
+        UpdateNotificationPreferenceRequest request,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>Paging bounds shared by the endpoints and the application service.</summary>
 public static class NotificationPaging
 {
@@ -119,25 +211,34 @@ public interface INotificationDispatchService
 }
 
 /// <summary>
-/// What one sweep did. Counts only: nothing here identifies a recipient or carries content.
+/// What one sweep did, counted per channel delivery rather than per intent.
 /// </summary>
+/// <remarks>
+/// Counts only: nothing here identifies a recipient or carries content. <c>Materialized</c> is named
+/// for what actually happened — an inbox row was written, or a message was materialized and taken by
+/// the configured transport — because a sweep cannot establish that a provider accepted anything, that
+/// a mail server took it, or that a person read it. <c>Deferred</c> counts quiet-hours postponements,
+/// which are not failures and consume no attempt.
+/// </remarks>
 public sealed record NotificationDispatchOutcome(
     int Claimed,
-    int Dispatched,
+    int Materialized,
     int Suppressed,
     int Retried,
     int DeadLettered,
-    int Reclaimed)
+    int Reclaimed,
+    int Deferred)
 {
-    public static NotificationDispatchOutcome Empty { get; } = new(0, 0, 0, 0, 0, 0);
+    public static NotificationDispatchOutcome Empty { get; } = new(0, 0, 0, 0, 0, 0, 0);
 
     public NotificationDispatchOutcome Add(NotificationDispatchOutcome other) => new(
         Claimed + other.Claimed,
-        Dispatched + other.Dispatched,
+        Materialized + other.Materialized,
         Suppressed + other.Suppressed,
         Retried + other.Retried,
         DeadLettered + other.DeadLettered,
-        Reclaimed + other.Reclaimed);
+        Reclaimed + other.Reclaimed,
+        Deferred + other.Deferred);
 
-    public int Total => Claimed + Suppressed + Reclaimed;
+    public int Total => Claimed + Suppressed + Reclaimed + Deferred;
 }

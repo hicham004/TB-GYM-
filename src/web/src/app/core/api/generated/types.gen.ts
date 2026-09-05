@@ -1561,6 +1561,8 @@ export type MuscleGroup =
 
 export type MuscleRole = 'Primary' | 'Secondary';
 
+export type NotificationChannel = 'InApp' | 'Email';
+
 export type NotificationDeadLetterPage = {
   total: number | string;
   items: Array<NotificationDeadLetterView>;
@@ -1568,6 +1570,8 @@ export type NotificationDeadLetterPage = {
 
 export type NotificationDeadLetterView = {
   outboxItemId: string;
+  channelDeliveryId: string;
+  channel: NotificationChannel;
   kind: CommercialNotificationKind;
   scheduledAtUtc: string;
   attemptCount: number | string;
@@ -1579,6 +1583,19 @@ export type NotificationPage = {
   total: number | string;
   unreadTotal: number | string;
   items: Array<NotificationView>;
+};
+
+export type NotificationPreferenceView = {
+  inAppEnabled: boolean;
+  emailServiceEnabled: boolean;
+  emailMarketingEnabled: boolean;
+  emailChannelAvailable: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStartLocal: null | string;
+  quietHoursEndLocal: null | string;
+  tenantTimeZoneId: string;
+  policyVersion: number | string;
+  version: number | string;
 };
 
 export type NotificationUnreadCount = {
@@ -2295,6 +2312,15 @@ export type UpdateExerciseRequest = {
 
 export type UpdateMesocycleVisibilityRequest = {
   revealAllWeeks: boolean;
+  version: number | string;
+};
+
+export type UpdateNotificationPreferenceRequest = {
+  emailServiceEnabled: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStartLocal: null | string;
+  quietHoursEndLocal: null | string;
+  idempotencyKey: string;
   version: number | string;
 };
 
@@ -7699,3 +7725,65 @@ export type MarkOwnNotificationReadResponses = {
 
 export type MarkOwnNotificationReadResponse =
   MarkOwnNotificationReadResponses[keyof MarkOwnNotificationReadResponses];
+
+export type GetOwnNotificationPreferencesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/notifications/preferences';
+};
+
+export type GetOwnNotificationPreferencesErrors = {
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type GetOwnNotificationPreferencesError =
+  GetOwnNotificationPreferencesErrors[keyof GetOwnNotificationPreferencesErrors];
+
+export type GetOwnNotificationPreferencesResponses = {
+  /**
+   * OK
+   */
+  200: NotificationPreferenceView;
+};
+
+export type GetOwnNotificationPreferencesResponse =
+  GetOwnNotificationPreferencesResponses[keyof GetOwnNotificationPreferencesResponses];
+
+export type UpdateOwnNotificationPreferencesData = {
+  body: UpdateNotificationPreferenceRequest;
+  path?: never;
+  query?: never;
+  url: '/api/notifications/preferences';
+};
+
+export type UpdateOwnNotificationPreferencesErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type UpdateOwnNotificationPreferencesError =
+  UpdateOwnNotificationPreferencesErrors[keyof UpdateOwnNotificationPreferencesErrors];
+
+export type UpdateOwnNotificationPreferencesResponses = {
+  /**
+   * OK
+   */
+  200: NotificationPreferenceView;
+};
+
+export type UpdateOwnNotificationPreferencesResponse =
+  UpdateOwnNotificationPreferencesResponses[keyof UpdateOwnNotificationPreferencesResponses];

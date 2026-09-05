@@ -8,6 +8,12 @@ namespace TB.Gym.Domain.Tests;
 /// <remarks>
 /// Every instant here is supplied, never observed: the retry schedule is asserted at its exact
 /// boundaries without a test ever waiting for wall-clock time to pass.
+/// <para>
+/// Phase 6B-3A moved this lifecycle from the intent onto <see cref="NotificationChannelDelivery"/>,
+/// one per channel. The assertions below are the Phase 6B-1 guarantees restated against the row that
+/// now owns them, so a regression in claiming, leasing, retrying, exhaustion or stale finalization
+/// still fails here.
+/// </para>
 /// </remarks>
 [TestClass]
 public sealed class Phase6B1NotificationDispatchDomainTests
@@ -19,203 +25,270 @@ public sealed class Phase6B1NotificationDispatchDomainTests
     private static readonly TimeSpan Lease = TimeSpan.FromSeconds(120);
 
     [TestMethod]
-    public void ScheduledItemIsPendingAndDueAtItsScheduledInstant()
+    public void ScheduledDeliveryIsPendingAndDueAtItsScheduledInstant()
     {
-        var item = Schedule(Now.AddHours(2));
+        var delivery = Select(Now.AddHours(2));
 
-        Assert.AreEqual(NotificationOutboxStatus.Pending, item.Status);
-        Assert.AreEqual(Now.AddHours(2), item.NextAttemptAtUtc);
-        Assert.AreEqual(0, item.AttemptCount);
-        Assert.IsNull(item.ClaimToken);
-        Assert.IsFalse(item.IsTerminal);
-        Assert.IsFalse(item.IsClaimable(Now.AddHours(2).AddTicks(-1)));
-        Assert.IsTrue(item.IsClaimable(Now.AddHours(2)));
+        Assert.AreEqual(NotificationDeliveryStatus.Pending, delivery.Status);
+        Assert.AreEqual(Now.AddHours(2), delivery.NextAttemptAtUtc);
+        Assert.AreEqual(Now.AddHours(2), delivery.DueAtUtc);
+        Assert.AreEqual(0, delivery.AttemptCount);
+        Assert.IsNull(delivery.ClaimToken);
+        Assert.IsFalse(delivery.IsTerminal);
+        Assert.IsFalse(delivery.IsClaimable(Now.AddHours(2).AddTicks(-1)));
+        Assert.IsTrue(delivery.IsClaimable(Now.AddHours(2)));
+    }
+
+    /// <summary>
+    /// The intent itself now carries no dispatch state at all, which is what lets two channels of one
+    /// notification hold different truths at the same time.
+    /// </summary>
+    [TestMethod]
+    public void TheLogicalNotificationCarriesNoChannelState()
+    {
+        var item = ScheduleIntent();
+
+        Assert.AreEqual(NotificationIntentStatus.Scheduled, item.Status);
+        Assert.IsFalse(item.IsCancelled);
+        Assert.IsNull(item.CancelledAtUtc);
+        Assert.AreEqual(NotificationPurpose.ServiceTransactional, item.Purpose);
+
+        var properties = typeof(NotificationOutboxItem)
+            .GetProperties()
+            .Select(property => property.Name)
+            .ToArray();
+        foreach (var channelState in new[]
+                 {
+                     "AttemptCount", "ClaimToken", "ClaimExpiresAtUtc", "NextAttemptAtUtc",
+                     "DispatchedAtUtc", "DeadLetteredAtUtc", "FailureCode",
+                 })
+        {
+            Assert.DoesNotContain(
+                channelState,
+                properties,
+                $"{channelState} is per-channel state and cannot live on the logical notification.");
+        }
     }
 
     [TestMethod]
-    public void ClaimingTakesALeaseStartsAnAttemptAndBlocksASecondClaimant()
+    public void ClaimingTakesALeaseAndAnExplicitStartConsumesTheAttempt()
     {
-        var item = Schedule(Now);
+        var delivery = Select(Now);
 
-        var claim = item.Claim(Now, Lease);
+        var claim = delivery.Claim(Now, Lease);
 
-        Assert.AreEqual(NotificationOutboxStatus.Processing, item.Status);
-        Assert.AreEqual(1, item.AttemptCount);
-        Assert.AreEqual(claim, item.ClaimToken);
-        Assert.AreEqual(Now.Add(Lease), item.ClaimExpiresAtUtc);
-        // While the lease holds, nobody else may take the item, however often they sweep.
-        Assert.IsFalse(item.IsClaimable(Now.Add(Lease).AddTicks(-1)));
-        Assert.ThrowsExactly<InvalidOperationException>(() => item.Claim(Now, Lease));
+        Assert.AreEqual(NotificationDeliveryStatus.Processing, delivery.Status);
+        Assert.AreEqual(0, delivery.AttemptCount, "A reservation is not an attempt.");
+        Assert.AreEqual(1, delivery.StartAttempt(claim));
+        Assert.AreEqual(1, delivery.AttemptCount);
+        Assert.AreEqual(claim, delivery.ClaimToken);
+        Assert.AreEqual(Now.Add(Lease), delivery.ClaimExpiresAtUtc);
+        // While the lease holds, nobody else may take the delivery, however often they sweep.
+        Assert.IsFalse(delivery.IsClaimable(Now.Add(Lease).AddTicks(-1)));
+        Assert.ThrowsExactly<InvalidOperationException>(() => delivery.Claim(Now, Lease));
     }
 
     [TestMethod]
-    public void AnExpiredLeaseMakesTheItemClaimableAgainAndIncrementsTheAttemptNumber()
+    public void AnExpiredStartedAttemptConsumesCapacityButAnUnusedReservationDoesNot()
     {
-        var item = Schedule(Now);
-        var abandoned = item.Claim(Now, Lease);
+        var delivery = Select(Now);
+        var abandoned = delivery.Claim(Now, Lease);
+        delivery.StartAttempt(abandoned);
 
         var expiry = Now.Add(Lease);
-        Assert.IsTrue(item.IsClaimExpired(expiry));
-        Assert.IsTrue(item.IsClaimable(expiry));
+        Assert.IsTrue(delivery.IsClaimExpired(expiry));
+        Assert.IsTrue(delivery.IsClaimable(expiry));
 
-        var replacement = item.Claim(expiry, Lease);
+        var replacement = delivery.Claim(expiry, Lease);
 
         Assert.AreNotEqual(abandoned, replacement);
-        Assert.AreEqual(2, item.AttemptCount);
-        Assert.AreEqual(replacement, item.ClaimToken);
+        Assert.AreEqual(1, delivery.AttemptCount);
+        delivery.StartAttempt(replacement);
+        Assert.AreEqual(2, delivery.AttemptCount);
+        Assert.AreEqual(replacement, delivery.ClaimToken);
     }
 
     [TestMethod]
     public void AStaleClaimantCannotFinalizeWorkThatWasTakenOverFromIt()
     {
-        var item = Schedule(Now);
-        var stale = item.Claim(Now, Lease);
-        var current = item.Claim(Now.Add(Lease), Lease);
+        var delivery = Select(Now);
+        var stale = delivery.Claim(Now, Lease);
+        var current = delivery.Claim(Now.Add(Lease), Lease);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => item.MarkDispatched(stale, Now.Add(Lease)));
+        Assert.ThrowsExactly<InvalidOperationException>(() => delivery.MarkMaterialized(stale, Now.Add(Lease)));
         Assert.ThrowsExactly<InvalidOperationException>(
-            () => item.MarkRetrying(stale, Now.AddHours(1), NotificationFailureCodes.DispatchTransient));
+            () => delivery.MarkRetrying(stale, Now.AddHours(1), NotificationFailureCodes.DispatchTransient));
         Assert.ThrowsExactly<InvalidOperationException>(
-            () => item.MarkDeadLettered(stale, Now, NotificationFailureCodes.AttemptsExhausted));
+            () => delivery.MarkDeadLettered(stale, Now, NotificationFailureCodes.AttemptsExhausted));
+        Assert.ThrowsExactly<InvalidOperationException>(
+            () => delivery.Suppress(stale, Now, NotificationSuppressionCodes.EmailOptedOut));
 
         // The current claimant still owns it, so the newer result is the one that lands.
-        item.MarkDispatched(current, Now.Add(Lease));
-        Assert.AreEqual(NotificationOutboxStatus.Dispatched, item.Status);
+        delivery.MarkMaterialized(current, Now.Add(Lease));
+        Assert.AreEqual(NotificationDeliveryStatus.Materialized, delivery.Status);
     }
 
     [TestMethod]
     public void FinalizingRequiresAClaimAtAll()
     {
-        var item = Schedule(Now);
+        var delivery = Select(Now);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => item.MarkDispatched(Guid.CreateVersion7(), Now));
+        Assert.ThrowsExactly<InvalidOperationException>(() => delivery.MarkMaterialized(Guid.CreateVersion7(), Now));
         Assert.ThrowsExactly<InvalidOperationException>(
-            () => item.MarkDeadLettered(Guid.CreateVersion7(), Now, NotificationFailureCodes.PayloadInvalid));
+            () => delivery.MarkDeadLettered(Guid.CreateVersion7(), Now, NotificationFailureCodes.PayloadInvalid));
     }
 
     [TestMethod]
-    public void DispatchRecordsItsCompletionInstantClearsTheClaimAndIsTerminal()
+    public void MaterializationRecordsItsCompletionInstantClearsTheClaimAndIsTerminal()
     {
-        var item = Schedule(Now);
-        var claim = item.Claim(Now, Lease);
+        var delivery = Select(Now);
+        var claim = delivery.Claim(Now, Lease);
 
-        item.MarkDispatched(claim, Now.AddSeconds(3));
+        delivery.MarkMaterialized(claim, Now.AddSeconds(3));
 
-        Assert.AreEqual(NotificationOutboxStatus.Dispatched, item.Status);
-        Assert.AreEqual(Now.AddSeconds(3), item.DispatchedAtUtc);
-        Assert.IsNull(item.FailureCode);
+        Assert.AreEqual(NotificationDeliveryStatus.Materialized, delivery.Status);
+        Assert.AreEqual(Now.AddSeconds(3), delivery.MaterializedAtUtc);
+        Assert.AreEqual(Now.AddSeconds(3), delivery.CompletedAtUtc);
+        Assert.IsNull(delivery.FailureCode);
+        // In-app has no transport and no provider, so neither is claimed.
+        Assert.IsNull(delivery.TransportAdapter);
+        Assert.IsNull(delivery.ProviderMessageId);
+        Assert.IsNull(delivery.ProviderAcceptedAtUtc);
         // A terminal row never keeps a live lease; that is what stops a stale worker finalizing it.
-        Assert.IsNull(item.ClaimToken);
-        Assert.IsNull(item.ClaimExpiresAtUtc);
-        Assert.IsTrue(item.IsTerminal);
-        Assert.IsFalse(item.IsClaimable(Now.AddYears(1)));
+        Assert.IsNull(delivery.ClaimToken);
+        Assert.IsNull(delivery.ClaimExpiresAtUtc);
+        Assert.IsTrue(delivery.IsTerminal);
+        Assert.IsFalse(delivery.IsClaimable(Now.AddYears(1)));
     }
 
     [TestMethod]
     public void ARetryableFailureReturnsToPendingAtItsScheduledNextAttempt()
     {
-        var item = Schedule(Now);
-        var claim = item.Claim(Now, Lease);
+        var delivery = Select(Now);
+        var claim = delivery.Claim(Now, Lease);
 
-        item.MarkRetrying(claim, Now.AddMinutes(1), NotificationFailureCodes.DispatchTransient);
+        delivery.MarkRetrying(claim, Now.AddMinutes(1), NotificationFailureCodes.DispatchTransient);
 
-        Assert.AreEqual(NotificationOutboxStatus.Pending, item.Status);
-        Assert.AreEqual(Now.AddMinutes(1), item.NextAttemptAtUtc);
-        Assert.AreEqual(NotificationFailureCodes.DispatchTransient, item.FailureCode);
-        Assert.IsNull(item.ClaimToken);
-        Assert.IsFalse(item.IsClaimable(Now.AddSeconds(59)));
-        Assert.IsTrue(item.IsClaimable(Now.AddMinutes(1)));
+        Assert.AreEqual(NotificationDeliveryStatus.Pending, delivery.Status);
+        Assert.AreEqual(Now.AddMinutes(1), delivery.NextAttemptAtUtc);
+        Assert.AreEqual(NotificationFailureCodes.DispatchTransient, delivery.FailureCode);
+        Assert.IsNull(delivery.ClaimToken);
+        Assert.IsFalse(delivery.IsClaimable(Now.AddSeconds(59)));
+        Assert.IsTrue(delivery.IsClaimable(Now.AddMinutes(1)));
     }
 
     [TestMethod]
     public void DeadLetteringIsTerminalAndRecordsWhenAndWhy()
     {
-        var item = Schedule(Now);
-        var claim = item.Claim(Now, Lease);
+        var delivery = Select(Now);
+        var claim = delivery.Claim(Now, Lease);
 
-        item.MarkDeadLettered(claim, Now.AddSeconds(2), NotificationFailureCodes.PayloadInvalid);
+        delivery.MarkDeadLettered(claim, Now.AddSeconds(2), NotificationFailureCodes.PayloadInvalid);
 
-        Assert.AreEqual(NotificationOutboxStatus.DeadLettered, item.Status);
-        Assert.AreEqual(Now.AddSeconds(2), item.DeadLetteredAtUtc);
-        Assert.AreEqual(NotificationFailureCodes.PayloadInvalid, item.FailureCode);
-        Assert.IsNull(item.ClaimToken);
-        Assert.IsTrue(item.IsTerminal);
+        Assert.AreEqual(NotificationDeliveryStatus.DeadLettered, delivery.Status);
+        Assert.AreEqual(Now.AddSeconds(2), delivery.DeadLetteredAtUtc);
+        Assert.AreEqual(NotificationFailureCodes.PayloadInvalid, delivery.FailureCode);
+        Assert.IsNull(delivery.ClaimToken);
+        Assert.IsTrue(delivery.IsTerminal);
         Assert.ThrowsExactly<InvalidOperationException>(
-            () => item.Suppress(NotificationSuppressionCodes.StateChanged));
+            () => delivery.SuppressBeforeClaim(Now, NotificationSuppressionCodes.StateChanged));
     }
 
     /// <summary>
-    /// Cancellation and dead-lettering are different facts. Cancelled means nobody should be told any
+    /// Cancellation and dead-lettering are different facts. Suppressed means nobody should be told any
     /// more; dead-lettered means somebody should have been and the dispatcher could not do it.
     /// </summary>
     [TestMethod]
     public void SuppressionAndDeadLetteringAreDifferentTerminalStates()
     {
-        var suppressed = Schedule(Now);
-        suppressed.Claim(Now, Lease);
-        suppressed.Suppress(NotificationSuppressionCodes.EnrollmentCancelled);
+        var suppressed = Select(Now);
+        var suppressedClaim = suppressed.Claim(Now, Lease);
+        suppressed.Suppress(suppressedClaim, Now, NotificationSuppressionCodes.EnrollmentCancelled);
 
-        Assert.AreEqual(NotificationOutboxStatus.Cancelled, suppressed.Status);
+        Assert.AreEqual(NotificationDeliveryStatus.Suppressed, suppressed.Status);
         Assert.AreEqual(NotificationSuppressionCodes.EnrollmentCancelled, suppressed.FailureCode);
         Assert.IsNull(suppressed.DeadLetteredAtUtc);
+        Assert.IsNull(suppressed.MaterializedAtUtc);
+        Assert.IsNotNull(suppressed.CompletedAtUtc);
         Assert.IsNull(suppressed.ClaimToken);
 
-        var deadLettered = Schedule(Now);
+        var deadLettered = Select(Now);
         var claim = deadLettered.Claim(Now, Lease);
         deadLettered.MarkDeadLettered(claim, Now, NotificationFailureCodes.TemplateMissing);
 
-        Assert.AreEqual(NotificationOutboxStatus.DeadLettered, deadLettered.Status);
+        Assert.AreEqual(NotificationDeliveryStatus.DeadLettered, deadLettered.Status);
         Assert.IsNotNull(deadLettered.DeadLetteredAtUtc);
     }
 
     /// <summary>
-    /// Commercial cancellation is a no-op on an item a worker is currently holding: the dispatcher
-    /// re-establishes eligibility before it renders anything and suppresses the item itself.
+    /// Business cancellation is a no-op on a delivery a worker is currently holding: the dispatcher
+    /// re-establishes eligibility before it materializes anything and suppresses its own claimed row.
     /// </summary>
     [TestMethod]
-    public void CommercialCancellationOnlyAffectsPendingItems()
+    public void BusinessCancellationOnlyAffectsPendingDeliveries()
     {
-        var pending = Schedule(Now);
-        pending.Cancel();
-        Assert.AreEqual(NotificationOutboxStatus.Cancelled, pending.Status);
+        var pending = Select(Now);
+        Assert.IsTrue(pending.CancelIfPending(Now));
+        Assert.AreEqual(NotificationDeliveryStatus.Suppressed, pending.Status);
+        Assert.AreEqual(NotificationSuppressionCodes.IntentCancelled, pending.FailureCode);
 
-        var held = Schedule(Now);
+        var held = Select(Now);
         var claim = held.Claim(Now, Lease);
-        held.Cancel();
-        Assert.AreEqual(NotificationOutboxStatus.Processing, held.Status);
+        Assert.IsFalse(held.CancelIfPending(Now));
+        Assert.AreEqual(NotificationDeliveryStatus.Processing, held.Status);
         Assert.AreEqual(claim, held.ClaimToken);
 
-        var dispatched = Schedule(Now);
-        var dispatchClaim = dispatched.Claim(Now, Lease);
-        dispatched.MarkDispatched(dispatchClaim, Now);
-        dispatched.Cancel();
-        Assert.AreEqual(NotificationOutboxStatus.Dispatched, dispatched.Status);
+        var materialized = Select(Now);
+        materialized.MarkMaterialized(materialized.Claim(Now, Lease), Now);
+        Assert.IsFalse(materialized.CancelIfPending(Now));
+        Assert.AreEqual(NotificationDeliveryStatus.Materialized, materialized.Status);
+    }
+
+    /// <summary>
+    /// Cancelling the intent is idempotent and one way, and it is deliberately a different fact from
+    /// what any one channel did with it.
+    /// </summary>
+    [TestMethod]
+    public void CancellingTheIntentIsIdempotentAndRecordsItsInstant()
+    {
+        var item = ScheduleIntent();
+
+        item.Cancel(Now);
+        Assert.IsTrue(item.IsCancelled);
+        Assert.AreEqual(NotificationIntentStatus.Cancelled, item.Status);
+        Assert.AreEqual(Now, item.CancelledAtUtc);
+
+        item.Cancel(Now.AddHours(1));
+        Assert.AreEqual(Now, item.CancelledAtUtc, "A second cancellation must not move the instant.");
     }
 
     [TestMethod]
-    public void ATerminalItemAcceptsNoFurtherTransition()
+    public void ATerminalDeliveryAcceptsNoFurtherTransition()
     {
-        foreach (var item in TerminalItems())
+        foreach (var delivery in TerminalDeliveries())
         {
-            var status = item.Status;
-            Assert.IsFalse(item.IsClaimable(Now.AddYears(5)));
-            Assert.ThrowsExactly<InvalidOperationException>(() => item.Claim(Now.AddYears(5), Lease));
+            var status = delivery.Status;
+            Assert.IsFalse(delivery.IsClaimable(Now.AddYears(5)));
+            Assert.ThrowsExactly<InvalidOperationException>(() => delivery.Claim(Now.AddYears(5), Lease));
             Assert.ThrowsExactly<InvalidOperationException>(
-                () => item.MarkDispatched(Guid.CreateVersion7(), Now));
+                () => delivery.MarkMaterialized(Guid.CreateVersion7(), Now));
             Assert.ThrowsExactly<InvalidOperationException>(
-                () => item.MarkRetrying(Guid.CreateVersion7(), Now.AddHours(1), NotificationFailureCodes.DispatchTransient));
-            item.Cancel();
-            Assert.AreEqual(status, item.Status, "A terminal item must not change status.");
+                () => delivery.MarkRetrying(Guid.CreateVersion7(), Now.AddHours(1), NotificationFailureCodes.DispatchTransient));
+            Assert.ThrowsExactly<InvalidOperationException>(
+                () => delivery.Defer(Now, Now.AddHours(1), NotificationDeferralCodes.QuietHours));
+            Assert.ThrowsExactly<InvalidOperationException>(() => delivery.MarkAttemptsExhausted(Now));
+            Assert.IsFalse(delivery.CancelIfPending(Now));
+            Assert.AreEqual(status, delivery.Status, "A terminal delivery must not change status.");
         }
     }
 
     [TestMethod]
     public void ClaimingRejectsANonPositiveLease()
     {
-        var item = Schedule(Now);
+        var delivery = Select(Now);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => item.Claim(Now, TimeSpan.Zero));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => item.Claim(Now, TimeSpan.FromSeconds(-1)));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => delivery.Claim(Now, TimeSpan.Zero));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => delivery.Claim(Now, TimeSpan.FromSeconds(-1)));
     }
 
     /// <summary>
@@ -268,74 +341,80 @@ public sealed class Phase6B1NotificationDispatchDomainTests
     [TestMethod]
     public void MaximumAttemptsDeadLettersRatherThanRetryingForever()
     {
-        var item = Schedule(Now);
+        var delivery = Select(Now);
         var now = Now;
 
         for (var attempt = 1; attempt <= 5; attempt++)
         {
-            var claim = item.Claim(now, Lease);
+            var claim = delivery.Claim(now, Lease);
+            delivery.StartAttempt(claim, 6);
             var next = NotificationRetryPolicy.NextAttemptAtUtc(attempt, 6, now);
             Assert.IsNotNull(next, $"Attempt {attempt} should still have been retryable.");
-            item.MarkRetrying(claim, next.Value, NotificationFailureCodes.DispatchTransient);
-            Assert.AreEqual(NotificationOutboxStatus.Pending, item.Status);
+            delivery.MarkRetrying(claim, next.Value, NotificationFailureCodes.DispatchTransient);
+            Assert.AreEqual(NotificationDeliveryStatus.Pending, delivery.Status);
             now = next.Value;
         }
 
-        var finalClaim = item.Claim(now, Lease);
-        Assert.AreEqual(6, item.AttemptCount);
+        var finalClaim = delivery.Claim(now, Lease);
+        delivery.StartAttempt(finalClaim, 6);
+        Assert.AreEqual(6, delivery.AttemptCount);
         Assert.IsNull(NotificationRetryPolicy.NextAttemptAtUtc(6, 6, now));
-        item.MarkDeadLettered(finalClaim, now, NotificationFailureCodes.AttemptsExhausted);
+        delivery.MarkDeadLettered(finalClaim, now, NotificationFailureCodes.AttemptsExhausted);
 
-        Assert.AreEqual(NotificationOutboxStatus.DeadLettered, item.Status);
-        Assert.AreEqual(NotificationFailureCodes.AttemptsExhausted, item.FailureCode);
-        Assert.AreEqual(6, item.AttemptCount);
+        Assert.AreEqual(NotificationDeliveryStatus.DeadLettered, delivery.Status);
+        Assert.AreEqual(NotificationFailureCodes.AttemptsExhausted, delivery.FailureCode);
+        Assert.AreEqual(6, delivery.AttemptCount);
     }
 
     [TestMethod]
     public void AbandonedClaimsConsumeTheMaximumAndCannotCreateAttemptFour()
     {
         const int MaximumAttempts = 3;
-        var item = Schedule(Now);
+        var delivery = Select(Now);
         var now = Now;
 
         for (var attempt = 1; attempt <= MaximumAttempts; attempt++)
         {
-            item.Claim(now, Lease, MaximumAttempts);
-            Assert.AreEqual(attempt, item.AttemptCount);
+            var claim = delivery.Claim(now, Lease, MaximumAttempts);
+            delivery.StartAttempt(claim, MaximumAttempts);
+            Assert.AreEqual(attempt, delivery.AttemptCount);
             now = now.Add(Lease);
         }
 
-        Assert.IsTrue(item.IsClaimExpired(now));
-        Assert.ThrowsExactly<InvalidOperationException>(() => item.Claim(now, Lease, MaximumAttempts));
-        item.MarkAttemptsExhausted(now);
+        Assert.IsTrue(delivery.IsClaimExpired(now));
+        Assert.ThrowsExactly<InvalidOperationException>(() => delivery.Claim(now, Lease, MaximumAttempts));
+        delivery.MarkAttemptsExhausted(now);
 
-        Assert.AreEqual(NotificationOutboxStatus.DeadLettered, item.Status);
-        Assert.AreEqual(NotificationFailureCodes.AttemptsExhausted, item.FailureCode);
-        Assert.AreEqual(MaximumAttempts, item.AttemptCount);
-        Assert.IsNull(item.ClaimToken);
+        Assert.AreEqual(NotificationDeliveryStatus.DeadLettered, delivery.Status);
+        Assert.AreEqual(NotificationFailureCodes.AttemptsExhausted, delivery.FailureCode);
+        Assert.AreEqual(MaximumAttempts, delivery.AttemptCount);
+        Assert.IsNull(delivery.ClaimToken);
     }
 
     [TestMethod]
     public void APermanentFailureDeadLettersOnItsFirstAttempt()
     {
-        var item = Schedule(Now);
-        var claim = item.Claim(Now, Lease);
+        var delivery = Select(Now);
+        var claim = delivery.Claim(Now, Lease);
+        delivery.StartAttempt(claim);
 
-        item.MarkDeadLettered(claim, Now, NotificationFailureCodes.AggregateMismatch);
+        delivery.MarkDeadLettered(claim, Now, NotificationFailureCodes.AggregateMismatch);
 
-        Assert.AreEqual(1, item.AttemptCount);
-        Assert.AreEqual(NotificationOutboxStatus.DeadLettered, item.Status);
-        Assert.AreEqual(NotificationFailureCodes.AggregateMismatch, item.FailureCode);
+        Assert.AreEqual(1, delivery.AttemptCount);
+        Assert.AreEqual(NotificationDeliveryStatus.DeadLettered, delivery.Status);
+        Assert.AreEqual(NotificationFailureCodes.AggregateMismatch, delivery.FailureCode);
     }
 
     [TestMethod]
     public void AnAttemptRecordsItsClaimAndAStableProviderIdempotencyKey()
     {
         var outboxItemId = Guid.CreateVersion7();
+        var deliveryId = Guid.CreateVersion7();
         var claim = Guid.CreateVersion7();
         var attempt = NotificationDeliveryAttempt.Start(
             TenantId,
             outboxItemId,
+            deliveryId,
             NotificationChannel.InApp,
             1,
             claim,
@@ -346,6 +425,7 @@ public sealed class Phase6B1NotificationDispatchDomainTests
         Assert.IsNull(attempt.CompletedAtUtc);
         Assert.IsNull(attempt.ProviderMessageId);
         Assert.AreEqual(claim, attempt.ClaimToken);
+        Assert.AreEqual(deliveryId, attempt.ChannelDeliveryId);
         // Stable for the intent and channel, deliberately not for the attempt: a retry has to be
         // recognisable by a provider as the same message.
         Assert.AreEqual(
@@ -353,8 +433,12 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             attempt.IdempotencyKey);
         Assert.AreEqual(
             attempt.IdempotencyKey,
-            NotificationDeliveryAttempt.Start(TenantId, outboxItemId, NotificationChannel.InApp, 2, Guid.CreateVersion7(), Now)
+            NotificationDeliveryAttempt.Start(TenantId, outboxItemId, deliveryId, NotificationChannel.InApp, 2, Guid.CreateVersion7(), Now)
                 .IdempotencyKey);
+        // Two channels of one notification are two different messages, so they carry two keys.
+        Assert.AreNotEqual(
+            attempt.IdempotencyKey,
+            NotificationDeliveryAttempt.BuildIdempotencyKey(outboxItemId, NotificationChannel.Email));
     }
 
     [TestMethod]
@@ -364,6 +448,7 @@ public sealed class Phase6B1NotificationDispatchDomainTests
         {
             var attempt = NotificationDeliveryAttempt.Start(
                 TenantId,
+                Guid.CreateVersion7(),
                 Guid.CreateVersion7(),
                 NotificationChannel.InApp,
                 1,
@@ -386,6 +471,7 @@ public sealed class Phase6B1NotificationDispatchDomainTests
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => NotificationDeliveryAttempt.Start(
             TenantId,
+            Guid.CreateVersion7(),
             Guid.CreateVersion7(),
             NotificationChannel.InApp,
             0,
@@ -539,25 +625,35 @@ public sealed class Phase6B1NotificationDispatchDomainTests
         attempt => attempt.Suppress(Now.AddSeconds(1), NotificationSuppressionCodes.StateChanged),
     ];
 
-    private static IEnumerable<NotificationOutboxItem> TerminalItems()
+    private static IEnumerable<NotificationChannelDelivery> TerminalDeliveries()
     {
-        var dispatched = Schedule(Now);
-        dispatched.MarkDispatched(dispatched.Claim(Now, Lease), Now);
-        yield return dispatched;
+        var materialized = Select(Now);
+        materialized.MarkMaterialized(materialized.Claim(Now, Lease), Now);
+        yield return materialized;
 
-        var deadLettered = Schedule(Now);
+        var deadLettered = Select(Now);
         deadLettered.MarkDeadLettered(
             deadLettered.Claim(Now, Lease),
             Now,
             NotificationFailureCodes.AttemptsExhausted);
         yield return deadLettered;
 
-        var cancelled = Schedule(Now);
-        cancelled.Cancel();
-        yield return cancelled;
+        var suppressed = Select(Now);
+        suppressed.SuppressBeforeClaim(Now, NotificationSuppressionCodes.IntentCancelled);
+        yield return suppressed;
     }
 
-    private static NotificationOutboxItem Schedule(DateTimeOffset scheduledAtUtc) =>
+    private static NotificationChannelDelivery Select(DateTimeOffset dueAtUtc) =>
+        NotificationChannelDelivery.Select(
+            TenantId,
+            Guid.CreateVersion7(),
+            NotificationChannel.InApp,
+            NotificationPurpose.ServiceTransactional,
+            NotificationChannelPlanner.InAppAlways,
+            NotificationChannelPlanner.PolicyVersion,
+            dueAtUtc);
+
+    private static NotificationOutboxItem ScheduleIntent() =>
         NotificationOutboxItem.Schedule(
             TenantId,
             RecipientId,
@@ -565,6 +661,6 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             CommercialNotificationKind.EnrollmentEndingSoon,
             $"enrollment:{EnrollmentId:N}:ending-soon:v1",
             $"{{\"enrollmentId\":\"{EnrollmentId}\",\"clientProfileId\":\"{Guid.CreateVersion7()}\",\"schemaVersion\":1}}",
-            scheduledAtUtc,
+            Now,
             "Asia/Beirut");
 }

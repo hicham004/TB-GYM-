@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,31 +14,33 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Infrastructure.Application;
 
 /// <summary>
-/// Turns due outbox intents into in-app notifications, durably and at least once.
+/// Turns due channel deliveries into their own artefacts, durably and at least once.
 /// </summary>
 /// <remarks>
-/// The sweep has two deliberately separate halves.
+/// The unit of work is one <see cref="NotificationChannelDelivery"/>, not one intent. That is the
+/// whole point of Phase 6B-3A: a notification whose inbox row was written and whose email is on its
+/// third retry has two truths at once, and a sweep that claimed the intent could represent only one of
+/// them. Two channels of the same notification are claimed, retried, suppressed, deferred and
+/// exhausted entirely independently, and neither can block, complete or resurrect the other.
 /// <para>
 /// <b>Claiming</b> happens in one short transaction per workspace. Due rows are locked with
 /// <c>FOR UPDATE SKIP LOCKED</c>, so several worker replicas may sweep at the same time and step over
 /// each other's rows instead of blocking or double-processing them. Inside that transaction each
-/// candidate has its eligibility re-established from the authoritative rows, a lease token and expiry
-/// are written, and an attempt row is started. Nothing external happens while the lock is held; there
-/// is no external provider in this slice, and preserving that boundary now is what will let one be
-/// added later without holding a database transaction across a network call.
+    /// candidate has its eligibility re-established from the authoritative rows and a lease token and
+    /// expiry are written. A claim is only a reservation; no attempt is spent yet, and nothing external
+    /// happens while the row lock is held.
 /// </para>
 /// <para>
-/// <b>Materialization</b> happens afterwards, per item, in its own scope and its own transaction. It
-/// first re-establishes eligibility so the committed claim cannot authorize stale delivery after an
-/// authoritative change. The notification row, the successful attempt and the completed outbox row
-/// then commit together or not at all. If that transaction fails, none of the three facts is visible,
-/// and the unique notification-per-intent constraint makes the replay idempotent even if the process
-/// died after the insert but before the commit.
+/// <b>Materialization</b> happens afterwards, per delivery, in its own scope and its own transaction.
+    /// It first re-establishes eligibility — including the recipient's <i>current</i> email preference and
+    /// the current quiet-hours window — so the committed claim cannot authorize stale delivery after an
+    /// authoritative change. Quiet hours can release the reservation without an attempt. Otherwise the
+    /// Started attempt commits before an artefact is written or handed to a transport.
 /// </para>
 /// <para>
 /// Every finalization presents the claim token it was issued. A worker whose lease expired and whose
-/// item has since been taken over cannot overwrite the newer worker's result: the domain refuses the
-/// transition, and the sweep records nothing.
+/// delivery has since been taken over cannot overwrite the newer worker's result: the domain refuses
+/// the transition, and the sweep records nothing.
 /// </para>
 /// </remarks>
 internal sealed class NotificationDispatchService(
@@ -45,6 +48,7 @@ internal sealed class NotificationDispatchService(
     IServiceScopeFactory scopeFactory,
     IClock clock,
     IOptions<NotificationDispatchOptions> options,
+    IOptions<NotificationEmailOptions> emailOptions,
     ILogger<NotificationDispatchService> logger,
     INotificationDispatchCheckpoint checkpoint)
     : INotificationDispatchService
@@ -52,40 +56,48 @@ internal sealed class NotificationDispatchService(
     private static readonly JsonSerializerOptions PayloadJsonOptions =
         new(JsonSerializerDefaults.Web);
 
-    // Identifiers, kind, channel, attempt number and a stable code only. No recipient, no rendered
-    // wording, no payload, no exception message: an operator needs to know which intent behaved how,
-    // not what it said or who it was for.
-    private static readonly Action<ILogger, Guid, Guid, string, int, string, Exception?> LogDispatched =
-        LoggerMessage.Define<Guid, Guid, string, int, string>(
+    // Identifiers, kind, channel, attempt number and a stable code only. No recipient, no address, no
+    // rendered wording, no payload, no exception message: an operator needs to know which delivery
+    // behaved how, not what it said or who it was for.
+    private static readonly Action<ILogger, Guid, Guid, string, string, int, Exception?> LogMaterialized =
+        LoggerMessage.Define<Guid, Guid, string, string, int>(
             LogLevel.Information,
-            new EventId(6101, "NotificationDispatched"),
-            "Notification {OutboxItemId} in workspace {TenantId} ({Kind}) dispatched on attempt {AttemptNumber} over {Channel}.");
+            new EventId(6101, "NotificationMaterialized"),
+            "Notification {OutboxItemId} in workspace {TenantId} ({Kind}) materialized over {Channel} on attempt {AttemptNumber}.");
 
-    private static readonly Action<ILogger, Guid, Guid, string, string, Exception?> LogSuppressed =
-        LoggerMessage.Define<Guid, Guid, string, string>(
+    private static readonly Action<ILogger, Guid, Guid, string, string, string, Exception?> LogSuppressed =
+        LoggerMessage.Define<Guid, Guid, string, string, string>(
             LogLevel.Information,
             new EventId(6102, "NotificationSuppressed"),
-            "Notification {OutboxItemId} in workspace {TenantId} ({Kind}) suppressed with {FailureCode}.");
+            "Notification {OutboxItemId} in workspace {TenantId} ({Kind}) suppressed on {Channel} with {FailureCode}.");
 
-    private static readonly Action<ILogger, Guid, Guid, string, int, string, Exception?> LogRetrying =
-        LoggerMessage.Define<Guid, Guid, string, int, string>(
+    private static readonly Action<ILogger, Guid, Guid, string, string, int, string, Exception?> LogRetrying =
+        LoggerMessage.Define<Guid, Guid, string, string, int, string>(
             LogLevel.Warning,
             new EventId(6103, "NotificationRetrying"),
-            "Notification {OutboxItemId} in workspace {TenantId} ({Kind}) failed attempt {AttemptNumber} with {FailureCode} and will be retried.");
+            "Notification {OutboxItemId} in workspace {TenantId} ({Kind}) failed attempt {AttemptNumber} on {Channel} with {FailureCode} and will be retried.");
 
-    private static readonly Action<ILogger, Guid, Guid, string, int, string, Exception?> LogDeadLettered =
-        LoggerMessage.Define<Guid, Guid, string, int, string>(
+    private static readonly Action<ILogger, Guid, Guid, string, string, int, string, Exception?> LogDeadLettered =
+        LoggerMessage.Define<Guid, Guid, string, string, int, string>(
             LogLevel.Error,
             new EventId(6104, "NotificationDeadLettered"),
-            "Notification {OutboxItemId} in workspace {TenantId} ({Kind}) dead-lettered after {AttemptNumber} attempts with {FailureCode}.");
+            "Notification {OutboxItemId} in workspace {TenantId} ({Kind}) dead-lettered on {Channel} after {AttemptNumber} attempts with {FailureCode}.");
 
-    private static readonly Action<ILogger, Guid, Guid, int, Exception?> LogReclaimed =
-        LoggerMessage.Define<Guid, Guid, int>(
+    private static readonly Action<ILogger, Guid, Guid, string, int, Exception?> LogReclaimed =
+        LoggerMessage.Define<Guid, Guid, string, int>(
             LogLevel.Warning,
             new EventId(6105, "NotificationClaimReclaimed"),
-            "Notification {OutboxItemId} in workspace {TenantId} had an expired claim; attempt {AttemptNumber} was abandoned.");
+            "Notification {OutboxItemId} in workspace {TenantId} had an expired {Channel} claim; attempt {AttemptNumber} was abandoned.");
+
+    private static readonly Action<ILogger, Guid, Guid, string, string, Exception?> LogDeferred =
+        LoggerMessage.Define<Guid, Guid, string, string>(
+            LogLevel.Information,
+            new EventId(6106, "NotificationDeferred"),
+            "Notification {OutboxItemId} in workspace {TenantId} deferred on {Channel} by {DeferralCode}.");
 
     private readonly NotificationDispatchOptions settings = options.Value;
+
+    private readonly NotificationEmailOptions email = emailOptions.Value;
 
     public async Task<NotificationDispatchOutcome> DispatchDueAsync(CancellationToken cancellationToken)
     {
@@ -97,17 +109,17 @@ internal sealed class NotificationDispatchService(
         var now = clock.UtcNow;
 
         // The only global read in the sweep, and it is read-only. The scheduling instant is the
-        // pending item's NextAttemptAtUtc or an expired claim's ClaimExpiresAtUtc. A workspace that
-        // was just served is placed behind workspaces whose due work has waited longer, using the
-        // durable attempt history rather than tenant GUID order or a process-local cursor. New work
-        // in a continuously busy workspace therefore cannot indefinitely starve an older waiter.
-        var tenantIds = await DueItems(dbContext, now)
+        // pending delivery's NextAttemptAtUtc or an expired claim's ClaimExpiresAtUtc. A workspace
+        // that was just served is placed behind workspaces whose due work has waited longer, using the
+        // durable attempt history rather than tenant GUID order or a process-local cursor. New work in
+        // a continuously busy workspace therefore cannot indefinitely starve an older waiter.
+        var tenantIds = await DueDeliveries(dbContext, now)
             .GroupBy(item => item.TenantId)
             .Select(group => new
             {
                 TenantId = group.Key,
                 EffectiveDueAtUtc = group.Min(item =>
-                    item.Status == NotificationOutboxStatus.Pending
+                    item.Status == NotificationDeliveryStatus.Pending
                         ? item.NextAttemptAtUtc
                         : item.ClaimExpiresAtUtc!.Value),
                 LastAttemptStartedAtUtc = dbContext.NotificationDeliveryAttempts
@@ -116,8 +128,8 @@ internal sealed class NotificationDispatchService(
                     .Max(attempt => (DateTimeOffset?)attempt.StartedAtUtc),
             })
             // The later of oldest due and last service is the workspace's effective waiting instant:
-            // due age leads until the workspace is served, then the durable service instant rotates
-            // it behind older due workspaces.
+            // due age leads until the workspace is served, then the durable service instant rotates it
+            // behind older due workspaces.
             .OrderBy(workspace =>
                 workspace.LastAttemptStartedAtUtc == null ||
                 workspace.LastAttemptStartedAtUtc < workspace.EffectiveDueAtUtc
@@ -151,19 +163,16 @@ internal sealed class NotificationDispatchService(
                 }
 
                 var limit = Math.Min(share, remaining);
-                var claimed = await ClaimForTenantAsync(
-                    tenantId,
-                    now,
-                    limit,
-                    cancellationToken);
+                var claimed = await ClaimForTenantAsync(tenantId, now, limit, cancellationToken);
                 outcome = outcome.Add(claimed.Outcome);
                 remaining -= claimed.Consumed;
 
                 foreach (var work in claimed.Work)
                 {
                     // ClaimForTenantAsync has committed before it returns. Tests replace this no-op
-                    // checkpoint with a barrier and commit authoritative changes while the durable
-                    // claim is visible but no notification has yet been materialized.
+                    // checkpoint with a barrier and commit authoritative changes — a preference
+                    // opt-out, a membership removal — while the durable claim is visible but nothing
+                    // has yet been materialized.
                     await checkpoint.AfterClaimCommittedAsync(
                         work.TenantId,
                         work.OutboxItemId,
@@ -185,16 +194,20 @@ internal sealed class NotificationDispatchService(
     }
 
     /// <summary>
-    /// Everything a sweep may act on: due Pending work, and Processing work whose lease has run out.
-    /// The second half is what stops a crashed worker from hiding a notification permanently.
+    /// Everything a sweep may act on: due Pending deliveries, and Processing deliveries whose lease has
+    /// run out. The second half is what stops a crashed worker from hiding a channel permanently.
     /// </summary>
-    private static IQueryable<NotificationOutboxItem> DueItems(GymDbContext context, DateTimeOffset now) =>
-        context.NotificationOutboxItems
+    /// <remarks>
+    /// A quiet-hours deferral simply moves <c>NextAttemptAtUtc</c>, so a deferred email is not in this
+    /// set at all until its window ends. The worker never polls it and never spends an attempt on it.
+    /// </remarks>
+    private static IQueryable<NotificationChannelDelivery> DueDeliveries(GymDbContext context, DateTimeOffset now) =>
+        context.NotificationChannelDeliveries
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(item =>
-                (item.Status == NotificationOutboxStatus.Pending && item.NextAttemptAtUtc <= now) ||
-                (item.Status == NotificationOutboxStatus.Processing &&
+                (item.Status == NotificationDeliveryStatus.Pending && item.NextAttemptAtUtc <= now) ||
+                (item.Status == NotificationDeliveryStatus.Processing &&
                  item.ClaimExpiresAtUtc != null &&
                  item.ClaimExpiresAtUtc <= now));
 
@@ -215,9 +228,11 @@ internal sealed class NotificationDispatchService(
 
             // Deterministic order by effective due instant then id, so two workers sweeping the same
             // workspace walk the backlog the same way and SKIP LOCKED simply divides it between them.
-            var candidates = await context.NotificationOutboxItems
+            // Only the delivery rows are locked: the intent is immutable and needs no lock, and
+            // locking it would serialize two channels that are deliberately independent.
+            var candidates = await context.NotificationChannelDeliveries
                 .FromSql($"""
-                    SELECT *, xmin FROM notifications."OutboxItems"
+                    SELECT *, xmin FROM notifications."ChannelDeliveries"
                     WHERE "TenantId" = {tenantId}
                       AND (("Status" = 'Pending' AND "NextAttemptAtUtc" <= {now})
                            OR ("Status" = 'Processing' AND "ClaimExpiresAtUtc" IS NOT NULL AND "ClaimExpiresAtUtc" <= {now}))
@@ -229,79 +244,93 @@ internal sealed class NotificationDispatchService(
 
             var outcome = NotificationDispatchOutcome.Empty;
             var work = new List<ClaimedWork>();
-            foreach (var item in candidates)
+            foreach (var delivery in candidates)
             {
-                var reclaimed = await AbandonExpiredAttemptAsync(context, item, now, cancellationToken);
+                var item = await context.NotificationOutboxItems
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(candidate => candidate.Id == delivery.OutboxItemId, cancellationToken);
+                if (item is null)
+                {
+                    // A delivery whose intent is not visible in this workspace is a broken row rather
+                    // than a delayed one. The composite foreign key makes it unreachable in practice.
+                    delivery.SuppressBeforeClaim(now, NotificationFailureCodes.AggregateMismatch);
+                    outcome = outcome with { Suppressed = outcome.Suppressed + 1 };
+                    continue;
+                }
+
+                var reclaimed = await AbandonExpiredAttemptAsync(context, delivery, item.Id, now, cancellationToken);
                 if (reclaimed)
                 {
                     outcome = outcome with { Reclaimed = outcome.Reclaimed + 1 };
                 }
 
-                var eligibility = await EvaluateAsync(context, item, cancellationToken);
+                var eligibility = await EvaluateAsync(context, item, delivery, now, cancellationToken);
+                if (eligibility.Deferral is { } deferral)
+                {
+                    // Quiet hours. Nothing was tried, nothing went wrong, and the notification is still
+                    // wanted: the row simply becomes invisible again until the window ends.
+                    delivery.Defer(now, deferral.NextAllowedAtUtc, deferral.Code);
+                    LogDeferred(logger, item.Id, tenantId, delivery.Channel.ToString(), deferral.Code, null);
+                    outcome = outcome with { Deferred = outcome.Deferred + 1 };
+                    continue;
+                }
+
                 if (eligibility.Suppression is { } suppression)
                 {
                     // Suppression costs no attempt: nothing was tried, the reason to try simply went
                     // away. Recorded with a stable code so it is distinguishable from a failure.
-                    item.Suppress(suppression);
-                    LogSuppressed(logger, item.Id, tenantId, item.Kind.ToString(), suppression, null);
+                    delivery.SuppressBeforeClaim(now, suppression);
+                    LogSuppressed(
+                        logger,
+                        item.Id,
+                        tenantId,
+                        item.Kind.ToString(),
+                        delivery.Channel.ToString(),
+                        suppression,
+                        null);
                     outcome = outcome with { Suppressed = outcome.Suppressed + 1 };
                     continue;
                 }
 
                 // Every increment represents a durably started attempt, including an abandoned one.
-                // Once that count reaches the configured maximum, reclaiming closes the item using
-                // the real last attempt already in history; it never manufactures attempt max + 1.
-                if (item.AttemptCount >= settings.MaximumAttempts)
+                // Once that count reaches the configured maximum, reclaiming closes the delivery using
+                // the real last attempt already in history; it never manufactures attempt max + 1. The
+                // budget belongs to this channel alone.
+                if (delivery.AttemptCount >= settings.MaximumAttempts)
                 {
-                    item.MarkAttemptsExhausted(now);
+                    delivery.MarkAttemptsExhausted(now);
                     LogDeadLettered(
                         logger,
                         item.Id,
                         tenantId,
                         item.Kind.ToString(),
-                        item.AttemptCount,
+                        delivery.Channel.ToString(),
+                        delivery.AttemptCount,
                         NotificationFailureCodes.AttemptsExhausted,
                         null);
                     outcome = outcome with { DeadLettered = outcome.DeadLettered + 1 };
                     continue;
                 }
 
-                var claimToken = item.Claim(
+                var claimToken = delivery.Claim(
                     now,
                     TimeSpan.FromSeconds(settings.ClaimLeaseSeconds),
                     settings.MaximumAttempts);
-                var attempt = NotificationDeliveryAttempt.Start(
-                    tenantId,
-                    item.Id,
-                    NotificationChannel.InApp,
-                    item.AttemptCount,
-                    claimToken,
-                    now);
-                context.NotificationDeliveryAttempts.Add(attempt);
 
-                if (eligibility.PermanentFailure is { } permanent)
-                {
-                    // A corrupt payload, a missing template or an impossible aggregate will not fix
-                    // itself, so this dead-letters now rather than burning the retry schedule on it.
-                    attempt.FailPermanently(now, permanent);
-                    item.MarkDeadLettered(claimToken, now, permanent);
-                    LogDeadLettered(logger, item.Id, tenantId, item.Kind.ToString(), item.AttemptCount, permanent, null);
-                    outcome = outcome with
-                    {
-                        Claimed = outcome.Claimed + 1,
-                        DeadLettered = outcome.DeadLettered + 1,
-                    };
-                    continue;
-                }
-
+                // Permanent eligibility failures still cross the committed claim boundary. That keeps
+                // the reservation and started-attempt transitions in separate transactions (required
+                // by the deferred attempt-history guard), and MaterializeAsync records the failed
+                // attempt with the final recheck's stable code.
                 work.Add(new ClaimedWork(
                     tenantId,
                     item.Id,
+                    delivery.Id,
+                    delivery.Channel,
                     item.Kind,
                     item.RecipientUserId,
                     claimToken,
-                    attempt.Id,
-                    item.AttemptCount));
+                    Guid.Empty,
+                    0));
                 outcome = outcome with { Claimed = outcome.Claimed + 1 };
             }
 
@@ -312,55 +341,77 @@ internal sealed class NotificationDispatchService(
     }
 
     /// <summary>
-    /// A lease that expired leaves evidence before it is replaced: the unfinished attempt it started
-    /// is marked Abandoned, so the history shows a try that was interrupted rather than an attempt
-    /// number that silently went missing.
+    /// A lease that expired leaves evidence before it is replaced when it had reached the Started
+    /// boundary: the unfinished attempt is marked Abandoned, so the history shows a try that was
+    /// interrupted rather than an attempt number that silently went missing. An expired reservation
+    /// that never started work has no attempt to invent or abandon.
     /// </summary>
     private async Task<bool> AbandonExpiredAttemptAsync(
         GymDbContext context,
-        NotificationOutboxItem item,
+        NotificationChannelDelivery delivery,
+        Guid outboxItemId,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        if (!item.IsClaimExpired(now) || item.ClaimToken is not { } expiredToken)
+        if (!delivery.IsClaimExpired(now) || delivery.ClaimToken is not { } expiredToken)
         {
             return false;
         }
 
         var unfinished = await context.NotificationDeliveryAttempts
             .Where(attempt =>
-                attempt.OutboxItemId == item.Id &&
+                attempt.ChannelDeliveryId == delivery.Id &&
                 attempt.ClaimToken == expiredToken &&
                 attempt.Outcome == NotificationDeliveryOutcome.Started)
             .ToListAsync(cancellationToken);
         foreach (var attempt in unfinished)
         {
             attempt.Abandon(now, NotificationFailureCodes.ClaimExpired);
-            LogReclaimed(logger, item.Id, item.TenantId, attempt.AttemptNumber, null);
+            LogReclaimed(
+                logger,
+                outboxItemId,
+                delivery.TenantId,
+                delivery.Channel.ToString(),
+                attempt.AttemptNumber,
+                null);
         }
 
         return true;
     }
 
     /// <summary>
-    /// Re-establishes every relationship server-side before anything is rendered.
+    /// Re-establishes every relationship server-side before anything is rendered, and then the
+    /// channel's own additional conditions.
     /// </summary>
     /// <remarks>
     /// A delayed notification describes a world that may have moved: the workspace may be closed, the
     /// account blocked, the membership gone, the coaching relationship blocked, the enrollment
-    /// cancelled or renewed. None of that can be trusted from the payload, which holds identifiers
-    /// and nothing else.
+    /// cancelled or renewed, and — new in this phase — the recipient may have turned email off, or the
+    /// workspace may now be inside their quiet hours. None of that can be trusted from the payload,
+    /// which holds identifiers and nothing else.
     /// <para>
-    /// <c>ICoachingFeatureAccessService</c> is deliberately not the decision here.
-    /// <c>PaymentRequired</c> exists precisely to describe a state in which feature access is denied,
-    /// so gating on it would suppress the one notification the client most needs.
+    /// The shared checks are evaluated once and apply to every channel. The email-only checks are
+    /// deliberately after them and deliberately cannot suppress in-app: a preference is about how
+    /// somebody is interrupted, never about whether their inbox exists.
+    /// </para>
+    /// <para>
+    /// <c>ICoachingFeatureAccessService</c> is deliberately not the decision here. <c>PaymentRequired</c>
+    /// exists precisely to describe a state in which feature access is denied, so gating on it would
+    /// suppress the one notification the client most needs.
     /// </para>
     /// </remarks>
     private async Task<Eligibility> EvaluateAsync(
         GymDbContext context,
         NotificationOutboxItem item,
+        NotificationChannelDelivery delivery,
+        DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        if (item.IsCancelled)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.IntentCancelled);
+        }
+
         if (!TryReadPayload(item.PayloadJson, out var payload) || payload.EnrollmentId != item.AggregateId)
         {
             return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
@@ -453,21 +504,15 @@ internal sealed class NotificationDispatchService(
             return Eligibility.Suppress(NotificationSuppressionCodes.EnrollmentCancelled);
         }
 
-        DateOnly tenantToday;
-        try
-        {
-            // The workspace's current time zone, not the one stored on the row. The stored zone is
-            // scheduling provenance; what "today" means now is a question about the workspace now.
-            var localNow = TimeZoneInfo.ConvertTime(
-                clock.UtcNow,
-                TimeZoneInfo.FindSystemTimeZoneById(tenant.TimeZoneId));
-            tenantToday = DateOnly.FromDateTime(localNow.DateTime);
-        }
-        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
+        // The workspace's current time zone, not the one stored on the row. The stored zone is
+        // scheduling provenance; what "today" means now, and when quiet hours are now, are questions
+        // about the workspace now. An unresolvable zone fails closed rather than being answered in UTC.
+        if (!NotificationQuietHoursPolicy.TryResolveZone(tenant.TimeZoneId, out var zone))
         {
             return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
         }
 
+        var tenantToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
         var stillHolds = item.Kind switch
         {
             CommercialNotificationKind.PaymentRequired =>
@@ -491,9 +536,74 @@ internal sealed class NotificationDispatchService(
             return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
         }
 
-        return NotificationTemplateCatalog.TryResolve(item.Kind, tenant.DefaultCulture, out var template)
-            ? Eligibility.Eligible(template)
-            : Eligibility.Permanent(NotificationFailureCodes.TemplateMissing);
+        return delivery.Channel switch
+        {
+            NotificationChannel.InApp => NotificationTemplateCatalog.TryResolve(
+                item.Kind,
+                tenant.DefaultCulture,
+                out var template)
+                ? Eligibility.InApp(template)
+                : Eligibility.Permanent(NotificationFailureCodes.TemplateMissing),
+            NotificationChannel.Email => await EvaluateEmailAsync(context, item, zone, now, cancellationToken),
+            _ => Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch),
+        };
+    }
+
+    /// <summary>
+    /// The email channel's own conditions, checked after every shared one and never able to affect a
+    /// different channel.
+    /// </summary>
+    /// <remarks>
+    /// The order matters. The preference is read first, so somebody who has opted out is not evaluated
+    /// against quiet hours or looked up in the account tables at all. Quiet hours come next and defer
+    /// rather than suppress: the notification is still wanted, this is simply not a moment the
+    /// recipient agreed to be interrupted in.
+    /// </remarks>
+    private async Task<Eligibility> EvaluateEmailAsync(
+        GymDbContext context,
+        NotificationOutboxItem item,
+        TimeZoneInfo zone,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        // A deployment that has switched email off, or that never had a transport, stops delivering it.
+        // Nothing is half-sent: no address is resolved, no wording is rendered.
+        if (!email.IsAvailable)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.EmailChannelUnavailable);
+        }
+
+        var preference = await context.NotificationChannelPreferences
+            .AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.UserId == item.RecipientUserId, cancellationToken);
+
+        // A member with no row has never opted in, which is exactly the default. Opting out after the
+        // delivery was planned lands here too, and suppresses the pending email without touching the
+        // in-app delivery of the same notification.
+        var wanted = item.Purpose switch
+        {
+            NotificationPurpose.ServiceTransactional => preference?.EmailServiceEnabled == true,
+            NotificationPurpose.Marketing => preference?.EmailMarketingEnabled == true,
+            _ => false,
+        };
+        if (!wanted)
+        {
+            return Eligibility.Suppress(item.Purpose == NotificationPurpose.Marketing
+                ? NotificationSuppressionCodes.MarketingConsentMissing
+                : NotificationSuppressionCodes.EmailOptedOut);
+        }
+
+        if (preference?.QuietHours is { } window && NotificationQuietHoursPolicy.IsWithin(now, window, zone))
+        {
+            var nextAllowed = NotificationQuietHoursPolicy.NextAllowedInstantUtc(now, window, zone);
+            return nextAllowed > now
+                ? Eligibility.Defer(nextAllowed, NotificationDeferralCodes.QuietHours)
+                // A window the policy cannot move past would be a bug, not a reason to email somebody
+                // at 3am. Failing closed here is deliberate.
+                : Eligibility.Suppress(NotificationSuppressionCodes.QuietHoursUnresolvable);
+        }
+
+        return Eligibility.Email();
     }
 
     private static bool TryReadPayload(string payloadJson, out CommercialNotificationPayload payload)
@@ -507,8 +617,8 @@ internal sealed class NotificationDispatchService(
                 parsed.EnrollmentId == Guid.Empty ||
                 parsed.ClientProfileId == Guid.Empty ||
                 // Phase 2 payloads predate the field and deserialize as 0. They are the current shape
-                // in every other respect, so they are read as version 1; anything else is a build
-                // that cannot read this payload, which no amount of retrying will change.
+                // in every other respect, so they are read as version 1; anything else is a build that
+                // cannot read this payload, which no amount of retrying will change.
                 parsed.SchemaVersion is not (0 or CommercialNotificationPayload.CurrentSchemaVersion))
             {
                 payload = null!;
@@ -526,7 +636,8 @@ internal sealed class NotificationDispatchService(
     }
 
     /// <summary>
-    /// The notification, its successful attempt and the completed outbox row, committed together.
+    /// One channel's artefact, its successful attempt and its completed delivery row, committed
+    /// together.
     /// </summary>
     private async Task<NotificationDispatchOutcome> MaterializeAsync(
         ClaimedWork work,
@@ -536,110 +647,180 @@ internal sealed class NotificationDispatchService(
         var provider = scope.ServiceProvider;
         provider.GetRequiredService<IMutableTenantContext>().SetTenant(work.TenantId);
         var context = provider.GetRequiredService<GymDbContext>();
-        var now = clock.UtcNow;
+        var activeWork = work;
+        IAsyncDisposable? recipientPolicyLease = null;
 
         try
         {
-            var finalization = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            if (work.Channel == NotificationChannel.Email)
+            {
+                recipientPolicyLease = await NotificationAdvisoryLocks.AcquireRecipientPolicySessionAsync(
+                    context,
+                    work.TenantId,
+                    work.RecipientUserId,
+                    cancellationToken);
+            }
+
+            // Reserve and attempt are deliberately separate. A committed claim authorizes nothing;
+            // current state is checked under the member policy lock, and quiet hours can still release
+            // that claim without creating an attempt. Once the check passes, the Started attempt is
+            // committed before any channel artefact is produced.
+            var preparation = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
             {
                 await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-                var (item, attempt) = await LoadClaimedAsync(context, work, cancellationToken);
+                var preparationNow = clock.UtcNow;
+                var (delivery, item) = await LoadClaimedDeliveryAsync(context, work, cancellationToken);
 
-                // Another worker may have reclaimed and completed this item while this worker was
-                // paused after its claim commit. The historical attempt now belongs to that past
-                // claim and may already be Abandoned; neither it nor the newer terminal result may be
+                // Another worker may have reclaimed and completed this delivery while this worker was
+                // paused after its claim commit. Neither the newer claim nor a terminal result may be
                 // changed by the stale claimant.
-                if (item.Status != NotificationOutboxStatus.Processing ||
-                    item.ClaimToken != work.ClaimToken ||
-                    attempt.ClaimToken != work.ClaimToken ||
-                    attempt.IsCompleted)
+                if (delivery.Status != NotificationDeliveryStatus.Processing ||
+                    delivery.ClaimToken != work.ClaimToken)
                 {
                     await transaction.CommitAsync(cancellationToken);
                     return MaterializationFinalization.Stale;
                 }
 
-                // A committed claim is a lease, not authorization forever. Re-read every
-                // authoritative relationship inside the same transaction that would materialize the
-                // notification, closing the race between the original eligibility check and delivery.
-                var eligibility = await EvaluateAsync(context, item, cancellationToken);
+                // A commit acknowledgement can be lost after the Started attempt became durable.
+                // Re-enter that same attempt instead of incrementing the budget or inserting a second
+                // row for the claim.
+                var existingAttempt = await context.NotificationDeliveryAttempts
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(
+                        attempt =>
+                            attempt.ChannelDeliveryId == delivery.Id &&
+                            attempt.ClaimToken == work.ClaimToken,
+                        cancellationToken);
+                if (existingAttempt is not null)
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                    return MaterializationFinalization.Prepared(
+                        work with
+                        {
+                            AttemptId = existingAttempt.Id,
+                            AttemptNumber = existingAttempt.AttemptNumber,
+                        },
+                        template: null);
+                }
+
+                // A committed claim is a lease, not authorization forever. Re-read every authoritative
+                // relationship, the current preference and the current quiet-hours window. Email holds
+                // the same recipient-policy lock through its Started commit and capture, so an opt-out
+                // cannot commit in the gap between this decision and the transport call.
+                var eligibility = await EvaluateAsync(context, item, delivery, preparationNow, cancellationToken);
+                if (eligibility.Deferral is { } deferral)
+                {
+                    // Quiet hours started while this delivery was reserved. No attempt has started, so
+                    // releasing the lease and moving the due instant spends no attempt or capacity.
+                    delivery.Defer(preparationNow, deferral.NextAllowedAtUtc, deferral.Code);
+                    await context.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                    return new MaterializationFinalization(
+                        MaterializationFinalizationKind.Deferred,
+                        deferral.Code);
+                }
+
+                var attemptNumber = delivery.StartAttempt(work.ClaimToken, settings.MaximumAttempts);
+                var attempt = NotificationDeliveryAttempt.Start(
+                    work.TenantId,
+                    work.OutboxItemId,
+                    work.ChannelDeliveryId,
+                    work.Channel,
+                    attemptNumber,
+                    work.ClaimToken,
+                    preparationNow);
+                context.NotificationDeliveryAttempts.Add(attempt);
+
+                // The insert guard requires every attempt to be born Started. Flush it before any
+                // terminal update, still inside this transaction.
+                await context.SaveChangesAsync(cancellationToken);
+                var startedWork = work with { AttemptId = attempt.Id, AttemptNumber = attemptNumber };
+
                 if (eligibility.Suppression is { } suppression)
                 {
                     // This attempt was already durably started. Suppression starts no replacement and
                     // earns no retry, but history must close the real attempt rather than delete it or
                     // leave it Started forever.
-                    attempt.Suppress(now, suppression);
-                    item.Suppress(suppression);
+                    attempt.Suppress(preparationNow, suppression);
+                    delivery.Suppress(work.ClaimToken, preparationNow, suppression);
                     await context.SaveChangesAsync(cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
                     return new MaterializationFinalization(
                         MaterializationFinalizationKind.Suppressed,
-                        suppression);
+                        suppression,
+                        AttemptNumber: attemptNumber);
                 }
 
                 if (eligibility.PermanentFailure is { } permanent)
                 {
-                    attempt.FailPermanently(now, permanent);
-                    item.MarkDeadLettered(work.ClaimToken, now, permanent);
+                    attempt.FailPermanently(preparationNow, permanent);
+                    delivery.MarkDeadLettered(work.ClaimToken, preparationNow, permanent);
                     await context.SaveChangesAsync(cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
                     return new MaterializationFinalization(
                         MaterializationFinalizationKind.DeadLettered,
-                        permanent);
+                        permanent,
+                        AttemptNumber: attemptNumber);
                 }
 
-                // A replay after a crash between the insert and the commit finds its own notification
-                // already there. That is a success, not a duplicate: the unique constraint on the
-                // source intent is what makes at-least-once delivery safe to repeat.
-                var alreadyMaterialized = await context.Notifications
-                    .AnyAsync(existing => existing.SourceOutboxItemId == item.Id, cancellationToken);
-                if (!alreadyMaterialized)
-                {
-                    context.Notifications.Add(Notification.Materialize(
-                        work.TenantId,
-                        work.RecipientUserId,
-                        item.Id,
-                        item.Kind,
-                        eligibility.Template!));
-                }
-
-                attempt.Succeed(now);
-                item.MarkDispatched(work.ClaimToken, now);
-                await context.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                return MaterializationFinalization.Dispatched;
+                return MaterializationFinalization.Prepared(startedWork, eligibility.Template);
             });
+
+            activeWork = preparation.StartedWork ?? work;
+            var finalization = preparation.Kind == MaterializationFinalizationKind.Prepared
+                ? await FinalizeStartedAttemptAsync(
+                    provider,
+                    context,
+                    activeWork,
+                    preparation.Template,
+                    cancellationToken)
+                : preparation;
 
             switch (finalization.Kind)
             {
-                case MaterializationFinalizationKind.Dispatched:
-                    LogDispatched(
+                case MaterializationFinalizationKind.Materialized:
+                    LogMaterialized(
                         logger,
                         work.OutboxItemId,
                         work.TenantId,
                         work.Kind.ToString(),
-                        work.AttemptNumber,
-                        NotificationChannel.InApp.ToString(),
+                        work.Channel.ToString(),
+                        finalization.AttemptNumber,
                         null);
-                    return NotificationDispatchOutcome.Empty with { Dispatched = 1 };
+                    return NotificationDispatchOutcome.Empty with { Materialized = 1 };
                 case MaterializationFinalizationKind.Suppressed:
                     LogSuppressed(
                         logger,
                         work.OutboxItemId,
                         work.TenantId,
                         work.Kind.ToString(),
+                        work.Channel.ToString(),
                         finalization.Code!,
                         null);
                     return NotificationDispatchOutcome.Empty with { Suppressed = 1 };
+                case MaterializationFinalizationKind.Deferred:
+                    LogDeferred(
+                        logger,
+                        work.OutboxItemId,
+                        work.TenantId,
+                        work.Channel.ToString(),
+                        finalization.Code!,
+                        null);
+                    return NotificationDispatchOutcome.Empty with { Deferred = 1 };
                 case MaterializationFinalizationKind.DeadLettered:
                     LogDeadLettered(
                         logger,
                         work.OutboxItemId,
                         work.TenantId,
                         work.Kind.ToString(),
-                        work.AttemptNumber,
+                        work.Channel.ToString(),
+                        finalization.AttemptNumber,
                         finalization.Code!,
                         null);
                     return NotificationDispatchOutcome.Empty with { DeadLettered = 1 };
+                case MaterializationFinalizationKind.Retry:
+                    return await RecordFailureAsync(activeWork, finalization.Code!, cancellationToken);
                 case MaterializationFinalizationKind.Stale:
                     return NotificationDispatchOutcome.Empty;
                 default:
@@ -648,32 +829,259 @@ internal sealed class NotificationDispatchService(
         }
         catch (Exception exception) when (IsRecoverable(exception))
         {
-            // The transaction rolled back, so nothing partial is visible. The failure is recorded in
-            // a clean scope, because the context that failed is holding tracked state that failed
-            // with it.
-            return await RecordFailureAsync(work, cancellationToken);
+            // The transaction rolled back, so nothing partial is visible. The failure is recorded in a
+            // clean scope, because the context that failed is holding tracked state that failed with it.
+            return await RecordFailureAsync(activeWork, NotificationFailureCodes.DispatchTransient, cancellationToken);
+        }
+        finally
+        {
+            if (recipientPolicyLease is not null)
+            {
+                await recipientPolicyLease.DisposeAsync();
+            }
         }
     }
 
-    private static async Task<(NotificationOutboxItem Item, NotificationDeliveryAttempt Attempt)> LoadClaimedAsync(
+    private async Task<MaterializationFinalization> FinalizeStartedAttemptAsync(
+        IServiceProvider provider,
+        GymDbContext context,
+        ClaimedWork work,
+        NotificationTemplate? preparedTemplate,
+        CancellationToken cancellationToken)
+    {
+        context.ChangeTracker.Clear();
+        return await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var now = clock.UtcNow;
+            var (delivery, attempt, item) = await LoadClaimedAsync(context, work, cancellationToken);
+            if (delivery.Status != NotificationDeliveryStatus.Processing ||
+                delivery.ClaimToken != work.ClaimToken ||
+                attempt.ClaimToken != work.ClaimToken ||
+                attempt.IsCompleted)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return MaterializationFinalization.Stale;
+            }
+
+            var template = preparedTemplate;
+            if (work.Channel == NotificationChannel.InApp && template is null)
+            {
+                var culture = await context.Tenants
+                    .AsNoTracking()
+                    .Where(candidate => candidate.Id == work.TenantId)
+                    .Select(candidate => candidate.DefaultCulture)
+                    .SingleAsync(cancellationToken);
+                if (!NotificationTemplateCatalog.TryResolve(work.Kind, culture, out template))
+                {
+                    throw new InvalidOperationException("The in-app template was not prepared.");
+                }
+            }
+
+            return work.Channel switch
+            {
+                NotificationChannel.InApp => await MaterializeInAppAsync(
+                    context,
+                    transaction,
+                    work,
+                    delivery,
+                    attempt,
+                    item,
+                    template!,
+                    now,
+                    cancellationToken),
+                NotificationChannel.Email => await MaterializeEmailAsync(
+                    provider,
+                    context,
+                    transaction,
+                    work,
+                    delivery,
+                    attempt,
+                    now,
+                    cancellationToken),
+                _ => throw new InvalidOperationException("Unknown notification channel."),
+            };
+        });
+    }
+
+    /// <summary>
+    /// The inbox row, its successful attempt and the completed in-app delivery, committed together.
+    /// </summary>
+    /// <remarks>
+    /// The email channel never reaches this method, so an email retry cannot write, rewrite or
+    /// duplicate an inbox row — and if it somehow did, the unique notification-per-source-intent index
+    /// would refuse it. The two channels touch entirely different tables.
+    /// </remarks>
+    private static async Task<MaterializationFinalization> MaterializeInAppAsync(
+        GymDbContext context,
+        IDbContextTransaction transaction,
+        ClaimedWork work,
+        NotificationChannelDelivery delivery,
+        NotificationDeliveryAttempt attempt,
+        NotificationOutboxItem item,
+        NotificationTemplate template,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        // A replay after a crash between the insert and the commit finds its own notification already
+        // there. That is a success, not a duplicate: the unique constraint on the source intent is what
+        // makes at-least-once delivery safe to repeat.
+        var alreadyMaterialized = await context.Notifications
+            .AnyAsync(existing => existing.SourceOutboxItemId == item.Id, cancellationToken);
+        if (!alreadyMaterialized)
+        {
+            context.Notifications.Add(Notification.Materialize(
+                work.TenantId,
+                work.RecipientUserId,
+                item.Id,
+                item.Kind,
+                template));
+        }
+
+        attempt.Succeed(now);
+        delivery.MarkMaterialized(work.ClaimToken, now);
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return MaterializationFinalization.Materialized(attempt.AttemptNumber);
+    }
+
+    /// <summary>
+    /// Resolves the recipient, renders the generic service wording, hands both to the configured
+    /// transport, and records only what happened.
+    /// </summary>
+    /// <remarks>
+    /// The address, the subject and the body exist as local variables for the duration of one call.
+    /// None of them is written to the delivery, the attempt, the intent, a dead-letter row or a log
+    /// line; the only place the content exists at all is inside the captured development adapter's own
+    /// memory. The recipient is resolved here rather than snapshotted at scheduling time precisely so
+    /// that a queue row never holds an address.
+    /// </remarks>
+    private static async Task<MaterializationFinalization> MaterializeEmailAsync(
+        IServiceProvider provider,
+        GymDbContext context,
+        IDbContextTransaction transaction,
+        ClaimedWork work,
+        NotificationChannelDelivery delivery,
+        NotificationDeliveryAttempt attempt,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var transport = provider.GetService<INotificationEmailTransport>();
+        if (transport is null)
+        {
+            // Configuration says email is available and composition disagrees. Fail closed rather than
+            // retrying forever against a transport that does not exist.
+            attempt.Suppress(now, NotificationSuppressionCodes.EmailChannelUnavailable);
+            delivery.Suppress(work.ClaimToken, now, NotificationSuppressionCodes.EmailChannelUnavailable);
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new MaterializationFinalization(
+                MaterializationFinalizationKind.Suppressed,
+                NotificationSuppressionCodes.EmailChannelUnavailable,
+                AttemptNumber: attempt.AttemptNumber);
+        }
+
+        var contacts = provider.GetRequiredService<INotificationRecipientContacts>();
+        var contact = await contacts.ResolveAsync(work.TenantId, work.RecipientUserId, cancellationToken);
+
+        // An unconfirmed address is not a delivery target. Mailing one both risks a stranger's inbox
+        // and teaches a mail provider that this sender writes to addresses nobody verified.
+        if (contact is null || !contact.EmailConfirmed)
+        {
+            attempt.Suppress(now, NotificationSuppressionCodes.EmailAddressUnavailable);
+            delivery.Suppress(work.ClaimToken, now, NotificationSuppressionCodes.EmailAddressUnavailable);
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new MaterializationFinalization(
+                MaterializationFinalizationKind.Suppressed,
+                NotificationSuppressionCodes.EmailAddressUnavailable,
+                AttemptNumber: attempt.AttemptNumber);
+        }
+
+        var template = NotificationTemplateCatalog.ServiceEmailV1;
+        var result = await transport.SendAsync(
+            new NotificationEmailMessage(
+                work.TenantId,
+                work.OutboxItemId,
+                NotificationDeliveryAttempt.BuildIdempotencyKey(work.OutboxItemId, NotificationChannel.Email),
+                contact.EmailAddress,
+                template.Title,
+                template.Body),
+            cancellationToken);
+
+        switch (result.Outcome)
+        {
+            case NotificationEmailTransportOutcome.Captured:
+                // Captured, and named that way. No provider was contacted, so no provider message
+                // identifier is recorded and no acceptance is claimed.
+                attempt.Succeed(now);
+                delivery.MarkMaterialized(work.ClaimToken, now, transport.AdapterName);
+                await context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return MaterializationFinalization.Materialized(attempt.AttemptNumber);
+            case NotificationEmailTransportOutcome.PermanentFailure:
+                var permanent = result.FailureCode ?? NotificationFailureCodes.EmailTransportPermanent;
+                attempt.FailPermanently(now, permanent);
+                delivery.MarkDeadLettered(work.ClaimToken, now, permanent);
+                await context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return new MaterializationFinalization(
+                    MaterializationFinalizationKind.DeadLettered,
+                    permanent,
+                    AttemptNumber: attempt.AttemptNumber);
+            default:
+                // Rolled back deliberately: the failure is recorded by RecordFailureAsync in a clean
+                // scope, which is also the path a thrown transport exception takes, so both look the
+                // same in history.
+                await transaction.RollbackAsync(cancellationToken);
+                return new MaterializationFinalization(
+                    MaterializationFinalizationKind.Retry,
+                    result.FailureCode ?? NotificationFailureCodes.EmailTransportTransient,
+                    AttemptNumber: attempt.AttemptNumber);
+        }
+    }
+
+    private static async Task<(NotificationChannelDelivery Delivery, NotificationOutboxItem Item)> LoadClaimedDeliveryAsync(
         GymDbContext context,
         ClaimedWork work,
         CancellationToken cancellationToken)
     {
+        var delivery = await context.NotificationChannelDeliveries
+            .SingleAsync(candidate => candidate.Id == work.ChannelDeliveryId, cancellationToken);
         var item = await context.NotificationOutboxItems
+            .AsNoTracking()
             .SingleAsync(candidate => candidate.Id == work.OutboxItemId, cancellationToken);
+        return (delivery, item);
+    }
+
+    private static async Task<(NotificationChannelDelivery Delivery, NotificationDeliveryAttempt Attempt, NotificationOutboxItem Item)> LoadClaimedAsync(
+        GymDbContext context,
+        ClaimedWork work,
+        CancellationToken cancellationToken)
+    {
+        var delivery = await context.NotificationChannelDeliveries
+            .SingleAsync(candidate => candidate.Id == work.ChannelDeliveryId, cancellationToken);
         var attempt = await context.NotificationDeliveryAttempts
-            .SingleAsync(candidate => candidate.Id == work.AttemptId, cancellationToken);
-        return (item, attempt);
+            .SingleAsync(
+                candidate => work.AttemptId != Guid.Empty
+                    ? candidate.Id == work.AttemptId
+                    : candidate.ChannelDeliveryId == work.ChannelDeliveryId &&
+                      candidate.ClaimToken == work.ClaimToken,
+                cancellationToken);
+        var item = await context.NotificationOutboxItems
+            .AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == work.OutboxItemId, cancellationToken);
+        return (delivery, attempt, item);
     }
 
     /// <summary>
-    /// Records a transient failure against the claim that suffered it, and either schedules the next
-    /// attempt from <c>notification-exponential-v1</c> or dead-letters the item because the schedule
-    /// is exhausted.
+    /// Records a transient failure against the claim that suffered it, and either schedules this
+    /// channel's next attempt from <c>notification-exponential-v1</c> or dead-letters the delivery
+    /// because its own schedule is exhausted. No other channel of the same notification is touched.
     /// </summary>
     private async Task<NotificationDispatchOutcome> RecordFailureAsync(
         ClaimedWork work,
+        string failureCode,
         CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -684,40 +1092,41 @@ internal sealed class NotificationDispatchService(
 
         try
         {
-            var (item, attempt) = await LoadClaimedAsync(context, work, cancellationToken);
+            var (delivery, attempt, _) = await LoadClaimedAsync(context, work, cancellationToken);
 
             // The lease may already have expired and been taken over while this attempt was running.
-            // The newer claimant owns the item now, so this one records nothing at all rather than
+            // The newer claimant owns the delivery now, so this one records nothing at all rather than
             // overwriting a result it no longer has any right to.
-            if (item.Status != NotificationOutboxStatus.Processing || item.ClaimToken != work.ClaimToken)
+            if (delivery.Status != NotificationDeliveryStatus.Processing ||
+                delivery.ClaimToken != work.ClaimToken ||
+                attempt.IsCompleted)
             {
                 return NotificationDispatchOutcome.Empty;
             }
 
-            attempt.FailTransiently(now, NotificationFailureCodes.DispatchTransient);
+            attempt.FailTransiently(now, failureCode);
+            var attemptNumber = attempt.AttemptNumber;
             var next = NotificationRetryPolicy.NextAttemptAtUtc(
-                work.AttemptNumber,
+                attemptNumber,
                 settings.MaximumAttempts,
                 now);
             if (next is { } nextAttemptAtUtc)
             {
-                item.MarkRetrying(
-                    work.ClaimToken,
-                    nextAttemptAtUtc,
-                    NotificationFailureCodes.DispatchTransient);
+                delivery.MarkRetrying(work.ClaimToken, nextAttemptAtUtc, failureCode);
                 await context.SaveChangesAsync(cancellationToken);
                 LogRetrying(
                     logger,
                     work.OutboxItemId,
                     work.TenantId,
                     work.Kind.ToString(),
-                    work.AttemptNumber,
-                    NotificationFailureCodes.DispatchTransient,
+                    work.Channel.ToString(),
+                    attemptNumber,
+                    failureCode,
                     null);
                 return NotificationDispatchOutcome.Empty with { Retried = 1 };
             }
 
-            item.MarkDeadLettered(
+            delivery.MarkDeadLettered(
                 work.ClaimToken,
                 now,
                 NotificationFailureCodes.AttemptsExhausted);
@@ -727,14 +1136,15 @@ internal sealed class NotificationDispatchService(
                 work.OutboxItemId,
                 work.TenantId,
                 work.Kind.ToString(),
-                work.AttemptNumber,
+                work.Channel.ToString(),
+                attemptNumber,
                 NotificationFailureCodes.AttemptsExhausted,
                 null);
             return NotificationDispatchOutcome.Empty with { DeadLettered = 1 };
         }
         catch (Exception exception) when (IsRecoverable(exception))
         {
-            // Even recording the failure failed. The claim lease still expires, so the item becomes
+            // Even recording the failure failed. The claim lease still expires, so the delivery becomes
             // visible again and nothing is lost; the next sweep abandons this attempt and retries.
             return NotificationDispatchOutcome.Empty;
         }
@@ -754,9 +1164,9 @@ internal sealed class NotificationDispatchService(
     /// the failure path re-reads the row, sees a claim it no longer holds, and records nothing at all.
     /// </para>
     /// <para>
-    /// No exception object reaches a log from this sweep. Each failure is classified into a stable
-    /// code first, because the exception is where an untrusted provider response or a connection
-    /// string would eventually turn up once an external adapter exists.
+    /// No exception object reaches a log from this sweep. Each failure is classified into a stable code
+    /// first, because the exception is where an untrusted provider response, a recipient address or a
+    /// connection string would turn up once a real transport exists.
     /// </para>
     /// </remarks>
     private static bool IsRecoverable(Exception exception) => exception switch
@@ -779,6 +1189,8 @@ internal sealed class NotificationDispatchService(
     private sealed record ClaimedWork(
         Guid TenantId,
         Guid OutboxItemId,
+        Guid ChannelDeliveryId,
+        NotificationChannel Channel,
         CommercialNotificationKind Kind,
         Guid RecipientUserId,
         Guid ClaimToken,
@@ -787,10 +1199,22 @@ internal sealed class NotificationDispatchService(
 
     private sealed record MaterializationFinalization(
         MaterializationFinalizationKind Kind,
-        string? Code = null)
+        string? Code = null,
+        ClaimedWork? StartedWork = null,
+        NotificationTemplate? Template = null,
+        int AttemptNumber = 0)
     {
-        public static MaterializationFinalization Dispatched { get; } =
-            new(MaterializationFinalizationKind.Dispatched);
+        public static MaterializationFinalization Materialized(int attemptNumber) =>
+            new(MaterializationFinalizationKind.Materialized, AttemptNumber: attemptNumber);
+
+        public static MaterializationFinalization Prepared(
+            ClaimedWork work,
+            NotificationTemplate? template) =>
+            new(
+                MaterializationFinalizationKind.Prepared,
+                StartedWork: work,
+                Template: template,
+                AttemptNumber: work.AttemptNumber);
 
         public static MaterializationFinalization Stale { get; } =
             new(MaterializationFinalizationKind.Stale);
@@ -798,21 +1222,33 @@ internal sealed class NotificationDispatchService(
 
     private enum MaterializationFinalizationKind
     {
-        Dispatched = 1,
+        Materialized = 1,
         Suppressed = 2,
         DeadLettered = 3,
         Stale = 4,
+        Deferred = 5,
+        Retry = 6,
+        Prepared = 7,
     }
+
+    private sealed record QuietHoursDeferral(DateTimeOffset NextAllowedAtUtc, string Code);
 
     private sealed record Eligibility(
         NotificationTemplate? Template,
         string? Suppression,
-        string? PermanentFailure)
+        string? PermanentFailure,
+        QuietHoursDeferral? Deferral = null)
     {
-        public static Eligibility Eligible(NotificationTemplate template) => new(template, null, null);
+        public static Eligibility InApp(NotificationTemplate template) => new(template, null, null);
+
+        /// <summary>Email renders one fixed generic wording, so it carries no per-kind template.</summary>
+        public static Eligibility Email() => new(null, null, null);
 
         public static Eligibility Suppress(string code) => new(null, code, null);
 
         public static Eligibility Permanent(string code) => new(null, null, code);
+
+        public static Eligibility Defer(DateTimeOffset nextAllowedAtUtc, string code) =>
+            new(null, null, null, new QuietHoursDeferral(nextAllowedAtUtc, code));
     }
 }

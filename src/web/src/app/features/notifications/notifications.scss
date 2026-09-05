@@ -71,3 +71,9 @@
 .error:empty {
   display: none;
 }
+
+.page-actions {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+}

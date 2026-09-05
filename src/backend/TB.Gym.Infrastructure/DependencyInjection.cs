@@ -173,10 +173,12 @@ public static class DependencyInjection
         services.AddScoped<IMediaPurgeService, MediaPurgeService>();
         services.AddHostedService<MediaPurgeWorker>();
         services.AddScoped<INotificationApplicationService, NotificationApplicationService>();
+        services.AddScoped<INotificationPreferenceService, NotificationPreferenceService>();
         // The API composes the dispatcher so that integration tests can drive one sweep
         // deterministically. It runs no notification sweep of its own: dispatch is the Worker
         // process's job, and the API deliberately hosts no timer for it.
         services.AddNotificationDispatch(configuration);
+        services.AddNotificationEmail(configuration, environment.IsProduction());
         services.AddOptions<MediaStorageOptions>()
             .Bind(configuration.GetSection(MediaStorageOptions.SectionName))
             .Validate(

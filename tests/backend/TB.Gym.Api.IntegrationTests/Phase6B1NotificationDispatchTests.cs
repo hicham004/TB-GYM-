@@ -48,7 +48,14 @@ public sealed partial class Phase6B1NotificationDispatchTests
             intents.Count,
             intents.Select(intent => intent.DeduplicationKey).Distinct(StringComparer.Ordinal).ToArray(),
             "Deduplication keys must be unique per workspace.");
-        Assert.IsTrue(intents.All(intent => intent.Status == "Pending"));
+        Assert.IsTrue(intents.All(intent => intent.Status == "Scheduled"));
+        // Every intent gets its channels in the same transaction. Email is off by default, so the plan
+        // is in-app alone until somebody opts in.
+        foreach (var intent in intents)
+        {
+            Assert.AreEqual(1L, await ChannelDeliveryCountAsync(intent.Id));
+            Assert.AreEqual("Pending", await DeliveryStatusAsync(intent.Id));
+        }
 
         // The same command with the same idempotency key resolves to the original enrollment, and
         // therefore to the original intents.
@@ -77,12 +84,12 @@ public sealed partial class Phase6B1NotificationDispatchTests
         var outcome = await SweepAsync();
 
         Assert.AreEqual(1, outcome.Claimed);
-        Assert.AreEqual(1, outcome.Dispatched);
+        Assert.AreEqual(1, outcome.Materialized);
         Assert.AreEqual(1L, await NotificationCountAsync(paymentRequired));
         var dispatched = await OutboxAsync(paymentRequired);
-        Assert.AreEqual("Dispatched", dispatched.Status);
+        Assert.AreEqual("Materialized", dispatched.Status);
         Assert.AreEqual(1, dispatched.AttemptCount);
-        Assert.IsNotNull(dispatched.DispatchedAtUtc);
+        Assert.IsNotNull(dispatched.MaterializedAtUtc);
         Assert.IsFalse(dispatched.HasClaim, "A terminal item must not keep a live claim.");
 
         var attempts = await AttemptsAsync(paymentRequired);
@@ -119,12 +126,12 @@ public sealed partial class Phase6B1NotificationDispatchTests
             enrollment,
             "cancel",
             new { reason = "The client changed their mind.", version = enrollment.Version });
-        Assert.AreEqual("Cancelled", await OutboxStatusAsync(paymentRequired));
+        Assert.AreEqual("Suppressed", await OutboxStatusAsync(paymentRequired));
 
         var outcome = await SweepAsync();
 
         Assert.AreEqual(0, outcome.Claimed);
-        Assert.AreEqual("Cancelled", await OutboxStatusAsync(paymentRequired));
+        Assert.AreEqual("Suppressed", await OutboxStatusAsync(paymentRequired));
         Assert.AreEqual(0L, await NotificationCountAsync(paymentRequired));
         Assert.AreEqual(0L, await AttemptCountAsync(paymentRequired));
     }
@@ -183,11 +190,16 @@ public sealed partial class Phase6B1NotificationDispatchTests
                 // Reproduces the interleaving the dispatcher's own recheck exists for: a worker had
                 // the item in flight when the coach cancelled, so the request's own cancellation
                 // could not reach it and the recheck is what has to catch up.
-                await ExecuteAsync(
+                await WithoutNotificationGuardsAsync(
                     """
+                    UPDATE notifications."ChannelDeliveries" d
+                    SET "Status" = 'Pending', "FailureCode" = NULL, "CompletedAtUtc" = NULL
+                    FROM notifications."OutboxItems" o
+                    WHERE o."Id" = d."OutboxItemId"
+                      AND o."AggregateId" = @id AND o."Kind" = 'PaymentRequired';
                     UPDATE notifications."OutboxItems"
-                    SET "Status" = 'Pending', "FailureCode" = NULL
-                    WHERE "AggregateId" = @id AND "Kind" = 'PaymentRequired'
+                    SET "Status" = 'Scheduled', "CancelledAtUtc" = NULL
+                    WHERE "AggregateId" = @id AND "Kind" = 'PaymentRequired';
                     """,
                     ("id", enrollment.Id));
             });
@@ -197,14 +209,14 @@ public sealed partial class Phase6B1NotificationDispatchTests
     public Task FullPaymentCommittedAfterClaimPreventsMaterialization() =>
         AssertPostClaimSuppressedAsync(
             "post-claim-payment",
-            NotificationSuppressionCodes.StateChanged,
+            NotificationSuppressionCodes.IntentCancelled,
             (enrollment, workspace) => PayInFullAsync(workspace.Coach, enrollment, 120m));
 
     [TestMethod]
     public Task CancellationCommittedAfterClaimPreventsMaterialization() =>
         AssertPostClaimSuppressedAsync(
             "post-claim-cancellation",
-            NotificationSuppressionCodes.EnrollmentCancelled,
+            NotificationSuppressionCodes.IntentCancelled,
             (enrollment, workspace) => ChangeStatusAsync(
                 workspace.Coach,
                 enrollment,
@@ -240,26 +252,26 @@ public sealed partial class Phase6B1NotificationDispatchTests
         var unpaid = await AssignPaidLaterAsync(workspace, 120m, "Training");
         var paymentRequired = await IntentIdAsync(unpaid.Id, CommercialNotificationKind.PaymentRequired);
         await SweepAsync();
-        Assert.AreEqual("Dispatched", await OutboxStatusAsync(paymentRequired));
+        Assert.AreEqual("Materialized", await OutboxStatusAsync(paymentRequired));
 
         // EnrollmentActivated: paying in full activates the enrollment and schedules the notice.
         await PayInFullAsync(workspace.Coach, unpaid, 120m);
         var activated = await IntentIdAsync(unpaid.Id, CommercialNotificationKind.EnrollmentActivated);
         await SweepAsync();
-        Assert.AreEqual("Dispatched", await OutboxStatusAsync(activated));
+        Assert.AreEqual("Materialized", await OutboxStatusAsync(activated));
 
         // EnrollmentEndingSoon: still Active three days before the end.
         var endingSoon = await IntentIdAsync(unpaid.Id, CommercialNotificationKind.EnrollmentEndingSoon);
         var endingSoonDue = (await OutboxAsync(endingSoon)).ScheduledAtUtc;
         Clock.Set(endingSoonDue);
         await SweepAsync();
-        Assert.AreEqual("Dispatched", await OutboxStatusAsync(endingSoon));
+        Assert.AreEqual("Materialized", await OutboxStatusAsync(endingSoon));
 
         // EnrollmentExpired: the tenant's own today has reached the exclusive end date.
         var expired = await IntentIdAsync(unpaid.Id, CommercialNotificationKind.EnrollmentExpired);
         Clock.Set((await OutboxAsync(expired)).ScheduledAtUtc);
         await SweepAsync();
-        Assert.AreEqual("Dispatched", await OutboxStatusAsync(expired));
+        Assert.AreEqual("Materialized", await OutboxStatusAsync(expired));
 
         // EnrollmentRenewed: a renewal exists and its own period has not ended.
         Clock.Set(StartInstant);
@@ -277,7 +289,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
             original.EndDateExclusive);
         var renewed = await IntentIdAsync(renewal.Id, CommercialNotificationKind.EnrollmentRenewed);
         await SweepAsync();
-        Assert.AreEqual("Dispatched", await OutboxStatusAsync(renewed));
+        Assert.AreEqual("Materialized", await OutboxStatusAsync(renewed));
 
         var renewalNotification = await NotificationCountAsync(renewed);
         Assert.AreEqual(1L, renewalNotification);
@@ -324,7 +336,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         await AssertSuppressedWithAsync(activatedIntent, NotificationSuppressionCodes.StateChanged);
         // The expiry notice for the same enrollment does hold at that instant, which is the other
         // side of the same boundary.
-        Assert.AreEqual("Dispatched", await OutboxStatusAsync(expiryIntent));
+        Assert.AreEqual("Materialized", await OutboxStatusAsync(expiryIntent));
 
         // EnrollmentRenewed once the renewal's own period has ended.
         Clock.Set(StartInstant);
@@ -392,7 +404,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         var paymentRequired = await IntentIdAsync(enrollment.Id, CommercialNotificationKind.PaymentRequired);
 
         // A schema version this build does not know, carrying something that must never escape.
-        await ExecuteAsync(
+        await WithoutIntentGuardAsync(
             """
             UPDATE notifications."OutboxItems"
             SET "PayloadJson" = @payload::jsonb
@@ -427,7 +439,9 @@ public sealed partial class Phase6B1NotificationDispatchTests
         var enrollment = await AssignPaidLaterAsync(workspace, 120m);
         var paymentRequired = await IntentIdAsync(enrollment.Id, CommercialNotificationKind.PaymentRequired);
 
-        await ExecuteAsync(
+        // The intent is immutable once scheduled, so the fixture rewrites the payload with that guard
+        // lifted rather than pretending the application could ever do this.
+        await WithoutIntentGuardAsync(
             """
             UPDATE notifications."OutboxItems"
             SET "PayloadJson" = @payload::jsonb
@@ -438,8 +452,8 @@ public sealed partial class Phase6B1NotificationDispatchTests
 
         var outcome = await SweepAsync();
 
-        Assert.AreEqual(1, outcome.Dispatched);
-        Assert.AreEqual("Dispatched", await OutboxStatusAsync(paymentRequired));
+        Assert.AreEqual(1, outcome.Materialized);
+        Assert.AreEqual("Materialized", await OutboxStatusAsync(paymentRequired));
         Assert.AreEqual(1L, await NotificationCountAsync(paymentRequired));
         Assert.AreEqual("Succeeded", (await AttemptsAsync(paymentRequired)).Single().Outcome);
     }
@@ -455,8 +469,9 @@ public sealed partial class Phase6B1NotificationDispatchTests
         var enrollment = await AssignPaidLaterAsync(workspace, 120m);
         var paymentRequired = await IntentIdAsync(enrollment.Id, CommercialNotificationKind.PaymentRequired);
 
-        // A client profile that does not exist in this workspace, or anywhere.
-        await ExecuteAsync(
+        // A client profile that does not exist in this workspace, or anywhere. Written with the
+        // immutable-intent guard lifted, because only a fixture may rewrite a scheduled intent.
+        await WithoutIntentGuardAsync(
             """
             UPDATE notifications."OutboxItems"
             SET "PayloadJson" = @payload::jsonb
@@ -512,10 +527,10 @@ public sealed partial class Phase6B1NotificationDispatchTests
         // The fault clears and the third attempt lands.
         Faults.FailMaterializationCommit = false;
         Clock.Set(afterSecond.NextAttemptAtUtc);
-        Assert.AreEqual(1, (await SweepAsync()).Dispatched);
+        Assert.AreEqual(1, (await SweepAsync()).Materialized);
 
         var dispatched = await OutboxAsync(paymentRequired);
-        Assert.AreEqual("Dispatched", dispatched.Status);
+        Assert.AreEqual("Materialized", dispatched.Status);
         Assert.AreEqual(3, dispatched.AttemptCount);
         Assert.IsNull(dispatched.FailureCode);
         // The scheduled instant is provenance and is never rewritten by a retry.
@@ -664,7 +679,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         Clock.Advance(TimeSpan.FromSeconds(1));
         var outcome = await SweepAsync();
         Assert.AreEqual(1, outcome.Reclaimed);
-        Assert.AreEqual(1, outcome.Dispatched);
+        Assert.AreEqual(1, outcome.Materialized);
 
         var attempts = await AttemptsAsync(paymentRequired);
         Assert.HasCount(2, attempts);
@@ -675,7 +690,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         Assert.AreEqual("Succeeded", attempts[1].Outcome);
 
         var dispatched = await OutboxAsync(paymentRequired);
-        Assert.AreEqual("Dispatched", dispatched.Status);
+        Assert.AreEqual("Materialized", dispatched.Status);
         Assert.IsFalse(dispatched.HasClaim);
         Assert.AreEqual(1L, await NotificationCountAsync(paymentRequired));
     }
@@ -695,20 +710,29 @@ public sealed partial class Phase6B1NotificationDispatchTests
         Clock.Advance(TimeSpan.FromSeconds(ClaimLeaseSeconds));
         var replacement = await SweepAsync().WaitAsync(TimeSpan.FromSeconds(30));
         Assert.AreEqual(1, replacement.Reclaimed);
-        Assert.AreEqual(1, replacement.Dispatched);
+        Assert.AreEqual(1, replacement.Materialized);
 
         CheckpointBarrier.Release();
         var stale = await original.WaitAsync(TimeSpan.FromSeconds(30));
         CheckpointBarrier.Disarm();
 
         Assert.AreEqual(1, stale.Claimed, "The original really did own the first committed claim.");
-        Assert.AreEqual(0, stale.Dispatched, "A stale claimant cannot finalize the newer result.");
-        Assert.AreEqual("Dispatched", await OutboxStatusAsync(paymentRequired));
+        Assert.AreEqual(0, stale.Materialized, "A stale claimant cannot finalize the newer result.");
+        var settled = await OutboxAsync(paymentRequired);
+        Assert.AreEqual("Materialized", settled.Status);
+        Assert.IsFalse(settled.HasClaim, "The replacement released its lease; the stale one owns nothing.");
         Assert.AreEqual(1L, await NotificationCountAsync(paymentRequired));
+
+        // The original was held between its committed claim and its first eligibility recheck, so it
+        // held a reservation and had started no attempt. A reservation costs no capacity — that is
+        // exactly what lets a post-claim quiet-hours deferral release the lease for free — so the
+        // replacement starts attempt 1 rather than inheriting an abandoned number. The abandoned-
+        // attempt path is the sibling case above, where the crash happens after the attempt started.
+        Assert.AreEqual(1, settled.AttemptCount, "An interrupted reservation spends no attempt.");
         var attempts = await AttemptsAsync(paymentRequired);
-        Assert.HasCount(2, attempts);
-        Assert.AreEqual("Abandoned", attempts[0].Outcome);
-        Assert.AreEqual("Succeeded", attempts[1].Outcome);
+        Assert.HasCount(1, attempts);
+        Assert.AreEqual(1, attempts[0].AttemptNumber);
+        Assert.AreEqual("Succeeded", attempts[0].Outcome, "The replacement's attempt, not the stale one's.");
     }
 
     /// <summary>
@@ -742,16 +766,16 @@ public sealed partial class Phase6B1NotificationDispatchTests
             // The contender runs to completion while the first sweep holds the row lock.
             var second = await SweepAsync();
             Assert.AreEqual(0, second.Claimed, $"Round {round}: the locked item must be skipped, not taken.");
-            Assert.AreEqual(0, second.Dispatched);
+            Assert.AreEqual(0, second.Materialized);
 
             Barrier.Release();
             var firstOutcome = await first;
             Barrier.Disarm();
 
             Assert.AreEqual(1, Barrier.Arrived, $"Round {round}: the barrier matched nothing, so nothing raced.");
-            Assert.AreEqual(1, firstOutcome.Dispatched);
+            Assert.AreEqual(1, firstOutcome.Materialized);
             Assert.AreEqual(1L, await NotificationCountAsync(paymentRequired));
-            Assert.AreEqual("Dispatched", await OutboxStatusAsync(paymentRequired));
+            Assert.AreEqual("Materialized", await OutboxStatusAsync(paymentRequired));
             var attempts = await AttemptsAsync(paymentRequired);
             Assert.HasCount(1, attempts);
             Assert.AreEqual(1, attempts[0].AttemptNumber);
@@ -783,12 +807,12 @@ public sealed partial class Phase6B1NotificationDispatchTests
         Barrier.Disarm();
 
         Assert.AreEqual(2, Barrier.Arrived, "Both sweeps must have reached the barrier at once.");
-        Assert.AreEqual(2, outcomes.Sum(outcome => outcome.Dispatched));
+        Assert.AreEqual(2, outcomes.Sum(outcome => outcome.Materialized));
         Assert.IsTrue(
-            outcomes.All(outcome => outcome.Dispatched >= 1),
+            outcomes.All(outcome => outcome.Materialized >= 1),
             "Each dispatcher must have delivered something rather than one doing all the work.");
-        Assert.AreEqual("Dispatched", await OutboxStatusAsync(alphaIntent));
-        Assert.AreEqual("Dispatched", await OutboxStatusAsync(betaIntent));
+        Assert.AreEqual("Materialized", await OutboxStatusAsync(alphaIntent));
+        Assert.AreEqual("Materialized", await OutboxStatusAsync(betaIntent));
         Assert.AreEqual(1L, await NotificationCountAsync(alphaIntent));
         Assert.AreEqual(1L, await NotificationCountAsync(betaIntent));
     }
@@ -816,14 +840,14 @@ public sealed partial class Phase6B1NotificationDispatchTests
         var outcome = await SweepAsync();
 
         Assert.AreEqual(2, outcome.Claimed, "The cap is 2 in total, not 2 per workspace.");
-        Assert.AreEqual(2, outcome.Dispatched);
+        Assert.AreEqual(2, outcome.Materialized);
         var statuses = new List<string>();
         foreach (var intent in intents)
         {
             statuses.Add(await OutboxStatusAsync(intent));
         }
 
-        Assert.AreEqual(2, statuses.Count(status => status == "Dispatched"));
+        Assert.AreEqual(2, statuses.Count(status => status == "Materialized"));
         Assert.AreEqual(4, statuses.Count(status => status == "Pending"));
 
         // Nothing is lost: the backlog drains over further sweeps.
@@ -832,7 +856,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         await SweepAsync();
         foreach (var intent in intents)
         {
-            Assert.AreEqual("Dispatched", await OutboxStatusAsync(intent));
+            Assert.AreEqual("Materialized", await OutboxStatusAsync(intent));
         }
     }
 
@@ -856,7 +880,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         var continuouslyBusy = new List<Workspace>();
         foreach (var workspace in workspaces)
         {
-            if (await OutboxStatusAsync(originalIntents[workspace.TenantId]) == "Dispatched")
+            if (await OutboxStatusAsync(originalIntents[workspace.TenantId]) == "Materialized")
             {
                 continuouslyBusy.Add(workspace);
             }
@@ -880,7 +904,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         foreach (var intent in originalIntents.Values)
         {
             Assert.AreEqual(
-                "Dispatched",
+                "Materialized",
                 await OutboxStatusAsync(intent),
                 "A due workspace must progress even while the initially selected workspaces replenish.");
         }
@@ -905,7 +929,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         var outcome = await SweepAsync();
 
         Assert.AreEqual(5, outcome.Claimed, "The sparse workspace's unused share must be reused.");
-        Assert.AreEqual(5, outcome.Dispatched);
+        Assert.AreEqual(5, outcome.Materialized);
         Assert.IsLessThanOrEqualTo(5, outcome.Claimed);
     }
 
@@ -927,7 +951,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         Assert.AreEqual(0L, await NotificationCountAsync(paymentRequired), "The notification must not survive.");
         var row = await OutboxAsync(paymentRequired);
         Assert.AreEqual("Pending", row.Status, "The outbox row must not have been completed.");
-        Assert.IsNull(row.DispatchedAtUtc);
+        Assert.IsNull(row.MaterializedAtUtc);
         var attempts = await AttemptsAsync(paymentRequired);
         Assert.HasCount(1, attempts);
         Assert.AreNotEqual("Succeeded", attempts[0].Outcome, "The attempt must not have been completed as a success.");
@@ -936,7 +960,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
         // And the item is still owed, which is the point of rolling back rather than half-committing.
         Faults.FailMaterializationCommit = false;
         Clock.Set(row.NextAttemptAtUtc);
-        Assert.AreEqual(1, (await SweepAsync()).Dispatched);
+        Assert.AreEqual(1, (await SweepAsync()).Materialized);
         Assert.AreEqual(1L, await NotificationCountAsync(paymentRequired));
     }
 
@@ -977,7 +1001,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
 
             Faults.DatabaseUnavailable = false;
             await WaitForAsync(
-                async () => await OutboxStatusAsync(paymentRequired) == "Dispatched",
+                async () => await OutboxStatusAsync(paymentRequired) == "Materialized",
                 "the worker to dispatch once the database returned");
         }
         finally

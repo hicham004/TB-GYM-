@@ -15,6 +15,7 @@ namespace TB.Gym.Api.IntegrationTests;
 public sealed class Phase6B1NotificationMigrationUpgradeTests
 {
     private const string MigrationBeforeDispatch = "Phase6FinalHardening";
+    private const string MigrationWithDispatch = "Phase6B1NotificationDispatch";
     private static readonly Guid RecipientUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid TenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly DateTimeOffset ScheduledAtUtc = new(2026, 8, 30, 9, 0, 0, TimeSpan.Zero);
@@ -97,9 +98,14 @@ public sealed class Phase6B1NotificationMigrationUpgradeTests
                 command.Parameters.AddWithValue("dispatched", ScheduledAtUtc.AddMinutes(2));
             });
 
+        // Stops at Phase 6B-1 deliberately. This test is about that migration's own upgrade of the
+        // Phase 2 states; Phase 6B-3A's split of that lifecycle into per-channel deliveries is proved
+        // separately, from this same shape, in Phase6B3ANotificationMigrationUpgradeTests.
         await using (var afterUpgrade = CreateContext())
         {
-            await afterUpgrade.Database.MigrateAsync();
+            await afterUpgrade.Database.GetInfrastructure()
+                .GetRequiredService<IMigrator>()
+                .MigrateAsync(MigrationWithDispatch);
         }
 
         var rows = await ReadRowsAsync();

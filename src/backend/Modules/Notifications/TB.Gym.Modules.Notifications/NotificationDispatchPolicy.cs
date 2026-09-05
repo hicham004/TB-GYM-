@@ -2,7 +2,7 @@ namespace TB.Gym.Modules.Notifications;
 
 /// <summary>
 /// Stable, bounded, non-sensitive classifications. These reach logs, the owner-only dead-letter view
-/// and the outbox row itself, so every one of them must be safe to show to somebody who is not the
+/// and the channel-delivery row itself, so every one of them must be safe to show to somebody who is not the
 /// recipient: no address, no name, no amount, no payload content, no exception text.
 /// </summary>
 public static class NotificationFailureCodes
@@ -24,12 +24,19 @@ public static class NotificationFailureCodes
 
     /// <summary>A claim lease expired before its attempt finished.</summary>
     public const string ClaimExpired = "notification-claim-expired";
+
+    /// <summary>The configured email transport refused the message in a way that may work later.</summary>
+    public const string EmailTransportTransient = "notification-email-transport-transient";
+
+    /// <summary>The configured email transport refused the message permanently.</summary>
+    public const string EmailTransportPermanent = "notification-email-transport-permanent";
 }
 
 /// <summary>
 /// Why a still-eligible-looking intent stopped being worth delivering. Suppression is not failure:
 /// nothing went wrong, the business reason simply no longer holds, so it costs no delivery attempt
-/// and produces no dead letter.
+/// and produces no dead letter. A decision made before work starts costs no attempt; one discovered
+/// by the required post-claim recheck closes the already-started attempt as suppressed.
 /// </summary>
 public static class NotificationSuppressionCodes
 {
@@ -48,6 +55,37 @@ public static class NotificationSuppressionCodes
 
     /// <summary>The kind-specific state this notification described no longer holds.</summary>
     public const string StateChanged = "notification-state-changed";
+
+    /// <summary>The business withdrew the intent before this channel had been claimed.</summary>
+    public const string IntentCancelled = "notification-intent-cancelled";
+
+    /// <summary>
+    /// The recipient's current preference no longer wants this channel. Suppresses email only; the
+    /// in-app delivery of the same intent is untouched, because preferences never remove it.
+    /// </summary>
+    public const string EmailOptedOut = "notification-email-opted-out";
+
+    /// <summary>Marketing selection without current affirmative consent. Fails closed.</summary>
+    public const string MarketingConsentMissing = "notification-marketing-consent-missing";
+
+    /// <summary>No usable address, or an address the account has never confirmed.</summary>
+    public const string EmailAddressUnavailable = "notification-email-address-unavailable";
+
+    /// <summary>This deployment has no configured email transport any more.</summary>
+    public const string EmailChannelUnavailable = "notification-email-channel-unavailable";
+
+    /// <summary>The workspace time zone cannot be resolved, so quiet hours cannot be honoured.</summary>
+    public const string QuietHoursUnresolvable = "notification-quiet-hours-unresolvable";
+}
+
+/// <summary>
+/// Why a delivery was moved forward without being tried. A deferral is neither a failure nor a
+/// suppression: nothing went wrong and the notification is still wanted, this is simply not a moment
+/// the recipient agreed to be interrupted in.
+/// </summary>
+public static class NotificationDeferralCodes
+{
+    public const string QuietHours = "notification-email-quiet-hours";
 }
 
 /// <summary>

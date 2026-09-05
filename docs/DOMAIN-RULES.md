@@ -600,16 +600,25 @@ from PostgreSQL because Redis cannot replay a lost send. Realtime publication th
 runs in the API host; the notification Worker keeps no hub, no listener, no exposed port and no Redis
 dependency.
 
-**NOT-001** In-app, email, and WhatsApp notifications share a domain notification but maintain
-separate delivery attempts. Retries are idempotent; provider acknowledgement is not confused
-with user read status. Phase 6B-1 implements this for the in-app channel: the scheduled outbox
-intent, the domain notification, each channel delivery attempt, and the reader's `ReadAtUtc` are
-four separate facts, and no code writes a delivery outcome into read state.
+**NOT-001** In-app, email, and WhatsApp notifications share one logical notification and keep
+entirely separate delivery state per channel. Retries are idempotent; provider acknowledgement is
+never confused with user read status. Phase 6B-3A makes the separation structural: the scheduled
+outbox intent, each channel's own `NotificationChannelDelivery`, each attempt on that delivery, the
+domain notification, and the reader's `ReadAtUtc` are five separate facts, and no code writes one
+into another. A channel's status, due instant, attempt count, claim lease, retry schedule, terminal
+result and transport metadata belong to that channel alone, so email exhausting its retries cannot
+un-write an in-app row that was already materialized, and an in-app success cannot mark an email
+sent. Failure, suppression, exhaustion or deferral on one channel never blocks another.
 
-**NOT-002** An outbox item is a durable scheduled intent, never evidence of delivery. Its lifecycle
-is `Pending -> Processing -> Dispatched | DeadLettered`, with a retryable failure returning it to
-`Pending` at a later attempt instant, and `Cancelled` reachable from either non-terminal state. A
-terminal item holds no live claim and accepts no further transition.
+**NOT-002** An outbox item is the immutable logical notification — who should be told what, and
+when it became due — and never evidence of delivery. Since Phase 6B-3A it carries no dispatch
+lifecycle of its own; the lifecycle belongs to each channel delivery and runs
+`Pending -> Processing -> Materialized | Suppressed | DeadLettered`, with a retryable failure
+returning it to `Pending` at a later attempt instant and a quiet-hours deferral moving that instant
+forward without consuming an attempt. A terminal delivery holds no live claim and accepts no further
+transition. The ten facts these words distinguish are defined exactly once, in `ARCHITECTURE.md`
+section 18; in particular `Materialized` means this channel produced its own artefact and asserts
+nothing about a provider, a recipient's mail server, or a human being.
 
 **NOT-003** Cancellation and dead-lettering are different facts. Cancelled means the business reason
 for the notification no longer holds and carries a stable suppression code. If that is known before
@@ -629,6 +638,11 @@ materialization is made idempotent by a unique notification-per-source-intent co
 provider will be at-least-once with a stable idempotency key, never exactly-once. With the default
 maximum of six, attempts 1–5 retry after 1m, 5m, 15m, 1h and 6h, and attempt 6 dead-letters. Allowed
 configured maxima are 1–20; above six, the 6h ceiling repeats until the configured maximum.
+Since Phase 6B-3A a claim is a **reservation** and starting the attempt is a separate step taken only
+after the final eligibility recheck passes. That is what lets a post-claim quiet-hours deferral
+release the lease for free (NOT-014). A reservation interrupted before the attempt started has no
+attempt to abandon and spends no capacity; a lease that expires after the attempt started is still
+recorded as `Abandoned` and still spends one, so maximum + 1 remains impossible either way.
 
 **NOT-005** Eligibility is re-established server-side both inside the claim transaction and again in
 the materialization transaction before a delayed notification is rendered: active workspace,
@@ -653,7 +667,93 @@ bounded, and carries no recipient, payload, wording or exception.
 **NOT-008** Account confirmation, password-reset and invitation delivery stay outside the generic
 outbox. Their links carry single-use credentials, and the outbox is a durable, replayable,
 operator-visible queue row; a token there would become a credential store with no designed retention.
-Merging them requires a tokenless design in which the sender mints the token at send time.
+Merging them requires a tokenless design in which the sender mints the token at send time. ADR 0021 fixes
+that design and deliberately implements none of it in Phase 6B-3A: nothing about account
+confirmation, password reset or invitation mail changes yet.
+
+**NOT-009** Channels are selected once, in the same transaction that schedules the intent, and the
+reason is snapshotted on the row. In-app is selected for every supported notification type and no
+preference removes it; this slice exposes no way to switch it off. Email is off by default and is
+selected only when the recipient has explicitly opted in and the deployment actually has an email
+transport. Two consequences are deliberate and tested. Opting in **later never resurrects history**:
+notifications scheduled before the decision have no email delivery row and never gain one. Opting
+out **still stops work already scheduled**: selection is what creates the row, and the recheck
+before materialization is what refuses to act on it. Because the selection reason, its policy
+version and the purpose are snapshotted, why a delivery exists can be explained later without
+consulting a preference that has since changed.
+
+**NOT-010** Every notification carries an explicit owned purpose — `ServiceTransactional` or
+`Marketing` — decided from its kind by a code-owned catalogue, never inferred from the wording of a
+template. Every notification this repository produces today is service/transactional: it states a
+fact about a coaching relationship or a service the recipient already has. `Marketing` reserves the
+vocabulary; nothing produces it, and channel planning fails it closed without current affirmative
+marketing consent. Marketing email may never ride on the service-email preference, and no
+promotional message may be reclassified as transactional to escape a consent or opt-out obligation.
+Lebanon's [Law 81/2018 Article 32](https://nhrclb.org/archives/8228) constrains unsolicited
+promotional messages and requires a free opt-out, which is why the separation is structural rather
+than editorial. This is a conservative engineering policy and not a substitute for Lebanese counsel
+reviewing a production marketing programme. See ADR 0021 and ADR 0003.
+
+**NOT-011** Every email opt-in, opt-out and future marketing-consent decision appends an immutable
+`NotificationConsentEvent`. Evidence is tenant- and user-scoped and records the channel, the
+purpose, whether consent was granted or withdrawn, the UTC instant, the named policy and its
+version, the source, and the authenticated actor. Earlier evidence is never overwritten or deleted
+when a preference changes. Evidence deliberately holds no IP address, user-agent string, email
+address, rendered message or secret, because none of those is needed to explain the decision. The
+mutable current preference is a read optimization and must agree with its evidence: each current
+email decision points at the exact event that explains it, a composite foreign key keeps that event
+in the same workspace and subject, and a database check refuses an enabled channel whose evidence
+does not say `Granted`.
+
+**NOT-012** A member's notification preferences are their own. Reads and writes are scoped to the
+active workspace and to the signed-in member, derived from the authentication cookie; no request
+shape carries a subject, so a coach or an owner cannot opt another member into email, silently or
+otherwise. Preferences are mutable aggregates and carry optimistic concurrency: a stale version
+conflicts rather than overwriting. Preference commands carry a UUID idempotency key bound to a
+fingerprint of the normalized payload — an identical retry replays the original result, concurrent
+identical retries converge on one winner, and a reused key with a changed payload conflicts.
+
+**NOT-013** Email quiet hours are an optional half-open local interval `[start, end)` interpreted in
+the workspace's **current** configured IANA time zone, never the browser's. A window whose end
+precedes its start spans midnight, which is the ordinary case. A window whose start equals its end
+is refused rather than silently read as a whole day, because it is at least as likely to be an
+unfinished choice, and guessing wrong either buries every email forever or delivers all of them at
+3am. An unknown or structurally invalid zone fails closed: quiet hours that cannot be evaluated
+suppress rather than assume now is a fine time to email somebody.
+
+**NOT-014** Quiet hours defer; they never fail. An email that becomes due inside the window has its
+next attempt instant moved to the next allowed instant and **consumes no attempt**, so a member with
+an eight-hour quiet window does not exhaust a retry budget overnight. The deferral is durable state
+on the delivery rather than something a worker holds in memory, so a deferred row is invisible to
+the sweep instead of being polled. In-app materialization is unaffected — passive persisted state
+interrupts nobody. The current quiet-hours policy is rechecked immediately before materialization,
+so a window set moments ago still defers a pending email. A stable deferral code records why,
+carrying nothing sensitive.
+
+**NOT-015** The named policy `notification-quiet-hours-v1` resolves both awkward daylight-saving
+cases in one documented direction: forward. Deciding whether an instant *is* quiet needs only
+UTC-to-local conversion, which is unambiguous on every day in every zone, so it has no special
+cases — a window a spring-forward gap removes contains no instant that day, and a window an autumn
+fold repeats contains both passes. Deciding when quiet hours *end* needs the reverse conversion. A
+local end time that occurs twice resolves to its **latest** UTC instant, because membership treats
+both passes as quiet and releasing at the first would contradict that. A local end time that never
+occurs resolves to the instant the gap finishes. Both rules move forward, never backward, and the
+result is re-tested against the window before it is used.
+
+**NOT-016** Email in Phase 6B-3A is materialized and captured, never sent. An owned transport
+interface is the seam a provider will one day sit behind; the only implementation captures in memory
+for development and tests, contacts nothing, and reports `Captured`. The vocabulary has no
+`Delivered` or `Sent` member, because this phase can establish capture and nothing beyond it.
+`ProviderMessageId` and provider acceptance stay null, and database checks refuse to set them.
+Production email is disabled by default and **fails closed**: enabling the channel without a real
+configured provider refuses to start, and the captured adapter is refused outside Development even
+when email is disabled. No recipient address, rendered subject, rendered body, action URL or token
+is written to the outbox, a channel delivery, an attempt, dead-letter data or a log; the recipient
+is resolved only at materialization through a narrow contract that itself reverifies active
+membership, and the message exists in memory for the duration of one transport call. Email wording
+is the same kind of code-owned, versioned, generic template NOT-006 requires: it may tell somebody
+to sign in to TB Gym, and may not disclose health data, payment details, client identity,
+conversation text or an invitation token.
 
 **MED-001** Object bytes live in object storage; the database owns metadata, tenant, purpose,
 content type, size, checksum, status, and retention. Upload authorization validates type and
@@ -830,11 +930,25 @@ At minimum, later migrations should enforce:
 | One-way check-in response lifecycle and frozen submitted answers                                                     | Application guard plus PostgreSQL trigger                                                             |
 | One submit and one review per response                                                                               | Unique `(TenantId, ResponseId, EventType)`                                                            |
 | One in-app notification per outbox intent                                                                            | Unique `(TenantId, SourceOutboxItemId)`                                                               |
-| One delivery attempt per intent, channel and number                                                                  | Unique `(TenantId, OutboxItemId, Channel, AttemptNumber)`                                             |
-| A live claim only on a Processing outbox item                                                                        | Check on `ClaimToken`/`ClaimExpiresAtUtc`/`Status`                                                    |
-| Terminal outbox instants match the status                                                                            | Checks pairing `Dispatched`/`DeadLettered` with their instants                                        |
+| One delivery attempt per channel delivery and number                                                                 | Unique `(TenantId, ChannelDeliveryId, AttemptNumber)`                                                 |
+| A live claim only on a Processing outbox item or channel delivery                                                    | Checks pairing `ClaimToken`/`ClaimExpiresAtUtc` with `Status` on both tables                          |
+| Terminal outbox and delivery instants match the status                                                               | Checks pairing each terminal status with exactly its own instants                                     |
 | Immutable completed delivery attempts and delivered wording                                                          | Application guard plus PostgreSQL trigger                                                             |
 | Notification child belongs to an intent of the same workspace                                                        | Composite FK `(TenantId, OutboxItemId)`                                                               |
+| At most one delivery per intent and channel                                                                          | Unique `(TenantId, OutboxItemId, Channel)`                                                            |
+| A channel delivery belongs to an intent of the same workspace and purpose                                            | Composite FKs `(TenantId, OutboxItemId)` and `(TenantId, OutboxItemId, Purpose)`                      |
+| An attempt belongs to one channel delivery and agrees with its channel                                               | Composite FK `(TenantId, ChannelDeliveryId, Channel)`                                                 |
+| Attempt count is consistent with started attempts and never exceeds the maximum                                      | Check plus deferred chain assertion over `1..AttemptCount`                                            |
+| Only a current claimant finalizes a delivery, and a terminal row never restarts                                      | Claim-token index plus PostgreSQL trigger comparing OLD and NEW                                       |
+| No provider message ID or acceptance for an adapter that contacted no provider                                       | Checks forcing both null for in-app and for every captured outcome                                    |
+| A quiet-hours deferral moves the attempt instant forward and consumes no attempt                                     | Check pairing the deferral code and instant with an unchanged attempt count                           |
+| Only vocabulary the application owns reaches a notification status or code column                                    | Enumerated checks on status, channel, purpose, transport, failure and deferral codes                  |
+| One notification preference row per member and workspace                                                             | Unique `(TenantId, UserId)` plus composite membership FK                                              |
+| An enabled email channel matches append-only consent evidence saying `Granted`                                       | Check plus composite FK `(TenantId, UserId, ConsentEventId)` into the evidence                        |
+| Append-only consent evidence, recorded only by its own subject                                                       | Check `ActorUserId = UserId` plus PostgreSQL trigger refusing update and delete                       |
+| Quiet hours are present together and never start and end at the same local time                                      | Checks on the preference row and on every spent preference command                                    |
+| One spent preference idempotency key per workspace                                                                   | Unique `(TenantId, IdempotencyKey)` plus composite actor-membership FK                                |
+| Preference, consent and command facts never cross a workspace                                                        | Composite FKs through `(TenantId, UserId)` memberships                                                |
 | One direct conversation per workspace, client and coach                                                              | Unique `(TenantId, ClientProfileId, CoachUserId)`                                                     |
 | Exactly one Coach side and one Client side per conversation                                                          | Unique `(TenantId, ConversationId, Role)` plus a deferred constraint trigger                          |
 | A message sender is an explicit participant of that conversation                                                     | Composite FK `(TenantId, ConversationId, SenderUserId)`                                               |

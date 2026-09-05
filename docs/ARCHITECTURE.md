@@ -510,12 +510,15 @@ that attempt. Every started attempt counts, including an abandoned lease, and no
 create maximum + 1. Permanent failures dead-letter immediately. Suppression and dead-lettering are
 different terminal facts. A pre-claim suppression starts no attempt; if authoritative state changes
 after the claim commits, the already-started attempt remains in history and completes as `Suppressed`.
-Tenant owners get a bounded dead-letter view carrying an id, a kind, instants, an attempt count and a
-stable failure code — no recipient, payload, wording or exception. `AccountEmailSender` and
-`InvitationDelivery` keep their existing behaviour:
-their links carry single-use credentials, which do not belong in a durable replayable queue row.
-Email and WhatsApp are still not implemented. See
-`docs/adr/0018-notification-dispatch-and-in-app-inbox-v1.md`.
+Tenant owners get a bounded dead-letter view carrying an id, a kind, a channel, instants, an attempt
+count and a stable failure code — no recipient, payload, wording or exception. `AccountEmailSender`
+and `InvitationDelivery` keep their existing behaviour:
+their links carry single-use credentials, which do not belong in a durable replayable queue row, and
+ADR 0021 designs the tokenless scheme that would let them join without one. Since Phase 6B-3A this
+retry policy, this claim protocol and this dead-letter view all belong to a **channel delivery**
+rather than to the intent, so each channel retries, suppresses and exhausts on its own; see section
+18. Email is materialized and captured behind an owned transport port with no provider, and WhatsApp
+is still not implemented. See `docs/adr/0018-notification-dispatch-and-in-app-inbox-v1.md`.
 
 Media, nutrition data, AI, and payment providers sit behind module-owned ports. Provider
 payloads and credentials do not leak into domain objects. AI output is untrusted input: it
@@ -932,3 +935,100 @@ else: a send during an outage is lost, and PostgreSQL plus catch-up is what make
 backplane connection string is never logged, and the backplane's own endpoint chatter is filtered out.
 
 See `docs/adr/0020-authorized-realtime-messaging-delivery.md`.
+
+## 18. Phase 6B-3A independent notification channels
+
+```text
+commercial event
+  -> NotificationOutboxItem (immutable logical notification: recipient, kind, purpose, due instant)
+  -> NotificationChannelPlanner, in the same transaction
+       -> NotificationChannelDelivery(InApp)  — always, reason snapshotted
+       -> NotificationChannelDelivery(Email)  — only on an explicit opt-in, transport available
+  -> Worker sweep, per delivery: FOR UPDATE SKIP LOCKED, recheck, claim token + lease
+       -> NotificationDeliveryAttempt (belongs to one delivery, immutable once completed)
+  -> recheck again immediately before materialization
+       InApp  -> Notification (inbox row) -> ReadAtUtc, the reader's own act
+       Email  -> recipient resolved now -> message built in memory -> INotificationEmailTransport
+```
+
+The 6B-1 outbox carried one mutable dispatch lifecycle even though attempts already named a channel.
+That was honest while exactly one channel existed and stops being honest the moment a second one
+does: a row cannot be both "the inbox row was written" and "the email is waiting to retry". The
+lifecycle therefore moved off the intent onto a per-channel delivery root, unique on
+`(TenantId, NotificationOutboxItemId, Channel)`. Status, due instant, attempt count, claim token and
+lease, retry schedule, terminal result, failure code and transport metadata all belong to the
+delivery; nothing about one channel can read, block or complete another. Every Phase 6B-1 guarantee
+is preserved and now holds per channel: PostgreSQL commits before side effects, exact maximum-attempt
+enforcement, abandoned started attempts consuming capacity, post-claim suppression remaining an
+auditable terminal attempt, stale claimants finalizing nothing, the bounded
+`notification-exponential-v1` schedule, one global sweep cap, and fair tenant scheduling.
+
+Claiming and starting an attempt are deliberately two steps. A claim is a **reservation** — it locks
+the row and takes a lease, and costs nothing. The attempt is started only after the final eligibility
+recheck succeeds, which is what makes a post-claim quiet-hours deferral free: the lease is released
+and the due instant moves without spending any of the delivery's budget. A reservation interrupted
+before that point therefore leaves no attempt row to abandon, while a lease that expires after the
+attempt started is still recorded as `Abandoned` and still consumes capacity, so maximum + 1 remains
+impossible.
+
+**Ten facts, never conflated.** The word "delivered" is not used, because in this system it has no
+single referent:
+
+| Fact                      | Where it lives                                        | What it means                                                     |
+| ------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------- |
+| Logically scheduled       | `NotificationOutboxItem`                              | A business event decided somebody should be told something.       |
+| Channel selected          | `NotificationChannelDelivery` exists, reason snapshot | This channel was chosen for it, and the row records why.          |
+| Claimed                   | `Status = Processing` plus a live token and lease     | One dispatcher reserved it; nothing has been produced yet.        |
+| Materialized              | `Status = Materialized`, `MaterializedAtUtc`          | This channel produced its own artefact: an inbox row, or a message handed to the configured transport. Never a provider claim. |
+| Provider accepted         | `ProviderAcceptedAtUtc`, `ProviderMessageId`          | Reserved. Null in this phase; database checks refuse both.        |
+| Recipient server accepted | not modelled                                          | A future webhook fact. Deliberately absent rather than implied.   |
+| Application acknowledged  | messaging ACK rows (6B-2B)                            | A client merged a projection. Unrelated to email.                 |
+| Read by the user          | `Notification.ReadAtUtc`                              | The reader's own act. No delivery outcome ever writes it.         |
+| Suppressed                | `Status = Suppressed` plus a stable code              | The reason to use this channel went away. Not a failure.          |
+| Exhausted                 | `Status = DeadLettered` after the maximum attempt     | Eligible, and could not be safely completed.                      |
+
+A quiet-hours **deferral** is none of these: it moves `NextAttemptAtUtc` forward, consumes no attempt,
+and leaves the delivery `Pending` and invisible to the sweep until its instant arrives.
+
+**Channels are planned once and rechecked twice.** `NotificationChannelPlanner` runs inside the
+scheduling transaction and is a pure function of the purpose and a snapshot of the recipient's
+preferences, so a domain test can enumerate it exhaustively. In-app is unconditional. Email requires
+an explicit opt-in and an available transport. Because selection happens once, opting in later never
+resurrects historical notifications; because the dispatcher rechecks membership, relationship
+eligibility, the current preference and quiet hours both inside the claim transaction and again
+immediately before materialization, opting out afterwards still stops a pending email — and an
+opt-out that lands after the claim commits completes the already-started attempt as `Suppressed`
+rather than sending.
+
+**Preferences, consent and quiet hours.** `NotificationChannelPreference` is one row per member per
+workspace, guarded by optimistic concurrency and by an idempotency key bound to a fingerprint of the
+normalized payload. Every email decision also appends an immutable `NotificationConsentEvent`, and
+the current preference points at the exact event that explains it, so the fast read and the audit
+trail cannot disagree — a database check refuses an enabled channel whose evidence does not say
+`Granted`. Quiet hours are a half-open local window in the workspace's current IANA zone under the
+named `notification-quiet-hours-v1` policy; equal start and end is refused, an unknown zone fails
+closed, and both daylight-saving edge cases resolve forward (a repeated end time to its latest
+instant, an end time inside a gap to where the gap finishes). The API exposes only
+`GET`/`PUT /api/notifications/preferences` for the caller's own settings: the subject comes from the
+authentication cookie, so no request shape lets a coach or owner opt somebody else in.
+
+**Email has a port and no provider.** `INotificationEmailTransport` is the seam; the only
+implementation captures in memory outside Production and contacts nothing. Configuration fails closed
+in both composition roots — an unknown adapter, an enabled channel with nothing behind it, or the
+captured adapter in Production each refuse startup, and production composition registers no transport
+at all rather than a disabled one somebody could resolve. The recipient address is resolved at
+materialization through `INotificationRecipientContacts`, which reverifies active membership and
+returns nothing for a removed member; the Notifications module never touches Identity's `DbSet`, and
+an architecture test asserts it holds no reference that would let it. Address, subject and body exist
+only in memory for one transport call: no column, dead-letter row or log line carries any of them,
+and an integration test dumps every notification column and every captured log line to prove it.
+
+**Angular.** `/notifications/settings` is a lazy child route showing that in-app is on and cannot
+be switched off here, toggling service email, and configuring or clearing quiet hours beside the
+workspace's zone. Every piece of state is owned by a member-and-workspace generation and discarded
+when that pair changes, so a slow reply for the workspace just left cannot land on the current one. A
+refused save never resets the form from the server, so a conflict or validation error costs a click
+rather than the whole edit. Nothing is written to browser storage.
+
+See `docs/adr/0021-tokenless-action-email-materialization.md` for the action-email design this phase
+deliberately does not implement.
