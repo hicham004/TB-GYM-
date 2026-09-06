@@ -34,9 +34,25 @@ below is external setup and operations, none of which this repository automates.
   addresses that hard-bounced.
 - [ ] Confirm `Notifications:Dispatch:MaximumAttempts` still fits inside the provider's idempotency
   retention window. Startup refuses a schedule that outruns it, so revisit whenever either changes.
-- [ ] Replace development captured-action URLs with production delivery and remove action
-  links from API responses outside Development. Account confirmation, password reset and invitation
-  mail are still on their own inline paths; ADR 0021 holds the design for moving them.
+- [x] Move account confirmation, password reset and invitation mail onto the tokenless design in
+      ADR 0021, and remove action links from API responses outside Development. Development links now
+      come from the captured adapter, which Production refuses; password recovery returns no link in
+      any environment. (Phase 6B-3C)
+- [ ] Set `Application:PublicBaseUrl` to the production origin and list it in
+  `Application:PublicOriginAllowlist`. Both are validated at startup in the API **and** the Worker,
+  and both refuse to start on anything that is not a bare HTTPS origin — a value carrying credentials,
+  a query string, a fragment or a path is refused outright. No action link is ever built from a
+  request header, so this setting is the only thing that decides where a reset link points.
+- [ ] Point `DataProtection:KeyPath` at the **same** persisted key ring for the API and the Worker,
+  and confirm both are running with it. The Worker mints confirmation and reset tokens and the API
+  unprotects them; two key rings make every link this system sends fail on click, with an error that
+  reads as "invalid token" and is really a deployment mistake.
+- [ ] Confirm the Worker is deployed and sweeping. Action mail is materialized by the Worker, so a
+  deployment without one queues confirmations and resets that nobody ever receives — and unlike a
+  commercial notification, nobody can proceed without them.
+- [ ] Review `Application:ActionMail:MaximumAttempts` against the provider's idempotency retention.
+  Startup refuses a schedule that outruns it. Keep it small: every durable attempt mints a fresh live
+  credential, and a link nobody used inside the schedule is one the person has already asked for again.
 - [ ] Keep invitation/reset tokens, message bodies, and personal data out of logs.
 
 ## Domain, TLS, and edge
@@ -162,6 +178,25 @@ below is external setup and operations, none of which this repository automates.
   dashboard. Ingestion is idempotent on the provider's event identifier, so a replay converges.
 - [ ] Decide a retention policy for provider-event history and dead letters before either grows past
   what an operator can read. Neither holds personal data; both accumulate.
+
+## Action mail readiness
+
+Account confirmation, password reset and client invitations run on ADR 0021's tokenless
+materialization since Phase 6B-3C; see `ARCHITECTURE.md` section 20 and `DOMAIN-RULES.md` NOT-025
+through NOT-034. These are the operational checks that stay live afterwards.
+
+| Ongoing check | What to watch | Why it matters |
+| --- | --- | --- |
+| Dead-lettered action mail | `identity."ActionMailRequests"` and `invitations."ActionMailRequests"` with `Status = 'DeadLettered'` | Somebody could not register, recover an account or be invited. Alert on any of these; unlike a commercial notification, the person is blocked |
+| Suppression codes | `FailureCode` on suppressed requests | `already-confirmed` and `credential-changed` are normal and healthy. A rise in `origin-unavailable` is a configuration fault |
+| Unresolved recovery requests | Requests with `SubjectUserId IS NULL` | Expected and harmless — this is the enumeration-resistant path. A sudden spike is somebody probing for accounts, and the rate limiter is the control |
+| Generation growth | `LogicalSendGeneration` on pending invitations | Repeated resends mean a coach is not getting through; each one kills the previous link, so a client with an old tab will see it stop working |
+| Token record growth | `invitations."TokenIssues"` | Grows with every send and retry. Holds no address and no credential, but it grows, and it has no retention policy yet |
+
+There is deliberately **no operator view** for either queue. Exposing one is a decision about who may
+read that somebody asked to reset their password, and reusing the tenant dead-letter surface would be
+exactly the cross-workspace visibility ADR 0021 refuses. Until that decision is made, these are
+database queries an operator runs deliberately.
 
 ## Release gate
 

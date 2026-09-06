@@ -39,9 +39,31 @@ public sealed partial class GymDbContext(
 
     public DbSet<ClientInvitation> ClientInvitations => Set<ClientInvitation>();
 
-    public DbSet<InvitationDelivery> InvitationDeliveries => Set<InvitationDelivery>();
+    /// <summary>
+    /// Every high-entropy invitation token this deployment has ever minted, as a one-way hash.
+    /// </summary>
+    /// <remarks>
+    /// Append-only evidence, committed before the provider is invoked, so a link a provider accepted
+    /// can never become invalid because a later commit acknowledgement was lost.
+    /// </remarks>
+    public DbSet<InvitationTokenIssue> InvitationTokenIssues => Set<InvitationTokenIssue>();
 
-    public DbSet<AccountEmailDelivery> AccountEmailDeliveries => Set<AccountEmailDelivery>();
+    public DbSet<InvitationActionMailRequest> InvitationActionMailRequests =>
+        Set<InvitationActionMailRequest>();
+
+    public DbSet<InvitationActionMailAttempt> InvitationActionMailAttempts =>
+        Set<InvitationActionMailAttempt>();
+
+    /// <summary>
+    /// The global Identity action-mail queue: account confirmation and password reset.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately without a tenant. These mails belong to an account rather than to a workspace, and
+    /// ADR 0021 refuses giving them a fabricated one to make them fit the tenant outbox.
+    /// </remarks>
+    public DbSet<AccountActionMailRequest> AccountActionMailRequests => Set<AccountActionMailRequest>();
+
+    public DbSet<AccountActionMailAttempt> AccountActionMailAttempts => Set<AccountActionMailAttempt>();
 
     public DbSet<BodyweightObservation> BodyweightObservations => Set<BodyweightObservation>();
 
@@ -264,6 +286,7 @@ public sealed partial class GymDbContext(
         ConfigureTenancy(builder);
         ConfigureClients(builder);
         ConfigureInvitations(builder);
+        ConfigureActionMail(builder);
         ConfigureProgress(builder);
         ConfigureCommercial(builder);
         ConfigureNotifications(builder);
@@ -301,23 +324,6 @@ public sealed partial class GymDbContext(
             entity.Property(user => user.PreferredCulture).HasMaxLength(20).HasDefaultValue("en-LB");
             entity.Property(user => user.CreatedAtUtc).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(user => user.UpdatedAtUtc).HasDefaultValueSql("CURRENT_TIMESTAMP");
-        });
-
-        builder.Entity<AccountEmailDelivery>(entity =>
-        {
-            entity.ToTable("AccountEmailDeliveries", "identity");
-            entity.HasKey(delivery => delivery.Id);
-            entity.Property(delivery => delivery.Recipient).HasMaxLength(320).IsRequired();
-            entity.Property(delivery => delivery.Purpose).HasConversion<string>().HasMaxLength(32);
-            entity.Property(delivery => delivery.Status).HasConversion<string>().HasMaxLength(32);
-            entity.Property(delivery => delivery.ProviderMessageId).HasMaxLength(200);
-            entity.Property(delivery => delivery.FailureCode).HasMaxLength(100);
-            entity.HasIndex(delivery => new { delivery.UserId, delivery.CreatedAtUtc });
-            entity.HasOne<ApplicationUser>()
-                .WithMany()
-                .HasForeignKey(delivery => delivery.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-            ConfigureAuditable(entity);
         });
 
         builder.Entity<IdentityRole<Guid>>().ToTable("Roles", "identity");
@@ -490,9 +496,7 @@ public sealed partial class GymDbContext(
             entity.Property(invitation => invitation.LastName).HasMaxLength(100).IsRequired();
             entity.Property(invitation => invitation.PhoneNumber).HasMaxLength(32);
             entity.Property(invitation => invitation.BirthDate).HasColumnType("date");
-            entity.Property(invitation => invitation.TokenHash).HasMaxLength(64).IsFixedLength().IsRequired();
             entity.Property(invitation => invitation.Status).HasConversion<string>().HasMaxLength(32);
-            entity.HasIndex(invitation => invitation.TokenHash).IsUnique();
             entity.HasIndex(invitation => new { invitation.TenantId, invitation.NormalizedEmail })
                 .IsUnique()
                 .HasFilter("\"Status\" = 'Pending'");
@@ -514,33 +518,22 @@ public sealed partial class GymDbContext(
                 table.HasCheckConstraint(
                     "CK_ClientInvitations_AcceptedState",
                     "\"Status\" <> 'Accepted' OR (\"AcceptedByUserId\" IS NOT NULL AND \"AcceptedAtUtc\" IS NOT NULL)");
+                // A generation starts at 1 and, going forward, only ever moves by exactly one through a
+                // deliberate resend. The trigger enforces the transition; this refuses the nonsensical
+                // value outright.
                 table.HasCheckConstraint(
-                    "CK_ClientInvitations_TokenHash",
-                    "char_length(\"TokenHash\") = 64");
+                    "CK_ClientInvitations_LogicalSendGeneration",
+                    "\"LogicalSendGeneration\" >= 1 AND \"LogicalSendGeneration\" <= \"SendCount\"");
+                // The invited address and its normalized form must agree. Direct SQL that changes one
+                // without the other is how an invitation would quietly point at a different mailbox
+                // than the one every uniqueness rule was evaluated against.
+                table.HasCheckConstraint(
+                    "CK_ClientInvitations_NormalizedEmail",
+                    "\"NormalizedEmail\" = upper(\"Email\")");
             });
             ConfigureAuditable(entity);
         });
 
-        builder.Entity<InvitationDelivery>(entity =>
-        {
-            entity.ToTable("InvitationDeliveries", "invitations");
-            entity.HasKey(delivery => delivery.Id);
-            entity.Property(delivery => delivery.Recipient).HasMaxLength(320).IsRequired();
-            entity.Property(delivery => delivery.Channel).HasConversion<string>().HasMaxLength(16);
-            entity.Property(delivery => delivery.Status).HasConversion<string>().HasMaxLength(32);
-            entity.Property(delivery => delivery.ProviderMessageId).HasMaxLength(200);
-            entity.Property(delivery => delivery.FailureCode).HasMaxLength(100);
-            entity.HasIndex(delivery => new { delivery.TenantId, delivery.InvitationId, delivery.AttemptNumber })
-                .IsUnique();
-            entity.HasOne<ClientInvitation>()
-                .WithMany()
-                .HasForeignKey(delivery => new { delivery.TenantId, delivery.InvitationId })
-                .HasPrincipalKey(invitation => new { invitation.TenantId, invitation.Id })
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasQueryFilter(delivery =>
-                tenantContext.HasTenant && delivery.TenantId == tenantContext.TenantId);
-            ConfigureAuditable(entity);
-        });
     }
 
     private void ConfigureProgress(ModelBuilder builder)
@@ -877,6 +870,94 @@ public sealed partial class GymDbContext(
         {
             throw new InvalidOperationException(
                 "Provider message relationships are never deleted; they are what a provider event resolves through.");
+        }
+
+        // Action-mail evidence. An issued invitation token is a fact about a credential that may be
+        // sitting in somebody's mailbox right now, so the row is written once and afterwards only ever
+        // gains one of two write-once facts: that it was revoked, or that it was redeemed. Database
+        // triggers are the guarantee; these catch the mistake in the code path that made it, with a
+        // message that names the intended operation.
+        if (ChangeTracker.Entries<InvitationTokenIssue>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException(
+                "Issued invitation tokens are never deleted; revocation and redemption are recorded state.");
+        }
+
+        foreach (var entry in ChangeTracker.Entries<InvitationTokenIssue>()
+                     .Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.Property(item => item.TokenHash).IsModified ||
+                entry.Property(item => item.TenantId).IsModified ||
+                entry.Property(item => item.InvitationId).IsModified ||
+                entry.Property(item => item.LogicalSendGeneration).IsModified ||
+                entry.Property(item => item.ActionMailRequestId).IsModified ||
+                entry.Property(item => item.ActionMailAttemptId).IsModified ||
+                entry.Property(item => item.AttemptNumber).IsModified ||
+                entry.Property(item => item.IssuedAtUtc).IsModified ||
+                entry.Property(item => item.ExpiresAtUtc).IsModified)
+            {
+                throw new InvalidOperationException(
+                    "Issued invitation token evidence is immutable; only revocation and redemption may be recorded.");
+            }
+
+            if (entry.OriginalValues.GetValue<DateTimeOffset?>(nameof(InvitationTokenIssue.RevokedAtUtc)) is not null &&
+                entry.Property(item => item.RevokedAtUtc).IsModified)
+            {
+                throw new InvalidOperationException("An invitation token revocation is recorded once.");
+            }
+
+            if (entry.OriginalValues.GetValue<DateTimeOffset?>(nameof(InvitationTokenIssue.RedeemedAtUtc)) is not null &&
+                entry.Property(item => item.RedeemedAtUtc).IsModified)
+            {
+                throw new InvalidOperationException("An invitation token is single-use.");
+            }
+        }
+
+        // Action-mail request state and attempt history explain afterwards why a confirmation, a reset
+        // or an invitation did or did not reach somebody. Neither is ever deleted, and a completed
+        // attempt is a historical fact rather than a row to correct.
+        if (ChangeTracker.Entries<AccountActionMailRequest>().Any(item => item.State == EntityState.Deleted) ||
+            ChangeTracker.Entries<AccountActionMailAttempt>().Any(item => item.State == EntityState.Deleted) ||
+            ChangeTracker.Entries<InvitationActionMailRequest>().Any(item => item.State == EntityState.Deleted) ||
+            ChangeTracker.Entries<InvitationActionMailAttempt>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException(
+                "Action mail request state and attempt history are never deleted; a terminal outcome is recorded state.");
+        }
+
+        foreach (var entry in ChangeTracker.Entries<AccountActionMailAttempt>()
+                     .Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<ActionMailAttemptOutcome>(nameof(AccountActionMailAttempt.Outcome))
+                != ActionMailAttemptOutcome.Started)
+            {
+                throw new InvalidOperationException("A completed account action mail attempt is immutable.");
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<InvitationActionMailAttempt>()
+                     .Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<InvitationActionMailOutcome>(nameof(InvitationActionMailAttempt.Outcome))
+                != InvitationActionMailOutcome.Started)
+            {
+                throw new InvalidOperationException("A completed invitation action mail attempt is immutable.");
+            }
+        }
+
+        // A logical-send generation moves by exactly one, only forward, and only through a deliberate
+        // resend. A skipped generation would orphan tokens that are still in mailboxes; a repeated one
+        // would resurrect links a coach deliberately killed.
+        foreach (var entry in ChangeTracker.Entries<ClientInvitation>()
+                     .Where(item => item.State == EntityState.Modified))
+        {
+            var previous = entry.OriginalValues.GetValue<int>(nameof(ClientInvitation.LogicalSendGeneration));
+            var current = entry.Entity.LogicalSendGeneration;
+            if (current != previous && current != previous + 1)
+            {
+                throw new InvalidOperationException(
+                    "An invitation logical-send generation advances by exactly one deliberate resend at a time.");
+            }
         }
 
         // Delivery history. A channel delivery's terminal outcome and its attempts are what explain

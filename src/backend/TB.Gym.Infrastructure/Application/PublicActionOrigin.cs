@@ -44,17 +44,6 @@ public sealed class PublicActionOriginOptions
     public IList<string> PublicOriginAllowlist { get; set; } = [];
 
     /// <summary>
-    /// Whether a request may be materialized inline, in the same call that enqueued it.
-    /// </summary>
-    /// <remarks>
-    /// Development and test only, and refused outright in Production. It exists so a development
-    /// environment can hand a caller the captured link immediately instead of waiting for a Worker
-    /// sweep; it runs exactly the same claim, recheck, mint, render and transport sequence a sweep
-    /// runs, so it is not a second implementation of anything.
-    /// </remarks>
-    public bool InlineActionMailDispatch { get; set; } = true;
-
-    /// <summary>
     /// The validated origin, or null when the configuration is unusable. Never falls back to a
     /// default: a defaulted origin is how an action link quietly points at localhost in production.
     /// </summary>
@@ -64,15 +53,9 @@ public sealed class PublicActionOriginOptions
     /// The startup rule, in one place so the API, the Worker and the tests all assert the same thing.
     /// Returns null when the configuration is acceptable, or the reason it is not.
     /// </summary>
-    public string? Validate(bool isDevelopment, bool isProduction)
+    public string? Validate(bool isDevelopment)
     {
         ResolvedOrigin = null;
-        if (isProduction && InlineActionMailDispatch)
-        {
-            return $"{SectionName}:InlineActionMailDispatch cannot be enabled in Production; " +
-                "action mail is materialized by the Worker.";
-        }
-
         if (TryNormalizeOrigin(PublicBaseUrl, isDevelopment, out var origin, out var error) is false)
         {
             return $"{SectionName}:PublicBaseUrl {error}";

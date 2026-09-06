@@ -665,11 +665,12 @@ member's notifications. Marking read is idempotent and one-way. Dead-letter visi
 bounded, and carries no recipient, payload, wording or exception.
 
 **NOT-008** Account confirmation, password-reset and invitation delivery stay outside the generic
-outbox. Their links carry single-use credentials, and the outbox is a durable, replayable,
-operator-visible queue row; a token there would become a credential store with no designed retention.
-Merging them requires a tokenless design in which the sender mints the token at send time. ADR 0021 fixes
-that design and deliberately implements none of it in Phase 6B-3A: nothing about account
-confirmation, password reset or invitation mail changes yet.
+tenant outbox, permanently. Their links carry single-use credentials, and the outbox is a durable,
+replayable, operator-visible queue row; a token there would become a credential store with no designed
+retention. Since Phase 6B-3C they run on ADR 0021's tokenless materialization instead, on their own
+queues, under NOT-025 through NOT-034. `CommercialNotificationPayload` still carries no token by
+construction, and no action-mail row ever reaches the notification outbox, the dead-letter view or a
+channel delivery.
 
 **NOT-009** Channels are selected once, in the same transaction that schedules the intent, and the
 reason is snapshotted on the row. In-app is selected for every supported notification type and no
@@ -844,6 +845,112 @@ has a committed default, and no validation message quotes a configured value. A 
 provider answers `404` on the webhook route. No recipient address, rendered subject or body, API key,
 signature, raw webhook body or provider diagnostic text is written to any notification column or any
 log line.
+
+**NOT-025** Action mail lives on two queues, and the separation is structural rather than a
+convention. Account confirmation and password reset belong to a **global** Identity account: they can
+happen before the account has any membership, one account may belong to several workspaces, and no
+workspace operator is entitled to know that somebody asked to reset their password. Their queue
+therefore has **no `TenantId` column at all** — a column that does not exist cannot be fabricated,
+joined on, or included in a tenant-scoped export, which is stronger than any rule about a nullable
+one. Client invitations are the opposite: an invitation is a workspace's own act, so that queue is
+tenant-owned, tenant-filtered, tenant-composite throughout and written only inside an active tenant
+scope. Assigning a fabricated, arbitrary or "first available" workspace to global mail so it could
+share one queue is refused.
+
+**NOT-026** An action-mail queue row holds identifiers, provenance and schema version, and never a
+credential. It may not contain a raw token, a complete action URL, a query string carrying one, a
+recipient address copied for delivery, a rendered subject or body, or provider authorization data.
+The token is minted **at materialization**, from the same Identity token provider for account mail and
+from a cryptographic random source for invitations, lives in a local variable for the duration of one
+transport call, and is dropped. The address is resolved at materialization too. A queue row that never
+held a credential cannot leak one, whatever a backup, a support export, an operator view or a log
+aggregator later does with it.
+
+**NOT-027** Action mail is mail the recipient asked for seconds earlier and cannot proceed without,
+so it is **not** subject to tenant notification preferences, marketing consent or commercial quiet
+hours, and it has no unsubscribe surface. It remains `ServiceTransactional`. Global Identity mail
+requires no workspace membership — requiring one would make an account unrecoverable precisely when it
+has none. Invitation eligibility is authorized by the invitation aggregate through a narrow
+Invitations-owned contract, never by membership: the invitee is by definition not a member yet, which
+is what an invitation is for.
+
+**NOT-028** These facts are kept distinct and are never written from one another: action requested;
+logical send created; transport attempt started; token minted; provider accepted; recipient server
+accepted; action redeemed; action expired; action revoked; explicit resend; transport retry. Dispatch
+is claimed and leased with `FOR UPDATE SKIP LOCKED`, bounded attempts, a durable
+`action-mail-exponential-v1` retry schedule (1 minute, 5 minutes, then a 30-minute ceiling, default
+maximum 4) and stale-claim protection equal in strength to the notification dispatcher's. A committed
+claim is a lease on work and never durable authorization to send: every attempt re-establishes
+authorization immediately before minting. Confirmation is suppressed once the address is confirmed,
+changed, removed or the account is blocked; password reset once the password or security stamp has
+moved, the reset has been used, or the account is removed or blocked; an invitation once it is
+accepted, revoked, expired, retargeted or superseded by a later generation. Suppression is not
+failure: it costs no attempt when discovered before a claim, closes the already-started attempt when
+discovered after one, and never produces a dead letter.
+
+**NOT-029** Public password recovery answers identically for every address. The same status and the
+same body are returned whether or not the address belongs to an eligible account; both paths perform
+one index probe and one durable insert, so neither is measurably slower; the existing
+`RateLimitPolicies.PublicAuthentication` limit is unchanged; and no existence information reaches a
+log, a metric, a queue-visible error or a response when the provider or queue is unavailable. The
+unresolved request carries **no address, no digest of one and nothing reversible to one**, and
+terminates safely at materialization with a stable suppression code. Nothing is minted synchronously
+on either path, and no development-only link is returned for recovery in any environment — a property
+that held only outside Production would be a property nobody tests in the environment that matters.
+
+**NOT-030** Every action link is built from one validated, configured, allowlisted public origin.
+`Host`, `X-Forwarded-Host`, `Origin` and every other request header are untrusted and never reach a
+link; the link builder holds no `HttpContext` and is usable from a process that has no requests.
+Outside Development the origin must be HTTPS and must appear in the configured allowlist, and a value
+carrying credentials, a query string, a fragment or any path is refused at startup. Both composition
+roots validate identically and refuse to start otherwise. Token-bearing pages send
+`Referrer-Policy: no-referrer`, remove the exchanged token from the address bar by history
+replacement rather than a new entry, load no third-party resource, and never place a token in local
+storage, session storage, analytics, error tracking or a log.
+
+**NOT-031** A deliberate resend and a transport retry are different operations on different durable
+state, and conflating them is a defect. A **resend** is a person's decision: it advances the
+invitation's logical-send generation by exactly one, immediately revokes every token issued under
+every earlier generation with a recorded reason, recalculates expiry forward from the new generation,
+creates a new durable request, and is authorized, rate-limited, idempotent, concurrency-checked and
+audited. A **transport retry** is the dispatcher's own: it re-enters the same request and therefore
+the same generation, mints and appends a new token, and revokes nothing — because the earlier link may
+already be in the recipient's mailbox and invalidating it would produce a "no longer valid" page for
+an invitation nobody revoked. One request exists per invitation and generation, so a retry has nowhere
+to write a new generation even if it tried, and the database refuses a generation that skips, repeats
+or moves backwards.
+
+**NOT-032** Every invitation token is recorded as an append-only high-entropy hash tagged with its
+invitation, workspace, logical-send generation, materialization request and attempt, issue and expiry
+instants, and its redemption or revocation. **The hash is committed before the provider is invoked**,
+so a link a provider accepted can never be one this system has no record of and therefore refuses; the
+database enforces the ordering by refusing to mark a request materialized when the attempt that
+finalized it minted no token. Issued token evidence is immutable and never deleted; revocation and
+redemption are each write-once and mutually exclusive. Acceptance recognises any unexpired, unrevoked,
+unredeemed hash of the invitation's **current** generation, is single-use, and is concurrency-safe
+through both the invitation's optimistic concurrency and the token's write-once redemption. A token of
+a superseded generation answers exactly like an unknown one, because telling its holder that the
+invitation exists would disclose the workspace to whoever holds an old mail.
+
+**NOT-033** Action mail does not reuse the commercial notification's stable per-intent provider
+idempotency key. A re-minted token changes the rendered payload, and a provider may answer one key
+presented with different content by refusing rather than sending. So the key is **per attempt**: one
+in-memory HTTP exchange of one materialization uses one token and one key; a later durable attempt
+mints a new token and presents a new key; and a unique index plus a shape check tie each key to
+exactly one request and attempt number, so no two attempts can present the same key. Earlier tokens
+of the current generation stay valid throughout. The guarantee is **at-least-once, never
+exactly-once**: provider ambiguity may produce two valid emails, and no retry ever invalidates a link
+that may already have been received.
+
+**NOT-034** Action-mail wording is a code-owned, versioned, generic allowlist compiled into the
+assembly, with no Razor, no HTML, no database-authored markup and no format string a caller can
+influence. The only value composed into a body is the action URL the application built from its own
+validated origin. A message carries only what the requested action needs: no workspace name, no coach
+or client name, no product, amount, date, health-adjacent fact or conversation content, and no
+database identifier beyond what the link itself must carry. Recipient, raw token, complete URL and
+rendered content exist only in memory during one materialization and inside controlled captured test
+adapters; no durable row, dead-letter view or operator surface exposes them, and logs carry stable
+identifiers and codes only.
 
 **MED-001** Object bytes live in object storage; the database owns metadata, tenant, purpose,
 content type, size, checksum, status, and retention. Upload authorization validates type and

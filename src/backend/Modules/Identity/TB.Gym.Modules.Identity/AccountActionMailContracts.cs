@@ -9,7 +9,7 @@ namespace TB.Gym.Modules.Identity;
 /// materialization, and the link is built from validated configuration. A caller that could supply any
 /// of the three would be a caller that could redirect somebody else's credential.
 /// </remarks>
-public interface IAccountActionMailQueue
+public interface IAccountActionMailScheduler
 {
     Task<AccountActionMailEnqueueResult> RequestAsync(
         AccountActionMailCommand command,

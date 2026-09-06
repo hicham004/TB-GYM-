@@ -687,11 +687,81 @@ entirely; production refuses missing secrets, captured configuration and insecur
 cannot fabricate provider acceptance, rewrite provider history or bypass suppression; and no address,
 body, key, signature or raw payload reaches PostgreSQL or a log.
 
+### Phase 6B-3C: tokenless account, password-reset and invitation mail (complete)
+
+Status: complete, implemented 2026-09-05. See
+`docs/adr/0021-tokenless-action-email-materialization.md` (implementation appendix),
+`ARCHITECTURE.md` section 20 and `DOMAIN-RULES.md` NOT-025 through NOT-034.
+
+- **Two queues, because there are two owners.** Account confirmation and password reset belong to a
+  global Identity account and are queued in `identity."ActionMailRequests"`, which has **no `TenantId`
+  column at all** — ADR 0021 refuses a fabricated workspace, and a column that does not exist cannot be
+  fabricated, joined on or swept into a tenant-scoped export. Client invitations are tenant-owned, with
+  query filters, tenant-composite keys and the write-scope guard, and are authorized by the invitation
+  aggregate through a narrow Invitations-owned contract rather than by membership — the invitee is not
+  a member yet, which is the entire point of an invitation. Neither module gained a reference to the
+  other or to Notifications.
+- **The queue holds identifiers; the credential exists for one method call.** No raw token, complete
+  URL, credential-bearing query string, copied recipient address, rendered subject or body, or provider
+  authorization data reaches a durable row. The token is minted at materialization, becomes a URL built
+  from the configured origin, becomes a body, crosses the transport seam and is dropped. An integration
+  test dumps every text column of the `identity` and `invitations` schemas plus every captured log line
+  and asserts that nothing the captured adapter produced appears in either.
+- **A deliberate resend and a transport retry are different facts.** A resend advances the invitation's
+  logical-send generation, revokes every earlier token immediately with a recorded reason, recalculates
+  expiry forward, and is idempotency-keyed, version-checked, rate-limited and audited. A retry re-enters
+  the same request and generation, appends a second token hash, and revokes nothing — so a link already
+  in a mailbox keeps working. One request exists per invitation and generation, so a retry has nowhere
+  to write a new one; the database refuses a generation that skips, repeats or moves backwards.
+- **The token hash is committed before the provider is invoked.** Append-only evidence tagged with
+  invitation, workspace, generation, request, attempt, issue and expiry instants, redemption and
+  revocation. A trigger refuses to mark a request materialized when the attempt that finalized it minted
+  no token, so a link a provider accepted can never be one this system has no record of. Acceptance takes
+  any unexpired, unrevoked, unredeemed hash of the current generation, is single-use, and is
+  concurrency-safe through the invitation's optimistic concurrency and the token's write-once redemption.
+- **Provider keys are per attempt, not per message.** A re-minted token changes the payload, and one key
+  presented with two bodies is what a provider answers with a conflict instead of a send. The key binds
+  request, attempt number and the truncated keyed mailbox fingerprint; a unique index and a shape check
+  make reuse structurally impossible. The guarantee stays at-least-once, never exactly-once.
+- **Enumeration resistance is structural.** Public recovery writes a durable request for every address;
+  the unresolved one carries no address, no digest of one and nothing reversible to one, and terminates
+  safely with no attempt spent. Both paths cost one index probe and one insert, nothing is minted
+  synchronously, and no development link is returned for recovery in any environment. A bounded
+  statistical test guards the timing.
+- **Links come from configuration, never a header.** One validated, allowlisted, HTTPS-outside-Development
+  public origin, refusing credentials, query, fragment and any path, validated identically in both
+  composition roots. The link builder holds no `HttpContext` and is resolvable in the Worker, which has
+  no requests at all.
+- **The Worker mints tokens, so it shares the key ring.** It composes `AddIdentityCore` for the token
+  providers — no cookies, no `SignInManager`, no authentication handlers — and the same
+  `AddDataProtection().SetApplicationName("TB.Gym")` and `DataProtection:KeyPath` the API uses. It still
+  hosts no HTTP surface, and now runs a second sweep beside notification dispatch.
+- **Angular.** The three token-bearing routes send `Referrer-Policy: no-referrer` from the API, from
+  nginx and from a document `<meta>`; they remove the exchanged token from the address bar by history
+  replacement so it leaves the back stack too; and they write no token to local storage, session storage
+  or analytics. The invitation screen says plainly that resending cancels the previous link.
+
+One forward migration ships: `Phase6B3CTokenlessActionMail` adds the two queues, their attempt tables
+and the append-only token record; adds the logical-send generation to the invitation; reconstructs one
+request, one attempt and the live token for every existing invitation before dropping
+`ClientInvitations.TokenHash`; drops the two legacy delivery tables, whose only remaining content was a
+plain recipient address and a status for mail no deployment ever sent; and installs the generation,
+token, request and attempt guards. Reverting restores the legacy token column from the token record
+before dropping it, so an in-flight invitation link survives a rollback.
+
+Exit: a confirmation and a reset work for an account with no workspace at all; no workspace operator can
+read global action-mail state; known and unknown recovery requests are indistinguishable in status, body,
+durable shape and timing; confirmation and reset are suppressed once the world moves; invalid, expired
+and reused tokens fail safely; a transport retry keeps the old invitation link working while a deliberate
+resend kills it; concurrent acceptance succeeds exactly once and concurrent resends converge; token
+hashes precede provider submission; stale workers cannot finalize newer attempts; provider keys are never
+reused across tokenized payloads; hostile `Host` and forwarded-host headers never influence a link;
+token-bearing pages scrub the address bar and touch no browser storage; the migration preserves legacy
+invitation facts across apply, revert and reapply; and direct SQL cannot violate a generation, token,
+tenant, attempt or append-only invariant.
+
 ### Phase 6B remaining
 
-- Migrate account confirmation, password reset and invitation mail onto the tokenless design in
-  ADR 0021, including the durable logical-send generation that keeps a transport retry from rotating
-  an invitation token, and the tokenless action-email materialization it depends on.
 - Implement production object storage, production upload scanning, provider inventory
   reconciliation, signed URLs, and the production retention/operations controls. Reservation-backed
   incomplete-ingest cleanup, transformations, quotas, and application-known purge are already
@@ -704,6 +774,9 @@ body, key, signature or raw payload reaches PostgreSQL or a log.
 - Manual dead-letter replay, and a suppression override or replay surface. Both are writes against
   somebody else's inbox or mailbox and need their own decision about who may press them and what is
   recorded when they do.
+- An operator view for the two action-mail queues. Deliberately absent: exposing one is a decision
+  about who may read that somebody asked to reset their password, and reusing the tenant dead-letter
+  surface would be exactly the cross-workspace visibility ADR 0021 refuses.
 - Cross-workspace suppression. A mailbox that hard-bounces in one workspace is suppressed there only;
   propagating it would help deliverability and would also let one workspace learn something about
   another's members, which is a privacy decision rather than an implementation detail.

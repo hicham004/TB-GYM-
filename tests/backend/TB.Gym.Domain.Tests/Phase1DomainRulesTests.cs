@@ -34,8 +34,14 @@ public sealed class Phase1DomainRulesTests
         Assert.AreEqual("EUR", workspace.DefaultCurrencyCode);
     }
 
+    /// <summary>
+    /// Phase 6B-3C moved the token off the invitation entirely. What a deliberate resend does at the
+    /// domain boundary is advance the logical-send generation, which is what invalidates every token
+    /// minted for the previous one; the tokens themselves live in append-only
+    /// <c>InvitationTokenIssue</c> rows a dispatcher writes, and this aggregate never sees one.
+    /// </summary>
     [TestMethod]
-    public void InvitationTokenRotationInvalidatesPriorHashAtDomainBoundary()
+    public void DeliberateResendAdvancesTheLogicalSendGenerationAtDomainBoundary()
     {
         var now = new DateTimeOffset(2026, 8, 20, 9, 0, 0, TimeSpan.Zero);
         var invitation = ClientInvitation.Create(
@@ -45,15 +51,42 @@ public sealed class Phase1DomainRulesTests
             "Haddad",
             null,
             new DateOnly(1995, 4, 2),
-            new string('a', 64),
             now.AddDays(7),
             now);
 
-        invitation.RotateToken(new string('b', 64), now.AddDays(8), now.AddMinutes(1));
+        Assert.AreEqual(ClientInvitation.FirstLogicalSendGeneration, invitation.LogicalSendGeneration);
 
-        Assert.AreEqual(new string('b', 64), invitation.TokenHash);
+        var generation = invitation.BeginNewLogicalSend(now.AddDays(8), now.AddMinutes(1));
+
+        Assert.AreEqual(2, generation);
+        Assert.AreEqual(2, invitation.LogicalSendGeneration);
         Assert.AreEqual(2, invitation.SendCount);
+        Assert.AreEqual(now.AddDays(8), invitation.ExpiresAtUtc);
         Assert.AreEqual("client@example.com", invitation.Email);
+    }
+
+    /// <summary>
+    /// The other half of the same rule: only a person may advance a generation, and only while the
+    /// invitation is still live. A revoked, accepted or expired invitation has nothing left to resend.
+    /// </summary>
+    [TestMethod]
+    public void ARevokedInvitationCannotBeginANewLogicalSend()
+    {
+        var now = new DateTimeOffset(2026, 8, 20, 9, 0, 0, TimeSpan.Zero);
+        var invitation = ClientInvitation.Create(
+            TenantId,
+            "client@example.com",
+            "Mira",
+            "Haddad",
+            null,
+            new DateOnly(1995, 4, 2),
+            now.AddDays(7),
+            now);
+        invitation.Revoke(now.AddMinutes(1));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            invitation.BeginNewLogicalSend(now.AddDays(8), now.AddMinutes(2)));
+        Assert.AreEqual(ClientInvitation.FirstLogicalSendGeneration, invitation.LogicalSendGeneration);
     }
 
     [TestMethod]

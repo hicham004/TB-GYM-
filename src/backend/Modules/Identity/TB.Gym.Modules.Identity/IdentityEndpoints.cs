@@ -174,36 +174,52 @@ public static class IdentityEndpoints
             : InvalidToken();
     }
 
+    /// <summary>
+    /// Public password recovery, with the same observable behaviour for every address.
+    /// </summary>
+    /// <remarks>
+    /// Both branches do the same bounded work and produce the same answer. An eligible account and an
+    /// address nobody has registered each cost one index probe and one durable insert, and both return
+    /// the same 202 with the same body; the unresolved request carries no address and nothing an
+    /// address could be recovered from, and terminates safely at materialization.
+    /// <para>
+    /// Nothing is minted here any more, which is the other half of it. The previous implementation
+    /// generated a reset token synchronously for a known address and did nothing at all for an unknown
+    /// one, so the two differed by a key-derivation — a difference a patient caller can measure. Now
+    /// the token is minted by the dispatcher, later, out of band.
+    /// </para>
+    /// <para>
+    /// The development action URL is deliberately never populated for this endpoint, in any
+    /// environment. A response that carried a link for a known address and none for an unknown one
+    /// would be the enumeration oracle everything above removes, and a property that only holds in
+    /// Production is a property nobody tests.
+    /// </para>
+    /// </remarks>
     private static async Task<IResult> ForgotPasswordAsync(
         ForgotPasswordRequest request,
         HttpContext context,
         IAntiforgery antiforgery,
         UserManager<ApplicationUser> userManager,
-        IAccountEmailSender emailSender,
+        IAccountActionMailScheduler actionMail,
         CancellationToken cancellationToken)
     {
         await antiforgery.ValidateRequestAsync(context);
-        string? developmentActionUrl = null;
         var email = string.IsNullOrWhiteSpace(request.Email)
             ? null
             : request.Email.Trim().ToLowerInvariant();
         var user = email is null ? null : await userManager.FindByEmailAsync(email);
-        if (user is not null && user.EmailConfirmed && !user.IsPlatformBlocked)
-        {
-            var token = await userManager.GeneratePasswordResetTokenAsync(user);
-            var dispatch = await emailSender.SendAsync(
-                new AccountEmailDispatchRequest(
-                    user.Id,
-                    user.Email ?? email!,
-                    AccountEmailPurpose.ResetPassword,
-                    token),
-                cancellationToken);
-            developmentActionUrl = dispatch.DevelopmentActionUrl;
-        }
+        var isEligible = user is not null && user.EmailConfirmed && !user.IsPlatformBlocked;
+
+        await actionMail.RequestAsync(
+            new AccountActionMailCommand(
+                isEligible ? user!.Id : null,
+                AccountActionKind.ResetPassword,
+                AccountActionMailSources.PublicPasswordRecovery),
+            cancellationToken);
 
         return Results.Accepted(value: new EmailActionResponse(
             "If the account is eligible, password reset instructions have been queued.",
-            developmentActionUrl));
+            null));
     }
 
     private static async Task<IResult> ResetPasswordAsync(

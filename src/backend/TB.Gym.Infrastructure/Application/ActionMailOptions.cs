@@ -10,10 +10,16 @@ namespace TB.Gym.Infrastructure.Application;
 /// </summary>
 /// <remarks>
 /// Action mail deliberately has no <c>Enabled</c> switch of the kind the notification email channel
-/// has. A deployment may reasonably decide not to email people about their payments; a deployment that
-/// decides not to email people their password-reset link has decided nobody can recover an account,
-/// and that is not a configuration option, it is a broken deployment. So the only question here is
-/// <i>which</i> transport carries it, and in Production the answer must be a real provider.
+/// has. A deployment may reasonably decide not to email people about their payments; there is no
+/// corresponding decision to make about a password-reset link, so there is no switch for it.
+/// <para>
+/// What action mail does <b>not</b> do is refuse to start when a deployment has configured no provider
+/// at all. Phase 6B-3A decided that a deployment may run with email switched off, and reversing that
+/// is not this phase's call. The consequence is stated where an operator will act on it — a Production
+/// deployment without a provider dead-letters its action mail with
+/// <c>*-transport-unavailable</c>, and <c>LAUNCH-CHECKLIST.md</c> carries it as a release gate rather
+/// than a startup refusal.
+/// </para>
 /// <para>
 /// There is no separate adapter setting, and no separate provider credentials. One provider is
 /// configured once, under <c>Notifications:Email:Provider</c>, and both the notification channel and
@@ -95,17 +101,6 @@ public sealed class ActionMailDispatchOptions
                     $"{email.Provider.IdempotencyRetentionHours}-hour provider idempotency retention " +
                     $"window in {NotificationEmailOptions.SectionName}:Provider:IdempotencyRetentionHours.";
             }
-        }
-
-        // Production must be able to send account confirmation, password reset and invitation mail.
-        // The captured adapter is already refused there by the notification validation; what this adds
-        // is that "no adapter at all" is refused too, because a production deployment that cannot mail
-        // a confirmation link cannot onboard anybody and would discover it one registration at a time.
-        if (isProduction && !email.UsesProviderAdapter)
-        {
-            return $"{NotificationEmailOptions.SectionName}:Adapter must name a real provider in " +
-                "Production: account confirmation, password reset and invitation mail cannot be " +
-                "captured and cannot be skipped.";
         }
 
         return null;

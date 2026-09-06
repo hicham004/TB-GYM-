@@ -297,8 +297,25 @@ public sealed partial class Phase6B3BProviderEmailTests
         client.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId.ToString());
     }
 
-    private static async Task<Guid> RegisterCoachAsync(HttpClient client, string email, string workspaceName)
+    /// <summary>
+    /// Registers a coach and confirms the address through the action-mail queue.
+    /// </summary>
+    /// <remarks>
+    /// Since Phase 6B-3C the confirmation link is not in the registration response here, and that is
+    /// the correct behaviour rather than a gap: these tests configure a real provider adapter, so
+    /// there is no development capture to read a link out of and nothing is materialized inline. The
+    /// link is where it would be in production — inside the message the adapter actually sent, which
+    /// this suite's provider double recorded.
+    /// <para>
+    /// The double is set to accept for the duration of registration and then restored, so a test that
+    /// scripts a refusal is scripting it for the message it is about rather than for the account
+    /// confirmation that happens to precede it.
+    /// </para>
+    /// </remarks>
+    private async Task<Guid> RegisterCoachAsync(HttpClient client, string email, string workspaceName)
     {
+        var responder = Provider.Responder;
+        Provider.Responder = _ => ProviderResponse.Accepted($"prov_{Guid.NewGuid():N}");
         await RefreshCsrfAsync(client);
         var response = await client.PostAsJsonAsync("/api/auth/register/coach", new
         {
@@ -313,13 +330,22 @@ public sealed partial class Phase6B3BProviderEmailTests
         });
         await AssertStatusAsync(response, HttpStatusCode.Accepted);
         var registration = await RequiredJsonAsync<Registration>(response);
-        Assert.IsNotNull(registration.DevelopmentConfirmationUrl);
+        Assert.IsNull(
+            registration.DevelopmentConfirmationUrl,
+            "A deployment with a real provider must not hand a confirmation link back over HTTP.");
+
+        var sent = Provider.Requests.Count;
+        await SweepAccountMailAsync();
+        Assert.IsGreaterThan(sent, Provider.Requests.Count, "The confirmation mail was never submitted.");
+        var confirmationUrl = ActionLinkFrom(Provider.Requests[^1].Body);
+        Provider.Responder = responder;
+
         await RefreshCsrfAsync(client);
         await AssertStatusAsync(
             await client.PostAsJsonAsync("/api/auth/confirm-email", new
             {
-                userId = Guid.Parse(QueryValue(registration.DevelopmentConfirmationUrl, "userId")),
-                code = QueryValue(registration.DevelopmentConfirmationUrl, "code"),
+                userId = Guid.Parse(QueryValue(confirmationUrl, "userId")),
+                code = QueryValue(confirmationUrl, "code"),
             }),
             HttpStatusCode.NoContent);
         await RefreshCsrfAsync(client);
@@ -332,8 +358,18 @@ public sealed partial class Phase6B3BProviderEmailTests
         return memberships.Single().TenantId;
     }
 
-    private static async Task<Acceptance> InviteAndAcceptAsync(HttpClient coach, HttpClient client, string email)
+    /// <summary>
+    /// Invites a client and accepts with the link the provider was actually sent.
+    /// </summary>
+    /// <remarks>
+    /// Same reason as registration: with a real provider adapter there is no development capture and
+    /// nothing is materialized inline, so the token comes from the message rather than from the REST
+    /// response. That is also closer to what happens in production than the captured path is.
+    /// </remarks>
+    private async Task<Acceptance> InviteAndAcceptAsync(HttpClient coach, HttpClient client, string email)
     {
+        var responder = Provider.Responder;
+        Provider.Responder = _ => ProviderResponse.Accepted($"prov_{Guid.NewGuid():N}");
         await RefreshCsrfAsync(coach);
         var response = await coach.PostAsJsonAsync("/api/invitations", new
         {
@@ -344,11 +380,13 @@ public sealed partial class Phase6B3BProviderEmailTests
             birthDate = "1995-04-02",
         });
         await AssertStatusAsync(response, HttpStatusCode.Created);
-        var invitation = await RequiredJsonAsync<Invitation>(response);
+        var invitationUrl = await SweepInvitationMailAndReadLinkAsync();
+        Provider.Responder = responder;
+
         await RefreshCsrfAsync(client);
         var acceptance = await client.PostAsJsonAsync("/api/invitations/accept", new
         {
-            token = QueryValue(invitation.DevelopmentActionUrl!, "token"),
+            token = QueryValue(invitationUrl, "token"),
             displayName = "Notified Client",
             password = Password,
         });
@@ -479,6 +517,9 @@ public sealed partial class Phase6B3BProviderEmailTests
         var userId = await ScalarAsync<Guid>(
             """SELECT "UserId" FROM clients."ClientProfiles" WHERE "Id" = @id""",
             ("id", acceptance.ClientProfileId));
+
+        // The invitation mail this member needed is a fixture too.
+        Provider.Clear();
         return new Member(client, acceptance.ClientProfileId, userId, email);
     }
 
@@ -505,6 +546,10 @@ public sealed partial class Phase6B3BProviderEmailTests
         var clientUserId = await ScalarAsync<Guid>(
             """SELECT "UserId" FROM clients."ClientProfiles" WHERE "Id" = @id""",
             ("id", acceptance.ClientProfileId));
+
+        // Registration and the invitation have each sent one real message through the double. They are
+        // fixtures, not the subject of any test here, so the recording starts from now.
+        Provider.Clear();
         return new Workspace(
             tenantId,
             coach,
@@ -608,6 +653,47 @@ public sealed partial class Phase6B3BProviderEmailTests
         }
 
         return dump.ToString();
+    }
+
+    /// <summary>Drains the global action-mail queue, which is what materializes account mail.</summary>
+    private async Task SweepAccountMailAsync()
+    {
+        await using var scope = RequiredFactory.Services.CreateAsyncScope();
+        await scope.ServiceProvider
+            .GetRequiredService<TB.Gym.Modules.Identity.IAccountActionMailDispatchService>()
+            .DispatchDueAsync(default);
+    }
+
+    /// <summary>
+    /// Drains the invitation action-mail queue and returns the link the provider was actually sent.
+    /// </summary>
+    private async Task<string> SweepInvitationMailAndReadLinkAsync()
+    {
+        var sent = Provider.Requests.Count;
+        await using (var scope = RequiredFactory.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider
+                .GetRequiredService<TB.Gym.Modules.Invitations.IInvitationActionMailDispatchService>()
+                .DispatchDueAsync(default);
+        }
+
+        Assert.IsGreaterThan(sent, Provider.Requests.Count, "The invitation mail was never submitted.");
+        return ActionLinkFrom(Provider.Requests[^1].Body);
+    }
+
+    /// <summary>The action link inside the message body the adapter submitted to the provider.</summary>
+    private static string ActionLinkFrom(string providerRequestBody)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(providerRequestBody);
+        var text = document.RootElement.GetProperty("text").GetString()
+            ?? throw new AssertFailedException("The provider request carried no text body.");
+        var link = text
+            .Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(line =>
+                line.StartsWith("http", StringComparison.Ordinal) &&
+                Uri.TryCreate(line, UriKind.Absolute, out _));
+        Assert.IsNotNull(link, "The provider request carried no action link.");
+        return link!;
     }
 
     private static async Task<T> RequiredJsonAsync<T>(HttpResponseMessage response) =>
@@ -1068,6 +1154,23 @@ public sealed partial class Phase6B3BProviderEmailTests
             var origin = app.Urls.First();
             instance = new ProviderHttpDouble(app, origin);
             return instance;
+        }
+
+        /// <summary>
+        /// Forgets everything recorded so far.
+        /// </summary>
+        /// <remarks>
+        /// Called once a test's fixtures are in place. Since Phase 6B-3C the account confirmation and
+        /// invitation mail that building a workspace produces go to this same provider, so without
+        /// this every assertion about "the requests this test caused" would be counting setup traffic
+        /// as well.
+        /// </remarks>
+        public void Clear()
+        {
+            while (requests.TryDequeue(out _))
+            {
+                // Drain.
+            }
         }
 
         public async ValueTask DisposeAsync()

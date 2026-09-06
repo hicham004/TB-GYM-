@@ -81,18 +81,25 @@ export class Invitations {
     }
   }
 
-  protected async resend(invitationId: string): Promise<void> {
+  /**
+   * A deliberate resend, which is a different operation from the dispatcher's own transport retry:
+   * it advances the invitation's logical-send generation and immediately kills every earlier link.
+   *
+   * The key is generated per press so two presses are two commands, while a retry of the *same*
+   * press — a double click, a flaky connection — converges on one generation instead of burning two.
+   */
+  protected async resend(invitation: ClientInvitation): Promise<void> {
     await this.runAction(
-      invitationId,
-      () => this.api.resendInvitation(invitationId),
-      $localize`A new invitation link was queued.`,
+      invitation.id,
+      () => this.api.resendInvitation(invitation.id, crypto.randomUUID(), invitation.version),
+      $localize`A new invitation link was sent. Any earlier link no longer works.`,
     );
   }
 
-  protected async revoke(invitationId: string): Promise<void> {
+  protected async revoke(invitation: ClientInvitation): Promise<void> {
     await this.runAction(
-      invitationId,
-      () => this.api.revokeInvitation(invitationId),
+      invitation.id,
+      () => this.api.revokeInvitation(invitation.id, invitation.version),
       $localize`Invitation revoked.`,
     );
   }

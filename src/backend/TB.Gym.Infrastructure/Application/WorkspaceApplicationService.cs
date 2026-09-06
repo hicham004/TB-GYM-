@@ -14,7 +14,7 @@ namespace TB.Gym.Infrastructure.Application;
 internal sealed class WorkspaceApplicationService(
     GymDbContext dbContext,
     UserManager<ApplicationUser> userManager,
-    IAccountEmailSender accountEmailSender,
+    IAccountActionMailScheduler accountActionMail,
     IClock clock,
     ITenantContext tenantContext)
     : IWorkspaceApplicationService
@@ -105,13 +105,17 @@ internal sealed class WorkspaceApplicationService(
                     });
         }
 
-        var confirmationToken = await userManager.GenerateEmailConfirmationTokenAsync(user);
-        var dispatch = await accountEmailSender.SendAsync(
-            new AccountEmailDispatchRequest(
+        // No token is minted here. Registration records a durable request for a confirmation email and
+        // returns; the dispatcher mints the token, builds the link from the configured origin and
+        // sends it. Outside Production the captured adapter materializes it inline, which is where the
+        // development confirmation link comes from — the caller supplied this address, so handing them
+        // back a link for it discloses nothing they did not already know.
+        var dispatch = await accountActionMail.RequestAsync(
+            new AccountActionMailCommand(
                 user.Id,
-                normalizedEmail,
-                AccountEmailPurpose.ConfirmEmail,
-                confirmationToken),
+                AccountActionKind.ConfirmEmail,
+                AccountActionMailSources.CoachRegistration,
+                user.Id),
             cancellationToken);
 
         return new WorkspaceRegistrationResult(

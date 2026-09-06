@@ -88,8 +88,16 @@ export interface ClientInvitation {
   lastName: string;
   status: InvitationStatus;
   expiresAtUtc: string;
+  /** How many times a person deliberately sent this invitation. Never incremented by a retry. */
   sendCount: number;
+  /**
+   * Which round of sending is currently valid. Only tokens issued for this generation can be
+   * accepted; a deliberate resend advances it and kills every earlier link.
+   */
+  logicalSendGeneration: number;
   createdAtUtc: string;
+  /** The optimistic-concurrency token a resend or revoke must present. */
+  version: number;
   developmentActionUrl: string | null;
 }
 

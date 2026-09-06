@@ -95,7 +95,9 @@ rather than by convention.
 
 `TB.Gym.Worker` is a second composition root of the same monolith, not a microservice: same
 database, same domain assemblies, same tenant guards, no HTTP surface. It runs durable notification
-dispatch. Realtime publication lives in the API instead, because it needs connections to publish to.
+dispatch and action-mail dispatch, and it shares the API's data-protection key ring because it mints
+the confirmation and reset tokens the API unprotects. Realtime publication lives in the API instead,
+because it needs connections to publish to.
 
 ## Status
 
@@ -122,13 +124,18 @@ Phases 0 through 6B are implemented and reviewed:
 - **Messaging** — persisted direct conversations with append-only revisions, one-way removal and
   coach moderation; then authorized realtime delivery with catch-up, application acknowledgement and
   Redis-backed multi-replica scale-out.
+- **Action mail** — account confirmation, password reset and client invitations on a tokenless
+  design: the queue holds identifiers, the token is minted at materialization and never stored, links
+  are built from one validated configured origin rather than any request header, and public password
+  recovery answers identically for every address. Invitations carry a logical-send generation, so a
+  deliberate resend kills the previous link while a transport retry leaves one that may already be in
+  somebody's mailbox working.
 
 Not implemented: gamification and tenant theming, SaaS productization and tenant billing, AI
 features, recurring billing, marketing email and any unsubscribe surface, and production provider
-integrations for WhatsApp and object storage. Account confirmation, password reset and invitation
-mail still send on their own inline paths rather than through the notification outbox; ADR 0021 holds
-that design. [ROADMAP.md](docs/ROADMAP.md) tracks each of these with its exit criteria, and
-[LAUNCH-CHECKLIST.md](docs/LAUNCH-CHECKLIST.md) tracks what production would still require.
+integrations for WhatsApp and object storage. [ROADMAP.md](docs/ROADMAP.md) tracks each of these with
+its exit criteria, and [LAUNCH-CHECKLIST.md](docs/LAUNCH-CHECKLIST.md) tracks what production would
+still require.
 
 The `base44/` directory preserves the previous React application as reference material only. It is
 not part of the new architecture.
@@ -147,9 +154,15 @@ The application is at <http://localhost:4200> and the API at <http://localhost:5
 `/health/live`, `/health/ready` and, in development, `/openapi/v1.json`. PostgreSQL is published on
 host port `5433` so it does not collide with a native installation.
 
-Register a coach from the sign-in screen to create a workspace. In development, confirmation, reset
-and invitation responses include a local action link, so the full flow can be exercised without an
-email provider.
+Register a coach from the sign-in screen to create a workspace. In development the captured mail
+adapter materializes confirmation and invitation mail immediately and the response carries the local
+action link, so the full flow can be exercised without an email provider.
+
+Password recovery is the deliberate exception: it returns no link, in any environment. A response
+that carried one for a known address and none for an unknown one would tell an unauthenticated caller
+which addresses have accounts, and a difference that exists only outside production is one nobody
+tests where it matters. The development reset link is materialized by the same queue and read from the
+captured adapter.
 
 To run against a local toolchain instead, set the PostgreSQL values in `.env`, start PostgreSQL, and
 run `.\scripts\run-api.ps1` and `.\scripts\run-web.ps1` in separate terminals.

@@ -1158,3 +1158,149 @@ is identifiable by its `ProviderMessageId`, which is why that identifier is reco
 rather than waiting for an event to supply it.
 
 See `docs/adr/0022-production-transactional-email-provider-and-events.md`.
+
+## 20. Phase 6B-3C tokenless action mail
+
+Account confirmation, password reset and client invitations now run on ADR 0021's tokenless
+materialization. Nothing about the tenant notification outbox changes: it still carries no token by
+construction, and no action-mail row ever appears in it, in a channel delivery, or in the owner-only
+dead-letter view.
+
+### Two queues, because there are two owners
+
+| | `identity."ActionMailRequests"` | `invitations."ActionMailRequests"` |
+| --- | --- | --- |
+| Owns | Account confirmation, password reset | Client invitations |
+| Tenant | **No `TenantId` column at all** | `TenantId`, query filter, composite keys, write-scope guard |
+| Authorized by | The Identity account and its security stamp | The invitation aggregate, through a narrow module contract |
+| Needs membership | No — the account may have none | No — the invitee is not a member yet |
+| Generations | None; Identity's security stamp invalidates outstanding tokens | One per deliberate send |
+
+The absence of a tenant column on the global queue is the design, not an omission. ADR 0021 refuses
+assigning a fabricated or "first available" workspace so that global mail can fit a tenant-shaped
+queue, because that would put one workspace's operator in the dead-letter view of another person's
+password reset. A column that does not exist cannot be fabricated, joined on, or swept up by a
+tenant-scoped export.
+
+The two queues share one transport, one provider client and one validated public origin, composed in
+Infrastructure. They share no durable state and no module reference: `TB.Gym.Modules.Identity` and
+`TB.Gym.Modules.Invitations` still reference only `TB.Gym.SharedKernel`, and neither knows the other
+or the Notifications module exists.
+
+### What a queue row may hold, and what it may not
+
+A row holds the action kind, a schema version, the subject or invitation it concerns, the logical-send
+generation where one exists, timestamps, and authorization provenance — who asked, from which flow. It
+may never hold a raw token, a complete action URL, a query string carrying a credential, a recipient
+address copied for delivery, a rendered subject or body, or provider authorization data.
+
+The credential's whole life is one method call. The token is minted at materialization, becomes part
+of a URL built from the configured origin, becomes part of a rendered body, crosses the transport
+seam, and is dropped. An integration test dumps every text column of the `identity` and `invitations`
+schemas and every captured log line and asserts that nothing the captured adapter actually produced —
+address, token, URL or body — appears in either.
+
+### The materialization sequence, and why its order is the guarantee
+
+1. **Claim** a due row in one short transaction, with `FOR UPDATE SKIP LOCKED`, so replicas divide the
+   work without coordinating. No attempt is spent; nothing external happens under the lock.
+2. **Re-establish authorization**, after that claim commits and before anything is minted. A committed
+   claim is a lease on work and never durable permission to mail somebody a credential.
+3. **Start the attempt and commit it**, so a process that dies mid-send leaves evidence rather than
+   silence.
+4. **Mint** the token in memory.
+5. **Commit its hash** — invitations only, and this is the step that matters. A link a provider
+   accepted must never be one this system has no record of, and the only way to guarantee that is to
+   make the record older than the send. A database trigger refuses to mark a request materialized when
+   the attempt that finalized it minted no token, so the ordering cannot be reversed by a later edit.
+6. **Send**, then finalize under the same claim token. A stale claimant is refused by the domain and
+   again by the database.
+
+### What an action-mail log line may say
+
+The request id, the logical-send generation, the attempt number, the adapter name and a stable code.
+Not the address, the token, the link or the wording — and **not the workspace identifier** either.
+
+That last one is a deliberate departure from the notification dispatcher, which does log a tenant id.
+Phase 6B-2B established the stricter rule for its own log lines, on the grounds that a workspace
+identifier in a log is a workspace an operator can correlate, and an action-mail line has no need of
+one: the request id resolves to its workspace by query when somebody genuinely has to know. The
+Phase 6B-2B privacy assertions cover the whole log during a messaging flow, so they hold this line too.
+
+### A deliberate resend is not a transport retry
+
+This is the substantive rule of the phase, and the one ADR 0002's original "resending rotates the
+token" wording predates.
+
+| | Deliberate resend | Transport retry |
+| --- | --- | --- |
+| Who asks | A coach or owner, over REST, with an idempotency key and a version | The dispatcher, from its retry schedule |
+| Generation | The **next** one | The **same** one |
+| Earlier tokens | Revoked immediately, with a recorded reason | Left alone — they may be in a mailbox |
+| Durable row | A **new** request | The **same** request, a new attempt |
+| Expiry | Recalculated forward | Unchanged |
+
+One request exists per invitation and generation, so a retry has nowhere to write a new generation
+even if it tried. Acceptance recognises any unexpired, unrevoked, unredeemed hash of the *current*
+generation, which is what makes two tokens from two attempts of one generation both work. A token of a
+superseded generation answers exactly like an unknown one.
+
+### Provider idempotency when the payload changes
+
+The commercial notification key is stable per intent because its payload is stable. An action email's
+payload contains a freshly minted token, so a later materialization is a different message, and
+presenting one key with two bodies is what a provider answers with a conflict instead of a send.
+
+The action-mail key is therefore per attempt: `account-action:{request}:a{attempt}:v1:{fingerprint}`
+and `invitation-action:{request}:a{attempt}:v1:{fingerprint}`, where the fingerprint is the truncated
+keyed mailbox fingerprint from ADR 0022. A unique index makes reuse impossible and a check constraint
+ties each key to the request and attempt number it names. The guarantee stays at-least-once, never
+exactly-once: provider ambiguity may produce two valid emails, and no retry invalidates a link that
+may already have arrived.
+
+### Enumeration resistance is structural
+
+Public password recovery writes a durable request whether or not the address resolves to an eligible
+account. The two rows differ only in fields nothing outside the process can observe, and the
+unresolved one carries no address, no digest of one, and nothing reversible to one; it terminates at
+materialization with `account-action-mail-subject-unresolved` and spends no attempt.
+
+Both paths perform exactly one primary-key probe and exactly one insert. Nothing is minted
+synchronously, which removes the key-derivation the old implementation performed only for known
+addresses. Recovery never materializes inline, in any environment, and never returns a development
+link — a difference that existed only outside Production would be one nobody tests where it matters.
+A statistical test asserts the medians stay within a factor of three and 250 ms of each other, which
+is coarse on purpose: the regression worth catching is a reintroduced synchronous mint, and a tighter
+bound would fail on a loaded machine for reasons unrelated to enumeration.
+
+### Links, and the headers that may never build one
+
+Every link is built from `Application:PublicBaseUrl`, validated at startup in both composition roots
+and required to appear in `Application:PublicOriginAllowlist` outside Development. HTTPS is required
+outside Development; credentials, a query string, a fragment and any path are refused, because a base
+URL carrying a path is how a lookalike gets built out of a real setting.
+
+`Host`, `X-Forwarded-Host` and `Origin` never reach a link. The builder holds no `HttpContext` and is
+resolvable from the Worker, which has no requests at all — a builder that *cannot* see a request
+header cannot be persuaded to trust one.
+
+### The Worker mints tokens, so it shares the key ring
+
+Confirmation and reset tokens are data-protection payloads. The Worker mints them and the API
+unprotects them, so both compose `AddDataProtection().SetApplicationName("TB.Gym")` and both must point
+`DataProtection:KeyPath` at the same persisted location. Two key rings would make every link this
+system sends fail on click, with an error that reads as "invalid token" and is really a deployment
+mistake. The Worker composes `AddIdentityCore` for the token providers — no cookies, no
+`SignInManager`, no authentication handlers — and still hosts no HTTP surface.
+
+### Angular
+
+`/auth/confirm-email`, `/auth/reset-password` and `/invite` are token-bearing pages. They send
+`Referrer-Policy: no-referrer` from the API, from the production nginx configuration and from a
+document `<meta>` so the guarantee survives any host; they remove the exchanged token from the address
+bar by **history replacement** rather than a new entry, so it is gone from the back stack too; and
+they never write a token to local storage, session storage, analytics or a log. The invitation screen
+states plainly that resending cancels the previous link, because that is a consequence the person
+pressing it is entitled to know about in advance.
+
+See `docs/adr/0021-tokenless-action-email-materialization.md`.

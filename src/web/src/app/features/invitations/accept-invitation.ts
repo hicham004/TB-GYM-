@@ -8,6 +8,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { PublicInvitation } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
+import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 
@@ -24,6 +25,7 @@ export class AcceptInvitation implements OnInit {
   private readonly formBuilder = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly scrubber = inject(ActionTokenScrubber);
   private readonly tenants = inject(TenantStore);
 
   protected readonly invitation = signal<PublicInvitation | null>(null);
@@ -98,6 +100,9 @@ export class AcceptInvitation implements OnInit {
           createsAccount ? value.password : null,
         ),
       );
+      // Acceptance is single-use, so the token in the address bar is now spent. Clearing it before
+      // navigating away keeps it out of the history entry this page leaves behind.
+      await this.scrubber.scrub(this.route);
       await this.auth.initialize(true);
       await this.tenants.load(result.tenantId);
       await this.router.navigateByUrl('/profile');

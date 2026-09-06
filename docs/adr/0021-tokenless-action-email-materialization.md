@@ -1,6 +1,6 @@
 # ADR 0021: Tokenless Action-Email Materialization
 
-Status: accepted, 2026-09-05
+Status: accepted, 2026-09-05. Implemented by Phase 6B-3C, 2026-09-05.
 
 ## Context
 
@@ -22,9 +22,12 @@ hours, preferences, consent evidence and an owned transport seam. The obvious ne
 "account mail should use this too", and the obvious next mistake is to reach that conclusion without
 first writing down which parts of it must not apply.
 
-This ADR is a design boundary for a later phase. **Nothing is migrated by it.**
-`AccountEmailSender` and `CapturedInvitationDelivery` keep their existing behaviour, the outbox still
-carries no token by construction, and `CommercialNotificationPayload` is unchanged.
+This ADR was written as a design boundary for a later phase, and that phase has now happened:
+**Phase 6B-3C implements it.** The section "Implementation, and what it decided" at the end records
+what the implementation had to settle that this document deliberately left open. The outbox still
+carries no token by construction and `CommercialNotificationPayload` is unchanged; what has gone are
+`AccountEmailSender` and `CapturedInvitationDelivery`, replaced by two queues and one materializing
+dispatcher.
 
 ## Decision
 
@@ -218,3 +221,70 @@ constraints. **No provider is added because of them**, and none of them is a com
 - Deferred, explicitly: any migration of account confirmation, password reset or invitation delivery;
   a production email provider; webhooks; bounce, complaint and suppression-list processing;
   DKIM/SPF/DMARC automation; and unsubscribe endpoints.
+
+
+## Implementation, and what it decided
+
+Phase 6B-3C built this. Most of the document survived contact unchanged; four things it left open had
+to be decided, and one thing it implied turned out to be wrong in a way worth recording.
+
+### The open question this ADR named: is account mail queued at all?
+
+It is. "What is not decided here" listed inline sending with a synchronous provider call as a
+legitimate answer for a credential whose value decays in minutes, and it would have been — except for
+enumeration. Inline sending means the known-address path performs a key derivation and an HTTPS
+exchange that the unknown-address path does not, and that difference is measurable by anybody patient
+enough to time it. Queuing both makes the observable work one index probe and one insert either way.
+
+So both paths write a durable request, and the unresolved one carries no subject, no address and no
+digest of one. It terminates at materialization with a stable code and spends no attempt. The cost is
+that a reset link now arrives a sweep interval later than it used to; the benefit is that the endpoint
+has no timing signal left to read.
+
+### Global mail got its own table, not a nullable tenant
+
+The ADR offered two shapes: a global-scoped table, or an explicitly nullable tenant with the query
+filter, the write-scope guard and the dead-letter view all taught about it. The first was chosen, and
+the reason is that the second is a rule while the first is a fact. `identity."ActionMailRequests"` has
+no `TenantId` column, so there is nothing for a future join, export, filter or operator view to get
+wrong — and no reviewer has to check that every one of them remembered the null case.
+
+### Provider idempotency needed its own answer
+
+This ADR quoted the provider's retention window as a reason a stable key is not eternal. The
+implementation found the sharper problem: for action mail the key must not be stable *at all*. A
+re-minted token changes the rendered payload, and a provider that remembers a key and sees different
+content answers with a conflict rather than a send — so a stable per-message key would make every
+durable retry fail permanently.
+
+The key is therefore per attempt, binding the request, the attempt number and the truncated keyed
+mailbox fingerprint from ADR 0022. A unique index and a shape check make reuse structurally
+impossible. The consequence is stated plainly rather than hidden: the guarantee is at-least-once,
+never exactly-once, and provider ambiguity may produce two valid emails.
+
+### The invitation generation needed a database, not a counter
+
+"A durable logical-send generation on the invitation, plus an append-only record of the token hashes
+minted for each generation" is exactly what was built, with one addition the ADR did not anticipate.
+The token hash is committed **before** the provider is invoked, and a trigger refuses to mark a
+request materialized when the attempt that finalized it minted no token.
+
+That ordering is not about generations at all. It is about a lost commit acknowledgement: without it,
+a process that sends and then fails to record has handed somebody a real link this system will refuse,
+and the failure is invisible until a recipient complains. Making the record older than the send removes
+the window.
+
+### What this ADR implied that turned out to need care
+
+"A transport retry re-mints" is true, and the document treats it as a property of the token. It is
+also a property of the *message*, and that is where the provider-key problem came from. The two are
+the same fact seen from two sides: a re-minted token is a new credential to the recipient and a new
+payload to the provider, and a design that handles only the first will fail on the second.
+
+### Deferred, still
+
+Marketing campaigns and unsubscribe; WhatsApp, SMS and push; open and click tracking; attachments;
+manual dead-letter replay for either queue; a suppression override surface; cross-workspace
+suppression; production media infrastructure; and DNS automation. Action mail deliberately has no
+dead-letter operator view of its own: exposing one is a decision about who may read that somebody
+asked to reset their password, and it needs its own answer rather than a reuse of the tenant one.

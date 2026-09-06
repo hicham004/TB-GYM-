@@ -6,6 +6,14 @@
     <meta name="description" content="TB Gym coaching platform" />
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Action links carry a single-use credential in the query string until the page exchanges it.
+      The API and the production nginx configuration both send `Referrer-Policy: no-referrer`, and
+      this repeats it in the document so the guarantee survives a development server, a static
+      preview or any host that does not set the header - a subresource or an outbound click must
+      never be able to carry a reset or invitation token to a third party.
+    -->
+    <meta name="referrer" content="no-referrer" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
   </head>
   <body>

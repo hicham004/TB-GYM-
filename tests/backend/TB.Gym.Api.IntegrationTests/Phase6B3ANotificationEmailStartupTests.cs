@@ -210,7 +210,13 @@ public sealed class Phase6B3ANotificationEmailStartupTests
             ["ConnectionStrings:Database"] = databaseConnection,
             ["Database:ApplyMigrationsOnStartup"] = "false",
             ["Seed:Enabled"] = "false",
-            ["Application:PublicBaseUrl"] = "http://localhost:4200",
+            // Phase 6B-3C validates the public action origin at startup and refuses anything that is
+            // not a bare, allowlisted HTTPS origin outside Development. These tests build Production
+            // hosts to assert email rules, so both values are supplied here and the Development cases
+            // keep the loopback origin they had.
+            ["Application:PublicBaseUrl"] =
+                environment == "Production" ? "https://app.tbgym.test" : "http://localhost:4200",
+            ["Application:PublicOriginAllowlist:0"] = "https://app.tbgym.test",
             ["Media:StorageRoot"] = Path.Combine(Path.GetTempPath(), databaseName!, "media"),
             ["Media:PurgeEnabled"] = "false",
             ["Notifications:Dispatch:PollIntervalSeconds"] = "300",

@@ -43,6 +43,17 @@
     <None Include="..\..\..\src\backend\TB.Gym.Worker\Dockerfile"
           Link="Worker.Dockerfile"
           CopyToOutputDirectory="PreserveNewest" />
+    <!--
+      The two places a token-bearing page's referrer policy is declared outside the API. Copied into
+      the test output so the assertion reads the files a deployment actually ships rather than a
+      description of them.
+    -->
+    <None Include="..\..\..\src\web\src\index.html"
+          Link="web.index.html"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\src\web\nginx.conf"
+          Link="web.nginx.conf"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

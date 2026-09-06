@@ -105,19 +105,19 @@ public sealed class ApiSmokeTests
                 builder.UseSetting("Seed:AdminEmail", "admin@example.test");
                 builder.UseSetting("Seed:AdminPassword", generatedTestPassword);
                 // Phase 6B-2B made an unconfigured hub origin a startup failure outside Development,
-                // and that check runs first. Configuring one keeps this test about what it says it is
-                // about: production refusing a development-only seed.
-                builder.UseSetting("Messaging:Realtime:AllowedOrigins:0", "https://app.example.test");
+                // and that check runs first. Phase 6B-3C added two more that run before the seed check:
+                // an action link must be built from an allowlisted HTTPS origin outside Development,
+                // and Production must have a real mail provider because a deployment that cannot send a
+                // confirmation link cannot onboard anybody. Configuring all three keeps this test about
+                // what it says it is about: production refusing a development-only seed.
+                foreach (var (key, value) in ProductionStartupPrerequisites(generatedTestPassword))
+                {
+                    builder.UseSetting(key, value);
+                }
+
                 builder.ConfigureAppConfiguration((_, configuration) =>
-                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
-                    {
-                        ["ConnectionStrings:Database"] = "Host=invalid;Database=invalid;Username=invalid",
-                        ["Database:ApplyMigrationsOnStartup"] = "false",
-                        ["Seed:Enabled"] = "true",
-                        ["Seed:AdminEmail"] = "admin@example.test",
-                        ["Seed:AdminPassword"] = generatedTestPassword,
-                        ["Messaging:Realtime:AllowedOrigins:0"] = "https://app.example.test",
-                    }));
+                    configuration.AddInMemoryCollection(
+                        ProductionStartupPrerequisites(generatedTestPassword)));
             });
 
         var exception = Assert.ThrowsExactly<InvalidOperationException>(() =>
@@ -125,6 +125,34 @@ public sealed class ApiSmokeTests
 
         StringAssert.Contains(exception.Message, "development-only");
     }
+
+    /// <summary>
+    /// Everything a Production host refuses to start without, and nothing this test is about.
+    /// </summary>
+    /// <remarks>
+    /// Kept in one place and applied through both configuration paths, because the factory reads some
+    /// settings before the in-memory source is added and some after. The values are deliberately
+    /// obvious placeholders: the point is to satisfy shape validation so the host reaches the seed
+    /// check, not to look like a real deployment.
+    /// </remarks>
+    private static Dictionary<string, string?> ProductionStartupPrerequisites(string adminPassword) => new()
+    {
+        ["ConnectionStrings:Database"] = "Host=invalid;Database=invalid;Username=invalid",
+        ["Database:ApplyMigrationsOnStartup"] = "false",
+        ["Seed:Enabled"] = "true",
+        ["Seed:AdminEmail"] = "admin@example.test",
+        ["Seed:AdminPassword"] = adminPassword,
+        ["Messaging:Realtime:AllowedOrigins:0"] = "https://app.example.test",
+        ["Application:PublicBaseUrl"] = "https://app.example.test",
+        ["Application:PublicOriginAllowlist:0"] = "https://app.example.test",
+        ["Notifications:Email:Adapter"] = "Resend",
+        ["Notifications:Email:Provider:ApiKey"] = "re_not_a_real_key",
+        ["Notifications:Email:Provider:FromAddress"] = "TB Gym <notifications@mail.example.test>",
+        ["Notifications:Email:Provider:WebhookSigningSecret"] = "whsec_bm90LWEtcmVhbC13ZWJob29rLXNlY3JldA==",
+        ["Notifications:Email:Provider:FingerprintKeyId"] = "smoke",
+        ["Notifications:Email:Provider:FingerprintKeys:smoke"] =
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    };
 
     private HttpClient RequiredClient => client ?? throw new InvalidOperationException("The test client is not initialized.");
 

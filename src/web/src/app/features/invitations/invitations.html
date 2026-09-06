@@ -103,6 +103,9 @@
               <td>{{ invitation.expiresAtUtc | date: 'medium' }}</td>
               <td>
                 <span i18n>Sent {{ invitation.sendCount }} time(s)</span>
+                <span class="hint" i18n>
+                  Only the newest link works; resending cancels the previous one.
+                </span>
                 @if (invitation.developmentActionUrl) {
                   <a [href]="invitation.developmentActionUrl" i18n>Open local link</a>
                 }
@@ -114,7 +117,7 @@
                       class="secondary-button compact"
                       type="button"
                       [disabled]="actingOn() === invitation.id"
-                      (click)="resend(invitation.id)"
+                      (click)="resend(invitation)"
                       i18n
                     >
                       Resend
@@ -123,7 +126,7 @@
                       class="danger-button compact"
                       type="button"
                       [disabled]="actingOn() === invitation.id"
-                      (click)="revoke(invitation.id)"
+                      (click)="revoke(invitation)"
                       i18n
                     >
                       Revoke

@@ -30,12 +30,18 @@ internal static class WorkerProgram
         });
 
         // The environment reaches composition explicitly rather than through an IWebHostEnvironment
-        // this process does not have. It decides one thing: whether the captured development email
-        // adapter and an enabled email channel are permitted, both of which are refused in Production.
+        // this process does not have. It decides two things: whether the captured development email
+        // adapter and an enabled email channel are permitted, both refused in Production; and whether
+        // an action link may be built from a plain-HTTP origin, which only Development allows.
         builder.Services.AddTbGymNotificationWorkerInfrastructure(
             builder.Configuration,
-            builder.Environment.IsProduction());
+            builder.Environment.IsProduction(),
+            builder.Environment.IsDevelopment());
         builder.Services.AddHostedService<NotificationDispatchWorker>();
+        // Two sweeps, deliberately separate. A commercial notification and a password-reset link have
+        // different urgency, different retry schedules and different consequences when they are late;
+        // sharing one loop would make either queue's backlog the other's latency.
+        builder.Services.AddHostedService<ActionMailDispatchWorker>();
 
         var host = builder.Build();
         await host.RunAsync();

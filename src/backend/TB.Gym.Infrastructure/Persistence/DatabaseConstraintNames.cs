@@ -57,6 +57,54 @@ internal static class DatabaseConstraintNames
     public const string OneEmailSuppressionPerAddress =
         "IX_EmailSuppressions_TenantId_UserId_AddressFingerprint";
 
+    /// <summary>
+    /// One durable request per invitation and logical-send generation.
+    /// </summary>
+    /// <remarks>
+    /// The structural half of the resend-versus-retry rule. A transport retry re-enters an existing
+    /// row and therefore cannot rotate a generation; only a deliberate resend creates the next one, and
+    /// two concurrent resends collide here rather than both succeeding.
+    /// </remarks>
+    public const string OneInvitationRequestPerGeneration =
+        "IX_InvitationActionMailRequests_TenantId_InvitationId_Generation";
+
+    /// <summary>
+    /// One spent invitation-command idempotency key per workspace. The create and resend paths read
+    /// this name to recognise a concurrent identical retry and replay the winner's result.
+    /// </summary>
+    public const string OneInvitationActionCommandPerKey =
+        "IX_InvitationActionMailRequests_TenantId_IdempotencyKey";
+
+    public const string OneInvitationActionAttemptPerNumber =
+        "IX_InvitationActionMailAttempts_TenantId_RequestId_AttemptNumber";
+
+    public const string OneAccountActionAttemptPerNumber =
+        "IX_AccountActionMailAttempts_RequestId_AttemptNumber";
+
+    /// <summary>
+    /// One provider idempotency key per action-mail attempt, across the whole deployment.
+    /// </summary>
+    /// <remarks>
+    /// This is what makes "one provider key, one tokenized payload" a property of the schema rather
+    /// than of a code path. An action email's body contains a freshly minted token, so a later
+    /// materialization is a different message and must present a different key; reusing one is the
+    /// single shape a provider answers with a conflict instead of a send.
+    /// </remarks>
+    public const string OneAccountActionProviderKey =
+        "IX_AccountActionMailAttempts_ProviderIdempotencyKey";
+
+    public const string OneInvitationActionProviderKey =
+        "IX_InvitationActionMailAttempts_ProviderIdempotencyKey";
+
+    /// <summary>
+    /// One invitation token per hash, across every workspace.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not tenant-scoped: the anonymous acceptance route resolves a workspace *from* the
+    /// hash, so a hash that could exist twice would be one that resolves to two answers.
+    /// </remarks>
+    public const string OneInvitationTokenPerHash = "IX_InvitationTokenIssues_TokenHash";
+
     /// <summary>One settings row per member and workspace.</summary>
     public const string OneNotificationPreferencePerMember =
         "IX_ChannelPreferences_TenantId_UserId";

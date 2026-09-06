@@ -61,19 +61,11 @@ public static class DependencyInjection
                 npgsql.EnableRetryOnFailure(3);
             }));
 
+        // The same options the Worker configures, from one place. A token provider's behaviour depends
+        // on them, and two composition roots that disagreed would mint credentials one of them refused.
         services
-            .AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
-            {
-                options.Password.RequiredLength = 12;
-                options.Password.RequireDigit = true;
-                options.Password.RequireLowercase = true;
-                options.Password.RequireUppercase = true;
-                options.Password.RequireNonAlphanumeric = true;
-                options.Lockout.MaxFailedAccessAttempts = 5;
-                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
-                options.User.RequireUniqueEmail = true;
-                options.SignIn.RequireConfirmedEmail = true;
-            })
+            .AddIdentity<ApplicationUser, IdentityRole<Guid>>(
+                WorkerDependencyInjection.ConfigureIdentityOptions)
             .AddEntityFrameworkStores<GymDbContext>()
             .AddDefaultTokenProviders();
 
@@ -138,8 +130,6 @@ public static class DependencyInjection
         services.AddScoped<IAuthorizationHandler, TenantRoleAuthorizationHandler>();
         services.AddScoped<ITenantMembershipStore, TenantMembershipStore>();
         services.AddScoped<IWorkspaceApplicationService, WorkspaceApplicationService>();
-        services.AddScoped<IAccountEmailSender, AccountEmailSender>();
-        services.AddScoped<IInvitationDelivery, CapturedInvitationDelivery>();
         services.AddScoped<IInvitationApplicationService, InvitationApplicationService>();
         services.AddScoped<IClientProfileApplicationService, ClientProfileApplicationService>();
         services.AddScoped<ICoachingFeatureAccessService, CoachingFeatureAccessService>();
@@ -179,6 +169,14 @@ public static class DependencyInjection
         // process's job, and the API deliberately hosts no timer for it.
         services.AddNotificationDispatch(configuration);
         services.AddNotificationEmail(configuration, environment.IsProduction());
+        // Action mail: the validated public origin every confirmation, reset and invitation link is
+        // built from, one transport over the same provider client, and the two queues. The API
+        // enqueues and — outside Production only — materializes inline so a development caller gets
+        // its captured link without a second process; the Worker is what drains them for real.
+        services.AddActionMail(
+            configuration,
+            environment.IsProduction(),
+            environment.IsDevelopment());
         services.AddOptions<MediaStorageOptions>()
             .Bind(configuration.GetSection(MediaStorageOptions.SectionName))
             .Validate(
@@ -208,12 +206,10 @@ public static class DependencyInjection
                 options => options.AccessLifetimeSeconds is >= 60 and <= 14400,
                 "Media:AccessLifetimeSeconds must be between 60 seconds and 4 hours.")
             .ValidateOnStart();
-        var dataProtection = services.AddDataProtection().SetApplicationName("TB.Gym");
-        var dataProtectionKeyPath = configuration["DataProtection:KeyPath"];
-        if (!string.IsNullOrWhiteSpace(dataProtectionKeyPath))
-        {
-            dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyPath));
-        }
+        // Shared with the Worker by construction. The Worker mints confirmation and reset tokens and
+        // this process unprotects them, so an unshared key ring would make every link this system
+        // sends fail on click for a reason that reads as an invalid token.
+        services.AddTbGymDataProtection(configuration);
 
         services.AddRateLimiter(options =>
         {

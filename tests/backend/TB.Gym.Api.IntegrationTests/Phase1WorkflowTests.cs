@@ -257,18 +257,37 @@ public sealed class Phase1WorkflowTests
         measurementDate = "2026-08-20",
     };
 
+    /// <summary>
+    /// The invitation token exists durably only as a one-way hash.
+    /// </summary>
+    /// <remarks>
+    /// Phase 6B-3C moved that hash off the invitation and into the append-only
+    /// <c>invitations.TokenIssues</c> record, because an invitation now has a logical-send generation
+    /// and one generation may have more than one live token - a transport retry mints a second without
+    /// invalidating the first. The property asserted here is unchanged: what is stored is a digest,
+    /// never the credential, and the aggregate itself no longer carries one at all.
+    /// </remarks>
     private async Task AssertTokenIsStoredOnlyAsHashAsync(string rawToken)
     {
         await using var connection = new NpgsqlConnection(RequiredDatabaseConnection);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT \"TokenHash\" FROM invitations.\"ClientInvitations\" LIMIT 1";
+        command.CommandText = "SELECT \"TokenHash\" FROM invitations.\"TokenIssues\" LIMIT 1";
         var storedHash = (string?)await command.ExecuteScalarAsync();
 
         Assert.IsNotNull(storedHash);
         Assert.AreEqual(64, storedHash.Length);
         Assert.AreNotEqual(rawToken, storedHash);
         Assert.IsTrue(storedHash.All(Uri.IsHexDigit));
+
+        await using var legacy = connection.CreateCommand();
+        legacy.CommandText =
+            "SELECT count(*) FROM information_schema.columns WHERE table_schema = \'invitations\'" +
+            " AND table_name = \'ClientInvitations\' AND column_name = \'TokenHash\'";
+        Assert.AreEqual(
+            0L,
+            (long)(await legacy.ExecuteScalarAsync())!,
+            "The invitation aggregate must no longer carry a token hash of its own.");
     }
 
     private static async Task RefreshCsrfAsync(HttpClient client)

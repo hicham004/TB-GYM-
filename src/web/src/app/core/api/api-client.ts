@@ -170,15 +170,30 @@ export class ApiClient {
     return this.http.post<InvitationSummary>('/api/invitations', request).pipe(map(toInvitation));
   }
 
-  resendInvitation(invitationId: string): Observable<ClientInvitation> {
+  /**
+   * Deliberately resends an invitation, which kills every earlier link for it.
+   *
+   * Both arguments are required by the API and both are security-relevant. The idempotency key
+   * makes two concurrent presses converge on one new logical-send generation instead of racing to
+   * create two; the version makes a press issued against a stale list conflict rather than silently
+   * revoking a link the person pressing did not know existed.
+   */
+  resendInvitation(
+    invitationId: string,
+    idempotencyKey: string,
+    version: number,
+  ): Observable<ClientInvitation> {
     return this.http
-      .post<InvitationSummary>(`/api/invitations/${invitationId}/resend`, {})
+      .post<InvitationSummary>(`/api/invitations/${invitationId}/resend`, {
+        idempotencyKey,
+        version,
+      })
       .pipe(map(toInvitation));
   }
 
-  revokeInvitation(invitationId: string): Observable<ClientInvitation> {
+  revokeInvitation(invitationId: string, version: number): Observable<ClientInvitation> {
     return this.http
-      .post<InvitationSummary>(`/api/invitations/${invitationId}/revoke`, {})
+      .post<InvitationSummary>(`/api/invitations/${invitationId}/revoke`, { version })
       .pipe(map(toInvitation));
   }
 
@@ -1497,6 +1512,8 @@ function toInvitation(value: InvitationSummary): ClientInvitation {
   return {
     ...value,
     sendCount: toNumber(value.sendCount),
+    logicalSendGeneration: toNumber(value.logicalSendGeneration),
+    version: toNumber(value.version),
     developmentActionUrl: value.developmentActionUrl ?? null,
   };
 }

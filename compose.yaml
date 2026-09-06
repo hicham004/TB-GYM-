@@ -71,6 +71,14 @@ services:
       Notifications__Email__Provider__WebhookSigningSecret: ${TB_GYM_EMAIL_WEBHOOK_SECRET:-}
       Notifications__Email__Provider__FingerprintKeyId: ${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-}
       Notifications__Email__Provider__FingerprintKeys__${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-unset}: ${TB_GYM_EMAIL_FINGERPRINT_KEY:-}
+      # The one origin every confirmation, password-reset and invitation link is built from. It is
+      # configuration and never a request header: a host-header injection would turn a reset mail into
+      # a credential-harvesting mail that the victim's own account legitimately triggered. Outside
+      # Development it must be HTTPS and must appear in the allowlist beside it, and startup refuses
+      # anything with credentials, a query, a fragment or a path.
+      Application__PublicBaseUrl: ${TB_GYM_PUBLIC_ORIGIN:-http://localhost:4200}
+      Application__PublicOriginAllowlist__0: ${TB_GYM_PUBLIC_ORIGIN:-http://localhost:4200}
+      Application__ActionMail__MaximumAttempts: ${TB_GYM_ACTION_MAIL_MAX_ATTEMPTS:-4}
     ports:
       - "5134:8080"
     volumes:
@@ -112,6 +120,22 @@ services:
       Notifications__Email__Provider__WebhookSigningSecret: ${TB_GYM_EMAIL_WEBHOOK_SECRET:-}
       Notifications__Email__Provider__FingerprintKeyId: ${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-}
       Notifications__Email__Provider__FingerprintKeys__${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-unset}: ${TB_GYM_EMAIL_FINGERPRINT_KEY:-}
+      # Action mail. The worker is what actually drains these two queues, so it needs the same
+      # validated public origin the API has - it has no request to take one from even if that were
+      # allowed, which is what makes configuration the only possible source here.
+      Application__PublicBaseUrl: ${TB_GYM_PUBLIC_ORIGIN:-http://localhost:4200}
+      Application__PublicOriginAllowlist__0: ${TB_GYM_PUBLIC_ORIGIN:-http://localhost:4200}
+      Application__ActionMail__PollIntervalSeconds: ${TB_GYM_ACTION_MAIL_POLL_SECONDS:-5}
+      Application__ActionMail__BatchSize: ${TB_GYM_ACTION_MAIL_BATCH_SIZE:-25}
+      Application__ActionMail__ClaimLeaseSeconds: ${TB_GYM_ACTION_MAIL_LEASE_SECONDS:-120}
+      Application__ActionMail__MaximumAttempts: ${TB_GYM_ACTION_MAIL_MAX_ATTEMPTS:-4}
+      # The same data-protection key ring the API uses, and the same volume, deliberately. Confirmation
+      # and reset tokens are protected payloads: this process mints them and the API unprotects them,
+      # so two key rings would make every link this system sends fail on click, with an error that
+      # reads as "invalid token" and is really a deployment mistake.
+      DataProtection__KeyPath: /home/app/.aspnet/DataProtection-Keys
+    volumes:
+      - data-protection-keys:/home/app/.aspnet/DataProtection-Keys
     depends_on:
       postgres:
         condition: service_healthy
