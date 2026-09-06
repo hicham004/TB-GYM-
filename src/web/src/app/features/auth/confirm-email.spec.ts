@@ -4,6 +4,7 @@ import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/route
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
+import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { CsrfService } from '../../core/security/csrf.service';
 import { query, settle } from '../../../testing/dom';
 import { ConfirmEmail } from './confirm-email';
@@ -13,6 +14,7 @@ function link(params: Record<string, string>) {
 }
 
 async function render(params: Record<string, string>, api: Partial<ApiClient> = {}) {
+  const scrubber = { scrub: vi.fn(() => Promise.resolve()) };
   await TestBed.configureTestingModule({
     imports: [ConfirmEmail],
     providers: [
@@ -20,12 +22,18 @@ async function render(params: Record<string, string>, api: Partial<ApiClient> = 
       { provide: ActivatedRoute, useValue: link(params) },
       { provide: ApiClient, useValue: { confirmEmail: vi.fn(() => of(undefined)), ...api } },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: ActionTokenScrubber, useValue: scrubber },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ConfirmEmail);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api: TestBed.inject(ApiClient) };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    api: TestBed.inject(ApiClient),
+    scrubber,
+  };
 }
 
 describe('ConfirmEmail', () => {
@@ -50,10 +58,11 @@ describe('ConfirmEmail', () => {
   });
 
   it('says the link is incomplete instead of calling the server with nothing', async () => {
-    const { host, api } = await render({ userId: 'user-1' });
+    const { host, api, scrubber } = await render({ userId: 'user-1' });
 
     expect(api.confirmEmail).not.toHaveBeenCalled();
     expect(host.textContent).toContain('This confirmation link is incomplete.');
+    expect(scrubber.scrub).toHaveBeenCalledOnce();
   });
 
   it('reports a spent or expired link rather than claiming the email is confirmed', async () => {

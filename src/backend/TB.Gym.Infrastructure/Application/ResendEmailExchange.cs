@@ -82,7 +82,10 @@ internal static class ResendEmailExchange
 
             if (!response.IsSuccessStatusCode)
             {
-                return ResendExchangeResult.Refused(Classify(response.StatusCode), (int)response.StatusCode);
+                var failure = response.StatusCode == HttpStatusCode.Conflict
+                    ? await ClassifyConflictAsync(response, timeout.Token)
+                    : Classify(response.StatusCode);
+                return ResendExchangeResult.Refused(failure, (int)response.StatusCode);
             }
 
             var body = await ReadBoundedAsync(response, timeout.Token);
@@ -134,18 +137,40 @@ internal static class ResendEmailExchange
     /// Turns a refusal into a neutral classification the callers map to their own codes.
     /// </summary>
     /// <remarks>
-    /// The provider's own error body is deliberately not read, not parsed and not logged. It quotes the
-    /// request — including the recipient address — and classification does not need it: the status code
-    /// carries everything a dispatcher must decide, which is whether waiting could help.
+    /// Provider error bodies are deliberately not read except for a bounded 409 response. Resend uses
+    /// the same status for a permanently changed idempotent payload and for a concurrent identical
+    /// request that should be retried, so that response's stable <c>name</c> is required to decide
+    /// whether waiting could help. The body is never returned or logged.
     /// </remarks>
     private static ResendFailureKind Classify(HttpStatusCode status) => status switch
     {
         HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => ResendFailureKind.Unauthorized,
         HttpStatusCode.TooManyRequests => ResendFailureKind.RateLimited,
         HttpStatusCode.RequestTimeout => ResendFailureKind.Timeout,
-        HttpStatusCode.Conflict => ResendFailureKind.IdempotencyConflict,
         _ => (int)status >= 500 ? ResendFailureKind.Unavailable : ResendFailureKind.Rejected,
     };
+
+    /// <summary>
+    /// Distinguishes the provider's permanent idempotency mismatch from retryable 409 responses.
+    /// </summary>
+    /// <remarks>
+    /// Unknown, malformed and oversized conflict bodies are retryable. Treating one as permanent
+    /// would discard a message merely because this build could not prove which documented conflict it
+    /// received; the bounded attempt schedule still prevents an endless retry.
+    /// </remarks>
+    private static async Task<ResendFailureKind> ClassifyConflictAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        var body = await ReadBoundedAsync(response, cancellationToken);
+        if (body is not null && TryReadErrorName(body, out var errorName) &&
+            string.Equals(errorName, "invalid_idempotent_request", StringComparison.Ordinal))
+        {
+            return ResendFailureKind.IdempotencyConflict;
+        }
+
+        return ResendFailureKind.RetryableConflict;
+    }
 
     /// <summary>
     /// Reads at most <see cref="MaximumResponseBytes"/>, or gives up.
@@ -223,6 +248,39 @@ internal static class ResendEmailExchange
         }
     }
 
+    private static bool TryReadErrorName(byte[] body, out string errorName)
+    {
+        errorName = string.Empty;
+        if (body.Length == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body, ResponseJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("name", out var name) ||
+                name.ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
+
+            var candidate = name.GetString();
+            if (string.IsNullOrWhiteSpace(candidate) || candidate.Length > 100)
+            {
+                return false;
+            }
+
+            errorName = candidate;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// The provider's own request shape, owned here and nowhere else.
     /// </summary>
@@ -283,6 +341,9 @@ internal enum ResendFailureKind
 
     /// <summary>This idempotency key was already used for a different request.</summary>
     IdempotencyConflict = 5,
+
+    /// <summary>A conflict that can clear when the in-flight provider operation finishes.</summary>
+    RetryableConflict = 8,
 
     /// <summary>The request itself was rejected.</summary>
     Rejected = 6,

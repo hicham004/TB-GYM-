@@ -387,7 +387,7 @@ internal sealed class AccountActionMailService(
             context.AccountActionMailAttempts.Add(attempt);
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return Preparation.Started(attempt.Id, attemptNumber, idempotencyKey, authorization);
+            return Preparation.Started(attempt.Id, attemptNumber, idempotencyKey);
         });
 
         return preparation.Kind switch
@@ -425,21 +425,19 @@ internal sealed class AccountActionMailService(
                 cancellationToken);
         }
 
-        // A resumed attempt lost its authorization result with the acknowledgement it never received.
-        // Re-establishing it is not optional: the world may have moved between the two.
-        var authorization = preparation.Authorization;
-        if (authorization is null)
+        // Starting the attempt commits a durable fact, not permission to mint a credential. Always
+        // re-establish authorization after that commit: an address, confirmation state, security
+        // stamp or platform block can change in precisely that boundary, on a first run as well as a
+        // resumed one.
+        var authorization = await AuthorizeAsync(context, work.RequestId, cancellationToken);
+        if (authorization.SuppressionCode is { } code)
         {
-            authorization = await AuthorizeAsync(context, work.RequestId, cancellationToken);
-            if (authorization.SuppressionCode is { } code)
-            {
-                return await FinalizeAsync(
-                    context,
-                    work,
-                    preparation,
-                    FinalOutcome.Suppression(code),
-                    cancellationToken);
-            }
+            return await FinalizeAsync(
+                context,
+                work,
+                preparation,
+                FinalOutcome.Suppression(code),
+                cancellationToken);
         }
 
         var user = await userManager.FindByIdAsync(authorization.SubjectUserId.ToString());
@@ -478,6 +476,33 @@ internal sealed class AccountActionMailService(
                 preparation,
                 FinalOutcome.Permanent(AccountActionMailCodes.TokenUnavailable),
                 cancellationToken);
+        }
+
+        // The raw token may cross the provider boundary only after its mint is a durable fact. This
+        // mirrors invitation token-hash ordering without retaining the account token itself. A
+        // resumed attempt that already minted cannot reconstruct that token, so it fails closed and
+        // leaves the lease to be reclaimed as a later, separately keyed attempt.
+        var mintedAt = clock.UtcNow;
+        var recorded = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var attempt = await context.AccountActionMailAttempts
+                .SingleOrDefaultAsync(item => item.Id == preparation.AttemptId, cancellationToken);
+            if (attempt is null || attempt.IsCompleted || attempt.TokenMintedAtUtc is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return false;
+            }
+
+            attempt.RecordTokenMinted(mintedAt);
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        });
+
+        if (!recorded)
+        {
+            return new AccountActionMailDispatchOutcome();
         }
 
         var actionUrl = links.BuildAccountActionUrl(
@@ -519,7 +544,8 @@ internal sealed class AccountActionMailService(
             ResendFailureKind.Unauthorized or
             ResendFailureKind.RateLimited or
             ResendFailureKind.Timeout or
-            ResendFailureKind.Unavailable => FinalOutcome.Retryable(AccountActionMailCodes.TransportTransient),
+            ResendFailureKind.Unavailable or
+            ResendFailureKind.RetryableConflict => FinalOutcome.Retryable(AccountActionMailCodes.TransportTransient),
             _ => FinalOutcome.Permanent(AccountActionMailCodes.TransportPermanent),
         },
     };
@@ -768,17 +794,15 @@ internal sealed class AccountActionMailService(
         Guid AttemptId = default,
         int AttemptNumber = 0,
         string? IdempotencyKey = null,
-        string? Code = null,
-        Authorization? Authorization = null)
+        string? Code = null)
     {
         public static Preparation Stale { get; } = new(PreparationKind.Stale);
 
         public static Preparation Started(
             Guid attemptId,
             int attemptNumber,
-            string idempotencyKey,
-            Authorization authorization) =>
-            new(PreparationKind.Started, attemptId, attemptNumber, idempotencyKey, null, authorization);
+            string idempotencyKey) =>
+            new(PreparationKind.Started, attemptId, attemptNumber, idempotencyKey);
 
         public static Preparation Resumed(Guid attemptId, int attemptNumber, string idempotencyKey) =>
             new(PreparationKind.Started, attemptId, attemptNumber, idempotencyKey);

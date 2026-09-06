@@ -64,8 +64,16 @@ export class AcceptInvitation implements OnInit {
       this.accountForm.controls.displayName.setValue(
         `${invitation.firstName} ${invitation.lastName}`.trim(),
       );
+      if (invitation.status !== 'Pending') {
+        // A terminal invitation has no usable credential left. Remove it from both the address bar
+        // and this history entry as soon as the server establishes that fact.
+        await this.scrubber.scrub(this.route);
+      }
     } catch {
       this.error.set($localize`This invitation link is invalid or no longer available.`);
+      // Unknown, expired, superseded and revoked links are all spent from the browser's point of
+      // view. Keeping one visible cannot make it usable and only gives it more places to leak.
+      await this.scrubber.scrub(this.route);
     } finally {
       this.loading.set(false);
     }
@@ -86,6 +94,7 @@ export class AcceptInvitation implements OnInit {
     const value = this.accountForm.getRawValue();
     if (createsAccount && value.password !== value.confirmPassword) {
       this.error.set($localize`Passwords do not match.`);
+      this.clearCredentials();
       return;
     }
 
@@ -115,6 +124,12 @@ export class AcceptInvitation implements OnInit {
       } else {
         this.error.set(apiErrorMessage(error, $localize`The invitation could not be accepted.`));
       }
+      if (createsAccount) {
+        this.clearCredentials();
+      }
+      if (error instanceof HttpErrorResponse && error.status === 410) {
+        await this.scrubber.scrub(this.route);
+      }
     } finally {
       this.submitting.set(false);
     }
@@ -125,5 +140,10 @@ export class AcceptInvitation implements OnInit {
     await this.router.navigate(['/auth/sign-in'], {
       queryParams: { returnUrl: this.returnUrl() },
     });
+  }
+
+  private clearCredentials(): void {
+    this.accountForm.controls.password.reset('');
+    this.accountForm.controls.confirmPassword.reset('');
   }
 }

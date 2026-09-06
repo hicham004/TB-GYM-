@@ -4,6 +4,7 @@ import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/route
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
+import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { CsrfService } from '../../core/security/csrf.service';
 import { button, fill, press, query, settle } from '../../../testing/dom';
 import { ResetPassword } from './reset-password';
@@ -16,6 +17,7 @@ function link(params: Record<string, string>) {
 const VALID_LINK = { userId: 'user-1', code: 'reset-code-1' };
 
 async function render(params: Record<string, string>, api: Partial<ApiClient> = {}) {
+  const scrubber = { scrub: vi.fn(() => Promise.resolve()) };
   await TestBed.configureTestingModule({
     imports: [ResetPassword],
     providers: [
@@ -23,12 +25,18 @@ async function render(params: Record<string, string>, api: Partial<ApiClient> = 
       { provide: ActivatedRoute, useValue: link(params) },
       { provide: ApiClient, useValue: { resetPassword: vi.fn(() => of(undefined)), ...api } },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: ActionTokenScrubber, useValue: scrubber },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ResetPassword);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api: TestBed.inject(ApiClient) };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    api: TestBed.inject(ApiClient),
+    scrubber,
+  };
 }
 
 describe('ResetPassword', () => {
@@ -85,11 +93,12 @@ describe('ResetPassword', () => {
   });
 
   it('offers no form at all when the link is missing its code', async () => {
-    const { host } = await render({ userId: 'user-1' });
+    const { host, scrubber } = await render({ userId: 'user-1' });
 
     expect(host.textContent).toContain('This reset link is incomplete.');
     expect(host.querySelector('input[type="password"]')).toBeNull();
     expect(host.querySelector('button[type="submit"]')).toBeNull();
+    expect(scrubber.scrub).toHaveBeenCalledOnce();
   });
 
   it('reports a spent or expired link rather than claiming the password changed', async () => {
@@ -107,5 +116,10 @@ describe('ResetPassword', () => {
       'The reset link is invalid or expired.',
     );
     expect(host.textContent).not.toContain('Password updated');
+    expect(passwords(host).map((input) => input.value)).toEqual(['', '']);
   });
 });
+
+function passwords(host: HTMLElement): HTMLInputElement[] {
+  return Array.from(host.querySelectorAll<HTMLInputElement>('input[type="password"]'));
+}

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
@@ -11,12 +12,14 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Notifications;
 using TB.Gym.SharedKernel;
@@ -67,6 +70,7 @@ public sealed class Phase6B3CActionMailProviderTests
     private MutableClock? testClock;
     private CapturedLog? log;
     private ProviderDouble? providerDouble;
+    private ActionMailCommitBarrier? actionMailCommitBarrier;
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -86,6 +90,8 @@ public sealed class Phase6B3CActionMailProviderTests
         testClock = clock;
         var capturedLog = new CapturedLog();
         log = capturedLog;
+        var commitBarrier = new ActionMailCommitBarrier();
+        actionMailCommitBarrier = commitBarrier;
 
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -128,6 +134,10 @@ public sealed class Phase6B3CActionMailProviderTests
                 services.RemoveAll<IClock>();
                 services.AddSingleton<IClock>(clock);
                 services.AddSingleton<ILoggerProvider>(capturedLog);
+                services.AddSingleton(commitBarrier);
+                services.AddDbContext<GymDbContext>((provider, options) => options.AddInterceptors(
+                    provider.GetRequiredService<ActionMailCommitBarrier>().Commands,
+                    provider.GetRequiredService<ActionMailCommitBarrier>().Transactions));
             });
         });
     }
@@ -135,6 +145,7 @@ public sealed class Phase6B3CActionMailProviderTests
     [TestCleanup]
     public async Task CleanupAsync()
     {
+        actionMailCommitBarrier?.Release();
         factory?.Dispose();
         if (providerDouble is not null)
         {
@@ -265,6 +276,62 @@ public sealed class Phase6B3CActionMailProviderTests
             HttpStatusCode.OK);
     }
 
+    /// <summary>Two distinct retry links cannot both report a successful acceptance.</summary>
+    [TestMethod]
+    public async Task ConcurrentDifferentTokensForOneGenerationAcceptExactlyOne()
+    {
+        var workspace = await CreateWorkspaceAsync("two-token-race");
+        Provider.Responder = attempt => attempt == 1
+            ? ProviderResponse.Status(500)
+            : ProviderResponse.Accepted($"prov_{Guid.NewGuid():N}");
+        var invitation = await CreateInvitationAsync(
+            workspace,
+            $"client-two-token-race-{workspace.Suffix}@tbgym.test");
+
+        await SweepInvitationMailAsync();
+        Clock.Advance(TimeSpan.FromMinutes(2));
+        await SweepInvitationMailAsync();
+        var tokens = Provider.Requests.Select(request => TokenOf(LinkFrom(request.Body))).ToArray();
+        Assert.HasCount(2, tokens);
+        Assert.AreNotEqual(tokens[0], tokens[1]);
+
+        using var first = CreateClient();
+        using var second = CreateClient();
+        await RefreshCsrfAsync(first);
+        await RefreshCsrfAsync(second);
+        var responses = await Task.WhenAll(
+            first.PostAsJsonAsync(
+                "/api/invitations/accept",
+                new { token = tokens[0], displayName = "Invited Client", password = Password },
+                TestContext.CancellationToken),
+            second.PostAsJsonAsync(
+                "/api/invitations/accept",
+                new { token = tokens[1], displayName = "Invited Client", password = Password },
+                TestContext.CancellationToken));
+
+        Assert.AreEqual(1, responses.Count(response => response.StatusCode == HttpStatusCode.OK));
+        Assert.AreEqual(1, responses.Count(response => response.StatusCode == HttpStatusCode.Conflict));
+        Assert.AreEqual(
+            1L,
+            await ScalarAsync<long>(
+                """
+                SELECT count(*) FROM invitations."TokenIssues"
+                WHERE "InvitationId" = @id AND "RedeemedAtUtc" IS NOT NULL
+                """,
+                ("id", invitation)));
+
+        var winner = Array.FindIndex(responses, response => response.StatusCode == HttpStatusCode.OK);
+        var loser = winner == 0 ? 1 : 0;
+        var winnerDetails = await first.GetAsync(
+            $"/api/invitations/public/{Uri.EscapeDataString(tokens[winner])}",
+            TestContext.CancellationToken);
+        var loserDetails = await second.GetAsync(
+            $"/api/invitations/public/{Uri.EscapeDataString(tokens[loser])}",
+            TestContext.CancellationToken);
+        await AssertStatusAsync(winnerDetails, HttpStatusCode.OK);
+        await AssertStatusAsync(loserDetails, HttpStatusCode.NotFound);
+    }
+
     /// <summary>
     /// A dead letter records the failure and leaks nothing about the recipient.
     /// </summary>
@@ -376,6 +443,104 @@ public sealed class Phase6B3CActionMailProviderTests
         Assert.DoesNotContain(ApiKey, Log.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>A concurrent use of the same provider key is delayed, not discarded.</summary>
+    /// <remarks>
+    /// Resend uses HTTP 409 for both a permanently changed idempotent payload and an identical request
+    /// that is still in flight. The stable error name, not the status alone, distinguishes them.
+    /// </remarks>
+    [TestMethod]
+    public async Task AConcurrentProviderIdempotencyRequestIsRetried()
+    {
+        var workspace = await CreateWorkspaceAsync("provider-conflict");
+        Provider.Responder = attempt => attempt == 1
+            ? ProviderResponse.Status(409, "{\"name\":\"concurrent_idempotent_requests\"}")
+            : ProviderResponse.Accepted($"prov_{Guid.NewGuid():N}");
+        var invitation = await CreateInvitationAsync(
+            workspace,
+            $"client-provider-conflict-{workspace.Suffix}@tbgym.test");
+
+        var first = await SweepInvitationMailAsync();
+        Assert.AreEqual(1, first.Retried, "A concurrent provider request can converge on retry.");
+        Assert.AreEqual(
+            InvitationActionMailCodes.TransportTransient,
+            await ScalarAsync<string>(
+                """SELECT "FailureCode" FROM invitations."ActionMailRequests" WHERE "InvitationId" = @id""",
+                ("id", invitation)));
+
+        Clock.Advance(TimeSpan.FromMinutes(2));
+        var second = await SweepInvitationMailAsync();
+        Assert.AreEqual(1, second.Materialized);
+    }
+
+    /// <summary>A revoke committed after attempt start still suppresses before token minting.</summary>
+    [TestMethod]
+    public async Task InvitationAuthorizationIsRecheckedAfterTheStartedAttemptCommits()
+    {
+        var workspace = await CreateWorkspaceAsync("authorization-boundary");
+        var invitation = await CreateInvitationAsync(
+            workspace,
+            $"client-authorization-boundary-{workspace.Suffix}@tbgym.test");
+        var barrier = RequiredActionMailCommitBarrier;
+        barrier.Arm("invitations");
+
+        var sweep = SweepInvitationMailAsync();
+        await barrier.WaitUntilCommittedAsync(TestContext.CancellationToken);
+        await RevokeInvitationAsync(workspace, invitation);
+        barrier.Release();
+
+        var outcome = await sweep;
+        Assert.AreEqual(1, outcome.Suppressed);
+        Assert.IsEmpty(Provider.Requests, "A revoked invitation reached the provider after attempt start.");
+        await AssertSuppressedAsync(invitation, 1, InvitationActionMailCodes.InvitationRevoked);
+    }
+
+    /// <summary>An account block committed after attempt start still suppresses before token minting.</summary>
+    [TestMethod]
+    public async Task AccountAuthorizationIsRecheckedAfterTheStartedAttemptCommits()
+    {
+        var workspace = await CreateWorkspaceAsync("account-authorization-boundary");
+        var userId = await ScalarAsync<Guid>(
+            """SELECT "Id" FROM identity."Users" WHERE "Email" = @email""",
+            ("email", workspace.CoachEmail));
+        await ExecuteAsync(
+            """UPDATE identity."Users" SET "EmailConfirmed" = false WHERE "Id" = @id""",
+            ("id", userId));
+
+        Guid requestId;
+        await using (var scope = RequiredFactory.Services.CreateAsyncScope())
+        {
+            var scheduled = await scope.ServiceProvider
+                .GetRequiredService<TB.Gym.Modules.Identity.IAccountActionMailScheduler>()
+                .RequestAsync(
+                    new TB.Gym.Modules.Identity.AccountActionMailCommand(
+                        userId,
+                        TB.Gym.Modules.Identity.AccountActionKind.ConfirmEmail,
+                        TB.Gym.Modules.Identity.AccountActionMailSources.CoachRegistration,
+                        userId),
+                    TestContext.CancellationToken);
+            requestId = scheduled.RequestId;
+        }
+
+        var barrier = RequiredActionMailCommitBarrier;
+        barrier.Arm("identity");
+        var before = Provider.Requests.Count;
+        var sweep = SweepAccountMailAsync();
+        await barrier.WaitUntilCommittedAsync(TestContext.CancellationToken);
+        await ExecuteAsync(
+            """UPDATE identity."Users" SET "IsPlatformBlocked" = true WHERE "Id" = @id""",
+            ("id", userId));
+        barrier.Release();
+
+        var outcome = await sweep;
+        Assert.AreEqual(1, outcome.Suppressed);
+        Assert.HasCount(before, Provider.Requests, "A blocked account reached the provider after attempt start.");
+        Assert.AreEqual(
+            TB.Gym.Modules.Identity.AccountActionMailCodes.SubjectBlocked,
+            await ScalarAsync<string>(
+                """SELECT "FailureCode" FROM identity."ActionMailRequests" WHERE "Id" = @id""",
+                ("id", requestId)));
+    }
+
     /// <summary>
     /// Requirement 17, structurally: no two attempts can present one provider key.
     /// </summary>
@@ -426,6 +591,47 @@ public sealed class Phase6B3CActionMailProviderTests
             """,
             "a provider key that does not name its own request and attempt",
             ("id", invitation));
+
+        // Prove the global unique index itself. The transaction temporarily bypasses the overlapping
+        // append-only trigger and key-shape check, then rolls every DDL change back.
+        await AssertProviderKeyUniqueIndexRefusesAsync(invitation, keys[0]);
+    }
+
+    private async Task AssertProviderKeyUniqueIndexRefusesAsync(Guid invitationId, string duplicateKey)
+    {
+        await using var connection = new NpgsqlConnection(RequiredConnection);
+        await connection.OpenAsync(TestContext.CancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(TestContext.CancellationToken);
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText =
+                """
+                ALTER TABLE invitations."ActionMailAttempts"
+                    DISABLE TRIGGER trg_invitation_action_mail_attempts_protect;
+                ALTER TABLE invitations."ActionMailAttempts"
+                    DROP CONSTRAINT "CK_InvitationActionMailAttempts_ProviderKeyShape";
+                UPDATE invitations."ActionMailAttempts"
+                SET "ProviderIdempotencyKey" = @key
+                WHERE "InvitationId" = @id AND "AttemptNumber" = 2;
+                """;
+            command.Parameters.AddWithValue("key", duplicateKey);
+            command.Parameters.AddWithValue("id", invitationId);
+            await command.ExecuteNonQueryAsync(TestContext.CancellationToken);
+            Assert.Fail("The database accepted one provider idempotency key on two attempts.");
+        }
+        catch (PostgresException exception)
+        {
+            Assert.AreEqual(
+                "IX_InvitationActionMailAttempts_ProviderIdempotencyKey",
+                exception.ConstraintName,
+                "A different guard rejected the mutation; the unique index has no independent proof.");
+        }
+        finally
+        {
+            await transaction.RollbackAsync(TestContext.CancellationToken);
+        }
     }
 
     /// <summary>
@@ -715,6 +921,9 @@ public sealed class Phase6B3CActionMailProviderTests
     private ProviderDouble Provider =>
         providerDouble ?? throw new InvalidOperationException("The provider double is not initialized.");
 
+    private ActionMailCommitBarrier RequiredActionMailCommitBarrier =>
+        actionMailCommitBarrier ?? throw new InvalidOperationException("The commit barrier is not initialized.");
+
     private HttpClient CreateClient() => RequiredFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
         AllowAutoRedirect = false,
@@ -794,10 +1003,10 @@ public sealed class Phase6B3CActionMailProviderTests
         return new Workspace(tenantId, coach, email, suffix);
     }
 
-    private async Task SweepAccountMailAsync()
+    private async Task<TB.Gym.Modules.Identity.AccountActionMailDispatchOutcome> SweepAccountMailAsync()
     {
         await using var scope = RequiredFactory.Services.CreateAsyncScope();
-        await scope.ServiceProvider
+        return await scope.ServiceProvider
             .GetRequiredService<TB.Gym.Modules.Identity.IAccountActionMailDispatchService>()
             .DispatchDueAsync(TestContext.CancellationToken);
     }
@@ -1174,6 +1383,121 @@ public sealed class Phase6B3CActionMailProviderTests
                 Exception? exception,
                 Func<TState, Exception?, string> formatter) =>
                 messages.Enqueue(formatter(state, exception));
+        }
+    }
+
+    /// <summary>
+    /// Holds EF immediately after the Started-attempt transaction is durably committed. This creates
+    /// the authorization race without adding a test hook to production code.
+    /// </summary>
+    internal sealed class ActionMailCommitBarrier
+    {
+        private readonly ConcurrentDictionary<DbTransaction, byte> watched = new();
+        private readonly object sync = new();
+        private TaskCompletionSource? arrived;
+        private TaskCompletionSource? release;
+        private string? tableFragment;
+
+        public ActionMailCommitBarrier()
+        {
+            Commands = new CommandWatcher(this);
+            Transactions = new TransactionWatcher(this);
+        }
+
+        public CommandWatcher Commands { get; }
+
+        public TransactionWatcher Transactions { get; }
+
+        public void Arm(string schema)
+        {
+            lock (sync)
+            {
+                tableFragment = $"INSERT INTO {schema}.\"ActionMailAttempts\"";
+                arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+        }
+
+        public async Task WaitUntilCommittedAsync(CancellationToken cancellationToken)
+        {
+            Task task;
+            lock (sync)
+            {
+                task = arrived?.Task ?? throw new InvalidOperationException("The barrier is not armed.");
+            }
+
+            await task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+        }
+
+        public void Release()
+        {
+            lock (sync)
+            {
+                release?.TrySetResult();
+                tableFragment = null;
+            }
+        }
+
+        private void Watch(DbCommand command)
+        {
+            lock (sync)
+            {
+                if (tableFragment is not null &&
+                    command.Transaction is not null &&
+                    command.CommandText.Contains(tableFragment, StringComparison.Ordinal))
+                {
+                    watched.TryAdd(command.Transaction, 0);
+                }
+            }
+        }
+
+        private async Task AfterCommitAsync(DbTransaction transaction, CancellationToken cancellationToken)
+        {
+            if (!watched.TryRemove(transaction, out _))
+            {
+                return;
+            }
+
+            Task releaseTask;
+            lock (sync)
+            {
+                arrived!.TrySetResult();
+                releaseTask = release!.Task;
+            }
+
+            await releaseTask.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+        }
+
+        internal sealed class CommandWatcher(ActionMailCommitBarrier owner) : DbCommandInterceptor
+        {
+            public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+                DbCommand command,
+                CommandEventData eventData,
+                InterceptionResult<DbDataReader> result,
+                CancellationToken cancellationToken = default)
+            {
+                owner.Watch(command);
+                return ValueTask.FromResult(result);
+            }
+
+            public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+                DbCommand command,
+                CommandEventData eventData,
+                InterceptionResult<int> result,
+                CancellationToken cancellationToken = default)
+            {
+                owner.Watch(command);
+                return ValueTask.FromResult(result);
+            }
+        }
+
+        internal sealed class TransactionWatcher(ActionMailCommitBarrier owner) : DbTransactionInterceptor
+        {
+            public override Task TransactionCommittedAsync(
+                DbTransaction transaction,
+                TransactionEndEventData eventData,
+                CancellationToken cancellationToken = default) =>
+                owner.AfterCommitAsync(transaction, cancellationToken);
         }
     }
 

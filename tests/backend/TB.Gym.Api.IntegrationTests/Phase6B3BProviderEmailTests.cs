@@ -176,7 +176,10 @@ public sealed partial class Phase6B3BProviderEmailTests
             (403, "{}", "Pending", NotificationFailureCodes.EmailProviderUnauthorized),
             (422, "{}", "DeadLettered", NotificationFailureCodes.EmailProviderRejected),
             (400, "{}", "DeadLettered", NotificationFailureCodes.EmailProviderRejected),
-            (409, "{}", "DeadLettered", NotificationFailureCodes.EmailProviderIdempotencyConflict),
+            (409, "{\"name\":\"invalid_idempotent_request\"}", "DeadLettered", NotificationFailureCodes.EmailProviderIdempotencyConflict),
+            (409, "{\"name\":\"concurrent_idempotent_requests\"}", "Pending", NotificationFailureCodes.EmailProviderConflictRetryable),
+            (409, "{\"name\":\"resource_locked\"}", "Pending", NotificationFailureCodes.EmailProviderConflictRetryable),
+            (409, "{}", "Pending", NotificationFailureCodes.EmailProviderConflictRetryable),
             (200, "{}", "DeadLettered", NotificationFailureCodes.EmailProviderResponseInvalid),
             (200, "{\"id\":\"has space\"}", "DeadLettered", NotificationFailureCodes.EmailProviderResponseInvalid),
             (200, "not json", "DeadLettered", NotificationFailureCodes.EmailProviderResponseInvalid),
@@ -828,12 +831,17 @@ public sealed partial class Phase6B3BProviderEmailTests
         // being untrue, and this is the copy that survives that refactor.
         await AssertRefusedAsync(
             """
+            UPDATE notifications."ProviderMessages" m
+            SET "EventCount" = m."EventCount" + 1,
+                "LastEventReceivedAtUtc" = e."ReceivedAtUtc"
+            FROM notifications."ProviderEvents" e
+            WHERE e."Id" = @id AND m."Id" = e."ProviderMessageRecordId";
             INSERT INTO notifications."ProviderEvents"
                 ("Id","TenantId","ProviderMessageRecordId","Adapter","ProviderEventId","EventType",
-                 "OccurredAtUtc","ReceivedAtUtc","AppliedNewFact","SignatureScheme",
-                 "SignatureSchemeVersion","CreatedAtUtc","UpdatedAtUtc")
+                  "OccurredAtUtc","ReceivedAtUtc","AppliedNewFact","SignatureScheme",
+                  "SignatureSchemeVersion","CreatedAtUtc","UpdatedAtUtc")
             SELECT uuidv7(), e."TenantId", e."ProviderMessageRecordId", e."Adapter", e."ProviderEventId",
-                   'Complained', e."OccurredAtUtc", e."ReceivedAtUtc", false, e."SignatureScheme",
+                   e."EventType", e."OccurredAtUtc", e."ReceivedAtUtc", false, e."SignatureScheme",
                    e."SignatureSchemeVersion", now(), now()
             FROM notifications."ProviderEvents" e WHERE e."Id" = @id
             """,
@@ -889,6 +897,50 @@ public sealed partial class Phase6B3BProviderEmailTests
             """DELETE FROM notifications."ProviderMessages" WHERE "Id" = @id""",
             "deleting a provider message",
             ("id", accepted.Id));
+
+        await AssertRefusedAsync(
+            """
+            UPDATE notifications."ProviderMessages"
+            SET "EventCount" = "EventCount" + 1, "LastEventReceivedAtUtc" = now()
+            WHERE "Id" = @id
+            """,
+            "event bookkeeping with no append-only event",
+            ("id", otherAccepted.Id));
+
+        await AssertRefusedAsync(
+            """
+            INSERT INTO notifications."ProviderEvents"
+                ("Id","TenantId","ProviderMessageRecordId","Adapter","ProviderEventId","EventType",
+                 "OccurredAtUtc","ReceivedAtUtc","AppliedNewFact","SignatureScheme",
+                 "SignatureSchemeVersion","CreatedAtUtc","UpdatedAtUtc")
+            SELECT uuidv7(), m."TenantId", m."Id", m."Adapter", 'evt_invented_same_tenant',
+                   'Complained', now(), now(), false, 'standard-webhooks-hmac-sha256-v1', 1, now(), now()
+            FROM notifications."ProviderMessages" m WHERE m."Id" = @id
+            """,
+            "an invented same-tenant provider event with no message bookkeeping or prior fact",
+            ("id", otherAccepted.Id));
+
+        var receivedAt = Clock.UtcNow.AddMinutes(1);
+        await AssertRefusedAsync(
+            """
+            UPDATE notifications."ProviderMessages"
+            SET "ComplainedAtUtc" = @fact, "EventCount" = "EventCount" + 1,
+                "LastEventReceivedAtUtc" = @received
+            WHERE "Id" = @message;
+            INSERT INTO notifications."ProviderEvents"
+                ("Id","TenantId","ProviderMessageRecordId","Adapter","ProviderEventId","EventType",
+                 "OccurredAtUtc","ReceivedAtUtc","AppliedNewFact","SignatureScheme",
+                 "SignatureSchemeVersion","CreatedAtUtc","UpdatedAtUtc")
+            SELECT uuidv7(), m."TenantId", m."Id", m."Adapter", 'evt_wrong_fact_instant',
+                   'Complained', @wrongFact, @received, true, 'standard-webhooks-hmac-sha256-v1',
+                   1, @received, @received
+            FROM notifications."ProviderMessages" m WHERE m."Id" = @message
+            """,
+            "provider evidence whose claimed fact does not match the message fact",
+            ("fact", receivedAt.AddMinutes(-1)),
+            ("wrongFact", receivedAt.AddMinutes(-2)),
+            ("received", receivedAt),
+            ("message", otherAccepted.Id));
 
         // And an attempt cannot claim an identifier its delivery does not own.
         await AssertRefusedAsync(

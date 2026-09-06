@@ -1204,11 +1204,12 @@ address, token, URL or body — appears in either.
 
 1. **Claim** a due row in one short transaction, with `FOR UPDATE SKIP LOCKED`, so replicas divide the
    work without coordinating. No attempt is spent; nothing external happens under the lock.
-2. **Re-establish authorization**, after that claim commits and before anything is minted. A committed
+2. **Establish current eligibility**, after that claim commits, before spending an attempt. A committed
    claim is a lease on work and never durable permission to mail somebody a credential.
 3. **Start the attempt and commit it**, so a process that dies mid-send leaves evidence rather than
-   silence.
-4. **Mint** the token in memory.
+   silence. Then **re-establish authorization again**: the committed attempt is evidence, not
+   permission, and state may have changed across that transaction boundary.
+4. **Mint** the token in memory only after the post-commit recheck succeeds.
 5. **Commit its hash** — invitations only, and this is the step that matters. A link a provider
    accepted must never be one this system has no record of, and the only way to guarantee that is to
    make the record older than the send. A database trigger refuses to mark a request materialized when
@@ -1242,8 +1243,9 @@ token" wording predates.
 
 One request exists per invitation and generation, so a retry has nowhere to write a new generation
 even if it tried. Acceptance recognises any unexpired, unrevoked, unredeemed hash of the *current*
-generation, which is what makes two tokens from two attempts of one generation both work. A token of a
-superseded generation answers exactly like an unknown one.
+generation, which is what makes two tokens from two attempts of one generation valid until one wins.
+After acceptance, only the exact redeemed token may read the accepted state; losing, revoked, or
+superseded tokens answer exactly like unknown credentials.
 
 ### Provider idempotency when the payload changes
 
@@ -1290,7 +1292,8 @@ Confirmation and reset tokens are data-protection payloads. The Worker mints the
 unprotects them, so both compose `AddDataProtection().SetApplicationName("TB.Gym")` and both must point
 `DataProtection:KeyPath` at the same persisted location. Two key rings would make every link this
 system sends fail on click, with an error that reads as "invalid token" and is really a deployment
-mistake. The Worker composes `AddIdentityCore` for the token providers — no cookies, no
+mistake. Production refuses to start without a configured persisted key path. The Worker composes
+`AddIdentityCore` for the token providers — no cookies, no
 `SignInManager`, no authentication handlers — and still hosts no HTTP surface.
 
 ### Angular
@@ -1301,6 +1304,7 @@ document `<meta>` so the guarantee survives any host; they remove the exchanged 
 bar by **history replacement** rather than a new entry, so it is gone from the back stack too; and
 they never write a token to local storage, session storage, analytics or a log. The invitation screen
 states plainly that resending cancels the previous link, because that is a consequence the person
-pressing it is entitled to know about in advance.
+pressing it is entitled to know about in advance. Failed password reset and account-creating
+invitation submissions clear password controls while preserving safe fields such as display name.
 
 See `docs/adr/0021-tokenless-action-email-materialization.md`.

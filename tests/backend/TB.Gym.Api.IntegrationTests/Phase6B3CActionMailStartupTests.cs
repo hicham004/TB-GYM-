@@ -213,6 +213,20 @@ public sealed class Phase6B3CActionMailStartupTests
         Assert.AreEqual("https://app.tbgym.test", resolved.GetLeftPart(UriPartial.Authority));
     }
 
+    /// <summary>Production cannot mint action tokens under an ephemeral, process-local key ring.</summary>
+    [TestMethod]
+    public void ProductionCompositionRefusesAnUnpersistedDataProtectionKeyRing()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        var services = new ServiceCollection();
+
+        var refusal = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            services.AddTbGymDataProtection(configuration, isProduction: true));
+
+        Assert.Contains("DataProtection:KeyPath", refusal.Message, StringComparison.Ordinal);
+        services.AddTbGymDataProtection(configuration, isProduction: false);
+    }
+
     /// <summary>
     /// The link builder produces links only from the validated origin, and null when there is none.
     /// </summary>
@@ -326,6 +340,7 @@ public sealed class Phase6B3CActionMailStartupTests
         var settings = new Dictionary<string, string?>(origin)
         {
             ["ConnectionStrings:Database"] = "Host=unused;Database=unused;Username=unused;Password=unused",
+            ["DataProtection:KeyPath"] = Path.Combine(Path.GetTempPath(), "tb-gym-action-mail-startup-tests"),
             ["Notifications:Email:Adapter"] = NotificationEmailAdapters.Resend,
             ["Notifications:Email:Provider:ApiKey"] = "re_startup_test_key",
             ["Notifications:Email:Provider:FromAddress"] = "TB Gym <notifications@mail.tbgym.test>",

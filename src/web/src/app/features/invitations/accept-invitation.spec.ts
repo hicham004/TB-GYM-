@@ -12,6 +12,7 @@ import type {
 } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
+import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, fill, press, query, settle } from '../../../testing/dom';
 import { AcceptInvitation } from './accept-invitation';
@@ -58,6 +59,7 @@ async function render(
 ) {
   const token = options.token ?? TOKEN;
   const currentUser = signal<CurrentUser | null>(options.signedInAs ?? null);
+  const scrubber = { scrub: vi.fn(() => Promise.resolve()) };
   await TestBed.configureTestingModule({
     imports: [AcceptInvitation],
     providers: [
@@ -83,6 +85,7 @@ async function render(
         },
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: ActionTokenScrubber, useValue: scrubber },
       { provide: TenantStore, useValue: { load: vi.fn(() => Promise.resolve()) } },
     ],
   }).compileComponents();
@@ -95,6 +98,7 @@ async function render(
     api: TestBed.inject(ApiClient),
     tenants: TestBed.inject(TenantStore),
     router: TestBed.inject(Router),
+    scrubber,
   };
 }
 
@@ -183,6 +187,8 @@ describe('AcceptInvitation', () => {
 
     expect(api.acceptInvitation).not.toHaveBeenCalled();
     expect(query(host, '[role="alert"]').textContent).toContain('Passwords do not match.');
+    expect(field(host).value).toBe('Rana H.');
+    expect(passwords(host).map((input) => input.value)).toEqual(['', '']);
   });
 
   it('does not submit a password shorter than the policy allows', async () => {
@@ -199,10 +205,11 @@ describe('AcceptInvitation', () => {
   });
 
   it('says an accepted invitation is spent instead of offering to accept it again', async () => {
-    const { host } = await render({ invitation: invitation({ status: 'Accepted' }) });
+    const { host, scrubber } = await render({ invitation: invitation({ status: 'Accepted' }) });
 
     expect(host.textContent).toContain('This invitation has already been accepted.');
     expect(host.querySelector('form')).toBeNull();
+    expect(scrubber.scrub).toHaveBeenCalledOnce();
   });
 
   it('says a revoked invitation is closed rather than offering a form', async () => {
@@ -220,7 +227,7 @@ describe('AcceptInvitation', () => {
   });
 
   it('reports an unknown or expired token as an unavailable link', async () => {
-    const { host } = await render({
+    const { host, scrubber } = await render({
       api: {
         getPublicInvitation: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 404 }))),
       },
@@ -228,6 +235,40 @@ describe('AcceptInvitation', () => {
 
     expect(host.textContent).toContain('This invitation link is invalid or no longer available.');
     expect(host.querySelector('form')).toBeNull();
+    expect(scrubber.scrub).toHaveBeenCalledOnce();
+  });
+
+  it('removes a token the server rejects as expired after an acceptance attempt', async () => {
+    const expired = new HttpErrorResponse({
+      status: 410,
+      error: { code: 'invitation_invalid_or_expired' },
+    });
+    const { fixture, host, scrubber } = await render({
+      signedInAs: user('rana@example.test'),
+      api: { acceptInvitation: vi.fn(() => throwError(() => expired)) },
+    });
+
+    press(host, 'Accept invitation');
+    await settle(fixture);
+
+    expect(scrubber.scrub).toHaveBeenCalledOnce();
+  });
+
+  it('preserves the display name but clears credentials after a failed account creation', async () => {
+    const refused = new HttpErrorResponse({ status: 503 });
+    const { fixture, host } = await render({
+      api: { acceptInvitation: vi.fn(() => throwError(() => refused)) },
+    });
+
+    fill(host, 'Display name', 'Rana H.');
+    fill(host, 'Password', 'correct-horse-battery');
+    fill(host, 'Confirm password', 'correct-horse-battery');
+    await settle(fixture);
+    press(host, 'Create account and join');
+    await settle(fixture);
+
+    expect(field(host).value).toBe('Rana H.');
+    expect(passwords(host).map((input) => input.value)).toEqual(['', '']);
   });
 
   it('names the mismatched-account refusal the server sent rather than a generic failure', async () => {
@@ -252,4 +293,8 @@ describe('AcceptInvitation', () => {
 /** The display-name control, addressed without assuming which binding fills it. */
 function field(host: HTMLElement): HTMLInputElement {
   return query<HTMLInputElement>(host, 'input[type="text"]');
+}
+
+function passwords(host: HTMLElement): HTMLInputElement[] {
+  return Array.from(host.querySelectorAll<HTMLInputElement>('input[type="password"]'));
 }

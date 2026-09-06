@@ -41,6 +41,7 @@ public sealed class Phase6B3CActionMailMigrationUpgradeTests
 
     private static readonly Guid TenantId = Guid.Parse("41111111-1111-1111-1111-111111111111");
     private static readonly Guid AcceptedByUserId = Guid.Parse("42222222-2222-2222-2222-222222222222");
+    private static readonly Guid AccountDeliveryId = Guid.Parse("42222222-2222-2222-2222-222222222223");
 
     private static readonly Guid PendingOnceId = Guid.Parse("43333333-3333-3333-3333-333333333301");
     private static readonly Guid PendingResentId = Guid.Parse("43333333-3333-3333-3333-333333333302");
@@ -66,6 +67,7 @@ public sealed class Phase6B3CActionMailMigrationUpgradeTests
     private string? adminConnection;
     private string? databaseName;
     private string? databaseConnection;
+    private readonly List<LegacyInvitationDelivery> legacyDeliveries = [];
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -78,6 +80,7 @@ public sealed class Phase6B3CActionMailMigrationUpgradeTests
         {
             Database = databaseName,
         }.ConnectionString;
+        legacyDeliveries.Clear();
     }
 
     [TestCleanup]
@@ -106,16 +109,19 @@ public sealed class Phase6B3CActionMailMigrationUpgradeTests
         await MigrateToLatestAsync();
         await AssertLegacyInvitationFactsAsync("after the first apply");
         await AssertReconstructedSendHistoryAsync("after the first apply");
+        await AssertLegacyDeliveryHistoryMappedAsync("after the first apply");
         await AssertLegacyLinksStillResolveAsync("after the first apply");
         await AssertLegacyDeliveryTablesAreGoneAsync();
 
         await MigrateToAsync(MigrationBeforeActionMail);
         await AssertLegacyInvitationFactsAsync("after the revert");
         await AssertLegacyTokenHashRestoredAsync();
+        await AssertLegacyDeliveryRowsRestoredAsync();
 
         await MigrateToLatestAsync();
         await AssertLegacyInvitationFactsAsync("after the reapply");
         await AssertReconstructedSendHistoryAsync("after the reapply");
+        await AssertLegacyDeliveryHistoryMappedAsync("after the reapply");
         await AssertLegacyLinksStillResolveAsync("after the reapply");
         await AssertLegacyDeliveryTablesAreGoneAsync();
     }
@@ -211,25 +217,24 @@ public sealed class Phase6B3CActionMailMigrationUpgradeTests
     }
 
     /// <summary>
-    /// One request and one attempt per generation the invitation has had, reconstructed from the
-    /// aggregate rather than from the legacy delivery rows.
+    /// One request and one attempt per real legacy delivery, after first proving that the rows form
+    /// the exact contiguous generation history recorded by the invitation aggregate.
     /// </summary>
     /// <remarks>
-    /// Deriving from the aggregate is what makes the live token's own generation certain to exist. A
-    /// backfill driven by the delivery table would produce the right answer whenever those rows agreed
-    /// with the invitation and a dangling token whenever they had drifted, which is precisely the case
-    /// a migration must not get wrong.
+    /// The migration fails closed if the delivery rows and send count disagree. That lets it preserve
+    /// real identifiers, outcomes, timestamps, failures and provider evidence without inventing a
+    /// generation or leaving the current token dangling.
     /// </remarks>
     private async Task AssertReconstructedSendHistoryAsync(string stage)
     {
         Assert.AreEqual(
             8L,
             await ScalarAsync("""SELECT count(*) FROM invitations."ActionMailRequests" """),
-            $"The reconstructed send history is not one request per generation {stage}.");
+            $"The migrated send history is not one request per legacy delivery {stage}.");
         Assert.AreEqual(
             8L,
             await ScalarAsync("""SELECT count(*) FROM invitations."ActionMailAttempts" """),
-            $"The reconstructed send history is not one attempt per request {stage}.");
+            $"The migrated send history is not one attempt per request {stage}.");
 
         Assert.AreEqual(
             3L,
@@ -261,17 +266,131 @@ public sealed class Phase6B3CActionMailMigrationUpgradeTests
                 ("id", PendingResentId)),
             $"Later generations are not recorded as resends {stage}.");
 
-        // Every reconstructed row is terminal and carries no provider evidence: the legacy senders
-        // captured in memory and contacted nobody, so claiming otherwise would be inventing a fact.
+        Assert.AreEqual(5L, await ScalarAsync(
+            """SELECT count(*) FROM invitations."ActionMailRequests" WHERE "Status" = 'Materialized' AND "TransportAdapter" = 'captured'"""));
+        Assert.AreEqual(1L, await ScalarAsync(
+            """SELECT count(*) FROM invitations."ActionMailRequests" WHERE "Status" = 'Materialized' AND "TransportAdapter" = 'resend'"""));
+        Assert.AreEqual(1L, await ScalarAsync(
+            """SELECT count(*) FROM invitations."ActionMailRequests" WHERE "Status" = 'Processing'"""));
+        Assert.AreEqual(1L, await ScalarAsync(
+            """SELECT count(*) FROM invitations."ActionMailRequests" WHERE "Status" = 'DeadLettered'"""));
+    }
+
+    private async Task AssertLegacyDeliveryHistoryMappedAsync(string stage)
+    {
+        foreach (var delivery in legacyDeliveries)
+        {
+            var requestStatus = delivery.Status switch
+            {
+                "Queued" => "Processing",
+                "Failed" => "DeadLettered",
+                _ => "Materialized",
+            };
+            var transport = delivery.Status switch
+            {
+                "CapturedForDevelopment" => "captured",
+                "Delivered" when delivery.ProviderMessageId is not null => "resend",
+                "Delivered" => "legacy-email",
+                _ => null,
+            };
+            var outcome = delivery.Status switch
+            {
+                "Queued" => "Started",
+                "Failed" => "PermanentFailure",
+                _ => "Succeeded",
+            };
+            DateTimeOffset? completedAt = delivery.Status == "Queued" ? null : delivery.UpdatedAtUtc;
+            DateTimeOffset? providerAcceptedAt = delivery.ProviderMessageId is null ? null : delivery.UpdatedAtUtc;
+            Assert.AreEqual(
+                1L,
+                await ScalarAsync(
+                    """
+                    SELECT count(*) FROM invitations."ActionMailRequests" r
+                    JOIN invitations."ActionMailAttempts" a ON a."TenantId" = r."TenantId" AND a."RequestId" = r."Id"
+                    WHERE r."Id" = @id AND r."LogicalSendGeneration" = @attempt
+                      AND r."Status" = @requestStatus
+                      AND r."TransportAdapter" IS NOT DISTINCT FROM @transport
+                      AND r."ProviderMessageId" IS NOT DISTINCT FROM @provider
+                      AND r."ProviderAcceptedAtUtc" IS NOT DISTINCT FROM @providerAccepted
+                      AND r."FailureCode" IS NOT DISTINCT FROM @failure
+                      AND r."CreatedAtUtc" = @created AND r."UpdatedAtUtc" = @updated
+                      AND a."StartedAtUtc" = @created
+                      AND a."CompletedAtUtc" IS NOT DISTINCT FROM @completed
+                      AND a."Outcome" = @outcome
+                      AND a."ProviderMessageId" IS NOT DISTINCT FROM @provider
+                      AND a."FailureCode" IS NOT DISTINCT FROM @failure
+                    """,
+                    ("id", delivery.Id),
+                    ("attempt", delivery.AttemptNumber),
+                    ("requestStatus", requestStatus),
+                    ("transport", transport ?? (object)DBNull.Value),
+                    ("provider", delivery.ProviderMessageId ?? (object)DBNull.Value),
+                    ("providerAccepted", providerAcceptedAt ?? (object)DBNull.Value),
+                    ("failure", delivery.FailureCode ?? (object)DBNull.Value),
+                    ("created", delivery.CreatedAtUtc),
+                    ("updated", delivery.UpdatedAtUtc),
+                    ("completed", completedAt ?? (object)DBNull.Value),
+                    ("outcome", outcome)),
+                $"Legacy invitation delivery {delivery.Id} was changed {stage}.");
+        }
+
         Assert.AreEqual(
-            8L,
+            1L,
             await ScalarAsync(
                 """
-                SELECT count(*) FROM invitations."ActionMailRequests"
-                WHERE "Status" = 'Materialized' AND "TransportAdapter" = 'captured'
-                  AND "ProviderMessageId" IS NULL AND "ProviderAcceptedAtUtc" IS NULL
-                """),
-            $"A reconstructed request claims provider evidence it never had {stage}.");
+                SELECT count(*) FROM identity."ActionMailRequests" r
+                JOIN identity."ActionMailAttempts" a ON a."RequestId" = r."Id"
+                WHERE r."Id" = @id AND r."ActionKind" = 'ConfirmEmail'
+                  AND r."Status" = 'Materialized' AND r."TransportAdapter" = 'captured'
+                  AND r."CreatedAtUtc" = @created AND r."UpdatedAtUtc" = @updated
+                  AND a."TokenMintedAtUtc" IS NOT NULL AND a."Outcome" = 'Succeeded'
+                """,
+                ("id", AccountDeliveryId),
+                ("created", CreatedAtUtc.AddHours(2)),
+                ("updated", CreatedAtUtc.AddHours(2).AddMinutes(1))),
+            $"Legacy account delivery was changed {stage}.");
+    }
+
+    private async Task AssertLegacyDeliveryRowsRestoredAsync()
+    {
+        foreach (var delivery in legacyDeliveries)
+        {
+            Assert.AreEqual(
+                1L,
+                await ScalarAsync(
+                    """
+                    SELECT count(*) FROM invitations."InvitationDeliveries"
+                    WHERE "Id" = @id AND "InvitationId" = @invitation
+                      AND "AttemptNumber" = @attempt AND "Status" = @status
+                      AND "ProviderMessageId" IS NOT DISTINCT FROM @provider
+                      AND "FailureCode" IS NOT DISTINCT FROM @failure
+                      AND "CreatedAtUtc" = @created AND "UpdatedAtUtc" = @updated
+                    """,
+                    ("id", delivery.Id),
+                    ("invitation", delivery.InvitationId),
+                    ("attempt", delivery.AttemptNumber),
+                    ("status", delivery.Status),
+                    ("provider", delivery.ProviderMessageId ?? (object)DBNull.Value),
+                    ("failure", delivery.FailureCode ?? (object)DBNull.Value),
+                    ("created", delivery.CreatedAtUtc),
+                    ("updated", delivery.UpdatedAtUtc)),
+                $"Legacy invitation delivery {delivery.Id} was not restored exactly.");
+        }
+
+        Assert.AreEqual(
+            1L,
+            await ScalarAsync(
+                """
+                SELECT count(*) FROM identity."AccountEmailDeliveries"
+                WHERE "Id" = @id AND "UserId" = @user AND "Recipient" = 'accepted@legacy.test'
+                  AND "Purpose" = 'ConfirmEmail' AND "Status" = 'CapturedForDevelopment'
+                  AND "CreatedAtUtc" = @created AND "UpdatedAtUtc" = @updated
+                """,
+                ("id", AccountDeliveryId),
+                ("user", AcceptedByUserId),
+                ("created", CreatedAtUtc.AddHours(2)),
+                ("updated", CreatedAtUtc.AddHours(2).AddMinutes(1))),
+            "Legacy account delivery was not restored exactly.");
     }
 
     /// <summary>
@@ -374,14 +493,12 @@ public sealed class Phase6B3CActionMailMigrationUpgradeTests
     }
 
     /// <summary>
-    /// The two legacy delivery tables are gone, and that is deliberate rather than incidental.
+    /// The two legacy delivery tables are gone after their non-address facts have been mapped exactly.
     /// </summary>
     /// <remarks>
     /// Both held a <c>Recipient</c> column containing a plain email address copied for delivery, which
-    /// is exactly what the tokenless design refuses to persist. Their remaining content was a status
-    /// for mail no deployment ever actually sent, because every sender that ever existed captured in
-    /// memory. The invitation facts worth keeping live on the aggregate and are asserted above; the
-    /// send history is reconstructed as one request and one attempt per generation.
+    /// the tokenless design refuses to persist. The migration derives that address from its owner,
+    /// validates it first, and retains every other delivery fact in the new request and attempt roots.
     /// </remarks>
     private async Task AssertLegacyDeliveryTablesAreGoneAsync()
     {
@@ -437,6 +554,19 @@ public sealed class Phase6B3CActionMailMigrationUpgradeTests
             ("user", AcceptedByUserId),
             ("created", CreatedAtUtc));
 
+        await ExecuteAsync(
+            """
+            INSERT INTO identity."AccountEmailDeliveries" (
+                "Id", "UserId", "Recipient", "Purpose", "Status", "ProviderMessageId",
+                "FailureCode", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES (@id, @user, 'accepted@legacy.test', 'ConfirmEmail', 'CapturedForDevelopment',
+                NULL, NULL, @created, @updated)
+            """,
+            ("id", AccountDeliveryId),
+            ("user", AcceptedByUserId),
+            ("created", CreatedAtUtc.AddHours(2)),
+            ("updated", CreatedAtUtc.AddHours(2).AddMinutes(1)));
+
         await SeedInvitationAsync(PendingOnceId, "pending-once@legacy.test", "Pending", 1, expiresInDays: 6);
         await SeedInvitationAsync(PendingResentId, "pending-resent@legacy.test", "Pending", 3, expiresInDays: 7);
         await SeedInvitationAsync(AcceptedId, "accepted@legacy.test", "Accepted", 1, expiresInDays: 5);
@@ -476,23 +606,46 @@ public sealed class Phase6B3CActionMailMigrationUpgradeTests
             ("created", CreatedAtUtc),
             ("sendCount", sendCount));
 
-        // The Phase 1 delivery rows, one per send, complete with the recipient address this design
-        // refuses to keep. They are seeded so the migration is proven against a populated table.
+        // The Phase 1 rows cover every legacy state and include failure and provider evidence.
         for (var attempt = 1; attempt <= sendCount; attempt++)
         {
+            var deliveryStatus = id == PendingResentId && attempt == 2
+                ? "Failed"
+                : id == PendingResentId && attempt == 3
+                    ? "Queued"
+                    : id == AcceptedId
+                        ? "Delivered"
+                        : "CapturedForDevelopment";
+            var providerMessageId = deliveryStatus == "Delivered" ? "legacy-provider-accepted-001" : null;
+            var failureCode = deliveryStatus == "Failed" ? "legacy-mailbox-refused" : null;
+            var delivery = new LegacyInvitationDelivery(
+                Guid.NewGuid(),
+                id,
+                attempt,
+                deliveryStatus,
+                providerMessageId,
+                failureCode,
+                CreatedAtUtc.AddMinutes(attempt),
+                CreatedAtUtc.AddMinutes(attempt + 1));
+            legacyDeliveries.Add(delivery);
             await ExecuteAsync(
                 """
                 INSERT INTO invitations."InvitationDeliveries" ("Id", "TenantId", "InvitationId",
                     "Recipient", "Channel", "AttemptNumber", "Status", "ProviderMessageId",
                     "FailureCode", "CreatedAtUtc", "UpdatedAtUtc")
-                VALUES (gen_random_uuid(), @tenant, @invitation, @email, 'Email', @attempt,
-                    'CapturedForDevelopment', NULL, NULL, @created, @created)
+                VALUES (@delivery, @tenant, @invitation, @email, 'Email', @attempt,
+                    @status, @provider, @failure, @created, @updated)
                 """,
                 ("tenant", TenantId),
+                ("delivery", delivery.Id),
                 ("invitation", id),
                 ("email", email),
                 ("attempt", attempt),
-                ("created", CreatedAtUtc));
+                ("status", delivery.Status),
+                ("provider", delivery.ProviderMessageId ?? (object)DBNull.Value),
+                ("failure", delivery.FailureCode ?? (object)DBNull.Value),
+                ("created", delivery.CreatedAtUtc),
+                ("updated", delivery.UpdatedAtUtc));
         }
     }
 
@@ -584,4 +737,14 @@ public sealed class Phase6B3CActionMailMigrationUpgradeTests
 
         public Guid TenantId => Guid.Empty;
     }
+
+    private sealed record LegacyInvitationDelivery(
+        Guid Id,
+        Guid InvitationId,
+        int AttemptNumber,
+        string Status,
+        string? ProviderMessageId,
+        string? FailureCode,
+        DateTimeOffset CreatedAtUtc,
+        DateTimeOffset UpdatedAtUtc);
 }

@@ -742,12 +742,13 @@ Status: complete, implemented 2026-09-05. See
   or analytics. The invitation screen says plainly that resending cancels the previous link.
 
 One forward migration ships: `Phase6B3CTokenlessActionMail` adds the two queues, their attempt tables
-and the append-only token record; adds the logical-send generation to the invitation; reconstructs one
-request, one attempt and the live token for every existing invitation before dropping
-`ClientInvitations.TokenHash`; drops the two legacy delivery tables, whose only remaining content was a
-plain recipient address and a status for mail no deployment ever sent; and installs the generation,
-token, request and attempt guards. Reverting restores the legacy token column from the token record
-before dropping it, so an in-flight invitation link survives a rollback.
+and the append-only token record; adds the logical-send generation to the invitation; maps every real
+legacy delivery one-for-one while preserving its identifier, state, timestamps, audit fields, failure
+and provider evidence; and fails closed if those rows disagree with the aggregate's send count or
+resolved mailbox. It then moves the live token from `ClientInvitations.TokenHash` to the current
+generation's token record and removes the address-bearing legacy delivery tables. Reverting restores
+the live token and exact mapped delivery history before removing the new structures, so an in-flight
+invitation link and its operational evidence survive an apply/revert/reapply round trip.
 
 Exit: a confirmation and a reset work for an account with no workspace at all; no workspace operator can
 read global action-mail state; known and unknown recovery requests are indistinguishable in status, body,

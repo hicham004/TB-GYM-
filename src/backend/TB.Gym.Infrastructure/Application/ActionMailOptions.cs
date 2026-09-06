@@ -34,7 +34,7 @@ public sealed class ActionMailDispatchOptions
     /// <summary>How long the worker waits between sweeps. Allowed 1 to 300 seconds.</summary>
     public int PollIntervalSeconds { get; set; } = 5;
 
-    /// <summary>The most requests one sweep may claim, across both queues. Allowed 1 to 200.</summary>
+    /// <summary>The most requests one sweep may claim from each queue. Allowed 1 to 200.</summary>
     public int BatchSize { get; set; } = 25;
 
     /// <summary>How long a claim stays valid before another worker may take it over. Allowed 30 to 900.</summary>

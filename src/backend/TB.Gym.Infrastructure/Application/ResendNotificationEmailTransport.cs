@@ -140,6 +140,9 @@ internal sealed class ResendNotificationEmailTransport(
             case ResendFailureKind.Unavailable:
                 return Transient(message, exchange, NotificationFailureCodes.EmailProviderUnavailable);
 
+            case ResendFailureKind.RetryableConflict:
+                return Transient(message, exchange, NotificationFailureCodes.EmailProviderConflictRetryable);
+
             case ResendFailureKind.IdempotencyConflict:
                 // The provider says this key was used for a different payload. The key binds the
                 // immutable message and the exact mailbox, so an unchanged retry cannot resolve it.

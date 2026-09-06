@@ -212,12 +212,15 @@ never exactly-once, and nothing in this repository claims otherwise.
 | 2xx with no usable `id` | **Permanent** | Recording acceptance without the identifier every later event correlates on would produce a delivery nothing can ever say more about. Inventing one would be worse. |
 | 401, 403 | **Transient**, logged as an operational fault | A revoked key is a deployment problem, not a problem with the notification. Dead-lettering every due email the moment one appears would discard work that becomes deliverable again as soon as somebody fixes it. The bounded schedule still ends in a dead letter, and the distinct code is what an alert is keyed on. |
 | 408, 429, 5xx, timeout, connection failure | Transient | Waiting could help. |
+| 409 `concurrent_idempotent_requests` or `resource_locked` | Transient | The same provider operation is still in flight or locked; the unchanged request can converge after waiting. |
 | 409 `invalid_idempotent_request` | Permanent | The key binds the immutable message and the exact mailbox, so an unchanged retry cannot resolve it. |
+| 409 with an unknown, malformed or oversized body | Transient | This build cannot prove the conflict is the permanent payload-mismatch case, so the bounded schedule is safer than discarding the message. |
 | Other 4xx | Permanent | The request itself was rejected. |
 
-The provider's error body is deliberately not read, not parsed and not logged. It quotes the request —
-including the recipient address — and classification does not need it: the status code carries
-everything the dispatcher must decide.
+Provider error bodies are deliberately not read except on `409`, where the same status represents
+both permanent and transient outcomes. That body is read to the adapter's hard byte limit and depth
+limit, and only the bounded stable `name` is considered; the body, diagnostic text and any echoed
+request fields are never returned, persisted or logged.
 
 ### Nothing sensitive is persisted, anywhere
 
@@ -265,6 +268,8 @@ threshold is not a policy.
 
 - Production can send transactional email, and every claim it makes about what happened to a message
   traces to either a synchronous provider response or an authenticated provider event.
+- Deferred guards keep provider-message event bookkeeping equal to append-only history and require a
+  newly applied event to match the exact fact it established.
 - Bounce and complaint handling exists from the first message rather than after the first reputation
   problem.
 - Suppression is durable, mailbox-scoped, self-clearing on a corrected address, and holds no address.
@@ -288,8 +293,8 @@ threshold is not a policy.
 - [Resend send email](https://resend.com/docs/api-reference/emails/send-email) — the request shape and
   the `{ "id": ... }` response this adapter reads.
 - [Resend idempotency keys](https://resend.com/docs/dashboard/emails/idempotency-keys) — the 256
-  character limit, the 24-hour retention window, and the `409 invalid_idempotent_request` a reused key
-  with a changed payload produces.
+  character limit, the 24-hour retention window, the permanent `invalid_idempotent_request` for a
+  changed payload, and the retryable `concurrent_idempotent_requests` for an identical in-flight one.
 - [Resend webhooks](https://resend.com/docs/dashboard/webhooks/introduction) — at-least-once delivery,
   no ordering guarantee, `svix-id` for deduplication, and the retry ladder.
 - [Resend webhook event types](https://resend.com/docs/dashboard/webhooks/event-types) and

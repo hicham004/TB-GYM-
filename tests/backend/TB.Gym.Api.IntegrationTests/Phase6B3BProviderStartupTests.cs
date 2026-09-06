@@ -288,6 +288,10 @@ public sealed class Phase6B3BProviderStartupTests
         var settings = new Dictionary<string, string?>(email)
         {
             ["ConnectionStrings:Database"] = databaseConnection,
+            // Phase 6B-3C refuses a Production composition with a process-local key ring, because the
+            // worker mints action tokens the API unprotects. These tests are about the email provider
+            // rules, so the key ring is satisfied here rather than asserted here.
+            ["DataProtection:KeyPath"] = Path.Combine(Path.GetTempPath(), databaseName!, "keys"),
         };
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
         var services = new ServiceCollection();
@@ -311,6 +315,9 @@ public sealed class Phase6B3BProviderStartupTests
             ["Application:PublicBaseUrl"] =
                 environment == "Production" ? "https://app.tbgym.test" : "http://localhost:4200",
             ["Application:PublicOriginAllowlist:0"] = "https://app.tbgym.test",
+            // See BuildWorker: a Production host needs a persisted key ring before it will start, and
+            // these tests build Production hosts to assert email rules rather than key-ring rules.
+            ["DataProtection:KeyPath"] = Path.Combine(Path.GetTempPath(), databaseName!, "keys"),
             ["Media:StorageRoot"] = Path.Combine(Path.GetTempPath(), databaseName!, "media"),
             ["Media:PurgeEnabled"] = "false",
             ["Notifications:Dispatch:PollIntervalSeconds"] = "300",

@@ -372,7 +372,7 @@ internal sealed class InvitationActionMailService(
             context.InvitationActionMailAttempts.Add(attempt);
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return Preparation.Started(attempt.Id, attemptNumber, idempotencyKey, authorization);
+            return Preparation.Started(attempt.Id, attemptNumber, idempotencyKey);
         });
 
         return preparation.Kind switch
@@ -402,12 +402,14 @@ internal sealed class InvitationActionMailService(
                 cancellationToken);
         }
 
-        var authorization = preparation.Authorization
-            ?? await authorizer.AuthorizeAsync(
-                work.TenantId,
-                work.InvitationId,
-                work.LogicalSendGeneration,
-                cancellationToken);
+        // The committed Started attempt is evidence that work began, never durable permission to mint
+        // or send a credential. Re-authorize on every path after that commit so a revoke, acceptance,
+        // expiry or deliberate resend in the boundary suppresses this attempt before token creation.
+        var authorization = await authorizer.AuthorizeAsync(
+            work.TenantId,
+            work.InvitationId,
+            work.LogicalSendGeneration,
+            cancellationToken);
         if (!authorization.IsAuthorized)
         {
             return await FinalizeAsync(
@@ -503,7 +505,8 @@ internal sealed class InvitationActionMailService(
             ResendFailureKind.Unauthorized or
             ResendFailureKind.RateLimited or
             ResendFailureKind.Timeout or
-            ResendFailureKind.Unavailable => FinalOutcome.Retryable(InvitationActionMailCodes.TransportTransient),
+            ResendFailureKind.Unavailable or
+            ResendFailureKind.RetryableConflict => FinalOutcome.Retryable(InvitationActionMailCodes.TransportTransient),
             _ => FinalOutcome.Permanent(InvitationActionMailCodes.TransportPermanent),
         },
     };
@@ -651,17 +654,15 @@ internal sealed class InvitationActionMailService(
         Guid AttemptId = default,
         int AttemptNumber = 0,
         string? IdempotencyKey = null,
-        string? Code = null,
-        InvitationMailAuthorization? Authorization = null)
+        string? Code = null)
     {
         public static Preparation Stale { get; } = new(PreparationKind.Stale);
 
         public static Preparation Started(
             Guid attemptId,
             int attemptNumber,
-            string idempotencyKey,
-            InvitationMailAuthorization authorization) =>
-            new(PreparationKind.Started, attemptId, attemptNumber, idempotencyKey, null, authorization);
+            string idempotencyKey) =>
+            new(PreparationKind.Started, attemptId, attemptNumber, idempotencyKey);
 
         /// <summary>
         /// An attempt whose Started commit landed but whose acknowledgement was lost. It carries no

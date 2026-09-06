@@ -145,6 +145,9 @@ public sealed class ApiSmokeTests
         ["Messaging:Realtime:AllowedOrigins:0"] = "https://app.example.test",
         ["Application:PublicBaseUrl"] = "https://app.example.test",
         ["Application:PublicOriginAllowlist:0"] = "https://app.example.test",
+        // Production refuses an ephemeral key ring, because the worker mints action tokens the API
+        // has to unprotect. No key is ever written here: the host fails the seed check first.
+        ["DataProtection:KeyPath"] = Path.Combine(Path.GetTempPath(), "tb-gym-api-smoke-keys"),
         ["Notifications:Email:Adapter"] = "Resend",
         ["Notifications:Email:Provider:ApiKey"] = "re_not_a_real_key",
         ["Notifications:Email:Provider:FromAddress"] = "TB Gym <notifications@mail.example.test>",

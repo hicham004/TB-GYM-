@@ -71,6 +71,9 @@ public static class NotificationFailureCodes
     /// unchanged cannot resolve the conflict.
     /// </summary>
     public const string EmailProviderIdempotencyConflict = "notification-email-provider-idempotency-conflict";
+
+    /// <summary>The provider is still processing a request that may converge on retry.</summary>
+    public const string EmailProviderConflictRetryable = "notification-email-provider-conflict-retryable";
 }
 
 /// <summary>

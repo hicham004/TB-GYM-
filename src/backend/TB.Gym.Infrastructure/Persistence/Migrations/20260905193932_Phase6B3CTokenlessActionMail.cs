@@ -437,6 +437,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                 table: "ClientInvitations",
                 sql: "\"NormalizedEmail\" = upper(\"Email\")");
 
+            BackfillLegacyAccountHistory(migrationBuilder);
             BackfillLegacyInvitationHistory(migrationBuilder);
 
             migrationBuilder.DropIndex(
@@ -451,14 +452,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                 name: "TokenHash",
                 schema: "invitations",
                 table: "ClientInvitations");
-            // The two legacy delivery tables go last, and they are the one thing this migration
-            // deliberately does not carry forward in full. Both stored a `Recipient` column holding a
-            // plain email address, which is precisely what the tokenless design refuses to persist;
-            // their remaining content was a status for mail that no deployment ever actually sent,
-            // because the only senders that ever existed captured in memory. The invitation facts
-            // worth keeping - identity, send count, expiry, revocation, acceptance and audit stamps -
-            // live on ClientInvitations and are preserved untouched, and the send history is
-            // reconstructed above as one request and one attempt per generation.
+            // Actual legacy delivery rows have now been mapped one-for-one into requests and attempts.
+            // Only the duplicated Recipient column is intentionally omitted; account recipients are
+            // resolved from Identity and invitation recipients remain on ClientInvitations.
             migrationBuilder.DropTable(
                 name: "AccountEmailDeliveries",
                 schema: "identity");
@@ -472,9 +468,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Reverting is lossy and the order is what keeps it from being needlessly lossier. The
-            // token record is the only place a live invitation link exists after this phase, so the
-            // legacy column is restored from it before the table holding it is dropped.
+            // Restore the live token and the exact legacy delivery rows before dropping their new
+            // request/attempt representation.
             DropActionMailProtections(migrationBuilder);
 
             migrationBuilder.AddColumn<string>(
@@ -497,21 +492,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                 maxLength: 64,
                 nullable: false);
 
-            migrationBuilder.DropTable(
-                name: "ActionMailAttempts",
-                schema: "identity");
-            migrationBuilder.DropTable(
-                name: "TokenIssues",
-                schema: "invitations");
-            migrationBuilder.DropTable(
-                name: "ActionMailRequests",
-                schema: "identity");
-            migrationBuilder.DropTable(
-                name: "ActionMailAttempts",
-                schema: "invitations");
-            migrationBuilder.DropTable(
-                name: "ActionMailRequests",
-                schema: "invitations");
             migrationBuilder.DropCheckConstraint(
                 name: "CK_ClientInvitations_LogicalSendGeneration",
                 schema: "invitations",
@@ -595,6 +575,22 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                 table: "InvitationDeliveries",
                 columns: new[] { "TenantId", "InvitationId", "AttemptNumber" },
                 unique: true);
+            RestoreLegacyDeliveryHistory(migrationBuilder);
+            migrationBuilder.DropTable(
+                name: "ActionMailAttempts",
+                schema: "identity");
+            migrationBuilder.DropTable(
+                name: "TokenIssues",
+                schema: "invitations");
+            migrationBuilder.DropTable(
+                name: "ActionMailRequests",
+                schema: "identity");
+            migrationBuilder.DropTable(
+                name: "ActionMailAttempts",
+                schema: "invitations");
+            migrationBuilder.DropTable(
+                name: "ActionMailRequests",
+                schema: "invitations");
             migrationBuilder.CreateIndex(
                 name: "IX_ClientInvitations_TokenHash",
                 schema: "invitations",
@@ -608,88 +604,154 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                 sql: "char_length(\"TokenHash\") = 64");
 }
 
-        /// <summary>
-        /// Rebuilds this phase's send history and token record from the invitations already in the
-        /// database, so an upgrade of a live workspace keeps every link that is currently in a mailbox.
-        /// </summary>
-        /// <remarks>
-        /// Three inserts, in dependency order, and each one is derived from <c>ClientInvitations</c>
-        /// rather than from the legacy delivery table. That is deliberate: the delivery table records
-        /// what a capture adapter was asked to do, while the invitation records what is actually true,
-        /// and an invitation whose delivery rows drifted must still end up with a request and an attempt
-        /// for the generation its live token belongs to. Deriving from the aggregate makes that
-        /// structurally guaranteed instead of merely likely.
-        /// <para>
-        /// The identifiers are derived deterministically from the invitation id and the generation with
-        /// a truncated SHA-256 digest, so re-running the upgrade after a revert produces the same rows
-        /// rather than a second set - which is what makes apply, revert and reapply converge.
-        /// </para>
-        /// <para>
-        /// The restored token hash is lower-cased. Phase 1 wrote it with an upper-case hex encoder and
-        /// this phase reads it with a lower-case one, so a link already in somebody's mailbox only keeps
-        /// working if the stored digest is normalised here. Getting this wrong would invalidate every
-        /// outstanding invitation silently.
-        /// </para>
-        /// </remarks>
+        private static void BackfillLegacyAccountHistory(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.Sql("""
+                DO $block$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM identity."AccountEmailDeliveries" d
+                        WHERE d."Purpose" NOT IN ('ConfirmEmail', 'ResetPassword')
+                           OR d."Status" NOT IN ('Queued', 'CapturedForDevelopment', 'Delivered', 'Failed')
+                           OR (d."Status" = 'Failed') <> (d."FailureCode" IS NOT NULL)
+                           OR (d."ProviderMessageId" IS NOT NULL AND d."Status" <> 'Delivered')) THEN
+                        RAISE EXCEPTION 'Legacy account delivery history cannot be mapped without changing a fact' USING ERRCODE = '23514';
+                    END IF;
+                    IF EXISTS (
+                        SELECT 1 FROM identity."AccountEmailDeliveries" d
+                        LEFT JOIN identity."Users" u ON u."Id" = d."UserId"
+                        WHERE u."Id" IS NULL OR u."Email" IS NULL OR u."SecurityStamp" IS NULL
+                           OR lower(btrim(d."Recipient")) <> lower(btrim(u."Email"))) THEN
+                        RAISE EXCEPTION 'Legacy account recipient history does not match its current Identity owner' USING ERRCODE = '23514';
+                    END IF;
+                END;
+                $block$;
+
+                INSERT INTO identity."ActionMailRequests" (
+                    "Id", "SubjectUserId", "SubjectSecurityStampHash", "ActionKind", "SchemaVersion",
+                    "RequestSource", "RequestedAtUtc", "Status", "AttemptCount", "NextAttemptAtUtc",
+                    "ClaimToken", "ClaimExpiresAtUtc", "MaterializedAtUtc", "CompletedAtUtc",
+                    "DeadLetteredAtUtc", "FailureCode", "TransportAdapter", "ProviderMessageId",
+                    "ProviderAcceptedAtUtc", "CreatedAtUtc", "CreatedByUserId", "UpdatedAtUtc", "UpdatedByUserId")
+                SELECT d."Id", d."UserId",
+                    encode(sha256(convert_to(u."SecurityStamp", 'UTF8')), 'hex'), d."Purpose", 1,
+                    'legacy-account-email-delivery', d."CreatedAtUtc",
+                    CASE d."Status" WHEN 'Queued' THEN 'Processing'
+                        WHEN 'Failed' THEN 'DeadLettered' ELSE 'Materialized' END,
+                    1, d."CreatedAtUtc",
+                    CASE WHEN d."Status" = 'Queued' THEN left(encode(sha256(convert_to('legacy.account.claim:' || d."Id"::text, 'UTF8')), 'hex'), 32)::uuid END,
+                    CASE WHEN d."Status" = 'Queued' THEN d."UpdatedAtUtc" END,
+                    CASE WHEN d."Status" IN ('CapturedForDevelopment', 'Delivered') THEN d."UpdatedAtUtc" END,
+                    CASE WHEN d."Status" <> 'Queued' THEN d."UpdatedAtUtc" END,
+                    CASE WHEN d."Status" = 'Failed' THEN d."UpdatedAtUtc" END,
+                    d."FailureCode",
+                    CASE d."Status" WHEN 'CapturedForDevelopment' THEN 'captured'
+                        WHEN 'Delivered' THEN CASE WHEN d."ProviderMessageId" IS NULL THEN 'legacy-email' ELSE 'resend' END END,
+                    d."ProviderMessageId",
+                    CASE WHEN d."ProviderMessageId" IS NOT NULL THEN d."UpdatedAtUtc" END,
+                    d."CreatedAtUtc", d."CreatedByUserId", d."UpdatedAtUtc", d."UpdatedByUserId"
+                FROM identity."AccountEmailDeliveries" d
+                JOIN identity."Users" u ON u."Id" = d."UserId";
+
+                INSERT INTO identity."ActionMailAttempts" (
+                    "Id", "RequestId", "ActionKind", "AttemptNumber", "ClaimToken",
+                    "ProviderIdempotencyKey", "StartedAtUtc", "TokenMintedAtUtc", "CompletedAtUtc",
+                    "Outcome", "FailureCode", "ProviderMessageId", "CreatedAtUtc", "CreatedByUserId",
+                    "UpdatedAtUtc", "UpdatedByUserId")
+                SELECT left(encode(sha256(convert_to('legacy.account.attempt:' || d."Id"::text, 'UTF8')), 'hex'), 32)::uuid,
+                    d."Id", d."Purpose", 1,
+                    left(encode(sha256(convert_to('legacy.account.claim:' || d."Id"::text, 'UTF8')), 'hex'), 32)::uuid,
+                    'account-action:' || replace(d."Id"::text, '-', '') || ':a1:v1:' ||
+                        left(encode(sha256(convert_to('legacy.account.mailbox:' || d."Id"::text, 'UTF8')), 'hex'), 32),
+                    d."CreatedAtUtc", d."CreatedAtUtc",
+                    CASE WHEN d."Status" <> 'Queued' THEN d."UpdatedAtUtc" END,
+                    CASE d."Status" WHEN 'Queued' THEN 'Started'
+                        WHEN 'Failed' THEN 'PermanentFailure' ELSE 'Succeeded' END,
+                    d."FailureCode", d."ProviderMessageId", d."CreatedAtUtc", d."CreatedByUserId",
+                    d."UpdatedAtUtc", d."UpdatedByUserId"
+                FROM identity."AccountEmailDeliveries" d;
+                """);
+        }
+
+        /// <summary>Maps each real legacy delivery to one request and attempt without inventing history.</summary>
         private static void BackfillLegacyInvitationHistory(MigrationBuilder migrationBuilder)
         {
-            // One request per generation the invitation has had.
             migrationBuilder.Sql("""
+                DO $block$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM invitations."ClientInvitations" i
+                        LEFT JOIN invitations."InvitationDeliveries" d
+                          ON d."TenantId" = i."TenantId" AND d."InvitationId" = i."Id"
+                        GROUP BY i."TenantId", i."Id", i."SendCount"
+                        HAVING count(d."Id") <> GREATEST(i."SendCount", 1)
+                           OR min(d."AttemptNumber") <> 1
+                           OR max(d."AttemptNumber") <> GREATEST(i."SendCount", 1))
+                       OR EXISTS (
+                        SELECT 1 FROM invitations."InvitationDeliveries" d
+                        WHERE d."Channel" <> 'Email'
+                           OR d."Status" NOT IN ('Queued', 'CapturedForDevelopment', 'Delivered', 'Failed')
+                           OR (d."Status" = 'Failed') <> (d."FailureCode" IS NOT NULL)
+                           OR (d."ProviderMessageId" IS NOT NULL AND d."Status" <> 'Delivered')) THEN
+                        RAISE EXCEPTION 'Legacy invitation delivery history cannot be mapped without losing or changing a fact' USING ERRCODE = '23514';
+                    END IF;
+                    IF EXISTS (
+                        SELECT 1 FROM invitations."InvitationDeliveries" d
+                        JOIN invitations."ClientInvitations" i
+                          ON i."TenantId" = d."TenantId" AND i."Id" = d."InvitationId"
+                        WHERE lower(btrim(d."Recipient")) <> lower(btrim(i."Email"))) THEN
+                        RAISE EXCEPTION 'Legacy invitation recipient history does not match its invitation' USING ERRCODE = '23514';
+                    END IF;
+                END;
+                $block$;
+
                 INSERT INTO invitations."ActionMailRequests" (
                     "Id", "TenantId", "InvitationId", "LogicalSendGeneration", "SchemaVersion",
                     "IdempotencyKey", "PayloadFingerprint", "RequestSource", "RequestedByUserId",
                     "RequestedAtUtc", "Status", "AttemptCount", "NextAttemptAtUtc",
-                    "MaterializedAtUtc", "CompletedAtUtc", "TransportAdapter",
-                    "CreatedAtUtc", "UpdatedAtUtc")
-                SELECT
-                    (left(encode(sha256(convert_to('tbgym.request:' || i."Id"::text || ':' || g.generation::text, 'UTF8')), 'hex'), 32)::uuid),
-                    i."TenantId",
-                    i."Id",
-                    g.generation,
-                    1,
-                    (left(encode(sha256(convert_to('tbgym.key:' || i."Id"::text || ':' || g.generation::text, 'UTF8')), 'hex'), 32)::uuid),
-                    encode(sha256(convert_to('legacy:' || i."Id"::text || ':' || g.generation::text, 'UTF8')), 'hex'),
-                    CASE WHEN g.generation = 1 THEN 'invitation-created' ELSE 'invitation-resend' END,
-                    NULL,
-                    i."CreatedAtUtc",
-                    'Materialized',
-                    1,
-                    i."CreatedAtUtc",
-                    i."CreatedAtUtc",
-                    i."CreatedAtUtc",
-                    'captured',
-                    i."CreatedAtUtc",
-                    i."CreatedAtUtc"
-                FROM invitations."ClientInvitations" i
-                CROSS JOIN LATERAL generate_series(1, GREATEST(i."SendCount", 1)) AS g(generation)
-                ON CONFLICT DO NOTHING
+                    "ClaimToken", "ClaimExpiresAtUtc", "MaterializedAtUtc", "CompletedAtUtc",
+                    "DeadLetteredAtUtc", "FailureCode", "TransportAdapter", "ProviderMessageId",
+                    "ProviderAcceptedAtUtc", "CreatedAtUtc", "CreatedByUserId", "UpdatedAtUtc", "UpdatedByUserId")
+                SELECT d."Id", d."TenantId", d."InvitationId", d."AttemptNumber", 1,
+                    left(encode(sha256(convert_to('legacy.invitation.key:' || d."Id"::text, 'UTF8')), 'hex'), 32)::uuid,
+                    encode(sha256(convert_to('legacy.invitation.payload:' || d."Id"::text, 'UTF8')), 'hex'),
+                    CASE WHEN d."AttemptNumber" = 1 THEN 'invitation-created' ELSE 'invitation-resend' END,
+                    NULL, d."CreatedAtUtc",
+                    CASE d."Status" WHEN 'Queued' THEN 'Processing'
+                        WHEN 'Failed' THEN 'DeadLettered' ELSE 'Materialized' END,
+                    1, d."CreatedAtUtc",
+                    CASE WHEN d."Status" = 'Queued' THEN left(encode(sha256(convert_to('legacy.invitation.claim:' || d."Id"::text, 'UTF8')), 'hex'), 32)::uuid END,
+                    CASE WHEN d."Status" = 'Queued' THEN d."UpdatedAtUtc" END,
+                    CASE WHEN d."Status" IN ('CapturedForDevelopment', 'Delivered') THEN d."UpdatedAtUtc" END,
+                    CASE WHEN d."Status" <> 'Queued' THEN d."UpdatedAtUtc" END,
+                    CASE WHEN d."Status" = 'Failed' THEN d."UpdatedAtUtc" END,
+                    d."FailureCode",
+                    CASE d."Status" WHEN 'CapturedForDevelopment' THEN 'captured'
+                        WHEN 'Delivered' THEN CASE WHEN d."ProviderMessageId" IS NULL THEN 'legacy-email' ELSE 'resend' END END,
+                    d."ProviderMessageId",
+                    CASE WHEN d."ProviderMessageId" IS NOT NULL THEN d."UpdatedAtUtc" END,
+                    d."CreatedAtUtc", d."CreatedByUserId", d."UpdatedAtUtc", d."UpdatedByUserId"
+                FROM invitations."InvitationDeliveries" d;
                 """);
 
-            // One attempt per request, so the token record below has the started materialization every
-            // token row is required to name.
             migrationBuilder.Sql("""
                 INSERT INTO invitations."ActionMailAttempts" (
                     "Id", "TenantId", "RequestId", "InvitationId", "LogicalSendGeneration",
                     "AttemptNumber", "ClaimToken", "ProviderIdempotencyKey", "StartedAtUtc",
-                    "TokenMintedAtUtc", "CompletedAtUtc", "Outcome", "CreatedAtUtc", "UpdatedAtUtc")
-                SELECT
-                    (left(encode(sha256(convert_to('tbgym.attempt:' || r."Id"::text, 'UTF8')), 'hex'), 32)::uuid),
-                    r."TenantId",
-                    r."Id",
-                    r."InvitationId",
-                    r."LogicalSendGeneration",
-                    1,
-                    (left(encode(sha256(convert_to('tbgym.claim:' || r."Id"::text, 'UTF8')), 'hex'), 32)::uuid),
-                    'invitation-action:' || replace(r."Id"::text, '-', '') || ':a1:v1:'
-                        || left(encode(sha256(convert_to('legacy:' || r."Id"::text, 'UTF8')), 'hex'), 32),
-                    r."RequestedAtUtc",
-                    r."RequestedAtUtc",
-                    r."RequestedAtUtc",
-                    'Succeeded',
-                    r."RequestedAtUtc",
-                    r."RequestedAtUtc"
-                FROM invitations."ActionMailRequests" r
-                ON CONFLICT DO NOTHING
+                    "TokenMintedAtUtc", "CompletedAtUtc", "Outcome", "FailureCode", "ProviderMessageId",
+                    "CreatedAtUtc", "CreatedByUserId", "UpdatedAtUtc", "UpdatedByUserId")
+                SELECT left(encode(sha256(convert_to('legacy.invitation.attempt:' || d."Id"::text, 'UTF8')), 'hex'), 32)::uuid,
+                    d."TenantId", d."Id", d."InvitationId", d."AttemptNumber", 1,
+                    left(encode(sha256(convert_to('legacy.invitation.claim:' || d."Id"::text, 'UTF8')), 'hex'), 32)::uuid,
+                    'invitation-action:' || replace(d."Id"::text, '-', '') || ':a1:v1:' ||
+                        left(encode(sha256(convert_to('legacy.invitation.mailbox:' || d."Id"::text, 'UTF8')), 'hex'), 32),
+                    d."CreatedAtUtc", d."CreatedAtUtc",
+                    CASE WHEN d."Status" <> 'Queued' THEN d."UpdatedAtUtc" END,
+                    CASE d."Status" WHEN 'Queued' THEN 'Started'
+                        WHEN 'Failed' THEN 'PermanentFailure' ELSE 'Succeeded' END,
+                    d."FailureCode", d."ProviderMessageId", d."CreatedAtUtc", d."CreatedByUserId",
+                    d."UpdatedAtUtc", d."UpdatedByUserId"
+                FROM invitations."InvitationDeliveries" d;
                 """);
 
             // The live token, for the current generation only. Earlier generations' tokens were already
@@ -705,18 +767,16 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     i."TenantId",
                     i."Id",
                     i."LogicalSendGeneration",
-                    r."Id",
-                    a."Id",
+                    r."Id", a."Id",
                     a."AttemptNumber",
                     lower(trim(i."TokenHash")),
-                    i."CreatedAtUtc",
+                    a."TokenMintedAtUtc",
                     i."ExpiresAtUtc",
                     CASE WHEN i."Status" = 'Revoked' THEN i."RevokedAtUtc" END,
                     CASE WHEN i."Status" = 'Revoked' THEN 'invitation-token-invitation-revoked' END,
                     CASE WHEN i."Status" = 'Accepted' THEN i."AcceptedAtUtc" END,
                     CASE WHEN i."Status" = 'Accepted' THEN i."AcceptedByUserId" END,
-                    i."CreatedAtUtc",
-                    i."CreatedAtUtc"
+                    a."CreatedAtUtc", a."UpdatedAtUtc"
                 FROM invitations."ClientInvitations" i
                 JOIN invitations."ActionMailRequests" r
                   ON r."TenantId" = i."TenantId"
@@ -726,9 +786,43 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                   ON a."TenantId" = r."TenantId" AND a."RequestId" = r."Id"
                 WHERE lower(trim(i."TokenHash")) ~ '^[0-9a-f]{64}$'
                   AND i."ExpiresAtUtc" > i."CreatedAtUtc"
-                ON CONFLICT DO NOTHING
                 """);
         }
+
+        private static void RestoreLegacyDeliveryHistory(MigrationBuilder migrationBuilder) =>
+            migrationBuilder.Sql("""
+                INSERT INTO identity."AccountEmailDeliveries" (
+                    "Id", "UserId", "Recipient", "Purpose", "Status", "ProviderMessageId",
+                    "FailureCode", "CreatedAtUtc", "CreatedByUserId", "UpdatedAtUtc", "UpdatedByUserId")
+                SELECT r."Id", r."SubjectUserId", u."Email", r."ActionKind",
+                    CASE r."Status" WHEN 'Processing' THEN 'Queued'
+                        WHEN 'DeadLettered' THEN 'Failed'
+                        WHEN 'Materialized' THEN CASE WHEN r."TransportAdapter" = 'captured'
+                            THEN 'CapturedForDevelopment' ELSE 'Delivered' END END,
+                    r."ProviderMessageId", r."FailureCode", r."CreatedAtUtc", r."CreatedByUserId",
+                    r."UpdatedAtUtc", r."UpdatedByUserId"
+                FROM identity."ActionMailRequests" r
+                JOIN identity."Users" u ON u."Id" = r."SubjectUserId"
+                WHERE r."RequestSource" = 'legacy-account-email-delivery';
+
+                INSERT INTO invitations."InvitationDeliveries" (
+                    "Id", "TenantId", "InvitationId", "Recipient", "Channel", "AttemptNumber",
+                    "Status", "ProviderMessageId", "FailureCode", "CreatedAtUtc", "CreatedByUserId",
+                    "UpdatedAtUtc", "UpdatedByUserId")
+                SELECT r."Id", r."TenantId", r."InvitationId", i."Email", 'Email',
+                    r."LogicalSendGeneration",
+                    CASE r."Status" WHEN 'Processing' THEN 'Queued'
+                        WHEN 'DeadLettered' THEN 'Failed'
+                        WHEN 'Materialized' THEN CASE WHEN r."TransportAdapter" = 'captured'
+                            THEN 'CapturedForDevelopment' ELSE 'Delivered' END END,
+                    r."ProviderMessageId", r."FailureCode", r."CreatedAtUtc", r."CreatedByUserId",
+                    r."UpdatedAtUtc", r."UpdatedByUserId"
+                FROM invitations."ActionMailRequests" r
+                JOIN invitations."ClientInvitations" i
+                  ON i."TenantId" = r."TenantId" AND i."Id" = r."InvitationId"
+                WHERE r."IdempotencyKey" = left(encode(sha256(convert_to(
+                    'legacy.invitation.key:' || r."Id"::text, 'UTF8')), 'hex'), 32)::uuid;
+                """);
 
         /// <summary>
         /// Puts the live invitation token back on the invitation, for a revert.

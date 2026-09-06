@@ -769,7 +769,10 @@ identifier every later event correlates on could never be spoken about again, an
 be worse. See ADR 0022.
 
 **NOT-018** Every provider failure is classified into a stable owned code before it reaches a row,
-and no provider response body, URI, header or exception object is logged. Rate limits, timeouts,
+and no provider response body, URI, header or exception object is logged. A `409` body is the sole
+bounded parse exception because the provider uses that status for both permanent payload mismatch and
+retryable concurrent-request/lock outcomes; only its stable `name` is considered and nothing from it is
+retained. Rate limits, timeouts,
 transport failures and eligible server errors are transient and earn a retry from
 `notification-exponential-v1`. A rejected request and a reused idempotency key with a changed payload
 are permanent. Credential and configuration refusals are transient and logged as an *operational*
@@ -806,7 +809,9 @@ and no ordering, so a repeat converges on one recorded fact and a reordering rec
 every fact a provider event establishes is written **once** on `NotificationProviderMessage`, and a
 later event never rewrites an earlier one. A bounce arriving before the recipient-server acceptance it
 contradicts overwrites nothing, and neither does the acceptance when it turns up second. Nothing
-collapses them into a status the last writer wins. `email.opened` and `email.clicked` are not modelled
+collapses them into a status the last writer wins. Deferred database guards require the message's
+event count and last-received instant to equal its append-only history, and an event marked as the
+source of a new fact must exactly match that fact. `email.opened` and `email.clicked` are not modelled
 and are never persisted in any form: an open is not a read, and recording one would begin exactly the
 tracking log the consent evidence was kept from becoming.
 
@@ -862,7 +867,8 @@ credential. It may not contain a raw token, a complete action URL, a query strin
 recipient address copied for delivery, a rendered subject or body, or provider authorization data.
 The token is minted **at materialization**, from the same Identity token provider for account mail and
 from a cryptographic random source for invitations, lives in a local variable for the duration of one
-transport call, and is dropped. The address is resolved at materialization too. A queue row that never
+transport call, and is dropped. Its mint instant is committed before either transport is invoked; the
+invitation queue additionally commits the token hash. The address is resolved at materialization too. A queue row that never
 held a credential cannot leak one, whatever a backup, a support export, an operator view or a log
 aggregator later does with it.
 
@@ -880,13 +886,17 @@ accepted; action redeemed; action expired; action revoked; explicit resend; tran
 is claimed and leased with `FOR UPDATE SKIP LOCKED`, bounded attempts, a durable
 `action-mail-exponential-v1` retry schedule (1 minute, 5 minutes, then a 30-minute ceiling, default
 maximum 4) and stale-claim protection equal in strength to the notification dispatcher's. A committed
-claim is a lease on work and never durable authorization to send: every attempt re-establishes
-authorization immediately before minting. Confirmation is suppressed once the address is confirmed,
+claim is a lease on work and never durable authorization to send; a committed `Started` attempt is not
+authorization either. Every attempt re-establishes authorization after that commit and immediately
+before minting. Confirmation is suppressed once the address is confirmed,
 changed, removed or the account is blocked; password reset once the password or security stamp has
 moved, the reset has been used, or the account is removed or blocked; an invitation once it is
 accepted, revoked, expired, retargeted or superseded by a later generation. Suppression is not
 failure: it costs no attempt when discovered before a claim, closes the already-started attempt when
 discovered after one, and never produces a dead letter.
+
+Production account-token composition also requires `DataProtection:KeyPath`; otherwise the API and
+Worker could silently use different ephemeral key rings and reject every link the Worker minted.
 
 **NOT-029** Public password recovery answers identically for every address. The same status and the
 same body are returned whether or not the address belongs to an eligible account; both paths perform
@@ -930,7 +940,12 @@ redemption are each write-once and mutually exclusive. Acceptance recognises any
 unredeemed hash of the invitation's **current** generation, is single-use, and is concurrency-safe
 through both the invitation's optimistic concurrency and the token's write-once redemption. A token of
 a superseded generation answers exactly like an unknown one, because telling its holder that the
-invitation exists would disclose the workspace to whoever holds an old mail.
+invitation exists would disclose the workspace to whoever holds an old mail. Two callers presenting
+one link both pass the "no account for this address yet" check before either commits, so the loser's
+account insert fails on Identity's own uniqueness; it answers with the same conflict a caller gets
+when the account was already there, never with a validation problem, and never by repeating
+Identity's "already taken" text, which on an anonymous public endpoint would disclose that an account
+exists for an address this flow otherwise never confirms.
 
 **NOT-033** Action mail does not reuse the commercial notification's stable per-intent provider
 idempotency key. A re-minted token changes the rendered payload, and a provider may answer one key

@@ -336,8 +336,22 @@ internal sealed class InvitationApplicationService(
         // deliberately killed. It answers exactly like an unknown token, because telling the holder
         // that the invitation exists but their link was replaced discloses the workspace to whoever is
         // holding an old mail.
-        if (issue.LogicalSendGeneration != invitation.LogicalSendGeneration ||
-            (issue.RevokedAtUtc is not null && invitation.Status != InvitationStatus.Accepted))
+        if (issue.LogicalSendGeneration != invitation.LogicalSendGeneration)
+        {
+            return null;
+        }
+
+        if (invitation.Status == InvitationStatus.Accepted)
+        {
+            // Several transport attempts can mint distinct valid tokens for one generation. Only the
+            // exact token that won acceptance may reveal the terminal invitation; every losing token
+            // is spent and answers like an unknown credential.
+            if (issue.RedeemedAtUtc is null || issue.RedeemedByUserId != invitation.AcceptedByUserId)
+            {
+                return null;
+            }
+        }
+        else if (issue.RevokedAtUtc is not null || issue.RedeemedAtUtc is not null)
         {
             return null;
         }
@@ -503,6 +517,22 @@ internal sealed class InvitationApplicationService(
                 var identityResult = await userManager.CreateAsync(user, request.Password);
                 if (!identityResult.Succeeded)
                 {
+                    // A second acceptance of the same link can create this account between the
+                    // existence check above and this insert. The loser of that race answers exactly
+                    // like the caller who found the account already there, for two reasons: the race
+                    // did not make the request malformed, so a validation problem misdescribes what
+                    // happened; and Identity's own text names the address as already taken, which on
+                    // a public anonymous endpoint is an account-existence disclosure this flow
+                    // otherwise never makes.
+                    if (identityResult.Errors.Any(error =>
+                            error.Code is nameof(IdentityErrorDescriber.DuplicateUserName)
+                                or nameof(IdentityErrorDescriber.DuplicateEmail)))
+                    {
+                        return AcceptanceOutcome.From(
+                            InvitationAcceptanceStatus.ExistingAccountSignInRequired);
+                    }
+
+                    // Everything else is a password the caller can correct.
                     return new AcceptanceOutcome(
                         new InvitationAcceptanceResult(
                             InvitationAcceptanceStatus.Invalid,
@@ -711,11 +741,15 @@ internal sealed class InvitationApplicationService(
                     invitation.TenantId,
                     invitation.Status,
                     invitation.AcceptedByUserId,
+                    issue.RedeemedAtUtc,
+                    issue.RedeemedByUserId,
                 })
             .SingleOrDefaultAsync(cancellationToken);
         if (accepted is null ||
             accepted.Status != InvitationStatus.Accepted ||
-            accepted.AcceptedByUserId is not { } acceptedByUserId)
+            accepted.AcceptedByUserId is not { } acceptedByUserId ||
+            accepted.RedeemedAtUtc is null ||
+            accepted.RedeemedByUserId != acceptedByUserId)
         {
             return null;
         }

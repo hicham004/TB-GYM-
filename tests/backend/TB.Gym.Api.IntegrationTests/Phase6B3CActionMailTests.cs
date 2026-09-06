@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using TB.Gym.Infrastructure.Application;
@@ -156,6 +157,30 @@ public sealed partial class Phase6B3CActionMailTests
         await SignInAsync(recovering, email, newPassword);
 
         Assert.AreEqual(invitation.Id, invitation.Id);
+    }
+
+    [TestMethod]
+    public async Task SuccessfulAccountActionMailRecordsTokenMintBeforeCompletion()
+    {
+        var workspace = await CreateWorkspaceAsync("account-mint-evidence");
+        using var caller = CreateClient();
+        Assert.IsNotNull(await ResetLinkForAsync(caller, workspace.CoachEmail));
+
+        Assert.IsGreaterThanOrEqualTo(
+            2L,
+            await ScalarAsync<long>(
+                """
+                SELECT count(*) FROM identity."ActionMailAttempts"
+                WHERE "Outcome" = 'Succeeded' AND "TokenMintedAtUtc" IS NOT NULL
+                """),
+            "Confirmation and reset should both have durable token-mint evidence.");
+        Assert.AreEqual(
+            0L,
+            await ScalarAsync<long>(
+                """
+                SELECT count(*) FROM identity."ActionMailAttempts"
+                WHERE "Outcome" = 'Succeeded' AND "TokenMintedAtUtc" IS NULL
+                """));
     }
 
     /// <summary>
@@ -500,6 +525,64 @@ public sealed partial class Phase6B3CActionMailTests
     }
 
     /// <summary>
+    /// An acceptance whose account insert loses to Identity's uniqueness converges, and never
+    /// answers with the invited address.
+    /// </summary>
+    /// <remarks>
+    /// This is the deterministic stand-in for the losing half of the race above. Two callers
+    /// presenting one link both pass the "no account for this address yet" check before either
+    /// commits, so the loser's insert fails on Identity's uniqueness rather than on anything the
+    /// caller sent. That interleaving cannot be scheduled reliably, so it is reproduced here by an
+    /// account whose user name is the invited address while its own address is different: the
+    /// pre-check misses it and the insert still refuses it, which is exactly the loser's position.
+    /// <para>
+    /// Two things must hold. The answer is the same convergent conflict a caller gets when the
+    /// account was already there, because losing a race did not make the request malformed. And the
+    /// body does not repeat Identity's "is already taken" text, which on an anonymous public
+    /// endpoint would disclose that an account exists for an address this flow otherwise never
+    /// confirms.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public async Task AnAcceptanceLosingTheAccountInsertConvergesWithoutNamingTheAddress()
+    {
+        var workspace = await CreateWorkspaceAsync("accept-collide");
+        var email = $"client-collide-{workspace.Suffix}@tbgym.test";
+        await CreateInvitationAsync(workspace.Coach, email);
+        await SweepInvitationMailAsync();
+        var token = TokenOf(RequiredInvitationLink());
+
+        await using (var scope = RequiredFactory.Services.CreateAsyncScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var collision = new ApplicationUser
+            {
+                Id = Guid.CreateVersion7(),
+                UserName = email,
+                Email = $"other-{workspace.Suffix}@tbgym.test",
+                EmailConfirmed = true,
+                DisplayName = "Name Collision",
+                CreatedAtUtc = Clock.UtcNow,
+                UpdatedAtUtc = Clock.UtcNow,
+            };
+            Assert.IsTrue(
+                (await users.CreateAsync(collision, Password)).Succeeded,
+                "The colliding account could not be seeded.");
+        }
+
+        using var invitee = CreateClient();
+        var response = await AcceptInvitationAsync(invitee, token);
+        var body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken);
+
+        Assert.AreEqual(
+            HttpStatusCode.Conflict,
+            response.StatusCode,
+            $"A lost account insert answered {(int)response.StatusCode}.");
+        Assert.DoesNotContain(email, body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("already taken", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Requirement 13: concurrent resends converge through idempotency and concurrency control.
     /// </summary>
     /// <remarks>
@@ -822,6 +905,34 @@ public sealed partial class Phase6B3CActionMailTests
             WHERE "SubjectUserId" IS NOT NULL
             """,
             "a subject with no recorded credential state");
+
+        await RequestPasswordResetAsync(workspace.Coach, workspace.CoachEmail);
+        var reset = (await AccountRequestsAsync())
+            .Last(item => item.ActionKind == nameof(AccountActionKind.ResetPassword));
+        var claim = Guid.NewGuid();
+        await AssertRefusedAsync(
+            """
+            UPDATE identity."ActionMailRequests"
+            SET "Status" = 'Processing', "ClaimToken" = @claim,
+                "ClaimExpiresAtUtc" = CURRENT_TIMESTAMP + interval '2 minutes'
+            WHERE "Id" = @request;
+            UPDATE identity."ActionMailRequests"
+            SET "AttemptCount" = 1
+            WHERE "Id" = @request;
+            INSERT INTO identity."ActionMailAttempts" (
+                "Id", "RequestId", "ActionKind", "AttemptNumber", "ClaimToken",
+                "ProviderIdempotencyKey", "StartedAtUtc", "Outcome", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES (
+                uuidv7(), @request, 'ResetPassword', 1, @claim,
+                'account-action:' || replace(CAST(@request AS text), '-', '') || ':a1:v1:' || repeat('a', 32),
+                CURRENT_TIMESTAMP, 'Started', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            UPDATE identity."ActionMailAttempts"
+            SET "Outcome" = 'Succeeded', "CompletedAtUtc" = CURRENT_TIMESTAMP
+            WHERE "RequestId" = @request;
+            """,
+            "a successful account materialization with no recorded token mint",
+            ("claim", claim),
+            ("request", reset.Id));
     }
 
     // Three groups of cases live in Phase6B3CActionMailProviderTests instead of here, for one

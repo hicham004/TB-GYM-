@@ -31,6 +31,9 @@ export class ConfirmEmail implements OnInit {
     if (!userId || !code) {
       this.state.set('error');
       this.error.set($localize`This confirmation link is incomplete.`);
+      if (userId || code) {
+        await this.scrubber.scrub(this.route);
+      }
       return;
     }
 

@@ -66,8 +66,12 @@ Every action email re-establishes, immediately before it renders anything:
 - the current address, through a narrow authorized contract of the kind
   `INotificationRecipientContacts` already is.
 
-A committed claim is a lease on work, not durable authorization to send. This is the same recheck
-Phase 6B-3A performs for commercial notifications and Phase 6B-2B performs for realtime delivery.
+A committed claim is a lease on work, not durable authorization to send. Neither is a committed
+`Started` attempt: authorization is checked before spending the attempt and then re-established after
+that commit, immediately before token minting. This closes the transaction-boundary window in which
+an account can be blocked or an invitation revoked, accepted, expired or superseded. It is the same
+recheck principle Phase 6B-3A applies to commercial notifications and Phase 6B-2B applies to realtime
+delivery.
 
 ### Links are built from a configured origin, never a Host header
 
@@ -269,10 +273,23 @@ minted for each generation" is exactly what was built, with one addition the ADR
 The token hash is committed **before** the provider is invoked, and a trigger refuses to mark a
 request materialized when the attempt that finalized it minted no token.
 
+Account mail records the same durable mint fact before submission without retaining a hash or token;
+a corrective trigger refuses a successful account attempt or materialized request without it.
+
 That ordering is not about generations at all. It is about a lost commit acknowledgement: without it,
 a process that sends and then fails to record has handed somebody a real link this system will refuse,
 and the failure is invisible until a recipient complains. Making the record older than the send removes
-the window.
+the window. Production also refuses an unset `DataProtection:KeyPath`, because process-local key rings
+would let the Worker mint links the API cannot unprotect.
+
+### Existing delivery evidence moves; it is not reconstructed
+
+The upgrade maps each legacy account and invitation delivery one-for-one into a request and attempt,
+preserving its identifier, state, timestamps, audit fields, failure code and provider identifier. It
+first proves invitation attempt numbers are contiguous and equal `SendCount`, and proves each stored
+recipient still resolves to its owner; an inconsistency aborts the migration instead of inventing
+history. The copied address is then discarded. The down path restores the exact mapped legacy rows,
+and the apply/revert/reapply test covers queued, failed, captured and provider-delivered evidence.
 
 ### What this ADR implied that turned out to need care
 

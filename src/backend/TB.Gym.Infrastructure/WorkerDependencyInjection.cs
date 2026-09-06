@@ -69,7 +69,7 @@ public static class WorkerDependencyInjection
         services.AddIdentityCore<ApplicationUser>(ConfigureIdentityOptions)
             .AddEntityFrameworkStores<GymDbContext>()
             .AddDefaultTokenProviders();
-        services.AddTbGymDataProtection(configuration);
+        services.AddTbGymDataProtection(configuration, isProduction);
 
         services.AddNotificationDispatch(configuration);
         services.AddNotificationEmail(configuration, isProduction);
@@ -110,10 +110,17 @@ public static class WorkerDependencyInjection
     /// </remarks>
     internal static IServiceCollection AddTbGymDataProtection(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        bool isProduction)
     {
         var dataProtection = services.AddDataProtection().SetApplicationName("TB.Gym");
         var keyPath = configuration["DataProtection:KeyPath"];
+        if (isProduction && string.IsNullOrWhiteSpace(keyPath))
+        {
+            throw new InvalidOperationException(
+                "DataProtection:KeyPath must name the shared persisted key ring in Production.");
+        }
+
         if (!string.IsNullOrWhiteSpace(keyPath))
         {
             dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keyPath));
@@ -183,8 +190,9 @@ public static class WorkerDependencyInjection
         {
             // Outside Production a deployment with no provider still has to be able to prove the whole
             // path end to end, so the captured adapter carries it. Production never reaches this
-            // branch: the dispatch validation above refuses to start without a real provider, because
-            // a deployment that cannot mail a confirmation link cannot onboard anybody.
+            // branch and composes no action-mail transport when email is deliberately disabled; the
+            // launch checklist makes a configured provider a release gate instead of changing the
+            // Phase 6B-3A decision that an email-off deployment may start.
             services.TryAddSingleton<CapturedActionEmailTransport>();
             services.TryAddSingleton<IActionEmailTransport>(provider =>
                 provider.GetRequiredService<CapturedActionEmailTransport>());

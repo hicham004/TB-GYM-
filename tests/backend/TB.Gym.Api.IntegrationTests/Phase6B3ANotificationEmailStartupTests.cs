@@ -186,6 +186,10 @@ public sealed class Phase6B3ANotificationEmailStartupTests
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["ConnectionStrings:Database"] = databaseConnection,
+                    // Phase 6B-3C refuses a Production composition with a process-local key ring,
+                    // and that check runs before the email options are read. This test is about the
+                    // email rules, so the key ring is satisfied rather than asserted here.
+                    ["DataProtection:KeyPath"] = Path.Combine(Path.GetTempPath(), databaseName!, "keys"),
                     ["Notifications:Email:Enabled"] = enabled,
                     ["Notifications:Email:Adapter"] = adapter,
                 })
@@ -217,6 +221,9 @@ public sealed class Phase6B3ANotificationEmailStartupTests
             ["Application:PublicBaseUrl"] =
                 environment == "Production" ? "https://app.tbgym.test" : "http://localhost:4200",
             ["Application:PublicOriginAllowlist:0"] = "https://app.tbgym.test",
+            // A Production host needs a persisted key ring before it will start; these tests build
+            // Production hosts to assert email rules rather than key-ring rules.
+            ["DataProtection:KeyPath"] = Path.Combine(Path.GetTempPath(), databaseName!, "keys"),
             ["Media:StorageRoot"] = Path.Combine(Path.GetTempPath(), databaseName!, "media"),
             ["Media:PurgeEnabled"] = "false",
             ["Notifications:Dispatch:PollIntervalSeconds"] = "300",

@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -13,7 +13,7 @@ import { CsrfService } from '../../core/security/csrf.service';
   templateUrl: './reset-password.html',
   styleUrl: './auth.scss',
 })
-export class ResetPassword {
+export class ResetPassword implements OnInit {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly route = inject(ActivatedRoute);
@@ -37,6 +37,12 @@ export class ResetPassword {
     confirmPassword: ['', Validators.required],
   });
 
+  ngOnInit(): void {
+    if (!this.validLink && (this.userId || this.code)) {
+      void this.scrubber.scrub(this.route);
+    }
+  }
+
   protected async submit(): Promise<void> {
     if (!this.validLink || this.form.invalid) {
       this.form.markAllAsTouched();
@@ -57,6 +63,8 @@ export class ResetPassword {
       this.complete.set(true);
     } catch (error) {
       this.error.set(apiErrorMessage(error, $localize`The reset link is invalid or expired.`));
+      this.form.controls.password.reset('');
+      this.form.controls.confirmPassword.reset('');
     } finally {
       this.submitting.set(false);
       // The token is single-use and has now been presented, so it is spent whether or not the reset

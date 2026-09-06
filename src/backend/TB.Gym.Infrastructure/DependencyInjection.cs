@@ -209,7 +209,7 @@ public static class DependencyInjection
         // Shared with the Worker by construction. The Worker mints confirmation and reset tokens and
         // this process unprotects them, so an unshared key ring would make every link this system
         // sends fail on click for a reason that reads as an invalid token.
-        services.AddTbGymDataProtection(configuration);
+        services.AddTbGymDataProtection(configuration, environment.IsProduction());
 
         services.AddRateLimiter(options =>
         {
