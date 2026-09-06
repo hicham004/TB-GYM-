@@ -726,6 +726,15 @@ public sealed partial class Phase6B2BRealtimeSignalRTests : IDisposable
             }
         }
 
+        /// <summary>Whether the live socket has received the named durable message.</summary>
+        public bool HasMessage(Guid messageId)
+        {
+            lock (sync)
+            {
+                return events.Any(item => item.Message?.Id == messageId);
+            }
+        }
+
         /// <summary>
         /// Waits for a frame to arrive, polling rather than sleeping a guess.
         /// </summary>
@@ -764,6 +773,23 @@ public sealed partial class Phase6B2BRealtimeSignalRTests : IDisposable
             }
 
             return Invalidations.Count >= count;
+        }
+
+        /// <summary>Waits for one named message, ignoring unrelated frames that arrive first.</summary>
+        public async Task<bool> WaitForMessageAsync(Guid messageId, TimeSpan? timeout = null)
+        {
+            var deadline = DateTimeOffset.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(20));
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                if (HasMessage(messageId))
+                {
+                    return true;
+                }
+
+                await Task.Delay(25);
+            }
+
+            return HasMessage(messageId);
         }
 
         /// <summary>

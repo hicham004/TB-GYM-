@@ -94,6 +94,9 @@ jobs:
         run: |
           docker run --detach --name tb-gym-worker-ci-smoke \
             --env 'ConnectionStrings__Database=Host=unused;Database=unused;Username=unused;Password=unused' \
+            --env DataProtection__KeyPath=/tmp/tb-gym-keys \
+            --env Application__PublicBaseUrl=https://app.example.com \
+            --env Application__PublicOriginAllowlist__0=https://app.example.com \
             --env Notifications__Dispatch__Enabled=false \
             tb-gym-worker:ci
           trap 'docker rm --force tb-gym-worker-ci-smoke >/dev/null 2>&1 || true' EXIT
@@ -123,6 +126,9 @@ jobs:
           docker run --detach --name tb-gym-api-ci --network tb-gym-ci-net \
             --env ASPNETCORE_ENVIRONMENT=Production \
             --env 'ConnectionStrings__Database=Host=unused;Database=unused;Username=unused;Password=unused' \
+            --env DataProtection__KeyPath=/tmp/tb-gym-keys \
+            --env Application__PublicBaseUrl=https://app.example.com \
+            --env Application__PublicOriginAllowlist__0=https://app.example.com \
             --env Database__ApplyMigrationsOnStartup=false \
             --env Messaging__Realtime__Enabled=false \
             --env Messaging__Realtime__ScaleOut=Redis \
@@ -140,6 +146,9 @@ jobs:
           docker run --name tb-gym-api-ci --network tb-gym-ci-net \
             --env ASPNETCORE_ENVIRONMENT=Production \
             --env 'ConnectionStrings__Database=Host=unused;Database=unused;Username=unused;Password=unused' \
+            --env DataProtection__KeyPath=/tmp/tb-gym-keys \
+            --env Application__PublicBaseUrl=https://app.example.com \
+            --env Application__PublicOriginAllowlist__0=https://app.example.com \
             --env Database__ApplyMigrationsOnStartup=false \
             --env Messaging__Realtime__ApiReplicaCount=3 \
             --env Messaging__Realtime__AllowedOrigins__0=https://app.example.com \

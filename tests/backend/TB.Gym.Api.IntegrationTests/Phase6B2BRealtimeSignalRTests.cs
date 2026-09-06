@@ -427,18 +427,17 @@ public sealed partial class Phase6B2BRealtimeSignalRTests
         // The service is alive and still works. A later message publishes normally.
         client.Clear();
         var afterOutage = await SendAsync(workspace.Coach, workspace.ConversationId, "after the outage");
-        for (var attempt = 0; attempt < 10 && client.Events.Count == 0; attempt++)
+        // A frame attempted during the outage may surface late. It is not proof that this new work
+        // crossed the recovered backplane, so wait for the exact message this assertion is about.
+        for (var attempt = 0; attempt < 10 && !client.HasMessage(afterOutage.Id); attempt++)
         {
             await SweepAsync(ReplicaB);
-            await client.WaitForEventsAsync(1, TimeSpan.FromSeconds(3));
+            await client.WaitForMessageAsync(afterOutage.Id, TimeSpan.FromSeconds(3));
         }
 
-        Assert.IsNotEmpty(
-            client.Events,
+        Assert.IsTrue(
+            client.HasMessage(afterOutage.Id),
             "After Redis returns, eligible work publishes again and the loop was never killed.");
-        Assert.Contains(
-            afterOutage.Id,
-            client.Events.Where(item => item.Message is not null).Select(item => item.Message!.Id).ToArray());
 
         // No connection string and no exception prose anywhere in either replica's log.
         foreach (var text in new[] { LogA.Text, logB?.Text ?? string.Empty })
