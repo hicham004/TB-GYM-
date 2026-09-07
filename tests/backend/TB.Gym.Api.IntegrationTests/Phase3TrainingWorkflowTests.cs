@@ -83,6 +83,12 @@ public sealed partial class Phase3TrainingWorkflowTests
                     // request did. The realtime rows these commands write are still written.
                     ["Messaging:Realtime:Enabled"] = "false",
                     ["Application:PublicBaseUrl"] = "http://localhost:4200",
+                    ["Media:StorageAdapter"] =
+                        TestContext.TestName?.Contains(
+                            "UnavailableStorage",
+                            StringComparison.Ordinal) == true
+                            ? "None"
+                            : "Local",
                     ["Media:StorageRoot"] = Path.Combine(Path.GetTempPath(), databaseName, "media"),
                     ["Media:AccessLifetimeSeconds"] =
                         MediaAccessLifetimeSeconds.ToString(CultureInfo.InvariantCulture),

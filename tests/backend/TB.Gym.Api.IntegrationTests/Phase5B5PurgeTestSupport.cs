@@ -60,15 +60,28 @@ public sealed partial class Phase3TrainingWorkflowTests
     {
         public bool FailDeletes { get; set; }
 
+        public bool IsUnavailable { get; set; }
+
+        public string? WriteLocationOverride { get; set; }
+
         public int PutCount => Volatile.Read(ref putCount);
+
+        public int ReadCount => Volatile.Read(ref readCount);
 
         public int DeleteCount => Volatile.Read(ref deleteCount);
 
         public IReadOnlyCollection<string> StoredKeys => storedKeys.Keys.ToArray();
 
+        public IReadOnlyCollection<ObjectReadRequest> Reads => reads.ToArray();
+
         private readonly ConcurrentDictionary<string, byte> storedKeys = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<int, byte> failedDeleteCalls = new();
+        private readonly ConcurrentQueue<ObjectReadRequest> reads = new();
+        private readonly Lock deleteBarrierSync = new();
+        private TaskCompletionSource<StorageObjectLocator>? deleteStarted;
+        private TaskCompletionSource? releaseDelete;
         private int putCount;
+        private int readCount;
         private int deleteCount;
 
         public void FailDeleteCall(int callNumber) => failedDeleteCalls[callNumber] = 0;
@@ -85,6 +98,63 @@ public sealed partial class Phase3TrainingWorkflowTests
             storedKeys[objectKey] = 0;
         }
 
+        public void RecordRead(ObjectReadRequest request)
+        {
+            Interlocked.Increment(ref readCount);
+            reads.Enqueue(request);
+        }
+
+        public void ArmDeleteBarrier()
+        {
+            lock (deleteBarrierSync)
+            {
+                deleteStarted = new TaskCompletionSource<StorageObjectLocator>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                releaseDelete = new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+        }
+
+        public async Task<StorageObjectLocator> WaitForDeleteAsync(CancellationToken cancellationToken)
+        {
+            Task<StorageObjectLocator> started;
+            lock (deleteBarrierSync)
+            {
+                started = deleteStarted?.Task
+                    ?? throw new InvalidOperationException("The delete barrier is not armed.");
+            }
+
+            return await started.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+        }
+
+        public void ReleaseDeleteBarrier()
+        {
+            lock (deleteBarrierSync)
+            {
+                releaseDelete?.TrySetResult();
+            }
+        }
+
+        public async Task EnterDeleteAsync(
+            StorageObjectLocator locator,
+            CancellationToken cancellationToken)
+        {
+            Task? release = null;
+            lock (deleteBarrierSync)
+            {
+                if (deleteStarted is not null && !deleteStarted.Task.IsCompleted)
+                {
+                    deleteStarted.TrySetResult(locator);
+                    release = releaseDelete!.Task;
+                }
+            }
+
+            if (release is not null)
+            {
+                await release.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+            }
+        }
+
         public bool ShouldFailDelete()
         {
             var callNumber = Interlocked.Increment(ref deleteCount);
@@ -97,25 +167,50 @@ public sealed partial class Phase3TrainingWorkflowTests
     private sealed class FaultInjectingObjectStorage(IObjectStorage inner, StorageFaultSwitch faults)
         : IObjectStorage
     {
-        public async Task<StoredObject> PutAsync(ObjectUpload upload, CancellationToken cancellationToken)
-        {
-            var stored = await inner.PutAsync(upload, cancellationToken);
-            faults.RecordPut(stored.ObjectKey);
-            return stored;
-        }
+        public string WriteLocation => faults.WriteLocationOverride ?? inner.WriteLocation;
 
-        public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken) =>
-            inner.OpenReadAsync(objectKey, cancellationToken);
+        public bool IsAvailable => !faults.IsUnavailable && inner.IsAvailable;
 
-        public async Task DeleteAsync(string objectKey, CancellationToken cancellationToken)
+        public async Task<ObjectWriteResult> PutAsync(
+            ObjectUpload upload,
+            CancellationToken cancellationToken)
         {
-            if (faults.ShouldFailDelete())
+            var result = await inner.PutAsync(upload, cancellationToken);
+            if (result.StoredObject is { } stored)
             {
-                throw new IOException("The object store is unavailable.");
+                faults.RecordPut(stored.Locator.ObjectKey);
             }
 
-            await inner.DeleteAsync(objectKey, cancellationToken);
-            faults.RecordDelete(objectKey);
+            return result;
+        }
+
+        public Task<ObjectReadResult> ReadAsync(
+            ObjectReadRequest request,
+            CancellationToken cancellationToken)
+        {
+            faults.RecordRead(request);
+            return inner.ReadAsync(request, cancellationToken);
+        }
+
+        public async Task<ObjectDeleteResult> DeleteAsync(
+            StorageObjectLocator locator,
+            CancellationToken cancellationToken)
+        {
+            await faults.EnterDeleteAsync(locator, cancellationToken);
+            if (faults.ShouldFailDelete())
+            {
+                return new ObjectDeleteResult(
+                    ObjectStorageOperationStatus.Failed,
+                    "storage_io_error");
+            }
+
+            var result = await inner.DeleteAsync(locator, cancellationToken);
+            if (result.Status == ObjectStorageOperationStatus.Success)
+            {
+                faults.RecordDelete(locator.ObjectKey);
+            }
+
+            return result;
         }
     }
 }

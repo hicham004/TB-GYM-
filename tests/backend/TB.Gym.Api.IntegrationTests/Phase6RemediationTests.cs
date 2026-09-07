@@ -918,6 +918,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         // The grant works while the membership is active.
         await AssertStatusAsync(await subject.GetAsync(grant.Url), HttpStatusCode.OK);
         await AssertStatusAsync(await subject.GetAsync(grant.ThumbnailUrl), HttpStatusCode.OK);
+        var readsBeforeRevocation = RequiredStorageFaults.ReadCount;
 
         // The membership is deactivated while that same, unexpired grant is still in the cookie jar.
         await Phase6ExecuteAsync(
@@ -933,6 +934,17 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.IsTrue(
             thumbnail.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound,
             $"Expected the thumbnail to be refused but received {(int)thumbnail.StatusCode}.");
+
+        using var rangedRequest = new HttpRequestMessage(HttpMethod.Get, grant.Url);
+        rangedRequest.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 0);
+        var ranged = await subject.SendAsync(rangedRequest);
+        Assert.IsTrue(
+            ranged.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound,
+            $"Expected the ranged original to be refused but received {(int)ranged.StatusCode}.");
+        Assert.AreEqual(
+            readsBeforeRevocation,
+            RequiredStorageFaults.ReadCount,
+            "Membership revocation was checked only after storage had already been opened.");
 
         // And a fresh grant cannot be minted either, so this is not a stale-cookie artefact.
         await RefreshCsrfAsync(subject);

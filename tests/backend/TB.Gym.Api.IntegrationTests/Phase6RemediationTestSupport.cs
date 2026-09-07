@@ -213,7 +213,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         public bool IsAvailable => state.IsAvailable;
 
         public async Task<MediaScanResult> ScanAsync(
-            string objectKey,
+            StorageObjectLocator locator,
             string verifiedContentType,
             CancellationToken cancellationToken)
         {

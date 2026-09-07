@@ -27,7 +27,7 @@ public sealed class Phase5B2ProgressPhotoDomainTests
             "video/mp4",
             1_024,
             new string('a', 64),
-            "tenant/object",
+            Locator("object"),
             MediaPurpose.ProgressPhoto));
 
         var image = MediaAsset.RegisterUpload(
@@ -40,7 +40,7 @@ public sealed class Phase5B2ProgressPhotoDomainTests
             "image/jpeg",
             1_024,
             new string('a', 64),
-            "tenant/object",
+            Locator("object"),
             MediaPurpose.ProgressPhoto);
         Assert.AreEqual(MediaPurpose.ProgressPhoto, image.Purpose);
     }
@@ -60,7 +60,7 @@ public sealed class Phase5B2ProgressPhotoDomainTests
             "video/mp4",
             2_048,
             new string('b', 64),
-            "tenant/object-2");
+            Locator("object-2"));
 
         Assert.AreEqual(MediaPurpose.ExerciseMedia, asset.Purpose);
     }
@@ -104,4 +104,7 @@ public sealed class Phase5B2ProgressPhotoDomainTests
         Assert.ThrowsExactly<ArgumentException>(() =>
             ProgressPhotoRemoval.Create(photo, "Valid reason.", Now, Guid.Empty));
     }
+
+    private static StorageObjectLocator Locator(string suffix) =>
+        new(TenantId, MediaStorageLocations.LocalV1, $"{TenantId:N}/{suffix}");
 }

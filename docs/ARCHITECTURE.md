@@ -4,7 +4,8 @@ Status: Phase 6A check-ins complete, 2026-08-26; Phase 5/6 audit remediation app
 Phase 6B-1 notification dispatch and in-app inbox complete, 2026-08-31; Phase 6B-2A persisted
 direct messaging complete, 2026-09-01; Phase 6B-2B authorized realtime messaging delivery complete,
 2026-09-04; Phase 6B-3A independent notification channels complete, 2026-09-05; Phase 6B-3B
-production transactional email, provider events and suppression complete, 2026-09-05
+production transactional email, provider events and suppression complete, 2026-09-05; Phase 6B-4A
+Production Media Foundation complete, 2026-09-07
 
 ## 1. Architectural style
 
@@ -73,7 +74,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Check-ins        | Form lineages, immutable published versions, stable question keys, assignments, typed client answers, one-way submission/review, comparison projections                                  |
 | Messaging        | Tenant-scoped direct coach/client conversations, explicit participants, message history, immutable revisions, one-way removal and moderation, per-participant read state                 |
 | Notifications    | Idempotent outbox, durable dispatch, versioned templates, per-channel delivery attempts, in-app notifications and read state, transactional email transport, provider events and mailbox suppression |
-| Media            | Object metadata, signature/scanner lifecycle, protected access, subordinate renditions, external embeds, retention                                                                       |
+| Media            | Object metadata, provider-neutral locators and ranges, scan evidence, protected access, subordinate renditions, external embeds, retention and leased purge                              |
 | Gamification     | Tenant theme, levels, ranks and auditable experience events                                                                                                                              |
 | Integrations     | AI, payment, nutrition-data and other external provider contracts                                                                                                                        |
 
@@ -528,30 +529,37 @@ payloads and credentials do not leak into domain objects. AI output is untrusted
 requires schema validation, provenance, human approval where appropriate, and normal domain
 validation before persistence.
 
-Phase 3 provides a local streaming object-store adapter and a development signature scanner.
-Production fails media publication closed until a real scanning adapter is configured.
-Phase 3 also enforces request-size, endpoint rate/concurrency, and configurable workspace
-quota limits, and tombstones historically referenced media. The local storage implementation
-is not the production object-store decision; managed object storage, scanner, and CDN/private
-delivery remain later production work. Incomplete local ingestion is now durably reconciled rather
-than left to provider-level orphan discovery.
+Phase 6B-4A owns the Media storage seam. The local streaming adapter composes automatically only in
+Development; non-Development composition uses an explicit unavailable adapter and rejects an upload
+before it reserves an object or accepts upload bytes. A readiness check exposes that closed state.
+No cloud provider is selected here. `S3`/`R2`, production ClamAV, inventory reconciliation,
+CDN/presigned delivery and operations controls remain deferred.
 
-Retention processing is now in the application. One in-process `BackgroundService` — the only
-hosted service inside the API — sweeps tombstoned media whose retention has elapsed, deleting
-derivative objects before originals and recording completion. It is deliberately minimal and is not
-a job platform: it holds no queue, no schedule table, and no dispatch abstraction, and it was never a
-foundation for notification-outbox delivery, which needed durable semantics it does not have —
-Phase 6B-1 built those separately in `TB.Gym.Worker` rather than generalising this loop. Several
-API replicas may run it because each sweep claims rows with `FOR UPDATE SKIP LOCKED`, per workspace
-so the tenant write-scope guard stays in force for every write it makes. The same sweep first
+Every stored object has a durable provider-neutral `(location, key)` locator. `MediaAsset`,
+`MediaAssetDerivative` and a live `MediaIngestObject` retain the location that produced the bytes,
+so changing the current write adapter cannot redirect an existing read or purge. The Phase 6B-4A
+migration truthfully backfills pre-existing local objects as `local-v1`. The owned storage contract
+serves either the full stream or one bounded byte range and returns the total object length; the
+Media module contains no provider SDK vocabulary. Content authorization completes before a storage
+read opens, including a rendition request.
+
+Scan evidence is bound to the exact locator and SHA-256 of the bytes inspected, along with the
+scanner identity, version, instant and outcome. An asset or derivative cannot publish without
+allowed exact evidence. Historical rows without evidence are represented as `LegacyUnavailable`,
+not fabricated as scanned; new writes cannot introduce that state.
+
+Retention processing remains a minimal in-process `BackgroundService`, not a job platform. A short
+transaction claims a due asset or ingest row with a random token and lease, then commits before any
+storage deletion. Derivatives are deleted before the original outside a database transaction; a
+separate short finalization transaction accepts only the current claim token. An expired lease is
+reclaimable and a stale claimant cannot finalize or fail a newer claim. A storage failure leaves the
+row due and quota-counted, and quota is released only after confirmed deletion. The same sweep first
 reclaims due incomplete-ingest reservations, including a crashed pre-write reservation after its
 15-minute lease. Storage allowances count originals, derivatives, tombstoned bytes still on disk,
-and non-purged ingest reservations; they exclude only purged/deleted bytes and are
-checked and committed inside one transaction holding a transaction-scoped advisory lock keyed on the
-workspace, so concurrent uploads cannot jointly exceed a limit. Admission orders concurrent durable
-reservations by creation instant and id: a candidate counts reservations ahead of it, while every
-later candidate observes the winner as committed asset bytes. This avoids symmetric rejection when
-exactly one valid upload fits without weakening the hard limit.
+and non-purged ingest reservations; they exclude only confirmed purges and are checked and committed
+inside one transaction holding a transaction-scoped advisory lock keyed on the workspace. Admission
+orders concurrent durable reservations by creation instant and id, avoiding symmetric rejection when
+exactly one valid upload fits without weakening the hard limit. See ADR 0023.
 
 ## 10. Operations and scaling
 

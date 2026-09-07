@@ -8,6 +8,7 @@ public sealed class Phase5B3ProgressPhotoThumbnailDomainTests
     private static readonly Guid TenantId = Guid.Parse("10000000-0000-0000-0000-00000000053b");
     private static readonly Guid MediaAssetId = Guid.Parse("30000000-0000-0000-0000-00000000053b");
     private static readonly string Hash = new('a', 64);
+    private static readonly DateTimeOffset Now = new(2026, 8, 23, 9, 0, 0, TimeSpan.Zero);
 
     [TestMethod]
     public void ThumbnailSizingPreservesAspectRatioAndNeverUpscalesASmallerOriginal()
@@ -46,12 +47,14 @@ public sealed class Phase5B3ProgressPhotoThumbnailDomainTests
     [TestMethod]
     public void AThumbnailIsSubordinateToItsParentAndAccountsForItsOwnBytes()
     {
+        var locator = Locator("thumbnail-object");
         var thumbnail = MediaAssetDerivative.RegisterThumbnail(
             TenantId,
             MediaAssetId,
             18_432,
             Hash.ToUpperInvariant(),
-            "tenant/thumbnail-object",
+            locator,
+            Evidence(locator, Hash),
             480,
             360);
 
@@ -65,14 +68,16 @@ public sealed class Phase5B3ProgressPhotoThumbnailDomainTests
 
         // It cannot exist without a parent, and it cannot claim bytes or dimensions it does not
         // have, because those are exactly the values a purge and a quota would later trust.
+        var invalidLocator = Locator("object");
+        var evidence = Evidence(invalidLocator, Hash);
         Assert.ThrowsExactly<ArgumentException>(() => MediaAssetDerivative.RegisterThumbnail(
-            TenantId, Guid.Empty, 18_432, Hash, "tenant/object", 480, 360));
+            TenantId, Guid.Empty, 18_432, Hash, invalidLocator, evidence, 480, 360));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => MediaAssetDerivative.RegisterThumbnail(
-            TenantId, MediaAssetId, 0, Hash, "tenant/object", 480, 360));
+            TenantId, MediaAssetId, 0, Hash, invalidLocator, evidence, 480, 360));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => MediaAssetDerivative.RegisterThumbnail(
-            TenantId, MediaAssetId, 18_432, Hash, "tenant/object", 480, 0));
+            TenantId, MediaAssetId, 18_432, Hash, invalidLocator, evidence, 480, 0));
         Assert.ThrowsExactly<ArgumentException>(() => MediaAssetDerivative.RegisterThumbnail(
-            TenantId, MediaAssetId, 18_432, "not-a-hash", "tenant/object", 480, 360));
+            TenantId, MediaAssetId, 18_432, "not-a-hash", invalidLocator, evidence, 480, 360));
     }
 
     private static void AssertRatioPreserved(int width, int height, (int Width, int Height) fitted)
@@ -84,4 +89,14 @@ public sealed class Phase5B3ProgressPhotoThumbnailDomainTests
             Math.Abs(source - target),
             $"The aspect ratio changed from {source} to {target}.");
     }
+
+    private static StorageObjectLocator Locator(string suffix) =>
+        new(TenantId, MediaStorageLocations.LocalV1, $"{TenantId:N}/{suffix}");
+
+    private static MediaScanEvidence Evidence(StorageObjectLocator locator, string sha256) =>
+        MediaScanEvidence.Record(
+            locator,
+            sha256,
+            new MediaScanResult(true, "scanner", "1.0", null),
+            Now);
 }

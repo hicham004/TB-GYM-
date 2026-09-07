@@ -42,6 +42,7 @@ public interface IMediaApplicationService
     Task<MediaContentResult> OpenContentAsync(
         Guid assetId,
         string grant,
+        RequestedByteRange? range,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -51,6 +52,7 @@ public interface IMediaApplicationService
     Task<MediaContentResult> OpenThumbnailAsync(
         Guid assetId,
         string grant,
+        RequestedByteRange? range,
         CancellationToken cancellationToken);
 
     Task<MediaCommandResult> DeleteAsync(
@@ -103,7 +105,68 @@ public sealed record MediaContentResult(
     MediaContentStatus Status,
     Stream? Content = null,
     string? ContentType = null,
-    long? Length = null);
+    long? ObjectLength = null,
+    long? ContentLength = null,
+    ObjectByteRange? Range = null);
+
+/// <summary>A syntactically valid single HTTP byte-range request, resolved after authorization.</summary>
+public sealed record RequestedByteRange
+{
+    private RequestedByteRange(long? start, long? endInclusive, long? suffixLength)
+    {
+        Start = start;
+        EndInclusive = endInclusive;
+        SuffixLength = suffixLength;
+    }
+
+    public long? Start { get; }
+
+    public long? EndInclusive { get; }
+
+    public long? SuffixLength { get; }
+
+    public static RequestedByteRange FromStart(long start, long? endInclusive = null)
+    {
+        if (start < 0 || endInclusive < start)
+        {
+            throw new ArgumentOutOfRangeException(nameof(start));
+        }
+
+        return new RequestedByteRange(start, endInclusive, null);
+    }
+
+    public static RequestedByteRange FromSuffix(long suffixLength)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(suffixLength);
+
+        return new RequestedByteRange(null, null, suffixLength);
+    }
+
+    public bool TryResolve(long objectLength, out ObjectByteRange? range)
+    {
+        range = null;
+        if (objectLength <= 0)
+        {
+            return false;
+        }
+
+        if (SuffixLength is { } suffix)
+        {
+            var length = Math.Min(suffix, objectLength);
+            range = new ObjectByteRange(objectLength - length, length);
+            return true;
+        }
+
+        if (Start is not { } start || start >= objectLength)
+        {
+            return false;
+        }
+
+        var end = Math.Min(EndInclusive ?? (objectLength - 1), objectLength - 1);
+        range = new ObjectByteRange(start, checked(end - start + 1));
+        return true;
+    }
+}
 
 public sealed record MediaAccessResult(
     MediaAccessStatus Status,
@@ -216,11 +279,19 @@ public enum MediaContentStatus
     Success = 1,
     NotFound = 2,
     Forbidden = 3,
+    RangeNotSatisfiable = 4,
+    Unavailable = 5,
 }
 
 public sealed class MediaStorageOptions
 {
     public const string SectionName = "Media";
+
+    /// <summary>
+    /// Development defaults to Local. Non-development defaults to None and never silently selects
+    /// process-local disk; tests may replace <see cref="IObjectStorage"/> explicitly.
+    /// </summary>
+    public string? StorageAdapter { get; set; }
 
     public long MaxWorkspaceStorageBytes { get; set; } = 20L * 1024L * 1024L * 1024L;
 
@@ -244,6 +315,12 @@ public sealed class MediaStorageOptions
     /// receiving it, so the ceiling is the number written here and not a multiple of it.
     /// </summary>
     public int PurgeBatchSize { get; set; } = 25;
+
+    /// <summary>
+    /// A purge claimant owns work only for this bounded interval. Expiry permits another replica
+    /// to replay idempotent deletion after a crash.
+    /// </summary>
+    public int PurgeClaimLeaseSeconds { get; set; } = 120;
 
     /// <summary>
     /// Engineering policy: maximum progress-photo decodes admitted across this API process.

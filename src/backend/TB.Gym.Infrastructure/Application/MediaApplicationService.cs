@@ -70,6 +70,13 @@ internal sealed class MediaApplicationService(
                 return new MediaCommandResult(MediaCommandStatus.NotFound);
             }
 
+            // Non-development composition supplies an unavailable adapter until production object
+            // storage is configured. Refuse before reserving a key or reading one upload byte.
+            if (!objectStorage.IsAvailable)
+            {
+                return StorageUnavailable();
+            }
+
             // Fail before accepting a byte. A deployment that already knows it cannot scan must not
             // create a storage object merely to delete it again and call that fail-closed.
             if (!scanner.IsAvailable)
@@ -102,8 +109,12 @@ internal sealed class MediaApplicationService(
                 : MediaUploadPolicy.MaximumVideoBytes;
             var quotaBoundsTheStream = remainingBytes < acceptedBytes;
             var objectKey = $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}";
+            var originalLocator = new StorageObjectLocator(
+                tenantContext.TenantId,
+                objectStorage.WriteLocation,
+                objectKey);
             var originalReservation = await ReserveIngestObjectAsync(
-                objectKey,
+                originalLocator,
                 Math.Min(acceptedBytes, remainingBytes),
                 purpose,
                 clientProfileId,
@@ -113,14 +124,20 @@ internal sealed class MediaApplicationService(
             StoredObject stored;
             try
             {
-                stored = await objectStorage.PutAsync(
+                var write = await objectStorage.PutAsync(
                     new ObjectUpload(
-                        objectKey,
+                        originalLocator,
                         contentType,
                         content,
-                        tenantContext.TenantId,
                         Math.Min(acceptedBytes, remainingBytes)),
                     cancellationToken);
+                if (write is not { Status: ObjectStorageOperationStatus.Success, StoredObject: { } written })
+                {
+                    await CleanupIngestObjectsAsync(ingestObjects);
+                    return StorageUnavailable();
+                }
+
+                stored = written;
             }
             catch (ArgumentOutOfRangeException) when (quotaBoundsTheStream)
             {
@@ -134,7 +151,7 @@ internal sealed class MediaApplicationService(
                     "The workspace media-storage allowance is full.");
             }
 
-            originalReservation.ConfirmStored(stored.Length, clock.UtcNow);
+            originalReservation.ConfirmStored(stored.Length, stored.Sha256, clock.UtcNow);
             await dbContext.SaveChangesAsync(cancellationToken);
 
             var validation = MediaUploadPolicy.Validate(fileName, contentType, stored.Length, stored.Signature);
@@ -185,25 +202,45 @@ internal sealed class MediaApplicationService(
                 validation.VerifiedContentType,
                 stored.Length,
                 stored.Sha256,
-                stored.ObjectKey,
+                stored.Locator,
                 purpose);
-            MediaScanResult scan;
+            MediaScanEvidence assetScanEvidence;
+            MediaScanEvidence? thumbnailScanEvidence = null;
             try
             {
-                scan = await scanner.ScanAsync(stored.ObjectKey, validation.VerifiedContentType, cancellationToken);
-                if (rendition is not null && scan.IsAllowed)
+                var scan = await scanner.ScanAsync(
+                    stored.Locator,
+                    validation.VerifiedContentType,
+                    cancellationToken);
+                assetScanEvidence = MediaScanEvidence.Record(
+                    stored.Locator,
+                    stored.Sha256,
+                    scan,
+                    clock.UtcNow);
+                var assetReservation = rendition?.Image.Reservation ?? originalReservation;
+                assetReservation.RecordScanEvidence(assetScanEvidence);
+
+                if (rendition is not null && assetScanEvidence.IsAllowed)
                 {
                     // The thumbnail is bytes this workspace actually stores and serves, so the
-                    // scanner runs against it too. A rendition refusal fails the whole upload.
+                    // scanner runs against it too. A refusal of the original already rejects the
+                    // complete upload, so it must not invoke a second scan for bytes that will
+                    // only be cleaned up.
                     var thumbnailScan = await scanner.ScanAsync(
-                        rendition.Thumbnail.Stored.ObjectKey,
+                        rendition.Thumbnail.Stored.Locator,
                         MediaThumbnailPolicy.ContentType,
                         cancellationToken);
-                    if (!thumbnailScan.IsAllowed)
-                    {
-                        scan = thumbnailScan;
-                    }
+                    thumbnailScanEvidence = MediaScanEvidence.Record(
+                        rendition.Thumbnail.Stored.Locator,
+                        rendition.Thumbnail.Stored.Sha256,
+                        thumbnailScan,
+                        clock.UtcNow);
+                    rendition.Thumbnail.Reservation.RecordScanEvidence(thumbnailScanEvidence);
                 }
+
+                // Evidence is durable before any refusal cleanup begins. If deletion then fails,
+                // the surviving ingest row still says exactly which stored bytes were inspected.
+                await dbContext.SaveChangesAsync(cancellationToken);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -218,7 +255,7 @@ internal sealed class MediaApplicationService(
                 return ScannerUnavailable();
             }
 
-            if (!scan.IsAllowed)
+            if (!assetScanEvidence.IsAllowed || thumbnailScanEvidence is { IsAllowed: false })
             {
                 // The upload fails, and it fails as an upload rather than as a stored asset in a
                 // dead state. Reporting success for bytes the scanner refused is what let a caller
@@ -236,9 +273,9 @@ internal sealed class MediaApplicationService(
 
             try
             {
-                asset.RecordScan(scan);
+                asset.RecordScan(assetScanEvidence);
             }
-            catch (ArgumentException)
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {
                 // A malformed provider result is an operational scanner failure, not evidence that
                 // the caller supplied an invalid file.
@@ -253,7 +290,8 @@ internal sealed class MediaApplicationService(
                     asset.Id,
                     rendition.Thumbnail.Stored.Length,
                     rendition.Thumbnail.Stored.Sha256,
-                    rendition.Thumbnail.Stored.ObjectKey,
+                    rendition.Thumbnail.Stored.Locator,
+                    thumbnailScanEvidence!,
                     rendition.Width,
                     rendition.Height);
 
@@ -436,14 +474,16 @@ internal sealed class MediaApplicationService(
     public Task<MediaContentResult> OpenContentAsync(
         Guid assetId,
         string grant,
+        RequestedByteRange? range,
         CancellationToken cancellationToken) =>
-        OpenAsync(assetId, grant, thumbnail: false, cancellationToken);
+        OpenAsync(assetId, grant, thumbnail: false, range, cancellationToken);
 
     public Task<MediaContentResult> OpenThumbnailAsync(
         Guid assetId,
         string grant,
+        RequestedByteRange? range,
         CancellationToken cancellationToken) =>
-        OpenAsync(assetId, grant, thumbnail: true, cancellationToken);
+        OpenAsync(assetId, grant, thumbnail: true, range, cancellationToken);
 
     /// <summary>
     /// Resolves the bytes of one asset, or of its thumbnail rendition, behind a single grant and a
@@ -459,6 +499,7 @@ internal sealed class MediaApplicationService(
         Guid assetId,
         string grant,
         bool thumbnail,
+        RequestedByteRange? requestedRange,
         CancellationToken cancellationToken)
     {
         try
@@ -494,11 +535,12 @@ internal sealed class MediaApplicationService(
                 (item.Status == MediaAssetStatus.Ready || item.Status == MediaAssetStatus.Tombstoned) &&
                 item.Source == MediaSource.Upload,
             cancellationToken);
-        if (asset?.StorageKey is null)
+        if (asset?.StorageKey is null || asset.StorageLocation is null)
         {
             return new MediaContentResult(MediaContentStatus.NotFound);
         }
 
+        var storageLocation = asset.StorageLocation;
         var storageKey = asset.StorageKey;
         var contentType = asset.VerifiedContentType;
         var length = asset.Length;
@@ -512,29 +554,55 @@ internal sealed class MediaApplicationService(
             // The row survives a purge as history with its storage key cleared, so a missing key is
             // as much a "gone" as a missing row. Both are NotFound; neither may reach storage with
             // a null key and surface as a 500.
-            if (derivative?.StorageKey is null)
+            if (derivative?.StorageKey is null || string.IsNullOrWhiteSpace(derivative.StorageLocation))
             {
                 return new MediaContentResult(MediaContentStatus.NotFound);
             }
 
+            storageLocation = derivative.StorageLocation;
             storageKey = derivative.StorageKey;
             contentType = derivative.VerifiedContentType;
             length = derivative.Length;
         }
 
-        try
-        {
-            var stream = await objectStorage.OpenReadAsync(storageKey, cancellationToken);
-            return new MediaContentResult(
-                MediaContentStatus.Success,
-                stream,
-                contentType,
-                length);
-        }
-        catch (FileNotFoundException)
+        if (contentType is null || length is not { } objectLength || objectLength <= 0)
         {
             return new MediaContentResult(MediaContentStatus.NotFound);
         }
+
+        ObjectByteRange? range = null;
+        if (requestedRange is not null && !requestedRange.TryResolve(objectLength, out range))
+        {
+            return new MediaContentResult(
+                MediaContentStatus.RangeNotSatisfiable,
+                ObjectLength: objectLength);
+        }
+
+        var locator = new StorageObjectLocator(
+            tenantContext.TenantId,
+            storageLocation,
+            storageKey);
+        var read = await objectStorage.ReadAsync(
+            new ObjectReadRequest(locator, contentType, range),
+            cancellationToken);
+        return read switch
+        {
+            { Status: ObjectStorageOperationStatus.Success, Content: { } content, Metadata: { } metadata } =>
+                new MediaContentResult(
+                    MediaContentStatus.Success,
+                    content,
+                    metadata.ContentType,
+                    metadata.ObjectLength,
+                    metadata.ContentLength,
+                    metadata.Range),
+            { Status: ObjectStorageOperationStatus.RangeNotSatisfiable, Metadata: { } metadata } =>
+                new MediaContentResult(
+                    MediaContentStatus.RangeNotSatisfiable,
+                    ObjectLength: metadata.ObjectLength),
+            { Status: ObjectStorageOperationStatus.NotFound } =>
+                new MediaContentResult(MediaContentStatus.NotFound),
+            _ => new MediaContentResult(MediaContentStatus.Unavailable),
+        };
     }
 
     /// <summary>
@@ -883,7 +951,15 @@ internal sealed class MediaApplicationService(
         IngestStoredObject? rewritten = null;
         try
         {
-            await using (var original = await objectStorage.OpenReadAsync(stored.ObjectKey, cancellationToken))
+            var read = await objectStorage.ReadAsync(
+                new ObjectReadRequest(stored.Locator, validation.VerifiedContentType),
+                cancellationToken);
+            if (read is not { Status: ObjectStorageOperationStatus.Success, Content: { } original })
+            {
+                throw new MediaStorageException(read.FailureCode ?? "storage_unavailable");
+            }
+
+            await using (original)
             {
                 if (!ProgressPhotoSanitizer.TrySanitize(original, validation.VerifiedContentType, out produced) ||
                     produced is null)
@@ -953,22 +1029,30 @@ internal sealed class MediaApplicationService(
     {
         content.Position = 0;
         var objectKey = $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}";
+        var locator = new StorageObjectLocator(
+            tenantContext.TenantId,
+            objectStorage.WriteLocation,
+            objectKey);
         var reservation = await ReserveIngestObjectAsync(
-            objectKey,
+            locator,
             Math.Min(maximumBytes, content.Length),
             purpose,
             clientProfileId,
             cancellationToken);
         ingestObjects.Add(reservation);
-        var stored = await objectStorage.PutAsync(
+        var write = await objectStorage.PutAsync(
             new ObjectUpload(
-                objectKey,
+                locator,
                 verifiedContentType,
                 content,
-                tenantContext.TenantId,
                 maximumBytes),
             cancellationToken);
-        reservation.ConfirmStored(stored.Length, clock.UtcNow);
+        if (write is not { Status: ObjectStorageOperationStatus.Success, StoredObject: { } stored })
+        {
+            throw new MediaStorageException(write.FailureCode ?? "storage_unavailable");
+        }
+
+        reservation.ConfirmStored(stored.Length, stored.Sha256, clock.UtcNow);
         await dbContext.SaveChangesAsync(cancellationToken);
         try
         {
@@ -987,7 +1071,7 @@ internal sealed class MediaApplicationService(
     }
 
     private async Task<MediaIngestObject> ReserveIngestObjectAsync(
-        string objectKey,
+        StorageObjectLocator locator,
         long reservedBytes,
         MediaPurpose purpose,
         Guid? clientProfileId,
@@ -995,7 +1079,7 @@ internal sealed class MediaApplicationService(
     {
         var reservation = MediaIngestObject.Reserve(
             tenantContext.TenantId,
-            objectKey,
+            locator,
             reservedBytes,
             purpose,
             clientProfileId,
@@ -1042,25 +1126,42 @@ internal sealed class MediaApplicationService(
         // little longer than the storage timeout so the timeout handler can make it immediately
         // due; if the process dies instead, reconciliation takes over after this short bound.
         var cleanupTimeout = TimeSpan.FromSeconds(storageOptions.IngestCleanupAttemptTimeoutSeconds);
-        ingestObject.BeginImmediatePurgeAttempt(now, cleanupTimeout.Add(TimeSpan.FromSeconds(5)));
+        var claimToken = Guid.NewGuid();
+        ingestObject.ClaimImmediatePurge(
+            now,
+            cleanupTimeout.Add(TimeSpan.FromSeconds(5)),
+            claimToken);
         await dbContext.SaveChangesAsync(CancellationToken.None);
 
         try
         {
             using var cleanupCancellation = new CancellationTokenSource(cleanupTimeout);
-            if (ingestObject.StorageKey is { } storageKey)
+            if (ingestObject.StorageKey is not null)
             {
-                await objectStorage.DeleteAsync(storageKey, cleanupCancellation.Token);
+                var deletion = await objectStorage.DeleteAsync(
+                    ingestObject.GetStorageLocator(),
+                    cleanupCancellation.Token);
+                if (deletion.Status != ObjectStorageOperationStatus.Success)
+                {
+                    ingestObject.RecordPurgeFailure(
+                        clock.UtcNow,
+                        claimToken,
+                        deletion.FailureCode ?? "storage_unavailable");
+                    await dbContext.SaveChangesAsync(CancellationToken.None);
+                    return false;
+                }
             }
 
-            ingestObject.ScheduleCleanup(clock.UtcNow);
-            ingestObject.CompletePurge(clock.UtcNow);
+            ingestObject.CompletePurge(clock.UtcNow, claimToken);
             await dbContext.SaveChangesAsync(CancellationToken.None);
             return true;
         }
         catch (Exception exception) when (IsStorageCleanupFailure(exception))
         {
-            ingestObject.RecordPurgeFailure(clock.UtcNow, StorageFailureCode(exception));
+            ingestObject.RecordPurgeFailure(
+                clock.UtcNow,
+                claimToken,
+                StorageFailureCode(exception));
             await dbContext.SaveChangesAsync(CancellationToken.None);
             return false;
         }
@@ -1073,6 +1174,7 @@ internal sealed class MediaApplicationService(
         InvalidOperationException;
 
     private static bool IsStorageOperationalFailure(Exception exception) => exception is
+        MediaStorageException or
         IOException or
         TimeoutException or
         UnauthorizedAccessException;
@@ -1087,6 +1189,7 @@ internal sealed class MediaApplicationService(
         UnauthorizedAccessException => "storage_access_denied",
         IOException => "storage_io_error",
         ArgumentException => "storage_key_invalid",
+        MediaStorageException storage => storage.FailureCode,
         _ => "storage_unavailable",
     };
 
@@ -1094,6 +1197,11 @@ internal sealed class MediaApplicationService(
         new(
             MediaCommandStatus.Unavailable,
             Message: "Media uploads are unavailable. Try again later.");
+
+    private static MediaCommandResult StorageUnavailable() =>
+        new(
+            MediaCommandStatus.Unavailable,
+            Message: "Media storage is unavailable. Try again later.");
 
     private static string ExtensionFor(string verifiedContentType) => verifiedContentType switch
     {
@@ -1263,4 +1371,9 @@ internal sealed class MediaApplicationService(
     private sealed record IngestAdmissionPriority(DateTimeOffset CreatedAtUtc, Guid Id);
 
     private sealed record IngestUsage(Guid Id, long AccountedBytes);
+
+    private sealed class MediaStorageException(string failureCode) : Exception
+    {
+        public string FailureCode { get; } = failureCode;
+    }
 }

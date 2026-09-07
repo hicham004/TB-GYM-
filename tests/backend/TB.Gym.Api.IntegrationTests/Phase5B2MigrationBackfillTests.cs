@@ -80,7 +80,7 @@ public sealed class Phase5B2MigrationBackfillTests
                  "IsCoachProtected", "OriginalFileName", "DeclaredContentType",
                  "VerifiedContentType", "Length", "Sha256", "StorageKey")
             VALUES (@assetId, @tenantId, @userId, 'Legacy squat demo', 'Video', 'Upload', 'Ready',
-                    TRUE, 'squat.mp4', 'video/mp4', 'video/mp4', 2048, @sha, 'tenant/legacy-object');
+                    TRUE, 'squat.mp4', 'video/mp4', 'video/mp4', 2048, @sha, @storageKey);
             """,
             command =>
             {
@@ -88,6 +88,7 @@ public sealed class Phase5B2MigrationBackfillTests
                 command.Parameters.AddWithValue("assetId", LegacyAssetId);
                 command.Parameters.AddWithValue("tenantId", TenantId);
                 command.Parameters.AddWithValue("sha", new string('a', 64));
+                command.Parameters.AddWithValue("storageKey", $"{TenantId:N}/legacy-object");
             });
 
         Assert.IsFalse(await ColumnExistsAsync("media", "Assets", "Purpose"));

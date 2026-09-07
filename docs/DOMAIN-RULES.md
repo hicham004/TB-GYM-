@@ -986,8 +986,12 @@ derives tenant identity from the protected grant rather than a custom subresourc
 and rechecks current resource/entitlement authorization. The grant carries its own absolute
 expiry, enforced against the injected clock rather than a provider wall clock, and its
 lifetime is configurable (60 seconds to 4 hours, default 1800) so that pausing and seeking a
-demo video does not fail mid-playback. External embeds are validated YouTube/Vimeo IDs. Production publication fails closed until a scanner is configured. Local
-Docker storage is development infrastructure, not the production object-store decision.
+demo video does not fail mid-playback. External embeds are validated YouTube/Vimeo IDs. Phase
+6B-4A gives every stored object a durable provider-neutral `(location, key)` locator; full and
+one bounded byte-range read use the owned storage contract, and authorization completes before
+that contract opens storage. Local storage composes automatically only in Development. A
+non-Development deployment with no adapter is explicitly unavailable and refuses an upload
+before accepting bytes or reserving a key. No production provider is selected here.
 
 **MED-005** An unexpired grant is not a licence. Every content and rendition request re-establishes
 active membership of the asset's tenant before anything else, so removing or deactivating a
@@ -1002,7 +1006,10 @@ orientation can require a second full bitmap and codec/encoder/stream/rendition 
 it. One upload per tenant and a configurable process-wide decode cap bound concurrency. A scanner
 refusal, an unavailable deployment, or an operational scanner failure commits no asset or photo;
 `400` is reserved for an actual refusal and `503` for scanner availability/failure, without exposing
-provider details.
+provider details. Scan evidence records the exact stored locator and SHA-256, scanner key and
+version, instant and outcome. Ready originals and derivatives require allowed exact evidence;
+historical rows with no evidence remain honestly `LegacyUnavailable` rather than fabricated as
+scanned, and new writes cannot create that legacy state.
 
 **PRG-007** A progress photo belongs to one tenant, client, workspace-local date, and pose,
 enforced by a unique index, and exists only once its media asset is `Ready` — a refused or
@@ -1054,8 +1061,11 @@ reference, or still inside its retention is never purged. Derivative objects are
 original; deleting an object that is already gone counts as success, and any storage failure leaves
 the row tombstoned, due, and retryable with its attempt count and failure code recorded, never
 silently marked complete. After a purge the rows survive as history with their storage keys cleared,
-and grant creation, content and thumbnail all fail closed. A sweep claims rows with
-`FOR UPDATE SKIP LOCKED` per workspace, so multiple API replicas are safe.
+and grant creation, content and thumbnail all fail closed. A sweep uses short durable
+claim/lease/finalize transactions: it commits a random token and expiry before deleting storage,
+does no storage I/O inside that database transaction, and finalizes or records a failure only when
+the token still owns the row. Expired claims are reclaimed; a stale claimant cannot finalize or fail
+a newer claim. Quota remains charged until storage deletion is confirmed.
 
 **PRG-011** A bodyweight observation's measurement date is its identity and is immutable in the
 domain and at the database. A mis-dated entry is corrected by void-and-replace, never by an in-place
@@ -1083,13 +1093,14 @@ admission counts reservations ahead of the candidate, and a later candidate sees
 committed asset bytes. A full allowance is a conflict carrying a stable code, not a validation
 failure blamed on the file.
 
-**MED-010** Before every object-store put, ingestion persists the generated key and a conservative
-byte reservation. A successful put ends with that key atomically attached to an asset/derivative,
-positively deleted and marked Purged, or retained in immediately due durable cleanup state; a
-crashed live reservation becomes due after 15 minutes. Non-purged ingest bytes count toward the
-workspace and applicable client allowance. Compensation uses an independent bounded token, handles
-original and derivative keys independently, and deletion is idempotent. Reconciliation clears a key
-and releases quota only after storage confirms deletion.
+**MED-010** Before every object-store put, ingestion persists the generated tenant-bound locator and
+a conservative byte reservation. A successful put records its actual SHA-256 and ends with that
+locator atomically attached to an asset/derivative, positively deleted and marked Purged, or retained
+in immediately due durable cleanup state; a crashed live reservation becomes due after 15 minutes.
+Non-purged ingest bytes count toward the workspace and applicable client allowance. Compensation uses
+an independent bounded claim token, handles original and derivative locators independently, and
+deletion is idempotent. Reconciliation clears a key and releases quota only after storage confirms
+deletion.
 
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and

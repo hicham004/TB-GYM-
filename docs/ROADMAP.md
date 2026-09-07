@@ -761,12 +761,35 @@ token-bearing pages scrub the address bar and touch no browser storage; the migr
 invitation facts across apply, revert and reapply; and direct SQL cannot violate a generation, token,
 tenant, attempt or append-only invariant.
 
+### Phase 6B-4A: Production Media Foundation (complete)
+
+Status: complete, implemented 2026-09-07. See
+`docs/adr/0023-production-media-foundation.md`, `ARCHITECTURE.md` section 9 and
+`DOMAIN-RULES.md` MED-004, MED-006, MED-008 and MED-010.
+
+- **Fail-closed composition.** Local object storage is automatic only in Development. A
+  non-Development deployment without an adapter reports storage unavailable and refuses an upload
+  before accepting bytes or reserving a locator.
+- **Durable object truth.** Assets, derivatives and ingest reservations use provider-neutral
+  `(location, key)` identities, owned full/range reads, exact checksum-bound scan evidence, and an
+  honest `LegacyUnavailable` state for rows that predate evidence.
+- **Leased purge.** Short claim, lease and finalization transactions keep storage deletion outside
+  database transactions; expired claims recover safely and only confirmed deletion releases quota.
+
+### Phase 6B-4B: production media adapters and delivery (not started)
+
+- Select and implement production object storage (such as S3/R2) and production upload scanning
+  (such as ClamAV) behind the existing ports. No provider choice is made by 6B-4A.
+- Decide whether CDN or presigned delivery belongs in the protected-media model; public URLs are not
+  introduced by 6B-4A.
+
+### Phase 6B-4C: media operations and reconciliation (not started)
+
+- Add provider inventory reconciliation and the production retention/operations controls. No
+  reconciliation authority or operator workflow is introduced by 6B-4A.
+
 ### Phase 6B remaining
 
-- Implement production object storage, production upload scanning, provider inventory
-  reconciliation, signed URLs, and the production retention/operations controls. Reservation-backed
-  incomplete-ingest cleanup, transformations, quotas, and application-known purge are already
-  delivered.
 - Integrate one WhatsApp provider, and SMS or push if either is ever wanted, behind existing ports.
   Email is delivered; see Phase 6B-3B.
 - Marketing campaigns, promotional producers, bulk mail and the unsubscribe surface RFC 8058 requires

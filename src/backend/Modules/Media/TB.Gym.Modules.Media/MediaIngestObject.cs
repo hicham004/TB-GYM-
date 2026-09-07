@@ -15,7 +15,7 @@ public sealed class MediaIngestObject : TenantEntity
 
     private MediaIngestObject(
         Guid tenantId,
-        string storageKey,
+        StorageObjectLocator storageLocator,
         long reservedBytes,
         MediaPurpose purpose,
         Guid? clientProfileId,
@@ -33,7 +33,13 @@ public sealed class MediaIngestObject : TenantEntity
             throw new ArgumentException("An ingest reservation requires its media purpose and client when applicable.");
         }
 
-        StorageKey = MediaText.Required(storageKey, 500, nameof(storageKey));
+        if (storageLocator.TenantId != tenantId)
+        {
+            throw new ArgumentException("An ingest object cannot use another tenant's storage locator.");
+        }
+
+        StorageLocation = storageLocator.Location;
+        StorageKey = storageLocator.ObjectKey;
         AccountedBytes = reservedBytes;
         Purpose = purpose;
         ClientProfileId = clientProfileId;
@@ -42,6 +48,8 @@ public sealed class MediaIngestObject : TenantEntity
     }
 
     public string? StorageKey { get; private set; }
+
+    public string StorageLocation { get; private set; } = string.Empty;
 
     /// <summary>
     /// Actual bytes after a successful write, or the conservative reservation before then.
@@ -59,6 +67,8 @@ public sealed class MediaIngestObject : TenantEntity
 
     public DateTimeOffset? StoredAtUtc { get; private set; }
 
+    public string? StoredSha256 { get; private set; }
+
     public DateTimeOffset? PurgedAtUtc { get; private set; }
 
     public int PurgeAttemptCount { get; private set; }
@@ -67,16 +77,48 @@ public sealed class MediaIngestObject : TenantEntity
 
     public string? PurgeFailureCode { get; private set; }
 
+    public Guid? PurgeClaimToken { get; private set; }
+
+    public DateTimeOffset? PurgeClaimExpiresAtUtc { get; private set; }
+
+    public MediaScanEvidenceState ScanEvidenceState { get; private set; }
+
+    public string? ScanStorageLocation { get; private set; }
+
+    public string? ScanStorageKey { get; private set; }
+
+    public string? ScanSha256 { get; private set; }
+
+    public string? ScannerKey { get; private set; }
+
+    public string? ScannerVersion { get; private set; }
+
+    public DateTimeOffset? ScannedAtUtc { get; private set; }
+
+    public MediaScanOutcome? ScanOutcome { get; private set; }
+
+    public string? ScanFailureCode { get; private set; }
+
     public static MediaIngestObject Reserve(
         Guid tenantId,
-        string storageKey,
+        StorageObjectLocator storageLocator,
         long reservedBytes,
         MediaPurpose purpose,
         Guid? clientProfileId,
         DateTimeOffset now) =>
-        new(tenantId, storageKey, reservedBytes, purpose, clientProfileId, now);
+        new(tenantId, storageLocator, reservedBytes, purpose, clientProfileId, now);
 
-    public void ConfirmStored(long actualBytes, DateTimeOffset now)
+    public StorageObjectLocator GetStorageLocator()
+    {
+        if (StorageKey is null)
+        {
+            throw new InvalidOperationException("The ingest object has no live stored object.");
+        }
+
+        return new StorageObjectLocator(TenantId, StorageLocation, StorageKey);
+    }
+
+    public void ConfirmStored(long actualBytes, string sha256, DateTimeOffset now)
     {
         if (Status != MediaIngestObjectStatus.Reserved || actualBytes <= 0 || actualBytes > AccountedBytes)
         {
@@ -84,6 +126,7 @@ public sealed class MediaIngestObject : TenantEntity
         }
 
         AccountedBytes = actualBytes;
+        StoredSha256 = MediaText.Sha256(sha256);
         StoredAtUtc = now;
     }
 
@@ -98,60 +141,103 @@ public sealed class MediaIngestObject : TenantEntity
         PurgeAfterUtc = now;
     }
 
+    public void RecordScanEvidence(MediaScanEvidence evidence)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+        if (StoredAtUtc is null ||
+            StoredSha256 is null ||
+            !evidence.Covers(GetStorageLocator(), StoredSha256))
+        {
+            throw new InvalidOperationException("Scan evidence requires stored bytes at this locator.");
+        }
+
+        ScanEvidenceState = MediaScanEvidenceState.Complete;
+        ScanStorageLocation = evidence.StorageLocation;
+        ScanStorageKey = evidence.StorageKey;
+        ScanSha256 = evidence.Sha256;
+        ScannerKey = evidence.ScannerKey;
+        ScannerVersion = evidence.ScannerVersion;
+        ScannedAtUtc = evidence.ScannedAtUtc;
+        ScanOutcome = evidence.Outcome;
+        ScanFailureCode = evidence.FailureCode;
+    }
+
     /// <summary>
     /// Claims the request's immediate compensation attempt and keeps the background sweep away for
     /// its bounded duration. A process failure makes the row due when this short lease expires;
     /// an ordinary storage failure calls <see cref="RecordPurgeFailure"/> and makes it due at once.
     /// </summary>
-    public void BeginImmediatePurgeAttempt(DateTimeOffset now, TimeSpan attemptLease)
+    public void ClaimImmediatePurge(DateTimeOffset now, TimeSpan attemptLease, Guid claimToken)
     {
-        if (Status == MediaIngestObjectStatus.Purged || attemptLease <= TimeSpan.Zero)
+        if (Status == MediaIngestObjectStatus.Purged ||
+            attemptLease <= TimeSpan.Zero ||
+            claimToken == Guid.Empty ||
+            (PurgeClaimToken is not null && PurgeClaimExpiresAtUtc > now))
         {
             throw new InvalidOperationException("A live ingest object and positive cleanup lease are required.");
         }
 
         Status = MediaIngestObjectStatus.CleanupPending;
-        PurgeAfterUtc = now.Add(attemptLease);
+        PurgeAfterUtc = now;
+        PurgeClaimToken = claimToken;
+        PurgeClaimExpiresAtUtc = now.Add(attemptLease);
         PurgeAttemptCount++;
         LastPurgeAttemptAtUtc = now;
     }
 
-    public void BeginPurgeAttempt(DateTimeOffset now)
+    public bool IsPurgeClaimable(DateTimeOffset now) =>
+        Status != MediaIngestObjectStatus.Purged &&
+        now >= PurgeAfterUtc &&
+        (PurgeClaimToken is null || PurgeClaimExpiresAtUtc <= now);
+
+    public void ClaimPurge(DateTimeOffset now, TimeSpan lease, Guid claimToken)
     {
-        EnsurePurgeable(now);
+        if (!IsPurgeClaimable(now) || lease <= TimeSpan.Zero || claimToken == Guid.Empty)
+        {
+            throw new InvalidOperationException("The ingest object cannot be claimed for cleanup.");
+        }
+
+        Status = MediaIngestObjectStatus.CleanupPending;
+        PurgeClaimToken = claimToken;
+        PurgeClaimExpiresAtUtc = now.Add(lease);
         PurgeAttemptCount++;
         LastPurgeAttemptAtUtc = now;
     }
 
-    public void CompletePurge(DateTimeOffset now)
+    public bool CompletePurge(DateTimeOffset now, Guid claimToken)
     {
-        EnsurePurgeable(now);
+        if (!OwnsPurgeClaim(claimToken))
+        {
+            return false;
+        }
+
         Status = MediaIngestObjectStatus.Purged;
         StorageKey = null;
         PurgedAtUtc = now;
         PurgeFailureCode = null;
+        PurgeClaimToken = null;
+        PurgeClaimExpiresAtUtc = null;
+        return true;
     }
 
-    public void RecordPurgeFailure(DateTimeOffset now, string failureCode)
+    public bool RecordPurgeFailure(DateTimeOffset now, Guid claimToken, string failureCode)
     {
-        if (Status == MediaIngestObjectStatus.Purged)
+        if (Status == MediaIngestObjectStatus.Purged || !OwnsPurgeClaim(claimToken))
         {
-            throw new InvalidOperationException("A purged ingest object cannot fail cleanup.");
+            return false;
         }
 
         Status = MediaIngestObjectStatus.CleanupPending;
         PurgeAfterUtc = now;
         LastPurgeAttemptAtUtc = now;
         PurgeFailureCode = MediaText.Required(failureCode, 100, nameof(failureCode));
+        PurgeClaimToken = null;
+        PurgeClaimExpiresAtUtc = null;
+        return true;
     }
 
-    private void EnsurePurgeable(DateTimeOffset now)
-    {
-        if (Status == MediaIngestObjectStatus.Purged || now < PurgeAfterUtc)
-        {
-            throw new InvalidOperationException("The ingest object is not due for cleanup.");
-        }
-    }
+    public bool OwnsPurgeClaim(Guid claimToken) =>
+        claimToken != Guid.Empty && PurgeClaimToken == claimToken;
 }
 
 public enum MediaIngestObjectStatus

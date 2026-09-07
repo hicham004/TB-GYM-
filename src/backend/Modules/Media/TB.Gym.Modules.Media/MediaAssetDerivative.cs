@@ -4,7 +4,7 @@ namespace TB.Gym.Modules.Media;
 
 /// <summary>
 /// A subordinate rendition of one <see cref="MediaAsset"/>, such as a thumbnail. A derivative is
-/// never a standalone asset: it has no owner, no scan lifecycle of its own, no title, and no
+/// never a standalone asset: it has no owner, no title, and no
 /// address. Callers resolve it by naming the parent asset and the variant they want, so a
 /// derivative can only ever be reached by someone already authorized for its parent.
 /// </summary>
@@ -27,7 +27,8 @@ public sealed class MediaAssetDerivative : TenantEntity
         string verifiedContentType,
         long length,
         string sha256,
-        string storageKey,
+        StorageObjectLocator storageLocator,
+        MediaScanEvidence scanEvidence,
         int width,
         int height)
         : base(tenantId)
@@ -47,12 +48,33 @@ public sealed class MediaAssetDerivative : TenantEntity
             throw new ArgumentOutOfRangeException(nameof(length), "The media derivative exceeds the allowed size.");
         }
 
+        if (storageLocator.TenantId != tenantId)
+        {
+            throw new ArgumentException("A media derivative cannot use another tenant's storage locator.");
+        }
+
         MediaAssetId = mediaAssetId;
         Variant = variant;
         VerifiedContentType = MediaText.Required(verifiedContentType, 100, nameof(verifiedContentType));
         Length = length;
         Sha256 = MediaText.Sha256(sha256);
-        StorageKey = MediaText.Required(storageKey, 500, nameof(storageKey));
+        StorageLocation = storageLocator.Location;
+        StorageKey = storageLocator.ObjectKey;
+        if (!scanEvidence.IsAllowed || !scanEvidence.Covers(storageLocator, Sha256))
+        {
+            throw new InvalidOperationException(
+                "A publishable media derivative requires allowed evidence for its exact stored bytes.");
+        }
+
+        ScanEvidenceState = MediaScanEvidenceState.Complete;
+        ScanStorageLocation = scanEvidence.StorageLocation;
+        ScanStorageKey = scanEvidence.StorageKey;
+        ScanSha256 = scanEvidence.Sha256;
+        ScannerKey = scanEvidence.ScannerKey;
+        ScannerVersion = scanEvidence.ScannerVersion;
+        ScannedAtUtc = scanEvidence.ScannedAtUtc;
+        ScanOutcome = scanEvidence.Outcome;
+        ScanFailureCode = scanEvidence.FailureCode;
         Width = width;
         Height = height;
     }
@@ -73,11 +95,41 @@ public sealed class MediaAssetDerivative : TenantEntity
     /// </summary>
     public string? StorageKey { get; private set; }
 
+    public string StorageLocation { get; private set; } = string.Empty;
+
+    public MediaScanEvidenceState ScanEvidenceState { get; private set; }
+
+    public string? ScanStorageLocation { get; private set; }
+
+    public string? ScanStorageKey { get; private set; }
+
+    public string? ScanSha256 { get; private set; }
+
+    public string? ScannerKey { get; private set; }
+
+    public string? ScannerVersion { get; private set; }
+
+    public DateTimeOffset? ScannedAtUtc { get; private set; }
+
+    public MediaScanOutcome? ScanOutcome { get; private set; }
+
+    public string? ScanFailureCode { get; private set; }
+
     public DateTimeOffset? PurgedAtUtc { get; private set; }
 
     public int Width { get; private set; }
 
     public int Height { get; private set; }
+
+    public StorageObjectLocator GetStorageLocator()
+    {
+        if (StorageKey is null)
+        {
+            throw new InvalidOperationException("The media derivative has no live stored object.");
+        }
+
+        return new StorageObjectLocator(TenantId, StorageLocation, StorageKey);
+    }
 
     /// <summary>
     /// The rendition's object is gone. Purging a derivative twice is a no-op rather than an error,
@@ -99,7 +151,8 @@ public sealed class MediaAssetDerivative : TenantEntity
         Guid mediaAssetId,
         long length,
         string sha256,
-        string storageKey,
+        StorageObjectLocator storageLocator,
+        MediaScanEvidence scanEvidence,
         int width,
         int height) =>
         new(
@@ -109,7 +162,8 @@ public sealed class MediaAssetDerivative : TenantEntity
             MediaThumbnailPolicy.ContentType,
             length,
             sha256,
-            storageKey,
+            storageLocator,
+            scanEvidence,
             width,
             height);
 }

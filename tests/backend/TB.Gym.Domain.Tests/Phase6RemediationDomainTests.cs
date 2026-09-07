@@ -93,25 +93,35 @@ public sealed class Phase6MediaIngestObjectTests
     [TestMethod]
     public void FailedImmediateCleanupStaysDiscoverableUntilAConfirmedPurgeClearsItsKey()
     {
+        var tenantId = Guid.NewGuid();
         var ingest = MediaIngestObject.Reserve(
-            Guid.NewGuid(),
-            "tenant/generated-object-key",
+            tenantId,
+            new StorageObjectLocator(
+                tenantId,
+                MediaStorageLocations.LocalV1,
+                $"{tenantId:N}/generated-object-key"),
             1_000,
             MediaPurpose.ProgressPhoto,
             Guid.NewGuid(),
             Now);
-        ingest.ConfirmStored(750, Now);
+        ingest.ConfirmStored(750, new string('a', 64), Now);
 
-        ingest.BeginImmediatePurgeAttempt(Now, TimeSpan.FromSeconds(35));
+        var firstClaim = Guid.NewGuid();
+        ingest.ClaimImmediatePurge(Now, TimeSpan.FromSeconds(35), firstClaim);
         Assert.AreEqual(MediaIngestObjectStatus.CleanupPending, ingest.Status);
-        Assert.AreEqual(Now.AddSeconds(35), ingest.PurgeAfterUtc);
-        Assert.AreEqual("tenant/generated-object-key", ingest.StorageKey);
+        Assert.AreEqual(Now, ingest.PurgeAfterUtc);
+        Assert.AreEqual(Now.AddSeconds(35), ingest.PurgeClaimExpiresAtUtc);
+        Assert.AreEqual($"{tenantId:N}/generated-object-key", ingest.StorageKey);
         Assert.AreEqual(750L, ingest.AccountedBytes);
 
-        ingest.RecordPurgeFailure(Now.AddSeconds(1), "storage_io_error");
+        Assert.IsTrue(ingest.RecordPurgeFailure(
+            Now.AddSeconds(1),
+            firstClaim,
+            "storage_io_error"));
         Assert.AreEqual(Now.AddSeconds(1), ingest.PurgeAfterUtc);
-        ingest.BeginPurgeAttempt(Now.AddSeconds(1));
-        ingest.CompletePurge(Now.AddSeconds(1));
+        var secondClaim = Guid.NewGuid();
+        ingest.ClaimPurge(Now.AddSeconds(1), TimeSpan.FromSeconds(35), secondClaim);
+        Assert.IsTrue(ingest.CompletePurge(Now.AddSeconds(1), secondClaim));
 
         Assert.AreEqual(MediaIngestObjectStatus.Purged, ingest.Status);
         Assert.IsNull(ingest.StorageKey);
@@ -122,15 +132,20 @@ public sealed class Phase6MediaIngestObjectTests
     [TestMethod]
     public void ConfirmedBytesCannotExceedTheConservativeReservation()
     {
+        var tenantId = Guid.NewGuid();
         var ingest = MediaIngestObject.Reserve(
-            Guid.NewGuid(),
-            "tenant/generated-object-key",
+            tenantId,
+            new StorageObjectLocator(
+                tenantId,
+                MediaStorageLocations.LocalV1,
+                $"{tenantId:N}/generated-object-key"),
             1_000,
             MediaPurpose.ExerciseMedia,
             null,
             Now);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ingest.ConfirmStored(1_001, Now));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            ingest.ConfirmStored(1_001, new string('a', 64), Now));
         Assert.AreEqual(1_000L, ingest.AccountedBytes);
         Assert.AreEqual(MediaIngestObjectStatus.Reserved, ingest.Status);
     }

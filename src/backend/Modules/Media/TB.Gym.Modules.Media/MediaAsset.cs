@@ -18,7 +18,7 @@ public sealed class MediaAsset : TenantEntity
         string verifiedContentType,
         long length,
         string sha256,
-        string storageKey,
+        StorageObjectLocator storageLocator,
         MediaPurpose purpose)
         : base(tenantId)
     {
@@ -41,7 +41,13 @@ public sealed class MediaAsset : TenantEntity
         VerifiedContentType = MediaText.Required(verifiedContentType, 100, nameof(verifiedContentType));
         Length = length;
         Sha256 = MediaText.Sha256(sha256);
-        StorageKey = MediaText.Required(storageKey, 500, nameof(storageKey));
+        if (storageLocator.TenantId != tenantId)
+        {
+            throw new ArgumentException("A media asset cannot use another tenant's storage locator.");
+        }
+
+        StorageLocation = storageLocator.Location;
+        StorageKey = storageLocator.ObjectKey;
         Status = MediaAssetStatus.PendingScan;
         IsCoachProtected = true;
         Purpose = purpose;
@@ -99,6 +105,12 @@ public sealed class MediaAsset : TenantEntity
 
     public string? StorageKey { get; private set; }
 
+    /// <summary>
+    /// Durable storage identity. It remains after purge so history never reinterprets the cleared
+    /// key under whichever adapter a deployment selects later.
+    /// </summary>
+    public string? StorageLocation { get; private set; }
+
     public ExternalMediaProvider? ExternalProvider { get; private set; }
 
     public string? ExternalMediaId { get; private set; }
@@ -107,7 +119,19 @@ public sealed class MediaAsset : TenantEntity
 
     public string? ScannerVersion { get; private set; }
 
-    public string? FailureCode { get; private set; }
+    public string? ScanFailureCode { get; private set; }
+
+    public MediaScanEvidenceState ScanEvidenceState { get; private set; }
+
+    public string? ScanStorageLocation { get; private set; }
+
+    public string? ScanStorageKey { get; private set; }
+
+    public string? ScanSha256 { get; private set; }
+
+    public DateTimeOffset? ScannedAtUtc { get; private set; }
+
+    public MediaScanOutcome? ScanOutcome { get; private set; }
 
     public bool IsCoachProtected { get; private set; }
 
@@ -131,6 +155,10 @@ public sealed class MediaAsset : TenantEntity
 
     public string? PurgeFailureCode { get; private set; }
 
+    public Guid? PurgeClaimToken { get; private set; }
+
+    public DateTimeOffset? PurgeClaimExpiresAtUtc { get; private set; }
+
     public static MediaAsset RegisterUpload(
         Guid tenantId,
         Guid ownerUserId,
@@ -141,7 +169,7 @@ public sealed class MediaAsset : TenantEntity
         string verifiedContentType,
         long length,
         string sha256,
-        string storageKey,
+        StorageObjectLocator storageLocator,
         MediaPurpose purpose = MediaPurpose.ExerciseMedia) =>
         new(
             tenantId,
@@ -153,7 +181,7 @@ public sealed class MediaAsset : TenantEntity
             verifiedContentType,
             length,
             sha256,
-            storageKey,
+            storageLocator,
             purpose);
 
     public static MediaAsset RegisterExternalEmbed(
@@ -164,17 +192,39 @@ public sealed class MediaAsset : TenantEntity
         string externalMediaId) =>
         new(tenantId, ownerUserId, title, provider, externalMediaId);
 
-    public void RecordScan(MediaScanResult result)
+    public StorageObjectLocator GetStorageLocator()
+    {
+        if (Source != MediaSource.Upload || StorageLocation is null || StorageKey is null)
+        {
+            throw new InvalidOperationException("The media asset has no live stored object.");
+        }
+
+        return new StorageObjectLocator(TenantId, StorageLocation, StorageKey);
+    }
+
+    public void RecordScan(MediaScanEvidence evidence)
     {
         if (Status != MediaAssetStatus.PendingScan)
         {
             throw new InvalidOperationException("Only pending media can receive a scan result.");
         }
 
-        ScannerKey = MediaText.Required(result.ScannerKey, 80, nameof(result));
-        ScannerVersion = MediaText.Required(result.ScannerVersion, 40, nameof(result));
-        FailureCode = MediaText.Optional(result.FailureCode, 100, nameof(result));
-        Status = result.IsAllowed ? MediaAssetStatus.Ready : MediaAssetStatus.Rejected;
+        ArgumentNullException.ThrowIfNull(evidence);
+        if (!evidence.Covers(GetStorageLocator(), Sha256!))
+        {
+            throw new InvalidOperationException("Scan evidence does not cover this stored media object.");
+        }
+
+        ScannerKey = evidence.ScannerKey;
+        ScannerVersion = evidence.ScannerVersion;
+        ScanFailureCode = evidence.FailureCode;
+        ScanEvidenceState = MediaScanEvidenceState.Complete;
+        ScanStorageLocation = evidence.StorageLocation;
+        ScanStorageKey = evidence.StorageKey;
+        ScanSha256 = evidence.Sha256;
+        ScannedAtUtc = evidence.ScannedAtUtc;
+        ScanOutcome = evidence.Outcome;
+        Status = evidence.IsAllowed ? MediaAssetStatus.Ready : MediaAssetStatus.Rejected;
     }
 
     public void MarkTombstoned(DateTimeOffset now, TimeSpan retention, bool isHistoricallyReferenced)
@@ -207,13 +257,24 @@ public sealed class MediaAsset : TenantEntity
         PurgeAfterUtc is { } purgeAfter &&
         now >= purgeAfter;
 
+    public bool IsPurgeClaimable(DateTimeOffset now) =>
+        IsPurgeDue(now) &&
+        (PurgeClaimToken is null || PurgeClaimExpiresAtUtc <= now);
+
     /// <summary>
     /// Records that physical deletion is being attempted. Called before any object is touched so a
     /// process that dies mid-purge still leaves evidence of the attempt.
     /// </summary>
-    public void BeginPurgeAttempt(DateTimeOffset now)
+    public void ClaimPurge(DateTimeOffset now, TimeSpan lease, Guid claimToken)
     {
         EnsurePurgeable();
+        if (!IsPurgeClaimable(now) || lease <= TimeSpan.Zero || claimToken == Guid.Empty)
+        {
+            throw new InvalidOperationException("The media asset cannot be claimed for purge.");
+        }
+
+        PurgeClaimToken = claimToken;
+        PurgeClaimExpiresAtUtc = now.Add(lease);
         PurgeAttemptCount++;
         LastPurgeAttemptAtUtc = now;
     }
@@ -222,25 +283,44 @@ public sealed class MediaAsset : TenantEntity
     /// Every object belonging to this asset is gone. The row is kept as history, but its storage
     /// key is cleared: there is nothing left for it to address.
     /// </summary>
-    public void CompletePurge(DateTimeOffset now)
+    public bool CompletePurge(DateTimeOffset now, Guid claimToken)
     {
         EnsurePurgeable();
+        if (!OwnsPurgeClaim(claimToken))
+        {
+            return false;
+        }
+
         Status = MediaAssetStatus.Purged;
         PurgedAtUtc = now;
         StorageKey = null;
         PurgeFailureCode = null;
+        PurgeClaimToken = null;
+        PurgeClaimExpiresAtUtc = null;
+        return true;
     }
 
     /// <summary>
     /// Physical deletion failed. The asset stays tombstoned and due, so the next sweep retries it,
     /// and the reason stays on the row so a persistently stuck object can be found.
     /// </summary>
-    public void RecordPurgeFailure(DateTimeOffset now, string failureCode)
+    public bool RecordPurgeFailure(DateTimeOffset now, Guid claimToken, string failureCode)
     {
         EnsurePurgeable();
+        if (!OwnsPurgeClaim(claimToken))
+        {
+            return false;
+        }
+
         LastPurgeAttemptAtUtc = now;
         PurgeFailureCode = MediaText.Required(failureCode, 100, nameof(failureCode));
+        PurgeClaimToken = null;
+        PurgeClaimExpiresAtUtc = null;
+        return true;
     }
+
+    public bool OwnsPurgeClaim(Guid claimToken) =>
+        claimToken != Guid.Empty && PurgeClaimToken == claimToken;
 
     private void EnsurePurgeable()
     {

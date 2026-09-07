@@ -17,7 +17,7 @@ public sealed class Phase5B5MediaPurgeDomainTests
 
         // Never purge an asset that is not tombstoned, whatever its scan state.
         Assert.IsFalse(asset.IsPurgeDue(Now));
-        asset.RecordScan(new MediaScanResult(true, "scanner", "1.0", null));
+        asset.RecordScan(Evidence(asset));
         Assert.IsFalse(asset.IsPurgeDue(Now.AddYears(5)));
 
         asset.MarkTombstoned(Now, TimeSpan.FromDays(30), isHistoricallyReferenced: false);
@@ -38,8 +38,10 @@ public sealed class Phase5B5MediaPurgeDomainTests
         // A null purge date means "never": a program snapshot still has to resolve these bytes.
         Assert.IsNull(asset.PurgeAfterUtc);
         Assert.IsFalse(asset.IsPurgeDue(Now.AddYears(50)));
-        Assert.ThrowsExactly<InvalidOperationException>(() => asset.CompletePurge(Now.AddYears(50)));
-        Assert.ThrowsExactly<InvalidOperationException>(() => asset.BeginPurgeAttempt(Now.AddYears(50)));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            asset.CompletePurge(Now.AddYears(50), Guid.NewGuid()));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            asset.ClaimPurge(Now.AddYears(50), TimeSpan.FromMinutes(2), Guid.NewGuid()));
     }
 
     [TestMethod]
@@ -48,24 +50,28 @@ public sealed class Phase5B5MediaPurgeDomainTests
         var ready = Ready();
 
         // Purging skips no state: an asset must be tombstoned first.
-        Assert.ThrowsExactly<InvalidOperationException>(() => ready.CompletePurge(Now));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ready.BeginPurgeAttempt(Now));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ready.RecordPurgeFailure(Now, "storage_io_error"));
+        Assert.ThrowsExactly<InvalidOperationException>(() => ready.CompletePurge(Now, Guid.NewGuid()));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            ready.ClaimPurge(Now, TimeSpan.FromMinutes(2), Guid.NewGuid()));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            ready.RecordPurgeFailure(Now, Guid.NewGuid(), "storage_io_error"));
 
         ready.MarkTombstoned(Now, TimeSpan.FromDays(30), isHistoricallyReferenced: false);
         var due = Now.AddDays(30);
 
         // A failed attempt leaves the asset tombstoned, due, and visibly pending with its reason.
-        ready.BeginPurgeAttempt(due);
-        ready.RecordPurgeFailure(due, "storage_io_error");
+        var firstClaim = Guid.NewGuid();
+        ready.ClaimPurge(due, TimeSpan.FromMinutes(2), firstClaim);
+        Assert.IsTrue(ready.RecordPurgeFailure(due, firstClaim, "storage_io_error"));
         Assert.AreEqual(MediaAssetStatus.Tombstoned, ready.Status);
         Assert.AreEqual("storage_io_error", ready.PurgeFailureCode);
         Assert.AreEqual(1, ready.PurgeAttemptCount);
         Assert.IsTrue(ready.IsPurgeDue(due));
 
         // The retry succeeds, clears the failure, and drops the key: nothing addresses the object.
-        ready.BeginPurgeAttempt(due);
-        ready.CompletePurge(due);
+        var secondClaim = Guid.NewGuid();
+        ready.ClaimPurge(due, TimeSpan.FromMinutes(2), secondClaim);
+        Assert.IsTrue(ready.CompletePurge(due, secondClaim));
         Assert.AreEqual(MediaAssetStatus.Purged, ready.Status);
         Assert.AreEqual(due, ready.PurgedAtUtc);
         Assert.IsNull(ready.StorageKey);
@@ -74,24 +80,28 @@ public sealed class Phase5B5MediaPurgeDomainTests
 
         // Purged is terminal. Nothing may re-purge it, re-tombstone it, or reschedule its bytes.
         Assert.IsFalse(ready.IsPurgeDue(due));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ready.CompletePurge(due));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ready.BeginPurgeAttempt(due));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ready.RecordPurgeFailure(due, "storage_io_error"));
+        Assert.ThrowsExactly<InvalidOperationException>(() => ready.CompletePurge(due, secondClaim));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            ready.ClaimPurge(due, TimeSpan.FromMinutes(2), Guid.NewGuid()));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            ready.RecordPurgeFailure(due, secondClaim, "storage_io_error"));
         Assert.ThrowsExactly<InvalidOperationException>(() =>
             ready.MarkTombstoned(due, TimeSpan.FromDays(30), isHistoricallyReferenced: false));
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            ready.RecordScan(new MediaScanResult(true, "scanner", "1.0", null)));
+            ready.RecordScan(Evidence(ready)));
     }
 
     [TestMethod]
     public void PurgingADerivativeIsIdempotentSoAPartialFailureCanBeReplayed()
     {
+        var locator = Locator("thumbnail-object");
         var thumbnail = MediaAssetDerivative.RegisterThumbnail(
             TenantId,
             AssetId,
             18_432,
             new string('a', 64),
-            "tenant/thumbnail-object",
+            locator,
+            Evidence(locator, new string('a', 64)),
             480,
             360);
 
@@ -119,13 +129,26 @@ public sealed class Phase5B5MediaPurgeDomainTests
         "image/jpeg",
         1_024,
         new string('b', 64),
-        "tenant/object",
+        Locator("object"),
         MediaPurpose.ProgressPhoto);
 
     private static MediaAsset Ready()
     {
         var asset = Upload();
-        asset.RecordScan(new MediaScanResult(true, "scanner", "1.0", null));
+        asset.RecordScan(Evidence(asset));
         return asset;
     }
+
+    private static StorageObjectLocator Locator(string suffix) =>
+        new(TenantId, MediaStorageLocations.LocalV1, $"{TenantId:N}/{suffix}");
+
+    private static MediaScanEvidence Evidence(MediaAsset asset) =>
+        Evidence(asset.GetStorageLocator(), asset.Sha256!);
+
+    private static MediaScanEvidence Evidence(StorageObjectLocator locator, string sha256) =>
+        MediaScanEvidence.Record(
+            locator,
+            sha256,
+            new MediaScanResult(true, "scanner", "1.0", null),
+            Now);
 }

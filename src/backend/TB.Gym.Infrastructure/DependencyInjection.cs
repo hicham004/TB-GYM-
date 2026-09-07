@@ -156,7 +156,29 @@ public static class DependencyInjection
             .Bind(configuration.GetSection("Nutrition:UsdaFoodDataCentral"));
         services.AddScoped<IMediaApplicationService, MediaApplicationService>();
         services.AddSingleton<MediaUploadConcurrencyGate>();
-        services.AddSingleton<IObjectStorage, LocalObjectStorage>();
+        var storageAdapter = configuration["Media:StorageAdapter"]?.Trim();
+        storageAdapter = string.IsNullOrEmpty(storageAdapter)
+            ? (environment.IsDevelopment() ? "Local" : "None")
+            : storageAdapter;
+        if (string.Equals(storageAdapter, "Local", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!environment.IsDevelopment())
+            {
+                throw new InvalidOperationException(
+                    "Local media storage may be selected only in Development.");
+            }
+
+            services.AddSingleton<IObjectStorage, LocalObjectStorage>();
+        }
+        else if (string.Equals(storageAdapter, "None", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddSingleton<IObjectStorage, UnavailableObjectStorage>();
+        }
+        else
+        {
+            throw new InvalidOperationException("Media:StorageAdapter is not supported.");
+        }
+
         services.AddSingleton<IMediaScanner>(_ => environment.IsDevelopment()
             ? new DevelopmentMediaScanner()
             : new UnavailableMediaScanner());
@@ -194,6 +216,9 @@ public static class DependencyInjection
             .Validate(
                 options => options.PurgeBatchSize is >= 1 and <= 1000,
                 "Media:PurgeBatchSize must be between 1 and 1000.")
+            .Validate(
+                options => options.PurgeClaimLeaseSeconds is >= 30 and <= 3600,
+                "Media:PurgeClaimLeaseSeconds must be between 30 seconds and 1 hour.")
             .Validate(
                 options => options.MaxConcurrentProgressPhotoDecodes is >= 1 and <= 8,
                 "Media:MaxConcurrentProgressPhotoDecodes must be between 1 and 8.")
@@ -276,6 +301,7 @@ public static class DependencyInjection
         services.AddHealthChecks()
             .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])
             .AddCheck<PostgresHealthCheck>("postgres", tags: ["ready"])
+            .AddCheck<MediaStorageHealthCheck>("media-storage", tags: ["ready"])
             // Degraded, never unhealthy: an unscannable deployment refuses uploads but serves
             // everything else, so this makes the closed state visible without removing the
             // instance from rotation.

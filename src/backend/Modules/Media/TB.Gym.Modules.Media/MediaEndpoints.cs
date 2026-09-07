@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -159,12 +160,19 @@ public static class MediaEndpoints
             CancellationToken cancellationToken) =>
                 await StreamGrantedAsync(
                     context,
-                    grant => service.OpenContentAsync(assetId, grant, cancellationToken)))
+                    (grant, range) => service.OpenContentAsync(
+                        assetId,
+                        grant,
+                        range,
+                        cancellationToken)))
         .WithName("StreamPrivateMedia")
         .RequireAuthorization()
         .Produces(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status206PartialContent)
         .Produces(StatusCodes.Status403Forbidden)
-        .Produces(StatusCodes.Status404NotFound);
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status416RangeNotSatisfiable)
+        .Produces(StatusCodes.Status503ServiceUnavailable);
 
         // A thumbnail is a rendition of the asset above, not a resource of its own: it is addressed
         // through its parent, presents the same grant cookie, and is authorized by the same check.
@@ -175,12 +183,19 @@ public static class MediaEndpoints
             CancellationToken cancellationToken) =>
                 await StreamGrantedAsync(
                     context,
-                    grant => service.OpenThumbnailAsync(assetId, grant, cancellationToken)))
+                    (grant, range) => service.OpenThumbnailAsync(
+                        assetId,
+                        grant,
+                        range,
+                        cancellationToken)))
         .WithName("StreamPrivateMediaThumbnail")
         .RequireAuthorization()
         .Produces(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status206PartialContent)
         .Produces(StatusCodes.Status403Forbidden)
-        .Produces(StatusCodes.Status404NotFound);
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status416RangeNotSatisfiable)
+        .Produces(StatusCodes.Status503ServiceUnavailable);
 
         return endpoints;
     }
@@ -210,26 +225,128 @@ public static class MediaEndpoints
                 [$"Between 1 and {MediaAccessBatchPolicy.MaximumAssets} media assets may be granted at once."],
         });
 
-    private static async Task<IResult> StreamGrantedAsync(
+    private static async Task StreamGrantedAsync(
         HttpContext context,
-        Func<string, Task<MediaContentResult>> open)
+        Func<string, RequestedByteRange?, Task<MediaContentResult>> open)
     {
         if (!context.Request.Cookies.TryGetValue(MediaAccessCookie.Name, out var grant) ||
             string.IsNullOrWhiteSpace(grant))
         {
-            return Results.Forbid();
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
         }
 
-        var result = await open(grant);
-        return result.Status switch
+        if (!TryParseRange(context.Request, out var range))
         {
-            MediaContentStatus.Success => Results.Stream(
-                result.Content!,
-                result.ContentType,
-                enableRangeProcessing: true),
-            MediaContentStatus.Forbidden => Results.Forbid(),
-            _ => Results.NotFound(),
-        };
+            context.Response.StatusCode = StatusCodes.Status416RangeNotSatisfiable;
+            context.Response.Headers.AcceptRanges = "bytes";
+            return;
+        }
+
+        var result = await open(grant, range);
+        switch (result.Status)
+        {
+            case MediaContentStatus.Success:
+                context.Response.StatusCode = result.Range is null
+                    ? StatusCodes.Status200OK
+                    : StatusCodes.Status206PartialContent;
+                context.Response.ContentType = result.ContentType;
+                context.Response.ContentLength = result.ContentLength;
+                context.Response.Headers.AcceptRanges = "bytes";
+                if (result.Range is { } fulfilled && result.ObjectLength is { } objectLength)
+                {
+                    context.Response.Headers.ContentRange =
+                        $"bytes {fulfilled.Offset}-{fulfilled.EndInclusive}/{objectLength}";
+                }
+
+                var content = result.Content!;
+                await using (content)
+                {
+                    await content.CopyToAsync(context.Response.Body, context.RequestAborted);
+                }
+
+                return;
+            case MediaContentStatus.Forbidden:
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            case MediaContentStatus.RangeNotSatisfiable:
+                context.Response.StatusCode = StatusCodes.Status416RangeNotSatisfiable;
+                context.Response.Headers.AcceptRanges = "bytes";
+                if (result.ObjectLength is { } length)
+                {
+                    context.Response.Headers.ContentRange = $"bytes */{length}";
+                }
+
+                return;
+            case MediaContentStatus.Unavailable:
+                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                return;
+            default:
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+        }
+    }
+
+    private static bool TryParseRange(HttpRequest request, out RequestedByteRange? range)
+    {
+        range = null;
+        var values = request.Headers.Range;
+        if (values.Count == 0)
+        {
+            return true;
+        }
+
+        if (values.Count != 1)
+        {
+            return false;
+        }
+
+        var value = values[0];
+        if (string.IsNullOrWhiteSpace(value) ||
+            !value.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var interval = value[6..].Trim();
+        if (interval.Contains(',') ||
+            interval.Count(character => character == '-') != 1)
+        {
+            return false;
+        }
+
+        var separator = interval.IndexOf('-');
+        var first = interval[..separator];
+        var last = interval[(separator + 1)..];
+        if (first.Length == 0)
+        {
+            if (!long.TryParse(last, NumberStyles.None, CultureInfo.InvariantCulture, out var suffix) || suffix <= 0)
+            {
+                return false;
+            }
+
+            range = RequestedByteRange.FromSuffix(suffix);
+            return true;
+        }
+
+        if (!long.TryParse(first, NumberStyles.None, CultureInfo.InvariantCulture, out var start) || start < 0)
+        {
+            return false;
+        }
+
+        if (last.Length == 0)
+        {
+            range = RequestedByteRange.FromStart(start);
+            return true;
+        }
+
+        if (!long.TryParse(last, NumberStyles.None, CultureInfo.InvariantCulture, out var end) || end < start)
+        {
+            return false;
+        }
+
+        range = RequestedByteRange.FromStart(start, end);
+        return true;
     }
 
     private static async Task<IResult> StreamUploadAsync(
