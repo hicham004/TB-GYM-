@@ -378,23 +378,37 @@ public sealed partial class Phase6B2BRealtimeSignalRTests
         Assert.IsGreaterThanOrEqualTo(1, outcome.Published, "Replica B is the process that published.");
 
         Assert.IsTrue(
-            await client.WaitForEventsAsync(1),
+            await client.WaitForMessageAsync(sent.Id),
             "The frame crossed the Redis backplane to the replica holding the connection.");
-        Assert.AreEqual(sent.Id, client.Events.Single().Message!.Id);
+        // Counted by identity rather than asserting the buffer holds exactly one frame. The sweep
+        // above Clear() publishes this workspace's setup events, and a frame already handed to Redis
+        // can still be travelling to the socket when Clear() runs, so an unrelated arrival here is
+        // timing rather than a defect. What must hold is that the backplane delivered this frame,
+        // and delivered it once.
+        Assert.AreEqual(
+            1,
+            client.Events.Count(item => item.Message?.Id == sent.Id),
+            "The backplane delivered the published frame exactly once.");
         Assert.IsTrue(await client.WaitForInvalidationsAsync(1));
     }
 
     /// <summary>
-    /// A backplane outage loses sends and loses nothing else.
+    /// A backplane outage loses the publish and leaves everything else intact.
     /// </summary>
     /// <remarks>
-    /// Redis is not durable and is not a queue: a send during an outage is gone. What makes that
-    /// survivable is that the event is in PostgreSQL, the attempt is retried under its own policy, the
-    /// hosted loop lives through it, and an authorized catch-up returns the event whether or not it
-    /// was ever republished.
+    /// Redis is not durable and is not a queue: the publish attempted during an outage is gone from
+    /// the backplane. What makes that survivable is that the event is in PostgreSQL, the attempt is
+    /// retried under its own policy, the hosted loop lives through it, and an authorized catch-up
+    /// returns the event whether or not it was ever republished.
+    /// <para>
+    /// The name deliberately does not say the <i>send</i> is lost. Nothing here asserts a loss, and
+    /// the retry usually redelivers the frame once Redis returns — which is exactly the late arrival
+    /// the wait below has to step over. What this proves is that the outage costs the durable record
+    /// and the service nothing.
+    /// </para>
     /// </remarks>
     [TestMethod]
-    public async Task ARedisOutageLosesTheSendAndLeavesPostgresAndTheServiceIntact()
+    public async Task ARedisOutageLeavesPostgresAndTheServiceIntact()
     {
         var workspace = await CreateLiveWorkspaceAsync("redis-outage");
         var client = await ConnectAsync(workspace.Client, workspace.TenantId);

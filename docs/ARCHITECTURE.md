@@ -456,8 +456,9 @@ parameter is a `Guid`, so a client can name a conversation and never a group, a 
 One API replica needs no backplane. More than one declared replica requires Redis and refuses to start
 without it, because otherwise each frame reaches only the replica that published it. Transport
 fallback stays enabled, so a multi-replica production deployment needs load-balancer session affinity.
-Redis is a backplane and nothing else: a send during an outage is lost, and PostgreSQL plus catch-up —
-not Redis — is what makes that survivable.
+Redis is a backplane and nothing else: a publish during an outage is lost, the attempt is retried
+under `messaging-realtime-backoff-v1`, and PostgreSQL plus catch-up — not Redis — is what makes that
+survivable whether or not the retry ever lands.
 
 Commercial notifications persist an outbox item atomically with enrollment/payment state. Each item
 retains the tenant time zone used to calculate its UTC schedule and a unique deduplication key. A
@@ -933,7 +934,8 @@ dependency — asserted on the assemblies and on the built image.
 
 **One replica needs no backplane; more than one fails startup without Redis.** Transport fallback stays
 on, so multi-replica production needs load-balancer session affinity. Redis is a backplane and nothing
-else: a send during an outage is lost, and PostgreSQL plus catch-up is what makes that survivable. The
+else: a publish during an outage is lost, the attempt is retried under `messaging-realtime-backoff-v1`,
+and PostgreSQL plus catch-up is what makes that survivable whether or not the retry lands. The
 backplane connection string is never logged, and the backplane's own endpoint chatter is filtered out.
 
 See `docs/adr/0020-authorized-realtime-messaging-delivery.md`.

@@ -178,6 +178,17 @@ Builds the solution in Release, runs the full backend suite against a real Postg
 Vitest, and audits npm dependencies. CI runs the same gates plus EF model drift detection and
 container image smoke tests.
 
+The backend suite needs a reachable PostgreSQL. It uses two connection strings: `ConnectionStrings__Database`
+for the application and `TB_GYM_TEST_ADMIN_CONNECTION` for the administrative connection that creates
+one database per test class and drops it afterwards. Both are derived from the `POSTGRES_*` values in
+`.env`, so the setup above is enough; to run against a different database, set the two variables
+yourself before running the script. `check.ps1` verifies them before it builds and stops with the
+names to set rather than failing every integration test after a full Release build.
+
+Docker also has to be running for the run to be free of skips: the Redis scale-out tests start their
+own pinned Redis container, and without a daemon they report inconclusive instead of executing. CI
+requires them.
+
 Angular transport contracts are generated from the API's OpenAPI document and checked in. When an
 API contract changes, run the development API and regenerate them with `npm run api:generate` from
 `src/web`; the generated directory is never edited by hand.
