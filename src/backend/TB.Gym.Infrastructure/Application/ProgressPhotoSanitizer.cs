@@ -27,6 +27,12 @@ namespace TB.Gym.Infrastructure.Application;
 /// <see cref="OutOfMemoryException"/> is deliberately not that boundary and is not attempted: by
 /// the time it is raised the allocation has already been demanded.
 /// </para>
+/// <para>
+/// The source is whatever the object store handed back, and a remote store hands back a network
+/// body that cannot seek. Decoding therefore goes through SkiaSharp's own <see cref="Stream"/> entry
+/// point, which front-buffers the handful of bytes a codec rewinds over, rather than through a bare
+/// managed stream, which needs a rewindable source and produces no codec at all without one.
+/// </para>
 /// </remarks>
 internal static class ProgressPhotoSanitizer
 {
@@ -52,8 +58,19 @@ internal static class ProgressPhotoSanitizer
         SKBitmap? rotated = null;
         try
         {
-            using var managed = new SKManagedStream(source);
-            using var codec = SKCodec.Create(managed);
+            // The library's own stream entry point, not a hand-rolled SKManagedStream around the
+            // same stream. The two are not equivalent: a bare managed stream must be rewindable, so
+            // it produces no codec at all for the non-seekable body a remote object store hands back
+            // — which is a correct response body, and made every progress-photo upload fail as
+            // "could not be processed as a valid image" the moment storage stopped being a local
+            // file. This overload front-buffers exactly the few bytes a codec needs to rewind over,
+            // so the image is still read as a stream rather than held whole in memory.
+            //
+            // It also takes ownership of what it is given and closes it with the codec. The response
+            // stream belongs to the caller, which disposes it around this call, so it is handed over
+            // behind a view whose only difference is that closing it closes nothing.
+            using var owned = new NonOwningStream(source);
+            using var codec = SKCodec.Create(owned);
             if (codec is null)
             {
                 return false;
@@ -186,6 +203,47 @@ internal static class ProgressPhotoSanitizer
         canvas.DrawBitmap(source, 0, 0);
         canvas.Flush();
         return target;
+    }
+
+    /// <summary>
+    /// The caller's stream, seen by something that will try to close it.
+    /// </summary>
+    /// <remarks>
+    /// One stream, one owner. The decoder's contract is that it closes what it is handed, and the
+    /// object-store response stream's contract is that the caller who opened it closes it — and that
+    /// caller has already opened the read, applied its own timeout to it, and will dispose it whether
+    /// this decode succeeds, fails or is never reached. Passing it through unwrapped would satisfy
+    /// neither contract: it would be closed twice on the way out, and once by whichever of the two
+    /// finished first. Everything else is forwarded exactly, seekability included, so the decoder
+    /// still sees the stream it was actually given.
+    /// </remarks>
+    private sealed class NonOwningStream(Stream inner) : Stream
+    {
+        public override bool CanRead => inner.CanRead;
+
+        public override bool CanSeek => inner.CanSeek;
+
+        public override bool CanWrite => false;
+
+        public override long Length => inner.Length;
+
+        public override long Position
+        {
+            get => inner.Position;
+            set => inner.Position = value;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+
+        public override int Read(Span<byte> buffer) => inner.Read(buffer);
+
+        public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+
+        public override void Flush() => inner.Flush();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private static SKMatrix OrientationMatrix(SKEncodedOrigin origin, int width, int height) => origin switch

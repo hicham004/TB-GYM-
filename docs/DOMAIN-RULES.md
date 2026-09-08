@@ -1030,7 +1030,10 @@ in the coach exercise-media library. Uploads are images only. Removal is one-way
 the row and its media association are retained, the coach view loses it, and the owning client
 keeps it in their own history. Uploaded photos are re-encoded from their pixels before permanent
 storage so EXIF/GPS and other metadata cannot persist, with orientation applied to the pixels
-first; signature validation, scanning, size limits, and streaming are unchanged.
+first; signature validation, scanning, size limits, and streaming are unchanged. The bytes it decodes
+are read back through the owned object-read contract, which is a forward-only stream at any remote
+location, so sanitisation decodes a stream and never requires a seekable source or a copy of the
+image in memory.
 
 **PRG-008** A thumbnail is a subordinate derivative of its parent media asset, never a standalone
 asset and never independently addressable: it is resolved as "the thumbnail of asset X" beneath the
