@@ -159,6 +159,11 @@ public static class DependencyInjection
         services.AddTbGymMediaProviders(configuration, environment);
         services.AddScoped<IMediaPurgeService, MediaPurgeService>();
         services.AddHostedService<MediaPurgeWorker>();
+        // Two sweeps, deliberately separate. Deleting due bytes must finish in seconds and run every
+        // few minutes; auditing a whole location walks everything and may need several passes.
+        // Sharing one loop would make an inventory walk the reason a deletion was late.
+        services.AddScoped<IMediaInventoryReconciliationService, MediaInventoryReconciliationService>();
+        services.AddHostedService<MediaInventoryReconciliationWorker>();
         services.AddScoped<INotificationApplicationService, NotificationApplicationService>();
         services.AddScoped<INotificationPreferenceService, NotificationPreferenceService>();
         // The API composes the dispatcher so that integration tests can drive one sweep
@@ -205,6 +210,22 @@ public static class DependencyInjection
                 // request latency and produce intermittent playback failures rather than security.
                 options => options.AccessLifetimeSeconds is >= 60 and <= 14400,
                 "Media:AccessLifetimeSeconds must be between 60 seconds and 4 hours.")
+            .Validate(
+                // An hour is already an aggressive audit cadence for standing conditions, and a
+                // week is long enough that a leak could sit unseen through a whole billing period.
+                options => options.Reconciliation.IntervalSeconds is >= 3600 and <= 604800,
+                "Media:Reconciliation:IntervalSeconds must be between 1 hour and 7 days.")
+            .Validate(
+                options => options.Reconciliation.ObjectsPerRun is >= 1 and <= 100000,
+                "Media:Reconciliation:ObjectsPerRun must be between 1 and 100000.")
+            .Validate(
+                options => options.Reconciliation.OwnerProbesPerRun is >= 0 and <= 100000,
+                "Media:Reconciliation:OwnerProbesPerRun must be between 0 and 100000.")
+            .Validate(
+                // Below a minute a lease can expire inside one page and cause needless takeovers;
+                // above an hour a crashed replica hides a whole location for too long.
+                options => options.Reconciliation.RunLeaseSeconds is >= 60 and <= 3600,
+                "Media:Reconciliation:RunLeaseSeconds must be between 60 seconds and 1 hour.")
             .ValidateOnStart();
         // Shared with the Worker by construction. The Worker mints confirmation and reset tokens and
         // this process unprotects them, so an unshared key ring would make every link this system

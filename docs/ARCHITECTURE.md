@@ -578,8 +578,48 @@ ignored. A limit is never a clean result, which is why `compose.yaml` and
 application's own 500 MiB ceiling. Signature names are never returned, persisted or logged; the
 scanner key and a normalized engine/signature version are, parsed from the daemon's version reply
 and refused as unusable metadata when it names no engine or no signature revision. The clamd client is owned rather than
-taken from a package, because what it decides is bounds rather than parsing. Provider inventory
-reconciliation, retention/lifecycle policy and operator controls remain deferred to 6B-4C.
+taken from a package, because what it decides is bounds rather than parsing.
+
+**Phase 6B-4C adds a read-only observer beside all of that.** A daily bounded pass compares the
+objects at the reconciled location with the rows that own them, in two directions: it enumerates
+stored objects and asks the database who owns each key, and it walks rows with a live key and asks the
+store whether their object exists. It records what it found in `media.InventoryFindings` and stops
+there. It deletes no object, clears no locator, marks nothing purged, releases no allowance, writes no
+lifecycle configuration and repairs no finding. That is structural rather than editorial: the service
+is composed with `IObjectInventory`, which lists and stats, and never with `IObjectStorage`, which
+writes and deletes, so no code path inside it has anything to call; an architecture test asserts the
+constructor rather than trusting review. A missing object never tombstones a row and a failed provider
+call is never read as an absence. See `docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`
+and `DOMAIN-RULES.md` MED-012.
+
+Only canonical application locators at that one location are reconciled. A key outside the grammar, or
+one naming no workspace, is counted on the run and never attributed — a finding is a tenant-owned row
+and such an object has no tenant to own one — and rows at another location, `local-v1` included, are
+counted as unreconciled rather than probed. Where the leased purge sweep or the ingest reservation
+lease already owns a row, the pass observes and stays out of the way; the one thing it adds there is a
+`CleanupStuck` finding after repeated failures over a day, which changes no retry schedule and is the
+alerting ADR 0014 deferred. `PurgedObjectStillPresent` is distinguishable from an object nobody has
+ever heard of only because scan evidence survives a purge and still names the exact object the cleared
+key used to address.
+
+`media.InventoryRuns` is not tenant-owned, because a run describes a store rather than a workspace. It
+carries the lease, both resume cursors, the counters and the failure count, and `Completed` is
+reachable only when both passes finished with no page failure — enforced in the domain and by a check
+constraint — because "it found nothing" from a pass that could not read everything is a different
+statement from the same words after a complete one. A failed page leaves its cursor untouched so the
+page is re-read rather than stepped over; a pass that spends its budget hands the run back with its
+cursors intact; a run older than a day is abandoned rather than resumed on a cursor the store may no
+longer honour. One unfinished run per location, by partial unique index plus a lease token, so several
+replicas may run the loop and only one does the work. No storage call happens inside a database
+transaction. Findings are opened, re-observed and resolved, never duplicated and never deleted; the
+partial unique index over unresolved findings is what makes a resumed or concurrent pass converge on
+one row.
+
+Bucket lifecycle stays an operator prerequisite rather than code: one rule aborting incomplete
+multipart uploads after a day, applied by hand with an Admin credential the application never holds,
+and no object-expiration or storage-class rule without a future ADR. The runtime credential stays
+bucket-scoped Object Read and Write, which already permits the listing this needs. Operator surfaces,
+alerting, restore, force-purge and any repair authority remain deferred.
 
 Every stored object has a durable provider-neutral `(location, key)` locator. `MediaAsset`,
 `MediaAssetDerivative` and a live `MediaIngestObject` retain the location that produced the bytes,

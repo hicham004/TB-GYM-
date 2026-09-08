@@ -1090,6 +1090,29 @@ additionally probes a composed provider and reports `Degraded`, never `Unhealthy
 answer. No provider secret, key, bucket, endpoint or object key appears in a log, an error or a
 response.
 
+**MED-012** Inventory reconciliation reads and never repairs. A bounded pass compares the objects at
+the reconciled storage location with the rows that own them and records durable findings; it deletes
+no object, clears no locator, marks nothing purged, releases no allowance, changes no lifecycle
+configuration and repairs nothing automatically. The service is composed with a list/stat inventory
+port and never with the storage port, so it holds nothing that can delete. A stored object the store
+reports as absent never tombstones a row or releases quota, and a provider call that failed is never
+read as an absence. Only canonical application locators at that one location are reconciled: a key
+outside the grammar or naming no workspace is counted on the run and never attributed, because a
+finding is a tenant-owned row; rows at another location are counted as unreconciled, never probed.
+Rows the leased purge sweep or a live ingest reservation already owns are observed and left alone,
+except that a cleanup failing repeatedly for a day becomes a finding without changing its retry
+schedule. Findings are unique per tenant, kind, location and key while unresolved, are re-observed
+rather than duplicated, are never described as actionable on a single observation, and resolve
+one-way; a condition that returns is a new finding. An object key is recorded only on a finding and
+never in a log. A run is complete only when both passes finished with no page failure — enforced in
+the domain and at the database — and a failed page leaves its cursor untouched so its objects are
+re-read rather than counted as verified; one unfinished run exists per location, claimed under a
+lease, and no storage call happens inside a database transaction. The 30-day tombstone retention
+stays a fixed constant. Bucket lifecycle is operator configuration, not application behaviour: one
+rule aborting incomplete multipart uploads after a day, applied with a credential the application
+never holds, and no object-expiration or storage-class transition rule without a new approved
+decision.
+
 **MED-007** Upload bodies are streamed with explicit application and Nginx limits, endpoint
 rate/concurrency controls, and a configurable workspace-byte quota. Deleting historically
 referenced media creates a tombstone and retains bytes. A later retention worker may purge

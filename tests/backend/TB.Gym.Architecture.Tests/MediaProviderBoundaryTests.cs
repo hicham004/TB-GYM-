@@ -129,6 +129,80 @@ public sealed class MediaProviderBoundaryTests
     }
 
     /// <summary>
+    /// Reconciliation cannot delete an object because it was never given anything that can.
+    /// </summary>
+    /// <remarks>
+    /// This is the whole safety argument of Phase 6B-4C, and it is a property of the constructor
+    /// rather than of the code inside it. A reviewer can miss a call; a parameter list cannot hide
+    /// one. If a later change hands this service <c>IObjectStorage</c> — or any other type with a
+    /// delete on it — the read-only guarantee is gone, and that change should have to fail here
+    /// rather than be noticed in review.
+    /// </remarks>
+    [TestMethod]
+    public void TheReconciliationServiceIsNeverGivenADeleteCapableDependency()
+    {
+        var infrastructure = LoadByName("TB.Gym.Infrastructure");
+        var service = infrastructure.GetTypes()
+            .SingleOrDefault(candidate => candidate.Name == "MediaInventoryReconciliationService");
+        Assert.IsNotNull(service, "The reconciliation service is missing from Infrastructure.");
+        Assert.IsFalse(service.IsPublic, "The reconciliation service is public; it is an implementation detail.");
+
+        var parameters = service.GetConstructors(
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .SelectMany(constructor => constructor.GetParameters())
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+        Assert.DoesNotContain(
+            typeof(IObjectStorage),
+            parameters,
+            "The reconciliation service takes IObjectStorage; it could then delete a workspace's bytes.");
+        foreach (var parameter in parameters)
+        {
+            Assert.IsEmpty(
+                parameter.GetMethods().Where(method =>
+                    method.Name.Contains("Delete", StringComparison.OrdinalIgnoreCase) ||
+                    method.Name.Contains("Purge", StringComparison.OrdinalIgnoreCase) ||
+                    method.Name.Contains("Put", StringComparison.OrdinalIgnoreCase)),
+                $"{parameter.Name} gives the reconciliation service a way to write or delete stored objects.");
+        }
+    }
+
+    /// <summary>
+    /// The enumeration adapter is an implementation detail like every other one, and the port it
+    /// serves describes stored objects rather than a provider's idea of them.
+    /// </summary>
+    [TestMethod]
+    public void TheInventoryAdapterIsInternalAndItsPortNamesNoProvider()
+    {
+        var infrastructure = LoadByName("TB.Gym.Infrastructure");
+        foreach (var name in new[] { "R2ObjectInventory", "UnavailableObjectInventory", "MediaInventoryReconciliationWorker" })
+        {
+            var type = infrastructure.GetTypes().SingleOrDefault(candidate => candidate.Name == name);
+            Assert.IsNotNull(type, $"{name} is missing from Infrastructure.");
+            Assert.IsFalse(type.IsPublic, $"{name} is public; a provider adapter is an implementation detail.");
+        }
+
+        // Belt and braces beside the module-wide sweep below: these are the types most likely to
+        // acquire a provider word, because a bucket listing is what they are actually doing.
+        foreach (var type in new[]
+                 {
+                     typeof(IObjectInventory),
+                     typeof(ObjectInventoryEntry),
+                     typeof(ObjectInventoryPage),
+                     typeof(MediaInventoryFinding),
+                     typeof(MediaInventoryRun),
+                 })
+        {
+            AssertNamesNoProvider(type.Name, type.FullName!);
+            foreach (var member in type.GetMembers(
+                         BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            {
+                AssertNamesNoProvider(member.Name, $"{type.Name}.{member.Name}");
+            }
+        }
+    }
+
+    /// <summary>
     /// The daemon in the development stack: pinned to a digest, unprivileged, persistent, checked,
     /// and reachable only from inside the deployment.
     /// </summary>

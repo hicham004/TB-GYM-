@@ -2,6 +2,7 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TB.Gym.Infrastructure.Application;
@@ -42,6 +43,11 @@ public static class MediaProviderDependencyInjection
     {
         AddObjectStorage(services, configuration, environment);
         AddScanner(services, configuration, environment);
+        // Every adapter that cannot enumerate its objects — the local development one, and no
+        // adapter at all — gets the unavailable inventory. Registered rather than omitted so the
+        // reconciliation sweep can resolve it and decide to do nothing, instead of a missing
+        // registration turning a background tick into a startup failure.
+        services.TryAddSingleton<IObjectInventory, UnavailableObjectInventory>();
         return services;
     }
 
@@ -109,6 +115,13 @@ public static class MediaProviderDependencyInjection
                 provider.GetRequiredService<IAmazonS3>(),
                 options,
                 provider.GetRequiredService<ILogger<R2ObjectStorage>>()));
+            // The read-only half, as its own registration and its own type. Reconciliation resolves
+            // this and never IObjectStorage, so the fact that it cannot delete anything is a
+            // property of what it was given rather than of what it happens to call.
+            services.AddSingleton<IObjectInventory>(provider => new R2ObjectInventory(
+                provider.GetRequiredService<IAmazonS3>(),
+                options,
+                provider.GetRequiredService<ILogger<R2ObjectInventory>>()));
             return;
         }
 

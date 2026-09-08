@@ -213,8 +213,8 @@ the unique index becomes partial on active rows so a freed date can be logged ag
 `docs/adr/0015-bodyweight-date-correction-v1.md`.
 
 Explicitly deferred to a later phase: photo comparison, device/wearable import, a coach-facing
-storage-usage view, alerting on assets stuck pending purge, provider-level inventory reconciliation,
-voiding a bodyweight observation without a replacement, bulk re-dating, and the same date correction
+storage-usage view, voiding a bodyweight observation without a replacement, bulk re-dating, and the
+same date correction
 for body measurements and progress photos. Previously deferred: mesocycle-aligned summaries and
 change statistics, subscription/program period linking, date-adjustment impact analysis,
 privacy-safe exports, retention/deletion workflows, device imports, and any coupling to nutrition
@@ -841,13 +841,40 @@ path-scoped grant, authorization per request. No public bucket, CDN, presigned U
 SSE-C or client-side encryption — every one of those replaces "the API authorized this request" with
 "the holder of this URL may read these bytes".
 
-### Phase 6B-4C: media operations and reconciliation (not started)
+### Phase 6B-4C: media inventory reconciliation (complete)
 
-- Add provider inventory reconciliation and the production retention/operations controls. No
-  reconciliation authority or operator workflow is introduced by 6B-4A or 6B-4B.
-- Bucket lifecycle and retention policy, including abandoning incomplete multipart uploads that a
-  killed process could not abort itself. 6B-4B aborts its own and states the rest as an operator
-  prerequisite.
+Status: complete, implemented 2026-09-08. See
+`docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`, `ARCHITECTURE.md`
+section 9 and `DOMAIN-RULES.md` MED-012. Additive migration
+`20260908190256_Phase6B4CMediaInventoryReconciliation`: two new tables and two partial indexes; no
+existing media table is altered.
+
+- **It reads and never repairs.** A daily bounded pass enumerates stored objects and asks who owns
+  each key, then walks rows with a live key and asks the store whether their object exists. It
+  records findings and stops: no deletion, no locator cleared, nothing marked purged, no allowance
+  released, no lifecycle configuration written, no automatic repair. The service is composed with a
+  list/stat port and never with the storage port, so it holds nothing that can delete; an
+  architecture test asserts the constructor.
+- **Seven findings, tenant-owned, idempotent.** Missing object for a live owner, unowned object past
+  a 24-hour grace, an object a purged row still names through its retained scan evidence, a length
+  mismatch, one key claimed by two live rows, a derivative and parent disagreeing about purge, and a
+  cleanup stuck after repeated failures. Unique per tenant/kind/location/key while unresolved, so a
+  resumed or concurrent pass converges on one row; re-observed rather than duplicated, resolved
+  one-way, never deleted. An object key lives on a finding and never in a log.
+- **A partial run is never a clean bill of health.** The run row carries the lease, both cursors, the
+  counters and the failure count, and `Completed` requires both passes finished with no page failure,
+  in the domain and at the database. A failed page leaves its cursor alone so its objects are re-read
+  rather than called verified; a spent budget hands the run back; a day-old run is abandoned rather
+  than resumed on a stale cursor. One unfinished run per location by partial unique index and lease.
+- **Existing authorities are untouched.** Rows the purge sweep or a live ingest reservation owns are
+  observed and left alone, and no storage call happens inside a database transaction.
+- **Lifecycle stays an operator prerequisite.** One rule aborting incomplete multipart uploads after
+  a day, applied by hand with an Admin credential the application never holds. No object-expiration
+  and no storage-class transition rule without a new ADR. The runtime credential is unchanged.
+
+Deferred, deliberately: any repair authority at all, an operator or coach-facing surface, alerting,
+restore, force-purge, enumerating abandoned multipart uploads, local-object migration, and a retention
+decision for findings and runs.
 
 ### Phase 6B remaining
 

@@ -37,6 +37,16 @@ internal sealed class FakeS3Bucket
     /// <summary>Returns a stale 200 for a ranged read, as a provider that ignored Range would.</summary>
     public bool IgnoreRangeRequests { get; set; }
 
+    /// <summary>
+    /// The modification instant a newly stored object is given. Settable so a reconciliation test can
+    /// place an object on either side of the unowned-object grace window without waiting a day.
+    /// </summary>
+    public DateTimeOffset StoredAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Stores an object directly, as something other than this application would have.</summary>
+    public void Seed(string key, byte[] content, DateTimeOffset lastModifiedUtc) =>
+        Objects[key] = new FakeS3Object(content, null, FakeS3Handler.EtagOf(content), lastModifiedUtc);
+
     /// <summary>Every body handed to the SDK, so a test can see whether the caller disposed it.</summary>
     public ConcurrentQueue<TrackingStream> ServedBodies { get; } = new();
 
@@ -47,7 +57,16 @@ internal sealed class FakeS3Bucket
     public byte[] this[string key] => Objects[key].Content;
 }
 
-internal sealed record FakeS3Object(byte[] Content, string? ContentType, string ETag);
+/// <summary>
+/// One stored object. <paramref name="LastModifiedUtc"/> is settable because reconciliation decides
+/// whether an unowned object is an orphan or an upload that is still committing by how old it is,
+/// and a test cannot wait a day to make that difference.
+/// </summary>
+internal sealed record FakeS3Object(
+    byte[] Content,
+    string? ContentType,
+    string ETag,
+    DateTimeOffset LastModifiedUtc);
 
 internal sealed record FakeS3Request(
     string Method,
@@ -130,7 +149,11 @@ internal sealed class FakeS3Handler(FakeS3Bucket bucket) : HttpMessageHandler
             // The multipart form of an S3 ETag: a digest of the parts' digests, then the part count.
             // It is not the digest of the object, which is precisely why an ETag is not a checksum.
             var multipartEtag = $"{EtagOf(assembled)}-{parts.Count}";
-            bucket.Objects[key] = new FakeS3Object(assembled, null, multipartEtag);
+            bucket.Objects[key] = new FakeS3Object(
+                assembled,
+                null,
+                multipartEtag,
+                bucket.StoredAtUtc);
             return Xml(
                 HttpStatusCode.OK,
                 $"""<CompleteMultipartUploadResult xmlns="{Namespace}"><Bucket>{segments[0]}</Bucket><Key>{key}</Key><ETag>"{multipartEtag}"</ETag></CompleteMultipartUploadResult>""");
@@ -148,8 +171,14 @@ internal sealed class FakeS3Handler(FakeS3Bucket bucket) : HttpMessageHandler
             bucket.Objects[key] = new FakeS3Object(
                 body,
                 request.Content?.Headers.ContentType?.ToString(),
-                EtagOf(body));
+                EtagOf(body),
+                bucket.StoredAtUtc);
             return Ok(EtagOf(body));
+        }
+
+        if (request.Method == HttpMethod.Get && query.ContainsKey("list-type"))
+        {
+            return ListObjects(segments[0], query);
         }
 
         if (request.Method == HttpMethod.Get || request.Method == HttpMethod.Head)
@@ -194,6 +223,47 @@ internal sealed class FakeS3Handler(FakeS3Bucket bucket) : HttpMessageHandler
         }
 
         return Error(HttpStatusCode.MethodNotAllowed, "MethodNotAllowed");
+    }
+
+    /// <summary>
+    /// A <c>ListObjectsV2</c> answer, in the shape the protocol defines: keys in byte order, a page
+    /// bounded by <c>max-keys</c>, and a continuation token when more remain.
+    /// </summary>
+    /// <remarks>
+    /// The page is deliberately allowed to be shorter than <c>max-keys</c> while still being
+    /// truncated, because a real store may answer that way and an enumeration that decided it was
+    /// finished by counting would silently stop early — and then report the objects it never read
+    /// as verified.
+    /// </remarks>
+    private HttpResponseMessage ListObjects(string bucketName, Dictionary<string, string> query)
+    {
+        var maxKeys = query.TryGetValue("max-keys", out var requested) &&
+            int.TryParse(requested, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 1000;
+        query.TryGetValue("continuation-token", out var after);
+        var ordered = bucket.Objects
+            .OrderBy(item => item.Key, StringComparer.Ordinal)
+            .Where(item => after is null || string.CompareOrdinal(item.Key, after) > 0)
+            .ToList();
+        var page = ordered.Take(maxKeys).ToList();
+        var truncated = ordered.Count > page.Count;
+        var contents = string.Concat(page.Select(item => string.Concat(
+            "<Contents><Key>",
+            System.Security.SecurityElement.Escape(item.Key),
+            "</Key><LastModified>",
+            item.Value.LastModifiedUtc.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
+            "</LastModified><ETag>&quot;",
+            item.Value.ETag,
+            "&quot;</ETag><Size>",
+            item.Value.Content.Length.ToString(CultureInfo.InvariantCulture),
+            "</Size><StorageClass>STANDARD</StorageClass></Contents>")));
+        var token = truncated
+            ? $"<NextContinuationToken>{System.Security.SecurityElement.Escape(page[^1].Key)}</NextContinuationToken>"
+            : string.Empty;
+        return Xml(
+            HttpStatusCode.OK,
+            $"""<ListBucketResult xmlns="{Namespace}"><Name>{bucketName}</Name><KeyCount>{page.Count}</KeyCount><MaxKeys>{maxKeys}</MaxKeys><IsTruncated>{(truncated ? "true" : "false")}</IsTruncated>{token}{contents}</ListBucketResult>""");
     }
 
     private static Dictionary<string, string> ParseQuery(string query)
@@ -598,8 +668,13 @@ internal sealed class Phase6B4BProviderHarness : IAsyncDisposable
         return settings;
     }
 
+    /// <summary>
+    /// Starts for the provider tests and for the Phase 6B-4C reconciliation tests, which need the
+    /// same thing: a real enumerable store behind the real adapter, with the socket replaced.
+    /// </summary>
     public static Phase6B4BProviderHarness? StartIfRequestedBy(string? testName) =>
-        testName?.StartsWith("Phase6B4BOverProviders", StringComparison.Ordinal) == true
+        testName?.StartsWith("Phase6B4BOverProviders", StringComparison.Ordinal) == true ||
+        testName?.StartsWith("Phase6B4COverProviders", StringComparison.Ordinal) == true
             ? new Phase6B4BProviderHarness()
             : null;
 

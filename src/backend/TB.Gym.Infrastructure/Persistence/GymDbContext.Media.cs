@@ -71,6 +71,13 @@ public sealed partial class GymDbContext
                 { item.TenantId, item.StorageLocation, item.StorageKey })
                 .IsUnique()
                 .HasFilter("\"StorageKey\" IS NOT NULL");
+            // Purged rows only. A purge clears the live key, but scan evidence keeps naming the exact
+            // object it covered, which is what lets reconciliation tell "the database says these
+            // bytes were deleted" apart from "the database has never heard of this object". Without
+            // this index that lookup would be a sequential scan for every unknown object.
+            entity.HasIndex(item => new
+                { item.TenantId, item.ScanStorageLocation, item.ScanStorageKey })
+                .HasFilter("\"StorageKey\" IS NULL AND \"ScanStorageKey\" IS NOT NULL");
             entity.HasIndex(item => new { item.TenantId, item.ExternalProvider, item.ExternalMediaId })
                 .IsUnique()
                 .HasFilter("\"ExternalMediaId\" IS NOT NULL");
@@ -119,6 +126,10 @@ public sealed partial class GymDbContext
             ConfigureScanEvidence(entity);
             entity.HasIndex(item => new { item.TenantId, item.MediaAssetId, item.Variant })
                 .IsUnique();
+            // The derivative half of the purged-evidence lookup, for the same reason.
+            entity.HasIndex(item => new
+                { item.TenantId, item.ScanStorageLocation, item.ScanStorageKey })
+                .HasFilter("\"StorageKey\" IS NULL AND \"ScanStorageKey\" IS NOT NULL");
             entity.HasIndex(item => new
                 { item.TenantId, item.StorageLocation, item.StorageKey })
                 .IsUnique()
@@ -192,6 +203,101 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_MediaIngestObjects_ScanEvidence",
                     "((\"StoredSha256\" IS NULL AND \"StoredAtUtc\" IS NULL) OR (\"StoredSha256\" ~ '^[0-9a-f]{64}$' AND \"StoredAtUtc\" IS NOT NULL) OR \"ScanEvidenceState\" = 'LegacyUnavailable') AND ((\"ScanEvidenceState\" = 'None' AND \"ScanStorageLocation\" IS NULL AND \"ScanStorageKey\" IS NULL AND \"ScanSha256\" IS NULL AND \"ScannedAtUtc\" IS NULL AND \"ScanOutcome\" IS NULL AND \"ScannerKey\" IS NULL AND \"ScannerVersion\" IS NULL AND \"ScanFailureCode\" IS NULL) OR (\"ScanEvidenceState\" = 'LegacyUnavailable' AND \"ScanStorageLocation\" IS NULL AND \"ScanStorageKey\" IS NULL AND \"ScanSha256\" IS NULL AND \"ScannedAtUtc\" IS NULL AND \"ScanOutcome\" IS NULL) OR (\"ScanEvidenceState\" = 'Complete' AND \"ScanStorageLocation\" = \"StorageLocation\" AND \"ScanStorageKey\" IS NOT NULL AND (\"StorageKey\" IS NULL OR \"ScanStorageKey\" = \"StorageKey\") AND \"ScanSha256\" = \"StoredSha256\" AND \"ScannedAtUtc\" IS NOT NULL AND \"ScannerKey\" IS NOT NULL AND \"ScannerVersion\" IS NOT NULL AND \"ScanOutcome\" IS NOT NULL))");
+            });
+            ConfigureTenantEntity(entity);
+        });
+    }
+
+    /// <summary>
+    /// The two tables reconciliation owns. They are additive and stand apart from the three that own
+    /// stored objects: nothing here is read by upload, access, delivery or purge, so a defect in
+    /// this phase can make a report wrong and cannot make a media row wrong.
+    /// </summary>
+    private void ConfigureMediaInventory(ModelBuilder builder)
+    {
+        builder.Entity<MediaInventoryRun>(entity =>
+        {
+            entity.ToTable("InventoryRuns", "media");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Location)
+                .HasMaxLength(StorageObjectLocator.MaximumLocationLength)
+                .IsRequired();
+            entity.Property(item => item.State).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.ProbeStage).HasConversion<string>().HasMaxLength(24);
+            // A resume cursor is an opaque provider value, so it is stored as given and never
+            // parsed, trimmed or interpreted here.
+            entity.Property(item => item.InventoryCursor).HasMaxLength(2048);
+            entity.Property(item => item.LastFailureCode).HasMaxLength(100);
+            // One unfinished run per location, in the database rather than in a lock. Two replicas
+            // ticking at the same moment both try to start one and exactly one of them succeeds.
+            entity.HasIndex(item => item.Location)
+                .IsUnique()
+                .HasFilter("\"State\" = 'Running'");
+            entity.HasIndex(item => new { item.Location, item.StartedAtUtc });
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_MediaInventoryRuns_Lease",
+                    "(\"LeaseToken\" IS NULL) = (\"LeaseExpiresAtUtc\" IS NULL) AND (\"State\" = 'Running' OR \"LeaseToken\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_MediaInventoryRuns_Completed",
+                    "(\"State\" = 'Completed') = (\"CompletedAtUtc\" IS NOT NULL)");
+                // The honesty rule, in the database as well as in the domain: a run that still has a
+                // cursor, an unfinished probe stage or a failed page is not a completed inventory,
+                // and "it found nothing" means something entirely different for one that is not.
+                table.HasCheckConstraint(
+                    "CK_MediaInventoryRuns_CompletionEvidence",
+                    "\"State\" <> 'Completed' OR (\"InventoryCompleted\" AND \"InventoryCursor\" IS NULL AND \"ProbeStage\" = 'Completed' AND \"PageFailureCount\" = 0)");
+                table.HasCheckConstraint(
+                    "CK_MediaInventoryRuns_Counters",
+                    "\"ObjectsScanned\" >= 0 AND \"ObjectsSkippedRecent\" >= 0 AND \"ObjectsSkippedOwnedByPurge\" >= 0 AND \"UnattributableKeyCount\" >= 0 AND \"OwnersProbed\" >= 0 AND \"OwnersSkippedNotReconciled\" >= 0 AND \"OwnersSkippedOwnedByPurge\" >= 0 AND \"FindingsOpened\" >= 0 AND \"FindingsResolved\" >= 0 AND \"PageFailureCount\" >= 0");
+            });
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<MediaInventoryFinding>(entity =>
+        {
+            entity.ToTable("InventoryFindings", "media");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Kind).HasConversion<string>().HasMaxLength(40);
+            entity.Property(item => item.OwnerKind).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.StorageLocation)
+                .HasMaxLength(StorageObjectLocator.MaximumLocationLength)
+                .IsRequired();
+            entity.Property(item => item.StorageKey)
+                .HasMaxLength(StorageObjectLocator.MaximumKeyLength)
+                .IsRequired();
+            entity.Property(item => item.ResolutionCode).HasMaxLength(60);
+            // One open finding per condition per object. This index is the idempotency guarantee: a
+            // resumed pass, a re-run and a second replica all converge on the same row rather than
+            // filing the same disagreement again.
+            entity.HasIndex(item => new
+                { item.TenantId, item.Kind, item.StorageLocation, item.StorageKey })
+                .IsUnique()
+                .HasFilter("\"ResolvedAtUtc\" IS NULL");
+            entity.HasIndex(item => new { item.TenantId, item.ResolvedAtUtc, item.Kind });
+            entity.HasOne<MediaInventoryRun>()
+                .WithMany()
+                .HasForeignKey(item => item.FirstRunId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<MediaInventoryRun>()
+                .WithMany()
+                .HasForeignKey(item => item.LastRunId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_MediaInventoryFindings_StorageLocator",
+                    "\"StorageLocation\" ~ " + StorageLocationGrammar + " AND (" + StorageKeyGrammar + ")");
+                table.HasCheckConstraint(
+                    "CK_MediaInventoryFindings_Owner",
+                    "(\"OwnerKind\" = 'None') = (\"OwnerId\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_MediaInventoryFindings_Resolution",
+                    "(\"ResolvedAtUtc\" IS NULL) = (\"ResolutionCode\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_MediaInventoryFindings_Observations",
+                    "\"ConsecutiveObservations\" >= 1 AND \"LastObservedAtUtc\" >= \"FirstObservedAtUtc\"");
             });
             ConfigureTenantEntity(entity);
         });

@@ -38,6 +38,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     private StorageFaultSwitch? storageFaults;
     private InsertBarrier? insertBarrier;
     private ScannerSwitch? scannerSwitch;
+    private InventoryProbe? inventoryProbe;
     private Phase6B4BProviderHarness? providerHarness;
 
     public TestContext TestContext { get; set; } = null!;
@@ -67,6 +68,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         insertBarrier = barrier;
         var scanner = new ScannerSwitch();
         scannerSwitch = scanner;
+        var inventoryProbe = new InventoryProbe();
+        this.inventoryProbe = inventoryProbe;
         // The 6B-4B tests run the real R2 and clamd adapters, so they compose the providers instead
         // of the local adapter and the switchable scanner. Everything else about the fixture — the
         // clock, the storage-call counting, the database — stays as it is.
@@ -113,6 +116,10 @@ public sealed partial class Phase3TrainingWorkflowTests
                         // The sweep is driven explicitly by the purge tests, so a background tick can
                         // never race an assertion about what has or has not been deleted.
                         ["Media:PurgeEnabled"] = "false",
+                        // Reconciliation is driven explicitly by its own tests, for the same reason
+                        // the purge sweep is: a background pass must not race an assertion about
+                        // what one run observed.
+                        ["Media:Reconciliation:Enabled"] = "false",
                         ["Media:MaxWorkspaceStorageBytes"] =
                             Phase5B5WorkspaceQuotaBytes().ToString(CultureInfo.InvariantCulture),
                         ["Media:MaxClientProgressPhotoBytes"] =
@@ -143,6 +150,7 @@ public sealed partial class Phase3TrainingWorkflowTests
                 }
 
                 Phase5B5DecorateObjectStorage(services, storageFaults);
+                Phase6B4CDecorateObjectInventory(services, inventoryProbe);
                 if (providers is null)
                 {
                     // A scanner the test can switch off, so an unavailable-scanner deployment can be

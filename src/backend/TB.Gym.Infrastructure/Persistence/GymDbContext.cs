@@ -136,6 +136,10 @@ public sealed partial class GymDbContext(
 
     public DbSet<MediaIngestObject> MediaIngestObjects => Set<MediaIngestObject>();
 
+    public DbSet<MediaInventoryRun> MediaInventoryRuns => Set<MediaInventoryRun>();
+
+    public DbSet<MediaInventoryFinding> MediaInventoryFindings => Set<MediaInventoryFinding>();
+
     public DbSet<StrengthMaxRecord> StrengthMaxRecords => Set<StrengthMaxRecord>();
 
     public DbSet<MesocycleWorkingMaxSnapshot> MesocycleWorkingMaxSnapshots => Set<MesocycleWorkingMaxSnapshot>();
@@ -293,6 +297,7 @@ public sealed partial class GymDbContext(
         ConfigureLegalConsent(builder);
         ConfigureExerciseLibrary(builder);
         ConfigureMedia(builder);
+        ConfigureMediaInventory(builder);
         ConfigureStrength(builder);
         ConfigureTraining(builder);
         ConfigureNutrition(builder);

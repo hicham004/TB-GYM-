@@ -348,6 +348,11 @@ public sealed class MediaStorageOptions
     /// </summary>
     public bool PurgeEnabled { get; set; } = true;
 
+    /// <summary>
+    /// The read-only pass that compares stored objects with the rows that own them.
+    /// </summary>
+    public MediaReconciliationOptions Reconciliation { get; set; } = new();
+
     // A grant must outlive one viewing session, not one request. The initial response survives
     // expiry because the grant is checked once at request start, but a seek outside the buffered
     // range and a resume after a pause each issue a new Range request that must re-present the
@@ -358,6 +363,42 @@ public sealed class MediaStorageOptions
     // that same user, and the content route re-authorizes membership and entitlement on every
     // request, so revocation already takes effect before this value expires.
     public int AccessLifetimeSeconds { get; set; } = 1800;
+}
+
+/// <summary>
+/// The engineering parameters of the inventory reconciliation pass. Only the schedule and the
+/// per-pass budgets are settings: what a finding <em>means</em> is fixed in
+/// <see cref="MediaInventoryPolicy"/>, because a deployment that could retune those could turn a
+/// real leak into silence without changing a line of code.
+/// </summary>
+public sealed class MediaReconciliationOptions
+{
+    /// <summary>
+    /// Whether the pass runs. It also does nothing when the composed deployment has no enumerable
+    /// object store, so Development and an unconfigured deployment need no separate switch.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// How often a pass runs. Daily by default: the conditions it looks for are standing ones, and
+    /// an enumeration is the one operation here that costs per request rather than per byte.
+    /// </summary>
+    public int IntervalSeconds { get; set; } = 86400;
+
+    /// <summary>
+    /// The most objects one pass enumerates. Whatever it does not reach stays in the run's cursor
+    /// for the next pass, exactly as an undrained purge backlog stays due.
+    /// </summary>
+    public int ObjectsPerRun { get; set; } = 2000;
+
+    /// <summary>The most rows one pass examines in the direction that asks the store about a row.</summary>
+    public int OwnerProbesPerRun { get; set; } = 500;
+
+    /// <summary>
+    /// How long one claimant owns a run before another replica may take it over. Renewed on every
+    /// committed page, so it bounds one page rather than a whole pass.
+    /// </summary>
+    public int RunLeaseSeconds { get; set; } = 300;
 }
 
 public static class MediaAccessCookie
