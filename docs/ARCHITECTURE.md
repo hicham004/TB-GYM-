@@ -539,9 +539,10 @@ Every stored object has a durable provider-neutral `(location, key)` locator. `M
 `MediaAssetDerivative` and a live `MediaIngestObject` retain the location that produced the bytes,
 so changing the current write adapter cannot redirect an existing read or purge. The Phase 6B-4A
 migration truthfully backfills pre-existing local objects as `local-v1`. A key is a canonical
-relative name — the row's own tenant as a 32-hex first segment, then unreserved segments, no dot
-segments — enforced by `StorageObjectLocator` and a matching PostgreSQL check on all three media
-tables, so a stored key cannot name another tenant's object through either separator form. The owned
+relative name — the row's own tenant as a 32-hex first segment, then lower-case unreserved segments,
+no dot segments, none dot-terminated — enforced by `StorageObjectLocator` and a matching PostgreSQL
+check on all three media tables, so a stored key cannot name another tenant's object through either
+separator form, nor alias to another key's object on a case-insensitive store. The owned
 storage contract serves either the full stream or one bounded byte range and returns the total object
 length; the Media module contains no provider SDK vocabulary. Content authorization completes before
 a storage read opens, including a rendition request.

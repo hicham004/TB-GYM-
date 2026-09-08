@@ -990,9 +990,10 @@ demo video does not fail mid-playback. External embeds are validated YouTube/Vim
 6B-4A gives every stored object a durable provider-neutral `(location, key)` locator; full and
 one bounded byte-range read use the owned storage contract, and authorization completes before
 that contract opens storage. A key is a canonical relative name bound to its own tenant — a 32-hex
-tenant segment then unreserved segments, no dot segments, no rooted or backslash form — enforced in
-the domain and by a PostgreSQL check on assets, derivatives and ingest objects, so no stored key can
-resolve inside another tenant. Local storage composes automatically only in Development. A
+tenant segment then lower-case unreserved segments, no dot segments, none ending in a dot, no rooted
+or backslash form — enforced in the domain and by a PostgreSQL check on assets, derivatives and
+ingest objects, so no stored key can resolve inside another tenant and no two keys can alias to one
+object on a case-insensitive store. Local storage composes automatically only in Development. A
 non-Development deployment with no adapter is explicitly unavailable, reports media storage
 `Degraded` at readiness, and refuses an upload before accepting bytes or reserving a key. No
 production provider is selected here.

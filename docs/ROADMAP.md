@@ -798,6 +798,16 @@ selected and 6B-4B is not started.
 - **Readiness wording.** ADR 0023 said unavailable storage reports unhealthy; it reports `Degraded`,
   deliberately, and now says so.
 
+Follow-up, 2026-09-08, additive migration
+`20260908101303_Phase6B4ACanonicalStorageKeyCaseAndTrailingDot`:
+
+- **Same-workspace lease regression.** The per-item lease proof now also runs several due items
+  through one workspace's claim loop, and the failed-item proof does too — that inner loop, not the
+  per-workspace one, is where a batched lease aged.
+- **Key grammar closed before adoption.** Upper-case and dot-terminated segments are refused in the
+  domain and the database. Both alias to one object where the store or path layer is
+  case-insensitive or strips trailing dots; every historical key is lower case and unaffected.
+
 ### Phase 6B-4B: production media adapters and delivery (not started)
 
 - Select and implement production object storage (such as S3/R2) and production upload scanning

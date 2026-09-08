@@ -30,6 +30,7 @@ public sealed class Phase6B4ARemediationDomainTests
             $"{Tenant}/contract/019291f0aaaa4bbbccccddddeeeeffff.bin",
             $"{Tenant}/legacy-object",
             $"{Tenant}/objects/photo.jpg",
+            $"{Tenant}/019291f0aaaa4bbbccccddddeeeeffff/rendition.jpg",
             $"{Tenant}/a_b/c-d.e",
         ];
 
@@ -81,6 +82,39 @@ public sealed class Phase6B4ARemediationDomainTests
                 () => new StorageObjectLocator(TenantId, MediaStorageLocations.LocalV1, key),
                 scenario);
         }
+    }
+
+    /// <summary>
+    /// Two keys that differ only by case, or only by a trailing dot, are one object on a
+    /// case-insensitive store or a Windows path — but two rows and two unique-index entries in the
+    /// database. Both forms are refused so a key names exactly one object under every adapter.
+    /// </summary>
+    [TestMethod]
+    public void CanonicalKeysRejectCaseAndTrailingDotFilesystemAliases()
+    {
+        (string Scenario, string Key)[] aliases =
+        [
+            ("upper-case segment", $"{Tenant}/ABC"),
+            ("mixed-case segment", $"{Tenant}/aBc"),
+            ("upper-case extension", $"{Tenant}/objects/Photo.JPG"),
+            ("upper-case uuid segment", $"{Tenant}/019291F0AAAA4BBBCCCCDDDDEEEEFFFF"),
+            ("upper-case tenant prefix", $"{Tenant.ToUpperInvariant()}/object"),
+            ("trailing dot", $"{Tenant}/abc."),
+            ("interior trailing dot", $"{Tenant}/abc./x"),
+            ("trailing double dot", $"{Tenant}/abc.."),
+        ];
+
+        foreach (var (scenario, key) in aliases)
+        {
+            Assert.ThrowsExactly<ArgumentException>(
+                () => new StorageObjectLocator(TenantId, MediaStorageLocations.LocalV1, key),
+                scenario);
+        }
+
+        // A leading dot is neither an alias nor traversal, so it stays inside the grammar.
+        Assert.AreEqual(
+            $"{Tenant}/.hidden",
+            new StorageObjectLocator(TenantId, MediaStorageLocations.LocalV1, $"{Tenant}/.hidden").ObjectKey);
     }
 
     [TestMethod]

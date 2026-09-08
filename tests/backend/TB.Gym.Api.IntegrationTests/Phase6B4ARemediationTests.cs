@@ -160,15 +160,113 @@ public sealed partial class Phase3TrainingWorkflowTests
     }
 
     /// <summary>
+    /// Several due items in one workspace go through the inner per-item loop, which is where a
+    /// batched lease used to age: only the item being processed is leased, and its same-workspace
+    /// successors stay unleased until their own work begins.
+    /// </summary>
+    [TestMethod]
+    public async Task Phase6B4ARemediationSameWorkspaceItemsAreLeasedOneAtATimeAsTheirWorkBegins()
+    {
+        var (_, photos) = await Phase6B4ACreateDuePhotosInOneWorkspaceAsync(
+            "same-workspace-lease",
+            "Front",
+            "Side",
+            "Back");
+        var assetIds = photos.Select(photo => photo.MediaAssetId).ToArray();
+        Assert.HasCount(3, assetIds);
+
+        var lease = TimeSpan.FromSeconds(RequiredFactory.Services
+            .GetRequiredService<IOptions<MediaStorageOptions>>()
+            .Value.PurgeClaimLeaseSeconds);
+        var observations = new List<Phase6B4ALeaseObservation>();
+        var started = new HashSet<Guid>();
+
+        RequiredStorageFaults.OnDeleteStarting = async _ =>
+        {
+            var rows = await Phase6B4AReadPurgeStateAsync(assetIds);
+            var inFlight = rows.Where(row => row.ClaimToken is not null).ToArray();
+            Assert.HasCount(1, inFlight, "Two items in one workspace were leased at once.");
+
+            var current = inFlight[0];
+            if (!started.Add(current.AssetId))
+            {
+                return;
+            }
+
+            observations.Add(new Phase6B4ALeaseObservation(
+                current.AssetId,
+                RequiredTestClock.UtcNow,
+                current.ClaimExpiresAtUtc!.Value,
+                rows.Where(row =>
+                        row.AssetId != current.AssetId &&
+                        row.Status != MediaAssetStatus.Purged)
+                    .All(row => row.ClaimToken is null && row.AttemptCount == 0),
+                await Phase6B4ACountClaimableAsync(current.AssetId)));
+
+            // Age past a whole lease mid-delete. The successors in this same workspace are not
+            // leased yet, so nothing they own can expire while they wait their turn.
+            RequiredTestClock.Advance(lease + TimeSpan.FromSeconds(30));
+        };
+
+        try
+        {
+            var swept = await Phase5B5SweepAsync();
+            Assert.AreEqual(3, swept.Claimed);
+            Assert.AreEqual(3, swept.Purged);
+            Assert.AreEqual(0, swept.Failed);
+        }
+        finally
+        {
+            RequiredStorageFaults.OnDeleteStarting = null;
+        }
+
+        CollectionAssert.AreEquivalent(
+            assetIds,
+            observations.Select(item => item.AssetId).ToArray(),
+            "Every same-workspace item must have been processed under its own claim.");
+
+        foreach (var observation in observations)
+        {
+            Assert.IsGreaterThan(
+                observation.ObservedAtUtc,
+                observation.ClaimExpiresAtUtc,
+                $"Asset {observation.AssetId} began its deletion under an already-expired lease.");
+            Assert.IsGreaterThan(
+                lease - TimeSpan.FromSeconds(1),
+                observation.ClaimExpiresAtUtc - observation.ObservedAtUtc,
+                $"Asset {observation.AssetId} started work on a lease that had already been running.");
+            Assert.IsTrue(
+                observation.OthersUnclaimed,
+                "A later same-workspace item was already sitting under an aging lease.");
+            Assert.AreEqual(
+                0L,
+                observation.InFlightClaimable,
+                $"Asset {observation.AssetId} was reclaimable while its own work was in flight.");
+        }
+
+        foreach (var assetId in assetIds)
+        {
+            var purged = await Phase5B5ReadAssetAsync(assetId);
+            Assert.AreEqual(MediaAssetStatus.Purged, purged.Status);
+            Assert.IsNull(purged.PurgeClaimToken);
+            Assert.AreEqual(1, purged.PurgeAttemptCount, "An item was claimed more than once.");
+        }
+    }
+
+    /// <summary>
     /// Claiming per item must not turn a failure into a hot retry loop. A failed item is due again
     /// for the *next* sweep; offering it back immediately would let one stuck object spend the
-    /// whole batch budget and starve the rest of the workspace for a full interval.
+    /// whole batch budget and starve the rest of its own workspace for a full interval.
     /// </summary>
     [TestMethod]
     public async Task Phase6B4ARemediationAFailedItemIsNotReofferedWithinTheSameSweep()
     {
-        var (_, photo) = await Phase6B4ACreateDuePhotoAsync("no-hot-retry", "Front");
-        var peer = await Phase6B4ACreateDuePhotoAsync("no-hot-retry-peer", "Side");
+        var (_, photos) = await Phase6B4ACreateDuePhotosInOneWorkspaceAsync(
+            "no-hot-retry",
+            "Front",
+            "Side");
+        var assetIds = photos.Select(photo => photo.MediaAssetId).ToArray();
+        var deletesBefore = RequiredStorageFaults.DeleteCount;
         RequiredStorageFaults.FailDeletes = true;
 
         var swept = await Phase5B5SweepAsync();
@@ -176,7 +274,11 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(2, swept.Claimed, "A failed item was re-offered inside its own sweep.");
         Assert.AreEqual(2, swept.Failed);
         Assert.AreEqual(0, swept.Purged);
-        foreach (var assetId in new[] { photo.MediaAssetId, peer.Photo.MediaAssetId })
+
+        // One delete attempt per item: the derivative fails and the sweep leaves that item there.
+        // A re-offered item would show up here as extra calls long before the budget ran out.
+        Assert.AreEqual(2, RequiredStorageFaults.DeleteCount - deletesBefore);
+        foreach (var assetId in assetIds)
         {
             var pending = await Phase5B5ReadAssetAsync(assetId);
             Assert.AreEqual(MediaAssetStatus.Tombstoned, pending.Status);
@@ -185,7 +287,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             Assert.IsNull(pending.PurgeClaimToken);
         }
 
-        // Still due, so the next sweep picks it up: retryable, just not in a spin.
+        // Still due, so the next sweep picks both up: retryable, just not in a spin.
         RequiredStorageFaults.AllowDeletes();
         Assert.AreEqual(2, (await Phase5B5SweepAsync()).Purged);
     }
@@ -272,6 +374,14 @@ public sealed partial class Phase3TrainingWorkflowTests
             ("prefix extension", $"{tenant}ff/object"),
             ("foreign tenant", $"{victim}/object"),
             ("embedded space", $"{tenant}/a b"),
+            // Case and trailing dots alias to one object on a case-insensitive store or a Windows
+            // path, so two rows could address the same bytes while the unique index saw two keys.
+            ("upper-case segment", $"{tenant}/ABC"),
+            ("mixed-case segment", $"{tenant}/aBc"),
+            ("upper-case extension", $"{tenant}/objects/Photo.JPG"),
+            ("upper-case tenant prefix", $"{tenant.ToUpperInvariant()}/object"),
+            ("trailing dot", $"{tenant}/abc."),
+            ("interior trailing dot", $"{tenant}/abc./x"),
         ];
 
         // The evidence key is moved with the live key so the scan-evidence constraint is satisfied
@@ -445,5 +555,39 @@ public sealed partial class Phase3TrainingWorkflowTests
         Guid AssetId,
         DateTimeOffset ObservedAtUtc,
         DateTimeOffset ClaimExpiresAtUtc,
-        bool OthersUnclaimed);
+        bool OthersUnclaimed,
+        long InFlightClaimable = 0L);
+
+    /// <summary>
+    /// Several due media items owned by one workspace, which is what puts them through a single
+    /// tenant's per-item claim loop rather than one item per workspace.
+    /// </summary>
+    private async Task<(Guid WorkspaceId, Phase5B2Photo[] Photos)>
+        Phase6B4ACreateDuePhotosInOneWorkspaceAsync(string scenario, params string[] poses)
+    {
+        using var coach = CreateClient();
+        var workspaceId = await RegisterCoachAsync(
+            coach,
+            $"p6b4-{scenario}-coach@example.test",
+            $"{scenario} coach",
+            $"{scenario} workspace");
+        using var client = CreateClient();
+        await InviteAndAcceptAsync(coach, client, $"p6b4-{scenario}-client@example.test", true);
+        SetTenant(client, workspaceId);
+
+        // One client, one date, a different pose each: the uniqueness slot is (tenant, client,
+        // date, pose), so this is several separately purgeable assets in the same workspace.
+        var photos = new List<Phase5B2Photo>();
+        foreach (var pose in poses)
+        {
+            var photo = await UploadProgressPhotoAsync(
+                client,
+                $"/api/progress/me/photos?pose={pose}&photoDate=2026-08-22");
+            await Phase5B5RemoveAsync(client, photo);
+            photos.Add(photo);
+        }
+
+        RequiredTestClock.Advance(TimeSpan.FromDays(31));
+        return (workspaceId, [.. photos]);
+    }
 }

@@ -76,8 +76,8 @@ public sealed record StorageObjectLocator
 
     /// <summary>
     /// The canonical key grammar: the tenant's own 32-hex prefix, then one or more segments of
-    /// letters, digits, dot, underscore and hyphen. A key is a relative name in a flat tenant-owned
-    /// namespace, never a path the caller may steer.
+    /// lower-case letters, digits, dot, underscore and hyphen, none of them ending in a dot. A key
+    /// is a relative name in a flat tenant-owned namespace, never a path the caller may steer.
     /// </summary>
     /// <remarks>
     /// The tenant prefix on its own is not tenant binding. <c>&lt;tenantA&gt;/../&lt;tenantB&gt;/object</c>
@@ -125,13 +125,27 @@ public sealed record StorageObjectLocator
     }
 
     /// <summary>
-    /// One key segment: non-empty, not composed only of dots, and drawn from the unreserved set.
+    /// One key segment: non-empty, not composed only of dots, not ending in a dot, and drawn from
+    /// the lower-case unreserved set.
     /// </summary>
+    /// <remarks>
+    /// Lower case only, because every key this application and its migrations have ever written is
+    /// lower case — a generated tenant hex prefix and a generated UUID — and a case-insensitive
+    /// filesystem or object store would let <c>&lt;tenant&gt;/ABC</c> and <c>&lt;tenant&gt;/abc</c>
+    /// be two rows addressing one object. A trailing dot is refused for the same aliasing reason:
+    /// Windows strips it during path normalisation, so <c>&lt;tenant&gt;/abc.</c> and
+    /// <c>&lt;tenant&gt;/abc</c> would name one file while the unique index believed they were two.
+    /// The trailing-dot rule already excludes <c>.</c> and <c>..</c>; the all-dots clause is kept
+    /// beside it so that relaxing one rule later cannot silently re-admit traversal.
+    /// </remarks>
     private static bool IsSafeSegment(string segment) =>
         segment.Length > 0 &&
+        segment[^1] is not '.' &&
         segment.Any(character => character is not '.') &&
         segment.All(character =>
-            char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
+            char.IsAsciiDigit(character) ||
+            char.IsAsciiLetterLower(character) ||
+            character is '.' or '_' or '-');
 
     private static string ValidateLocation(string value)
     {

@@ -14,20 +14,23 @@ public sealed partial class GymDbContext
     /// <summary>
     /// The canonical storage-key grammar, stated in the database as well as in
     /// <see cref="StorageObjectLocator"/>: the row's own tenant as a 32-hex first segment, then one
-    /// or more segments of letters, digits, dot, underscore and hyphen, and no segment that is
-    /// nothing but dots.
+    /// or more segments of lower-case letters, digits, dot, underscore and hyphen, no segment that
+    /// is nothing but dots, and no segment ending in a dot.
     /// </summary>
     /// <remarks>
-    /// The previous <c>LIKE tenant || '/%'</c> check asserted tenant ownership that the key did not
+    /// The original <c>LIKE tenant || '/%'</c> check asserted tenant ownership that the key did not
     /// actually carry: <c>&lt;tenantA&gt;/../&lt;tenantB&gt;/object</c> satisfies it while naming
-    /// tenant B's object under any adapter that resolves a key as a path. The second clause is what
-    /// closes that, and the character class is what excludes backslashes, control characters,
-    /// whitespace and drive/scheme punctuation — so a rooted or traversing key cannot be written in
-    /// either separator form, on Windows or Unix.
+    /// tenant B's object under any adapter that resolves a key as a path. The dot-segment clauses
+    /// close that, and the character class excludes backslashes, control characters, whitespace and
+    /// drive/scheme punctuation — so a rooted or traversing key cannot be written in either
+    /// separator form, on Windows or Unix. Case and trailing dots are excluded because both alias
+    /// to one object on a case-insensitive store or a Windows path, which would let two rows and
+    /// two unique-index entries address the same bytes.
     /// </remarks>
     private const string StorageKeyGrammar =
-        "\"StorageKey\" ~ ('^' || replace(lower(\"TenantId\"::text), '-', '') || '(/[A-Za-z0-9._-]+)+$') " +
-        "AND \"StorageKey\" !~ '(^|/)[.]+(/|$)'";
+        "\"StorageKey\" ~ ('^' || replace(lower(\"TenantId\"::text), '-', '') || '(/[a-z0-9._-]+)+$') " +
+        "AND \"StorageKey\" !~ '(^|/)[.]+(/|$)' " +
+        "AND \"StorageKey\" !~ '[.](/|$)'";
 
     private const string AssetStorageLocatorCheck =
         "\"StorageLocation\" IS NULL OR (\"StorageLocation\" ~ " + StorageLocationGrammar +

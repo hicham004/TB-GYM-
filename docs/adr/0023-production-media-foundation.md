@@ -44,14 +44,21 @@ the locator and full/bounded range read contracts, while provider-specific behav
 `IObjectStorage` in Infrastructure.
 
 A key is a canonical relative name, not a path: the row's own tenant as a 32-hex first segment, then
-one or more segments of letters, digits, dot, underscore and hyphen, with no segment that is nothing
-but dots. `StorageObjectLocator` and a matching PostgreSQL check on all three media tables enforce
-exactly that. The tenant prefix alone was not tenant binding — `<tenantA>/../<tenantB>/object`
-satisfies a prefix or `LIKE` test and still resolves inside tenant B under any adapter that treats a
-key as a path, so the constraint asserted ownership the key did not carry. The grammar closes both
-separator forms and every rooted, empty, control-character and dot-segment shape, on Windows and
-Unix; `LocalObjectStorage` keeps its own path-containment check underneath as defense in depth.
-Every key the application and its migrations have ever written is inside the grammar already.
+one or more segments of lower-case letters, digits, dot, underscore and hyphen, with no segment that
+is nothing but dots and none ending in a dot. `StorageObjectLocator` and a matching PostgreSQL check
+on all three media tables enforce exactly that. The tenant prefix alone was not tenant binding —
+`<tenantA>/../<tenantB>/object` satisfies a prefix or `LIKE` test and still resolves inside tenant B
+under any adapter that treats a key as a path, so the constraint asserted ownership the key did not
+carry. The grammar closes both separator forms and every rooted, empty, control-character and
+dot-segment shape, on Windows and Unix; `LocalObjectStorage` keeps its own path-containment check
+underneath as defense in depth.
+
+Case and trailing dots are excluded for a second reason, settled before a provider adopts the
+grammar rather than after: both alias to one object where the store or the path layer is
+case-insensitive or strips trailing dots, so `<tenant>/ABC` and `<tenant>/abc`, or `<tenant>/abc.`
+and `<tenant>/abc`, would be two rows and two unique-index entries addressing one set of bytes.
+Every key the application and its migrations have ever written is lower case and dot-terminal free,
+so the grammar admits all of them unchanged.
 
 Media authorization completes before `IObjectStorage.ReadAsync` opens an original or rendition.
 The persisted locator is used for reads and purge, so changing the configured write location cannot
