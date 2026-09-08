@@ -808,17 +808,46 @@ Follow-up, 2026-09-08, additive migration
   domain and the database. Both alias to one object where the store or path layer is
   case-insensitive or strips trailing dots; every historical key is lower case and unaffected.
 
-### Phase 6B-4B: production media adapters and delivery (not started)
+### Phase 6B-4B: production media adapters and delivery (complete)
 
-- Select and implement production object storage (such as S3/R2) and production upload scanning
-  (such as ClamAV) behind the existing ports. No provider choice is made by 6B-4A.
-- Decide whether CDN or presigned delivery belongs in the protected-media model; public URLs are not
-  introduced by 6B-4A.
+Status: complete, implemented 2026-09-08. See
+`docs/adr/0024-production-media-storage-and-scanning.md`, `ARCHITECTURE.md` section 9 and
+`DOMAIN-RULES.md` MED-004, MED-006 and MED-011. No migration: the 6B-4A model already held
+everything these providers persist.
+
+- **One private EU bucket, over S3.** Object bytes live in a private Cloudflare R2 bucket in the EU
+  jurisdiction, addressed at the account's own EU endpoint with region `auto` and bucket-scoped
+  Object Read and Write credentials from environment or secret store. The location `r2-eu-v1`
+  permanently binds one account, jurisdiction and bucket; the adapter refuses every other location,
+  `local-v1` included, before making a provider request, and nothing migrates or routes.
+- **Bounded streaming with an owned checksum.** One pooled 8 MiB buffer, multipart for large or
+  non-seekable input, exactly the allowance and not one byte more, and an abort from a single place
+  on a token independent of the request's. SHA-256 and signature are computed over exactly the bytes
+  transmitted; the provider's `ETag` is never a checksum, and payload signing and default checksum
+  flavours are disabled per request because R2 does not implement them.
+- **A private clamd, streamed the stored bytes.** An owned bounded INSTREAM client, no whole-file
+  buffer and no temporary file. `OK` allows, `FOUND` refuses without exposing the signature name, and
+  a daemon error, an exceeded limit, a timeout, a disconnect or a malformed frame is an operational
+  `503` that commits no asset — a limit is never a clean result. `compose.yaml` and
+  `docker/clamav/clamd.conf` run the official image pinned by digest, non-root, with a persistent
+  signature volume, freshclam, ~4 GiB, a healthcheck and port 3310 on the private network only.
+- **Loud selection, quiet defaults.** Naming a provider with a configuration it cannot use refuses
+  startup, as does the allow-everything development scanner outside Development; naming nothing keeps
+  6B-4A's fail-closed adapters and Degraded readiness exactly. Readiness now probes a composed
+  provider and still reports Degraded, never Unhealthy.
+
+Delivery is unchanged and deliberately so: API-proxied full and range reads, the HTTP-only
+path-scoped grant, authorization per request. No public bucket, CDN, presigned URL, direct upload,
+SSE-C or client-side encryption — every one of those replaces "the API authorized this request" with
+"the holder of this URL may read these bytes".
 
 ### Phase 6B-4C: media operations and reconciliation (not started)
 
 - Add provider inventory reconciliation and the production retention/operations controls. No
-  reconciliation authority or operator workflow is introduced by 6B-4A.
+  reconciliation authority or operator workflow is introduced by 6B-4A or 6B-4B.
+- Bucket lifecycle and retention policy, including abandoning incomplete multipart uploads that a
+  killed process could not abort itself. 6B-4B aborts its own and states the rest as an operator
+  prerequisite.
 
 ### Phase 6B remaining
 

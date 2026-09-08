@@ -35,6 +35,48 @@ services:
       timeout: 3s
       retries: 12
 
+  # The upload scanner. Media publication fails closed without one: every upload is refused, which
+  # is safe and completely silent, so the local stack runs the real daemon rather than pretending.
+  #
+  # Pinned by tag and digest. A scanner that changed feature version between a passing run and a
+  # failing one would make an upload refusal unreproducible, and unlike the backplane this one
+  # decides whether somebody's file is published at all. 1.5 is a currently supported ClamAV feature
+  # version; the image bundles a signature database so the daemon can start without waiting on a
+  # download, and freshclam keeps it current from then on.
+  #
+  # It runs as the image's own unprivileged clamav user, which means its unprivileged entrypoint,
+  # which does not rewrite clamd.conf from environment variables - hence the mounted configuration
+  # file. Port 3310 is exposed to the compose network and published to no host interface: clamd has
+  # no authentication of its own, so being able to reach it must already mean being inside the
+  # deployment.
+  clamav:
+    image: clamav/clamav:1.5.4@sha256:1fdfd24c6f0a0fb60788481487459a6d4eda8a9b448641594e04db8410d34422
+    user: "clamav"
+    entrypoint: ["/init-unprivileged"]
+    environment:
+      # Twice a day. The engine is only as good as the signatures behind it, and the verdict it
+      # gives is recorded as durable evidence with the signature revision that produced it.
+      FRESHCLAM_CHECKS: ${TB_GYM_CLAMAV_FRESHCLAM_CHECKS:-2}
+      CLAMD_STARTUP_TIMEOUT: 300
+    expose:
+      - "3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+      - ./docker/clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+    # ClamAV holds its whole signature database in memory. Roughly 4 GiB is what the project asks
+    # for; below it the daemon is killed part-way through loading, which presents as an upload that
+    # times out rather than as an out-of-memory container.
+    mem_limit: ${TB_GYM_CLAMAV_MEMORY:-4g}
+    healthcheck:
+      # The image's own check: it asks the running daemon to answer, rather than looking for a
+      # process. The start period is generous because loading the database is minutes of work on a
+      # cold container.
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 360s
+
   api:
     build:
       context: .
@@ -47,6 +89,20 @@ services:
       DataProtection__KeyPath: /home/app/.aspnet/DataProtection-Keys
       Media__StorageRoot: /home/app/media
       Media__MaxWorkspaceStorageBytes: ${TB_GYM_MEDIA_WORKSPACE_QUOTA_BYTES:-21474836480}
+      # Media providers. The local stack defaults to local files and the allow-everything development
+      # scanner, because that is what a development machine can compose without a Cloudflare account.
+      # Setting the storage adapter to R2 requires every R2 value below and refuses startup without
+      # them; setting the scanner adapter to ClamAv points it at the daemon in this file. Neither
+      # secret is defaulted: a credential that can write every workspace's media does not belong in a
+      # committed file.
+      Media__StorageAdapter: ${TB_GYM_MEDIA_STORAGE_ADAPTER:-Local}
+      Media__R2__AccountId: ${TB_GYM_R2_ACCOUNT_ID:-}
+      Media__R2__BucketName: ${TB_GYM_R2_BUCKET:-}
+      Media__R2__AccessKeyId: ${TB_GYM_R2_ACCESS_KEY_ID:-}
+      Media__R2__SecretAccessKey: ${TB_GYM_R2_SECRET_ACCESS_KEY:-}
+      Media__ScannerAdapter: ${TB_GYM_MEDIA_SCANNER_ADAPTER:-Development}
+      Media__ClamAv__Host: clamav
+      Media__ClamAv__Port: "3310"
       Seed__Enabled: ${TB_GYM_SEED_ENABLED:-true}
       Seed__AdminEmail: ${TB_GYM_ADMIN_EMAIL:-admin@tbgym.local}
       Seed__AdminPassword: ${TB_GYM_ADMIN_PASSWORD:-}
@@ -89,6 +145,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # Started, not healthy: the API composes its scanner from configuration and reports media
+      # storage and scanning at /health/ready, so waiting minutes for a database load before the
+      # rest of the application serves anything would be the wrong trade.
+      clamav:
+        condition: service_started
 
   # A second composition root of the same monolith, not a microservice: same image base, same
   # database, same domain assemblies, no HTTP surface and no migrations of its own. It waits for the
@@ -155,3 +216,6 @@ volumes:
   postgres-data:
   data-protection-keys:
   media-data:
+  # The signature database. Persisted so a restart does not re-download several hundred megabytes,
+  # and so freshclam's incremental updates have something to be incremental against.
+  clamav-data:

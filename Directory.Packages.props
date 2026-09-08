@@ -3,6 +3,12 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Apache-2.0, Amazon-published. The S3 client, referenced only by TB.Gym.Infrastructure so
+         the provider vocabulary cannot reach a module. Cloudflare R2 speaks S3 and nothing else:
+         SigV4 signing, multipart upload, ranged GET and the error shapes they return are the
+         protocol, not a convenience, and hand-rolling a signer for the one credential that can
+         write every workspace's media is not a place to save a dependency. -->
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.5" />
     <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />

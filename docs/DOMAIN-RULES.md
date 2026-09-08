@@ -995,8 +995,8 @@ or backslash form — enforced in the domain and by a PostgreSQL check on assets
 ingest objects, so no stored key can resolve inside another tenant and no two keys can alias to one
 object on a case-insensitive store. Local storage composes automatically only in Development. A
 non-Development deployment with no adapter is explicitly unavailable, reports media storage
-`Degraded` at readiness, and refuses an upload before accepting bytes or reserving a key. No
-production provider is selected here.
+`Degraded` at readiness, and refuses an upload before accepting bytes or reserving a key. Phase
+6B-4B selects the production providers; see MED-011.
 
 **MED-005** An unexpired grant is not a licence. Every content and rendition request re-establishes
 active membership of the asset's tenant before anything else, so removing or deactivating a
@@ -1057,6 +1057,29 @@ mesocycle contributes only sessions that have a `WorkoutExecution`; completed/in
 remain historical numerators and each such execution's session remains in the denominator, while
 never-started withdrawn sessions are excluded. Cancellation therefore yields `1 of 1`, never `0 of
 0` or `1 of 0`, after one completed workout and mutates no training history.
+
+**MED-011** Production object bytes live in one private Cloudflare R2 bucket in the EU
+jurisdiction, reached over S3 at the account's own EU endpoint with the fixed signing region `auto`
+and bucket-scoped Object Read and Write credentials that come only from environment or secret store.
+Delivery stays API-proxied and authorized per request: no public bucket, no CDN, no presigned URL, no
+direct browser upload, no customer-managed or client-side encryption. The location `r2-eu-v1`
+permanently binds one account, one jurisdiction and one bucket; the adapter serves that location
+alone and refuses every other, `local-v1` included, before making a provider request, and no locator
+is ever reinterpreted after a configuration change. A write streams in bounded parts, uses multipart
+for large or non-seekable input, accepts exactly the allowance and refuses one byte more, and aborts
+an interrupted upload on a cleanup token independent of the request's. The recorded SHA-256 and
+signature are computed over exactly the bytes transmitted; a provider `ETag` is never treated as a
+checksum. Production upload scanning is a private ClamAV `clamd` over INSTREAM, streaming the stored
+object directly with no whole-file buffer and no temporary file. `OK` allows and `FOUND` refuses
+without ever exposing the signature name; a daemon error, an exceeded daemon limit, a timeout, a
+disconnect, and a malformed or unterminated reply are operational scanner failures reporting `503`
+under MED-006, never a clean result and never a `400` about the file. Scan evidence records the
+scanner key and a normalized engine/signature version. Selecting either provider with an unusable
+configuration refuses startup, as does selecting the allow-everything development scanner outside
+Development; selecting neither keeps the MED-004 fail-closed Degraded state unchanged. Readiness
+additionally probes a composed provider and reports `Degraded`, never `Unhealthy`, when it does not
+answer. No provider secret, key, bucket, endpoint or object key appears in a log, an error or a
+response.
 
 **MED-007** Upload bodies are streamed with explicit application and Nginx limits, endpoint
 rate/concurrency controls, and a configurable workspace-byte quota. Deleting historically

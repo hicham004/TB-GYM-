@@ -156,32 +156,7 @@ public static class DependencyInjection
             .Bind(configuration.GetSection("Nutrition:UsdaFoodDataCentral"));
         services.AddScoped<IMediaApplicationService, MediaApplicationService>();
         services.AddSingleton<MediaUploadConcurrencyGate>();
-        var storageAdapter = configuration["Media:StorageAdapter"]?.Trim();
-        storageAdapter = string.IsNullOrEmpty(storageAdapter)
-            ? (environment.IsDevelopment() ? "Local" : "None")
-            : storageAdapter;
-        if (string.Equals(storageAdapter, "Local", StringComparison.OrdinalIgnoreCase))
-        {
-            if (!environment.IsDevelopment())
-            {
-                throw new InvalidOperationException(
-                    "Local media storage may be selected only in Development.");
-            }
-
-            services.AddSingleton<IObjectStorage, LocalObjectStorage>();
-        }
-        else if (string.Equals(storageAdapter, "None", StringComparison.OrdinalIgnoreCase))
-        {
-            services.AddSingleton<IObjectStorage, UnavailableObjectStorage>();
-        }
-        else
-        {
-            throw new InvalidOperationException("Media:StorageAdapter is not supported.");
-        }
-
-        services.AddSingleton<IMediaScanner>(_ => environment.IsDevelopment()
-            ? new DevelopmentMediaScanner()
-            : new UnavailableMediaScanner());
+        services.AddTbGymMediaProviders(configuration, environment);
         services.AddScoped<IMediaPurgeService, MediaPurgeService>();
         services.AddHostedService<MediaPurgeWorker>();
         services.AddScoped<INotificationApplicationService, NotificationApplicationService>();

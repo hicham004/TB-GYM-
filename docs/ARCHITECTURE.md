@@ -532,8 +532,48 @@ validation before persistence.
 Phase 6B-4A owns the Media storage seam. The local streaming adapter composes automatically only in
 Development; non-Development composition uses an explicit unavailable adapter and rejects an upload
 before it reserves an object or accepts upload bytes. A readiness check exposes that closed state.
-No cloud provider is selected here. `S3`/`R2`, production ClamAV, inventory reconciliation,
-CDN/presigned delivery and operations controls remain deferred.
+
+**Phase 6B-4B fills that seam with two providers.** Object bytes live in one private Cloudflare R2
+bucket in the EU jurisdiction, reached over S3 through the account's own EU endpoint with the fixed
+signing region `auto` and bucket-scoped Object Read and Write credentials from the environment or a
+secret store. Upload scanning is a private ClamAV `clamd` over INSTREAM. Delivery stays
+API-proxied and authorized per request: no public bucket, no CDN, no presigned URL, no direct
+browser upload, no customer-managed or client-side encryption. See
+`docs/adr/0024-production-media-storage-and-scanning.md`, whose Prerequisites section is what an
+operator needs before switching either adapter on.
+
+`Media:StorageAdapter` and `Media:ScannerAdapter` select them. Naming a provider with a configuration
+it cannot use refuses startup, as does selecting the allow-everything Development scanner outside
+Development; naming nothing keeps 6B-4A's fail-closed adapters and Degraded readiness entry exactly
+as they were. Readiness additionally asks a composed provider whether it answers — a bucket probe for
+an object that cannot exist, and a `PING` — because a configured but unreachable dependency refuses
+every upload just as an unconfigured one does. It stays Degraded rather than Unhealthy for the same
+reason as before.
+
+The durable location `r2-eu-v1` permanently binds one account, one jurisdiction and one bucket, and
+the adapter refuses every other location including `local-v1` before making a provider request. It is
+not a router and 6B-4B migrates no local object. Repointing that configuration at a different bucket
+while keeping the location name would make historical locators name bytes that are not theirs;
+nothing in the process can detect that, so moving buckets is a migration rather than a configuration
+edit.
+
+A write streams into one pooled 8 MiB buffer, switches to bounded sequential multipart parts when the
+content does not fit it, refuses one byte past the allowance, and aborts an interrupted upload from a
+single place on a token independent of the request's. The SHA-256 and signature are computed over
+exactly the transmitted bytes; the provider's `ETag` is never used for either, and payload signing and
+the SDK's default checksum flavours are disabled per request because R2 does not implement them. A
+read serves the full object or one bounded range, and the stream handed back owns the provider
+response so disposing it releases the connection.
+
+The scanner streams the *stored* object to `clamd` in bounded chunks — no whole-file buffer, no
+temporary file. `OK` allows and `FOUND` refuses; a daemon error, a configured limit, a timeout, a
+disconnect and a malformed or unterminated frame are all operational failures reporting `503` with
+every stored object cleaned up. A limit is never a clean result, which is why `compose.yaml` and
+`docker/clamav/clamd.conf` configure `StreamMaxLength`, `MaxFileSize` and `MaxScanSize` above the
+application's own 500 MiB ceiling. Signature names are never returned, persisted or logged; the
+scanner key and a normalized engine/signature version are. The clamd client is owned rather than
+taken from a package, because what it decides is bounds rather than parsing. Provider inventory
+reconciliation, retention/lifecycle policy and operator controls remain deferred to 6B-4C.
 
 Every stored object has a durable provider-neutral `(location, key)` locator. `MediaAsset`,
 `MediaAssetDerivative` and a live `MediaIngestObject` retain the location that produced the bytes,

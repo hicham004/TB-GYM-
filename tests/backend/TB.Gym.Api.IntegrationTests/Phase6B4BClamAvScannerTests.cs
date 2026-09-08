@@ -1,0 +1,344 @@
+using System.Security.Cryptography;
+using Microsoft.Extensions.Logging.Abstractions;
+using TB.Gym.Infrastructure.Application;
+using TB.Gym.Modules.Media;
+
+namespace TB.Gym.Api.IntegrationTests;
+
+/// <summary>
+/// The clamd adapter, against a local daemon that speaks the same framing.
+/// </summary>
+/// <remarks>
+/// The verdicts a scanner returns are the ones this repository turns into a published asset or a
+/// refused upload, so every answer the real daemon can give is scripted here — including the ones
+/// that are not answers at all. No live engine, no signature database and no real malware sample is
+/// involved: an <c>ERROR</c> line and a detection line are both just text on a socket, and testing
+/// against a real virus would prove the same branch far less reliably.
+/// </remarks>
+[TestClass]
+public sealed class Phase6B4BClamAvScannerTests
+{
+    private const string RealVersionLine = "ClamAV 1.5.4/28115/Sun Sep  6 06:26:06 2026";
+
+    private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+
+    private static readonly StorageObjectLocator Locator =
+        new(Tenant, R2StorageOptions.LocationName, $"{Tenant:N}/object");
+
+    [TestMethod]
+    public async Task ACleanStreamIsAllowedAndRecordsTheEngineAndSignatureRevision()
+    {
+        var content = RandomNumberGenerator.GetBytes(200 * 1024);
+        await using var daemon = FakeClamd.StartAnswering(RealVersionLine, "stream: OK");
+        var scanner = ScannerFor(daemon, content);
+
+        var result = await scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None);
+
+        Assert.IsTrue(result.IsAllowed);
+        Assert.AreEqual("ClamAV-clamd-instream", result.ScannerKey);
+        Assert.AreEqual("ClamAV 1.5.4/28115", result.ScannerVersion);
+        Assert.IsNull(result.FailureCode);
+
+        // The evidence the application binds to the stored bytes must accept what the adapter says.
+        var evidence = MediaScanEvidence.Record(
+            Locator,
+            Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant(),
+            result,
+            DateTimeOffset.UtcNow);
+        Assert.AreEqual(MediaScanOutcome.Allowed, evidence.Outcome);
+        Assert.IsLessThanOrEqualTo(40, evidence.ScannerVersion.Length);
+    }
+
+    [TestMethod]
+    public async Task TheStoredBytesReachTheDaemonAsLengthPrefixedChunksEndedByAZeroLength()
+    {
+        var content = RandomNumberGenerator.GetBytes((ClamAvScannerOptions.ChunkBytes * 2) + 17);
+        await using var daemon = FakeClamd.StartAnswering(RealVersionLine, "stream: OK");
+        var scanner = ScannerFor(daemon, content);
+
+        await scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None);
+
+        var scan = daemon.Sessions.Single(session => session.Command == "zINSTREAM");
+        Assert.IsTrue(scan.SawTerminator, "The stream was never terminated with a zero length.");
+        CollectionAssert.AreEqual(content, scan.ReceivedBody);
+        CollectionAssert.AreEqual(
+            new[] { ClamAvScannerOptions.ChunkBytes, ClamAvScannerOptions.ChunkBytes, 17 },
+            scan.ChunkSizes.ToArray());
+    }
+
+    [TestMethod]
+    public async Task ADetectionRefusesTheFileWithoutNamingTheSignature()
+    {
+        await using var daemon = FakeClamd.StartAnswering(
+            RealVersionLine,
+            "stream: Eicar-Test-Signature FOUND");
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        var result = await scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None);
+
+        Assert.IsFalse(result.IsAllowed);
+        Assert.AreEqual("scan_refused", result.FailureCode);
+        Assert.AreEqual("ClamAV 1.5.4/28115", result.ScannerVersion);
+        foreach (var value in new[] { result.FailureCode, result.ScannerKey, result.ScannerVersion })
+        {
+            Assert.DoesNotContain(
+                "Eicar",
+                value!,
+                StringComparison.OrdinalIgnoreCase,
+                "The signature name escaped into the scan result.");
+        }
+    }
+
+    /// <summary>
+    /// clamd answers the moment it recognises something, without waiting for the rest of the stream.
+    /// The adapter has to accept a verdict that was already waiting when it finished writing.
+    /// </summary>
+    [TestMethod]
+    public async Task ADetectionAnsweredBeforeTheStreamEndsIsStillARefusal()
+    {
+        await using var daemon = FakeClamd.Start(async session =>
+        {
+            if (session.Command != "zINSTREAM")
+            {
+                await session.ReplyAsync(session.Command == "zPING" ? "PONG" : RealVersionLine);
+                return;
+            }
+
+            await session.ReadOneChunkAsync();
+            await session.ReplyAsync("stream: Eicar-Test-Signature FOUND");
+            // The remainder is drained rather than answered by closing the socket. A real daemon
+            // does close early and the adapter tolerates the broken pipe that causes; forcing that
+            // race here would make the assertion depend on whether the reply survived a reset.
+            await session.ReadInstreamAsync();
+        });
+        var scanner = ScannerFor(daemon, RandomNumberGenerator.GetBytes(ClamAvScannerOptions.ChunkBytes * 6));
+
+        var result = await scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None);
+
+        Assert.IsFalse(result.IsAllowed);
+        Assert.AreEqual("scan_refused", result.FailureCode);
+    }
+
+    [TestMethod]
+    [DataRow("INSTREAM size limit exceeded. ERROR", DisplayName = "a configured daemon limit")]
+    [DataRow("stream: Can't allocate memory ERROR", DisplayName = "an engine error")]
+    [DataRow("stream: something unexpected", DisplayName = "an unrecognised reply")]
+    [DataRow("", DisplayName = "an empty reply")]
+    public async Task AnythingThatIsNotAVerdictIsAnOperationalFailure(string reply)
+    {
+        await using var daemon = FakeClamd.StartAnswering(RealVersionLine, reply);
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task ADaemonThatDisconnectsWithoutAnsweringIsAnOperationalFailure()
+    {
+        await using var daemon = FakeClamd.Start(async session =>
+        {
+            if (session.Command == "zVERSION")
+            {
+                await session.ReplyAsync(RealVersionLine);
+                return;
+            }
+
+            await session.ReadInstreamAsync();
+            session.Close();
+        });
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task AnUnterminatedReplyIsAnOperationalFailureRatherThanACleanPass()
+    {
+        await using var daemon = FakeClamd.Start(async session =>
+        {
+            if (session.Command == "zVERSION")
+            {
+                await session.ReplyAsync(RealVersionLine);
+                return;
+            }
+
+            await session.ReadInstreamAsync();
+            await session.ReplyUnterminatedAsync("stream: OK");
+            session.Close();
+        });
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task AnOverLongReplyIsAnOperationalFailure()
+    {
+        await using var daemon = FakeClamd.StartAnswering(
+            RealVersionLine,
+            new string('x', 4096) + " OK");
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task ADaemonThatNeverAnswersTimesOut()
+    {
+        await using var daemon = FakeClamd.Start(async session =>
+        {
+            if (session.Command == "zVERSION")
+            {
+                await session.ReplyAsync(RealVersionLine);
+                return;
+            }
+
+            await session.ReadInstreamAsync();
+            await Task.Delay(TimeSpan.FromMinutes(5));
+        });
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4], scanTimeoutSeconds: 5);
+
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task AVersionTooLongForEvidenceIsNormalizedRatherThanRejected()
+    {
+        await using var daemon = FakeClamd.StartAnswering(
+            $"ClamAV {new string('9', 60)}/28115/Sun Sep  6 06:26:06 2026",
+            "stream: OK");
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        var result = await scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None);
+
+        Assert.IsTrue(result.IsAllowed);
+        Assert.AreEqual(40, result.ScannerVersion.Length);
+        var evidence = MediaScanEvidence.Record(
+            Locator,
+            Convert.ToHexString(SHA256.HashData([1, 2, 3, 4])).ToLowerInvariant(),
+            result,
+            DateTimeOffset.UtcNow);
+        Assert.AreEqual(result.ScannerVersion, evidence.ScannerVersion);
+    }
+
+    [TestMethod]
+    public async Task StorageThatCannotOpenTheStoredObjectIsAnOperationalFailure()
+    {
+        await using var daemon = FakeClamd.StartAnswering(RealVersionLine, "stream: OK");
+        var scanner = new ClamAvMediaScanner(
+            new UnreadableStorage(),
+            OptionsFor(daemon),
+            NullLogger<ClamAvMediaScanner>.Instance);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task TheReadinessProbeAnswersOnlyWhenTheDaemonDoes()
+    {
+        await using var daemon = FakeClamd.StartAnswering(RealVersionLine, "stream: OK");
+        var reachable = ScannerFor(daemon, [1]);
+        var unreachable = new ClamAvMediaScanner(
+            new InMemoryStorage([1]),
+            new ClamAvScannerOptions
+            {
+                Host = "127.0.0.1",
+                // Nothing listens here; the probe must report that rather than throw or hang.
+                Port = 1,
+                ConnectTimeoutSeconds = 1,
+                ProbeTimeoutSeconds = 2,
+            },
+            NullLogger<ClamAvMediaScanner>.Instance);
+
+        Assert.IsTrue(await reachable.ProbeAsync(CancellationToken.None));
+        Assert.IsFalse(await unreachable.ProbeAsync(CancellationToken.None));
+        Assert.IsTrue(reachable.IsAvailable, "A composed scanner is available; reachability is readiness.");
+    }
+
+    [TestMethod]
+    public async Task TheVersionIsResolvedOnceAndReusedAcrossScans()
+    {
+        await using var daemon = FakeClamd.StartAnswering(RealVersionLine, "stream: OK");
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        await scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None);
+        await scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None);
+
+        Assert.AreEqual(
+            1,
+            daemon.Sessions.Count(session => session.Command == "zVERSION"),
+            "The engine version was re-read on every upload.");
+        Assert.AreEqual(2, daemon.Sessions.Count(session => session.Command == "zINSTREAM"));
+    }
+
+    private static ClamAvMediaScanner ScannerFor(
+        FakeClamd daemon,
+        byte[] content,
+        int scanTimeoutSeconds = 30) =>
+        new(
+            new InMemoryStorage(content),
+            OptionsFor(daemon, scanTimeoutSeconds),
+            NullLogger<ClamAvMediaScanner>.Instance);
+
+    private static ClamAvScannerOptions OptionsFor(FakeClamd daemon, int scanTimeoutSeconds = 30) =>
+        new()
+        {
+            Host = "127.0.0.1",
+            Port = daemon.Port,
+            ConnectTimeoutSeconds = 5,
+            ScanTimeoutSeconds = scanTimeoutSeconds,
+            ProbeTimeoutSeconds = 5,
+        };
+
+    /// <summary>The stored object the scanner streams, without a provider behind it.</summary>
+    private sealed class InMemoryStorage(byte[] content) : IObjectStorage
+    {
+        public string WriteLocation => R2StorageOptions.LocationName;
+
+        public bool IsAvailable => true;
+
+        public Task<ObjectWriteResult> PutAsync(ObjectUpload upload, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ObjectReadResult> ReadAsync(
+            ObjectReadRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ObjectReadResult(
+                ObjectStorageOperationStatus.Success,
+                new MemoryStream(content),
+                new ObjectReadMetadata(content.Length, request.ContentType, null)));
+
+        public Task<ObjectDeleteResult> DeleteAsync(
+            StorageObjectLocator locator,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ObjectDeleteResult(ObjectStorageOperationStatus.Success));
+    }
+
+    private sealed class UnreadableStorage : IObjectStorage
+    {
+        public string WriteLocation => R2StorageOptions.LocationName;
+
+        public bool IsAvailable => true;
+
+        public Task<ObjectWriteResult> PutAsync(ObjectUpload upload, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ObjectReadResult> ReadAsync(
+            ObjectReadRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ObjectReadResult(
+                ObjectStorageOperationStatus.Failed,
+                FailureCode: "storage_provider_unavailable"));
+
+        public Task<ObjectDeleteResult> DeleteAsync(
+            StorageObjectLocator locator,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ObjectDeleteResult(ObjectStorageOperationStatus.Success));
+    }
+}

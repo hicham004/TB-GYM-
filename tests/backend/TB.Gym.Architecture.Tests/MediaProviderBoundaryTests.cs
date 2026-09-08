@@ -1,0 +1,256 @@
+using System.Reflection;
+using TB.Gym.Modules.Media;
+using TB.Gym.SharedKernel;
+
+namespace TB.Gym.Architecture.Tests;
+
+/// <summary>
+/// The boundaries Phase 6B-4B has to hold now that real providers sit behind the media ports.
+/// </summary>
+/// <remarks>
+/// Selecting Cloudflare R2 and ClamAV is a deployment decision. It became a code decision the moment
+/// an SDK entered the repository, so what is asserted here is that it entered exactly one assembly,
+/// that the Media module still describes storage and scanning in its own words, and that the private
+/// daemon in <c>compose.yaml</c> stays private, pinned and unprivileged.
+/// </remarks>
+[TestClass]
+public sealed class MediaProviderBoundaryTests
+{
+    private static readonly Assembly MediaAssembly = typeof(MediaModule).Assembly;
+
+    /// <summary>
+    /// Words that name a provider rather than a stored object. HTTP words the module legitimately
+    /// owns — an endpoint it serves, a multipart form it parses — are deliberately not here: the
+    /// rule is about whose vocabulary storage is described in, not about banning a spelling.
+    /// </summary>
+    private static readonly string[] ProviderVocabulary =
+    [
+        "Amazon", "AWS", "S3", "R2", "Cloudflare", "Bucket", "ClamAv", "Clamd", "Instream",
+        "ETag", "AccessKey", "SecretKey", "SigV4", "PresignedUrl",
+    ];
+
+    [TestMethod]
+    public void OnlyInfrastructureReferencesTheStorageProviderSdk()
+    {
+        foreach (var assembly in new[]
+                 {
+                     MediaAssembly,
+                     typeof(IClock).Assembly,
+                     typeof(TB.Gym.Modules.Progress.ProgressModule).Assembly,
+                 })
+        {
+            var references = assembly.GetReferencedAssemblies()
+                .Select(reference => reference.Name ?? string.Empty)
+                .Where(name => name.StartsWith("AWSSDK", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            Assert.IsEmpty(
+                references,
+                $"{assembly.GetName().Name} references {string.Join(", ", references)}; " +
+                "the S3 client belongs to Infrastructure, behind IObjectStorage.");
+        }
+
+        Assert.Contains(
+            "AWSSDK.S3",
+            LoadByName("TB.Gym.Infrastructure").GetReferencedAssemblies()
+                .Select(reference => reference.Name ?? string.Empty)
+                .ToArray(),
+            "The adapter that speaks S3 is the one assembly that may.");
+    }
+
+    /// <summary>
+    /// One storage SDK and no scanner client at all. The clamd exchange is a command, a length-
+    /// prefixed body and a status line, and the bounds that matter — a connect timeout, a whole-scan
+    /// timeout, a capped reply and a limit that is never read as clean — are the decisions this
+    /// repository has to make itself rather than inherit.
+    /// </summary>
+    [TestMethod]
+    public void NoOtherObjectStoreOrScannerClientIsReferencedAnywhere()
+    {
+        string[] forbidden =
+        [
+            "Minio", "Azure.Storage", "Google.Cloud.Storage", "AWSSDK.S3Control", "AWSSDK.Transfer",
+            "nClam", "ClamAV.Net", "ClamAvClient", "VirusTotal",
+        ];
+
+        var manifest = File.ReadAllText(Path.Combine(RepositoryRoot(), "Directory.Packages.props"));
+        foreach (var package in forbidden)
+        {
+            Assert.DoesNotContain(
+                package,
+                manifest,
+                StringComparison.OrdinalIgnoreCase,
+                $"Directory.Packages.props references {package}; this phase adds one storage SDK and no scanner client.");
+        }
+
+        Assert.Contains(
+            "AWSSDK.S3",
+            manifest,
+            StringComparison.Ordinal,
+            "The one provider SDK this phase adds is declared centrally, with its licence and reason.");
+    }
+
+    /// <summary>
+    /// The Media module owns the vocabulary. A locator names a location and a key; a scan result
+    /// names a scanner and a verdict. Neither has ever heard of a bucket, a part or an ETag, and a
+    /// module that started using those words would be a module that had taken on a provider.
+    /// </summary>
+    [TestMethod]
+    public void TheMediaModuleSurfaceNamesNoProvider()
+    {
+        foreach (var type in MediaAssembly.GetTypes().Where(candidate => candidate.IsPublic))
+        {
+            AssertNamesNoProvider(type.Name, type.FullName!);
+            foreach (var member in type.GetMembers(
+                         BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            {
+                AssertNamesNoProvider(member.Name, $"{type.Name}.{member.Name}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// The adapters are implementation details of one assembly, so nothing outside it can hold a
+    /// reference to one, resolve it by type, or grow a second caller that bypasses the port.
+    /// </summary>
+    [TestMethod]
+    public void TheProviderAdaptersAreInternalToInfrastructure()
+    {
+        var infrastructure = LoadByName("TB.Gym.Infrastructure");
+        foreach (var name in new[]
+                 {
+                     "R2ObjectStorage", "ClamAvMediaScanner", "R2StorageOptions", "ClamAvScannerOptions",
+                     "OwnedObjectStream", "LocalObjectStorage", "UnavailableObjectStorage",
+                 })
+        {
+            var type = infrastructure.GetTypes().SingleOrDefault(candidate => candidate.Name == name);
+            Assert.IsNotNull(type, $"{name} is missing from Infrastructure.");
+            Assert.IsFalse(type.IsPublic, $"{name} is public; a provider adapter is an implementation detail.");
+        }
+    }
+
+    /// <summary>
+    /// The daemon in the development stack: pinned to a digest, unprivileged, persistent, checked,
+    /// and reachable only from inside the deployment.
+    /// </summary>
+    /// <remarks>
+    /// clamd authenticates nobody. Publishing 3310 to a host interface would put an unauthenticated
+    /// file-scanning service on the network, and the reason it is safe here is exactly that it is
+    /// not published — which is a property of this file and therefore assertable in it.
+    /// </remarks>
+    [TestMethod]
+    public void TheScannerServiceIsPinnedUnprivilegedAndPrivate()
+    {
+        var compose = File.ReadAllText(Path.Combine(RepositoryRoot(), "compose.yaml"));
+        var service = Section(compose, "  clamav:");
+
+        Assert.Contains("image: clamav/clamav:", service, StringComparison.Ordinal);
+        Assert.Contains("@sha256:", service, StringComparison.Ordinal, "The scanner image is not pinned by digest.");
+        Assert.Contains("user: \"clamav\"", service, StringComparison.Ordinal, "The scanner runs as root.");
+        Assert.Contains("/var/lib/clamav", service, StringComparison.Ordinal, "The signature database is not persisted.");
+        Assert.Contains("healthcheck:", service, StringComparison.Ordinal);
+        Assert.Contains("mem_limit:", service, StringComparison.Ordinal, "The engine has no memory reservation.");
+        Assert.Contains("FRESHCLAM_CHECKS", service, StringComparison.Ordinal, "Signature updates are not configured.");
+        Assert.DoesNotContain(
+            "ports:",
+            service,
+            StringComparison.Ordinal,
+            "The scanner port is published to a host interface; clamd has no authentication of its own.");
+        Assert.DoesNotContain(
+            ":3310\"",
+            service.Replace("- \"3310\"", string.Empty, StringComparison.Ordinal),
+            StringComparison.Ordinal,
+            "The scanner port is mapped to a host port.");
+    }
+
+    /// <summary>
+    /// The limits that decide whether a 500 MiB video can be scanned at all. clamd answers a stream
+    /// above <c>StreamMaxLength</c> with an error rather than a verdict, and the application refuses
+    /// the upload rather than publishing it — so a default-sized daemon would fail every video.
+    /// </summary>
+    [TestMethod]
+    public void TheScannerLimitsCoverTheLargestUploadTheApplicationAccepts()
+    {
+        var configuration = File.ReadAllLines(
+            Path.Combine(RepositoryRoot(), "docker", "clamav", "clamd.conf"));
+
+        Assert.IsGreaterThanOrEqualTo(
+            MediaUploadPolicy.MaximumVideoBytes,
+            Megabytes(configuration, "StreamMaxLength"),
+            "clamd would refuse to read a video this application accepts.");
+        Assert.IsGreaterThanOrEqualTo(
+            MediaUploadPolicy.MaximumVideoBytes,
+            Megabytes(configuration, "MaxFileSize"),
+            "clamd would skip a file this application accepts.");
+        Assert.IsGreaterThanOrEqualTo(
+            Megabytes(configuration, "MaxFileSize"),
+            Megabytes(configuration, "MaxScanSize"),
+            "The total scanned size must cover the largest single file, plus what it can expand to.");
+        Assert.Contains(
+            "TCPAddr 0.0.0.0",
+            string.Join('\n', configuration),
+            StringComparison.Ordinal,
+            "clamd binds to loopback without this, which inside a container means nothing can reach it.");
+    }
+
+    private static long Megabytes(string[] configuration, string setting)
+    {
+        var line = configuration.SingleOrDefault(candidate =>
+            candidate.StartsWith(setting + " ", StringComparison.Ordinal));
+        Assert.IsNotNull(line, $"clamd.conf does not set {setting}.");
+        var value = line[(setting.Length + 1)..].Trim();
+        Assert.EndsWith("M", value, $"{setting} is not expressed in megabytes.");
+        return long.Parse(value[..^1], System.Globalization.CultureInfo.InvariantCulture) * 1024 * 1024;
+    }
+
+    private static void AssertNamesNoProvider(string name, string description)
+    {
+        foreach (var word in ProviderVocabulary)
+        {
+            Assert.DoesNotContain(
+                word,
+                name,
+                StringComparison.OrdinalIgnoreCase,
+                $"{description} names '{word}'; the Media module owns provider-neutral storage terms.");
+        }
+    }
+
+    /// <summary>The block of a compose service, from its key to the next one at the same indent.</summary>
+    private static string Section(string compose, string key)
+    {
+        var start = compose.IndexOf(key, StringComparison.Ordinal);
+        Assert.IsGreaterThan(-1, start, $"compose.yaml has no {key.Trim()} service.");
+        var next = compose.IndexOf("\n  ", start + key.Length, StringComparison.Ordinal);
+        while (next > 0 && compose.Length > next + 3 && compose[next + 3] is ' ' or '#')
+        {
+            next = compose.IndexOf("\n  ", next + 3, StringComparison.Ordinal);
+        }
+
+        return next < 0 ? compose[start..] : compose[start..next];
+    }
+
+    private static Assembly LoadByName(string assemblyName)
+    {
+        var loaded = AppDomain.CurrentDomain.GetAssemblies()
+            .FirstOrDefault(assembly => assembly.GetName().Name == assemblyName);
+        if (loaded is not null)
+        {
+            return loaded;
+        }
+
+        var path = Path.Combine(AppContext.BaseDirectory, $"{assemblyName}.dll");
+        Assert.IsTrue(File.Exists(path), $"{assemblyName}.dll is not in the test output directory.");
+        return Assembly.LoadFrom(path);
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "TB.Gym.slnx")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.IsNotNull(directory, "The repository root could not be located from the test output directory.");
+        return directory.FullName;
+    }
+}

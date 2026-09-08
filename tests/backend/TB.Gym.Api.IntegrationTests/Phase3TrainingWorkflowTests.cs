@@ -38,6 +38,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     private StorageFaultSwitch? storageFaults;
     private InsertBarrier? insertBarrier;
     private ScannerSwitch? scannerSwitch;
+    private Phase6B4BProviderHarness? providerHarness;
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -66,40 +67,57 @@ public sealed partial class Phase3TrainingWorkflowTests
         insertBarrier = barrier;
         var scanner = new ScannerSwitch();
         scannerSwitch = scanner;
+        // The 6B-4B tests run the real R2 and clamd adapters, so they compose the providers instead
+        // of the local adapter and the switchable scanner. Everything else about the fixture — the
+        // clock, the storage-call counting, the database — stays as it is.
+        var providers = Phase6B4BProviderHarness.StartIfRequestedBy(TestContext.TestName);
+        providerHarness = providers;
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");
             builder.UseSetting("ConnectionStrings:Database", databaseConnection);
             builder.UseSetting("Database:ApplyMigrationsOnStartup", "true");
             builder.UseSetting("Seed:Enabled", "false");
+            // Also as host settings, not only as an application configuration source: which media
+            // provider to compose is read while the services are being registered, which happens
+            // before ConfigureAppConfiguration's sources are applied.
+            foreach (var (key, value) in providers?.Settings ?? new Dictionary<string, string?>())
+            {
+                builder.UseSetting(key, value);
+            }
+
             builder.ConfigureAppConfiguration((_, configuration) =>
-                configuration.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["ConnectionStrings:Database"] = databaseConnection,
-                    ["Database:ApplyMigrationsOnStartup"] = "true",
-                    ["Seed:Enabled"] = "false",
-                    // Phase 6B-2B added an API-hosted realtime sweep. It is switched off here for the same
-                    // reason the media purge is: a background tick must not race an assertion about what one
-                    // request did. The realtime rows these commands write are still written.
-                    ["Messaging:Realtime:Enabled"] = "false",
-                    ["Application:PublicBaseUrl"] = "http://localhost:4200",
-                    ["Media:StorageAdapter"] =
-                        TestContext.TestName?.Contains(
-                            "UnavailableStorage",
-                            StringComparison.Ordinal) == true
-                            ? "None"
-                            : "Local",
-                    ["Media:StorageRoot"] = Path.Combine(Path.GetTempPath(), databaseName, "media"),
-                    ["Media:AccessLifetimeSeconds"] =
-                        MediaAccessLifetimeSeconds.ToString(CultureInfo.InvariantCulture),
-                    // The sweep is driven explicitly by the purge tests, so a background tick can
-                    // never race an assertion about what has or has not been deleted.
-                    ["Media:PurgeEnabled"] = "false",
-                    ["Media:MaxWorkspaceStorageBytes"] =
-                        Phase5B5WorkspaceQuotaBytes().ToString(CultureInfo.InvariantCulture),
-                    ["Media:MaxClientProgressPhotoBytes"] =
-                        Phase5B5ClientQuotaBytes().ToString(CultureInfo.InvariantCulture),
-                }));
+                // The provider harness, when one is running, has the last word on the media
+                // settings: it is what selects R2 and clamd instead of the local defaults.
+                configuration.AddInMemoryCollection(Phase6B4BProviderHarness.Merge(
+                    providers,
+                    new Dictionary<string, string?>
+                    {
+                        ["ConnectionStrings:Database"] = databaseConnection,
+                        ["Database:ApplyMigrationsOnStartup"] = "true",
+                        ["Seed:Enabled"] = "false",
+                        // Phase 6B-2B added an API-hosted realtime sweep. It is switched off here for the same
+                        // reason the media purge is: a background tick must not race an assertion about what one
+                        // request did. The realtime rows these commands write are still written.
+                        ["Messaging:Realtime:Enabled"] = "false",
+                        ["Application:PublicBaseUrl"] = "http://localhost:4200",
+                        ["Media:StorageAdapter"] =
+                            TestContext.TestName?.Contains(
+                                "UnavailableStorage",
+                                StringComparison.Ordinal) == true
+                                ? "None"
+                                : "Local",
+                        ["Media:StorageRoot"] = Path.Combine(Path.GetTempPath(), databaseName, "media"),
+                        ["Media:AccessLifetimeSeconds"] =
+                            MediaAccessLifetimeSeconds.ToString(CultureInfo.InvariantCulture),
+                        // The sweep is driven explicitly by the purge tests, so a background tick can
+                        // never race an assertion about what has or has not been deleted.
+                        ["Media:PurgeEnabled"] = "false",
+                        ["Media:MaxWorkspaceStorageBytes"] =
+                            Phase5B5WorkspaceQuotaBytes().ToString(CultureInfo.InvariantCulture),
+                        ["Media:MaxClientProgressPhotoBytes"] =
+                            Phase5B5ClientQuotaBytes().ToString(CultureInfo.InvariantCulture),
+                    })));
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IClock>();
@@ -115,11 +133,23 @@ public sealed partial class Phase3TrainingWorkflowTests
                 services.AddDbContext<GymDbContext>((provider, options) => options.AddInterceptors(
                     provider.GetRequiredService<TodayQueryCounter>(),
                     provider.GetRequiredService<InsertBarrier>()));
+                if (providers is not null)
+                {
+                    // Only the socket is replaced: the composed adapter, its configuration and the
+                    // requests it makes are the real ones.
+                    services.RemoveAll<Amazon.S3.IAmazonS3>();
+                    services.AddSingleton<Amazon.S3.IAmazonS3>(_ =>
+                        Phase6B4BMediaProviderStartupTests.CreateFakeS3(providers.Bucket));
+                }
+
                 Phase5B5DecorateObjectStorage(services, storageFaults);
-                // A scanner the test can switch off, so an unavailable-scanner deployment can be
-                // exercised without leaving Development, which the rest of the harness needs.
-                services.RemoveAll<IMediaScanner>();
-                services.AddSingleton<IMediaScanner>(new SwitchableMediaScanner(scanner));
+                if (providers is null)
+                {
+                    // A scanner the test can switch off, so an unavailable-scanner deployment can be
+                    // exercised without leaving Development, which the rest of the harness needs.
+                    services.RemoveAll<IMediaScanner>();
+                    services.AddSingleton<IMediaScanner>(new SwitchableMediaScanner(scanner));
+                }
             });
         });
     }
@@ -128,6 +158,11 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task CleanupAsync()
     {
         factory?.Dispose();
+        if (providerHarness is not null)
+        {
+            await providerHarness.DisposeAsync();
+        }
+
         NpgsqlConnection.ClearAllPools();
         if (databaseName is null || adminConnection is null)
         {
