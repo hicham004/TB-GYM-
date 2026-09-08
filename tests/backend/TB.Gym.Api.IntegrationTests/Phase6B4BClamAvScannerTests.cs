@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using TB.Gym.Infrastructure.Application;
 using TB.Gym.Modules.Media;
@@ -308,6 +309,55 @@ public sealed class Phase6B4BClamAvScannerTests
             new UnreadableStorage(),
             OptionsFor(daemon),
             NullLogger<ClamAvMediaScanner>.Instance);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    /// <summary>
+    /// One command per connection means one reply record and then the end of it. Stopping at the
+    /// first terminator would accept a clean verdict followed by anything at all — including the
+    /// daemon's own second record saying the scan errored.
+    /// </summary>
+    [TestMethod]
+    [DataRow("stream: OK\0garbage", DisplayName = "trailing bytes in the same read")]
+    [DataRow("stream: OK\0stream: Can\'t allocate memory ERROR\0", DisplayName = "a second record contradicting the first")]
+    [DataRow("stream: OK\0stream: Eicar-Test-Signature FOUND\0", DisplayName = "a second record refusing the file")]
+    public async Task AReplyFollowedByAnythingElseIsAnOperationalFailure(string frame)
+    {
+        await using var daemon = FakeClamd.Start(async session =>
+        {
+            if (session.Command == "zVERSION")
+            {
+                await session.ReplyAsync(RealVersionLine);
+                return;
+            }
+
+            await session.ReadInstreamAsync();
+            await session.ReplyBytesAsync(Encoding.ASCII.GetBytes(frame));
+        });
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    /// <summary>The same rule when the extra bytes arrive after the read that carried the reply.</summary>
+    [TestMethod]
+    public async Task BytesArrivingAfterTheReplyRecordAreAnOperationalFailure()
+    {
+        await using var daemon = FakeClamd.Start(async session =>
+        {
+            if (session.Command == "zVERSION")
+            {
+                await session.ReplyAsync(RealVersionLine);
+                return;
+            }
+
+            await session.ReadInstreamAsync();
+            await session.ReplyThenSendLaterAsync("stream: OK", "stream: Can\'t allocate memory ERROR\0");
+        });
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
 
         await Assert.ThrowsAsync<IOException>(() =>
             scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));

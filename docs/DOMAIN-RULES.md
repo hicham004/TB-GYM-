@@ -1077,7 +1077,10 @@ timeout, a disconnect, a malformed or unterminated reply, and any reply that mer
 `FOUND` are operational scanner failures reporting `503` under MED-006, never a clean result and
 never a `400` about the file. A reply is parsed exactly as the daemon sent it — untrimmed, with a
 detection required to name a signature that is not only whitespace, and any byte outside printable
-ASCII refused — because normalizing a frame before reading it is how a mutated one becomes a verdict. Scan evidence records the scanner key and a normalized
+ASCII refused — because normalizing a frame before reading it is how a mutated one becomes a verdict.
+Exactly one reply record is accepted per connection and the connection must then end: anything after
+the terminator, in that read or a later one, is an operational failure rather than something ignored
+behind an accepted verdict. Scan evidence records the scanner key and a normalized
 engine/signature version parsed, equally as sent, from the scanner's own version reply; a reply that
 names no engine or no signature revision, carries surrounding whitespace, or will not fit the
 evidence column is unusable metadata and the same operational failure. Selecting either provider with an unusable

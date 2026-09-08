@@ -571,7 +571,9 @@ frames; a daemon error, a configured limit, a timeout, a disconnect, a malformed
 frame and any reply that merely ends in the right word are all operational failures reporting `503`
 with every stored object cleaned up. Frames are parsed exactly as sent — `NUL` ends the record, so
 nothing is trimmed, a detection must name a signature that is not only whitespace, and a byte
-outside printable ASCII is refused rather than decoded into something that parses. A limit is never a clean result, which is why `compose.yaml` and
+outside printable ASCII is refused rather than decoded into something that parses. One command per
+connection means one record and then its close, so bytes after the terminator are refused instead of
+ignored. A limit is never a clean result, which is why `compose.yaml` and
 `docker/clamav/clamd.conf` configure `StreamMaxLength`, `MaxFileSize` and `MaxScanSize` above the
 application's own 500 MiB ceiling. Signature names are never returned, persisted or logged; the
 scanner key and a normalized engine/signature version are, parsed from the daemon's version reply

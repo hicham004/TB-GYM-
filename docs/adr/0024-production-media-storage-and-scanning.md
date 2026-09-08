@@ -91,6 +91,11 @@ bytes before it are the whole reply and none of them are trimmed, stripped or de
 nothing, and a byte outside printable ASCII belongs to no status line clamd defines. Normalizing a
 reply before parsing it is how a mutated frame becomes a verdict.
 
+One command per connection also means one record and then the end of the connection, so what follows
+the terminator is checked rather than discarded. Stopping at the first `NUL` would accept
+`stream: OK` followed by anything at all — including the daemon's own second record saying the scan
+errored, which is a file published because the reply that refused it was never read.
+
 A limit is never a clean result either: a file the daemon declined to finish reading has not been
 found clean, and treating a truncated pass as an allowance is how an unscanned file becomes a
 published one. The daemon's limits are therefore configured above the application's own 500 MiB

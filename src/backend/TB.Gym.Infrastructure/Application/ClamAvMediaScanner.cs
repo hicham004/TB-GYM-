@@ -370,36 +370,72 @@ internal sealed class ClamAvMediaScanner(
         }
     }
 
+    /// <summary>
+    /// One reply record, and then the end of the connection.
+    /// </summary>
+    /// <remarks>
+    /// This adapter sends one command per connection and never opens a session, so clamd answers
+    /// with exactly one <c>NUL</c>-terminated record and closes. Stopping at the first terminator
+    /// and ignoring the rest would accept <c>stream: OK</c> followed by anything at all — including
+    /// a second record saying the scan errored — so what arrives after the terminator is checked
+    /// rather than discarded, and the connection is required to end there. The bound is the
+    /// exchange's own timeout, and every refusal here is an operational failure.
+    /// </remarks>
     private static async Task<string> ReadReplyAsync(NetworkStream stream, CancellationToken cancellationToken)
     {
         var buffer = new byte[MaximumReplyBytes];
         var filled = 0;
-        while (filled < buffer.Length)
+        var terminator = -1;
+        while (terminator < 0)
         {
+            if (filled == buffer.Length)
+            {
+                // More than any status line clamd defines, with no terminator in it.
+                throw new IOException("The scanner reply was not a complete frame.");
+            }
+
             var read = await stream.ReadAsync(buffer.AsMemory(filled), cancellationToken);
             if (read == 0)
             {
-                break;
+                // The daemon closed before terminating its reply. An unterminated frame is not a
+                // verdict: accepting the leading bytes of one would let a truncated exchange read
+                // as a clean pass.
+                throw new IOException("The scanner reply was not a complete frame.");
             }
 
+            terminator = Array.IndexOf(buffer, (byte)0, filled, read);
             filled += read;
-            var terminator = Array.IndexOf(buffer, (byte)0, 0, filled);
-            if (terminator >= 0)
-            {
-                // Exactly the bytes before the terminator, and no normalization of them. NUL ends a
-                // record in the protocol this adapter speaks, so whatever precedes it is the whole
-                // reply: trimming it would turn "stream: OK " — which the daemon does not send —
-                // into the frame that means clean.
-                return IsPrintableAscii(buffer, terminator)
-                    ? Encoding.ASCII.GetString(buffer, 0, terminator)
-                    : throw new IOException("The scanner reply contained bytes no status line uses.");
-            }
         }
 
-        // Either the daemon closed before terminating its reply, or it sent more than any status
-        // line it defines. Both are unterminated frames, and an unterminated frame is not a verdict:
-        // accepting the leading bytes of one would let a truncated exchange read as a clean pass.
-        throw new IOException("The scanner reply was not a complete frame.");
+        if (filled > terminator + 1)
+        {
+            throw new IOException("The scanner sent more than one reply record.");
+        }
+
+        await EnsureConnectionEndedAsync(stream, cancellationToken);
+
+        // Exactly the bytes before the terminator, and no normalization of them. NUL ends a record
+        // in the protocol this adapter speaks, so whatever precedes it is the whole reply: trimming
+        // it would turn "stream: OK " — which the daemon does not send — into the frame that means
+        // clean.
+        return IsPrintableAscii(buffer, terminator)
+            ? Encoding.ASCII.GetString(buffer, 0, terminator)
+            : throw new IOException("The scanner reply contained bytes no status line uses.");
+    }
+
+    /// <summary>
+    /// Requires the daemon to have finished. A byte after the reply record means this was not the
+    /// single-record exchange that was asked for, whichever read it arrives in.
+    /// </summary>
+    private static async Task EnsureConnectionEndedAsync(
+        NetworkStream stream,
+        CancellationToken cancellationToken)
+    {
+        var trailing = new byte[1];
+        if (await stream.ReadAsync(trailing, cancellationToken) != 0)
+        {
+            throw new IOException("The scanner sent data after its reply record.");
+        }
     }
 
     /// <summary>

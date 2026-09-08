@@ -485,6 +485,18 @@ internal sealed class FakeClamdSession(TcpClient connection)
     /// <summary>Answers with exact bytes, for frames that are not representable as ASCII text.</summary>
     public Task ReplyBytesAsync(byte[] frame) => stream.WriteAsync(frame).AsTask();
 
+    /// <summary>
+    /// Answers, then sends more after a pause, so the trailing bytes land in a later read rather
+    /// than in the one that carried the reply.
+    /// </summary>
+    public async Task ReplyThenSendLaterAsync(string reply, string trailing)
+    {
+        await ReplyAsync(reply);
+        await stream.FlushAsync();
+        await Task.Delay(TimeSpan.FromMilliseconds(150));
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(trailing));
+    }
+
     public void Close() => connection.Close();
 
     private async Task<bool> ReadExactlyAsync(byte[] destination)
