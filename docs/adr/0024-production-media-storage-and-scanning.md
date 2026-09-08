@@ -85,6 +85,12 @@ required of a scanner that cannot produce a usable verdict. Suffix matching is c
 is the one shape of mistake here that fails open: `<anything> OK` read as clean would publish a file
 nothing inspected.
 
+A frame is read exactly as sent. `NUL` ends a record in the protocol this adapter speaks, so the
+bytes before it are the whole reply and none of them are trimmed, stripped or decoded lossily:
+`stream: OK ` is not the frame that means clean, a detection whose signature is only whitespace names
+nothing, and a byte outside printable ASCII belongs to no status line clamd defines. Normalizing a
+reply before parsing it is how a mutated frame becomes a verdict.
+
 A limit is never a clean result either: a file the daemon declined to finish reading has not been
 found clean, and treating a truncated pass as an allowance is how an unscanned file becomes a
 published one. The daemon's limits are therefore configured above the application's own 500 MiB
@@ -94,9 +100,10 @@ The signature name in a detection is never returned, persisted or logged. The ca
 was rejected. The scanner key and a normalized engine and signature-database version are persisted as
 evidence, because a verdict this repository cannot attribute to an engine and a signature set is not
 evidence. The `VERSION` reply is parsed for exactly that shape — `ClamAV <engine>/<signature
-revision>` — and anything else, including an engine with no signature revision or a version too long
-for the evidence column, is unusable metadata and therefore the same operational failure rather than
-a value recorded as though it identified something.
+revision>` — read as sent, refused rather than repaired — and anything else, including an engine with
+no signature revision, surrounding whitespace, or a version too long for the evidence column, is
+unusable metadata and therefore the same operational failure rather than a value recorded as though
+it identified something.
 
 The clamd client is owned rather than taken from a package. The protocol is a command, a
 length-prefixed body and a status line; what is actually being decided here is bounds — a connect

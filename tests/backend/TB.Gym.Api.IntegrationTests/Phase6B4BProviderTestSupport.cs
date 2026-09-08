@@ -482,6 +482,9 @@ internal sealed class FakeClamdSession(TcpClient connection)
     public Task ReplyUnterminatedAsync(string text) =>
         stream.WriteAsync(Encoding.ASCII.GetBytes(text)).AsTask();
 
+    /// <summary>Answers with exact bytes, for frames that are not representable as ASCII text.</summary>
+    public Task ReplyBytesAsync(byte[] frame) => stream.WriteAsync(frame).AsTask();
+
     public void Close() => connection.Close();
 
     private async Task<bool> ReadExactlyAsync(byte[] destination)

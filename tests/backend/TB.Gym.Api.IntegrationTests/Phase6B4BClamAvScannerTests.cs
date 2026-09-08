@@ -137,6 +137,14 @@ public sealed class Phase6B4BClamAvScannerTests
     [DataRow("garbage FOUND", DisplayName = "a malformed frame ending in FOUND")]
     [DataRow("stream: FOUND", DisplayName = "a detection naming no signature")]
     [DataRow(" FOUND", DisplayName = "a bare FOUND with no frame around it")]
+    // NUL ends the record, so the bytes before it are the whole reply. None of these are frames the
+    // daemon sends, and none of them may become one by having whitespace taken off first.
+    [DataRow("stream: OK ", DisplayName = "a clean verdict with a trailing space")]
+    [DataRow(" stream: OK", DisplayName = "a clean verdict with a leading space")]
+    [DataRow("stream: OK\n", DisplayName = "a clean verdict with the line terminator this adapter never asks for")]
+    [DataRow("stream: OK\t", DisplayName = "a clean verdict with a trailing tab")]
+    [DataRow("stream:   FOUND", DisplayName = "a detection whose signature is only whitespace")]
+    [DataRow("stream: \t FOUND", DisplayName = "a detection whose signature is only blank characters")]
     public async Task AnythingThatIsNotAVerdictIsAnOperationalFailure(string reply)
     {
         await using var daemon = FakeClamd.StartAnswering(RealVersionLine, reply);
@@ -160,12 +168,29 @@ public sealed class Phase6B4BClamAvScannerTests
     [DataRow("ClamAV 1.5.4/latest", DisplayName = "a signature revision that is not a number")]
     [DataRow("SomethingElse 1.5.4/28115", DisplayName = "a different product")]
     [DataRow("ClamAV 1.5.4/28115 FOUND", DisplayName = "a verdict where a version belongs")]
+    [DataRow(" ClamAV 1.5.4/28115", DisplayName = "a version with a leading space")]
+    [DataRow("ClamAV 1.5.4/28115 ", DisplayName = "a version with a trailing space")]
+    [DataRow("ClamAV 1.5 .4/28115", DisplayName = "a version with whitespace inside the engine")]
     public async Task AVersionThatCannotIdentifyTheEngineIsAnOperationalFailure(string version)
     {
         await using var daemon = FakeClamd.StartAnswering(version, "stream: OK");
         var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    /// <summary>
+    /// A control byte never reaches the version parser: the frame carrying it is refused first, as
+    /// no status line clamd defines contains one. Both failures are operational and report 503.
+    /// </summary>
+    [TestMethod]
+    public async Task AVersionFrameCarryingAControlByteIsRefusedAtTheFrameBoundary()
+    {
+        await using var daemon = FakeClamd.StartAnswering("ClamAV 1.5.4/28115\n", "stream: OK");
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        await Assert.ThrowsAsync<IOException>(() =>
             scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
     }
 
@@ -283,6 +308,30 @@ public sealed class Phase6B4BClamAvScannerTests
             new UnreadableStorage(),
             OptionsFor(daemon),
             NullLogger<ClamAvMediaScanner>.Instance);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    /// <summary>
+    /// A high byte would otherwise be decoded to <c>?</c> and could complete a frame that parses;
+    /// a control byte is not part of any status line either. Both are refused, not decoded.
+    /// </summary>
+    [TestMethod]
+    public async Task AReplyCarryingBytesNoStatusLineUsesIsAnOperationalFailure()
+    {
+        await using var daemon = FakeClamd.Start(async session =>
+        {
+            if (session.Command == "zVERSION")
+            {
+                await session.ReplyAsync(RealVersionLine);
+                return;
+            }
+
+            await session.ReadInstreamAsync();
+            await session.ReplyBytesAsync([.. "stream: "u8.ToArray(), 0xff, 0x01, .. " FOUND\0"u8.ToArray()]);
+        });
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
 
         await Assert.ThrowsAsync<IOException>(() =>
             scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));

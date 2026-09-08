@@ -130,13 +130,14 @@ internal sealed class ClamAvMediaScanner(
             return true;
         }
 
-        // "stream: <signature name> FOUND", with a name between the two. The whole frame is matched
-        // rather than its suffix: a reply ending in the right word is not the same fact as a reply
-        // the daemon actually formed, and "<anything> OK" reading as clean is the one mistake in
-        // this method that fails open.
+        // "stream: <signature name> FOUND", with a name — not merely a gap — between the two. The
+        // whole frame is matched rather than its suffix: a reply ending in the right word is not the
+        // same fact as a reply the daemon actually formed, and "<anything> OK" reading as clean is
+        // the one mistake in this method that fails open.
         if (reply.StartsWith(StreamPrefix, StringComparison.Ordinal) &&
             reply.EndsWith(FoundSuffix, StringComparison.Ordinal) &&
-            reply.Length > StreamPrefix.Length + FoundSuffix.Length)
+            reply.Length > StreamPrefix.Length + FoundSuffix.Length &&
+            reply[StreamPrefix.Length..^FoundSuffix.Length].Any(character => !char.IsWhiteSpace(character)))
         {
             return false;
         }
@@ -215,13 +216,14 @@ internal sealed class ClamAvMediaScanner(
     /// </remarks>
     private static string? NormalizeVersion(string reply)
     {
-        var cleaned = new string(reply.Where(character => !char.IsControl(character)).ToArray()).Trim();
-        if (!cleaned.StartsWith(VersionPrefix, StringComparison.Ordinal))
+        // Read as sent. A version is evidence, so a reply that only becomes well formed after
+        // whitespace is taken off it was not the reply that identified the engine.
+        if (!reply.StartsWith(VersionPrefix, StringComparison.Ordinal))
         {
             return null;
         }
 
-        var remainder = cleaned[VersionPrefix.Length..];
+        var remainder = reply[VersionPrefix.Length..];
         var engineEnd = remainder.IndexOf('/', StringComparison.Ordinal);
         if (engineEnd <= 0)
         {
@@ -384,7 +386,13 @@ internal sealed class ClamAvMediaScanner(
             var terminator = Array.IndexOf(buffer, (byte)0, 0, filled);
             if (terminator >= 0)
             {
-                return Encoding.ASCII.GetString(buffer, 0, terminator).Trim();
+                // Exactly the bytes before the terminator, and no normalization of them. NUL ends a
+                // record in the protocol this adapter speaks, so whatever precedes it is the whole
+                // reply: trimming it would turn "stream: OK " — which the daemon does not send —
+                // into the frame that means clean.
+                return IsPrintableAscii(buffer, terminator)
+                    ? Encoding.ASCII.GetString(buffer, 0, terminator)
+                    : throw new IOException("The scanner reply contained bytes no status line uses.");
             }
         }
 
@@ -392,5 +400,23 @@ internal sealed class ClamAvMediaScanner(
         // line it defines. Both are unterminated frames, and an unterminated frame is not a verdict:
         // accepting the leading bytes of one would let a truncated exchange read as a clean pass.
         throw new IOException("The scanner reply was not a complete frame.");
+    }
+
+    /// <summary>
+    /// Every status line clamd defines is printable US-ASCII. A control byte or a high byte in one
+    /// is a mutated or foreign frame, and it is refused rather than decoded into something that
+    /// happens to parse — <c>Encoding.ASCII</c> would silently turn a high byte into <c>?</c>.
+    /// </summary>
+    private static bool IsPrintableAscii(byte[] buffer, int length)
+    {
+        for (var index = 0; index < length; index++)
+        {
+            if (buffer[index] is < 0x20 or > 0x7e)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
