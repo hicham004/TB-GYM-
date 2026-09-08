@@ -227,6 +227,17 @@ public sealed class MediaAsset : TenantEntity
         Status = evidence.IsAllowed ? MediaAssetStatus.Ready : MediaAssetStatus.Rejected;
     }
 
+    /// <summary>
+    /// Schedules the bytes for physical deletion. A refused original may travel this way too: its
+    /// Complete/Refused evidence stays exactly as recorded, so the row keeps saying the scanner
+    /// refused these precise bytes while the cleanup lifecycle reclaims them.
+    /// </summary>
+    /// <remarks>
+    /// Tombstoned is a readable state for ordinary media — a mistaken removal stays recoverable for
+    /// the retention window — so a refused asset passing through it must not become readable. The
+    /// access and content paths therefore decide on <see cref="ScanOutcome"/> rather than on
+    /// <see cref="Status"/> alone.
+    /// </remarks>
     public void MarkTombstoned(DateTimeOffset now, TimeSpan retention, bool isHistoricallyReferenced)
     {
         if (Status == MediaAssetStatus.Tombstoned)

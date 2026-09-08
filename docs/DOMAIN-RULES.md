@@ -989,9 +989,13 @@ lifetime is configurable (60 seconds to 4 hours, default 1800) so that pausing a
 demo video does not fail mid-playback. External embeds are validated YouTube/Vimeo IDs. Phase
 6B-4A gives every stored object a durable provider-neutral `(location, key)` locator; full and
 one bounded byte-range read use the owned storage contract, and authorization completes before
-that contract opens storage. Local storage composes automatically only in Development. A
-non-Development deployment with no adapter is explicitly unavailable and refuses an upload
-before accepting bytes or reserving a key. No production provider is selected here.
+that contract opens storage. A key is a canonical relative name bound to its own tenant — a 32-hex
+tenant segment then unreserved segments, no dot segments, no rooted or backslash form — enforced in
+the domain and by a PostgreSQL check on assets, derivatives and ingest objects, so no stored key can
+resolve inside another tenant. Local storage composes automatically only in Development. A
+non-Development deployment with no adapter is explicitly unavailable, reports media storage
+`Degraded` at readiness, and refuses an upload before accepting bytes or reserving a key. No
+production provider is selected here.
 
 **MED-005** An unexpired grant is not a licence. Every content and rendition request re-establishes
 active membership of the asset's tenant before anything else, so removing or deactivating a
@@ -1009,7 +1013,12 @@ refusal, an unavailable deployment, or an operational scanner failure commits no
 provider details. Scan evidence records the exact stored locator and SHA-256, scanner key and
 version, instant and outcome. Ready originals and derivatives require allowed exact evidence;
 historical rows with no evidence remain honestly `LegacyUnavailable` rather than fabricated as
-scanned, and new writes cannot create that legacy state.
+scanned, and new writes cannot create that legacy state. A scanner result whose own metadata cannot
+be bound to the stored bytes is an operational scanner failure — `503`, every stored object deleted
+or durably scheduled, no provider detail — never a `400` about the caller's file. A refused original
+keeps its Complete/Refused evidence through `Rejected -> Tombstoned -> Purged` so its bytes are
+reclaimed, and is refused by grant creation and both content routes throughout, because access is
+decided on the scan outcome and not on the otherwise-readable tombstoned status.
 
 **PRG-007** A progress photo belongs to one tenant, client, workspace-local date, and pose,
 enforced by a unique index, and exists only once its media asset is `Ready` — a refused or
@@ -1062,10 +1071,13 @@ original; deleting an object that is already gone counts as success, and any sto
 the row tombstoned, due, and retryable with its attempt count and failure code recorded, never
 silently marked complete. After a purge the rows survive as history with their storage keys cleared,
 and grant creation, content and thumbnail all fail closed. A sweep uses short durable
-claim/lease/finalize transactions: it commits a random token and expiry before deleting storage,
-does no storage I/O inside that database transaction, and finalizes or records a failure only when
-the token still owns the row. Expired claims are reclaimed; a stale claimant cannot finalize or fail
-a newer claim. Quota remains charged until storage deletion is confirmed.
+claim/lease/finalize transactions: it claims one item immediately before that item's own deletion,
+from a clock read taken then, commits the random token and expiry before deleting storage, does no
+storage I/O inside that database transaction, and finalizes or records a failure only when the token
+still owns the row. A lease therefore bounds the item it guards rather than the batch it arrived in.
+Expired claims are reclaimed; a stale claimant cannot finalize or fail a newer claim. A failed item
+is due again for the next sweep and is not re-offered inside the sweep that failed it. Quota remains
+charged until storage deletion is confirmed.
 
 **PRG-011** A bodyweight observation's measurement date is its identity and is immutable in the
 domain and at the database. A mis-dated entry is corrected by void-and-replace, never by an in-place
@@ -1093,8 +1105,9 @@ admission counts reservations ahead of the candidate, and a later candidate sees
 committed asset bytes. A full allowance is a conflict carrying a stable code, not a validation
 failure blamed on the file.
 
-**MED-010** Before every object-store put, ingestion persists the generated tenant-bound locator and
-a conservative byte reservation. A successful put records its actual SHA-256 and ends with that
+**MED-010** Before every object-store put, ingestion persists the generated tenant-bound locator —
+canonical, dot-segment free, and validated in the domain and at the database — and a conservative
+byte reservation. A successful put records its actual SHA-256 and ends with that
 locator atomically attached to an asset/derivative, positively deleted and marked Purged, or retained
 in immediately due durable cleanup state; a crashed live reservation becomes due after 15 minutes.
 Non-purged ingest bytes count toward the workspace and applicable client allowance. Compensation uses

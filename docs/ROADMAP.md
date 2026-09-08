@@ -776,6 +776,28 @@ Status: complete, implemented 2026-09-07. See
 - **Leased purge.** Short claim, lease and finalization transactions keep storage deletion outside
   database transactions; expired claims recover safely and only confirmed deletion releases quota.
 
+#### Phase 6B-4A remediation checkpoint (complete)
+
+Status: complete, implemented 2026-09-08, from an independent audit of the 6B-4A commit. Additive
+migration `20260907200911_Phase6B4ARemediationStorageKeyGrammarAndRefusedLifecycle`; no provider is
+selected and 6B-4B is not started.
+
+- **Per-item purge leases.** A batch was leased in one transaction, so a sweep slower than the lease
+  handed its later items an expiry already in the past and another replica could reclaim them before
+  their work began. Each item is now claimed immediately before its own deletion from a clock read
+  taken then; batch limits, tenant fairness and one attempt per item per sweep are unchanged.
+- **Canonical tenant-bound keys.** The tenant prefix was not tenant binding:
+  `<tenantA>/../<tenantB>/object` satisfied the `LIKE` check and resolved inside tenant B. The
+  domain and all three media tables now enforce a canonical relative-key grammar covering dot
+  segments, empty segments, rooted keys, control characters and both separator forms.
+- **Scanner metadata failures.** Unusable scanner metadata reported `400` about the caller's file;
+  it now reports `503` as the operational scanner failure it is.
+- **Refused-byte lifecycle.** Complete/Refused evidence stays valid through
+  `Rejected -> Tombstoned -> Purged` so refused bytes are reclaimed, while access decides on the
+  scan outcome so they never become readable.
+- **Readiness wording.** ADR 0023 said unavailable storage reports unhealthy; it reports `Degraded`,
+  deliberately, and now says so.
+
 ### Phase 6B-4B: production media adapters and delivery (not started)
 
 - Select and implement production object storage (such as S3/R2) and production upload scanning

@@ -393,7 +393,13 @@ internal sealed class MediaApplicationService(
 
         // A purged asset has no bytes left to grant. It reports NotFound rather than NotReady,
         // because "not ready yet" implies waiting will help and nothing will bring it back.
-        if (asset.Status == MediaAssetStatus.Purged)
+        //
+        // Refused bytes are the same answer for the same reason. A refusal is terminal, and the
+        // refused original still has to travel Rejected -> Tombstoned -> Purged so its bytes are
+        // reclaimed — but Tombstoned is a readable state for everything else, so the outcome, not
+        // the status, is what decides here.
+        if (asset.Status == MediaAssetStatus.Purged ||
+            asset.ScanOutcome == MediaScanOutcome.Refused)
         {
             return new MediaAccessResult(MediaAccessStatus.NotFound);
         }
@@ -529,10 +535,14 @@ internal sealed class MediaApplicationService(
             return new MediaContentResult(MediaContentStatus.Forbidden);
         }
 
+        // Stated as the positive case rather than "not refused", so a legacy row that carries no
+        // outcome at all stays readable while a refused one never is, without depending on how a
+        // provider translates a comparison against NULL.
         var asset = await dbContext.MediaAssets.AsNoTracking().SingleOrDefaultAsync(
             item =>
                 item.Id == assetId &&
                 (item.Status == MediaAssetStatus.Ready || item.Status == MediaAssetStatus.Tombstoned) &&
+                (item.ScanOutcome == null || item.ScanOutcome == MediaScanOutcome.Allowed) &&
                 item.Source == MediaSource.Upload,
             cancellationToken);
         if (asset?.StorageKey is null || asset.StorageLocation is null)
@@ -1167,11 +1177,24 @@ internal sealed class MediaApplicationService(
         }
     }
 
+    /// <summary>
+    /// Everything that means "the scanner did not produce a usable verdict", as opposed to "the
+    /// scanner inspected the file and refused it".
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ArgumentException"/> belongs here because binding a verdict to the stored bytes
+    /// validates the scanner's own metadata — its key, version, failure code and scan instant — and
+    /// rejects unusable values by throwing it. That is the provider failing, not the caller
+    /// supplying a bad file, and reporting it as a rejected upload would blame a file the scanner
+    /// never faulted. <c>400</c> stays reserved for an actual refusal and for genuine caller
+    /// validation, which happens outside the scan block.
+    /// </remarks>
     private static bool IsScannerOperationalFailure(Exception exception) => exception is
         IOException or
         TimeoutException or
         HttpRequestException or
-        InvalidOperationException;
+        InvalidOperationException or
+        ArgumentException;
 
     private static bool IsStorageOperationalFailure(Exception exception) => exception is
         MediaStorageException or

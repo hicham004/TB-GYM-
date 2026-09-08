@@ -2644,6 +2644,14 @@ export type StreamPrivateMediaErrors = {
    * Not Found
    */
   404: unknown;
+  /**
+   * Range Not Satisfiable
+   */
+  416: unknown;
+  /**
+   * Service Unavailable
+   */
+  503: unknown;
 };
 
 export type StreamPrivateMediaResponses = {
@@ -2651,6 +2659,10 @@ export type StreamPrivateMediaResponses = {
    * OK
    */
   200: unknown;
+  /**
+   * Partial Content
+   */
+  206: unknown;
 };
 
 export type StreamPrivateMediaThumbnailData = {
@@ -2671,6 +2683,14 @@ export type StreamPrivateMediaThumbnailErrors = {
    * Not Found
    */
   404: unknown;
+  /**
+   * Range Not Satisfiable
+   */
+  416: unknown;
+  /**
+   * Service Unavailable
+   */
+  503: unknown;
 };
 
 export type StreamPrivateMediaThumbnailResponses = {
@@ -2678,6 +2698,10 @@ export type StreamPrivateMediaThumbnailResponses = {
    * OK
    */
   200: unknown;
+  /**
+   * Partial Content
+   */
+  206: unknown;
 };
 
 export type GetOwnMessagingUnreadCountData = {

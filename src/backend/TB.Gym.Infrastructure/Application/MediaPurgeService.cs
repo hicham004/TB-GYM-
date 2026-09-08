@@ -12,6 +12,14 @@ namespace TB.Gym.Infrastructure.Application;
 /// Reconciles due tombstones and incomplete ingests through short claims, storage I/O outside any
 /// database transaction, and token-checked finalization.
 /// </summary>
+/// <remarks>
+/// One item is claimed at a time, immediately before its own deletion and dated by a clock read
+/// taken at that moment. The batch size and the per-workspace share still bound how much one sweep
+/// does; what they no longer do is decide when a lease starts. Leasing a whole workspace batch in
+/// one transaction dated every item's expiry from the first item's claim, so a batch slower than
+/// the lease handed its later items an expiry already in the past and another replica could reclaim
+/// them before their work had begun.
+/// </remarks>
 internal sealed class MediaPurgeService(
     GymDbContext dbContext,
     IServiceScopeFactory scopeFactory,
@@ -39,10 +47,12 @@ internal sealed class MediaPurgeService(
             return new MediaPurgeOutcome(0, 0, 0);
         }
 
-        var now = clock.UtcNow;
-        var tenantIds = await DueAssets(dbContext, now)
+        // Discovery only. Which workspaces have work is a stable enough answer for one pass; the
+        // instant that decides a *lease* is read again for every single item below.
+        var discoveredAt = clock.UtcNow;
+        var tenantIds = await DueAssets(dbContext, discoveredAt)
             .Select(item => item.TenantId)
-            .Concat(DueIngestObjects(dbContext, now).Select(item => item.TenantId))
+            .Concat(DueIngestObjects(dbContext, discoveredAt).Select(item => item.TenantId))
             .Distinct()
             .OrderBy(id => id)
             .Take(batchSize)
@@ -64,16 +74,30 @@ internal sealed class MediaPurgeService(
                 break;
             }
 
-            var claims = await ClaimTenantAsync(
-                tenantId,
-                now,
-                Math.Min(share, remaining),
-                cancellationToken);
-            claimed += claims.Count;
-            remaining -= claims.Count;
+            var budget = Math.Min(share, remaining);
 
-            foreach (var claim in claims)
+            // A failure releases the claim and leaves the row due again, which is what lets the
+            // next sweep retry it. Within this sweep it must not be offered again: a persistently
+            // failing object would otherwise spin on the same bytes until it had eaten the whole
+            // budget, and every other due object in the workspace would wait a full interval for
+            // work this pass was supposed to do. One attempt per item per sweep, as before.
+            var attempted = new List<Guid>(budget);
+            for (var taken = 0; taken < budget; taken++)
             {
+                // One claim, taken immediately before its own storage work and dated by a clock
+                // read taken now. Leasing a whole batch up front dated the last item's lease from
+                // the moment the first item's deletion began, so a batch that took longer than the
+                // lease handed later items an expiry that was already in the past: they were
+                // reclaimable by another replica before their work had started.
+                var claim = await ClaimNextAsync(tenantId, clock.UtcNow, attempted, cancellationToken);
+                if (claim is null)
+                {
+                    break;
+                }
+
+                attempted.Add(claim.OwnerId);
+                claimed++;
+                remaining--;
                 if (await ProcessClaimAsync(claim, cancellationToken))
                 {
                     purged++;
@@ -111,40 +135,55 @@ internal sealed class MediaPurgeService(
                 (item.PurgeClaimToken == null || item.PurgeClaimExpiresAtUtc <= now));
 
     /// <summary>
-    /// Selects and leases work in one short transaction. The transaction is committed before this
-    /// method returns any locator to the storage phase.
+    /// Selects and leases exactly one due item in one short transaction, committed before the
+    /// caller is given any locator to delete. Returns null when this workspace has nothing
+    /// claimable left.
     /// </summary>
-    private async Task<IReadOnlyList<PurgeClaim>> ClaimTenantAsync(
+    /// <remarks>
+    /// One item, not a batch: the lease has to bound the work it actually guards. Incomplete
+    /// ingests still come before ordinary tombstones, because their bytes have no active media
+    /// consumer; asking for them first here preserves that order one item at a time.
+    /// </remarks>
+    private async Task<PurgeClaim?> ClaimNextAsync(
         Guid tenantId,
         DateTimeOffset now,
-        int batchSize,
+        IReadOnlyCollection<Guid> attempted,
         CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var provider = scope.ServiceProvider;
         provider.GetRequiredService<IMutableTenantContext>().SetTenant(tenantId);
         var context = provider.GetRequiredService<GymDbContext>();
+        // `<> ALL` on an empty array is true, so the first call needs no special case.
+        var alreadyAttempted = attempted.ToArray();
 
         return await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-            var claimedIngest = await context.MediaIngestObjects
+            var ingest = await context.MediaIngestObjects
                 .FromSql($"""
                     SELECT *, xmin FROM media."IngestObjects"
                     WHERE "TenantId" = {tenantId}
                       AND "Status" <> 'Purged'
                       AND "PurgeAfterUtc" <= {now}
                       AND ("PurgeClaimToken" IS NULL OR "PurgeClaimExpiresAtUtc" <= {now})
+                      AND "Id" <> ALL({alreadyAttempted})
                     ORDER BY "PurgeAfterUtc", "Id"
-                    LIMIT {batchSize}
+                    LIMIT 1
                     FOR UPDATE SKIP LOCKED
                     """)
-                .ToListAsync(cancellationToken);
+                .SingleOrDefaultAsync(cancellationToken);
 
-            var remaining = batchSize - claimedIngest.Count;
-            var claimedAssets = remaining <= 0
-                ? []
-                : await context.MediaAssets
+            PurgeClaim? claim = null;
+            if (ingest is not null)
+            {
+                var token = Guid.NewGuid();
+                ingest.ClaimPurge(now, claimLease, token);
+                claim = new PurgeClaim(tenantId, ingest.Id, token, PurgeWorkKind.Ingest);
+            }
+            else
+            {
+                var asset = await context.MediaAssets
                     .FromSql($"""
                         SELECT *, xmin FROM media."Assets"
                         WHERE "TenantId" = {tenantId}
@@ -153,30 +192,29 @@ internal sealed class MediaPurgeService(
                           AND "PurgeAfterUtc" IS NOT NULL
                           AND "PurgeAfterUtc" <= {now}
                           AND ("PurgeClaimToken" IS NULL OR "PurgeClaimExpiresAtUtc" <= {now})
+                          AND "Id" <> ALL({alreadyAttempted})
                         ORDER BY "PurgeAfterUtc", "Id"
-                        LIMIT {remaining}
+                        LIMIT 1
                         FOR UPDATE SKIP LOCKED
                         """)
-                    .ToListAsync(cancellationToken);
-
-            var claims = new List<PurgeClaim>(claimedIngest.Count + claimedAssets.Count);
-            foreach (var ingest in claimedIngest)
-            {
-                var token = Guid.NewGuid();
-                ingest.ClaimPurge(now, claimLease, token);
-                claims.Add(new PurgeClaim(tenantId, ingest.Id, token, PurgeWorkKind.Ingest));
+                    .SingleOrDefaultAsync(cancellationToken);
+                if (asset is not null)
+                {
+                    var token = Guid.NewGuid();
+                    asset.ClaimPurge(now, claimLease, token);
+                    claim = new PurgeClaim(tenantId, asset.Id, token, PurgeWorkKind.Asset);
+                }
             }
 
-            foreach (var asset in claimedAssets)
+            if (claim is null)
             {
-                var token = Guid.NewGuid();
-                asset.ClaimPurge(now, claimLease, token);
-                claims.Add(new PurgeClaim(tenantId, asset.Id, token, PurgeWorkKind.Asset));
+                await transaction.RollbackAsync(cancellationToken);
+                return null;
             }
 
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return (IReadOnlyList<PurgeClaim>)claims;
+            return claim;
         });
     }
 

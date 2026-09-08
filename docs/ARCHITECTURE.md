@@ -5,7 +5,7 @@ Phase 6B-1 notification dispatch and in-app inbox complete, 2026-08-31; Phase 6B
 direct messaging complete, 2026-09-01; Phase 6B-2B authorized realtime messaging delivery complete,
 2026-09-04; Phase 6B-3A independent notification channels complete, 2026-09-05; Phase 6B-3B
 production transactional email, provider events and suppression complete, 2026-09-05; Phase 6B-4A
-Production Media Foundation complete, 2026-09-07
+Production Media Foundation complete, 2026-09-07, audit remediation applied 2026-09-08
 
 ## 1. Architectural style
 
@@ -538,22 +538,30 @@ CDN/presigned delivery and operations controls remain deferred.
 Every stored object has a durable provider-neutral `(location, key)` locator. `MediaAsset`,
 `MediaAssetDerivative` and a live `MediaIngestObject` retain the location that produced the bytes,
 so changing the current write adapter cannot redirect an existing read or purge. The Phase 6B-4A
-migration truthfully backfills pre-existing local objects as `local-v1`. The owned storage contract
-serves either the full stream or one bounded byte range and returns the total object length; the
-Media module contains no provider SDK vocabulary. Content authorization completes before a storage
-read opens, including a rendition request.
+migration truthfully backfills pre-existing local objects as `local-v1`. A key is a canonical
+relative name — the row's own tenant as a 32-hex first segment, then unreserved segments, no dot
+segments — enforced by `StorageObjectLocator` and a matching PostgreSQL check on all three media
+tables, so a stored key cannot name another tenant's object through either separator form. The owned
+storage contract serves either the full stream or one bounded byte range and returns the total object
+length; the Media module contains no provider SDK vocabulary. Content authorization completes before
+a storage read opens, including a rendition request.
 
 Scan evidence is bound to the exact locator and SHA-256 of the bytes inspected, along with the
 scanner identity, version, instant and outcome. An asset or derivative cannot publish without
 allowed exact evidence. Historical rows without evidence are represented as `LegacyUnavailable`,
-not fabricated as scanned; new writes cannot introduce that state.
+not fabricated as scanned; new writes cannot introduce that state. A scanner that returns unusable
+metadata is an operational failure reported as `503`, not a rejected file. Refused bytes keep their
+Complete/Refused evidence through tombstoning and purge so they are reclaimed, and the access and
+content paths decide on the scan outcome rather than status alone, so they never become readable.
 
 Retention processing remains a minimal in-process `BackgroundService`, not a job platform. A short
-transaction claims a due asset or ingest row with a random token and lease, then commits before any
+transaction claims one due asset or ingest row with a random token and lease, taken immediately
+before that item's own deletion and dated by a clock read at that moment, and commits before any
 storage deletion. Derivatives are deleted before the original outside a database transaction; a
 separate short finalization transaction accepts only the current claim token. An expired lease is
 reclaimable and a stale claimant cannot finalize or fail a newer claim. A storage failure leaves the
-row due and quota-counted, and quota is released only after confirmed deletion. The same sweep first
+row due and quota-counted for the next sweep rather than being re-offered inside the failing one, and
+quota is released only after confirmed deletion. The same sweep first
 reclaims due incomplete-ingest reservations, including a crashed pre-write reservation after its
 15-minute lease. Storage allowances count originals, derivatives, tombstoned bytes still on disk,
 and non-purged ingest reservations; they exclude only confirmed purges and are checked and committed

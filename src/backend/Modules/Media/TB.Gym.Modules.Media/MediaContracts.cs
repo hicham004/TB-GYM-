@@ -309,17 +309,22 @@ public sealed class MediaStorageOptions
     public int PurgeIntervalSeconds { get; set; } = 900;
 
     /// <summary>
-    /// The most assets one sweep claims in total, across every workspace it visits. Each batch
-    /// holds row locks for the duration of its storage calls, so this bounds how long another
-    /// replica can be kept waiting. Workspaces with work due share this budget rather than each
-    /// receiving it, so the ceiling is the number written here and not a multiple of it.
+    /// The most objects one sweep claims in total, across every workspace it visits. Workspaces
+    /// with work due share this budget rather than each receiving it, so the ceiling is the number
+    /// written here and not a multiple of it. Whatever it does not reach stays due for the next
+    /// sweep.
     /// </summary>
     public int PurgeBatchSize { get; set; } = 25;
 
     /// <summary>
-    /// A purge claimant owns work only for this bounded interval. Expiry permits another replica
-    /// to replay idempotent deletion after a crash.
+    /// A purge claimant owns one item for this bounded interval. Expiry permits another replica to
+    /// replay idempotent deletion after a crash.
     /// </summary>
+    /// <remarks>
+    /// It bounds one item's deletion, not a whole sweep: the sweep claims each item immediately
+    /// before deleting it, so this value does not have to cover <see cref="PurgeBatchSize"/> items'
+    /// worth of storage latency.
+    /// </remarks>
     public int PurgeClaimLeaseSeconds { get; set; } = 120;
 
     /// <summary>

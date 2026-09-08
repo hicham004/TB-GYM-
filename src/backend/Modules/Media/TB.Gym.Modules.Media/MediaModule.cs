@@ -65,14 +65,7 @@ public sealed record StorageObjectLocator
 
         TenantId = tenantId;
         Location = ValidateLocation(location);
-        ObjectKey = MediaText.Required(objectKey, MaximumKeyLength, nameof(objectKey));
-        var tenantPrefix = $"{tenantId:N}/";
-        if (!ObjectKey.StartsWith(tenantPrefix, StringComparison.Ordinal))
-        {
-            throw new ArgumentException(
-                "A storage object key must belong to the locator tenant.",
-                nameof(objectKey));
-        }
+        ObjectKey = ValidateObjectKey(tenantId, objectKey);
     }
 
     public Guid TenantId { get; }
@@ -80,6 +73,65 @@ public sealed record StorageObjectLocator
     public string Location { get; }
 
     public string ObjectKey { get; }
+
+    /// <summary>
+    /// The canonical key grammar: the tenant's own 32-hex prefix, then one or more segments of
+    /// letters, digits, dot, underscore and hyphen. A key is a relative name in a flat tenant-owned
+    /// namespace, never a path the caller may steer.
+    /// </summary>
+    /// <remarks>
+    /// The tenant prefix on its own is not tenant binding. <c>&lt;tenantA&gt;/../&lt;tenantB&gt;/object</c>
+    /// begins with tenant A's prefix and satisfies a prefix or <c>LIKE</c> check, yet every adapter
+    /// that maps a key onto a hierarchical namespace resolves it inside tenant B — so the database
+    /// constraint would say "belongs to A" about bytes that belong to B. Rejecting dot segments,
+    /// empty segments, rooted keys, control characters and backslashes is what makes the prefix
+    /// mean what the constraint claims, on Windows and Unix alike. The character allow-list is what
+    /// excludes the rest: whitespace, <c>:</c>, <c>%</c>, <c>\</c> and every control character are
+    /// simply not members of it.
+    /// </remarks>
+    private static string ValidateObjectKey(Guid tenantId, string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value, nameof(value));
+
+        // Deliberately not trimmed. Surrounding whitespace makes a different durable address, and
+        // silently normalising it would let two rows claim one object.
+        if (value.Length > MaximumKeyLength)
+        {
+            throw new ArgumentException(
+                $"A storage object key cannot exceed {MaximumKeyLength} characters.",
+                nameof(value));
+        }
+
+        var segments = value.Split('/');
+        if (segments.Length < 2 ||
+            !string.Equals(segments[0], tenantId.ToString("N"), StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "A storage object key must belong to the locator tenant.",
+                nameof(value));
+        }
+
+        foreach (var segment in segments)
+        {
+            if (!IsSafeSegment(segment))
+            {
+                throw new ArgumentException(
+                    "A storage object key segment is empty, a dot segment, or uses unsupported characters.",
+                    nameof(value));
+            }
+        }
+
+        return value;
+    }
+
+    /// <summary>
+    /// One key segment: non-empty, not composed only of dots, and drawn from the unreserved set.
+    /// </summary>
+    private static bool IsSafeSegment(string segment) =>
+        segment.Length > 0 &&
+        segment.Any(character => character is not '.') &&
+        segment.All(character =>
+            char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
 
     private static string ValidateLocation(string value)
     {

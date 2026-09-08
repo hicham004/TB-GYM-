@@ -64,6 +64,14 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         public string? WriteLocationOverride { get; set; }
 
+        /// <summary>
+        /// Runs on the sweep's own thread at the start of every delete, while no database
+        /// transaction is open. A test uses it to observe or move the world mid-purge — advancing
+        /// the clock, or reading what the claim actually committed — which is the only way to
+        /// inspect the window between "claim committed" and "storage deleted".
+        /// </summary>
+        public Func<StorageObjectLocator, Task>? OnDeleteStarting { get; set; }
+
         public int PutCount => Volatile.Read(ref putCount);
 
         public int ReadCount => Volatile.Read(ref readCount);
@@ -196,6 +204,11 @@ public sealed partial class Phase3TrainingWorkflowTests
             StorageObjectLocator locator,
             CancellationToken cancellationToken)
         {
+            if (faults.OnDeleteStarting is { } observe)
+            {
+                await observe(locator);
+            }
+
             await faults.EnterDeleteAsync(locator, cancellationToken);
             if (faults.ShouldFailDelete())
             {

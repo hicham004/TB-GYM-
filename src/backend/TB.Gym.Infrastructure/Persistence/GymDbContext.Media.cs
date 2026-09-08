@@ -6,6 +6,37 @@ namespace TB.Gym.Infrastructure.Persistence;
 
 public sealed partial class GymDbContext
 {
+    /// <summary>
+    /// A durable storage location: lower-case, starts alphanumeric, no separators of any kind.
+    /// </summary>
+    private const string StorageLocationGrammar = "'^[a-z0-9][a-z0-9._-]{0,79}$'";
+
+    /// <summary>
+    /// The canonical storage-key grammar, stated in the database as well as in
+    /// <see cref="StorageObjectLocator"/>: the row's own tenant as a 32-hex first segment, then one
+    /// or more segments of letters, digits, dot, underscore and hyphen, and no segment that is
+    /// nothing but dots.
+    /// </summary>
+    /// <remarks>
+    /// The previous <c>LIKE tenant || '/%'</c> check asserted tenant ownership that the key did not
+    /// actually carry: <c>&lt;tenantA&gt;/../&lt;tenantB&gt;/object</c> satisfies it while naming
+    /// tenant B's object under any adapter that resolves a key as a path. The second clause is what
+    /// closes that, and the character class is what excludes backslashes, control characters,
+    /// whitespace and drive/scheme punctuation — so a rooted or traversing key cannot be written in
+    /// either separator form, on Windows or Unix.
+    /// </remarks>
+    private const string StorageKeyGrammar =
+        "\"StorageKey\" ~ ('^' || replace(lower(\"TenantId\"::text), '-', '') || '(/[A-Za-z0-9._-]+)+$') " +
+        "AND \"StorageKey\" !~ '(^|/)[.]+(/|$)'";
+
+    private const string AssetStorageLocatorCheck =
+        "\"StorageLocation\" IS NULL OR (\"StorageLocation\" ~ " + StorageLocationGrammar +
+        " AND (\"StorageKey\" IS NULL OR (" + StorageKeyGrammar + ")))";
+
+    private const string SubordinateStorageLocatorCheck =
+        "\"StorageLocation\" ~ " + StorageLocationGrammar +
+        " AND (\"StorageKey\" IS NULL OR (" + StorageKeyGrammar + "))";
+
     private void ConfigureMedia(ModelBuilder builder)
     {
         builder.Entity<MediaAsset>(entity =>
@@ -60,13 +91,13 @@ public sealed partial class GymDbContext
                     "\"Sha256\" IS NULL OR \"Sha256\" ~ '^[0-9a-f]{64}$'");
                 table.HasCheckConstraint(
                     "CK_MediaAssets_StorageLocator",
-                    "\"StorageLocation\" IS NULL OR (\"StorageLocation\" ~ '^[a-z0-9][a-z0-9._-]{0,79}$' AND (\"StorageKey\" IS NULL OR \"StorageKey\" LIKE replace(lower(\"TenantId\"::text), '-', '') || '/%'))");
+                    AssetStorageLocatorCheck);
                 table.HasCheckConstraint(
                     "CK_MediaAssets_PurgeClaim",
                     "(\"PurgeClaimToken\" IS NULL) = (\"PurgeClaimExpiresAtUtc\" IS NULL) AND (\"Status\" <> 'Purged' OR \"PurgeClaimToken\" IS NULL)");
                 table.HasCheckConstraint(
                     "CK_MediaAssets_ScanEvidence",
-                    "((\"ScanEvidenceState\" = 'None' AND \"ScanStorageLocation\" IS NULL AND \"ScanStorageKey\" IS NULL AND \"ScanSha256\" IS NULL AND \"ScannedAtUtc\" IS NULL AND \"ScanOutcome\" IS NULL AND \"ScannerKey\" IS NULL AND \"ScannerVersion\" IS NULL AND \"ScanFailureCode\" IS NULL) OR (\"ScanEvidenceState\" = 'LegacyUnavailable' AND \"ScanStorageLocation\" IS NULL AND \"ScanStorageKey\" IS NULL AND \"ScanSha256\" IS NULL AND \"ScannedAtUtc\" IS NULL AND \"ScanOutcome\" IS NULL) OR (\"ScanEvidenceState\" = 'Complete' AND \"ScanStorageLocation\" = \"StorageLocation\" AND \"ScanStorageKey\" IS NOT NULL AND (\"StorageKey\" IS NULL OR \"ScanStorageKey\" = \"StorageKey\") AND \"ScanSha256\" = \"Sha256\" AND \"ScanSha256\" ~ '^[0-9a-f]{64}$' AND \"ScannedAtUtc\" IS NOT NULL AND \"ScannerKey\" IS NOT NULL AND \"ScannerVersion\" IS NOT NULL AND \"ScanOutcome\" IS NOT NULL)) AND (\"Source\" <> 'Upload' OR \"Status\" = 'PendingScan' OR \"ScanEvidenceState\" IN ('Complete', 'LegacyUnavailable')) AND (\"ScanEvidenceState\" <> 'Complete' OR (\"Status\" = 'Rejected' AND \"ScanOutcome\" = 'Refused') OR (\"Status\" IN ('Ready', 'Tombstoned', 'Purged') AND \"ScanOutcome\" = 'Allowed'))");
+                    "((\"ScanEvidenceState\" = 'None' AND \"ScanStorageLocation\" IS NULL AND \"ScanStorageKey\" IS NULL AND \"ScanSha256\" IS NULL AND \"ScannedAtUtc\" IS NULL AND \"ScanOutcome\" IS NULL AND \"ScannerKey\" IS NULL AND \"ScannerVersion\" IS NULL AND \"ScanFailureCode\" IS NULL) OR (\"ScanEvidenceState\" = 'LegacyUnavailable' AND \"ScanStorageLocation\" IS NULL AND \"ScanStorageKey\" IS NULL AND \"ScanSha256\" IS NULL AND \"ScannedAtUtc\" IS NULL AND \"ScanOutcome\" IS NULL) OR (\"ScanEvidenceState\" = 'Complete' AND \"ScanStorageLocation\" = \"StorageLocation\" AND \"ScanStorageKey\" IS NOT NULL AND (\"StorageKey\" IS NULL OR \"ScanStorageKey\" = \"StorageKey\") AND \"ScanSha256\" = \"Sha256\" AND \"ScanSha256\" ~ '^[0-9a-f]{64}$' AND \"ScannedAtUtc\" IS NOT NULL AND \"ScannerKey\" IS NOT NULL AND \"ScannerVersion\" IS NOT NULL AND \"ScanOutcome\" IS NOT NULL)) AND (\"Source\" <> 'Upload' OR \"Status\" = 'PendingScan' OR \"ScanEvidenceState\" IN ('Complete', 'LegacyUnavailable')) AND (\"ScanEvidenceState\" <> 'Complete' OR (\"ScanOutcome\" = 'Refused' AND \"Status\" IN ('Rejected', 'Tombstoned', 'Purged')) OR (\"ScanOutcome\" = 'Allowed' AND \"Status\" IN ('Ready', 'Tombstoned', 'Purged')))");
             });
             ConfigureTenantEntity(entity);
         });
@@ -110,7 +141,7 @@ public sealed partial class GymDbContext
                     "(\"PurgedAtUtc\" IS NULL) = (\"StorageKey\" IS NOT NULL)");
                 table.HasCheckConstraint(
                     "CK_MediaAssetDerivatives_StorageLocator",
-                    "\"StorageLocation\" ~ '^[a-z0-9][a-z0-9._-]{0,79}$' AND (\"StorageKey\" IS NULL OR \"StorageKey\" LIKE replace(lower(\"TenantId\"::text), '-', '') || '/%')");
+                    SubordinateStorageLocatorCheck);
                 table.HasCheckConstraint(
                     "CK_MediaAssetDerivatives_ScanEvidence",
                     "(\"ScanEvidenceState\" = 'LegacyUnavailable' AND \"ScanStorageLocation\" IS NULL AND \"ScanStorageKey\" IS NULL AND \"ScanSha256\" IS NULL AND \"ScannedAtUtc\" IS NULL AND \"ScanOutcome\" IS NULL) OR (\"ScanEvidenceState\" = 'Complete' AND \"ScanStorageLocation\" = \"StorageLocation\" AND \"ScanStorageKey\" IS NOT NULL AND (\"StorageKey\" IS NULL OR \"ScanStorageKey\" = \"StorageKey\") AND \"ScanSha256\" = \"Sha256\" AND \"ScanSha256\" ~ '^[0-9a-f]{64}$' AND \"ScannedAtUtc\" IS NOT NULL AND \"ScannerKey\" IS NOT NULL AND \"ScannerVersion\" IS NOT NULL AND \"ScanOutcome\" = 'Allowed')");
@@ -151,7 +182,7 @@ public sealed partial class GymDbContext
                     "\"Purpose\" <> 'ProgressPhoto' OR \"ClientProfileId\" IS NOT NULL");
                 table.HasCheckConstraint(
                     "CK_MediaIngestObjects_StorageLocator",
-                    "\"StorageLocation\" ~ '^[a-z0-9][a-z0-9._-]{0,79}$' AND (\"StorageKey\" IS NULL OR \"StorageKey\" LIKE replace(lower(\"TenantId\"::text), '-', '') || '/%')");
+                    SubordinateStorageLocatorCheck);
                 table.HasCheckConstraint(
                     "CK_MediaIngestObjects_PurgeClaim",
                     "(\"PurgeClaimToken\" IS NULL) = (\"PurgeClaimExpiresAtUtc\" IS NULL) AND (\"Status\" <> 'Purged' OR \"PurgeClaimToken\" IS NULL)");

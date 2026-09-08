@@ -191,6 +191,13 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         public bool ThrowOnScan { get; set; }
 
+        /// <summary>
+        /// A provider that answers with a verdict but without a usable identity for it. Nothing can
+        /// be bound to the stored bytes, so there is no evidence — which is an operational failure
+        /// of the scanner, not a statement about the caller's file.
+        /// </summary>
+        public bool ProduceMalformedResult { get; set; }
+
         public bool WaitForCancellation { get; set; }
 
         public int ScanCallCount => Volatile.Read(ref scanCallCount);
@@ -227,6 +234,11 @@ public sealed partial class Phase3TrainingWorkflowTests
             if (state.ThrowOnScan)
             {
                 throw new IOException("The scanner transport is unavailable.");
+            }
+
+            if (state.ProduceMalformedResult)
+            {
+                return new MediaScanResult(true, "   ", "1.0", null);
             }
 
             return state.IsAvailable && !state.RejectScans
