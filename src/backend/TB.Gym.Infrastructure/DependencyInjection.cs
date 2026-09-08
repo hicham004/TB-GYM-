@@ -162,6 +162,11 @@ public static class DependencyInjection
         // Two sweeps, deliberately separate. Deleting due bytes must finish in seconds and run every
         // few minutes; auditing a whole location walks everything and may need several passes.
         // Sharing one loop would make an inventory walk the reason a deletion was late.
+        //
+        // The reconciliation service is composed with the finding store rather than with a scope
+        // factory of its own. A per-workspace scope is what writing a tenant-owned row needs; a
+        // container is what would also let it resolve something that deletes.
+        services.AddScoped<IMediaInventoryFindingStore, MediaInventoryFindingStore>();
         services.AddScoped<IMediaInventoryReconciliationService, MediaInventoryReconciliationService>();
         services.AddHostedService<MediaInventoryReconciliationWorker>();
         services.AddScoped<INotificationApplicationService, NotificationApplicationService>();
@@ -221,6 +226,14 @@ public static class DependencyInjection
             .Validate(
                 options => options.Reconciliation.OwnerProbesPerRun is >= 0 and <= 100000,
                 "Media:Reconciliation:OwnerProbesPerRun must be between 0 and 100000.")
+            .Validate(
+                // Zero probes is not "skip that half of the pass"; it is a run that can never finish
+                // its owner pass, can therefore never be Completed, and is abandoned a day later so
+                // the next one can repeat the same thing. A deployment that does not want the pass
+                // turns it off, which is a statement about the pass rather than a budget that
+                // quietly means never.
+                options => !options.Reconciliation.Enabled || options.Reconciliation.OwnerProbesPerRun >= 1,
+                "Media:Reconciliation:OwnerProbesPerRun must be at least 1 while reconciliation is enabled; set Media:Reconciliation:Enabled to false to switch the pass off.")
             .Validate(
                 // Below a minute a lease can expire inside one page and cause needless takeovers;
                 // above an hour a crashed replica hides a whole location for too long.

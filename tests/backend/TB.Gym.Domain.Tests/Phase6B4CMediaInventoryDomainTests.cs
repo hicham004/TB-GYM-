@@ -141,7 +141,7 @@ public sealed class Phase6B4CMediaInventoryDomainTests
         var lease = TimeSpan.FromMinutes(5);
         var token = Guid.NewGuid();
         var run = MediaInventoryRun.Start(Location, Now, lease, token);
-        run.RecordInventoryPage(Now, token, lease, new MediaInventoryPageTally(3, 0, 0, 0, 1, 0), "page-2", true);
+        run.RecordInventoryPage(Now, token, lease, new MediaInventoryPageTally(3, 0, 0, 0, 1), "page-2", true);
 
         Assert.IsTrue(run.RecordPageFailure(Now, token, "storage_provider_unavailable"));
 
@@ -152,6 +152,42 @@ public sealed class Phase6B4CMediaInventoryDomainTests
         Assert.AreEqual(1, run.PageFailureCount);
         Assert.AreEqual("storage_provider_unavailable", run.LastFailureCode);
         Assert.IsFalse(run.HasExhaustedFailures);
+    }
+
+    [TestMethod]
+    public void ARereadPageRecoversTheRunWhileRepeatedFailuresStillExhaustIt()
+    {
+        var lease = TimeSpan.FromMinutes(5);
+        var token = Guid.NewGuid();
+        var run = MediaInventoryRun.Start(Location, Now, lease, token);
+
+        // One blip on a location that takes several passes to walk. The page kept its cursor, so
+        // re-reading it means nothing was skipped and the run has as much right to finish as one
+        // that never failed.
+        run.RecordPageFailure(Now, token, "storage_provider_unavailable");
+        run.RecordInventoryPage(Now, token, lease, new MediaInventoryPageTally(3, 0, 0, 0, 0), null, false);
+        Assert.AreEqual(0, run.PageFailureCount);
+        Assert.AreEqual(1, run.TotalPageFailureCount, "A recovered failure was forgotten entirely.");
+        Assert.IsFalse(run.HasExhaustedFailures);
+
+        run.RecordOwnerProbes(Now, token, lease, default, MediaInventoryProbeStage.Completed, null);
+        Assert.IsTrue(run.CanComplete, "A run that re-read every failed page could not complete.");
+        Assert.IsTrue(run.Complete(Now, token, resolvedFindings: 2));
+        Assert.AreEqual(MediaInventoryRunState.Completed, run.State);
+        Assert.AreEqual(2, run.FindingsResolved);
+        Assert.AreEqual(1, run.TotalPageFailureCount);
+
+        // A store that keeps refusing still fails the run: the budget counts failures the run never
+        // recovered from, and three in a row is three pages it never read.
+        var second = MediaInventoryRun.Start(Location, Now, lease, token);
+        for (var attempt = 0; attempt < MediaInventoryPolicy.MaximumPageFailures; attempt++)
+        {
+            second.RecordPageFailure(Now, token, "storage_provider_unavailable");
+        }
+
+        Assert.IsTrue(second.HasExhaustedFailures);
+        Assert.AreEqual(MediaInventoryPolicy.MaximumPageFailures, second.TotalPageFailureCount);
+        Assert.IsFalse(second.CanComplete);
     }
 
     [TestMethod]
@@ -190,7 +226,7 @@ public sealed class Phase6B4CMediaInventoryDomainTests
         var lease = TimeSpan.FromMinutes(5);
         var token = Guid.NewGuid();
         var run = MediaInventoryRun.Start(Location, Now, lease, token);
-        run.RecordInventoryPage(Now, token, lease, new MediaInventoryPageTally(3, 0, 0, 0, 1, 0), "page-2", true);
+        run.RecordInventoryPage(Now, token, lease, new MediaInventoryPageTally(3, 0, 0, 0, 1), "page-2", true);
 
         Assert.IsTrue(run.ReleaseClaim(Now, token));
 
@@ -290,6 +326,138 @@ public sealed class Phase6B4CMediaInventoryDomainTests
             Guid.CreateVersion7(),
             Guid.CreateVersion7(),
             Now));
+    }
+
+    [TestMethod]
+    public void OneRunCountsOneObservationHoweverOftenItReplaysThePage()
+    {
+        var runId = Guid.CreateVersion7();
+        var finding = MediaInventoryFinding.Open(
+            TenantId,
+            MediaInventoryFindingKind.UnownedObject,
+            Locator(),
+            MediaInventoryOwnerKind.None,
+            null,
+            runId,
+            Now);
+
+        // A crash between writing a page's findings and committing its cursor re-reads exactly that
+        // page; a batch whose stat failed is re-examined from the same cursor. Counting those visits
+        // would make one logical observation look like an established condition.
+        finding.Observe(Now.AddMinutes(5), runId);
+        finding.Observe(Now.AddMinutes(9), runId);
+        Assert.AreEqual(1, finding.ConsecutiveObservations);
+        Assert.IsFalse(finding.IsActionable, "One run made a single observation look actionable.");
+        Assert.AreEqual(Now.AddMinutes(9), finding.LastObservedAtUtc);
+        Assert.IsTrue(finding.WasObservedBy(runId));
+
+        // The next run is a second look, and two looks are what makes a condition standing.
+        var later = Guid.CreateVersion7();
+        finding.Observe(Now.AddDays(1), later);
+        Assert.AreEqual(2, finding.ConsecutiveObservations);
+        Assert.IsTrue(finding.IsActionable);
+        Assert.IsFalse(finding.WasObservedBy(runId));
+    }
+
+    [TestMethod]
+    public void TwoRowsNamingOneMissingObjectBecomeOneFindingThatNamesNeither()
+    {
+        var locator = Locator();
+        var asset = Guid.CreateVersion7();
+        var derivative = Guid.CreateVersion7();
+        var other = new StorageObjectLocator(TenantId, Location, $"{TenantId:N}/{Guid.CreateVersion7():N}");
+
+        var collapsed = MediaInventoryFindingSet.Collapse(
+        [
+            new MediaInventoryPendingFinding(
+                MediaInventoryFindingKind.ObjectMissingForLiveOwner,
+                locator,
+                MediaInventoryOwnerKind.Asset,
+                asset),
+            new MediaInventoryPendingFinding(
+                MediaInventoryFindingKind.ObjectMissingForLiveOwner,
+                locator,
+                MediaInventoryOwnerKind.Derivative,
+                derivative),
+            new MediaInventoryPendingFinding(
+                MediaInventoryFindingKind.CleanupStuck,
+                locator,
+                MediaInventoryOwnerKind.IngestObject,
+                derivative),
+            new MediaInventoryPendingFinding(
+                MediaInventoryFindingKind.ObjectMissingForLiveOwner,
+                other,
+                MediaInventoryOwnerKind.Asset,
+                asset),
+        ]);
+
+        // One disagreement about one object, however many rows name it — which is exactly what the
+        // partial unique index over unresolved findings says, so queueing both would lose the whole
+        // page's findings to a constraint violation.
+        Assert.HasCount(3, collapsed);
+        var missing = collapsed.Single(item =>
+            item.Kind == MediaInventoryFindingKind.ObjectMissingForLiveOwner &&
+            item.Locator.ObjectKey == locator.ObjectKey);
+        Assert.AreEqual(MediaInventoryOwnerKind.None, missing.OwnerKind);
+        Assert.IsNull(missing.OwnerId, "The finding attributed a shared object to whichever row was read first.");
+
+        // A different kind about the same object, and the same kind about a different object, are
+        // both separate findings and keep the owner they were observed with.
+        Assert.AreEqual(
+            MediaInventoryOwnerKind.IngestObject,
+            collapsed.Single(item => item.Kind == MediaInventoryFindingKind.CleanupStuck).OwnerKind);
+        Assert.AreEqual(
+            asset,
+            collapsed.Single(item => item.Locator.ObjectKey == other.ObjectKey).OwnerId);
+
+        // The order observations arrived in is the order they are written in, so a replay of the
+        // same page produces the same rows rather than a different arrangement of them.
+        Assert.AreEqual(locator.ObjectKey, collapsed[0].Locator.ObjectKey);
+        Assert.AreEqual(MediaInventoryFindingKind.CleanupStuck, collapsed[1].Kind);
+        Assert.AreEqual(other.ObjectKey, collapsed[2].Locator.ObjectKey);
+    }
+
+    [TestMethod]
+    public void AnotherAuthorityOwnsARowWhileItHoldsAClaimOrItsRetentionHasElapsed()
+    {
+        var claim = Guid.NewGuid();
+        Assert.AreEqual(
+            MediaInventoryOwnerState.Live,
+            MediaInventoryClassifier.ClassifyOwnerState(MediaAssetStatus.Ready, null, null, null, Now));
+
+        // A live purge claim, whatever the status says.
+        Assert.AreEqual(
+            MediaInventoryOwnerState.OwnedByPurge,
+            MediaInventoryClassifier.ClassifyOwnerState(
+                MediaAssetStatus.Tombstoned,
+                Now.AddDays(10),
+                claim,
+                Now.AddMinutes(1),
+                Now));
+
+        // An expired claim is nobody's, so the row is decided by its retention alone.
+        Assert.AreEqual(
+            MediaInventoryOwnerState.Live,
+            MediaInventoryClassifier.ClassifyOwnerState(
+                MediaAssetStatus.Tombstoned,
+                Now.AddDays(10),
+                claim,
+                Now.AddMinutes(-1),
+                Now));
+        Assert.AreEqual(
+            MediaInventoryOwnerState.OwnedByPurge,
+            MediaInventoryClassifier.ClassifyOwnerState(
+                MediaAssetStatus.Tombstoned,
+                Now,
+                null,
+                null,
+                Now));
+
+        // A tombstone history references keeps no due date, so nothing is coming to delete it and it
+        // is still supposed to be readable.
+        Assert.AreEqual(
+            MediaInventoryOwnerState.Live,
+            MediaInventoryClassifier.ClassifyOwnerState(MediaAssetStatus.Tombstoned, null, null, null, Now));
     }
 
     private static StorageObjectLocator Locator() =>

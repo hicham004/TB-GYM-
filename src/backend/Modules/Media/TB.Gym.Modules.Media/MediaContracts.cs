@@ -391,7 +391,11 @@ public sealed class MediaReconciliationOptions
     /// </summary>
     public int ObjectsPerRun { get; set; } = 2000;
 
-    /// <summary>The most rows one pass examines in the direction that asks the store about a row.</summary>
+    /// <summary>
+    /// The most rows one pass examines in the direction that asks the store about a row. At least
+    /// one while the pass is enabled: a budget of zero is a run that can never finish its owner pass
+    /// and therefore never completes, which is a switched-off pass wearing a budget's clothes.
+    /// </summary>
     public int OwnerProbesPerRun { get; set; } = 500;
 
     /// <summary>

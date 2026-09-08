@@ -586,10 +586,13 @@ stored objects and asks the database who owns each key, and it walks rows with a
 store whether their object exists. It records what it found in `media.InventoryFindings` and stops
 there. It deletes no object, clears no locator, marks nothing purged, releases no allowance, writes no
 lifecycle configuration and repairs no finding. That is structural rather than editorial: the service
-is composed with `IObjectInventory`, which lists and stats, and never with `IObjectStorage`, which
-writes and deletes, so no code path inside it has anything to call; an architecture test asserts the
-constructor rather than trusting review. A missing object never tombstones a row and a failed provider
-call is never read as an absence. See `docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`
+is composed with `IObjectInventory`, which lists and stats, and `IMediaInventoryFindingStore`, which
+writes findings, and never with `IObjectStorage` or with any container that could resolve one — a
+service holding `IServiceScopeFactory` can produce the storage port in a line, so admitting one would
+have made the guarantee an argument about the code rather than a property of its shape. An
+architecture test asserts the constructor, and rejects both delete-capable and resolving parameters,
+rather than trusting review. A missing object never tombstones a row and a failed provider call is
+never read as an absence. See `docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`
 and `DOMAIN-RULES.md` MED-012.
 
 Only canonical application locators at that one location are reconciled. A key outside the grammar, or
@@ -603,17 +606,35 @@ ever heard of only because scan evidence survives a purge and still names the ex
 key used to address.
 
 `media.InventoryRuns` is not tenant-owned, because a run describes a store rather than a workspace. It
-carries the lease, both resume cursors, the counters and the failure count, and `Completed` is
-reachable only when both passes finished with no page failure — enforced in the domain and by a check
-constraint — because "it found nothing" from a pass that could not read everything is a different
-statement from the same words after a complete one. A failed page leaves its cursor untouched so the
-page is re-read rather than stepped over; a pass that spends its budget hands the run back with its
-cursors intact; a run older than a day is abandoned rather than resumed on a cursor the store may no
-longer honour. One unfinished run per location, by partial unique index plus a lease token, so several
-replicas may run the loop and only one does the work. No storage call happens inside a database
-transaction. Findings are opened, re-observed and resolved, never duplicated and never deleted; the
-partial unique index over unresolved findings is what makes a resumed or concurrent pass converge on
-one row.
+carries the lease, both resume cursors, the counters and the failure counts, and `Completed` is
+reachable only when both passes finished with no outstanding page failure — enforced in the domain and
+by a check constraint — because "it found nothing" from a pass that could not read everything is a
+different statement from the same words after a complete one. A failed page leaves its cursor
+untouched so the page is re-read rather than stepped over, and re-reading it clears the outstanding
+failure: nothing was skipped, so the run has as much right to finish as one that never failed. The run
+keeps a total that says the failures happened, and consecutive failures still fail it. A pass that
+spends its budget hands the run back with its cursors intact; a run older than a day is abandoned
+rather than resumed on a cursor the store may no longer honour. A listing that says there is more
+behind it and hands back no usable cursor, that cannot advance, or that omits an object's key, length
+or modification instant is a provider failure rather than the end of the enumeration — every one of
+those fails open if it is guessed at, a missing length as a mismatch and a missing instant as an
+object old enough to be an orphan.
+
+One unfinished run per location, by partial unique index plus a lease token, so several replicas may
+run the loop and only one does the work. The lease bounds the work rather than describing it: no
+remote call is started without enough of it left to finish inside, each call carries the remainder as
+its own deadline, and ownership is re-checked inside every transaction that writes a finding or moves
+a cursor — so a worker whose lease was taken while it was probing writes nothing. No storage call
+happens inside a database transaction.
+
+Findings are opened, re-observed and resolved, never duplicated and never deleted; the partial unique
+index over unresolved findings is what makes a resumed or concurrent pass converge on one row, and one
+object claimed by several rows is one finding rather than a constraint violation. A run counts one
+observation per finding however often it replays a page, so a single run can never make a condition
+look established. **No pass resolves anything.** Only a run that completed both passes resolves the
+findings it did not observe again, which is the only evidence that separates "the condition is gone"
+from "this pass stopped early" — and an object that vanished from the store, whose finding nothing
+enumerates or probes any more, is reachable in no other way.
 
 Bucket lifecycle stays an operator prerequisite rather than code: one rule aborting incomplete
 multipart uploads after a day, applied by hand with an Admin credential the application never holds,

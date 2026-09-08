@@ -841,12 +841,13 @@ path-scoped grant, authorization per request. No public bucket, CDN, presigned U
 SSE-C or client-side encryption — every one of those replaces "the API authorized this request" with
 "the holder of this URL may read these bytes".
 
-### Phase 6B-4C: media inventory reconciliation (complete)
+### Phase 6B-4C: media inventory reconciliation (implemented, not yet accepted)
 
-Status: complete, implemented 2026-09-08. See
-`docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`, `ARCHITECTURE.md`
-section 9 and `DOMAIN-RULES.md` MED-012. Additive migration
-`20260908190256_Phase6B4CMediaInventoryReconciliation`: two new tables and two partial indexes; no
+Status: implemented 2026-09-08, with a correctness follow-up on 2026-09-09; not deployed and not
+accepted. See `docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`,
+`ARCHITECTURE.md` section 9 and `DOMAIN-RULES.md` MED-012. Additive migrations
+`20260908190256_Phase6B4CMediaInventoryReconciliation` (two new tables and two partial indexes) and
+`20260908212945_Phase6B4CFollowUpInventoryFailureRecovery` (one counter and one widened check); no
 existing media table is altered.
 
 - **It reads and never repairs.** A daily bounded pass enumerates stored objects and asks who owns
@@ -859,15 +860,32 @@ existing media table is altered.
   a 24-hour grace, an object a purged row still names through its retained scan evidence, a length
   mismatch, one key claimed by two live rows, a derivative and parent disagreeing about purge, and a
   cleanup stuck after repeated failures. Unique per tenant/kind/location/key while unresolved, so a
-  resumed or concurrent pass converges on one row; re-observed rather than duplicated, resolved
-  one-way, never deleted. An object key lives on a finding and never in a log.
+  resumed or concurrent pass converges on one row and one object with several claimants is one
+  finding; re-observed rather than duplicated, and one run counts one observation however often it
+  replays a page. An object key lives on a finding and never in a log.
+- **A pass never closes a finding.** Only a run that finished both passes with no outstanding failure
+  resolves what it did not observe again — the only evidence that tells "the condition is gone" from
+  "this pass stopped early", and the only thing that can ever close a finding about an object that has
+  since vanished from the store. Resolution stays one-way and nothing is deleted.
 - **A partial run is never a clean bill of health.** The run row carries the lease, both cursors, the
-  counters and the failure count, and `Completed` requires both passes finished with no page failure,
-  in the domain and at the database. A failed page leaves its cursor alone so its objects are re-read
-  rather than called verified; a spent budget hands the run back; a day-old run is abandoned rather
-  than resumed on a stale cursor. One unfinished run per location by partial unique index and lease.
+  counters and the failure counts, and `Completed` requires both passes finished with no outstanding
+  page failure, in the domain and at the database. A failed page leaves its cursor alone so its
+  objects are re-read rather than called verified — and re-reading it clears the outstanding failure,
+  so one transient blip cannot make a long run permanently incomplete, while the total is retained and
+  consecutive failures still fail the run. A truncated listing with no usable cursor, one that cannot
+  advance, or an object listed without a key, a length or a modification instant is a provider failure
+  and never a completed enumeration. A spent budget hands the run back; a day-old run is abandoned
+  rather than resumed on a stale cursor. One unfinished run per location by partial unique index and
+  lease.
+- **A lease bounds the work rather than describing it.** No remote call starts without enough lease
+  left to finish inside it, each call carries the remainder as its deadline, and ownership is
+  re-checked inside every transaction that writes a finding or moves a cursor, so a worker whose run
+  was taken over mid-probe writes nothing at all.
 - **Existing authorities are untouched.** Rows the purge sweep or a live ingest reservation owns are
   observed and left alone, and no storage call happens inside a database transaction.
+- **Configuration cannot mean "never finish".** Enabling the pass with no owner-probe budget is
+  refused at startup, because such a run can never reach a completed state and would be abandoned
+  daily without anything saying so.
 - **Lifecycle stays an operator prerequisite.** One rule aborting incomplete multipart uploads after
   a day, applied by hand with an Admin credential the application never holds. No object-expiration
   and no storage-class transition rule without a new ADR. The runtime credential is unchanged.

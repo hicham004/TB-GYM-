@@ -1101,17 +1101,38 @@ outside the grammar or naming no workspace is counted on the run and never attri
 finding is a tenant-owned row; rows at another location are counted as unreconciled, never probed.
 Rows the leased purge sweep or a live ingest reservation already owns are observed and left alone,
 except that a cleanup failing repeatedly for a day becomes a finding without changing its retry
-schedule. Findings are unique per tenant, kind, location and key while unresolved, are re-observed
-rather than duplicated, are never described as actionable on a single observation, and resolve
-one-way; a condition that returns is a new finding. An object key is recorded only on a finding and
-never in a log. A run is complete only when both passes finished with no page failure — enforced in
-the domain and at the database — and a failed page leaves its cursor untouched so its objects are
-re-read rather than counted as verified; one unfinished run exists per location, claimed under a
-lease, and no storage call happens inside a database transaction. The 30-day tombstone retention
-stays a fixed constant. Bucket lifecycle is operator configuration, not application behaviour: one
-rule aborting incomplete multipart uploads after a day, applied with a credential the application
-never holds, and no object-expiration or storage-class transition rule without a new approved
-decision.
+schedule. Findings are unique per tenant, kind, location and key while unresolved — one object with
+several claimants is one finding, and one that several rows claim together names none of them — are
+re-observed rather than duplicated, and one run counts one observation however often it replays a
+page, so a single run can never make a condition actionable. An object key is recorded only on a
+finding and never in a log.
+
+**A pass never closes a finding.** Opening and re-observing are what a page or a batch may do;
+resolution belongs only to a run that finished both passes with no outstanding failure and therefore
+examined every object and every row the location has. Such a run resolves exactly the unresolved
+findings it did not observe again, because a complete traversal that did not reproduce a condition is
+what proves it gone: a length mismatch stays open until the lengths agree, a duplicate claim until the
+second claim is removed, and a missing-object finding closes as observed only where its row is still
+the live owner of that key — which is provable only if the store answered its probe. A partial,
+failed, abandoned or budget-exhausted pass resolves nothing. Resolution is one-way; a condition that
+returns is a new finding.
+
+A run is complete only when both passes finished with no outstanding page failure — enforced in the
+domain and at the database. A failed page leaves its cursor untouched so its objects are re-read
+rather than counted as verified, and re-reading it clears the outstanding failure so a transient
+provider blip cannot make a run permanently incomplete; the run keeps a total that says it happened,
+and consecutive failures still fail the run. A listing that claims more behind it and hands back no
+usable cursor, that cannot advance, or that omits an object's key, length or modification instant is a
+provider failure and never the end of an enumeration. One unfinished run exists per location, claimed
+under a lease; no remote call is started without enough lease left to finish inside it, ownership is
+re-checked inside every transaction that writes a finding or advances a cursor, and no storage call
+happens inside a database transaction. Reconciliation holds a list/stat port and a finding-writing
+port and no service locator, so it cannot resolve a capability it was not given. Enabling the pass
+with no owner-probe budget is refused at startup, because such a run can never complete. The 30-day
+tombstone retention stays a fixed constant. Bucket lifecycle is operator configuration, not
+application behaviour: one rule aborting incomplete multipart uploads after a day, applied with a
+credential the application never holds, and no object-expiration or storage-class transition rule
+without a new approved decision.
 
 **MED-007** Upload bodies are streamed with explicit application and Nginx limits, endpoint
 rate/concurrency controls, and a configurable workspace-byte quota. Deleting historically
@@ -1168,8 +1189,9 @@ locator atomically attached to an asset/derivative, positively deleted and marke
 in immediately due durable cleanup state; a crashed live reservation becomes due after 15 minutes.
 Non-purged ingest bytes count toward the workspace and applicable client allowance. Compensation uses
 an independent bounded claim token, handles original and derivative locators independently, and
-deletion is idempotent. Reconciliation clears a key and releases quota only after storage confirms
-deletion.
+deletion is idempotent. Purge finalization is what clears a key and releases quota, and only after
+storage confirms the deletion. Inventory reconciliation never does either: it is a read-only observer
+that records findings, and MED-012 is the rule that governs it.
 
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and

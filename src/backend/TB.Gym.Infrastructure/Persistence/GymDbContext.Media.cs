@@ -250,7 +250,7 @@ public sealed partial class GymDbContext
                     "\"State\" <> 'Completed' OR (\"InventoryCompleted\" AND \"InventoryCursor\" IS NULL AND \"ProbeStage\" = 'Completed' AND \"PageFailureCount\" = 0)");
                 table.HasCheckConstraint(
                     "CK_MediaInventoryRuns_Counters",
-                    "\"ObjectsScanned\" >= 0 AND \"ObjectsSkippedRecent\" >= 0 AND \"ObjectsSkippedOwnedByPurge\" >= 0 AND \"UnattributableKeyCount\" >= 0 AND \"OwnersProbed\" >= 0 AND \"OwnersSkippedNotReconciled\" >= 0 AND \"OwnersSkippedOwnedByPurge\" >= 0 AND \"FindingsOpened\" >= 0 AND \"FindingsResolved\" >= 0 AND \"PageFailureCount\" >= 0");
+                    "\"ObjectsScanned\" >= 0 AND \"ObjectsSkippedRecent\" >= 0 AND \"ObjectsSkippedOwnedByPurge\" >= 0 AND \"UnattributableKeyCount\" >= 0 AND \"OwnersProbed\" >= 0 AND \"OwnersSkippedNotReconciled\" >= 0 AND \"OwnersSkippedOwnedByPurge\" >= 0 AND \"FindingsOpened\" >= 0 AND \"FindingsResolved\" >= 0 AND \"PageFailureCount\" >= 0 AND \"TotalPageFailureCount\" >= \"PageFailureCount\"");
             });
             ConfigureAuditable(entity);
         });

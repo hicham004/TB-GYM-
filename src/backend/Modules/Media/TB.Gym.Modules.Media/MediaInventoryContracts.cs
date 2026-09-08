@@ -125,10 +125,37 @@ public static class MediaInventoryPolicy
     public const int ActionableObservations = 2;
 
     /// <summary>
-    /// Page failures after which a run is abandoned as failed rather than resumed. The next
-    /// scheduled pass starts a fresh run from the beginning.
+    /// Consecutive page failures after which a run is abandoned as failed rather than resumed. The
+    /// next scheduled pass starts a fresh run from the beginning.
     /// </summary>
+    /// <remarks>
+    /// Consecutive rather than cumulative. A page that failed keeps its cursor, so a later
+    /// successful re-read of that same page means nothing was skipped and the run is entitled to
+    /// finish; counting the failure forever would make one blip on a location that takes several
+    /// passes to walk a permanent refusal to ever complete. <see cref="MaximumRunAge"/> is what
+    /// bounds a run that keeps flapping between a failure and a success.
+    /// </remarks>
     public const int MaximumPageFailures = 3;
+
+    /// <summary>
+    /// How much of the lease must remain before a provider call is started, and therefore the
+    /// slack every remote call is bounded by.
+    /// </summary>
+    /// <remarks>
+    /// A lease exists to say who owns the run right now. A call that may still be in flight when
+    /// the lease expires makes that statement false: another replica can claim the run while the
+    /// first is still probing, and the first would then write findings and cursors for a run it no
+    /// longer owns. Every remote call is therefore given the remaining lease minus this margin as
+    /// its own deadline, and the margin is what is left for the database writes that follow it.
+    /// </remarks>
+    public static readonly TimeSpan LeaseSafetyMargin = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Consecutive empty-but-truncated pages tolerated before the enumeration is called stuck. A
+    /// store may legitimately answer with fewer entries than were asked for, including none, but a
+    /// store that keeps doing so is not making progress and must not be waited on forever.
+    /// </summary>
+    public const int MaximumEmptyPages = 10;
 
     /// <summary>
     /// How long an unfinished run may live before it is abandoned instead of resumed. A cursor from
@@ -276,6 +303,92 @@ public readonly record struct MediaInventoryObjectVerdict(
     MediaInventoryFindingKind? Finding = null);
 
 /// <summary>
+/// Why a pass stopped reading. Stable codes owned here rather than provider prose, because a
+/// failure code is recorded on the run row and read by a person.
+/// </summary>
+public static class MediaInventoryFailureCodes
+{
+    /// <summary>The store answered, but its answer could not be continued or could not be trusted.</summary>
+    public const string ListNoProgress = "storage_list_no_progress";
+
+    /// <summary>The store listed an object without the metadata a decision about it needs.</summary>
+    public const string ListMetadataMissing = "storage_list_metadata_missing";
+
+    /// <summary>The call would have outlived the lease, so it was abandoned rather than finished.</summary>
+    public const string LeaseExpired = "storage_lease_expired";
+
+    /// <summary>The store did not answer, and an absence was therefore never established.</summary>
+    public const string ProviderError = "storage_provider_error";
+}
+
+/// <summary>
+/// One condition a pass observed, before anything durable is written for it: the kind, the object
+/// it is about, and the row that owns that object when exactly one does.
+/// </summary>
+public readonly record struct MediaInventoryPendingFinding(
+    MediaInventoryFindingKind Kind,
+    StorageObjectLocator Locator,
+    MediaInventoryOwnerKind OwnerKind,
+    Guid? OwnerId);
+
+/// <summary>
+/// The one-finding-per-object representation the unresolved unique index enforces, computed before
+/// a write rather than discovered as a constraint violation.
+/// </summary>
+public static class MediaInventoryFindingSet
+{
+    /// <summary>
+    /// Reduces one pass's observations to at most one finding per kind and key.
+    /// </summary>
+    /// <remarks>
+    /// Two rows can name one object: an asset and a derivative may both hold the same key, and both
+    /// being missing is one disagreement about one object rather than two. The index says so — it is
+    /// unique on tenant, kind, location and key over unresolved rows — so a pass that queued both
+    /// would collide with it and lose the whole page's findings to a constraint violation.
+    /// <para>
+    /// When the claimants differ, the surviving finding names none of them, for the reason a
+    /// duplicate key claim names none: attributing the condition to whichever row happened to be
+    /// read first would describe a defect about an object as a property of one row.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<MediaInventoryPendingFinding> Collapse(
+        IReadOnlyList<MediaInventoryPendingFinding> observations)
+    {
+        ArgumentNullException.ThrowIfNull(observations);
+        if (observations.Count <= 1)
+        {
+            return observations;
+        }
+
+        var collapsed = new Dictionary<(MediaInventoryFindingKind Kind, string ObjectKey), MediaInventoryPendingFinding>();
+        var order = new List<(MediaInventoryFindingKind Kind, string ObjectKey)>();
+        foreach (var observation in observations)
+        {
+            var subject = (observation.Kind, observation.Locator.ObjectKey);
+            if (!collapsed.TryGetValue(subject, out var existing))
+            {
+                collapsed.Add(subject, observation);
+                order.Add(subject);
+                continue;
+            }
+
+            if (existing.OwnerKind == observation.OwnerKind && existing.OwnerId == observation.OwnerId)
+            {
+                continue;
+            }
+
+            collapsed[subject] = existing with
+            {
+                OwnerKind = MediaInventoryOwnerKind.None,
+                OwnerId = null,
+            };
+        }
+
+        return [.. order.Select(subject => collapsed[subject])];
+    }
+}
+
+/// <summary>
 /// The decisions reconciliation makes, as pure functions over observed facts, so that every case can
 /// be proved without a database, a store or a clock.
 /// </summary>
@@ -345,6 +458,27 @@ public static class MediaInventoryClassifier
         objectMissing && state == MediaInventoryOwnerState.Live
             ? MediaInventoryFindingKind.ObjectMissingForLiveOwner
             : null;
+
+    /// <summary>
+    /// Whether another authority already owns a stored object's row, from the facts that decide it:
+    /// an unexpired purge claim, or a tombstone whose retention has elapsed.
+    /// </summary>
+    /// <remarks>
+    /// Shared rather than duplicated because two places have to agree about it. The pass uses it to
+    /// decide what may be reported, and the finding store uses it to decide whether a row is still
+    /// the live owner a finding accused — and if those two answers could differ, a finding could be
+    /// resolved for a reason the pass never established.
+    /// </remarks>
+    public static MediaInventoryOwnerState ClassifyOwnerState(
+        MediaAssetStatus status,
+        DateTimeOffset? purgeAfterUtc,
+        Guid? purgeClaimToken,
+        DateTimeOffset? purgeClaimExpiresAtUtc,
+        DateTimeOffset now) =>
+        (purgeClaimToken is not null && purgeClaimExpiresAtUtc > now) ||
+        (status == MediaAssetStatus.Tombstoned && purgeAfterUtc is { } due && due <= now)
+            ? MediaInventoryOwnerState.OwnedByPurge
+            : MediaInventoryOwnerState.Live;
 
     /// <summary>
     /// Whether a cleanup that keeps failing has been failing long enough to report. It never changes

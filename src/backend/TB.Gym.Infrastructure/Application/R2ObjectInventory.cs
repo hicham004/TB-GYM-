@@ -68,27 +68,36 @@ internal sealed class R2ObjectInventory(
                 },
                 cancellationToken);
 
+            // Truncation is the provider's answer, never a count: a page may carry fewer entries
+            // than were asked for and still have more behind it, so counting to the page size would
+            // stop an enumeration early and call the remainder verified. A response that does not
+            // say is not an untruncated one — it is a response this adapter cannot read.
+            if (response.IsTruncated is not { } hasMore)
+            {
+                return FailedPage(MediaInventoryFailureCodes.ListMetadataMissing, "list");
+            }
+
             var entries = new List<ObjectInventoryEntry>(response.S3Objects?.Count ?? 0);
             foreach (var stored in response.S3Objects ?? [])
             {
-                if (string.IsNullOrEmpty(stored.Key))
+                // A key, a length and a modification instant are what every decision downstream is
+                // made of, and each of them fails open if it is invented: a missing length becomes a
+                // length mismatch against the row that owns the object, and a missing instant
+                // becomes an object old enough to be called an orphan nobody owns. A listing that
+                // does not carry them has not described this object, so the page has not been read.
+                if (string.IsNullOrEmpty(stored.Key) ||
+                    stored.Size is not { } size ||
+                    stored.LastModified is not { } modified)
                 {
-                    continue;
+                    return FailedPage(MediaInventoryFailureCodes.ListMetadataMissing, "list");
                 }
 
-                entries.Add(new ObjectInventoryEntry(
-                    stored.Key,
-                    stored.Size ?? 0,
-                    stored.LastModified is { } modified
-                        ? new DateTimeOffset(modified.ToUniversalTime(), TimeSpan.Zero)
-                        : DateTimeOffset.MinValue));
+                entries.Add(new ObjectInventoryEntry(stored.Key, size, Utc(modified)));
             }
 
-            // Truncation is the provider's answer, never a count: a page may carry fewer entries
-            // than were asked for and still have more behind it, so counting to the page size would
-            // stop an enumeration early and call the remainder verified.
-            var hasMore = response.IsTruncated == true &&
-                !string.IsNullOrEmpty(response.NextContinuationToken);
+            // Reported exactly as the store answered. Whether "more behind it, and here is no cursor
+            // to follow" is usable is the reconciliation pass's decision, and it treats it as a
+            // failure rather than as the end of the enumeration.
             return new ObjectInventoryPage(
                 ObjectStorageOperationStatus.Success,
                 entries,
@@ -97,17 +106,31 @@ internal sealed class R2ObjectInventory(
         }
         catch (AmazonS3Exception exception)
         {
-            return FailedPage(Classify(exception, "list"));
+            return new ObjectInventoryPage(
+                ObjectStorageOperationStatus.Failed,
+                [],
+                FailureCode: Classify(exception, "list"));
         }
         catch (Exception exception) when (exception is AmazonServiceException
                                               or HttpRequestException
                                               or IOException
                                               or TimeoutException)
         {
-            LogProviderFailure(logger, "list", "storage_provider_unavailable", null);
-            return FailedPage("storage_provider_unavailable");
+            return FailedPage("storage_provider_unavailable", "list");
         }
     }
+
+    /// <summary>
+    /// The instant a listing reports, read as the UTC the protocol defines it to be. An unspecified
+    /// kind is not a local time here, and treating it as one would move an object across the
+    /// unowned-object grace window by the deployment's own offset.
+    /// </summary>
+    private static DateTimeOffset Utc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => new DateTimeOffset(value, TimeSpan.Zero),
+        DateTimeKind.Local => new DateTimeOffset(value).ToUniversalTime(),
+        _ => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero),
+    };
 
     public async Task<ObjectStatResult> StatAsync(
         StorageObjectLocator locator,
@@ -154,6 +177,12 @@ internal sealed class R2ObjectInventory(
         }
     }
 
+    private ObjectInventoryPage FailedPage(string code, string operation)
+    {
+        LogProviderFailure(logger, operation, code, null);
+        return new ObjectInventoryPage(ObjectStorageOperationStatus.Failed, [], FailureCode: code);
+    }
+
     private static bool IsMissing(AmazonS3Exception exception) =>
         exception.StatusCode == HttpStatusCode.NotFound ||
         string.Equals(exception.ErrorCode, "NoSuchKey", StringComparison.Ordinal);
@@ -168,9 +197,6 @@ internal sealed class R2ObjectInventory(
         LogProviderFailure(logger, operation, code, null);
         return code;
     }
-
-    private static ObjectInventoryPage FailedPage(string code) =>
-        new(ObjectStorageOperationStatus.Failed, [], FailureCode: code);
 }
 
 /// <summary>

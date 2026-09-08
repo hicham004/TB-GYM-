@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
 using TB.Gym.Modules.Media;
 using TB.Gym.SharedKernel;
 
@@ -129,7 +130,32 @@ public sealed class MediaProviderBoundaryTests
     }
 
     /// <summary>
-    /// Reconciliation cannot delete an object because it was never given anything that can.
+    /// A resolver hands out whatever the application registered, so it is a way to reach every
+    /// capability rather than a dependency on one.
+    /// </summary>
+    private static readonly Type[] BroadResolvers =
+    [
+        typeof(IServiceProvider),
+        typeof(IKeyedServiceProvider),
+        typeof(IServiceScopeFactory),
+        typeof(IServiceScope),
+        typeof(IServiceCollection),
+    ];
+
+    /// <summary>
+    /// Names of methods that hand back an arbitrary service. Matched exactly rather than by
+    /// substring, so an honest port whose own vocabulary happens to contain one of these words is
+    /// not mistaken for a container.
+    /// </summary>
+    private static readonly string[] ResolverMethods =
+    [
+        "GetService", "GetRequiredService", "GetKeyedService", "GetRequiredKeyedService",
+        "CreateScope", "CreateAsyncScope", "Resolve",
+    ];
+
+    /// <summary>
+    /// Reconciliation cannot delete an object because it was never given anything that can, and was
+    /// never given anything that could ask for one either.
     /// </summary>
     /// <remarks>
     /// This is the whole safety argument of Phase 6B-4C, and it is a property of the constructor
@@ -137,9 +163,16 @@ public sealed class MediaProviderBoundaryTests
     /// one. If a later change hands this service <c>IObjectStorage</c> — or any other type with a
     /// delete on it — the read-only guarantee is gone, and that change should have to fail here
     /// rather than be noticed in review.
+    /// <para>
+    /// A container counts as delete-capable, and this is the correction the first cut needed: a
+    /// service holding <c>IServiceScopeFactory</c> can resolve <c>IObjectStorage</c> in one line, so
+    /// asserting the absence of the storage port while admitting the thing that produces it proved
+    /// nothing at all. Writing a finding needs a per-workspace scope; that belongs behind a port
+    /// that can only write findings.
+    /// </para>
     /// </remarks>
     [TestMethod]
-    public void TheReconciliationServiceIsNeverGivenADeleteCapableDependency()
+    public void TheReconciliationServiceIsNeverGivenADeleteCapableOrResolvingDependency()
     {
         var infrastructure = LoadByName("TB.Gym.Infrastructure");
         var service = infrastructure.GetTypes()
@@ -156,6 +189,13 @@ public sealed class MediaProviderBoundaryTests
             typeof(IObjectStorage),
             parameters,
             "The reconciliation service takes IObjectStorage; it could then delete a workspace's bytes.");
+        foreach (var resolver in BroadResolvers)
+        {
+            Assert.IsEmpty(
+                parameters.Where(resolver.IsAssignableFrom),
+                $"The reconciliation service takes {resolver.Name}; it could then resolve IObjectStorage and delete a workspace's bytes.");
+        }
+
         foreach (var parameter in parameters)
         {
             Assert.IsEmpty(
@@ -164,6 +204,60 @@ public sealed class MediaProviderBoundaryTests
                     method.Name.Contains("Purge", StringComparison.OrdinalIgnoreCase) ||
                     method.Name.Contains("Put", StringComparison.OrdinalIgnoreCase)),
                 $"{parameter.Name} gives the reconciliation service a way to write or delete stored objects.");
+            Assert.IsEmpty(
+                parameter.GetMethods().Where(method =>
+                    ResolverMethods.Contains(method.Name, StringComparer.Ordinal)),
+                $"{parameter.Name} is a service locator; it gives the reconciliation service every capability the application registered.");
+        }
+    }
+
+    /// <summary>
+    /// The port that replaced the container is narrow: it writes findings and nothing else, and it
+    /// is what the reconciliation service is actually composed with.
+    /// </summary>
+    /// <remarks>
+    /// The test above proves the service holds no resolver. This one proves the thing it holds
+    /// instead is not a resolver by another name — a "persistence port" exposing a generic
+    /// save-anything or context-returning member would move the hole rather than close it.
+    /// </remarks>
+    [TestMethod]
+    public void TheReconciliationServiceWritesThroughANarrowFindingPort()
+    {
+        var infrastructure = LoadByName("TB.Gym.Infrastructure");
+        var port = infrastructure.GetTypes()
+            .SingleOrDefault(candidate => candidate.Name == "IMediaInventoryFindingStore");
+        Assert.IsNotNull(port, "The reconciliation finding port is missing from Infrastructure.");
+        Assert.IsFalse(port.IsPublic, "The finding port is public; it is an implementation detail.");
+
+        var service = infrastructure.GetTypes()
+            .Single(candidate => candidate.Name == "MediaInventoryReconciliationService");
+        var parameters = service.GetConstructors(
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .SelectMany(constructor => constructor.GetParameters())
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+        Assert.Contains(
+            port,
+            parameters,
+            "The reconciliation service does not write through the finding port.");
+
+        // Two operations, both about findings. Anything that returned a DbContext, a repository or a
+        // service would be the container again with a different name on it.
+        foreach (var method in port.GetMethods())
+        {
+            Assert.Contains(
+                "Async",
+                method.Name,
+                StringComparison.Ordinal,
+                $"{method.Name} is not one of the finding port's asynchronous write operations.");
+            Assert.AreEqual(
+                typeof(Task<>).Name,
+                method.ReturnType.Name,
+                $"{method.Name} hands back something other than the outcome of writing findings.");
+            Assert.AreEqual(
+                "MediaInventoryFindingWrite",
+                method.ReturnType.GetGenericArguments().Single().Name,
+                $"{method.Name} hands back something other than the outcome of writing findings.");
         }
     }
 

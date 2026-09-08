@@ -1,6 +1,6 @@
 # ADR 0025: Media Inventory Reconciliation and Retention Operations
 
-Status: accepted, 2026-09-08
+Status: accepted, 2026-09-08; amended 2026-09-09 (see "Amendment: what closes a finding")
 
 Builds on: ADR 0014, ADR 0023 and ADR 0024. Every decision in those remains in force and unchanged.
 This ADR adds a read-only observer beside them and takes nothing away.
@@ -32,10 +32,12 @@ allowance, touches no lifecycle configuration and repairs no finding. Every acti
 media state is deliberately absent rather than disabled, and adding one is a decision for a later ADR.
 
 The guarantee is structural. `MediaInventoryReconciliationService` is composed with `IObjectInventory`
-— which lists and stats — and never with `IObjectStorage`, which writes and deletes. There is no
-object in its constructor with a delete on it. An architecture test asserts that parameter list,
-because a reviewer can miss a call and a signature cannot hide one, and because the way a read-only
-sweep stops being one is a later constructor parameter that nobody thought about twice.
+— which lists and stats — and a narrow port that writes findings, and never with `IObjectStorage`,
+which writes and deletes, nor with any container that could produce one. There is no object in its
+constructor with a delete on it and nothing there to ask for one. An architecture test asserts that
+parameter list, because a reviewer can miss a call and a signature cannot hide one, and because the
+way a read-only sweep stops being one is a later constructor parameter that nobody thought about
+twice. (The first implementation took a scope factory; see the amendment.)
 
 ### The database stays the source of truth, and a provider answer is never promoted to one
 
@@ -77,10 +79,12 @@ never in a log line.
 
 Findings are opened, re-observed and resolved, never duplicated and never deleted. A partial unique
 index over unresolved findings — `(TenantId, Kind, StorageLocation, StorageKey)` — is the idempotency
-guarantee: a resumed pass, a re-run and a second replica all converge on one row. `ConsecutiveObservations`
+guarantee: a resumed pass, a re-run and a second replica all converge on one row, and one object that
+two rows claim is one finding rather than two inserts racing that index. `ConsecutiveObservations`
 separates a standing condition from an object deleted a moment after its page was read, and nothing is
-described as actionable on a single observation. Resolution is one-way; a condition that returns is a
-new finding, so what was once wrong here is never rewritten.
+described as actionable on a single observation — one *run* therefore counts once, however many times
+it replays a page. Resolution is one-way and belongs to a completed run alone; a condition that
+returns is a new finding, so what was once wrong here is never rewritten.
 
 Seven kinds, and what each means is fixed in `MediaInventoryPolicy` rather than configurable, because
 a deployment that could retune a threshold could turn a real leak into silence without changing a line
@@ -109,11 +113,12 @@ history and dead letters, not invented here.
 `media.InventoryRuns` is not tenant-owned: a run describes a store, and a store belongs to the
 deployment. It carries the lease, both resume cursors, the counters and the failure count.
 
-`Completed` is reachable only when both passes finished with no page failure, enforced in the domain
-and again by a check constraint. A pass that spends its budget hands the run back — lease released,
-cursors intact — and stays `Running` so the next tick resumes it; a run whose failure budget runs out
-is `Failed` and retained; one older than a day is `Abandoned` rather than resumed, because its cursor
-describes an enumeration the store may no longer be able to continue. This matters more than it looks:
+`Completed` is reachable only when both passes finished with no outstanding page failure, enforced in
+the domain and again by a check constraint. A pass that spends its budget hands the run back — lease
+released, cursors intact — and stays `Running` so the next tick resumes it; a run whose failure budget
+runs out without a page succeeding in between is `Failed` and retained; one older than a day is
+`Abandoned` rather than resumed, because its cursor describes an enumeration the store may no longer
+be able to continue. This matters more than it looks:
 "it found nothing" from a pass that could not read everything is a different statement from the same
 words after a complete one, and only the run row can tell them apart. A failed page deliberately leaves
 its cursor where it was, so the page is re-read rather than stepped over and its objects called
@@ -155,7 +160,8 @@ than an engineering knob.
 ### Where it runs
 
 A second `BackgroundService` beside the purge worker in the API process, daily by default, bounded by
-`Media:Reconciliation:ObjectsPerRun` and `OwnerProbesPerRun`. Deliberately not the same loop: deleting
+`Media:Reconciliation:ObjectsPerRun` and `OwnerProbesPerRun` — both at least one while the pass is
+enabled, because a budget of zero is a run that can never complete rather than a smaller pass. Deliberately not the same loop: deleting
 due bytes must finish in seconds and run every few minutes, while auditing a whole location walks
 everything and may take several passes, and sharing a loop would make an inventory walk the reason a
 deletion was late. Like the purge worker it is a timer, a scope and one call, and it must not grow into
@@ -165,6 +171,59 @@ Development and any unconfigured deployment need no separate switch.
 No storage call happens inside a database transaction, for the reason the purge sweep was rebuilt: list
 or stat, then classify with untracked reads, then write findings in one short per-tenant scope. An
 integration test holds that by failing if the store is called while a transaction is open.
+
+## Amendment: what closes a finding, and what a lease is worth (2026-09-09)
+
+The decisions above stand. Five of them were implemented in a way that did not hold, and the
+corrections are decisions in their own right rather than defect fixes, so they are recorded here.
+
+**A pass may open a finding and may never close one.** The first implementation resolved a finding
+whenever a pass "touched" its key without a matching condition, which let a successful stat — proof
+that an object exists and nothing else — close a length mismatch and a duplicate key claim that were
+opened minutes earlier in the same run. It also left `UnownedObject` and `PurgedObjectStillPresent`
+unresolvable forever: once such an object stops being listed, nothing enumerates it and nothing probes
+it, so no pass ever looks at it again. Resolution now belongs to one place — a run that finished both
+passes with no outstanding failure resolves exactly the unresolved findings it did not observe again.
+That is the only evidence in the system that distinguishes "the condition is gone" from "this pass
+stopped early", it is evidence about the exact condition because the classifier re-derives each kind,
+and it reaches the object that vanished, which nothing else can. A missing-object finding additionally
+records *which* of the two ways it ended: its row is still the live owner of that key, so the complete
+owner pass must have statted it successfully, or the row released the key and the accusation has no
+subject left.
+
+**A recovered failure is not a permanent one.** A failed page keeps its cursor so it is re-read; the
+first implementation then counted that failure against the run forever, so a run that re-read
+everything successfully could still never be `Completed`. The failure count now means *outstanding*
+failures and is cleared by a page that succeeds — nothing was skipped, so the run has as much right to
+finish as one that never failed — while a retained total keeps the fact that it happened, consecutive
+failures still fail the run, and the maximum run age still bounds one that keeps flapping.
+
+**The lease bounds the work rather than describing it.** A batch of a hundred sequential stats against
+a slow store could outlive a five-minute lease, and the worker would then write findings and cursors
+for a run another replica had legitimately taken. No remote call is now started without enough lease
+left to finish inside it, every call carries the remainder as its own deadline, and every transaction
+that writes a finding or moves a cursor re-checks ownership under the run row's own lock. Provider I/O
+stays outside database transactions, unchanged.
+
+**The structural guarantee is a structural guarantee.** The service was given `IServiceScopeFactory`
+to open per-workspace scopes — and a scope factory resolves `IObjectStorage` in one line, so the
+architecture test asserting the absence of the storage port proved nothing while admitting the thing
+that produces it. Findings are now written through a narrow port that can only write findings, the
+service holds no resolver of any kind, and the test rejects both delete-capable and resolving
+parameters.
+
+**A store's answer is validated, not guessed at.** A listing that claims more behind it and gives no
+usable cursor, one that cannot advance, and an object listed without a key, a length or a modification
+instant are all provider failures now. Each of them failed open before: a truncated page with no
+cursor ended the enumeration and let the run be called complete, a missing length became a mismatch
+against the row that owns the object, and a missing instant became an object old enough to be reported
+as an orphan nobody owns.
+
+Two smaller consequences of the same reasoning: one run counts one observation per finding however
+often it replays a page, because a resumable pass re-reads pages by design and a single run must never
+make a condition look established; and enabling the pass with `OwnerProbesPerRun = 0` is refused at
+startup, because such a run can never finish its owner pass, can never be `Completed`, and would be
+abandoned every day with nothing saying why.
 
 ## Consequences
 
@@ -205,7 +264,8 @@ Before a deployment relies on this:
 
 - ADR 0014 (tombstone, retention, quota and the deferred alerting), ADR 0023 (locator, evidence,
   leased purge), ADR 0024 (the bucket and the scanner)
-- `20260908190256_Phase6B4CMediaInventoryReconciliation`
+- `20260908190256_Phase6B4CMediaInventoryReconciliation`,
+  `20260908212945_Phase6B4CFollowUpInventoryFailureRecovery`
 - `docs/ARCHITECTURE.md` section 9, `DOMAIN-RULES.md` MED-012
 - Cloudflare R2: [S3 API compatibility](https://developers.cloudflare.com/r2/api/s3/api/),
   [object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/),

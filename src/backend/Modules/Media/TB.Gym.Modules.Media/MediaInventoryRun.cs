@@ -91,7 +91,24 @@ public sealed class MediaInventoryRun : AuditableEntity
 
     public int FindingsResolved { get; private set; }
 
+    /// <summary>
+    /// Failures since the last page this run read successfully, and therefore what is still
+    /// outstanding rather than what ever happened.
+    /// </summary>
+    /// <remarks>
+    /// A failed page keeps its cursor, so the very next attempt re-reads exactly the page that
+    /// failed. Once it has been read, nothing was skipped and the run has as much right to finish as
+    /// one that never failed — which is why this is cleared by a successful page and why
+    /// <see cref="TotalPageFailureCount"/> exists to remember that it happened.
+    /// </remarks>
     public int PageFailureCount { get; private set; }
+
+    /// <summary>
+    /// Every failure this run ever recorded, recovered or not. Never cleared: a completed run that
+    /// hit three transient failures on the way is a different thing from one that hit none, and the
+    /// only place that difference can be read is here.
+    /// </summary>
+    public int TotalPageFailureCount { get; private set; }
 
     public string? LastFailureCode { get; private set; }
 
@@ -155,9 +172,9 @@ public sealed class MediaInventoryRun : AuditableEntity
         ObjectsSkippedOwnedByPurge += tally.SkippedOwnedByPurge;
         UnattributableKeyCount += tally.Unattributable;
         FindingsOpened += tally.FindingsOpened;
-        FindingsResolved += tally.FindingsResolved;
         InventoryCursor = hasMore ? nextCursor : null;
         InventoryCompleted = !hasMore;
+        RecoverFromFailures();
         Renew(now, lease);
         return true;
     }
@@ -180,9 +197,9 @@ public sealed class MediaInventoryRun : AuditableEntity
         OwnersSkippedNotReconciled += tally.SkippedNotReconciled;
         OwnersSkippedOwnedByPurge += tally.SkippedOwnedByPurge;
         FindingsOpened += tally.FindingsOpened;
-        FindingsResolved += tally.FindingsResolved;
         ProbeStage = stage;
         ProbeCursorId = stage == MediaInventoryProbeStage.Completed ? null : cursorId;
+        RecoverFromFailures();
         Renew(now, lease);
         return true;
     }
@@ -199,14 +216,16 @@ public sealed class MediaInventoryRun : AuditableEntity
         }
 
         PageFailureCount++;
+        TotalPageFailureCount++;
         LastFailureCode = MediaText.Required(failureCode, 100, nameof(failureCode));
         LastProgressAtUtc = now;
         return true;
     }
 
     /// <summary>
-    /// Whether this run examined the whole location. Both passes finished and nothing failed; a
-    /// budget that ran out leaves a cursor behind and therefore does not qualify.
+    /// Whether this run examined the whole location. Both passes finished and no failure is
+    /// outstanding; a budget that ran out leaves a cursor behind and therefore does not qualify,
+    /// and neither does a page the store has still not served.
     /// </summary>
     public bool CanComplete =>
         State == MediaInventoryRunState.Running &&
@@ -214,7 +233,16 @@ public sealed class MediaInventoryRun : AuditableEntity
         ProbeStage == MediaInventoryProbeStage.Completed &&
         PageFailureCount == 0;
 
-    public bool Complete(DateTimeOffset now, Guid leaseToken)
+    /// <summary>
+    /// Records that this run examined the whole location, together with the findings its completion
+    /// put to rest.
+    /// </summary>
+    /// <remarks>
+    /// Resolution counts arrive here rather than on a page, because nothing a partial pass sees is
+    /// enough to close a finding: only a run that read everything can say a condition it did not
+    /// observe again is gone.
+    /// </remarks>
+    public bool Complete(DateTimeOffset now, Guid leaseToken, int resolvedFindings = 0)
     {
         if (!EnsureLive(leaseToken))
         {
@@ -227,6 +255,8 @@ public sealed class MediaInventoryRun : AuditableEntity
                 "A reconciliation run that did not finish both passes without failure cannot be completed.");
         }
 
+        ArgumentOutOfRangeException.ThrowIfNegative(resolvedFindings);
+        FindingsResolved += resolvedFindings;
         State = MediaInventoryRunState.Completed;
         CompletedAtUtc = now;
         LastProgressAtUtc = now;
@@ -284,11 +314,19 @@ public sealed class MediaInventoryRun : AuditableEntity
         ReleaseLease();
     }
 
-    /// <summary>Whether the failure budget for one run has been spent.</summary>
+    /// <summary>
+    /// Whether the failure budget for one run has been spent without a page in between succeeding.
+    /// </summary>
     public bool HasExhaustedFailures => PageFailureCount >= MediaInventoryPolicy.MaximumPageFailures;
 
     private bool EnsureLive(Guid leaseToken) =>
         State == MediaInventoryRunState.Running && OwnsLease(leaseToken);
+
+    /// <summary>
+    /// The store answered again. What failed before was re-read rather than stepped over, so it no
+    /// longer stands between this run and a completed one — but it is not forgotten either.
+    /// </summary>
+    private void RecoverFromFailures() => PageFailureCount = 0;
 
     private void Renew(DateTimeOffset now, TimeSpan lease)
     {
@@ -315,17 +353,21 @@ public enum MediaInventoryProbeStage
     Completed = 4,
 }
 
+/// <summary>
+/// What one enumerated page turned out to contain. It carries no resolution count, structurally: a
+/// pass opens and re-observes findings and never closes one, because closing a finding needs
+/// evidence a partial pass does not have.
+/// </summary>
 public readonly record struct MediaInventoryPageTally(
     int ObjectsScanned,
     int SkippedRecent,
     int SkippedOwnedByPurge,
     int Unattributable,
-    int FindingsOpened,
-    int FindingsResolved);
+    int FindingsOpened);
 
+/// <summary>What one bounded slice of the owner pass turned out to contain.</summary>
 public readonly record struct MediaInventoryProbeTally(
     int Probed,
     int SkippedNotReconciled,
     int SkippedOwnedByPurge,
-    int FindingsOpened,
-    int FindingsResolved);
+    int FindingsOpened);

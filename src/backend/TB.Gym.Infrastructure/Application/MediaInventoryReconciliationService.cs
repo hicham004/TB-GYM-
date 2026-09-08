@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -16,15 +15,23 @@ namespace TB.Gym.Infrastructure.Application;
 /// <remarks>
 /// <para>
 /// The guarantee that it cannot repair anything is structural rather than editorial: its constructor
-/// takes <see cref="IObjectInventory"/>, which lists and stats, and never <see cref="IObjectStorage"/>,
-/// which writes and deletes. There is no object here to call delete on. An architecture test holds
-/// that shape, because a later constructor parameter is exactly how a read-only sweep stops being one.
+/// takes <see cref="IObjectInventory"/>, which lists and stats, and <see cref="IMediaInventoryFindingStore"/>,
+/// which writes findings, and neither <see cref="IObjectStorage"/> nor any container that could
+/// resolve one. There is no object here to call delete on and no way to ask for one. An architecture
+/// test holds that shape, because a later constructor parameter is exactly how a read-only sweep
+/// stops being one.
 /// </para>
 /// <para>
 /// Two passes share one run. The inventory pass enumerates stored objects and asks the database who
 /// owns each key; the owner pass walks rows with a live key and asks the store whether their object
 /// exists. Neither holds a database transaction across a provider call, for the reason the purge
 /// sweep does not either: remote latency must not hold a transaction open.
+/// </para>
+/// <para>
+/// Neither pass ever closes a finding. A pass examines a subset — a page, a batch, whatever its
+/// budget and its lease allowed — and a subset that did not contain a condition is not evidence that
+/// the condition has gone. Only a run that finished both passes with no outstanding failure has
+/// looked at everything, and only such a run resolves what it did not observe again.
 /// </para>
 /// <para>
 /// Where an existing authority already owns a row — the leased purge sweep, the ingest reservation
@@ -34,8 +41,8 @@ namespace TB.Gym.Infrastructure.Application;
 /// </remarks>
 internal sealed class MediaInventoryReconciliationService(
     GymDbContext dbContext,
-    IServiceScopeFactory scopeFactory,
     IObjectInventory inventory,
+    IMediaInventoryFindingStore findingStore,
     IOptions<MediaStorageOptions> storageOptions,
     IClock clock,
     ILogger<MediaInventoryReconciliationService> logger)
@@ -45,13 +52,19 @@ internal sealed class MediaInventoryReconciliationService(
         LoggerMessage.Define<Guid, string, int>(
             LogLevel.Warning,
             new EventId(5521, "MediaInventoryPageFailed"),
-            "Media inventory run {RunId} could not read a page: {FailureCode}. Failures so far: {PageFailureCount}.");
+            "Media inventory run {RunId} could not read a page: {FailureCode}. Unrecovered failures: {PageFailureCount}.");
 
     private static readonly Action<ILogger, Guid, Exception?> LogRunAbandoned =
         LoggerMessage.Define<Guid>(
             LogLevel.Warning,
             new EventId(5522, "MediaInventoryRunAbandoned"),
             "Media inventory run {RunId} was abandoned: its resume cursors are older than one day.");
+
+    private static readonly Action<ILogger, Guid, Exception?> LogLeaseLost =
+        LoggerMessage.Define<Guid>(
+            LogLevel.Information,
+            new EventId(5526, "MediaInventoryLeaseLost"),
+            "Media inventory run {RunId} is no longer held by this worker; it stopped without writing.");
 
     private readonly TimeSpan runLease =
         TimeSpan.FromSeconds(storageOptions.Value.Reconciliation.RunLeaseSeconds);
@@ -67,24 +80,24 @@ internal sealed class MediaInventoryReconciliationService(
         }
 
         var location = inventory.ReconciledLocation;
-        var run = await ClaimRunAsync(location, cancellationToken);
-        if (run is null)
+        var claimed = await ClaimRunAsync(location, cancellationToken);
+        if (claimed is null)
         {
             return MediaInventoryReconciliationOutcome.Idle;
         }
 
         var totals = new ReconciliationTotals();
-        var live = await RunInventoryPassAsync(run, location, objectBudget, totals, cancellationToken);
-        if (live is not null)
+        var pass = await RunInventoryPassAsync(claimed, location, objectBudget, totals, cancellationToken);
+        if (pass is { Run: { } afterInventory, Continue: true })
         {
-            live = await RunOwnerPassAsync(live, location, ownerProbeBudget, totals, cancellationToken);
+            pass = await RunOwnerPassAsync(afterInventory, location, ownerProbeBudget, totals, cancellationToken);
         }
 
-        var state = live is null
-            ? MediaInventoryRunState.Running
-            : await FinalizeRunAsync(live, cancellationToken);
+        var state = pass.Run is { } live
+            ? await FinalizeRunAsync(live, location, totals, cancellationToken)
+            : MediaInventoryRunState.Running;
         return new MediaInventoryReconciliationOutcome(
-            run.RunId,
+            claimed.RunId,
             state,
             totals.ObjectsScanned,
             totals.OwnersProbed,
@@ -163,21 +176,39 @@ internal sealed class MediaInventoryReconciliationService(
                 return null;
             }
 
-            return new RunProgress(
-                run.Id,
-                token,
-                run.InventoryCursor,
-                run.InventoryCompleted,
-                run.ProbeStage,
-                run.ProbeCursorId,
-                run.PageFailureCount);
+            return RunProgress.From(run, token);
         });
     }
 
+    /// <summary>
+    /// Ends this worker's turn on the run: failed, completed, or handed back unfinished.
+    /// </summary>
+    /// <remarks>
+    /// Completion is the only place a finding is resolved, and the resolution sweep therefore runs
+    /// before the state changes rather than after it. Each of its writes re-checks the lease on its
+    /// own, so a worker that lost the run between the last page and here resolves nothing; and a
+    /// crash between the sweep and the state change leaves a run that is still Running with both
+    /// passes done, which the next tick finalises again from exactly this point.
+    /// </remarks>
     private async Task<MediaInventoryRunState> FinalizeRunAsync(
         RunProgress run,
+        string location,
+        ReconciliationTotals totals,
         CancellationToken cancellationToken)
     {
+        var resolved = 0;
+        if (await MayCompleteAsync(run, cancellationToken))
+        {
+            var swept = await findingStore.SweepUnobservedAsync(run.Claim, location, cancellationToken);
+            resolved = swept.Resolved;
+            totals.FindingsResolved += swept.Resolved;
+            if (!swept.Owned)
+            {
+                LogLeaseLost(logger, run.RunId, null);
+                return MediaInventoryRunState.Running;
+            }
+        }
+
         var now = clock.UtcNow;
         return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
@@ -195,14 +226,15 @@ internal sealed class MediaInventoryReconciliationService(
             }
             else if (stored.CanComplete)
             {
-                stored.Complete(now, run.Token);
+                stored.Complete(now, run.Token, resolved);
             }
             else
             {
-                // Budget ran out with work left. The run stays Running with its cursors intact and
-                // the next tick resumes it — and, because it is not Completed, nothing can read it
-                // as a statement that the location was fully examined. The lease is handed back
-                // rather than left to expire, so the next pass can pick the run up at once.
+                // Budget or lease ran out with work left. The run stays Running with its cursors
+                // intact and the next tick resumes it — and, because it is not Completed, nothing
+                // can read it as a statement that the location was fully examined. The lease is
+                // handed back rather than left to expire, so the next pass can pick the run up at
+                // once.
                 stored.ReleaseClaim(now, run.Token);
             }
 
@@ -213,9 +245,24 @@ internal sealed class MediaInventoryReconciliationService(
         });
     }
 
+    /// <summary>
+    /// Whether this run has read everything, asked before the resolution sweep so that a partial,
+    /// failed or budget-exhausted pass never reaches it.
+    /// </summary>
+    private async Task<bool> MayCompleteAsync(RunProgress run, CancellationToken cancellationToken)
+    {
+        var stored = await dbContext.MediaInventoryRuns
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == run.RunId, cancellationToken);
+        return stored is not null &&
+            stored.OwnsLease(run.Token) &&
+            !stored.HasExhaustedFailures &&
+            stored.CanComplete;
+    }
+
     // ---------------------------------------------------------------- inventory pass
 
-    private async Task<RunProgress?> RunInventoryPassAsync(
+    private async Task<PassOutcome> RunInventoryPassAsync(
         RunProgress run,
         string location,
         int objectBudget,
@@ -223,33 +270,85 @@ internal sealed class MediaInventoryReconciliationService(
         CancellationToken cancellationToken)
     {
         var scanned = 0;
+        var emptyPages = 0;
         while (run is { InventoryCompleted: false } &&
                scanned < objectBudget &&
                !cancellationToken.IsCancellationRequested)
         {
+            if (!TryLeaseBudget(run, out var budget))
+            {
+                // Not enough lease left to finish a call inside it. Nothing has been asserted about
+                // the pages not yet read, and the cursor still says where they start.
+                return new PassOutcome(run, Continue: false);
+            }
+
             var pageSize = Math.Min(MediaInventoryPolicy.PageSize, objectBudget - scanned);
+            var cursor = run.InventoryCursor;
             // No transaction is open here, and none may be: this is a remote call.
-            var page = await inventory.ListAsync(run.InventoryCursor, pageSize, cancellationToken);
+            var page = await ListWithinLeaseAsync(cursor, pageSize, budget, cancellationToken);
             if (page.Status != ObjectStorageOperationStatus.Success)
             {
-                var failed = await RecordFailureAsync(run, page.FailureCode, cancellationToken);
                 totals.PageFailures++;
-                return failed;
+                return new PassOutcome(
+                    await RecordFailureAsync(run, page.FailureCode, cancellationToken),
+                    Continue: false);
+            }
+
+            if (!IsUsablePage(page, cursor, ref emptyPages))
+            {
+                // The store answered with a page that cannot be continued or cannot advance. That is
+                // a provider failure rather than the end of the enumeration: treating it as the end
+                // would mark the run complete having never read what is behind it.
+                totals.PageFailures++;
+                return new PassOutcome(
+                    await RecordFailureAsync(run, MediaInventoryFailureCodes.ListNoProgress, cancellationToken),
+                    Continue: false);
             }
 
             var tally = await ClassifyPageAsync(run, location, page.Entries, cancellationToken);
+            if (tally is not { } counted)
+            {
+                return new PassOutcome(null, Continue: false);
+            }
+
             scanned += page.Entries.Count;
-            totals.Add(tally);
-            var advanced = await RecordPageAsync(run, tally, page.NextCursor, page.HasMore, cancellationToken);
+            totals.Add(counted);
+            var advanced = await RecordPageAsync(run, counted, page.NextCursor, page.HasMore, cancellationToken);
             if (advanced is null)
             {
-                return null;
+                return new PassOutcome(null, Continue: false);
             }
 
             run = advanced;
         }
 
-        return run;
+        return new PassOutcome(run, Continue: true);
+    }
+
+    /// <summary>
+    /// Whether one answered page lets the enumeration go on. A page that claims more behind it and
+    /// hands back no usable cursor, or the same cursor it was given, is a page that cannot be
+    /// followed; a store that keeps answering with nothing is one that is not advancing.
+    /// </summary>
+    private static bool IsUsablePage(ObjectInventoryPage page, string? cursor, ref int emptyPages)
+    {
+        if (page.HasMore &&
+            (string.IsNullOrEmpty(page.NextCursor) ||
+             string.Equals(page.NextCursor, cursor, StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        if (page.Entries.Count > 0)
+        {
+            emptyPages = 0;
+            return true;
+        }
+
+        // An empty last page is an ordinary end. An empty page with more behind it is legitimate
+        // once — a store may answer with fewer entries than were asked for — and is a store going
+        // nowhere if it keeps happening.
+        return !page.HasMore || ++emptyPages <= MediaInventoryPolicy.MaximumEmptyPages;
     }
 
     /// <summary>
@@ -257,7 +356,7 @@ internal sealed class MediaInventoryReconciliationService(
     /// anything else: a key outside the canonical grammar, or one whose tenant segment names no
     /// workspace, is not an application object and is counted rather than judged.
     /// </summary>
-    private async Task<MediaInventoryPageTally> ClassifyPageAsync(
+    private async Task<MediaInventoryPageTally?> ClassifyPageAsync(
         RunProgress run,
         string location,
         IReadOnlyList<ObjectInventoryEntry> entries,
@@ -284,7 +383,7 @@ internal sealed class MediaInventoryReconciliationService(
 
         if (attributed.Count == 0)
         {
-            return new MediaInventoryPageTally(entries.Count, 0, 0, unattributable, 0, 0);
+            return new MediaInventoryPageTally(entries.Count, 0, 0, unattributable, 0);
         }
 
         var candidateTenants = attributed.Keys.ToArray();
@@ -297,7 +396,6 @@ internal sealed class MediaInventoryReconciliationService(
         var skippedRecent = 0;
         var skippedOwned = 0;
         var opened = 0;
-        var resolved = 0;
         foreach (var (tenantId, objects) in attributed)
         {
             if (!knownTenants.Contains(tenantId))
@@ -312,10 +410,14 @@ internal sealed class MediaInventoryReconciliationService(
                 location,
                 objects,
                 cancellationToken);
-            skippedRecent += tallied.SkippedRecent;
-            skippedOwned += tallied.SkippedOwnedByPurge;
-            opened += tallied.FindingsOpened;
-            resolved += tallied.FindingsResolved;
+            if (tallied is not { } counted)
+            {
+                return null;
+            }
+
+            skippedRecent += counted.SkippedRecent;
+            skippedOwned += counted.SkippedOwnedByPurge;
+            opened += counted.FindingsOpened;
         }
 
         return new MediaInventoryPageTally(
@@ -323,11 +425,10 @@ internal sealed class MediaInventoryReconciliationService(
             skippedRecent,
             skippedOwned,
             unattributable,
-            opened,
-            resolved);
+            opened);
     }
 
-    private async Task<MediaInventoryPageTally> ClassifyTenantObjectsAsync(
+    private async Task<MediaInventoryPageTally?> ClassifyTenantObjectsAsync(
         RunProgress run,
         Guid tenantId,
         string location,
@@ -346,8 +447,7 @@ internal sealed class MediaInventoryReconciliationService(
 
         var skippedRecent = 0;
         var skippedOwned = 0;
-        var findings = new List<PendingFinding>();
-        var consistent = new List<string>();
+        var findings = new List<MediaInventoryPendingFinding>();
         foreach (var candidate in objects)
         {
             var key = candidate.Locator.ObjectKey;
@@ -371,11 +471,8 @@ internal sealed class MediaInventoryReconciliationService(
                 case MediaInventoryObjectOutcome.SkippedOwnedByPurge:
                     skippedOwned++;
                     break;
-                case MediaInventoryObjectOutcome.Consistent:
-                    consistent.Add(key);
-                    break;
                 case MediaInventoryObjectOutcome.Finding when verdict.Finding is { } kind:
-                    findings.Add(new PendingFinding(
+                    findings.Add(new MediaInventoryPendingFinding(
                         kind,
                         candidate.Locator,
                         // A duplicate claim names no single owner: saying which of the two rows it
@@ -393,19 +490,24 @@ internal sealed class MediaInventoryReconciliationService(
             }
         }
 
-        var (opened, resolvedCount) = await ApplyFindingsAsync(
-            run,
+        var applied = await findingStore.ApplyAsync(
+            run.Claim,
             tenantId,
             location,
-            findings,
-            consistent,
+            MediaInventoryFindingSet.Collapse(findings),
             cancellationToken);
-        return new MediaInventoryPageTally(0, skippedRecent, skippedOwned, 0, opened, resolvedCount);
+        if (!applied.Owned)
+        {
+            LogLeaseLost(logger, run.RunId, null);
+            return null;
+        }
+
+        return new MediaInventoryPageTally(0, skippedRecent, skippedOwned, 0, applied.Opened);
     }
 
     // ---------------------------------------------------------------- owner pass
 
-    private async Task<RunProgress?> RunOwnerPassAsync(
+    private async Task<PassOutcome> RunOwnerPassAsync(
         RunProgress run,
         string location,
         int ownerProbeBudget,
@@ -417,6 +519,11 @@ internal sealed class MediaInventoryReconciliationService(
                examined < ownerProbeBudget &&
                !cancellationToken.IsCancellationRequested)
         {
+            if (!TryLeaseBudget(run, out _))
+            {
+                return new PassOutcome(run, Continue: false);
+            }
+
             var batchSize = Math.Min(OwnerBatchSize, ownerProbeBudget - examined);
             var rows = await LoadOwnerRowsAsync(run.ProbeStage, run.ProbeCursorId, batchSize, cancellationToken);
             if (rows.Count == 0)
@@ -430,7 +537,7 @@ internal sealed class MediaInventoryReconciliationService(
                     cancellationToken);
                 if (moved is null)
                 {
-                    return null;
+                    return new PassOutcome(null, Continue: false);
                 }
 
                 run = moved;
@@ -438,29 +545,47 @@ internal sealed class MediaInventoryReconciliationService(
             }
 
             var outcome = await ProbeOwnerRowsAsync(run, location, rows, cancellationToken);
+            if (outcome.LostLease)
+            {
+                return new PassOutcome(null, Continue: false);
+            }
+
             examined += rows.Count;
             totals.Add(outcome.Tally);
             if (outcome.FailureCode is { } failure)
             {
+                // The batch keeps its cursor exactly as a failed page does, so the rows it was
+                // examining are re-read rather than counted as verified.
                 totals.PageFailures++;
-                return await RecordFailureAsync(run, failure, cancellationToken);
+                return new PassOutcome(
+                    await RecordFailureAsync(run, failure, cancellationToken),
+                    Continue: false);
+            }
+
+            if (outcome.LastExaminedId is not { } cursorId)
+            {
+                return new PassOutcome(run, Continue: false);
             }
 
             var advanced = await RecordProbesAsync(
                 run,
                 outcome.Tally,
                 run.ProbeStage,
-                rows[^1].Id,
+                cursorId,
                 cancellationToken);
             if (advanced is null)
             {
-                return null;
+                return new PassOutcome(null, Continue: false);
             }
 
             run = advanced;
+            if (outcome.LeaseExhausted)
+            {
+                return new PassOutcome(run, Continue: false);
+            }
         }
 
-        return run;
+        return new PassOutcome(run, Continue: true);
     }
 
     /// <summary>
@@ -469,7 +594,9 @@ internal sealed class MediaInventoryReconciliationService(
     /// </summary>
     /// <remarks>
     /// A stat that fails is a page failure, never an absence. The distinction is the whole
-    /// difference between "this workspace has lost a photo" and "the network was busy".
+    /// difference between "this workspace has lost a photo" and "the network was busy". A stat that
+    /// would outlive the lease is not started at all: the batch stops at the last row it fully
+    /// examined and the rest is re-read by whoever holds the run next.
     /// </remarks>
     private async Task<OwnerProbeOutcome> ProbeOwnerRowsAsync(
         RunProgress run,
@@ -481,7 +608,9 @@ internal sealed class MediaInventoryReconciliationService(
         var probed = 0;
         var skippedNotReconciled = 0;
         var skippedOwned = 0;
-        var byTenant = new Dictionary<Guid, (List<PendingFinding> Findings, List<string> Consistent)>();
+        Guid? lastExaminedId = null;
+        var leaseExhausted = false;
+        var byTenant = new Dictionary<Guid, List<MediaInventoryPendingFinding>>();
 
         foreach (var row in rows)
         {
@@ -491,22 +620,24 @@ internal sealed class MediaInventoryReconciliationService(
                 // never probed and never judged, only counted, so a completed run is not read as
                 // having verified it.
                 skippedNotReconciled++;
+                lastExaminedId = row.Id;
                 continue;
             }
 
-            if (!byTenant.TryGetValue(row.TenantId, out var bucket))
+            if (!byTenant.TryGetValue(row.TenantId, out var pending))
             {
-                bucket = ([], []);
-                byTenant[row.TenantId] = bucket;
+                pending = [];
+                byTenant[row.TenantId] = pending;
             }
 
             if (row.Mismatch is { } mismatch)
             {
                 if (row.TryLocator() is { } subject)
                 {
-                    bucket.Findings.Add(new PendingFinding(mismatch, subject, row.Kind, row.Id));
+                    pending.Add(new MediaInventoryPendingFinding(mismatch, subject, row.Kind, row.Id));
                 }
 
+                lastExaminedId = row.Id;
                 continue;
             }
 
@@ -516,161 +647,155 @@ internal sealed class MediaInventoryReconciliationService(
                 if (MediaInventoryClassifier.IsCleanupStuck(row.AttemptCount, row.LastAttemptAtUtc, now) &&
                     row.TryLocator() is { } stuck)
                 {
-                    bucket.Findings.Add(new PendingFinding(
+                    pending.Add(new MediaInventoryPendingFinding(
                         MediaInventoryFindingKind.CleanupStuck,
                         stuck,
                         row.Kind,
                         row.Id));
                 }
 
+                lastExaminedId = row.Id;
                 continue;
             }
 
             if (row.StorageKey is null || row.TryLocator() is not { } locator)
             {
+                lastExaminedId = row.Id;
                 continue;
             }
 
-            var stat = await inventory.StatAsync(locator, cancellationToken);
+            if (!TryLeaseBudget(run, out var budget))
+            {
+                leaseExhausted = true;
+                break;
+            }
+
+            var stat = await StatWithinLeaseAsync(locator, budget, cancellationToken);
             probed++;
             if (stat.Status == ObjectStorageOperationStatus.Failed)
             {
-                var partial = await ApplyPendingAsync(run, byTenant, cancellationToken);
+                var partial = await ApplyPendingAsync(run, location, byTenant, cancellationToken);
                 return new OwnerProbeOutcome(
                     new MediaInventoryProbeTally(
                         probed,
                         skippedNotReconciled,
                         skippedOwned,
-                        partial.Opened,
-                        partial.Resolved),
-                    stat.FailureCode ?? "storage_provider_error");
+                        partial.Opened),
+                    stat.FailureCode ?? MediaInventoryFailureCodes.ProviderError,
+                    LastExaminedId: null,
+                    LeaseExhausted: false,
+                    LostLease: !partial.Owned);
             }
 
             var missing = stat.Status == ObjectStorageOperationStatus.NotFound;
             if (MediaInventoryClassifier.ClassifyOwner(row.State, missing) is { } kind)
             {
-                bucket.Findings.Add(new PendingFinding(kind, locator, row.Kind, row.Id));
+                pending.Add(new MediaInventoryPendingFinding(kind, locator, row.Kind, row.Id));
             }
-            else if (!missing)
-            {
-                bucket.Consistent.Add(locator.ObjectKey);
-            }
+
+            lastExaminedId = row.Id;
         }
 
-        var (opened, resolved) = await ApplyPendingAsync(run, byTenant, cancellationToken);
+        var applied = await ApplyPendingAsync(run, location, byTenant, cancellationToken);
         return new OwnerProbeOutcome(
-            new MediaInventoryProbeTally(probed, skippedNotReconciled, skippedOwned, opened, resolved),
-            null);
+            new MediaInventoryProbeTally(probed, skippedNotReconciled, skippedOwned, applied.Opened),
+            FailureCode: null,
+            lastExaminedId,
+            leaseExhausted,
+            LostLease: !applied.Owned);
     }
 
-    private async Task<(int Opened, int Resolved)> ApplyPendingAsync(
+    private async Task<MediaInventoryFindingWrite> ApplyPendingAsync(
         RunProgress run,
-        Dictionary<Guid, (List<PendingFinding> Findings, List<string> Consistent)> byTenant,
+        string location,
+        Dictionary<Guid, List<MediaInventoryPendingFinding>> byTenant,
         CancellationToken cancellationToken)
     {
         var opened = 0;
-        var resolved = 0;
-        foreach (var (tenantId, work) in byTenant)
+        foreach (var (tenantId, pending) in byTenant)
         {
-            if (work.Findings.Count == 0 && work.Consistent.Count == 0)
+            if (pending.Count == 0)
             {
                 continue;
             }
 
-            var applied = await ApplyFindingsAsync(
-                run,
+            var applied = await findingStore.ApplyAsync(
+                run.Claim,
                 tenantId,
-                inventory.ReconciledLocation,
-                work.Findings,
-                work.Consistent,
+                location,
+                MediaInventoryFindingSet.Collapse(pending),
                 cancellationToken);
+            if (!applied.Owned)
+            {
+                LogLeaseLost(logger, run.RunId, null);
+                byTenant.Clear();
+                return new MediaInventoryFindingWrite(false, opened, 0);
+            }
+
             opened += applied.Opened;
-            resolved += applied.Resolved;
         }
 
         byTenant.Clear();
-        return (opened, resolved);
+        return new MediaInventoryFindingWrite(true, opened, 0);
     }
 
-    // ---------------------------------------------------------------- durable writes
+    // ---------------------------------------------------------------- provider calls
 
     /// <summary>
-    /// Opens or re-observes the findings for one workspace, and resolves the ones whose condition
-    /// this pass saw put right. Every write happens inside that workspace's own scope, so the tenant
-    /// write-scope guard applies to reconciliation exactly as it does to a request.
+    /// How long a remote call may take: whatever is left of the lease, less the margin the database
+    /// writes that follow it need. False when there is not enough left to start one at all.
     /// </summary>
-    private async Task<(int Opened, int Resolved)> ApplyFindingsAsync(
-        RunProgress run,
-        Guid tenantId,
-        string location,
-        List<PendingFinding> findings,
-        List<string> consistentKeys,
+    private bool TryLeaseBudget(RunProgress run, out TimeSpan budget)
+    {
+        budget = run.LeaseExpiresAtUtc - clock.UtcNow - MediaInventoryPolicy.LeaseSafetyMargin;
+        return budget > TimeSpan.Zero;
+    }
+
+    private async Task<ObjectInventoryPage> ListWithinLeaseAsync(
+        string? cursor,
+        int pageSize,
+        TimeSpan budget,
         CancellationToken cancellationToken)
     {
-        if (findings.Count == 0 && consistentKeys.Count == 0)
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bounded.CancelAfter(budget);
+        try
         {
-            return (0, 0);
+            return await inventory.ListAsync(cursor, pageSize, bounded.Token);
         }
-
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var provider = scope.ServiceProvider;
-        provider.GetRequiredService<IMutableTenantContext>().SetTenant(tenantId);
-        var context = provider.GetRequiredService<GymDbContext>();
-        var now = clock.UtcNow;
-        var touchedKeys = findings.Select(item => item.Locator.ObjectKey)
-            .Concat(consistentKeys)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        var existing = await context.MediaInventoryFindings
-            .Where(item =>
-                item.StorageLocation == location &&
-                touchedKeys.Contains(item.StorageKey) &&
-                item.ResolvedAtUtc == null)
-            .ToListAsync(cancellationToken);
-
-        var opened = 0;
-        foreach (var pending in findings)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            var match = existing.SingleOrDefault(item =>
-                item.Kind == pending.Kind &&
-                string.Equals(item.StorageKey, pending.Locator.ObjectKey, StringComparison.Ordinal));
-            if (match is null)
-            {
-                context.MediaInventoryFindings.Add(MediaInventoryFinding.Open(
-                    tenantId,
-                    pending.Kind,
-                    pending.Locator,
-                    pending.OwnerKind,
-                    pending.OwnerId,
-                    run.RunId,
-                    now));
-                opened++;
-            }
-            else
-            {
-                match.Observe(now, run.RunId);
-            }
+            // The store had the whole remaining lease and did not answer inside it. That is a page
+            // this run did not read, which is exactly what a page failure means.
+            return new ObjectInventoryPage(
+                ObjectStorageOperationStatus.Failed,
+                [],
+                FailureCode: MediaInventoryFailureCodes.LeaseExpired);
         }
-
-        var stillOpen = findings
-            .Select(item => (item.Kind, item.Locator.ObjectKey))
-            .ToHashSet();
-        var resolved = 0;
-        foreach (var candidate in existing)
-        {
-            if (stillOpen.Contains((candidate.Kind, candidate.StorageKey)) ||
-                !touchedKeys.Contains(candidate.StorageKey, StringComparer.Ordinal))
-            {
-                continue;
-            }
-
-            candidate.Resolve(now, MediaInventoryResolutionCodes.ObserverConsistent);
-            resolved++;
-        }
-
-        await context.SaveChangesAsync(cancellationToken);
-        return (opened, resolved);
     }
+
+    private async Task<ObjectStatResult> StatWithinLeaseAsync(
+        StorageObjectLocator locator,
+        TimeSpan budget,
+        CancellationToken cancellationToken)
+    {
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bounded.CancelAfter(budget);
+        try
+        {
+            return await inventory.StatAsync(locator, bounded.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // A store that did not answer has reported nothing at all, and a call abandoned at the
+            // lease boundary is a store that did not answer.
+            return new ObjectStatResult(
+                ObjectStorageOperationStatus.Failed,
+                FailureCode: MediaInventoryFailureCodes.LeaseExpired);
+        }
+    }
+
+    // ---------------------------------------------------------------- durable progress
 
     private async Task<RunProgress?> RecordPageAsync(
         RunProgress run,
@@ -688,16 +813,13 @@ internal sealed class MediaInventoryReconciliationService(
                 !stored.RecordInventoryPage(now, run.Token, runLease, tally, nextCursor, hasMore))
             {
                 await transaction.RollbackAsync(cancellationToken);
+                LogLeaseLost(logger, run.RunId, null);
                 return null;
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return run with
-            {
-                InventoryCursor = stored.InventoryCursor,
-                InventoryCompleted = stored.InventoryCompleted,
-            };
+            return RunProgress.From(stored, run.Token);
         });
     }
 
@@ -717,16 +839,13 @@ internal sealed class MediaInventoryReconciliationService(
                 !stored.RecordOwnerProbes(now, run.Token, runLease, tally, stage, cursorId))
             {
                 await transaction.RollbackAsync(cancellationToken);
+                LogLeaseLost(logger, run.RunId, null);
                 return null;
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return run with
-            {
-                ProbeStage = stored.ProbeStage,
-                ProbeCursorId = stored.ProbeCursorId,
-            };
+            return RunProgress.From(stored, run.Token);
         });
     }
 
@@ -741,22 +860,23 @@ internal sealed class MediaInventoryReconciliationService(
         CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
+        var code = failureCode ?? MediaInventoryFailureCodes.ProviderError;
         return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
             var stored = await LoadForUpdateAsync(dbContext, run.RunId, cancellationToken);
-            if (stored is null ||
-                !stored.RecordPageFailure(now, run.Token, failureCode ?? "storage_provider_error"))
+            if (stored is null || !stored.RecordPageFailure(now, run.Token, code))
             {
                 await transaction.RollbackAsync(cancellationToken);
+                LogLeaseLost(logger, run.RunId, null);
                 return null;
             }
 
             var failures = stored.PageFailureCount;
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            LogPageFailure(logger, run.RunId, failureCode ?? "storage_provider_error", failures, null);
-            return run with { PageFailures = failures };
+            LogPageFailure(logger, run.RunId, code, failures, null);
+            return RunProgress.From(stored, run.Token);
         });
     }
 
@@ -812,7 +932,12 @@ internal sealed class MediaInventoryReconciliationService(
             Add(owners, asset.StorageKey!, new OwnerReference(
                 MediaInventoryOwnerKind.Asset,
                 asset.Id,
-                AssetState(asset.Status, asset.PurgeAfterUtc, asset.PurgeClaimToken, asset.PurgeClaimExpiresAtUtc, now),
+                MediaInventoryClassifier.ClassifyOwnerState(
+                    asset.Status,
+                    asset.PurgeAfterUtc,
+                    asset.PurgeClaimToken,
+                    asset.PurgeClaimExpiresAtUtc,
+                    now),
                 asset.Length));
         }
 
@@ -842,7 +967,7 @@ internal sealed class MediaInventoryReconciliationService(
                 derivative.Id,
                 // A derivative inherits its parent's cleanup state: it is the parent's purge that
                 // deletes it, so the parent is what decides whether another authority owns the row.
-                AssetState(
+                MediaInventoryClassifier.ClassifyOwnerState(
                     derivative.ParentStatus,
                     derivative.PurgeAfterUtc,
                     derivative.PurgeClaimToken,
@@ -959,7 +1084,7 @@ internal sealed class MediaInventoryReconciliationService(
                     item.StorageLocation!,
                     item.StorageKey,
                     null,
-                    AssetState(
+                    MediaInventoryClassifier.ClassifyOwnerState(
                         item.Status,
                         item.PurgeAfterUtc,
                         item.PurgeClaimToken,
@@ -1016,7 +1141,7 @@ internal sealed class MediaInventoryReconciliationService(
                             // A derivative inherits its parent's cleanup state: the parent's purge is
                             // what deletes it, so the parent decides whether another authority owns
                             // this row.
-                            AssetState(
+                            MediaInventoryClassifier.ClassifyOwnerState(
                                 parent.Status,
                                 parent.PurgeAfterUtc,
                                 parent.PurgeClaimToken,
@@ -1074,6 +1199,7 @@ internal sealed class MediaInventoryReconciliationService(
     /// <summary>
     /// How many rows one slice of the owner pass reads before committing its progress. Small enough
     /// that a lost lease costs little work, large enough that the cursor is not written per row.
+    /// The lease, not this number, is what bounds how long the slice may take.
     /// </summary>
     private const int OwnerBatchSize = 100;
 
@@ -1083,17 +1209,6 @@ internal sealed class MediaInventoryReconciliationService(
         MediaInventoryProbeStage.Derivatives => MediaInventoryProbeStage.IngestObjects,
         _ => MediaInventoryProbeStage.Completed,
     };
-
-    private static MediaInventoryOwnerState AssetState(
-        MediaAssetStatus status,
-        DateTimeOffset? purgeAfterUtc,
-        Guid? claimToken,
-        DateTimeOffset? claimExpiresAtUtc,
-        DateTimeOffset now) =>
-        (claimToken is not null && claimExpiresAtUtc > now) ||
-        (status == MediaAssetStatus.Tombstoned && purgeAfterUtc is { } due && due <= now)
-            ? MediaInventoryOwnerState.OwnedByPurge
-            : MediaInventoryOwnerState.Live;
 
     /// <summary>
     /// Whether one enumerated key is an application object at all: canonical under the key grammar,
@@ -1140,7 +1255,30 @@ internal sealed class MediaInventoryReconciliationService(
         bool InventoryCompleted,
         MediaInventoryProbeStage ProbeStage,
         Guid? ProbeCursorId,
-        int PageFailures);
+        int PageFailures,
+        DateTimeOffset LeaseExpiresAtUtc)
+    {
+        public MediaInventoryRunClaim Claim => new(RunId, Token);
+
+        public static RunProgress From(MediaInventoryRun run, Guid token) =>
+            new(
+                run.Id,
+                token,
+                run.InventoryCursor,
+                run.InventoryCompleted,
+                run.ProbeStage,
+                run.ProbeCursorId,
+                run.PageFailureCount,
+                // A run whose lease this worker released or lost has nothing left to spend, so an
+                // absent expiry is treated as an expiry that has already passed.
+                run.LeaseExpiresAtUtc ?? DateTimeOffset.MinValue);
+    }
+
+    /// <summary>
+    /// What one pass left behind. <see cref="Run"/> is null when the lease moved on mid-pass, and
+    /// <see cref="Continue"/> is false when this worker's turn is over even though the run survives.
+    /// </summary>
+    private readonly record struct PassOutcome(RunProgress? Run, bool Continue);
 
     private sealed record AttributedObject(StorageObjectLocator Locator, ObjectInventoryEntry Entry);
 
@@ -1152,13 +1290,12 @@ internal sealed class MediaInventoryReconciliationService(
 
     private sealed record KeyOwners(int Count, OwnerReference Single);
 
-    private sealed record PendingFinding(
-        MediaInventoryFindingKind Kind,
-        StorageObjectLocator Locator,
-        MediaInventoryOwnerKind OwnerKind,
-        Guid? OwnerId);
-
-    private sealed record OwnerProbeOutcome(MediaInventoryProbeTally Tally, string? FailureCode);
+    private sealed record OwnerProbeOutcome(
+        MediaInventoryProbeTally Tally,
+        string? FailureCode,
+        Guid? LastExaminedId,
+        bool LeaseExhausted,
+        bool LostLease);
 
     private sealed record OwnerRow(
         Guid Id,
@@ -1191,7 +1328,7 @@ internal sealed class MediaInventoryReconciliationService(
 
         public int FindingsOpened { get; private set; }
 
-        public int FindingsResolved { get; private set; }
+        public int FindingsResolved { get; set; }
 
         public int PageFailures { get; set; }
 
@@ -1199,14 +1336,12 @@ internal sealed class MediaInventoryReconciliationService(
         {
             ObjectsScanned += tally.ObjectsScanned;
             FindingsOpened += tally.FindingsOpened;
-            FindingsResolved += tally.FindingsResolved;
         }
 
         public void Add(MediaInventoryProbeTally tally)
         {
             OwnersProbed += tally.Probed;
             FindingsOpened += tally.FindingsOpened;
-            FindingsResolved += tally.FindingsResolved;
         }
     }
 }

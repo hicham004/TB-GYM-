@@ -68,7 +68,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         insertBarrier = barrier;
         var scanner = new ScannerSwitch();
         scannerSwitch = scanner;
-        var inventoryProbe = new InventoryProbe();
+        var inventoryProbe = new InventoryProbe { Advance = clock.Advance };
         this.inventoryProbe = inventoryProbe;
         // The 6B-4B tests run the real R2 and clamd adapters, so they compose the providers instead
         // of the local adapter and the switchable scanner. Everything else about the fixture — the
@@ -120,6 +120,14 @@ public sealed partial class Phase3TrainingWorkflowTests
                         // the purge sweep is: a background pass must not race an assertion about
                         // what one run observed.
                         ["Media:Reconciliation:Enabled"] = "false",
+                        // The shortest lease the options allow, for the one test that makes a
+                        // provider slow enough to outlive it. A remote call is never started
+                        // without enough lease left to finish inside it, and that boundary is only
+                        // reachable in a test if the lease is small and the clock can be pushed.
+                        ["Media:Reconciliation:RunLeaseSeconds"] =
+                            TestContext.TestName?.Contains("SlowStore", StringComparison.Ordinal) == true
+                                ? "60"
+                                : "300",
                         ["Media:MaxWorkspaceStorageBytes"] =
                             Phase5B5WorkspaceQuotaBytes().ToString(CultureInfo.InvariantCulture),
                         ["Media:MaxClientProgressPhotoBytes"] =

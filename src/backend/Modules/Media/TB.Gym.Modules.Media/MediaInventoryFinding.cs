@@ -112,6 +112,13 @@ public sealed class MediaInventoryFinding : TenantEntity
         new(tenantId, kind, locator, ownerKind, ownerId, runId, now);
 
     /// <summary>Records that a later run saw the same condition again.</summary>
+    /// <remarks>
+    /// One run counts once, however many times it looks. A pass is resumable and replayable — a
+    /// crash between writing a page's findings and committing its cursor re-reads exactly that page,
+    /// and a batch whose stat failed is re-examined from the same cursor — so a run that counted
+    /// every visit would turn one logical observation into two and make a condition seen once look
+    /// established. Recording the instant is still right: it says when this run last saw it.
+    /// </remarks>
     public void Observe(DateTimeOffset now, Guid runId)
     {
         if (IsResolved)
@@ -126,9 +133,17 @@ public sealed class MediaInventoryFinding : TenantEntity
         }
 
         LastObservedAtUtc = now;
+        if (LastRunId == runId)
+        {
+            return;
+        }
+
         LastRunId = runId;
         ConsecutiveObservations++;
     }
+
+    /// <summary>Whether the run identified here already counted this condition.</summary>
+    public bool WasObservedBy(Guid runId) => runId != Guid.Empty && LastRunId == runId;
 
     /// <summary>
     /// Records that the condition is gone. One-way, and never a deletion: the row stays as the
@@ -147,11 +162,22 @@ public sealed class MediaInventoryFinding : TenantEntity
 }
 
 /// <summary>Why a finding stopped applying. Stable codes, never provider prose.</summary>
+/// <remarks>
+/// Both codes are written only by a run that read the whole location without an outstanding failure.
+/// A pass that stopped early has examined a subset, and a subset that did not contain a condition is
+/// not evidence that the condition is gone — it is evidence that the pass stopped.
+/// </remarks>
 public static class MediaInventoryResolutionCodes
 {
-    /// <summary>A later run found the object and its owner agreeing again.</summary>
+    /// <summary>
+    /// A run that examined everything re-examined this exact subject and did not find the condition:
+    /// the lengths agree, one row claims the key, or the store answered the probe with the object.
+    /// </summary>
     public const string ObserverConsistent = "observed_consistent";
 
-    /// <summary>The row the finding was about no longer holds this key.</summary>
+    /// <summary>
+    /// The subject was no longer there to examine: the object is gone from the location, or the row
+    /// the finding named no longer holds that key here as a live owner.
+    /// </summary>
     public const string OwnerNoLongerHoldsKey = "owner_released_key";
 }
