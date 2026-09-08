@@ -76,11 +76,16 @@ deployment can reach. The stored object is streamed to it in bounded chunks thro
 storage contract every other read uses, so a 500 MiB video is never buffered and never written to a
 temporary file — a file that would be a second copy of the very bytes the scan exists to distrust.
 
-Two answers are verdicts. `OK` allows the bytes; `FOUND` refuses them. Everything else — an `ERROR`
+Two answers are verdicts, and they are matched as whole frames rather than by suffix: `stream: OK`
+allows the bytes, and `stream: <signature name> FOUND` refuses them. Everything else — an `ERROR`
 reply, a stream that exceeded a configured daemon limit, a timeout, a disconnect, a malformed or
-unterminated frame — is an operational failure that reports `503`, commits no asset and cleans up
-every stored object, exactly as ADR 0023 already required of a scanner that cannot produce a usable
-verdict. A limit is never a clean result: a file the daemon declined to finish reading has not been
+unterminated frame, a reply that merely ends in the right word — is an operational failure that
+reports `503`, commits no asset and cleans up every stored object, exactly as ADR 0023 already
+required of a scanner that cannot produce a usable verdict. Suffix matching is called out because it
+is the one shape of mistake here that fails open: `<anything> OK` read as clean would publish a file
+nothing inspected.
+
+A limit is never a clean result either: a file the daemon declined to finish reading has not been
 found clean, and treating a truncated pass as an allowance is how an unscanned file becomes a
 published one. The daemon's limits are therefore configured above the application's own 500 MiB
 ceiling rather than left at their 25 MB defaults, which would have failed every video upload.
@@ -88,7 +93,10 @@ ceiling rather than left at their 25 MB defaults, which would have failed every 
 The signature name in a detection is never returned, persisted or logged. The caller is told the file
 was rejected. The scanner key and a normalized engine and signature-database version are persisted as
 evidence, because a verdict this repository cannot attribute to an engine and a signature set is not
-evidence.
+evidence. The `VERSION` reply is parsed for exactly that shape — `ClamAV <engine>/<signature
+revision>` — and anything else, including an engine with no signature revision or a version too long
+for the evidence column, is unusable metadata and therefore the same operational failure rather than
+a value recorded as though it identified something.
 
 The clamd client is owned rather than taken from a package. The protocol is a command, a
 length-prefixed body and a status line; what is actually being decided here is bounds — a connect

@@ -566,12 +566,14 @@ read serves the full object or one bounded range, and the stream handed back own
 response so disposing it releases the connection.
 
 The scanner streams the *stored* object to `clamd` in bounded chunks — no whole-file buffer, no
-temporary file. `OK` allows and `FOUND` refuses; a daemon error, a configured limit, a timeout, a
-disconnect and a malformed or unterminated frame are all operational failures reporting `503` with
-every stored object cleaned up. A limit is never a clean result, which is why `compose.yaml` and
+temporary file. `stream: OK` allows and `stream: <signature> FOUND` refuses, matched as whole
+frames; a daemon error, a configured limit, a timeout, a disconnect, a malformed or unterminated
+frame and any reply that merely ends in the right word are all operational failures reporting `503`
+with every stored object cleaned up. A limit is never a clean result, which is why `compose.yaml` and
 `docker/clamav/clamd.conf` configure `StreamMaxLength`, `MaxFileSize` and `MaxScanSize` above the
 application's own 500 MiB ceiling. Signature names are never returned, persisted or logged; the
-scanner key and a normalized engine/signature version are. The clamd client is owned rather than
+scanner key and a normalized engine/signature version are, parsed from the daemon's version reply
+and refused as unusable metadata when it names no engine or no signature revision. The clamd client is owned rather than
 taken from a package, because what it decides is bounds rather than parsing. Provider inventory
 reconciliation, retention/lifecycle policy and operator controls remain deferred to 6B-4C.
 

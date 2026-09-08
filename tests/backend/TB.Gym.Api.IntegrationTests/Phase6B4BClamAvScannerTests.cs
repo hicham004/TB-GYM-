@@ -119,11 +119,24 @@ public sealed class Phase6B4BClamAvScannerTests
         Assert.AreEqual("scan_refused", result.FailureCode);
     }
 
+    /// <summary>
+    /// Only the two frames clamd defines are verdicts. The suffix cases matter most: a reply that
+    /// merely ends in the right word is not a reply the daemon formed, and reading one as clean is
+    /// the single mistake in this adapter that would fail open.
+    /// </summary>
     [TestMethod]
     [DataRow("INSTREAM size limit exceeded. ERROR", DisplayName = "a configured daemon limit")]
     [DataRow("stream: Can't allocate memory ERROR", DisplayName = "an engine error")]
     [DataRow("stream: something unexpected", DisplayName = "an unrecognised reply")]
     [DataRow("", DisplayName = "an empty reply")]
+    [DataRow("garbage OK", DisplayName = "a malformed frame ending in OK")]
+    [DataRow("OK", DisplayName = "a bare OK with no frame around it")]
+    [DataRow("stream: OK extra", DisplayName = "a clean verdict with trailing content")]
+    [DataRow("stream:OK", DisplayName = "a clean verdict missing its separator")]
+    [DataRow("1: stream: OK", DisplayName = "a session-framed clean verdict this adapter never asks for")]
+    [DataRow("garbage FOUND", DisplayName = "a malformed frame ending in FOUND")]
+    [DataRow("stream: FOUND", DisplayName = "a detection naming no signature")]
+    [DataRow(" FOUND", DisplayName = "a bare FOUND with no frame around it")]
     public async Task AnythingThatIsNotAVerdictIsAnOperationalFailure(string reply)
     {
         await using var daemon = FakeClamd.StartAnswering(RealVersionLine, reply);
@@ -131,6 +144,46 @@ public sealed class Phase6B4BClamAvScannerTests
 
         await Assert.ThrowsAsync<IOException>(() =>
             scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Evidence names the engine and the signature set that inspected the exact stored bytes, so a
+    /// version reply that names neither is unusable metadata rather than something to record.
+    /// </summary>
+    [TestMethod]
+    [DataRow("", DisplayName = "an empty version")]
+    [DataRow("PONG", DisplayName = "an answer to a different command")]
+    [DataRow("ClamAV", DisplayName = "a product name with no version at all")]
+    [DataRow("ClamAV 1.5.4", DisplayName = "an engine with no signature revision")]
+    [DataRow("ClamAV /28115/Sun Sep  6 06:26:06 2026", DisplayName = "a missing engine version")]
+    [DataRow("ClamAV x.y.z/28115", DisplayName = "an engine version that is not one")]
+    [DataRow("ClamAV 1.5.4/latest", DisplayName = "a signature revision that is not a number")]
+    [DataRow("SomethingElse 1.5.4/28115", DisplayName = "a different product")]
+    [DataRow("ClamAV 1.5.4/28115 FOUND", DisplayName = "a verdict where a version belongs")]
+    public async Task AVersionThatCannotIdentifyTheEngineIsAnOperationalFailure(string version)
+    {
+        await using var daemon = FakeClamd.StartAnswering(version, "stream: OK");
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
+    }
+
+    /// <summary>The real shapes, including a release with a build suffix.</summary>
+    [TestMethod]
+    [DataRow("ClamAV 1.5.4/28115/Sun Sep  6 06:26:06 2026", "ClamAV 1.5.4/28115")]
+    [DataRow("ClamAV 1.4.3-rc1/27700/Thu Sep  4 09:00:00 2026", "ClamAV 1.4.3-rc1/27700")]
+    [DataRow("ClamAV 1.5.4/28115", "ClamAV 1.5.4/28115")]
+    public async Task AUsableVersionIsRecordedAsTheEngineAndItsSignatureRevision(
+        string reply,
+        string expected)
+    {
+        await using var daemon = FakeClamd.StartAnswering(reply, "stream: OK");
+        var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
+
+        var result = await scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None);
+
+        Assert.AreEqual(expected, result.ScannerVersion);
     }
 
     [TestMethod]
@@ -206,24 +259,20 @@ public sealed class Phase6B4BClamAvScannerTests
             scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
     }
 
+    /// <summary>
+    /// Evidence holds forty characters. A version that does not fit is truncated into something that
+    /// claims to identify an engine it does not, so it is refused as unusable metadata instead.
+    /// </summary>
     [TestMethod]
-    public async Task AVersionTooLongForEvidenceIsNormalizedRatherThanRejected()
+    public async Task AVersionTooLongForEvidenceIsRefusedRatherThanTruncated()
     {
         await using var daemon = FakeClamd.StartAnswering(
             $"ClamAV {new string('9', 60)}/28115/Sun Sep  6 06:26:06 2026",
             "stream: OK");
         var scanner = ScannerFor(daemon, [1, 2, 3, 4]);
 
-        var result = await scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None);
-
-        Assert.IsTrue(result.IsAllowed);
-        Assert.AreEqual(40, result.ScannerVersion.Length);
-        var evidence = MediaScanEvidence.Record(
-            Locator,
-            Convert.ToHexString(SHA256.HashData([1, 2, 3, 4])).ToLowerInvariant(),
-            result,
-            DateTimeOffset.UtcNow);
-        Assert.AreEqual(result.ScannerVersion, evidence.ScannerVersion);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            scanner.ScanAsync(Locator, "image/jpeg", CancellationToken.None));
     }
 
     [TestMethod]

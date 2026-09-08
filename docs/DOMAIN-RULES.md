@@ -1070,11 +1070,15 @@ for large or non-seekable input, accepts exactly the allowance and refuses one b
 an interrupted upload on a cleanup token independent of the request's. The recorded SHA-256 and
 signature are computed over exactly the bytes transmitted; a provider `ETag` is never treated as a
 checksum. Production upload scanning is a private ClamAV `clamd` over INSTREAM, streaming the stored
-object directly with no whole-file buffer and no temporary file. `OK` allows and `FOUND` refuses
-without ever exposing the signature name; a daemon error, an exceeded daemon limit, a timeout, a
-disconnect, and a malformed or unterminated reply are operational scanner failures reporting `503`
-under MED-006, never a clean result and never a `400` about the file. Scan evidence records the
-scanner key and a normalized engine/signature version. Selecting either provider with an unusable
+object directly with no whole-file buffer and no temporary file. Only the two frames the protocol defines are
+verdicts, matched whole rather than by suffix: `stream: OK` allows and `stream: <signature> FOUND`
+refuses, without ever exposing the signature name. A daemon error, an exceeded daemon limit, a
+timeout, a disconnect, a malformed or unterminated reply, and any reply that merely ends in `OK` or
+`FOUND` are operational scanner failures reporting `503` under MED-006, never a clean result and
+never a `400` about the file. Scan evidence records the scanner key and a normalized
+engine/signature version parsed from the scanner's own version reply; a reply that names no engine
+or no signature revision, or that will not fit the evidence column, is unusable metadata and the
+same operational failure. Selecting either provider with an unusable
 configuration refuses startup, as does selecting the allow-everything development scanner outside
 Development; selecting neither keeps the MED-004 fail-closed Degraded state unchanged. Readiness
 additionally probes a composed provider and reports `Degraded`, never `Unhealthy`, when it does not

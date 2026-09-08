@@ -39,6 +39,17 @@ internal sealed class ClamAvMediaScanner(
     /// <summary>The reply frame is a short status line; anything longer is malformed by definition.</summary>
     private const int MaximumReplyBytes = 512;
 
+    /// <summary>The two INSTREAM verdicts clamd defines, and nothing either side of them.</summary>
+    private const string CleanReply = "stream: OK";
+    private const string StreamPrefix = "stream: ";
+    private const string FoundSuffix = " FOUND";
+
+    /// <summary>The shape of a usable <c>VERSION</c> reply: an engine and a signature revision.</summary>
+    private const string VersionPrefix = "ClamAV ";
+
+    /// <summary>What scan evidence has room for, so a version that will not fit is not a version.</summary>
+    private const int MaximumVersionLength = 40;
+
     private static readonly Action<ILogger, string, Exception?> LogScannerFailure =
         LoggerMessage.Define<string>(
             LogLevel.Warning,
@@ -114,20 +125,25 @@ internal sealed class ClamAvMediaScanner(
             TimeSpan.FromSeconds(options.ScanTimeoutSeconds),
             cancellationToken);
 
-        // FOUND is tested first: a signature name is arbitrary provider text and could itself end in
-        // the letters this method otherwise reads as a clean pass.
-        if (reply.EndsWith("FOUND", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        if (reply.EndsWith("OK", StringComparison.Ordinal))
+        if (string.Equals(reply, CleanReply, StringComparison.Ordinal))
         {
             return true;
         }
 
-        // ERROR, "INSTREAM size limit exceeded", and anything unrecognised. The reply text is not
-        // logged: an ERROR line can quote the daemon's view of the content.
+        // "stream: <signature name> FOUND", with a name between the two. The whole frame is matched
+        // rather than its suffix: a reply ending in the right word is not the same fact as a reply
+        // the daemon actually formed, and "<anything> OK" reading as clean is the one mistake in
+        // this method that fails open.
+        if (reply.StartsWith(StreamPrefix, StringComparison.Ordinal) &&
+            reply.EndsWith(FoundSuffix, StringComparison.Ordinal) &&
+            reply.Length > StreamPrefix.Length + FoundSuffix.Length)
+        {
+            return false;
+        }
+
+        // ERROR, "INSTREAM size limit exceeded", a truncated frame, and anything else that is not
+        // one of the two verdicts clamd defines. The reply text is not logged: an ERROR line can
+        // quote the daemon's view of the content.
         LogScannerFailure(logger, "scan_not_completed", null);
         throw new IOException("The scanner did not complete a verdict for the stored object.");
     }
@@ -168,8 +184,7 @@ internal sealed class ClamAvMediaScanner(
                 null,
                 TimeSpan.FromSeconds(options.ProbeTimeoutSeconds),
                 cancellationToken);
-            var normalized = NormalizeVersion(reply);
-            if (normalized.Length == 0)
+            if (NormalizeVersion(reply) is not { } normalized)
             {
                 LogScannerFailure(logger, "scanner_version_unusable", null);
                 throw new InvalidOperationException("The scanner reported no usable version.");
@@ -191,15 +206,50 @@ internal sealed class ClamAvMediaScanner(
     /// inspected the bytes. The build date is dropped because evidence has room for forty characters
     /// and the date is the least identifying part of the line.
     /// </summary>
-    private static string NormalizeVersion(string reply)
+    /// <remarks>
+    /// The shape is checked rather than assumed, and <c>null</c> means "not a version this can be
+    /// bound to". Evidence exists to say which engine and which signature set inspected the exact
+    /// stored bytes, so a reply that names neither is unusable metadata — an operational failure
+    /// under MED-006 — and not something to record as though it identified anything. A signature
+    /// revision is required for the same reason: an engine version alone does not say what it knew.
+    /// </remarks>
+    private static string? NormalizeVersion(string reply)
     {
         var cleaned = new string(reply.Where(character => !char.IsControl(character)).ToArray()).Trim();
-        var segments = cleaned.Split('/');
-        var normalized = segments.Length >= 2
-            ? $"{segments[0].Trim()}/{segments[1].Trim()}"
-            : cleaned;
-        return normalized.Length > 40 ? normalized[..40].TrimEnd() : normalized;
+        if (!cleaned.StartsWith(VersionPrefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var remainder = cleaned[VersionPrefix.Length..];
+        var engineEnd = remainder.IndexOf('/', StringComparison.Ordinal);
+        if (engineEnd <= 0)
+        {
+            return null;
+        }
+
+        var engine = remainder[..engineEnd];
+        var afterEngine = remainder[(engineEnd + 1)..];
+        var signaturesEnd = afterEngine.IndexOf('/', StringComparison.Ordinal);
+        var signatures = signaturesEnd < 0 ? afterEngine : afterEngine[..signaturesEnd];
+        if (!IsEngineVersion(engine) || !IsSignatureRevision(signatures))
+        {
+            return null;
+        }
+
+        var normalized = $"{VersionPrefix}{engine}/{signatures}";
+        return normalized.Length > MaximumVersionLength ? null : normalized;
     }
+
+    /// <summary>A dotted release, possibly with a build suffix: <c>1.5.4</c>, <c>1.4.3-rc1</c>.</summary>
+    private static bool IsEngineVersion(string value) =>
+        value.Length > 0 &&
+        char.IsAsciiDigit(value[0]) &&
+        value.All(character =>
+            char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
+
+    private static bool IsSignatureRevision(string value) =>
+        value.Length > 0 && value.All(char.IsAsciiDigit);
 
     /// <summary>
     /// One bounded clamd exchange: connect, send one command, optionally stream a body as INSTREAM
