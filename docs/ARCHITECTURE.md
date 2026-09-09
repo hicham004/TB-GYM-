@@ -586,14 +586,24 @@ stored objects and asks the database who owns each key, and it walks rows with a
 store whether their object exists. It records what it found in `media.InventoryFindings` and stops
 there. It deletes no object, clears no locator, marks nothing purged, releases no allowance, writes no
 lifecycle configuration and repairs no finding. That is structural rather than editorial: the service
-is composed with `IObjectInventory`, which lists and stats, and `IMediaInventoryFindingStore`, which
-writes findings, and never with `IObjectStorage` or with any container that could resolve one — a
-service holding `IServiceScopeFactory` can produce the storage port in a line, so admitting one would
-have made the guarantee an argument about the code rather than a property of its shape. An
-architecture test asserts the constructor, and rejects both delete-capable and resolving parameters,
-rather than trusting review. A missing object never tombstones a row and a failed provider call is
-never read as an absence. See `docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`
-and `DOMAIN-RULES.md` MED-012.
+is composed with `IObjectInventory`, which lists and stats, and three narrow ports —
+`IMediaInventoryRowReader`, which answers about the three owning tables in values and never hands
+back an aggregate; `IMediaInventoryRunStore`, which writes one row, this run's own; and
+`IMediaInventoryFindingStore`, which writes findings. It holds no `IObjectStorage`, no `GymDbContext`
+and no container. Each of those three was a real hole in turn: a scope factory resolves the storage
+port in a line, and a context is the authority to clear a locator or delete an asset row whatever the
+code inside says — `dbContext.MediaAssets` plus one `SaveChangesAsync`, both of which the service
+already had. The strongest of the three properties is the plainest: a value cannot be saved, so even
+a context reached some other way would find nothing tracked to write. An architecture test asserts
+the constructor — no context, no general persistence member, no queryable or context returned, no
+mutable media aggregate returned from anywhere including inside a `Task` or a list — and a PostgreSQL
+test asserts the consequence, driving a run that opens findings across both passes and a second that
+resolves them, then proving every media row's `xmin` is unchanged. `xmin` is PostgreSQL's own record
+of the transaction that last wrote a row, so a repair that restored the previous column values would
+still fail it, and the check covers the two adapters that do hold a context rather than only the
+service. A missing object never tombstones a row and a failed provider call is never read as an
+absence. See `docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md` and
+`DOMAIN-RULES.md` MED-012.
 
 Only canonical application locators at that one location are reconciled. A key outside the grammar, or
 one naming no workspace, is counted on the run and never attributed — a finding is a tenant-owned row

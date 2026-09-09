@@ -843,10 +843,10 @@ SSE-C or client-side encryption — every one of those replaces "the API authori
 
 ### Phase 6B-4C: media inventory reconciliation (code accepted, not deployed)
 
-Status: implemented 2026-09-08, with correctness follow-ups on 2026-09-09; code accepted on
-2026-09-09 against commit `246c2a7` with a full `scripts/check.ps1` run passing. Not deployed: every
-external prerequisite in `LAUNCH-CHECKLIST.md` under "Media storage, scanning and inventory" is still
-outstanding, and none of them is something this repository can do. See
+Status: implemented 2026-09-08, with correctness follow-ups on 2026-09-09 and a read-only-authority
+hardening the same day. Not deployed: every external prerequisite in `LAUNCH-CHECKLIST.md` under
+"Media storage, scanning and inventory" is still outstanding, and none of them is something this
+repository can do. See
 `docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`,
 `ARCHITECTURE.md` section 9 and `DOMAIN-RULES.md` MED-012. Additive migrations
 `20260908190256_Phase6B4CMediaInventoryReconciliation` (two new tables and two partial indexes),
@@ -859,8 +859,11 @@ upgrade-path test holds it. No existing media table is altered.
   each key, then walks rows with a live key and asks the store whether their object exists. It
   records findings and stops: no deletion, no locator cleared, nothing marked purged, no allowance
   released, no lifecycle configuration written, no automatic repair. The service is composed with a
-  list/stat port and never with the storage port, so it holds nothing that can delete; an
-  architecture test asserts the constructor.
+  list/stat port and three narrow ports — a read model that answers in values, a run store that
+  writes one row, a finding store — and with no storage port, no database context and no container,
+  so it holds nothing that can delete and nothing tracked it could save. An architecture test asserts
+  the constructor and a PostgreSQL test proves no media row's `xmin` moves across a run that opens
+  and then closes findings.
 - **Seven findings, tenant-owned, idempotent.** Missing object for a live owner, unowned object past
   a 24-hour grace, an object a purged row still names through its retained scan evidence, a length
   mismatch, one key claimed by two live rows, a derivative and parent disagreeing about purge, and a
@@ -904,9 +907,37 @@ Deferred, deliberately: any repair authority at all, an operator or coach-facing
 restore, force-purge, enumerating abandoned multipart uploads, local-object migration, and a retention
 decision for findings and runs.
 
+#### Phase 6B-4C read-only authority hardening (2026-09-09)
+
+Status: complete, from an independent review of the acceptance commit. No migration, no behaviour
+change, no new dependency: the same passes, cursors, leases, bounds and findings, reached through
+different seams.
+
+- **The context was the hole the scope factory had been.** The service's first constructor parameter
+  was a `GymDbContext` — every table in the application, media aggregates included. `MediaAssets`
+  plus one `SaveChangesAsync`, both already in the file, are the authority to clear a locator or
+  delete an asset row, so "there is no object in its constructor with a delete on it" was not true.
+  Reconciliation now holds no context: a read model that answers about the three owning tables in
+  values, a run store that writes one row, and the existing finding store. A value cannot be saved,
+  which is the plainest form the guarantee has taken yet.
+- **The test that was supposed to catch it looked for the wrong words.** It refused parameters with a
+  member containing "Delete", "Purge" or "Put" — an object store's vocabulary. EF's delete is
+  `Remove` and its write is `SaveChanges`, so `DbContext` passed; meanwhile the same rule refused
+  `ListPurgedEvidenceKeysAsync`, an honest read. It now refuses a `DbContext`, a general persistence
+  member, a returned queryable or context, and a returned mutable aggregate anywhere including inside
+  a `Task` or a list, and matches mutating verbs at the start of a name.
+- **A behavioural proof beside the structural one.** The two adapters still hold a context, because
+  writing a run row and a finding is their job. So a PostgreSQL test drives a run that opens findings
+  of three kinds across both passes and a second that resolves them, and asserts every media row's
+  `xmin` — PostgreSQL's own record of the transaction that last wrote it — is unchanged. A repair
+  that carefully restored the previous values would still fail it. A second test holds the same
+  through a store that will not answer. Both were confirmed to fail against a deliberately introduced
+  write before being relied on.
+
 #### Phase 6B-4 code acceptance and production handoff (2026-09-09)
 
-Status: the code of 6B-4A, 6B-4B and 6B-4C is accepted. No deployment of it exists, and nothing below
+Status: the code of 6B-4A, 6B-4B and 6B-4C is accepted, 6B-4C after the hardening above. No
+deployment of it exists, and nothing below
 should be read as one. The distinction matters here more than elsewhere in this roadmap, because two
 of the rules these phases rest on are operational agreements rather than anything the code can
 enforce: `r2-eu-v1` naming one account, jurisdiction and bucket forever (ADR 0024), and no
@@ -914,7 +945,8 @@ object-expiration or storage-class transition rule on that bucket without a new 
 
 What is accepted is what the repository contains: the provider-neutral seam and its fail-closed
 composition, the R2 and ClamAV adapters behind it, the API-proxied authorized delivery path, and the
-read-only reconciliation pass with its findings and runs. `scripts/check.ps1` passes at `246c2a7`.
+read-only reconciliation pass with its findings and runs, hardened so that its read-only authority is
+a property of its constructor and proved against PostgreSQL rather than argued for.
 
 What is not done is every external step, and all of it belongs to a person with credentials this
 repository has never held: creating the private EU bucket, issuing and storing the bucket-scoped

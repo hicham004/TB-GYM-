@@ -1097,9 +1097,11 @@ response.
 the reconciled storage location with the rows that own them and records durable findings; it deletes
 no object, clears no locator, marks nothing purged, releases no allowance, changes no lifecycle
 configuration and repairs nothing automatically. The service is composed with a list/stat inventory
-port and never with the storage port, so it holds nothing that can delete. A stored object the store
-reports as absent never tombstones a row or releases quota, and a provider call that failed is never
-read as an absence. Only canonical application locators at that one location are reconciled: a key
+port, a read model that answers about owning rows in values rather than aggregates, a store that
+writes only this run's row and a store that writes only findings; it holds no storage port, no
+database context and no container, so it has nothing that can delete and nothing tracked it could
+save. A stored object the store reports as absent never tombstones a row or releases quota, and a
+provider call that failed is never read as an absence. Only canonical application locators at that one location are reconciled: a key
 outside the grammar or naming no workspace is counted on the run and never attributed, because a
 finding is a tenant-owned row; rows at another location are counted as unreconciled, never probed.
 Rows the leased purge sweep or a live ingest reservation already owns are observed and left alone,

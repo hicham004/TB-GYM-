@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TB.Gym.Modules.Media;
 using TB.Gym.SharedKernel;
@@ -154,6 +155,51 @@ public sealed class MediaProviderBoundaryTests
     ];
 
     /// <summary>
+    /// Verbs an operation that changes a stored object is named for. Matched against the start of a
+    /// method name rather than anywhere inside it: an operation is named for what it does, and what
+    /// it does is its first word. The previous substring form failed both ways — it missed EF's
+    /// <c>Remove</c> entirely while refusing <c>ListPurgedEvidenceKeysAsync</c>, a read whose whole
+    /// purpose is to notice a purged row, because the noun it reads about contains a banned verb.
+    /// </summary>
+    private static readonly string[] MutatingVerbs =
+    [
+        "Delete", "Purge", "Put", "Write", "Upload", "Store", "Remove", "Save", "Copy", "Move",
+    ];
+
+    /// <summary>
+    /// Members that persist a change to whatever they are given, whichever table it belongs to.
+    /// </summary>
+    /// <remarks>
+    /// This list is the correction the previous cut needed. It looked for members whose names
+    /// contained "Delete", "Purge" or "Put" — which describes an object store's vocabulary and
+    /// nothing else. EF Core's delete is called <c>Remove</c>, its write is called
+    /// <c>SaveChanges</c>, and a <c>DbContext</c> has neither of the three banned words anywhere in
+    /// its surface, so the very type that gives a service the authority to clear a locator, mark a
+    /// row purged or drop an asset outright sailed straight through a test whose name says it
+    /// cannot. Names are matched exactly, so a port with an honest operation of its own — writing a
+    /// finding, updating a cursor — is judged by what it returns and what it is, below, rather than
+    /// by a word in the middle of its name.
+    /// </remarks>
+    private static readonly string[] PersistenceMembers =
+    [
+        "SaveChanges", "SaveChangesAsync", "Add", "AddAsync", "AddRange", "AddRangeAsync",
+        "Attach", "AttachRange", "Remove", "RemoveRange", "Update", "UpdateRange",
+        "Entry", "Set", "Database", "ChangeTracker", "Model",
+        "ExecuteDelete", "ExecuteDeleteAsync", "ExecuteUpdate", "ExecuteUpdateAsync",
+        "ExecuteSql", "ExecuteSqlAsync", "ExecuteSqlRaw", "ExecuteSqlRawAsync",
+    ];
+
+    /// <summary>
+    /// The mutable rows reconciliation exists to observe. It is never handed one, so there is
+    /// nothing for it to change even before the question of what it could save that change with.
+    /// </summary>
+    private static readonly string[] MutableMediaAggregates =
+    [
+        "MediaAsset", "MediaAssetDerivative", "MediaIngestObject", "MediaInventoryRun",
+        "MediaInventoryFinding",
+    ];
+
+    /// <summary>
     /// Reconciliation cannot delete an object because it was never given anything that can, and was
     /// never given anything that could ask for one either.
     /// </summary>
@@ -196,18 +242,88 @@ public sealed class MediaProviderBoundaryTests
                 $"The reconciliation service takes {resolver.Name}; it could then resolve IObjectStorage and delete a workspace's bytes.");
         }
 
+        Assert.IsEmpty(
+            parameters.Where(parameter => typeof(DbContext).IsAssignableFrom(parameter)),
+            "The reconciliation service takes a database context; it could then remove a media row and save it, whatever the code inside it does today.");
+
         foreach (var parameter in parameters)
         {
             Assert.IsEmpty(
-                parameter.GetMethods().Where(method =>
-                    method.Name.Contains("Delete", StringComparison.OrdinalIgnoreCase) ||
-                    method.Name.Contains("Purge", StringComparison.OrdinalIgnoreCase) ||
-                    method.Name.Contains("Put", StringComparison.OrdinalIgnoreCase)),
+                parameter.GetMethods().Where(method => MutatingVerbs.Any(verb =>
+                    method.Name.StartsWith(verb, StringComparison.OrdinalIgnoreCase))),
                 $"{parameter.Name} gives the reconciliation service a way to write or delete stored objects.");
             Assert.IsEmpty(
                 parameter.GetMethods().Where(method =>
                     ResolverMethods.Contains(method.Name, StringComparer.Ordinal)),
                 $"{parameter.Name} is a service locator; it gives the reconciliation service every capability the application registered.");
+            Assert.IsEmpty(
+                parameter.GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+                    .Where(member => PersistenceMembers.Contains(member.Name, StringComparer.Ordinal)),
+                $"{parameter.Name} exposes a general persistence member; it can save a change to any row, which is a repair authority however narrow its name sounds.");
+            Assert.IsEmpty(
+                MembersReturning(parameter, candidate =>
+                    typeof(IQueryable).IsAssignableFrom(candidate) || typeof(DbContext).IsAssignableFrom(candidate)),
+                $"{parameter.Name} hands back a queryable or a context; it is a database handle under another name.");
+
+            // The strongest of the four, and the one that needs no list of forbidden verbs: a value
+            // cannot be saved. Reconciliation is answered in ids, keys, lengths and a classified
+            // state, so even a context reached some other way would have nothing tracked to write.
+            Assert.IsEmpty(
+                MembersReturning(parameter, candidate =>
+                    MutableMediaAggregates.Contains(candidate.Name, StringComparer.Ordinal)),
+                $"{parameter.Name} hands the reconciliation service a mutable media aggregate; it must be answered in values.");
+        }
+    }
+
+    /// <summary>
+    /// Every type a member of <paramref name="port"/> can hand back, including the ones wrapped in a
+    /// <c>Task</c>, a list or a dictionary, tested against <paramref name="predicate"/>.
+    /// </summary>
+    private static IEnumerable<MemberInfo> MembersReturning(Type port, Func<Type, bool> predicate)
+    {
+        foreach (var member in port.GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+        {
+            var returned = member switch
+            {
+                MethodInfo method => method.ReturnType,
+                PropertyInfo property => property.PropertyType,
+                FieldInfo field => field.FieldType,
+                _ => null,
+            };
+            if (returned is not null && Unwrap(returned).Any(predicate))
+            {
+                yield return member;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A type and everything it wraps. <c>Task&lt;IReadOnlyList&lt;MediaAsset&gt;&gt;</c> hands back a
+    /// <c>MediaAsset</c> as surely as a bare one does, and stopping at the outermost type is how a
+    /// check like this misses the case it exists for.
+    /// </summary>
+    private static IEnumerable<Type> Unwrap(Type type)
+    {
+        yield return type;
+        if (type.IsArray && type.GetElementType() is { } element)
+        {
+            foreach (var inner in Unwrap(element))
+            {
+                yield return inner;
+            }
+        }
+
+        if (!type.IsGenericType)
+        {
+            yield break;
+        }
+
+        foreach (var argument in type.GetGenericArguments())
+        {
+            foreach (var inner in Unwrap(argument))
+            {
+                yield return inner;
+            }
         }
     }
 
@@ -258,6 +374,96 @@ public sealed class MediaProviderBoundaryTests
                 "MediaInventoryFindingWrite",
                 method.ReturnType.GetGenericArguments().Single().Name,
                 $"{method.Name} hands back something other than the outcome of writing findings.");
+        }
+    }
+
+    /// <summary>
+    /// The port that replaced the context on the read side answers in values and can be asked for
+    /// nothing else.
+    /// </summary>
+    /// <remarks>
+    /// Reconciliation has to read three media tables to do its job at all, and the obvious way to
+    /// give it that — a <c>GymDbContext</c> — is also a way to delete every row it can read. This
+    /// port is the narrow alternative: every operation is a bounded question with a bounded answer,
+    /// and the answer is a record of ids, keys, lengths and a classified state. Asserting that it
+    /// hands back no aggregate is what makes "it cannot repair anything" a property of the shape
+    /// rather than a promise about the code inside.
+    /// </remarks>
+    [TestMethod]
+    public void TheReconciliationServiceReadsThroughANarrowReadOnlyPort()
+    {
+        var infrastructure = LoadByName("TB.Gym.Infrastructure");
+        var port = infrastructure.GetTypes()
+            .SingleOrDefault(candidate => candidate.Name == "IMediaInventoryRowReader");
+        Assert.IsNotNull(port, "The reconciliation read port is missing from Infrastructure.");
+        Assert.IsFalse(port.IsPublic, "The read port is public; it is an implementation detail.");
+
+        var service = infrastructure.GetTypes()
+            .Single(candidate => candidate.Name == "MediaInventoryReconciliationService");
+        var parameters = service.GetConstructors(
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .SelectMany(constructor => constructor.GetParameters())
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+        Assert.Contains(port, parameters, "The reconciliation service does not read through the read port.");
+
+        foreach (var method in port.GetMethods())
+        {
+            // Every operation is a question. A port whose vocabulary admitted a save, a write or an
+            // apply would be the context again with fewer methods on it.
+            Assert.StartsWith(
+                "List",
+                method.Name,
+                StringComparison.Ordinal,
+                $"{method.Name} is not one of the read port's bounded questions.");
+            Assert.IsEmpty(
+                Unwrap(method.ReturnType).Where(returned =>
+                    MutableMediaAggregates.Contains(returned.Name, StringComparer.Ordinal)),
+                $"{method.Name} hands back a mutable media aggregate rather than the values classification needs.");
+        }
+    }
+
+    /// <summary>
+    /// The port that replaced the context on the write side can write one row: this run's own.
+    /// </summary>
+    /// <remarks>
+    /// A run has to record where it got to, which is a durable write, and the question is what else
+    /// that authority carries with it. Here it carries nothing: every operation names the claim it
+    /// is writing under and hands back either the run's progress as values or its state, so there is
+    /// no media row in the vocabulary at all and no aggregate handed over that a later line could
+    /// change and save.
+    /// </remarks>
+    [TestMethod]
+    public void TheReconciliationServiceRecordsProgressThroughANarrowRunPort()
+    {
+        var infrastructure = LoadByName("TB.Gym.Infrastructure");
+        var port = infrastructure.GetTypes()
+            .SingleOrDefault(candidate => candidate.Name == "IMediaInventoryRunStore");
+        Assert.IsNotNull(port, "The reconciliation run port is missing from Infrastructure.");
+        Assert.IsFalse(port.IsPublic, "The run port is public; it is an implementation detail.");
+
+        var service = infrastructure.GetTypes()
+            .Single(candidate => candidate.Name == "MediaInventoryReconciliationService");
+        var parameters = service.GetConstructors(
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .SelectMany(constructor => constructor.GetParameters())
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+        Assert.Contains(port, parameters, "The reconciliation service does not record progress through the run port.");
+
+        var permitted = new[] { "MediaInventoryRunProgress", "MediaInventoryRunState", "Boolean" };
+        foreach (var method in port.GetMethods())
+        {
+            Assert.AreEqual(
+                typeof(Task<>).Name,
+                method.ReturnType.Name,
+                $"{method.Name} is not one of the run port's asynchronous operations.");
+            var returned = method.ReturnType.GetGenericArguments().Single();
+            var name = Nullable.GetUnderlyingType(returned)?.Name ?? returned.Name;
+            Assert.Contains(
+                name,
+                permitted,
+                $"{method.Name} hands back {name}; the run port answers about the run and nothing else.");
         }
     }
 

@@ -163,9 +163,15 @@ public static class DependencyInjection
         // few minutes; auditing a whole location walks everything and may need several passes.
         // Sharing one loop would make an inventory walk the reason a deletion was late.
         //
-        // The reconciliation service is composed with the finding store rather than with a scope
-        // factory of its own. A per-workspace scope is what writing a tenant-owned row needs; a
-        // container is what would also let it resolve something that deletes.
+        // The reconciliation service is composed with three narrow ports and with no database
+        // context, no storage port and no container. A context is a handle to every table in the
+        // application and EF's delete is called Remove, so a sweep holding one could clear a
+        // locator or drop an asset row whatever its own code says; a per-workspace scope is what
+        // writing a tenant-owned finding needs, and a container is what would also let it resolve
+        // something that deletes. Between them these three can write exactly two tables — the run
+        // and its findings — and read three, and none of them hands back a media aggregate.
+        services.AddScoped<IMediaInventoryRowReader, MediaInventoryRowReader>();
+        services.AddScoped<IMediaInventoryRunStore, MediaInventoryRunStore>();
         services.AddScoped<IMediaInventoryFindingStore, MediaInventoryFindingStore>();
         services.AddScoped<IMediaInventoryReconciliationService, MediaInventoryReconciliationService>();
         services.AddHostedService<MediaInventoryReconciliationWorker>();

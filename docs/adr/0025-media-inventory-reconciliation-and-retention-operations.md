@@ -1,7 +1,8 @@
 # ADR 0025: Media Inventory Reconciliation and Retention Operations
 
-Status: accepted, 2026-09-08; amended 2026-09-09 (see "Amendment: what closes a finding" and
-"Amendment: resolution is a third bounded phase")
+Status: accepted, 2026-09-08; amended 2026-09-09 (see "Amendment: what closes a finding",
+"Amendment: resolution is a third bounded phase" and "Amendment: the context was the hole the
+scope factory had been")
 
 Builds on: ADR 0014, ADR 0023 and ADR 0024. Every decision in those remains in force and unchanged.
 This ADR adds a read-only observer beside them and takes nothing away.
@@ -33,12 +34,13 @@ allowance, touches no lifecycle configuration and repairs no finding. Every acti
 media state is deliberately absent rather than disabled, and adding one is a decision for a later ADR.
 
 The guarantee is structural. `MediaInventoryReconciliationService` is composed with `IObjectInventory`
-— which lists and stats — and a narrow port that writes findings, and never with `IObjectStorage`,
-which writes and deletes, nor with any container that could produce one. There is no object in its
-constructor with a delete on it and nothing there to ask for one. An architecture test asserts that
-parameter list, because a reviewer can miss a call and a signature cannot hide one, and because the
-way a read-only sweep stops being one is a later constructor parameter that nobody thought about
-twice. (The first implementation took a scope factory; see the amendment.)
+— which lists and stats — and three narrow ports, and never with `IObjectStorage`, which writes and
+deletes, nor with a database context, nor with any container that could produce either. There is no
+object in its constructor with a delete on it and nothing there to ask for one. An architecture test
+asserts that parameter list, because a reviewer can miss a call and a signature cannot hide one, and
+because the way a read-only sweep stops being one is a later constructor parameter that nobody
+thought about twice. (The first implementation took a scope factory, and the second took a
+`GymDbContext`; see the amendments.)
 
 ### The database stays the source of truth, and a provider answer is never promoted to one
 
@@ -261,6 +263,51 @@ pass; on a deployment carrying one failed run or one completed run the constrain
 upgrade stops with the schema half applied. Each migration therefore backfills between the two steps,
 and a seeded upgrade test holds it: reconciliation history in every state the previous migration could
 produce, migrated forward, with the constraints then proved to be doing their job.
+
+## Amendment: the context was the hole the scope factory had been (2026-09-09, third review)
+
+The amendment above moved the container out of the service and said the guarantee was now a property
+of the constructor. It was not, because the first parameter of that constructor was a `GymDbContext`
+— a handle to every table in the application, media aggregates included. `dbContext.MediaAssets` and
+one `SaveChangesAsync`, both already in the file, are between them the authority to clear a locator,
+mark a row purged or delete an asset outright. The service did not use them that way; that is the
+distinction this ADR spent a page refusing to rely on anywhere else, and it should not have relied
+on it here.
+
+The architecture test did not catch it, and the reason is worth recording because it is the
+general-purpose version of this mistake. It refused any parameter with a member whose name contained
+"Delete", "Purge" or "Put" — an object store's vocabulary. EF Core's delete is called `Remove`, its
+write is called `SaveChanges`, and `DbContext` contains none of those three words anywhere in its
+surface, so the one type that mattered passed a test named for forbidding it. The same substring
+rule then refused `ListPurgedEvidenceKeysAsync`, an honest read, because the condition it reads about
+is spelled with a banned verb: a check that missed what it was for and objected to what it was not.
+
+**Reconciliation now holds no context.** It is composed with `IObjectInventory` and three ports:
+`IMediaInventoryRowReader`, which answers bounded questions about the three owning tables **in
+values** — ids, keys, lengths, a classified state — and never hands back a `MediaAsset`, a
+`MediaAssetDerivative` or a `MediaIngestObject`; `IMediaInventoryRunStore`, which can write one row,
+this run's own, and answers in the run's progress or its state; and the existing
+`IMediaInventoryFindingStore`. The strongest of those properties is the plainest: **a value cannot
+be saved.** Even a context reached some other way would find nothing tracked to write.
+
+The two adapters behind those ports do hold a context, because writing a run row and a finding is
+their whole job, and moving the container one level further down would only relocate the question
+again. So the structural argument is paired with a behavioural one that covers the adapters too. The
+architecture test now refuses any parameter that is a `DbContext`, that exposes a general
+persistence member (`SaveChanges`, `Add`, `Remove`, `Update`, `Entry`, `Set`, `Database`,
+`ExecuteDelete`, `ExecuteUpdate` and the rest, matched exactly), that returns an `IQueryable` or a
+context, or that returns a mutable media aggregate from anywhere — including inside a `Task`, a list
+or a dictionary. Mutating verbs are matched at the start of a method name rather than anywhere
+inside it, because an operation is named for what it does and what it does is its first word.
+
+And a PostgreSQL test proves the consequence rather than the shape: it drives a run that opens
+findings of three kinds across both passes, then a second that resolves them, and asserts that every
+row in all three media tables has the same `xmin` — PostgreSQL's own record of the transaction that
+last wrote it — before and after. An `UPDATE` changes `xmin`, a `DELETE` removes the row and an
+`INSERT` adds one, so a repair that carefully restored the previous column values would still fail
+it. A second test holds the same invariant through a store that will not answer, where the temptation
+to tidy up unconfirmed rows would be strongest. Both were confirmed to fail against a deliberately
+introduced write before being relied on.
 
 ## Consequences
 

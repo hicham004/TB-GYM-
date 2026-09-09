@@ -1,8 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Npgsql;
-using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Media;
 using TB.Gym.SharedKernel;
 
@@ -14,12 +11,17 @@ namespace TB.Gym.Infrastructure.Application;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The guarantee that it cannot repair anything is structural rather than editorial: its constructor
-/// takes <see cref="IObjectInventory"/>, which lists and stats, and <see cref="IMediaInventoryFindingStore"/>,
-/// which writes findings, and neither <see cref="IObjectStorage"/> nor any container that could
-/// resolve one. There is no object here to call delete on and no way to ask for one. An architecture
-/// test holds that shape, because a later constructor parameter is exactly how a read-only sweep
-/// stops being one.
+/// The guarantee that it cannot repair anything is structural rather than editorial, and the shape
+/// of the constructor is the whole of it. It takes <see cref="IObjectInventory"/>, which lists and
+/// stats; <see cref="IMediaInventoryRowReader"/>, which answers about media rows in values and never
+/// hands one over; <see cref="IMediaInventoryRunStore"/>, which can write nothing but this run's own
+/// row; and <see cref="IMediaInventoryFindingStore"/>, which can write nothing but findings. It
+/// takes no <see cref="IObjectStorage"/>, so it cannot delete bytes; no database context, so it has
+/// no <c>DbSet</c> to remove a media row from and no <c>SaveChanges</c> to call; and no container,
+/// so it cannot ask for any of those. There is nothing here to repair a finding with. An
+/// architecture test holds that shape — a later constructor parameter is exactly how a read-only
+/// sweep stops being one — and a PostgreSQL test holds the consequence, by proving that a full run
+/// over seeded rows leaves every media row's version untouched.
 /// </para>
 /// <para>
 /// Two passes share one run. The inventory pass enumerates stored objects and asks the database who
@@ -40,26 +42,15 @@ namespace TB.Gym.Infrastructure.Application;
 /// </para>
 /// </remarks>
 internal sealed class MediaInventoryReconciliationService(
-    GymDbContext dbContext,
     IObjectInventory inventory,
+    IMediaInventoryRowReader rowReader,
+    IMediaInventoryRunStore runStore,
     IMediaInventoryFindingStore findingStore,
     IOptions<MediaStorageOptions> storageOptions,
     IClock clock,
     ILogger<MediaInventoryReconciliationService> logger)
     : IMediaInventoryReconciliationService
 {
-    private static readonly Action<ILogger, Guid, string, int, Exception?> LogPageFailure =
-        LoggerMessage.Define<Guid, string, int>(
-            LogLevel.Warning,
-            new EventId(5521, "MediaInventoryPageFailed"),
-            "Media inventory run {RunId} could not read a page: {FailureCode}. Unrecovered failures: {PageFailureCount}.");
-
-    private static readonly Action<ILogger, Guid, Exception?> LogRunAbandoned =
-        LoggerMessage.Define<Guid>(
-            LogLevel.Warning,
-            new EventId(5522, "MediaInventoryRunAbandoned"),
-            "Media inventory run {RunId} was abandoned: its resume cursors are older than one day.");
-
     private static readonly Action<ILogger, Guid, Exception?> LogLeaseLost =
         LoggerMessage.Define<Guid>(
             LogLevel.Information,
@@ -80,7 +71,7 @@ internal sealed class MediaInventoryReconciliationService(
         }
 
         var location = inventory.ReconciledLocation;
-        var claimed = await ClaimRunAsync(location, cancellationToken);
+        var claimed = await runStore.ClaimAsync(location, runLease, cancellationToken);
         if (claimed is null)
         {
             return MediaInventoryReconciliationOutcome.Idle;
@@ -109,78 +100,6 @@ internal sealed class MediaInventoryReconciliationService(
     // ---------------------------------------------------------------- run lifecycle
 
     /// <summary>
-    /// Takes over the unfinished run for this location, or starts one. A run older than the maximum
-    /// age is abandoned rather than resumed: its cursor describes an enumeration the store may no
-    /// longer be able to continue, and silently restarting under the old row would make the counters
-    /// describe two different walks.
-    /// </summary>
-    private async Task<RunProgress?> ClaimRunAsync(string location, CancellationToken cancellationToken)
-    {
-        var now = clock.UtcNow;
-        return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-            var existing = await dbContext.MediaInventoryRuns
-                .FromSql($"""
-                    SELECT *, xmin FROM media."InventoryRuns"
-                    WHERE "Location" = {location}
-                      AND "State" = 'Running'
-                    ORDER BY "StartedAtUtc"
-                    LIMIT 1
-                    FOR UPDATE SKIP LOCKED
-                    """)
-                .SingleOrDefaultAsync(cancellationToken);
-
-            if (existing is not null && existing.IsStale(now))
-            {
-                existing.Abandon(now);
-                await dbContext.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
-                LogRunAbandoned(logger, existing.Id, null);
-                return null;
-            }
-
-            if (existing is not null && !existing.IsClaimable(now))
-            {
-                // Another replica holds a live lease on it. Nothing to do this tick.
-                await transaction.RollbackAsync(cancellationToken);
-                return null;
-            }
-
-            var token = Guid.NewGuid();
-            MediaInventoryRun run;
-            if (existing is null)
-            {
-                run = MediaInventoryRun.Start(location, now, runLease, token);
-                dbContext.MediaInventoryRuns.Add(run);
-            }
-            else
-            {
-                run = existing;
-                run.Claim(now, runLease, token);
-            }
-
-            try
-            {
-                await dbContext.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
-            }
-            catch (DbUpdateException exception)
-                when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
-            {
-                // Two replicas ticked at the same moment and both found no run to take over. The
-                // partial unique index is what settles it, and losing that race is the ordinary
-                // outcome rather than an error: the winner is already walking this location.
-                dbContext.MediaInventoryRuns.Entry(run).State = EntityState.Detached;
-                await transaction.RollbackAsync(cancellationToken);
-                return null;
-            }
-
-            return RunProgress.From(run, token);
-        });
-    }
-
-    /// <summary>
     /// Ends this worker's turn on the run: failed, completed, or handed back unfinished.
     /// </summary>
     /// <remarks>
@@ -191,68 +110,19 @@ internal sealed class MediaInventoryReconciliationService(
     /// passes done, which the next tick finalises again from exactly this point.
     /// </remarks>
     private async Task<MediaInventoryRunState> FinalizeRunAsync(
-        RunProgress run,
+        MediaInventoryRunProgress run,
         string location,
         ReconciliationTotals totals,
         CancellationToken cancellationToken)
     {
-        if (await MayResolveAsync(run, cancellationToken) &&
+        if (await runStore.MayResolveAsync(run.Claim, cancellationToken) &&
             await ResolveUnobservedAsync(run, location, totals, cancellationToken) == ResolutionOutcome.Lost)
         {
             // The run belongs to somebody else now. Its row is theirs to move, not this worker's.
             return MediaInventoryRunState.Running;
         }
 
-        var now = clock.UtcNow;
-        return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-            var stored = await LoadForUpdateAsync(dbContext, run.RunId, cancellationToken);
-            if (stored is null || !stored.OwnsLease(run.Token))
-            {
-                await transaction.RollbackAsync(cancellationToken);
-                return MediaInventoryRunState.Running;
-            }
-
-            if (stored.HasExhaustedFailures)
-            {
-                stored.Fail(now, run.Token);
-            }
-            else if (stored.CanComplete)
-            {
-                stored.Complete(now, run.Token);
-            }
-            else
-            {
-                // Budget or lease ran out with work left — an unread page, an unprobed row, or a
-                // finding still to close. The run stays Running with its cursors intact and the next
-                // tick resumes it, and because it is not Completed nothing can read it as a
-                // statement that the location was fully examined. The lease is handed back rather
-                // than left to expire, so the next pass can pick the run up at once.
-                stored.ReleaseClaim(now, run.Token);
-            }
-
-            var state = stored.State;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return state;
-        });
-    }
-
-    /// <summary>
-    /// Whether this run has read everything, asked before the resolution phase so that a partial,
-    /// failed or budget-exhausted pass never reaches it.
-    /// </summary>
-    private async Task<bool> MayResolveAsync(RunProgress run, CancellationToken cancellationToken)
-    {
-        var stored = await dbContext.MediaInventoryRuns
-            .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == run.RunId, cancellationToken);
-        return stored is not null &&
-            stored.OwnsLease(run.Token) &&
-            !stored.HasExhaustedFailures &&
-            stored.HasExaminedEverything &&
-            !stored.ResolutionCompleted;
+        return await runStore.FinalizeAsync(run.Claim, cancellationToken);
     }
 
     /// <summary>How a bounded resolution phase ended.</summary>
@@ -286,7 +156,7 @@ internal sealed class MediaInventoryReconciliationService(
     /// candidate set only ever shrinks.
     /// </remarks>
     private async Task<ResolutionOutcome> ResolveUnobservedAsync(
-        RunProgress run,
+        MediaInventoryRunProgress run,
         string location,
         ReconciliationTotals totals,
         CancellationToken cancellationToken)
@@ -338,7 +208,7 @@ internal sealed class MediaInventoryReconciliationService(
     // ---------------------------------------------------------------- inventory pass
 
     private async Task<PassOutcome> RunInventoryPassAsync(
-        RunProgress run,
+        MediaInventoryRunProgress run,
         string location,
         int objectBudget,
         ReconciliationTotals totals,
@@ -365,7 +235,10 @@ internal sealed class MediaInventoryReconciliationService(
             {
                 totals.PageFailures++;
                 return new PassOutcome(
-                    await RecordFailureAsync(run, page.FailureCode, cancellationToken),
+                    await runStore.RecordPageFailureAsync(
+                        run.Claim,
+                        page.FailureCode ?? MediaInventoryFailureCodes.ProviderError,
+                        cancellationToken),
                     Continue: false);
             }
 
@@ -376,7 +249,10 @@ internal sealed class MediaInventoryReconciliationService(
                 // would mark the run complete having never read what is behind it.
                 totals.PageFailures++;
                 return new PassOutcome(
-                    await RecordFailureAsync(run, MediaInventoryFailureCodes.ListNoProgress, cancellationToken),
+                    await runStore.RecordPageFailureAsync(
+                        run.Claim,
+                        MediaInventoryFailureCodes.ListNoProgress,
+                        cancellationToken),
                     Continue: false);
             }
 
@@ -388,7 +264,13 @@ internal sealed class MediaInventoryReconciliationService(
 
             scanned += page.Entries.Count;
             totals.Add(counted);
-            var advanced = await RecordPageAsync(run, counted, page.NextCursor, page.HasMore, cancellationToken);
+            var advanced = await runStore.RecordInventoryPageAsync(
+                run.Claim,
+                runLease,
+                counted,
+                page.NextCursor,
+                page.HasMore,
+                cancellationToken);
             if (advanced is null)
             {
                 return new PassOutcome(null, Continue: false);
@@ -432,7 +314,7 @@ internal sealed class MediaInventoryReconciliationService(
     /// workspace, is not an application object and is counted rather than judged.
     /// </summary>
     private async Task<MediaInventoryPageTally?> ClassifyPageAsync(
-        RunProgress run,
+        MediaInventoryRunProgress run,
         string location,
         IReadOnlyList<ObjectInventoryEntry> entries,
         CancellationToken cancellationToken)
@@ -461,12 +343,7 @@ internal sealed class MediaInventoryReconciliationService(
             return new MediaInventoryPageTally(entries.Count, 0, 0, unattributable, 0);
         }
 
-        var candidateTenants = attributed.Keys.ToArray();
-        var knownTenants = await dbContext.Tenants
-            .AsNoTracking()
-            .Where(tenant => candidateTenants.Contains(tenant.Id))
-            .Select(tenant => tenant.Id)
-            .ToListAsync(cancellationToken);
+        var knownTenants = await rowReader.ListKnownTenantsAsync(attributed.Keys, cancellationToken);
 
         var skippedRecent = 0;
         var skippedOwned = 0;
@@ -504,7 +381,7 @@ internal sealed class MediaInventoryReconciliationService(
     }
 
     private async Task<MediaInventoryPageTally?> ClassifyTenantObjectsAsync(
-        RunProgress run,
+        MediaInventoryRunProgress run,
         Guid tenantId,
         string location,
         IReadOnlyList<AttributedObject> objects,
@@ -512,13 +389,13 @@ internal sealed class MediaInventoryReconciliationService(
     {
         var now = clock.UtcNow;
         var keys = objects.Select(item => item.Locator.ObjectKey).ToArray();
-        var owners = await LoadLiveOwnersAsync(tenantId, location, keys, cancellationToken);
+        var owners = await rowReader.ListLiveOwnersAsync(tenantId, location, keys, cancellationToken);
         var unowned = keys
             .Where(key => !owners.ContainsKey(key))
             .ToArray();
         var purgedOwners = unowned.Length == 0
-            ? []
-            : await LoadPurgedEvidenceKeysAsync(tenantId, location, unowned, cancellationToken);
+            ? (IReadOnlySet<string>)new HashSet<string>(StringComparer.Ordinal)
+            : await rowReader.ListPurgedEvidenceKeysAsync(tenantId, location, unowned, cancellationToken);
 
         var skippedRecent = 0;
         var skippedOwned = 0;
@@ -583,7 +460,7 @@ internal sealed class MediaInventoryReconciliationService(
     // ---------------------------------------------------------------- owner pass
 
     private async Task<PassOutcome> RunOwnerPassAsync(
-        RunProgress run,
+        MediaInventoryRunProgress run,
         string location,
         int ownerProbeBudget,
         ReconciliationTotals totals,
@@ -600,12 +477,17 @@ internal sealed class MediaInventoryReconciliationService(
             }
 
             var batchSize = Math.Min(OwnerBatchSize, ownerProbeBudget - examined);
-            var rows = await LoadOwnerRowsAsync(run.ProbeStage, run.ProbeCursorId, batchSize, cancellationToken);
+            var rows = await rowReader.ListOwnerRowsAsync(
+                run.ProbeStage,
+                run.ProbeCursorId,
+                batchSize,
+                cancellationToken);
             if (rows.Count == 0)
             {
                 var advancedStage = NextStage(run.ProbeStage);
-                var moved = await RecordProbesAsync(
-                    run,
+                var moved = await runStore.RecordOwnerProbesAsync(
+                    run.Claim,
+                    runLease,
                     default,
                     advancedStage,
                     null,
@@ -633,7 +515,7 @@ internal sealed class MediaInventoryReconciliationService(
                 // examining are re-read rather than counted as verified.
                 totals.PageFailures++;
                 return new PassOutcome(
-                    await RecordFailureAsync(run, failure, cancellationToken),
+                    await runStore.RecordPageFailureAsync(run.Claim, failure, cancellationToken),
                     Continue: false);
             }
 
@@ -642,8 +524,9 @@ internal sealed class MediaInventoryReconciliationService(
                 return new PassOutcome(run, Continue: false);
             }
 
-            var advanced = await RecordProbesAsync(
-                run,
+            var advanced = await runStore.RecordOwnerProbesAsync(
+                run.Claim,
+                runLease,
                 outcome.Tally,
                 run.ProbeStage,
                 cursorId,
@@ -674,9 +557,9 @@ internal sealed class MediaInventoryReconciliationService(
     /// examined and the rest is re-read by whoever holds the run next.
     /// </remarks>
     private async Task<OwnerProbeOutcome> ProbeOwnerRowsAsync(
-        RunProgress run,
+        MediaInventoryRunProgress run,
         string location,
-        IReadOnlyList<OwnerRow> rows,
+        IReadOnlyList<MediaInventoryOwnerRow> rows,
         CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
@@ -781,7 +664,7 @@ internal sealed class MediaInventoryReconciliationService(
     }
 
     private async Task<MediaInventoryFindingWrite> ApplyPendingAsync(
-        RunProgress run,
+        MediaInventoryRunProgress run,
         string location,
         Dictionary<Guid, List<MediaInventoryPendingFinding>> byTenant,
         CancellationToken cancellationToken)
@@ -820,7 +703,7 @@ internal sealed class MediaInventoryReconciliationService(
     /// How long a remote call may take: whatever is left of the lease, less the margin the database
     /// writes that follow it need. False when there is not enough left to start one at all.
     /// </summary>
-    private bool TryLeaseBudget(RunProgress run, out TimeSpan budget)
+    private bool TryLeaseBudget(MediaInventoryRunProgress run, out TimeSpan budget)
     {
         budget = run.LeaseExpiresAtUtc - clock.UtcNow - MediaInventoryPolicy.LeaseSafetyMargin;
         return budget > TimeSpan.Zero;
@@ -867,426 +750,6 @@ internal sealed class MediaInventoryReconciliationService(
             return new ObjectStatResult(
                 ObjectStorageOperationStatus.Failed,
                 FailureCode: MediaInventoryFailureCodes.LeaseExpired);
-        }
-    }
-
-    // ---------------------------------------------------------------- durable progress
-
-    private async Task<RunProgress?> RecordPageAsync(
-        RunProgress run,
-        MediaInventoryPageTally tally,
-        string? nextCursor,
-        bool hasMore,
-        CancellationToken cancellationToken)
-    {
-        var now = clock.UtcNow;
-        return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-            var stored = await LoadForUpdateAsync(dbContext, run.RunId, cancellationToken);
-            if (stored is null ||
-                !stored.RecordInventoryPage(now, run.Token, runLease, tally, nextCursor, hasMore))
-            {
-                await transaction.RollbackAsync(cancellationToken);
-                LogLeaseLost(logger, run.RunId, null);
-                return null;
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return RunProgress.From(stored, run.Token);
-        });
-    }
-
-    private async Task<RunProgress?> RecordProbesAsync(
-        RunProgress run,
-        MediaInventoryProbeTally tally,
-        MediaInventoryProbeStage stage,
-        Guid? cursorId,
-        CancellationToken cancellationToken)
-    {
-        var now = clock.UtcNow;
-        return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-            var stored = await LoadForUpdateAsync(dbContext, run.RunId, cancellationToken);
-            if (stored is null ||
-                !stored.RecordOwnerProbes(now, run.Token, runLease, tally, stage, cursorId))
-            {
-                await transaction.RollbackAsync(cancellationToken);
-                LogLeaseLost(logger, run.RunId, null);
-                return null;
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return RunProgress.From(stored, run.Token);
-        });
-    }
-
-    /// <summary>
-    /// Records a page the store would not serve. The cursor is deliberately left where it was, so
-    /// the next attempt re-reads the page that failed instead of stepping over the objects it would
-    /// have carried and calling them examined.
-    /// </summary>
-    private async Task<RunProgress?> RecordFailureAsync(
-        RunProgress run,
-        string? failureCode,
-        CancellationToken cancellationToken)
-    {
-        var now = clock.UtcNow;
-        var code = failureCode ?? MediaInventoryFailureCodes.ProviderError;
-        return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-            var stored = await LoadForUpdateAsync(dbContext, run.RunId, cancellationToken);
-            if (stored is null || !stored.RecordPageFailure(now, run.Token, code))
-            {
-                await transaction.RollbackAsync(cancellationToken);
-                LogLeaseLost(logger, run.RunId, null);
-                return null;
-            }
-
-            var failures = stored.PageFailureCount;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            LogPageFailure(logger, run.RunId, code, failures, null);
-            return RunProgress.From(stored, run.Token);
-        });
-    }
-
-    // ---------------------------------------------------------------- database reads
-
-    /// <summary>
-    /// The run row, locked, with the values the database currently holds.
-    /// </summary>
-    /// <remarks>
-    /// Anything this context is still tracking from an earlier transaction is discarded first. The
-    /// finding store writes this row too — the count of what it closed commits with the rows it
-    /// closed — so a copy left over from a previous transaction carries a concurrency token the
-    /// database has already moved past, and saving against it would fail as a conflict with a writer
-    /// that is this same worker. Reading under <c>FOR UPDATE</c> exists to get the authoritative
-    /// row, so the stale copy is dropped rather than merged with it.
-    /// </remarks>
-    private static Task<MediaInventoryRun?> LoadForUpdateAsync(
-        GymDbContext context,
-        Guid runId,
-        CancellationToken cancellationToken)
-    {
-        var tracked = context.ChangeTracker
-            .Entries<MediaInventoryRun>()
-            .FirstOrDefault(entry => entry.Entity.Id == runId);
-        if (tracked is not null)
-        {
-            tracked.State = EntityState.Detached;
-        }
-
-        return context.MediaInventoryRuns
-            .FromSql($"""
-                SELECT *, xmin FROM media."InventoryRuns"
-                WHERE "Id" = {runId}
-                FOR UPDATE
-                """)
-            .SingleOrDefaultAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Every row that currently holds one of these keys, across the three tables that can own one.
-    /// The lookup is one query per table per page rather than one per object, and it is a read: no
-    /// tenant scope is entered, because nothing here is written.
-    /// </summary>
-    private async Task<Dictionary<string, KeyOwners>> LoadLiveOwnersAsync(
-        Guid tenantId,
-        string location,
-        string[] keys,
-        CancellationToken cancellationToken)
-    {
-        var now = clock.UtcNow;
-        var owners = new Dictionary<string, KeyOwners>(StringComparer.Ordinal);
-
-        var assets = await dbContext.MediaAssets
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(item =>
-                item.TenantId == tenantId &&
-                item.StorageLocation == location &&
-                item.StorageKey != null &&
-                keys.Contains(item.StorageKey))
-            .Select(item => new
-            {
-                item.Id,
-                item.StorageKey,
-                item.Status,
-                item.PurgeAfterUtc,
-                item.PurgeClaimToken,
-                item.PurgeClaimExpiresAtUtc,
-                item.Length,
-            })
-            .ToListAsync(cancellationToken);
-        foreach (var asset in assets)
-        {
-            Add(owners, asset.StorageKey!, new OwnerReference(
-                MediaInventoryOwnerKind.Asset,
-                asset.Id,
-                MediaInventoryClassifier.ClassifyOwnerState(
-                    asset.Status,
-                    asset.PurgeAfterUtc,
-                    asset.PurgeClaimToken,
-                    asset.PurgeClaimExpiresAtUtc,
-                    now),
-                asset.Length));
-        }
-
-        var derivatives = await (
-            from derivative in dbContext.MediaAssetDerivatives.IgnoreQueryFilters().AsNoTracking()
-            join parent in dbContext.MediaAssets.IgnoreQueryFilters().AsNoTracking()
-                on new { derivative.TenantId, Id = derivative.MediaAssetId }
-                equals new { parent.TenantId, parent.Id }
-            where derivative.TenantId == tenantId &&
-                  derivative.StorageLocation == location &&
-                  derivative.StorageKey != null &&
-                  keys.Contains(derivative.StorageKey)
-            select new
-            {
-                derivative.Id,
-                derivative.StorageKey,
-                derivative.Length,
-                ParentStatus = parent.Status,
-                parent.PurgeAfterUtc,
-                parent.PurgeClaimToken,
-                parent.PurgeClaimExpiresAtUtc,
-            }).ToListAsync(cancellationToken);
-        foreach (var derivative in derivatives)
-        {
-            Add(owners, derivative.StorageKey!, new OwnerReference(
-                MediaInventoryOwnerKind.Derivative,
-                derivative.Id,
-                // A derivative inherits its parent's cleanup state: it is the parent's purge that
-                // deletes it, so the parent is what decides whether another authority owns the row.
-                MediaInventoryClassifier.ClassifyOwnerState(
-                    derivative.ParentStatus,
-                    derivative.PurgeAfterUtc,
-                    derivative.PurgeClaimToken,
-                    derivative.PurgeClaimExpiresAtUtc,
-                    now),
-                derivative.Length));
-        }
-
-        var ingests = await dbContext.MediaIngestObjects
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(item =>
-                item.TenantId == tenantId &&
-                item.StorageLocation == location &&
-                item.StorageKey != null &&
-                keys.Contains(item.StorageKey))
-            .Select(item => new
-            {
-                item.Id,
-                item.StorageKey,
-                item.Status,
-                item.PurgeAfterUtc,
-                item.StoredAtUtc,
-                item.AccountedBytes,
-            })
-            .ToListAsync(cancellationToken);
-        foreach (var ingest in ingests)
-        {
-            Add(owners, ingest.StorageKey!, new OwnerReference(
-                MediaInventoryOwnerKind.IngestObject,
-                ingest.Id,
-                ingest.Status == MediaIngestObjectStatus.Reserved && ingest.PurgeAfterUtc > now
-                    ? MediaInventoryOwnerState.ReservationInFlight
-                    : MediaInventoryOwnerState.OwnedByPurge,
-                // Before the write is confirmed the accounted bytes are a conservative reservation
-                // rather than a measurement, so comparing them to an object would compare a bound
-                // with a fact.
-                ingest.StoredAtUtc is null ? null : ingest.AccountedBytes));
-        }
-
-        return owners;
-    }
-
-    /// <summary>
-    /// Keys that a purged row still names through its retained scan evidence. This is what separates
-    /// "the database says these bytes were deleted" from "the database has never heard of this
-    /// object", and it needs no extra column: the evidence keeps the locator a purge clears.
-    /// </summary>
-    private async Task<HashSet<string>> LoadPurgedEvidenceKeysAsync(
-        Guid tenantId,
-        string location,
-        string[] keys,
-        CancellationToken cancellationToken)
-    {
-        var assetKeys = await dbContext.MediaAssets
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(item =>
-                item.TenantId == tenantId &&
-                item.StorageKey == null &&
-                item.ScanStorageLocation == location &&
-                item.ScanStorageKey != null &&
-                keys.Contains(item.ScanStorageKey))
-            .Select(item => item.ScanStorageKey!)
-            .ToListAsync(cancellationToken);
-        var derivativeKeys = await dbContext.MediaAssetDerivatives
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(item =>
-                item.TenantId == tenantId &&
-                item.StorageKey == null &&
-                item.ScanStorageLocation == location &&
-                item.ScanStorageKey != null &&
-                keys.Contains(item.ScanStorageKey))
-            .Select(item => item.ScanStorageKey!)
-            .ToListAsync(cancellationToken);
-        return assetKeys.Concat(derivativeKeys).ToHashSet(StringComparer.Ordinal);
-    }
-
-    /// <summary>One bounded slice of the table the owner pass is currently walking.</summary>
-    /// <remarks>
-    /// Keyset paging on the primary key, expressed in SQL so the ordering is PostgreSQL's own and a
-    /// resumed pass continues exactly where the last committed cursor left off. An offset would let
-    /// a concurrent insert shift the window and step over a row, which is the one failure mode a
-    /// reconciliation pass must not have: a row it never examined would be indistinguishable from a
-    /// row it found consistent.
-    /// </remarks>
-    private async Task<IReadOnlyList<OwnerRow>> LoadOwnerRowsAsync(
-        MediaInventoryProbeStage stage,
-        Guid? cursorId,
-        int batchSize,
-        CancellationToken cancellationToken)
-    {
-        var now = clock.UtcNow;
-        var after = cursorId ?? Guid.Empty;
-        switch (stage)
-        {
-            case MediaInventoryProbeStage.Assets:
-            {
-                var rows = await dbContext.MediaAssets
-                    .FromSql($"""
-                        SELECT *, xmin FROM media."Assets"
-                        WHERE "StorageKey" IS NOT NULL AND "Id" > {after}
-                        ORDER BY "Id"
-                        LIMIT {batchSize}
-                        """)
-                    .IgnoreQueryFilters()
-                    .AsNoTracking()
-                    .ToListAsync(cancellationToken);
-                return rows.Select(item => new OwnerRow(
-                    item.Id,
-                    item.TenantId,
-                    MediaInventoryOwnerKind.Asset,
-                    item.StorageLocation!,
-                    item.StorageKey,
-                    null,
-                    MediaInventoryClassifier.ClassifyOwnerState(
-                        item.Status,
-                        item.PurgeAfterUtc,
-                        item.PurgeClaimToken,
-                        item.PurgeClaimExpiresAtUtc,
-                        now),
-                    null,
-                    item.PurgeAttemptCount,
-                    item.LastPurgeAttemptAtUtc)).ToList();
-            }
-
-            case MediaInventoryProbeStage.Derivatives:
-            {
-                var rows = await dbContext.MediaAssetDerivatives
-                    .FromSql($"""
-                        SELECT *, xmin FROM media."AssetDerivatives"
-                        WHERE "Id" > {after}
-                        ORDER BY "Id"
-                        LIMIT {batchSize}
-                        """)
-                    .IgnoreQueryFilters()
-                    .AsNoTracking()
-                    .ToListAsync(cancellationToken);
-                if (rows.Count == 0)
-                {
-                    return [];
-                }
-
-                var parentIds = rows.Select(item => item.MediaAssetId).Distinct().ToArray();
-                var parents = await dbContext.MediaAssets
-                    .IgnoreQueryFilters()
-                    .AsNoTracking()
-                    .Where(item => parentIds.Contains(item.Id))
-                    .Select(item => new
-                    {
-                        item.Id,
-                        item.Status,
-                        item.PurgeAfterUtc,
-                        item.PurgeClaimToken,
-                        item.PurgeClaimExpiresAtUtc,
-                    })
-                    .ToDictionaryAsync(item => item.Id, cancellationToken);
-                return rows
-                    .Where(item => parents.ContainsKey(item.MediaAssetId))
-                    .Select(item =>
-                    {
-                        var parent = parents[item.MediaAssetId];
-                        return new OwnerRow(
-                            item.Id,
-                            item.TenantId,
-                            MediaInventoryOwnerKind.Derivative,
-                            item.StorageLocation,
-                            item.StorageKey,
-                            item.ScanStorageKey,
-                            // A derivative inherits its parent's cleanup state: the parent's purge is
-                            // what deletes it, so the parent decides whether another authority owns
-                            // this row.
-                            MediaInventoryClassifier.ClassifyOwnerState(
-                                parent.Status,
-                                parent.PurgeAfterUtc,
-                                parent.PurgeClaimToken,
-                                parent.PurgeClaimExpiresAtUtc,
-                                now),
-                            // Neither shape the finalize transaction can produce, because it purges
-                            // the derivatives and the asset in one commit: either one is evidence of
-                            // something the code does not currently do.
-                            (parent.Status == MediaAssetStatus.Purged) == (item.PurgedAtUtc is not null)
-                                ? null
-                                : MediaInventoryFindingKind.DerivativePurgeStateMismatch,
-                            0,
-                            null);
-                    })
-                    .ToList();
-            }
-
-            case MediaInventoryProbeStage.IngestObjects:
-            {
-                var rows = await dbContext.MediaIngestObjects
-                    .FromSql($"""
-                        SELECT *, xmin FROM media."IngestObjects"
-                        WHERE "StorageKey" IS NOT NULL AND "Id" > {after}
-                        ORDER BY "Id"
-                        LIMIT {batchSize}
-                        """)
-                    .IgnoreQueryFilters()
-                    .AsNoTracking()
-                    .ToListAsync(cancellationToken);
-                return rows.Select(item => new OwnerRow(
-                    item.Id,
-                    item.TenantId,
-                    MediaInventoryOwnerKind.IngestObject,
-                    item.StorageLocation,
-                    item.StorageKey,
-                    null,
-                    // An ingest object is never "supposed to exist": its reservation is written
-                    // before the put, so absence is an ordinary state and never a finding. It is
-                    // walked here only so that a cleanup stuck for a day becomes visible.
-                    item.Status == MediaIngestObjectStatus.Reserved && item.PurgeAfterUtc > now
-                        ? MediaInventoryOwnerState.ReservationInFlight
-                        : MediaInventoryOwnerState.OwnedByPurge,
-                    null,
-                    item.PurgeAttemptCount,
-                    item.LastPurgeAttemptAtUtc)).ToList();
-            }
-
-            default:
-                return [];
         }
     }
 
@@ -1337,54 +800,13 @@ internal sealed class MediaInventoryReconciliationService(
         }
     }
 
-    private static void Add(Dictionary<string, KeyOwners> owners, string key, OwnerReference reference)
-    {
-        owners[key] = owners.TryGetValue(key, out var existing)
-            ? existing with { Count = existing.Count + 1 }
-            : new KeyOwners(1, reference);
-    }
-
-    private sealed record RunProgress(
-        Guid RunId,
-        Guid Token,
-        string? InventoryCursor,
-        bool InventoryCompleted,
-        MediaInventoryProbeStage ProbeStage,
-        Guid? ProbeCursorId,
-        int PageFailures,
-        DateTimeOffset LeaseExpiresAtUtc)
-    {
-        public MediaInventoryRunClaim Claim => new(RunId, Token);
-
-        public static RunProgress From(MediaInventoryRun run, Guid token) =>
-            new(
-                run.Id,
-                token,
-                run.InventoryCursor,
-                run.InventoryCompleted,
-                run.ProbeStage,
-                run.ProbeCursorId,
-                run.PageFailureCount,
-                // A run whose lease this worker released or lost has nothing left to spend, so an
-                // absent expiry is treated as an expiry that has already passed.
-                run.LeaseExpiresAtUtc ?? DateTimeOffset.MinValue);
-    }
-
     /// <summary>
     /// What one pass left behind. <see cref="Run"/> is null when the lease moved on mid-pass, and
     /// <see cref="Continue"/> is false when this worker's turn is over even though the run survives.
     /// </summary>
-    private readonly record struct PassOutcome(RunProgress? Run, bool Continue);
+    private readonly record struct PassOutcome(MediaInventoryRunProgress? Run, bool Continue);
 
     private sealed record AttributedObject(StorageObjectLocator Locator, ObjectInventoryEntry Entry);
-
-    private sealed record OwnerReference(
-        MediaInventoryOwnerKind Kind,
-        Guid Id,
-        MediaInventoryOwnerState State,
-        long? ComparableLength);
-
-    private sealed record KeyOwners(int Count, OwnerReference Single);
 
     private sealed record OwnerProbeOutcome(
         MediaInventoryProbeTally Tally,
@@ -1392,29 +814,6 @@ internal sealed class MediaInventoryReconciliationService(
         Guid? LastExaminedId,
         bool LeaseExhausted,
         bool LostLease);
-
-    private sealed record OwnerRow(
-        Guid Id,
-        Guid TenantId,
-        MediaInventoryOwnerKind Kind,
-        string StorageLocation,
-        string? StorageKey,
-        string? EvidenceKey,
-        MediaInventoryOwnerState State,
-        MediaInventoryFindingKind? Mismatch,
-        int AttemptCount,
-        DateTimeOffset? LastAttemptAtUtc)
-    {
-        /// <summary>
-        /// The key a finding about this row is filed under. A purged row has no live key, so its
-        /// retained scan evidence names the object instead; a row that predates that evidence names
-        /// nothing at all and therefore cannot be the subject of a finding.
-        /// </summary>
-        public string? FindingKey => StorageKey ?? EvidenceKey;
-
-        public StorageObjectLocator? TryLocator() =>
-            FindingKey is { } key ? new StorageObjectLocator(TenantId, StorageLocation, key) : null;
-    }
 
     private sealed class ReconciliationTotals
     {
