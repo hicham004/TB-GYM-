@@ -218,6 +218,18 @@ public sealed partial class Phase3TrainingWorkflowTests
             """);
     }
 
+    private async Task<int> Phase6B4CCountFindingsAsync(bool resolved)
+    {
+        await using var scope = RequiredFactory.Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<GymDbContext>();
+        return await context.MediaInventoryFindings
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .CountAsync(
+                item => resolved ? item.ResolvedAtUtc != null : item.ResolvedAtUtc == null,
+                TestContext.CancellationTokenSource.Token);
+    }
+
     /// <summary>
     /// Makes the store answer every listing with the given body, so a malformed or unfollowable page
     /// can be served by the same transport the adapter really talks to.

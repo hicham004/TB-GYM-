@@ -1120,6 +1120,18 @@ the live owner of that key — which is provable only if the store answered its 
 failed, abandoned or budget-exhausted pass resolves nothing. Resolution is one-way; a condition that
 returns is a new finding.
 
+**Resolution is itself a bounded, resumable phase**, because how many findings a location has is a
+property of how wrong the deployment is rather than something the code may assume is small. A fixed
+number of findings is closed per transaction, a fixed number of those transactions runs per pass, the
+lease is re-checked between them and never extended to fit more in, and no query materialises more
+than one batch. A pass that spends either bound leaves the run Running with every batch it closed
+already committed and the lease handed back, and the next pass resumes without a cursor because a
+closed finding is no longer a candidate. A run is complete only once that phase has finished too —
+enforced in the domain and at the database — and what marks it finished is a bounded look that finds
+no unresolved finding the run left unobserved, never a batch that merely closed fewer rows than it
+asked for. The count of what was closed commits with the rows it closed, so a pass that stops between
+batches neither loses a resolution nor counts one twice.
+
 A run is complete only when both passes finished with no outstanding page failure — enforced in the
 domain and at the database. A failed page leaves its cursor untouched so its objects are re-read
 rather than counted as verified, and re-reading it clears the outstanding failure so a transient

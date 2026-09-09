@@ -404,12 +404,20 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.IsFalse(refused.Owned, "A stale claimant was allowed to write findings.");
         Assert.AreEqual(0, refused.Opened);
 
-        var swept = await store.SweepUnobservedAsync(
+        var swept = await store.ResolveUnobservedBatchAsync(
             claim,
             R2StorageOptions.LocationName,
             TestContext.CancellationTokenSource.Token);
         Assert.IsFalse(swept.Owned, "A stale claimant was allowed to resolve findings.");
         Assert.AreEqual(0, swept.Resolved);
+        Assert.IsFalse(swept.Drained);
+
+        var finished = await store.CompleteResolutionAsync(
+            claim,
+            R2StorageOptions.LocationName,
+            TestContext.CancellationTokenSource.Token);
+        Assert.IsFalse(finished.Owned, "A stale claimant was allowed to declare resolution finished.");
+        Assert.IsFalse(finished.Drained);
 
         // Nothing moved: no third finding, no extra observation on either, and no resolution.
         var findings = await Phase6B4CFindingsAsync();
@@ -475,6 +483,96 @@ public sealed partial class Phase3TrainingWorkflowTests
             .AnyAsync(
                 item => item.Id == derivative && item.StorageKey == key,
                 TestContext.CancellationTokenSource.Token));
+    }
+
+    [TestMethod]
+    public async Task Phase6B4COverProvidersResolutionIsBoundedResumesAndCountsEveryBatchExactly()
+    {
+        using var coach = CreateClient();
+        var workspaceId = await RegisterCoachAsync(
+            coach,
+            "p6b4c-bounded@example.test",
+            "Bounded Coach",
+            "Bounded Workspace");
+
+        // One more finding than a single pass is allowed to close, so the phase has to yield.
+        var backlog = (MediaInventoryPolicy.ResolutionBatchSize * MediaInventoryPolicy.ResolutionBatchesPerPass) + 1;
+        for (var index = 0; index < backlog; index++)
+        {
+            Phase6B4CSeedUnownedObject(workspaceId);
+        }
+
+        var opening = await Phase6B4CReconcileAsync(objectBudget: backlog + 1);
+        Assert.AreEqual(MediaInventoryRunState.Completed, opening.State);
+        Assert.AreEqual(backlog, opening.FindingsOpened);
+        Assert.AreEqual(0, opening.FindingsResolved, "The run that opened the findings also closed them.");
+        Assert.AreEqual(backlog, await Phase6B4CCountFindingsAsync(resolved: false));
+
+        // Every one of them is dealt with at once, which is what a bucket restored from backup or a
+        // corrected configuration looks like. The next run therefore has the entire backlog to close.
+        RequiredProviderHarness.Bucket.Objects.Clear();
+
+        var first = await Phase6B4CReconcileAsync();
+
+        // The pass closed exactly its budget and stopped. It is not complete, and the lease is back
+        // so the next tick — or another replica — resumes at once rather than waiting it out.
+        var perPass = MediaInventoryPolicy.ResolutionBatchSize * MediaInventoryPolicy.ResolutionBatchesPerPass;
+        Assert.AreEqual(MediaInventoryRunState.Running, first.State);
+        Assert.AreEqual(perPass, first.FindingsResolved);
+        var yielded = (await Phase6B4CRunsAsync())[^1];
+        Assert.AreEqual(MediaInventoryRunState.Running, yielded.State);
+        Assert.IsFalse(yielded.ResolutionCompleted, "A pass that stopped mid-backlog called resolution finished.");
+        Assert.IsNull(yielded.CompletedAtUtc);
+        Assert.IsNull(yielded.LeaseToken, "The run was left leased by a worker that had stopped working.");
+        Assert.AreEqual(perPass, yielded.FindingsResolved);
+        Assert.AreEqual(perPass, await Phase6B4CCountFindingsAsync(resolved: true));
+        Assert.AreEqual(backlog - perPass, await Phase6B4CCountFindingsAsync(resolved: false));
+
+        // Another replica takes the run over mid-resolution. The worker that was resolving it holds
+        // a token that is no longer the run's, and it closes nothing more.
+        var theirs = Guid.NewGuid();
+        var mine = Guid.NewGuid();
+        await Phase6B4CHoldLeaseAsync(yielded.Id, theirs, RequiredTestClock.UtcNow.AddMinutes(-1));
+        await using (var scope = RequiredFactory.Services.CreateAsyncScope())
+        {
+            var store = scope.ServiceProvider.GetRequiredService<IMediaInventoryFindingStore>();
+            var stale = new MediaInventoryRunClaim(yielded.Id, mine);
+            var refused = await store.ResolveUnobservedBatchAsync(
+                stale,
+                R2StorageOptions.LocationName,
+                TestContext.CancellationTokenSource.Token);
+            Assert.IsFalse(refused.Owned, "A stale claimant kept resolving findings.");
+            Assert.AreEqual(0, refused.Resolved);
+            var finished = await store.CompleteResolutionAsync(
+                stale,
+                R2StorageOptions.LocationName,
+                TestContext.CancellationTokenSource.Token);
+            Assert.IsFalse(finished.Owned, "A stale claimant declared a half-resolved run finished.");
+        }
+
+        Assert.AreEqual(perPass, await Phase6B4CCountFindingsAsync(resolved: true));
+        Assert.AreEqual(perPass, (await Phase6B4CRunsAsync())[^1].FindingsResolved);
+
+        // The lease that replica held has expired, so the next pass resumes the same run — no cursor
+        // needed, because a closed finding is no longer a candidate — and finishes it.
+        var second = await Phase6B4CReconcileAsync();
+
+        Assert.AreEqual(MediaInventoryRunState.Completed, second.State);
+        Assert.AreEqual(backlog - perPass, second.FindingsResolved);
+        var completed = (await Phase6B4CRunsAsync())[^1];
+        Assert.AreEqual(yielded.Id, completed.Id, "The backlog was finished by a different run.");
+        Assert.IsTrue(completed.ResolutionCompleted);
+        Assert.IsNotNull(completed.CompletedAtUtc);
+        Assert.AreEqual(
+            backlog,
+            completed.FindingsResolved,
+            "The total across batches is not the number of findings actually closed.");
+        Assert.AreEqual(backlog, await Phase6B4CCountFindingsAsync(resolved: true));
+        Assert.AreEqual(0, await Phase6B4CCountFindingsAsync(resolved: false));
+        Assert.IsTrue(
+            (await Phase6B4CFindingsAsync()).All(item =>
+                item.ResolutionCode == MediaInventoryResolutionCodes.ObserverConsistent),
+            "A finding closed by a complete enumeration was recorded under the wrong reason.");
     }
 
     private async Task Phase6B4CDeleteDerivativeAsync(Guid derivativeId)

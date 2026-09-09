@@ -40,11 +40,27 @@ internal interface IMediaInventoryFindingStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Resolves every unresolved finding at this location that the run identified by the claim did
-    /// not observe. Called only for a run that finished both passes with no outstanding failure, and
-    /// which therefore examined every object and every row this location has.
+    /// Closes one bounded batch of the findings at this location that the run identified by the
+    /// claim did not observe, and adds that batch to the run's total in the same transaction.
+    /// Called only for a run that finished both passes with no outstanding failure, and which
+    /// therefore examined every object and every row this location has.
     /// </summary>
-    Task<MediaInventoryFindingWrite> SweepUnobservedAsync(
+    /// <remarks>
+    /// One batch, one workspace, one transaction. The candidate set shrinks with every batch —
+    /// closing a finding removes it from the query that finds the next one — so the phase is
+    /// resumable without a cursor, and a batch that finds no candidate at all is the bounded proof
+    /// that there is nothing left, reported as <see cref="MediaInventoryFindingWrite.Drained"/>.
+    /// </remarks>
+    Task<MediaInventoryFindingWrite> ResolveUnobservedBatchAsync(
+        MediaInventoryRunClaim claim,
+        string location,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records on the run that resolution is finished, if and only if a bounded look finds no
+    /// unresolved finding this run left unobserved.
+    /// </summary>
+    Task<MediaInventoryFindingWrite> CompleteResolutionAsync(
         MediaInventoryRunClaim claim,
         string location,
         CancellationToken cancellationToken);
@@ -55,9 +71,15 @@ internal readonly record struct MediaInventoryRunClaim(Guid RunId, Guid LeaseTok
 
 /// <summary>
 /// What one write did. <see cref="Owned"/> is false when the lease had moved on, in which case
-/// nothing at all was written and the caller must stop rather than carry on.
+/// nothing at all was written and the caller must stop rather than carry on. <see cref="Drained"/>
+/// says a bounded look found nothing left to close, which is the only thing that entitles a run to
+/// be completed.
 /// </summary>
-internal readonly record struct MediaInventoryFindingWrite(bool Owned, int Opened, int Resolved)
+internal readonly record struct MediaInventoryFindingWrite(
+    bool Owned,
+    int Opened,
+    int Resolved,
+    bool Drained = false)
 {
     public static MediaInventoryFindingWrite Nothing { get; } = new(true, 0, 0);
 
@@ -135,76 +157,54 @@ internal sealed class MediaInventoryFindingStore(
         });
     }
 
-    public async Task<MediaInventoryFindingWrite> SweepUnobservedAsync(
+    public async Task<MediaInventoryFindingWrite> ResolveUnobservedBatchAsync(
         MediaInventoryRunClaim claim,
         string location,
         CancellationToken cancellationToken)
     {
-        // Ownership is established before anything is read, not only before something is written.
-        // "Nothing needed resolving" from a worker that no longer holds the run is not an answer
-        // about the location; it is an answer about a run somebody else is now walking, and the
-        // caller uses this to decide whether it may complete that run.
+        // Which workspace holds the next finding to close. One, not all of them: the caller runs
+        // this a bounded number of times and every batch shrinks the set, so the whole backlog is
+        // never materialised and a workspace with ten thousand findings is drained over as many
+        // passes as it takes rather than in one transaction nobody bounded.
         await using var lookup = scopeFactory.CreateAsyncScope();
         var reader = lookup.ServiceProvider.GetRequiredService<GymDbContext>();
-        if (!await OwnsRunAsync(reader, claim, cancellationToken))
+        var tenantId = await UnobservedTenants(reader, claim, location)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (tenantId == Guid.Empty)
         {
-            return MediaInventoryFindingWrite.Lost;
+            // Nothing found to close. Ownership still decides whether that is an answer about this
+            // location or an answer about a run somebody else is now walking, because the caller
+            // uses it to decide whether the run may be completed.
+            return await OwnsRunAsync(reader, claim, cancellationToken)
+                ? MediaInventoryFindingWrite.Nothing with { Drained = true }
+                : MediaInventoryFindingWrite.Lost;
         }
 
-        // Which workspaces still hold a standing finding this run never observed. A cross-tenant
-        // read, and only a read: every write below happens inside the workspace's own scope.
-        var tenantIds = await reader.MediaInventoryFindings
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(item =>
-                item.StorageLocation == location &&
-                item.ResolvedAtUtc == null &&
-                item.LastRunId != claim.RunId)
-            .Select(item => item.TenantId)
-            .Distinct()
-            .OrderBy(tenantId => tenantId)
-            .ToListAsync(cancellationToken);
-
-        var resolved = 0;
-        foreach (var tenantId in tenantIds)
-        {
-            var swept = await SweepTenantAsync(claim, tenantId, location, cancellationToken);
-            if (!swept.Owned)
-            {
-                return new MediaInventoryFindingWrite(false, 0, resolved);
-            }
-
-            resolved += swept.Resolved;
-        }
-
-        return new MediaInventoryFindingWrite(true, 0, resolved);
-    }
-
-    private async Task<MediaInventoryFindingWrite> SweepTenantAsync(
-        MediaInventoryRunClaim claim,
-        Guid tenantId,
-        string location,
-        CancellationToken cancellationToken)
-    {
         await using var scope = OpenTenantScope(tenantId, out var context);
         var now = clock.UtcNow;
         return await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-            if (!await OwnsRunAsync(context, claim, cancellationToken))
+            var run = await LoadRunForUpdateAsync(context, claim, cancellationToken);
+            if (run is null)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return MediaInventoryFindingWrite.Lost;
             }
 
-            var unobserved = await context.MediaInventoryFindings
+            var batch = await context.MediaInventoryFindings
                 .Where(item =>
                     item.StorageLocation == location &&
                     item.ResolvedAtUtc == null &&
                     item.LastRunId != claim.RunId)
+                .OrderBy(item => item.Id)
+                .Take(MediaInventoryPolicy.ResolutionBatchSize)
                 .ToListAsync(cancellationToken);
-            if (unobserved.Count == 0)
+            if (batch.Count == 0)
             {
+                // This workspace's findings were closed between the two queries. That is an ordinary
+                // outcome and not a drained location: only the query for the next workspace may say
+                // that, and it says it above.
                 await transaction.RollbackAsync(cancellationToken);
                 return MediaInventoryFindingWrite.Nothing;
             }
@@ -212,10 +212,10 @@ internal sealed class MediaInventoryFindingStore(
             var stillLive = await LiveOwnersStillHoldingKeysAsync(
                 context,
                 location,
-                unobserved,
+                batch,
                 now,
                 cancellationToken);
-            foreach (var finding in unobserved)
+            foreach (var finding in batch)
             {
                 // A finding about a live owner's missing object is the one kind whose resolution has
                 // to name which of two things happened. If that row is still the live owner of that
@@ -231,11 +231,73 @@ internal sealed class MediaInventoryFindingStore(
                         : MediaInventoryResolutionCodes.OwnerNoLongerHoldsKey);
             }
 
+            // The count and the rows it counts commit together, so a pass that dies between two
+            // batches neither loses one nor counts one twice when it resumes.
+            if (!run.RecordResolvedFindings(now, claim.LeaseToken, batch.Count))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return MediaInventoryFindingWrite.Lost;
+            }
+
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new MediaInventoryFindingWrite(true, 0, unobserved.Count);
+            return new MediaInventoryFindingWrite(true, 0, batch.Count);
         });
     }
+
+    public async Task<MediaInventoryFindingWrite> CompleteResolutionAsync(
+        MediaInventoryRunClaim claim,
+        string location,
+        CancellationToken cancellationToken)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<GymDbContext>();
+        var now = clock.UtcNow;
+        return await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var run = await LoadRunForUpdateAsync(context, claim, cancellationToken);
+            if (run is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return MediaInventoryFindingWrite.Lost;
+            }
+
+            // One row, not a count: this asks whether anything is left, and stops looking the moment
+            // it finds one. The run row is already locked, so nothing can open a finding for this
+            // location between this answer and the flag it sets.
+            var remaining = await UnobservedTenants(context, claim, location)
+                .AnyAsync(cancellationToken);
+            if (remaining || !run.CompleteResolution(now, claim.LeaseToken))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return remaining ? MediaInventoryFindingWrite.Nothing : MediaInventoryFindingWrite.Lost;
+            }
+
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return MediaInventoryFindingWrite.Nothing with { Drained = true };
+        });
+    }
+
+    /// <summary>
+    /// The workspaces still holding a finding this run never observed, in a fixed order and never
+    /// materialised: callers take one, or ask whether there is one.
+    /// </summary>
+    private static IQueryable<Guid> UnobservedTenants(
+        GymDbContext context,
+        MediaInventoryRunClaim claim,
+        string location) =>
+        context.MediaInventoryFindings
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(item =>
+                item.StorageLocation == location &&
+                item.ResolvedAtUtc == null &&
+                item.LastRunId != claim.RunId)
+            .Select(item => item.TenantId)
+            .Distinct()
+            .OrderBy(tenantId => tenantId);
 
     /// <summary>
     /// Of the findings that accuse an owning row of naming a missing object, the ones whose row is
@@ -364,6 +426,36 @@ internal sealed class MediaInventoryFindingStore(
         return run is not null &&
             run.State == MediaInventoryRunState.Running &&
             run.OwnsLease(claim.LeaseToken);
+    }
+
+    /// <summary>
+    /// The run this claim owns, locked and tracked so the same transaction that closes findings can
+    /// also record how many it closed. Null when the claim no longer owns it, which is the caller's
+    /// signal to write nothing at all.
+    /// </summary>
+    /// <remarks>
+    /// A run is not tenant-owned, so it can be read and written from a workspace's scope without
+    /// meeting the write-scope guard — which is what lets one transaction hold both halves of the
+    /// count. It is not media state: nothing about an asset, a derivative or an ingest object is
+    /// reachable from here.
+    /// </remarks>
+    private static async Task<MediaInventoryRun?> LoadRunForUpdateAsync(
+        GymDbContext context,
+        MediaInventoryRunClaim claim,
+        CancellationToken cancellationToken)
+    {
+        var run = await context.MediaInventoryRuns
+            .FromSql($"""
+                SELECT *, xmin FROM media."InventoryRuns"
+                WHERE "Id" = {claim.RunId}
+                FOR UPDATE
+                """)
+            .SingleOrDefaultAsync(cancellationToken);
+        return run is not null &&
+            run.State == MediaInventoryRunState.Running &&
+            run.OwnsLease(claim.LeaseToken)
+            ? run
+            : null;
     }
 
     /// <summary>

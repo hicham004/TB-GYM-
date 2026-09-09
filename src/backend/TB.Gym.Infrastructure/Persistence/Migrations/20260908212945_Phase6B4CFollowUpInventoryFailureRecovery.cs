@@ -23,6 +23,17 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                 nullable: false,
                 defaultValue: 0);
 
+            // The new column defaults to zero, and the constraint below requires it to be at least
+            // the count it now supersedes. A database carrying a run that had already failed a page
+            // has a positive PageFailureCount and a zero total, so the constraint would refuse to be
+            // added at all and the upgrade would stop here. The total is the history of the count,
+            // so seeding it with the count is what that history actually was.
+            migrationBuilder.Sql("""
+                UPDATE media."InventoryRuns"
+                SET "TotalPageFailureCount" = "PageFailureCount"
+                WHERE "TotalPageFailureCount" < "PageFailureCount"
+                """);
+
             migrationBuilder.AddCheckConstraint(
                 name: "CK_MediaInventoryRuns_Counters",
                 schema: "media",

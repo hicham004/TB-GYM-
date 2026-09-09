@@ -1,6 +1,7 @@
 # ADR 0025: Media Inventory Reconciliation and Retention Operations
 
-Status: accepted, 2026-09-08; amended 2026-09-09 (see "Amendment: what closes a finding")
+Status: accepted, 2026-09-08; amended 2026-09-09 (see "Amendment: what closes a finding" and
+"Amendment: resolution is a third bounded phase")
 
 Builds on: ADR 0014, ADR 0023 and ADR 0024. Every decision in those remains in force and unchanged.
 This ADR adds a read-only observer beside them and takes nothing away.
@@ -225,6 +226,42 @@ make a condition look established; and enabling the pass with `OwnerProbesPerRun
 startup, because such a run can never finish its owner pass, can never be `Completed`, and would be
 abandoned every day with nothing saying why.
 
+## Amendment: resolution is a third bounded phase (2026-09-09, second review)
+
+The amendment above moved resolution to one place and left it unbounded there. It resolved every
+finding at the location in one call: every workspace materialised, then every unresolved finding of
+each, then all of them closed before the run could complete. That contradicts the sentence in this
+ADR that says both directions of the pass are bounded by configuration rather than by data volume,
+and it contradicts it exactly where the volume is worst — the misconfiguration this ADR already
+names, pointing the deployment at a different bucket, makes every object unowned and every row
+missing at once, so the backlog to close is the size of the workspace and it was to be closed in a
+single transaction under a lease meant for a page.
+
+**Resolution is therefore the third phase of a run, and bounded like the other two.** A fixed number
+of findings is closed per transaction, a fixed number of those transactions runs per pass, the lease
+is checked between them and never extended to fit more in, and nothing larger than one batch is ever
+materialised. A pass that spends either bound hands the run back still `Running`, with every batch it
+closed already committed, and the next tick resumes: closing a finding removes it from the query that
+finds the next one, so the phase is resumable without a cursor of its own.
+
+**`Completed` now also requires that phase to have finished**, durably, in the domain and in the
+check constraint beside the rest of the completion evidence. A run that stopped half way through its
+backlog and was called complete would present findings it had already proved gone as current ones,
+which is the failure resolution exists to prevent. What sets the flag is a bounded look for one
+finding still standing, taken under the run row's own lock in the same transaction that sets it — not
+a batch that happened to close fewer rows than it asked for, which is the same evidence as a short
+page and proves nothing. The count of what was closed commits with the rows it closed, so a pass that
+dies between two batches neither loses one nor counts one twice.
+
+**An upgrade adds a column and a rule about it in the same breath, and the rule has to hold for the
+rows already there.** Both follow-up migrations add a defaulted column and then a constraint relating
+it to a column that already has data — the failure total to the failure count, the resolution flag to
+the completed state — and a default satisfies neither for existing rows. On an empty database both
+pass; on a deployment carrying one failed run or one completed run the constraint is refused and the
+upgrade stops with the schema half applied. Each migration therefore backfills between the two steps,
+and a seeded upgrade test holds it: reconciliation history in every state the previous migration could
+produce, migrated forward, with the constraints then proved to be doing their job.
+
 ## Consequences
 
 A deployment can now answer "does the bucket match the database" and, just as importantly, "was that
@@ -265,7 +302,8 @@ Before a deployment relies on this:
 - ADR 0014 (tombstone, retention, quota and the deferred alerting), ADR 0023 (locator, evidence,
   leased purge), ADR 0024 (the bucket and the scanner)
 - `20260908190256_Phase6B4CMediaInventoryReconciliation`,
-  `20260908212945_Phase6B4CFollowUpInventoryFailureRecovery`
+  `20260908212945_Phase6B4CFollowUpInventoryFailureRecovery`,
+  `20260909071738_Phase6B4CFollowUpBoundedFindingResolution`
 - `docs/ARCHITECTURE.md` section 9, `DOMAIN-RULES.md` MED-012
 - Cloudflare R2: [S3 API compatibility](https://developers.cloudflare.com/r2/api/s3/api/),
   [object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/),

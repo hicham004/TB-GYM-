@@ -245,9 +245,12 @@ public sealed partial class GymDbContext
                 // The honesty rule, in the database as well as in the domain: a run that still has a
                 // cursor, an unfinished probe stage or a failed page is not a completed inventory,
                 // and "it found nothing" means something entirely different for one that is not.
+                // Resolution belongs to the same rule for the same reason — a run that stopped with
+                // findings it had proved gone still standing would present a stale report as a
+                // current one.
                 table.HasCheckConstraint(
                     "CK_MediaInventoryRuns_CompletionEvidence",
-                    "\"State\" <> 'Completed' OR (\"InventoryCompleted\" AND \"InventoryCursor\" IS NULL AND \"ProbeStage\" = 'Completed' AND \"PageFailureCount\" = 0)");
+                    "\"State\" <> 'Completed' OR (\"InventoryCompleted\" AND \"InventoryCursor\" IS NULL AND \"ProbeStage\" = 'Completed' AND \"PageFailureCount\" = 0 AND \"ResolutionCompleted\")");
                 table.HasCheckConstraint(
                     "CK_MediaInventoryRuns_Counters",
                     "\"ObjectsScanned\" >= 0 AND \"ObjectsSkippedRecent\" >= 0 AND \"ObjectsSkippedOwnedByPurge\" >= 0 AND \"UnattributableKeyCount\" >= 0 AND \"OwnersProbed\" >= 0 AND \"OwnersSkippedNotReconciled\" >= 0 AND \"OwnersSkippedOwnedByPurge\" >= 0 AND \"FindingsOpened\" >= 0 AND \"FindingsResolved\" >= 0 AND \"PageFailureCount\" >= 0 AND \"TotalPageFailureCount\" >= \"PageFailureCount\"");

@@ -196,17 +196,11 @@ internal sealed class MediaInventoryReconciliationService(
         ReconciliationTotals totals,
         CancellationToken cancellationToken)
     {
-        var resolved = 0;
-        if (await MayCompleteAsync(run, cancellationToken))
+        if (await MayResolveAsync(run, cancellationToken) &&
+            await ResolveUnobservedAsync(run, location, totals, cancellationToken) == ResolutionOutcome.Lost)
         {
-            var swept = await findingStore.SweepUnobservedAsync(run.Claim, location, cancellationToken);
-            resolved = swept.Resolved;
-            totals.FindingsResolved += swept.Resolved;
-            if (!swept.Owned)
-            {
-                LogLeaseLost(logger, run.RunId, null);
-                return MediaInventoryRunState.Running;
-            }
+            // The run belongs to somebody else now. Its row is theirs to move, not this worker's.
+            return MediaInventoryRunState.Running;
         }
 
         var now = clock.UtcNow;
@@ -226,15 +220,15 @@ internal sealed class MediaInventoryReconciliationService(
             }
             else if (stored.CanComplete)
             {
-                stored.Complete(now, run.Token, resolved);
+                stored.Complete(now, run.Token);
             }
             else
             {
-                // Budget or lease ran out with work left. The run stays Running with its cursors
-                // intact and the next tick resumes it — and, because it is not Completed, nothing
-                // can read it as a statement that the location was fully examined. The lease is
-                // handed back rather than left to expire, so the next pass can pick the run up at
-                // once.
+                // Budget or lease ran out with work left — an unread page, an unprobed row, or a
+                // finding still to close. The run stays Running with its cursors intact and the next
+                // tick resumes it, and because it is not Completed nothing can read it as a
+                // statement that the location was fully examined. The lease is handed back rather
+                // than left to expire, so the next pass can pick the run up at once.
                 stored.ReleaseClaim(now, run.Token);
             }
 
@@ -246,10 +240,10 @@ internal sealed class MediaInventoryReconciliationService(
     }
 
     /// <summary>
-    /// Whether this run has read everything, asked before the resolution sweep so that a partial,
+    /// Whether this run has read everything, asked before the resolution phase so that a partial,
     /// failed or budget-exhausted pass never reaches it.
     /// </summary>
-    private async Task<bool> MayCompleteAsync(RunProgress run, CancellationToken cancellationToken)
+    private async Task<bool> MayResolveAsync(RunProgress run, CancellationToken cancellationToken)
     {
         var stored = await dbContext.MediaInventoryRuns
             .AsNoTracking()
@@ -257,7 +251,88 @@ internal sealed class MediaInventoryReconciliationService(
         return stored is not null &&
             stored.OwnsLease(run.Token) &&
             !stored.HasExhaustedFailures &&
-            stored.CanComplete;
+            stored.HasExaminedEverything &&
+            !stored.ResolutionCompleted;
+    }
+
+    /// <summary>How a bounded resolution phase ended.</summary>
+    private enum ResolutionOutcome
+    {
+        /// <summary>Nothing was left to close, and the run may be completed.</summary>
+        Finished,
+
+        /// <summary>
+        /// The batch budget or the lease ran out with findings still standing. The run is handed
+        /// back, still Running, for the next tick to resume.
+        /// </summary>
+        Yielded,
+
+        /// <summary>The lease moved on. Nothing was written and nothing may be.</summary>
+        Lost,
+    }
+
+    /// <summary>
+    /// Closes the findings this run examined away, a bounded batch at a time, and marks the phase
+    /// finished only when a bounded look finds none left.
+    /// </summary>
+    /// <remarks>
+    /// The third bounded phase, and bounded the same way the other two are rather than by an
+    /// assumption that the backlog is small. How many findings a location has is a property of how
+    /// wrong the deployment is: pointing the configuration at the wrong bucket makes every object
+    /// unowned and every row missing at once, and "close everything that is left" would then be one
+    /// transaction the size of the workspace. Each batch is a fixed number of rows in its own
+    /// transaction, at most a fixed number of batches run per pass, and the lease is checked between
+    /// them and never extended to fit more in — the pass stops and the next one resumes, because the
+    /// candidate set only ever shrinks.
+    /// </remarks>
+    private async Task<ResolutionOutcome> ResolveUnobservedAsync(
+        RunProgress run,
+        string location,
+        ReconciliationTotals totals,
+        CancellationToken cancellationToken)
+    {
+        for (var batch = 0; batch < MediaInventoryPolicy.ResolutionBatchesPerPass; batch++)
+        {
+            if (cancellationToken.IsCancellationRequested || !TryLeaseBudget(run, out _))
+            {
+                return ResolutionOutcome.Yielded;
+            }
+
+            var resolved = await findingStore.ResolveUnobservedBatchAsync(
+                run.Claim,
+                location,
+                cancellationToken);
+            if (!resolved.Owned)
+            {
+                LogLeaseLost(logger, run.RunId, null);
+                return ResolutionOutcome.Lost;
+            }
+
+            totals.FindingsResolved += resolved.Resolved;
+            if (!resolved.Drained)
+            {
+                continue;
+            }
+
+            // Nothing was found to close. That is recorded on the run under its own lock, together
+            // with a second bounded look, so the flag and the emptiness it asserts are one fact.
+            var completed = await findingStore.CompleteResolutionAsync(
+                run.Claim,
+                location,
+                cancellationToken);
+            if (!completed.Owned)
+            {
+                LogLeaseLost(logger, run.RunId, null);
+                return ResolutionOutcome.Lost;
+            }
+
+            return completed.Drained ? ResolutionOutcome.Finished : ResolutionOutcome.Yielded;
+        }
+
+        // The batch budget is spent with findings still standing. The run keeps everything it has
+        // closed and is handed back, and the next tick picks up exactly where this one stopped: a
+        // closed finding is no longer a candidate, so the phase needs no cursor to be resumable.
+        return ResolutionOutcome.Yielded;
     }
 
     // ---------------------------------------------------------------- inventory pass
@@ -882,17 +957,38 @@ internal sealed class MediaInventoryReconciliationService(
 
     // ---------------------------------------------------------------- database reads
 
+    /// <summary>
+    /// The run row, locked, with the values the database currently holds.
+    /// </summary>
+    /// <remarks>
+    /// Anything this context is still tracking from an earlier transaction is discarded first. The
+    /// finding store writes this row too — the count of what it closed commits with the rows it
+    /// closed — so a copy left over from a previous transaction carries a concurrency token the
+    /// database has already moved past, and saving against it would fail as a conflict with a writer
+    /// that is this same worker. Reading under <c>FOR UPDATE</c> exists to get the authoritative
+    /// row, so the stale copy is dropped rather than merged with it.
+    /// </remarks>
     private static Task<MediaInventoryRun?> LoadForUpdateAsync(
         GymDbContext context,
         Guid runId,
-        CancellationToken cancellationToken) =>
-        context.MediaInventoryRuns
+        CancellationToken cancellationToken)
+    {
+        var tracked = context.ChangeTracker
+            .Entries<MediaInventoryRun>()
+            .FirstOrDefault(entry => entry.Entity.Id == runId);
+        if (tracked is not null)
+        {
+            tracked.State = EntityState.Detached;
+        }
+
+        return context.MediaInventoryRuns
             .FromSql($"""
                 SELECT *, xmin FROM media."InventoryRuns"
                 WHERE "Id" = {runId}
                 FOR UPDATE
                 """)
             .SingleOrDefaultAsync(cancellationToken);
+    }
 
     /// <summary>
     /// Every row that currently holds one of these keys, across the three tables that can own one.

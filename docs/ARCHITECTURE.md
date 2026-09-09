@@ -636,6 +636,19 @@ findings it did not observe again, which is the only evidence that separates "th
 from "this pass stopped early" — and an object that vanished from the store, whose finding nothing
 enumerates or probes any more, is reachable in no other way.
 
+Resolution is the third bounded phase of a run rather than something a completing run does all of at
+once. How many findings a location has is a property of how wrong the deployment is — the
+substitution above makes every object unowned and every row missing together — so a fixed number of
+findings is closed per transaction, a fixed number of those runs per pass, the lease is checked
+between them and never extended to fit more in, and nothing larger than one batch is materialised. A
+pass that spends either bound hands the run back still `Running` with every batch it closed
+committed; the next tick resumes without a cursor, because closing a finding removes it from the
+query that finds the next one. `Completed` requires that phase to have finished as well, in the
+domain and in the check constraint, and what marks it finished is a bounded look for one finding
+still standing rather than a batch that happened to close fewer rows than it asked for. The count of
+what was closed commits with the rows it closed, so a pass that dies between batches neither loses
+one nor counts one twice.
+
 Bucket lifecycle stays an operator prerequisite rather than code: one rule aborting incomplete
 multipart uploads after a day, applied by hand with an Admin credential the application never holds,
 and no object-expiration or storage-class rule without a future ADR. The runtime credential stays

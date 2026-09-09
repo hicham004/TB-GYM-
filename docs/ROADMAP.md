@@ -846,9 +846,11 @@ SSE-C or client-side encryption — every one of those replaces "the API authori
 Status: implemented 2026-09-08, with a correctness follow-up on 2026-09-09; not deployed and not
 accepted. See `docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`,
 `ARCHITECTURE.md` section 9 and `DOMAIN-RULES.md` MED-012. Additive migrations
-`20260908190256_Phase6B4CMediaInventoryReconciliation` (two new tables and two partial indexes) and
-`20260908212945_Phase6B4CFollowUpInventoryFailureRecovery` (one counter and one widened check); no
-existing media table is altered.
+`20260908190256_Phase6B4CMediaInventoryReconciliation` (two new tables and two partial indexes),
+`20260908212945_Phase6B4CFollowUpInventoryFailureRecovery` (one counter and one widened check) and
+`20260909071738_Phase6B4CFollowUpBoundedFindingResolution` (one flag and the completion evidence);
+each backfills the rows already there before the constraint that judges them, and a seeded
+upgrade-path test holds it. No existing media table is altered.
 
 - **It reads and never repairs.** A daily bounded pass enumerates stored objects and asks who owns
   each key, then walks rows with a live key and asks the store whether their object exists. It
@@ -867,6 +869,11 @@ existing media table is altered.
   resolves what it did not observe again — the only evidence that tells "the condition is gone" from
   "this pass stopped early", and the only thing that can ever close a finding about an object that has
   since vanished from the store. Resolution stays one-way and nothing is deleted.
+- **Resolution is a third bounded phase.** A fixed number of findings per transaction, a fixed number
+  of transactions per pass, the lease checked between them and never extended to fit more in, and no
+  query larger than a batch. A pass that spends either bound hands the run back still Running with
+  every batch committed, and the next resumes without a cursor. `Completed` requires that phase to
+  have finished, proved by a bounded look for one finding still standing.
 - **A partial run is never a clean bill of health.** The run row carries the lease, both cursors, the
   counters and the failure counts, and `Completed` requires both passes finished with no outstanding
   page failure, in the domain and at the database. A failed page leaves its cursor alone so its

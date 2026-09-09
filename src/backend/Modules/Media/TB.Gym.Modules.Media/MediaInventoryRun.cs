@@ -63,6 +63,19 @@ public sealed class MediaInventoryRun : AuditableEntity
     /// <summary>Which table the owner pass is walking, and how far through it has got.</summary>
     public MediaInventoryProbeStage ProbeStage { get; private set; }
 
+    /// <summary>
+    /// Whether the third phase finished: every finding this run did not observe again has been
+    /// closed, proved by a bounded look for one that has not.
+    /// </summary>
+    /// <remarks>
+    /// Durable rather than derived, because resolution is bounded and therefore resumable, and a
+    /// run that resolved half its backlog and handed the lease back has to be told apart from one
+    /// that had nothing to resolve. It is also what stops a run being called complete while findings
+    /// it should have closed are still standing — which would present a stale report as a current
+    /// one, and a stale report is the whole thing resolution exists to prevent.
+    /// </remarks>
+    public bool ResolutionCompleted { get; private set; }
+
     public Guid? ProbeCursorId { get; private set; }
 
     public int ObjectsScanned { get; private set; }
@@ -223,26 +236,74 @@ public sealed class MediaInventoryRun : AuditableEntity
     }
 
     /// <summary>
-    /// Whether this run examined the whole location. Both passes finished and no failure is
-    /// outstanding; a budget that ran out leaves a cursor behind and therefore does not qualify,
-    /// and neither does a page the store has still not served.
+    /// Whether this run examined the whole location, and may therefore resolve. Both passes finished
+    /// and no failure is outstanding; a budget that ran out leaves a cursor behind and therefore does
+    /// not qualify, and neither does a page the store has still not served.
     /// </summary>
-    public bool CanComplete =>
+    public bool HasExaminedEverything =>
         State == MediaInventoryRunState.Running &&
         InventoryCompleted &&
         ProbeStage == MediaInventoryProbeStage.Completed &&
         PageFailureCount == 0;
 
     /// <summary>
-    /// Records that this run examined the whole location, together with the findings its completion
-    /// put to rest.
+    /// Whether this run is finished: it examined the whole location and then closed every finding
+    /// that examination proved gone.
+    /// </summary>
+    public bool CanComplete => HasExaminedEverything && ResolutionCompleted;
+
+    /// <summary>
+    /// Accepts one bounded batch of closed findings. Called inside the transaction that closed them,
+    /// so the total and the rows it counts commit or roll back together and a resumed run neither
+    /// loses a batch nor counts one twice.
+    /// </summary>
+    public bool RecordResolvedFindings(DateTimeOffset now, Guid leaseToken, int resolvedFindings)
+    {
+        if (!EnsureLive(leaseToken))
+        {
+            return false;
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(resolvedFindings);
+        if (!HasExaminedEverything)
+        {
+            throw new InvalidOperationException(
+                "A reconciliation run that has not examined the whole location cannot close a finding.");
+        }
+
+        FindingsResolved += resolvedFindings;
+        LastProgressAtUtc = now;
+        return true;
+    }
+
+    /// <summary>
+    /// Records that a bounded look found no finding this run had left unclosed.
     /// </summary>
     /// <remarks>
-    /// Resolution counts arrive here rather than on a page, because nothing a partial pass sees is
-    /// enough to close a finding: only a run that read everything can say a condition it did not
-    /// observe again is gone.
+    /// Deliberately not implied by a batch that resolved fewer rows than it asked for: that is the
+    /// same evidence as an empty page, and the point of the whole phase is that a subset proves
+    /// nothing. This is set only where the query for the next one to close came back with none.
     /// </remarks>
-    public bool Complete(DateTimeOffset now, Guid leaseToken, int resolvedFindings = 0)
+    public bool CompleteResolution(DateTimeOffset now, Guid leaseToken)
+    {
+        if (!EnsureLive(leaseToken))
+        {
+            return false;
+        }
+
+        if (!HasExaminedEverything)
+        {
+            throw new InvalidOperationException(
+                "A reconciliation run that has not examined the whole location cannot finish resolving.");
+        }
+
+        ResolutionCompleted = true;
+        LastProgressAtUtc = now;
+        return true;
+    }
+
+    /// <summary>Records that this run examined the whole location and closed what it proved gone.</summary>
+    public bool Complete(DateTimeOffset now, Guid leaseToken)
     {
         if (!EnsureLive(leaseToken))
         {
@@ -252,11 +313,9 @@ public sealed class MediaInventoryRun : AuditableEntity
         if (!CanComplete)
         {
             throw new InvalidOperationException(
-                "A reconciliation run that did not finish both passes without failure cannot be completed.");
+                "A reconciliation run that did not finish both passes without failure, and then close every finding they proved gone, cannot be completed.");
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(resolvedFindings);
-        FindingsResolved += resolvedFindings;
         State = MediaInventoryRunState.Completed;
         CompletedAtUtc = now;
         LastProgressAtUtc = now;

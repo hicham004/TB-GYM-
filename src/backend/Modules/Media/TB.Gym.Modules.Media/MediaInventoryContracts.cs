@@ -157,6 +157,23 @@ public static class MediaInventoryPolicy
     /// </summary>
     public const int MaximumEmptyPages = 10;
 
+    /// <summary>How many findings one resolution transaction reads and closes.</summary>
+    /// <remarks>
+    /// Resolution is the third bounded phase of a run, and it is bounded for the reason the other
+    /// two are: how many findings a location has is a property of how wrong the deployment is, not
+    /// something the code may assume is small. A misconfiguration that points at the wrong bucket
+    /// makes every object unowned and every row missing at once, so "resolve everything that is
+    /// left" is a query whose size is the size of the workspace.
+    /// </remarks>
+    public const int ResolutionBatchSize = 100;
+
+    /// <summary>
+    /// How many resolution batches one pass runs before handing the run back. The lease bounds it
+    /// too, and either bound stops the pass with the run still <see cref="MediaInventoryRunState.Running"/>
+    /// so the next tick resumes exactly where this one stopped.
+    /// </summary>
+    public const int ResolutionBatchesPerPass = 5;
+
     /// <summary>
     /// How long an unfinished run may live before it is abandoned instead of resumed. A cursor from
     /// a run this old describes an enumeration the store may no longer be able to continue.

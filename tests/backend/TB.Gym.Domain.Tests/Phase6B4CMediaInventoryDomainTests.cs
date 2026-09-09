@@ -171,8 +171,13 @@ public sealed class Phase6B4CMediaInventoryDomainTests
         Assert.IsFalse(run.HasExhaustedFailures);
 
         run.RecordOwnerProbes(Now, token, lease, default, MediaInventoryProbeStage.Completed, null);
+        Assert.IsTrue(
+            run.HasExaminedEverything,
+            "A run that re-read every failed page was not entitled to resolve.");
+        run.RecordResolvedFindings(Now, token, 2);
+        run.CompleteResolution(Now, token);
         Assert.IsTrue(run.CanComplete, "A run that re-read every failed page could not complete.");
-        Assert.IsTrue(run.Complete(Now, token, resolvedFindings: 2));
+        Assert.IsTrue(run.Complete(Now, token));
         Assert.AreEqual(MediaInventoryRunState.Completed, run.State);
         Assert.AreEqual(2, run.FindingsResolved);
         Assert.AreEqual(1, run.TotalPageFailureCount);
@@ -206,12 +211,21 @@ public sealed class Phase6B4CMediaInventoryDomainTests
         run.RecordInventoryPage(Now, token, lease, default, null, false);
         Assert.IsFalse(run.CanComplete);
         run.RecordOwnerProbes(Now, token, lease, default, MediaInventoryProbeStage.Completed, null);
+
+        // Both passes are done, so the run may now close findings — and until it has finished doing
+        // so it is still not complete. A run that stopped with findings it proved gone still
+        // standing would present a stale report as a current one.
+        Assert.IsTrue(run.HasExaminedEverything);
+        Assert.IsFalse(run.CanComplete, "A run completed before it had closed what it examined away.");
+        Assert.ThrowsExactly<InvalidOperationException>(() => run.Complete(Now, token));
+        run.CompleteResolution(Now, token);
         Assert.IsTrue(run.CanComplete);
 
         // A single failed page disqualifies the whole run, however well the rest of it went:
         // "it found nothing" from a pass that could not read everything is not the same statement.
         run.RecordPageFailure(Now, token, "storage_provider_error");
         Assert.IsFalse(run.CanComplete);
+        Assert.IsFalse(run.HasExaminedEverything);
         Assert.ThrowsExactly<InvalidOperationException>(() => run.Complete(Now, token));
 
         Assert.IsTrue(run.Fail(Now, token));
@@ -326,6 +340,51 @@ public sealed class Phase6B4CMediaInventoryDomainTests
             Guid.CreateVersion7(),
             Guid.CreateVersion7(),
             Now));
+    }
+
+    [TestMethod]
+    public void ResolutionAccruesAcrossBatchesAndOnlyAFinishedOneCompletesTheRun()
+    {
+        var lease = TimeSpan.FromMinutes(5);
+        var token = Guid.NewGuid();
+        var run = MediaInventoryRun.Start(Location, Now, lease, token);
+
+        // Nothing may be closed before the location has been examined in full: a subset that did not
+        // contain a condition is evidence that the pass stopped, not that the condition is gone.
+        Assert.ThrowsExactly<InvalidOperationException>(() => run.RecordResolvedFindings(Now, token, 1));
+        Assert.ThrowsExactly<InvalidOperationException>(() => run.CompleteResolution(Now, token));
+
+        run.RecordInventoryPage(Now, token, lease, default, null, false);
+        run.RecordOwnerProbes(Now, token, lease, default, MediaInventoryProbeStage.Completed, null);
+
+        // Two bounded batches, and the total is the sum of them rather than of the last one.
+        Assert.IsTrue(run.RecordResolvedFindings(Now, token, MediaInventoryPolicy.ResolutionBatchSize));
+        Assert.IsTrue(run.RecordResolvedFindings(Now.AddMinutes(1), token, 7));
+        Assert.AreEqual(MediaInventoryPolicy.ResolutionBatchSize + 7, run.FindingsResolved);
+
+        // A batch that closed fewer rows than it asked for is the same evidence as a short page: it
+        // says nothing about what is left, so the run is still unfinished until something looked.
+        Assert.IsFalse(run.ResolutionCompleted);
+        Assert.IsFalse(run.CanComplete);
+        Assert.IsTrue(run.HasExaminedEverything, "A resolving run stopped being entitled to resolve.");
+
+        // Handing the run back mid-resolution keeps every closed batch and every count of one.
+        Assert.IsTrue(run.ReleaseClaim(Now.AddMinutes(2), token));
+        Assert.AreEqual(MediaInventoryRunState.Running, run.State);
+        Assert.AreEqual(MediaInventoryPolicy.ResolutionBatchSize + 7, run.FindingsResolved);
+        Assert.IsTrue(run.IsClaimable(Now.AddMinutes(2)));
+
+        // A later claimant resumes it, finds nothing left, and only then may complete it. The stale
+        // token can do neither.
+        var resumed = Guid.NewGuid();
+        run.Claim(Now.AddMinutes(3), lease, resumed);
+        Assert.IsFalse(run.RecordResolvedFindings(Now.AddMinutes(3), token, 1), "A stale claimant closed a finding.");
+        Assert.IsFalse(run.CompleteResolution(Now.AddMinutes(3), token), "A stale claimant finished resolution.");
+        Assert.IsTrue(run.RecordResolvedFindings(Now.AddMinutes(3), resumed, 3));
+        Assert.IsTrue(run.CompleteResolution(Now.AddMinutes(3), resumed));
+        Assert.IsTrue(run.Complete(Now.AddMinutes(3), resumed));
+        Assert.AreEqual(MediaInventoryPolicy.ResolutionBatchSize + 10, run.FindingsResolved);
+        Assert.AreEqual(MediaInventoryRunState.Completed, run.State);
     }
 
     [TestMethod]
