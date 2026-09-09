@@ -655,6 +655,14 @@ and no object-expiration or storage-class rule without a future ADR. The runtime
 bucket-scoped Object Read and Write, which already permits the listing this needs. Operator surfaces,
 alerting, restore, force-purge and any repair authority remain deferred.
 
+All three of these phases are accepted code, and none of them is a deployed production setup. The
+bucket, the bucket-scoped credential, the manual abort rule, the two written agreements the code
+cannot enforce, the private `clamd` and its signature feed, and a named reader for
+`media.InventoryFindings` are external steps this repository never performs; `LAUNCH-CHECKLIST.md`
+carries them unchecked with the evidence each one needs. A deployment that has done none of them
+composes the fail-closed adapters, refuses uploads before accepting bytes, and reports media as
+Degraded, which is the designed state rather than a fault.
+
 Every stored object has a durable provider-neutral `(location, key)` locator. `MediaAsset`,
 `MediaAssetDerivative` and a live `MediaIngestObject` retain the location that produced the bytes,
 so changing the current write adapter cannot redirect an existing read or purge. The Phase 6B-4A

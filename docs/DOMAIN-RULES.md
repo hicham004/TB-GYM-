@@ -1376,7 +1376,14 @@ Decisions still required for later phases and production launch:
    entitlement expiry, supplemental-program rules, default plate policies, and whether/when
    future prescriptions may be intentionally rebased.
 7. Choose production object storage, malware scanning, private delivery/CDN, retention, and
-   quota providers before accepting real coach uploads in production.
+   quota providers before accepting real coach uploads in production. Decided and implemented:
+   ADR 0024 selects a private EU Cloudflare R2 bucket and a private ClamAV daemon, and keeps
+   delivery proxied through the API with no CDN, presigned URL or public bucket; ADR 0014 owns
+   retention and quota; ADR 0025 adds read-only inventory reconciliation and leaves every repair
+   authority deferred. What is still required is not a decision but external setup, tracked
+   unchecked under "Media storage, scanning and inventory" in `LAUNCH-CHECKLIST.md`, including the
+   two operational agreements the code cannot enforce. A retention policy for reconciliation
+   findings and runs remains genuinely undecided.
 
 ## 13. Check-ins
 

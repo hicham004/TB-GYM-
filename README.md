@@ -130,12 +130,22 @@ Phases 0 through 6B are implemented and reviewed:
   recovery answers identically for every address. Invitations carry a logical-send generation, so a
   deliberate resend kills the previous link while a transport retry leaves one that may already be in
   somebody's mailbox working.
+- **Media** — a provider-neutral storage seam that is fail-closed outside development, then a private
+  EU Cloudflare R2 bucket behind it and a private ClamAV daemon that scans the stored bytes before
+  anything can be published. Delivery stays proxied through the API and authorized per request: no
+  public bucket, CDN, presigned URL or direct browser upload. Beside them, a daily read-only pass
+  reconciles the bucket's inventory against the database and records findings; it repairs nothing.
 
 Not implemented: gamification and tenant theming, SaaS productization and tenant billing, AI
-features, recurring billing, marketing email and any unsubscribe surface, and production provider
-integrations for WhatsApp and object storage. [ROADMAP.md](docs/ROADMAP.md) tracks each of these with
-its exit criteria, and [LAUNCH-CHECKLIST.md](docs/LAUNCH-CHECKLIST.md) tracks what production would
-still require.
+features, recurring billing, marketing email and any unsubscribe surface, and a production WhatsApp
+provider integration.
+
+The production media adapters are implemented and accepted, but no deployment is configured to use
+them, and the repository cannot configure one: the bucket, its bucket-scoped credential, the manual
+lifecycle rule and the ClamAV daemon are all external setup. Naming no adapter is a supported state
+rather than a broken one — uploads are refused before any bytes are accepted and `/health/ready`
+reports media as Degraded. [ROADMAP.md](docs/ROADMAP.md) tracks each of these with its exit criteria,
+and [LAUNCH-CHECKLIST.md](docs/LAUNCH-CHECKLIST.md) tracks what production would still require.
 
 The `base44/` directory preserves the previous React application as reference material only. It is
 not part of the new architecture.

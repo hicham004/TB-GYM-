@@ -841,10 +841,13 @@ path-scoped grant, authorization per request. No public bucket, CDN, presigned U
 SSE-C or client-side encryption — every one of those replaces "the API authorized this request" with
 "the holder of this URL may read these bytes".
 
-### Phase 6B-4C: media inventory reconciliation (implemented, not yet accepted)
+### Phase 6B-4C: media inventory reconciliation (code accepted, not deployed)
 
-Status: implemented 2026-09-08, with a correctness follow-up on 2026-09-09; not deployed and not
-accepted. See `docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`,
+Status: implemented 2026-09-08, with correctness follow-ups on 2026-09-09; code accepted on
+2026-09-09 against commit `246c2a7` with a full `scripts/check.ps1` run passing. Not deployed: every
+external prerequisite in `LAUNCH-CHECKLIST.md` under "Media storage, scanning and inventory" is still
+outstanding, and none of them is something this repository can do. See
+`docs/adr/0025-media-inventory-reconciliation-and-retention-operations.md`,
 `ARCHITECTURE.md` section 9 and `DOMAIN-RULES.md` MED-012. Additive migrations
 `20260908190256_Phase6B4CMediaInventoryReconciliation` (two new tables and two partial indexes),
 `20260908212945_Phase6B4CFollowUpInventoryFailureRecovery` (one counter and one widened check) and
@@ -901,6 +904,31 @@ Deferred, deliberately: any repair authority at all, an operator or coach-facing
 restore, force-purge, enumerating abandoned multipart uploads, local-object migration, and a retention
 decision for findings and runs.
 
+#### Phase 6B-4 code acceptance and production handoff (2026-09-09)
+
+Status: the code of 6B-4A, 6B-4B and 6B-4C is accepted. No deployment of it exists, and nothing below
+should be read as one. The distinction matters here more than elsewhere in this roadmap, because two
+of the rules these phases rest on are operational agreements rather than anything the code can
+enforce: `r2-eu-v1` naming one account, jurisdiction and bucket forever (ADR 0024), and no
+object-expiration or storage-class transition rule on that bucket without a new ADR (ADR 0025).
+
+What is accepted is what the repository contains: the provider-neutral seam and its fail-closed
+composition, the R2 and ClamAV adapters behind it, the API-proxied authorized delivery path, and the
+read-only reconciliation pass with its findings and runs. `scripts/check.ps1` passes at `246c2a7`.
+
+What is not done is every external step, and all of it belongs to a person with credentials this
+repository has never held: creating the private EU bucket, issuing and storing the bucket-scoped
+runtime credential, applying the one-day incomplete-multipart abort rule by hand with an Admin
+credential, writing down the two agreements above, standing up a private `clamd` with its signature
+feed, proving the two adapters and one reconciliation run in staging, and naming who reads
+`media.InventoryFindings`. `LAUNCH-CHECKLIST.md` carries them as unchecked items with the evidence
+each one needs; none may be ticked from this repository, and a passing check run is not evidence for
+any of them.
+
+Until those are done, a non-Development deployment composes 6B-4A's fail-closed adapters, refuses
+every upload before accepting bytes, and reports a Degraded media entry on `/health/ready`. That is
+the designed state of an unconfigured deployment, not a defect to work around.
+
 ### Phase 6B remaining
 
 - Integrate one WhatsApp provider, and SMS or push if either is ever wanted, behind existing ports.
@@ -927,8 +955,11 @@ retries, duplicate callbacks, and multiple API replicas.
 
 ## Phase 7: Theme and gamification
 
-Dependencies: authoritative completion/diet events; open decisions 8 and 9 in
-`DOMAIN-RULES.md`.
+Dependencies: authoritative completion/diet events; open decisions 4 and 5 in `DOMAIN-RULES.md`
+section 12 — what counts as diet completion and a missed workout for experience changes, and whether
+uploaded, imported or generated themed assets are owned or licensed. They are the two that GAM-003
+and GAM-004 already say must be answered before this phase ships; the numbers 8 and 9 named nothing
+in that list.
 
 - Build constrained tenant theme tokens and licensed uploaded/generated assets.
 - Build versioned experience rules, append-only experience ledger, levels, ranks, progress
