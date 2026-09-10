@@ -719,6 +719,28 @@ The API emits structured JSON console logs and exposes:
 Production configuration comes from environment variables or a secret manager. Secrets,
 connection strings, uploaded files, and local databases are not committed.
 
+**Forwarded headers are opt-in and name their edge.** `X-Forwarded-For` and `X-Forwarded-Proto` are
+request headers, so they are the caller's invention until the address the connection came from says
+otherwise. `ReverseProxy:Enabled` is that decision and defaults to false, which is correct for a
+directly reachable deployment: the headers are then not read, not stripped and not acted on.
+Enabling it requires at least one `ReverseProxy:TrustedProxies` address or
+`ReverseProxy:TrustedNetworks` CIDR entry, and startup refuses an enabled deployment that names
+neither — accepting forwarded headers from nobody is not a safe default but a silent one, because
+the per-address rate limiters (public authentication and the provider webhook) then partition every
+caller in the world onto the proxy's single address and go on looking like limiters. A zero-length
+prefix and the unspecified address are refused for the opposite reason: both are "trust everyone"
+written as data.
+
+The framework's own defaults — measured as `KnownProxies = [::1]` and
+`KnownIPNetworks = [127.0.0.0/8]` — are added to and never cleared. Clearing them does not narrow
+the trusted set, it removes the check entirely and believes any caller. The consequence to hold is
+that loopback is trusted before configuration adds anything, so the API is bound to a private
+interface and is never reachable directly from outside the deployment. The forward limit stays at
+one hop, which is what makes a spoofed header harmless behind an edge that appends: nginx's
+`$proxy_add_x_forwarded_for` puts the address it actually accepted the connection from last, and the
+last entry is the one taken. More than one hop in front of the API is a separate decision and is not
+configured here.
+
 Docker persists local uploads and ASP.NET Core Data Protection keys in separate named
 volumes. Multiple API replicas must share an external key repository and object storage;
 container-local files are never a horizontal-scaling design.

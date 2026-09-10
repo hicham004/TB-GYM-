@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using TB.Gym.Api;
 using TB.Gym.Infrastructure;
@@ -43,10 +42,11 @@ builder.Services.AddTbGymInfrastructure(builder.Configuration, builder.Environme
 var app = builder.Build();
 
 app.UseExceptionHandler();
-app.UseForwardedHeaders(new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-});
+// Forwarded headers from the configured edge and from nobody else, or — when no edge is configured —
+// not at all. First in the pipeline, because everything after it that reads a client address or a
+// scheme must read the corrected one: the per-address rate limiters, HTTPS redirection, and every
+// log line that names a caller.
+app.UseTbGymForwardedHeaders();
 app.UseTbGymSecurityHeaders();
 // Before authentication, so a hub handshake from a disallowed origin is refused before a cookie is
 // decoded. A WebSocket upgrade is not protected by the same-origin policy, so this is the check that

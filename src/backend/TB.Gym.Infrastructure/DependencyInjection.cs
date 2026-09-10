@@ -251,6 +251,23 @@ public static class DependencyInjection
         // sends fail on click for a reason that reads as an invalid token.
         services.AddTbGymDataProtection(configuration, environment.IsProduction());
 
+        // Registered immediately before the limiters it decides the partitions of. Two of the four
+        // policies below partition on the source address, and behind an unconfigured proxy every
+        // caller shares one partition; this is what makes the address the client's rather than the
+        // edge's. Validated on start so an enabled-but-unnamed edge refuses to boot instead of
+        // serving with a limiter that only looks like one.
+        var reverseProxy = new ReverseProxyOptions();
+        configuration.GetSection(ReverseProxyOptions.SectionName).Bind(reverseProxy);
+        services.AddOptions<ReverseProxyOptions>()
+            .Bind(configuration.GetSection(ReverseProxyOptions.SectionName))
+            // Validation and resolution are the same call, so a forwarder can never be composed from
+            // a value that was not validated.
+            .Validate(
+                options => options.Validate() is null,
+                reverseProxy.Validate()
+                    ?? $"{ReverseProxyOptions.SectionName} is not a valid reverse proxy configuration.")
+            .ValidateOnStart();
+
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;

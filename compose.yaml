@@ -103,6 +103,16 @@ services:
       Media__ScannerAdapter: ${TB_GYM_MEDIA_SCANNER_ADAPTER:-Development}
       Media__ClamAv__Host: clamav
       Media__ClamAv__Port: "3310"
+      # Whose word this deployment takes for a client's address and scheme. Off by default, which is
+      # what the local stack wants and what a directly reachable deployment wants: X-Forwarded-For
+      # and X-Forwarded-Proto are the caller's invention until an address says otherwise, and this
+      # stack's nginx is not configured here as an edge. Turning it on without naming a proxy
+      # refuses startup rather than accepting forwarded headers from nobody, which would collapse
+      # every per-address rate limit onto one partition. The Worker has no HTTP surface and needs
+      # none of this.
+      ReverseProxy__Enabled: ${TB_GYM_REVERSE_PROXY_ENABLED:-false}
+      ReverseProxy__TrustedProxies__0: ${TB_GYM_TRUSTED_PROXY:-}
+      ReverseProxy__TrustedNetworks__0: ${TB_GYM_TRUSTED_PROXY_NETWORK:-}
       Seed__Enabled: ${TB_GYM_SEED_ENABLED:-true}
       Seed__AdminEmail: ${TB_GYM_ADMIN_EMAIL:-admin@tbgym.local}
       Seed__AdminPassword: ${TB_GYM_ADMIN_PASSWORD:-}

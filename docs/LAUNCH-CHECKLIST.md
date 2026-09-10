@@ -60,7 +60,14 @@ below is external setup and operations, none of which this repository automates.
 - [ ] Register the production domain and define API/web DNS ownership and renewal contacts.
 - [ ] Terminate TLS 1.2+ with automatic certificate renewal; redirect HTTP and test renewal.
 - [ ] Serve SPA and API under the approved same-origin model so cookie/XSRF assumptions hold.
-- [ ] Configure trusted proxy networks before accepting forwarded headers.
+- [ ] Configure trusted proxy networks before accepting forwarded headers. Set
+  `ReverseProxy:Enabled` to true only with a reverse proxy in front of the API, and name it with
+  `ReverseProxy:TrustedProxies` addresses, `ReverseProxy:TrustedNetworks` CIDR entries, or both;
+  startup refuses an enabled deployment that names neither. Leave it false for a directly reachable
+  deployment. Evidence: the configured values, and a request through the edge whose logged client
+  address is the browser's rather than the proxy's. Loopback (`::1`, `127.0.0.0/8`) stays trusted by
+  framework default, so also confirm the API is bound to a private interface and is not reachable
+  directly.
 - [ ] Enable HSTS only after all production subdomains are HTTPS-ready.
 - [ ] Validate CSP, frame denial, `nosniff`, referrer policy, permissions policy, CORS, and
   WebSocket headers at the real edge/CDN, not only in application tests.
