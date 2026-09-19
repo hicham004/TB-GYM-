@@ -32,6 +32,8 @@ export class AcceptInvitation implements OnInit {
   protected readonly loading = signal(true);
   protected readonly submitting = signal(false);
   protected readonly error = signal<string | null>(null);
+  /** Whether the load failed because the server said the link is gone, rather than transiently. */
+  protected readonly spent = signal(false);
   protected readonly token = signal('');
   protected readonly signedInUser = this.auth.user;
   protected readonly returnUrl = computed(
@@ -58,8 +60,24 @@ export class AcceptInvitation implements OnInit {
       return;
     }
 
+    await this.load();
+  }
+
+  /**
+   * Reads the invitation the held token names.
+   *
+   * Separate from `ngOnInit` because the answer depends on who is signed in — `requiresExistingAccountSignIn`
+   * is decided against the caller's own session — so signing an account out has to ask again rather
+   * than reuse a reply that was computed for somebody else.
+   *
+   * The token comes from the signal rather than the route, deliberately: the scrubber may already
+   * have emptied the address bar, and this component is the only thing that still holds the value.
+   */
+  protected async load(): Promise<void> {
+    this.loading.set(true);
+    this.error.set(null);
     try {
-      const invitation = await firstValueFrom(this.api.getPublicInvitation(token));
+      const invitation = await firstValueFrom(this.api.getPublicInvitation(this.token()));
       this.invitation.set(invitation);
       this.accountForm.controls.displayName.setValue(
         `${invitation.firstName} ${invitation.lastName}`.trim(),
@@ -69,11 +87,21 @@ export class AcceptInvitation implements OnInit {
         // and this history entry as soon as the server establishes that fact.
         await this.scrubber.scrub(this.route);
       }
-    } catch {
-      this.error.set($localize`This invitation link is invalid or no longer available.`);
-      // Unknown, expired, superseded and revoked links are all spent from the browser's point of
-      // view. Keeping one visible cannot make it usable and only gives it more places to leak.
-      await this.scrubber.scrub(this.route);
+    } catch (error) {
+      // Only a server answer that the link is *gone* may spend it. A rate limit, a restarting API
+      // or a dropped connection says nothing about the invitation, and scrubbing on one of those
+      // destroyed the person's only copy of a link that still worked — with no way to get it back,
+      // since the address bar was the only place it existed.
+      const status = error instanceof HttpErrorResponse ? error.status : 0;
+      this.spent.set(status === 404 || status === 410);
+      this.error.set(
+        this.spent()
+          ? $localize`This invitation link is invalid or no longer available.`
+          : $localize`This invitation could not be loaded. Check your connection and try again.`,
+      );
+      if (this.spent()) {
+        await this.scrubber.scrub(this.route);
+      }
     } finally {
       this.loading.set(false);
     }
@@ -135,11 +163,31 @@ export class AcceptInvitation implements OnInit {
     }
   }
 
+  /**
+   * Signs the wrong account out and stays on the invitation.
+   *
+   * It deliberately does not navigate to the sign-in page. The person holding this link usually has
+   * no account at all — that is the ordinary case for an invited client — and sign-in has nothing
+   * for them: it cannot create a client account, and the only account it offers to create is a
+   * coach workspace. Sending them there stranded them one step away from the one form that could
+   * help, with the token left behind in a query parameter of the page they had just left.
+   *
+   * Staying put re-asks the server who this invitation is for now that nobody is signed in, which
+   * is what decides between the create-account form and the sign-in prompt below it.
+   */
   protected async signOut(): Promise<void> {
-    await this.auth.logout();
-    await this.router.navigate(['/auth/sign-in'], {
-      queryParams: { returnUrl: this.returnUrl() },
-    });
+    this.submitting.set(true);
+    try {
+      await this.auth.logout();
+    } catch {
+      // A session the server has already dropped is the state this button was trying to reach; the
+      // reinitialize below establishes what is actually true either way.
+    } finally {
+      this.submitting.set(false);
+    }
+
+    await this.auth.initialize(true);
+    await this.load();
   }
 
   private clearCredentials(): void {

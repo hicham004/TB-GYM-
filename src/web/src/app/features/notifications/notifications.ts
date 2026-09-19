@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -35,6 +36,7 @@ export class Notifications {
   private readonly csrf = inject(CsrfService);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly notifications = inject(NotificationStore);
 
   /** Bumped whenever the recipient or the workspace changes; every reply is checked against it. */
@@ -69,7 +71,9 @@ export class Notifications {
   });
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const key = this.contextKey();
       if (key === this.context) {
         return;
@@ -87,120 +91,141 @@ export class Notifications {
   }
 
   protected async reload(): Promise<void> {
-    const generation = this.contextGeneration;
-    if (this.contextKey() === null) {
-      return;
-    }
+    return this.scope.run('reload', async (owner) => {
+      const generation = this.contextGeneration;
+      if (this.contextKey() === null) {
+        return;
+      }
 
-    this.items.set([]);
-    this.consumedOffset.set(0);
-    this.total.set(0);
-    this.serverExhausted.set(false);
-    await this.load(generation);
+      this.items.set([]);
+      this.consumedOffset.set(0);
+      this.total.set(0);
+      this.serverExhausted.set(false);
+      await owner.wait(this.load(generation));
+    });
   }
 
   protected async loadMore(): Promise<void> {
-    const generation = this.contextGeneration;
-    if (!this.hasMore() || this.loadingMore() || this.loading()) {
-      return;
-    }
-
-    const request = ++this.listGeneration;
-    const skip = this.consumedOffset();
-    this.loadingMore.set(true);
-    this.error.set(null);
-    try {
-      const page = await firstValueFrom(this.api.listNotifications(skip, pageSize));
-      if (!this.owns(generation, request)) {
+    return this.scope.run('notifications', async (owner) => {
+      const generation = this.contextGeneration;
+      if (!this.hasMore() || this.loadingMore() || this.loading()) {
         return;
       }
 
-      // Appended by identifier rather than by position: something delivered between the two requests
-      // shifts the page boundary, and a duplicated row would be a rendering error.
-      this.items.update((loaded) => appendPage(loaded, page.items));
-      // Offset progress belongs to rows the server returned, not unique rows that survived DOM
-      // deduplication. An overlapping page still consumed every one of its server positions.
-      this.consumedOffset.update((consumed) => consumed + page.items.length);
-      this.total.set(page.total);
-      this.serverExhausted.set(page.items.length === 0);
-      this.notifications.set(page.unreadTotal);
-    } catch (error) {
-      if (this.owns(generation, request)) {
-        this.error.set(apiErrorMessage(error, $localize`More notifications could not be loaded.`));
+      const request = ++this.listGeneration;
+      const skip = this.consumedOffset();
+      this.loadingMore.set(true);
+      this.error.set(null);
+      try {
+        const page = await owner.wait(firstValueFrom(this.api.listNotifications(skip, pageSize)));
+        if (!this.owns(generation, request)) {
+          return;
+        }
+
+        // Appended by identifier rather than by position: something delivered between the two requests
+        // shifts the page boundary, and a duplicated row would be a rendering error.
+        this.items.update((loaded) => appendPage(loaded, page.items));
+        // Offset progress belongs to rows the server returned, not unique rows that survived DOM
+        // deduplication. An overlapping page still consumed every one of its server positions.
+        this.consumedOffset.update((consumed) => consumed + page.items.length);
+        this.total.set(page.total);
+        this.serverExhausted.set(page.items.length === 0);
+        this.notifications.set(page.unreadTotal);
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.owns(generation, request)) {
+          this.error.set(
+            apiErrorMessage(error, $localize`More notifications could not be loaded.`),
+          );
+        }
+      } finally {
+        if (owner.current) {
+          if (this.contextGeneration === generation && this.listGeneration === request) {
+            this.loadingMore.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.contextGeneration === generation && this.listGeneration === request) {
-        this.loadingMore.set(false);
-      }
-    }
+    });
   }
 
   protected async markRead(notification: NotificationItem): Promise<void> {
-    const generation = this.contextGeneration;
-    if (notification.isRead || this.busyId() !== null) {
-      return;
-    }
-
-    this.busyId.set(notification.id);
-    this.error.set(null);
-    try {
-      await this.csrf.refresh();
-      if (this.contextGeneration !== generation) {
+    return this.scope.run('markRead', async (owner) => {
+      const generation = this.contextGeneration;
+      if (notification.isRead || this.busyId() !== null) {
         return;
       }
 
-      const updated = await firstValueFrom(this.api.markNotificationRead(notification.id));
-      if (this.contextGeneration !== generation) {
-        return;
-      }
+      this.busyId.set(notification.id);
+      this.error.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (this.contextGeneration !== generation) {
+          return;
+        }
 
-      this.items.update((loaded) =>
-        loaded.map((item) => (item.id === updated.id ? updated : item)),
-      );
-      this.notifications.decrement();
-    } catch (error) {
-      if (this.contextGeneration === generation) {
-        // The row keeps its unread presentation: the server did not accept the change, so pretending
-        // it did would leave the badge and the list disagreeing with the workspace.
-        this.error.set(
-          apiErrorMessage(error, $localize`This notification could not be marked as read.`),
+        const updated = await owner.wait(
+          firstValueFrom(this.api.markNotificationRead(notification.id)),
         );
+        if (this.contextGeneration !== generation) {
+          return;
+        }
+
+        this.items.update((loaded) =>
+          loaded.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        this.notifications.decrement();
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.contextGeneration === generation) {
+          // The row keeps its unread presentation: the server did not accept the change, so pretending
+          // it did would leave the badge and the list disagreeing with the workspace.
+          this.error.set(
+            apiErrorMessage(error, $localize`This notification could not be marked as read.`),
+          );
+        }
+      } finally {
+        if (owner.current) {
+          if (this.contextGeneration === generation) {
+            this.busyId.set(null);
+          }
+        }
       }
-    } finally {
-      if (this.contextGeneration === generation) {
-        this.busyId.set(null);
-      }
-    }
+    });
   }
 
   private async load(generation: number): Promise<void> {
-    const request = ++this.listGeneration;
-    this.loading.set(true);
-    this.error.set(null);
-    try {
-      const page = await firstValueFrom(this.api.listNotifications(0, pageSize));
-      if (!this.owns(generation, request)) {
-        return;
-      }
+    return this.scope.run('notifications', async (owner) => {
+      const request = ++this.listGeneration;
+      this.loading.set(true);
+      this.error.set(null);
+      try {
+        const page = await owner.wait(firstValueFrom(this.api.listNotifications(0, pageSize)));
+        if (!this.owns(generation, request)) {
+          return;
+        }
 
-      this.items.set(page.items);
-      this.consumedOffset.set(page.items.length);
-      this.total.set(page.total);
-      this.serverExhausted.set(page.items.length === 0);
-      this.notifications.set(page.unreadTotal);
-    } catch (error) {
-      if (this.owns(generation, request)) {
-        this.items.set([]);
-        this.consumedOffset.set(0);
-        this.total.set(0);
-        this.serverExhausted.set(false);
-        this.error.set(apiErrorMessage(error, $localize`Notifications could not be loaded.`));
+        this.items.set(page.items);
+        this.consumedOffset.set(page.items.length);
+        this.total.set(page.total);
+        this.serverExhausted.set(page.items.length === 0);
+        this.notifications.set(page.unreadTotal);
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.owns(generation, request)) {
+          this.items.set([]);
+          this.consumedOffset.set(0);
+          this.total.set(0);
+          this.serverExhausted.set(false);
+          this.error.set(apiErrorMessage(error, $localize`Notifications could not be loaded.`));
+        }
+      } finally {
+        if (owner.current) {
+          if (this.contextGeneration === generation && this.listGeneration === request) {
+            this.loading.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.contextGeneration === generation && this.listGeneration === request) {
-        this.loading.set(false);
-      }
-    }
+    });
   }
 
   /** A reply is only allowed to write if it is both the current context and the newest request. */
@@ -218,5 +243,19 @@ export class Notifications {
     this.loadingMore.set(false);
     this.busyId.set(null);
     this.error.set(null);
+  }
+
+  private resetTenantState(): void {
+    ++this.contextGeneration;
+    ++this.listGeneration;
+    this.context = null;
+    this.items.set([]);
+    this.consumedOffset.set(0);
+    this.total.set(0);
+    this.serverExhausted.set(false);
+    this.loading.set(false);
+    this.loadingMore.set(false);
+    this.error.set(null);
+    this.busyId.set(null);
   }
 }

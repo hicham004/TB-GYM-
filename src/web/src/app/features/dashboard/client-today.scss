@@ -1,0 +1,56 @@
+:host {
+  display: block;
+  color: #1c1b19;
+}
+.today-page {
+  max-inline-size: 40rem;
+  margin-inline: auto;
+  padding: 1rem;
+  background: #faf8f5;
+  border-radius: 10px;
+}
+h1 {
+  margin-block: 0.25rem;
+  font-size: 1.75rem;
+}
+h2 {
+  font-size: 1.25rem;
+  overflow-wrap: anywhere;
+}
+.daily-action {
+  background: #fff;
+  padding: 1.5rem;
+  border: 1px solid #dedad3;
+  border-radius: 10px;
+  margin-block: 1rem;
+}
+.daily-action p {
+  overflow-wrap: anywhere;
+}
+.primary-button {
+  background: #1f5e4b;
+  border-color: #1f5e4b;
+  min-block-size: 48px;
+  inline-size: 100%;
+  text-align: center;
+}
+.muted {
+  color: #5f5b55;
+  font-size: 0.875rem;
+}
+.also-today a {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  min-block-size: 48px;
+  padding-block: 0.75rem;
+  border-block-end: 1px solid #dedad3;
+  color: #1f5e4b;
+}
+.coming-up {
+  padding-block: 0.5rem;
+}
+.skeleton {
+  min-block-size: 10rem;
+  color: #5f5b55;
+}

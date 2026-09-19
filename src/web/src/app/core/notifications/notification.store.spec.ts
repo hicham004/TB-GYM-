@@ -78,7 +78,7 @@ describe('NotificationStore', () => {
     context.unreadCount.mockReturnValue(of(0));
 
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     expect(context.store.unread()).toBe(0);
     expect(context.store.isAvailable()).toBe(true);
@@ -89,7 +89,7 @@ describe('NotificationStore', () => {
     context.unreadCount.mockReturnValue(of(1));
 
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     expect(context.store.unread()).toBe(1);
   });
@@ -99,7 +99,7 @@ describe('NotificationStore', () => {
     context.unreadCount.mockReturnValue(of(17));
 
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     expect(context.store.unread()).toBe(17);
   });
@@ -108,13 +108,13 @@ describe('NotificationStore', () => {
     const context = harness();
     context.unreadCount.mockReturnValue(of(4));
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
     expect(context.store.unread()).toBe(4);
 
     context.unreadCount.mockReturnValue(of(2));
     context.membership.set(BETA_TENANT);
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     expect(context.store.unread()).toBe(2);
     expect(context.unreadCount).toHaveBeenCalledTimes(2);
@@ -124,12 +124,12 @@ describe('NotificationStore', () => {
     const context = harness();
     context.unreadCount.mockReturnValue(of(6));
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     context.unreadCount.mockReturnValue(of(0));
     context.user.set(BETA_USER);
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     expect(context.store.unread()).toBe(0);
   });
@@ -138,12 +138,12 @@ describe('NotificationStore', () => {
     const context = harness();
     context.unreadCount.mockReturnValue(of(3));
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
     expect(context.store.unread()).toBe(3);
 
     context.membership.set(undefined);
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     expect(context.store.unread()).toBe(0);
     expect(context.store.isAvailable()).toBe(false);
@@ -155,11 +155,11 @@ describe('NotificationStore', () => {
     const context = harness();
     context.unreadCount.mockReturnValue(of(5));
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     context.user.set(null);
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     expect(context.store.unread()).toBe(0);
     expect(context.store.isAvailable()).toBe(false);
@@ -177,23 +177,23 @@ describe('NotificationStore', () => {
     context.unreadCount.mockReturnValueOnce(stale).mockReturnValueOnce(fresh);
 
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     context.membership.set(BETA_TENANT);
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     // The new workspace answers first.
     fresh.next(2);
     fresh.complete();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
     expect(context.store.unread()).toBe(2);
 
     // The old workspace answers last, and must not be written.
     stale.next(99);
     stale.complete();
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
+    await new Promise((resolve) => setTimeout(resolve));
 
     expect(context.store.unread()).toBe(2);
   });
@@ -203,8 +203,8 @@ describe('NotificationStore', () => {
     context.unreadCount.mockReturnValue(throwError(() => new Error('offline')));
 
     flush();
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
+    await new Promise((resolve) => setTimeout(resolve));
 
     expect(context.store.unread()).toBe(0);
   });
@@ -213,7 +213,7 @@ describe('NotificationStore', () => {
     const context = harness();
     context.unreadCount.mockReturnValue(of(1));
     flush();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve));
 
     context.store.decrement();
     expect(context.store.unread()).toBe(0);

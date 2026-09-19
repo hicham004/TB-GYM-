@@ -119,6 +119,12 @@ during remediation, and was accepted through a live Chrome coach/client journey 
 Dockerized API and PostgreSQL. The browser run also verifies the compact mobile workout grid,
 native protected-media rendering without `X-Tenant-Id`, and real five-minute grant expiry.
 
+Closed-beta Slice 1 extends the existing Phase 3 surface without opening a new domain phase: bounded
+upcoming/resumable and coach-workout reads, a client-focused Today runner, client account navigation,
+coach-to-client message handoff, and read-only workout review. It preserves the existing write APIs,
+schema and invariants; RPE remains canonical and choosing a preferred client effort-input scale is
+deferred. See `docs/CLOSED-BETA-SLICE-1.md` for bounded-read and verification evidence.
+
 Explicitly deferred: supplemental mesocycles, intentional future working-max rebase,
 completion correction, arbitrary edits to started sessions, more progression transforms,
 large analytics/PR dashboards, a production object-store/scanner/CDN adapter, and media

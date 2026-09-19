@@ -63,11 +63,15 @@ below is external setup and operations, none of which this repository automates.
 - [ ] Configure trusted proxy networks before accepting forwarded headers. Set
   `ReverseProxy:Enabled` to true only with a reverse proxy in front of the API, and name it with
   `ReverseProxy:TrustedProxies` addresses, `ReverseProxy:TrustedNetworks` CIDR entries, or both;
-  startup refuses an enabled deployment that names neither. Leave it false for a directly reachable
-  deployment. Evidence: the configured values, and a request through the edge whose logged client
-  address is the browser's rather than the proxy's. Loopback (`::1`, `127.0.0.0/8`) stays trusted by
-  framework default, so also confirm the API is bound to a private interface and is not reachable
-  directly.
+  startup refuses an enabled deployment that names neither. Prefer an exact `TrustedProxies` address
+  — for a beta behind one edge it is almost always knowable, and it is the narrowest thing that can
+  be trusted; reach for a network only when the edge's address is assigned rather than fixed. Leave
+  `Enabled` false for a directly reachable deployment. Evidence: the configured values, and a
+  request through the edge whose logged client address is the browser's rather than the proxy's.
+  Loopback (`::1`, `127.0.0.0/8`) stays trusted by framework default, so also confirm the API is
+  bound to a private interface and is not reachable directly. Note that `compose.yaml` wires one
+  address and one network, both at index 0; more than one is added to the api service's environment
+  in the deployment configuration, not in `.env`.
 - [ ] Enable HSTS only after all production subdomains are HTTPS-ready.
 - [ ] Validate CSP, frame denial, `nosniff`, referrer policy, permissions policy, CORS, and
   WebSocket headers at the real edge/CDN, not only in application tests.

@@ -12,6 +12,10 @@ export interface NutritionChoiceDraft {
 export class NutritionChoiceDrafts {
   private readonly drafts = new Map<string, NutritionChoiceDraft>();
 
+  clear(): void {
+    this.drafts.clear();
+  }
+
   reconcile(day: NutritionDay): void {
     for (const slot of day.slots) {
       const current = this.drafts.get(slot.id);

@@ -1,0 +1,98 @@
+@if (loading()) {
+  <p role="status" i18n>Loading workout…</p>
+}
+@if (error()) {
+  <p role="alert">{{ error() }}</p>
+  <button class="secondary-button" type="button" (click)="load()" i18n>Retry</button>
+}
+@if (result(); as result) {
+  @if (!result.isAllowed) {
+    <p role="status">{{ accessLabel(result.accessReason) }}</p>
+  } @else if (result.detail; as detail) {
+    <section class="workout-detail">
+      <header>
+        <h3 dir="auto">{{ detail.workout.name }}</h3>
+        <p>{{ detail.date | date: 'EEE d MMM' }} · <span i18n>Read only</span></p>
+      </header>
+      @if (detail.workout.coachNotes) {
+        <p dir="auto">{{ detail.workout.coachNotes }}</p>
+      }
+      @for (exercise of detail.workout.exercises; track exercise.prescriptionId) {
+        <section>
+          <h4 dir="auto">{{ exercise.actualExerciseName }}</h4>
+          @if (exercise.wasSubstituted) {
+            <p dir="auto" i18n>Approved swap. Prescribed: {{ exercise.prescribedExerciseName }}</p>
+          }
+          @if (exercise.coachNotes) {
+            <p dir="auto">{{ exercise.coachNotes }}</p>
+          }
+          @for (set of exercise.sets; track set.prescriptionId; let index = $index) {
+            <div class="set-comparison">
+              <strong i18n>Set {{ index + 1 }}</strong>
+              <p>
+                <span i18n>Target:</span> {{ set.prescribedRepetitionsMinimum ?? '—' }}–{{
+                  set.prescribedRepetitionsMaximum ?? '—'
+                }}
+                <span i18n>reps</span> · {{ set.prescribedLoad ?? '—' }}
+                {{
+                  set.prescribedLoadUnit === 'Kilogram'
+                    ? 'kg'
+                    : set.prescribedLoadUnit === 'Pound'
+                      ? 'lb'
+                      : ''
+                }}
+                @if (set.prescribedTargetRpe !== null) {
+                  · RPE {{ set.prescribedTargetRpe }}
+                }
+              </p>
+              <p>
+                <span i18n>Actual:</span> {{ set.actualRepetitions ?? '—' }}
+                <span i18n>reps</span> · {{ set.actualLoad ?? '—' }}
+                {{
+                  set.actualLoadUnit === 'Kilogram'
+                    ? 'kg'
+                    : set.actualLoadUnit === 'Pound'
+                      ? 'lb'
+                      : ''
+                }}
+                @if (set.actualRpe !== null) {
+                  · RPE {{ set.actualRpe }}
+                }
+                ·
+                @if (set.isCompleted) {
+                  <span i18n>Logged</span>
+                } @else {
+                  <span i18n>Not logged</span>
+                }
+              </p>
+              @if (set.clientNote) {
+                <p dir="auto"><strong i18n>Client note:</strong> {{ set.clientNote }}</p>
+              }
+            </div>
+          }
+        </section>
+      }
+      <h4 i18n>Workout notes</h4>
+      @for (note of detail.workout.notes; track note.id) {
+        <p>
+          <strong>{{ note.authorRole === 'Client' ? 'Client' : 'Coach' }}</strong> ·
+          {{ noteTime(note.createdAtUtc, detail.timeZoneId) }}
+          <span class="note" dir="auto">{{ note.text }}</span>
+        </p>
+      } @empty {
+        <p i18n>No workout notes.</p>
+      }
+      @if (result.nextNotesSkip !== null) {
+        <button
+          type="button"
+          class="secondary-button"
+          [disabled]="loading()"
+          (click)="load(result.nextNotesSkip)"
+          i18n
+        >
+          Older notes
+        </button>
+      }
+    </section>
+  }
+}

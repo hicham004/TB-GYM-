@@ -55,7 +55,10 @@ internal sealed class InvitationApplicationService(
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        return invitations.Select(invitation => ToSummary(invitation)).ToArray();
+        var capturedLinks = await CapturedLinksAsync(invitations, cancellationToken);
+        return invitations
+            .Select(invitation => ToSummary(invitation, capturedLinks.GetValueOrDefault(invitation.Id)))
+            .ToArray();
     }
 
     public async Task<InvitationCommandResult> CreateAsync(
@@ -665,6 +668,58 @@ internal sealed class InvitationApplicationService(
 
         await concrete.DispatchRequestAsync(tenantId, id, cancellationToken);
         return concrete.CapturedActionUrl(id);
+    }
+
+    /// <summary>
+    /// The captured link for each listed invitation that still has a usable one.
+    /// </summary>
+    /// <remarks>
+    /// Development and test only, behind exactly the gate <see cref="MaterializeInlineAsync"/> uses:
+    /// the capture adapter, which startup validation refuses in Production. It exists because a
+    /// deployment with no email provider has the captured link as its <i>only</i> route to an
+    /// invitation, and returning it once in the create response meant that reloading the page lost it
+    /// permanently — leaving a coach to revoke and re-invite to get another one.
+    /// <para>
+    /// Only a pending invitation's current generation is offered. A link from a superseded, revoked,
+    /// accepted or expired generation does not work, and showing one is worse than showing none.
+    /// </para>
+    /// </remarks>
+    private async Task<Dictionary<Guid, string>> CapturedLinksAsync(
+        IReadOnlyCollection<ClientInvitation> invitations,
+        CancellationToken cancellationToken)
+    {
+        if (actionMail is not InvitationActionMailService concrete || !concrete.InlineDispatchAvailable)
+        {
+            return [];
+        }
+
+        var currentGenerations = invitations
+            .Where(invitation => invitation.Status == InvitationStatus.Pending)
+            .ToDictionary(invitation => invitation.Id, invitation => invitation.LogicalSendGeneration);
+        if (currentGenerations.Count == 0)
+        {
+            return [];
+        }
+
+        var invitationIds = currentGenerations.Keys.ToList();
+        var requests = await dbContext.InvitationActionMailRequests
+            .AsNoTracking()
+            .Where(item => invitationIds.Contains(item.InvitationId))
+            .Select(item => new { item.Id, item.InvitationId, item.LogicalSendGeneration })
+            .ToListAsync(cancellationToken);
+
+        var links = new Dictionary<Guid, string>();
+        foreach (var request in requests)
+        {
+            if (currentGenerations.TryGetValue(request.InvitationId, out var generation) &&
+                request.LogicalSendGeneration == generation &&
+                concrete.CapturedActionUrl(request.Id) is { } actionUrl)
+            {
+                links[request.InvitationId] = actionUrl;
+            }
+        }
+
+        return links;
     }
 
     /// <summary>

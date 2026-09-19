@@ -43,7 +43,16 @@ namespace TB.Gym.Infrastructure.Security;
 /// mean "no restriction", it means the middleware stops checking at all and believes any caller;
 /// this composition only ever <em>adds</em> to the framework's defaults. A configured network of
 /// <c>0.0.0.0/0</c> or <c>::/0</c> is that same "trust everyone" expressed as data, so a zero prefix
-/// length is refused. And an unspecified address is refused because <c>0.0.0.0</c> is not a proxy.
+/// length is refused. And the unspecified address is refused in both lists and however it is
+/// written — <c>0.0.0.0</c> and <c>::</c> as proxies, <c>0.0.0.0/32</c> and <c>::/128</c> as
+/// networks — because it names no proxy.
+/// </para>
+/// <para>
+/// What is deliberately <em>not</em> policed here is how wide an acceptable network may be. A
+/// minimum prefix length would be an invented rule about somebody else's topology; how small the
+/// trusted range can be is a hosting decision, and the guidance that belongs with it — name an exact
+/// proxy address wherever the edge has one — lives in <c>.env.example</c> and the launch checklist
+/// rather than in a constant here.
 /// </para>
 /// <para>
 /// Disabled is a real answer and the default one. A deployment reached directly, with no proxy in
@@ -140,6 +149,16 @@ public sealed class ReverseProxyOptions
             {
                 return $"{SectionName}:TrustedNetworks must not contain a zero-length prefix; " +
                     "0.0.0.0/0 and ::/0 trust every caller on the internet as a proxy.";
+            }
+
+            // The same rule the proxy list applies, applied to the network's base address, so the
+            // two lists cannot disagree about what the unspecified address means. It names no proxy
+            // however it is written: 0.0.0.0/32 and ::/128 name exactly it, and a wider prefix over
+            // it names it along with a reserved range nothing legitimately connects from.
+            if (IsUnspecified(network.BaseAddress))
+            {
+                return $"{SectionName}:TrustedNetworks must not be built on the unspecified address; " +
+                    "0.0.0.0/32 and ::/128 name no proxy.";
             }
 
             resolvedNetworks.Add(network);

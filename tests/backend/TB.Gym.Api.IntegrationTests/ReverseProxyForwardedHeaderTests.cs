@@ -39,8 +39,14 @@ public sealed class ReverseProxyForwardedHeaderTests
     private const string ProbePath = "/probe";
     private const string ForwardedClient = "198.51.100.10";
     private const string SecondForwardedClient = "198.51.100.11";
+    // Reserved ranges that route nowhere: RFC 5737 documentation blocks, and RFC 2544's benchmarking
+    // block for the untrusted caller so it sits well outside the /24 under test. More to the point,
+    // the framework's default trusted set covers none of them, so an assertion about one of these is
+    // an assertion about this configuration rather than about a default.
     private const string SomeOtherProxy = "203.0.113.10";
-    private const string UntrustedCaller = "203.0.113.200";
+    private const string DocumentationNetwork = "203.0.113.0/24";
+    private const string OutsideDocumentationNetwork = "203.0.114.10";
+    private const string UntrustedCaller = "198.18.0.200";
 
     private readonly List<HttpClient> clients = [];
     private WebApplication? probe;
@@ -125,12 +131,56 @@ public sealed class ReverseProxyForwardedHeaderTests
     }
 
     [TestMethod]
-    public async Task ForwardedHeadersFromAConfiguredTrustedProxyUpdateTheClientAddressAndScheme()
+    public async Task AConfiguredTrustedNetworkCoversAProxyWhoseAddressIsNotFixed()
     {
+        // A network the framework does not already trust, so what is proved is the configuration
+        // rather than the default. 127.0.0.0/8 would prove nothing here: it is the framework's own
+        // default entry, and the assertion would hold with TrustedNetworks empty.
+        var options = new ReverseProxyOptions
+        {
+            Enabled = true,
+            TrustedNetworks = { DocumentationNetwork },
+        };
+        Assert.IsNull(options.Validate());
+
+        var context = await ForwardAsync(options, connectingFrom: SomeOtherProxy);
+
+        Assert.AreEqual(ForwardedClient, context.Connection.RemoteIpAddress?.ToString());
+        Assert.AreEqual("https", context.Request.Scheme);
+    }
+
+    [TestMethod]
+    public async Task AnAddressOutsideTheConfiguredTrustedNetworkIsNotBelieved()
+    {
+        // One address either side of the prefix boundary, so the test says the range is what decides
+        // rather than "some address in a nearby block".
+        var options = new ReverseProxyOptions
+        {
+            Enabled = true,
+            TrustedNetworks = { DocumentationNetwork },
+        };
+        Assert.IsNull(options.Validate());
+
+        var context = await ForwardAsync(options, connectingFrom: OutsideDocumentationNetwork);
+
+        Assert.AreEqual(
+            OutsideDocumentationNetwork,
+            context.Connection.RemoteIpAddress?.ToString(),
+            "An address outside the trusted network rewrote its own address.");
+        Assert.AreEqual("http", context.Request.Scheme);
+    }
+
+    [TestMethod]
+    public async Task TheComposedPipelineAppliesForwardedHeadersOverARealSocket()
+    {
+        // What this proves is the pipeline, not the binding: the middleware is composed when
+        // forwarding is enabled and both headers take effect on a genuine Kestrel request. The
+        // connection is loopback, which the framework trusts by default, so this assertion would
+        // hold with TrustedProxies empty too — the configured-entry cases above are what cover that.
         var client = await StartProbeAsync(new Dictionary<string, string?>
         {
             ["ReverseProxy:Enabled"] = "true",
-            ["ReverseProxy:TrustedProxies:0"] = "127.0.0.1",
+            ["ReverseProxy:TrustedProxies:0"] = SomeOtherProxy,
         });
 
         var observed = await ProbeAsync(client, ForwardedClient, "https");
@@ -140,25 +190,11 @@ public sealed class ReverseProxyForwardedHeaderTests
     }
 
     [TestMethod]
-    public async Task ATrustedNetworkCoversAProxyWhoseAddressIsNotFixed()
+    public async Task DisabledForwardingIgnoresTheHeadersEvenFromLoopbackWhichTheFrameworkTrusts()
     {
-        var client = await StartProbeAsync(new Dictionary<string, string?>
-        {
-            ["ReverseProxy:Enabled"] = "true",
-            ["ReverseProxy:TrustedNetworks:0"] = "127.0.0.0/8",
-        });
-
-        var observed = await ProbeAsync(client, ForwardedClient, "https");
-
-        Assert.AreEqual(ForwardedClient, observed.RemoteIp);
-        Assert.AreEqual("https", observed.Scheme);
-    }
-
-    [TestMethod]
-    public async Task DisabledForwardingIgnoresTheHeadersEvenFromAnAddressThatIsConfiguredAsTrusted()
-    {
-        // The edge is named and would be trusted; the explicit choice not to forward is what decides.
-        // This is the direct, non-proxy deployment, and it must see the request that reached it.
+        // This one does turn on the configuration, and in the strongest direction available over a
+        // socket: loopback is trusted by framework default, so a composed middleware would honour
+        // these headers. Nothing is honoured, which can only be because no middleware was composed.
         var client = await StartProbeAsync(new Dictionary<string, string?>
         {
             ["ReverseProxy:Enabled"] = "false",
@@ -200,6 +236,27 @@ public sealed class ReverseProxyForwardedHeaderTests
         StringAssert.Contains(failure, "Forwarded headers would be accepted from nobody");
         Assert.IsEmpty(options.ResolvedProxies);
         Assert.IsEmpty(options.ResolvedNetworks);
+    }
+
+    [TestMethod]
+    public void AnUnspecifiedNetworkIsRefusedTheSameWayAnUnspecifiedProxyIs()
+    {
+        // The two lists must not disagree about what the unspecified address means. 0.0.0.0 is
+        // already refused as a proxy; 0.0.0.0/32 is the same address wearing CIDR notation.
+        foreach (var nowhere in new[] { "0.0.0.0/32", "::/128" })
+        {
+            var options = new ReverseProxyOptions
+            {
+                Enabled = true,
+                TrustedNetworks = { nowhere },
+            };
+
+            var failure = options.Validate();
+
+            Assert.IsNotNull(failure, $"{nowhere} was accepted as a trusted proxy network.");
+            StringAssert.Contains(failure, "unspecified address");
+            Assert.IsEmpty(options.ResolvedNetworks);
+        }
     }
 
     [TestMethod]
@@ -248,6 +305,37 @@ public sealed class ReverseProxyForwardedHeaderTests
         StringAssert.Contains(
             string.Join(" ", failure.Failures),
             "Forwarded headers would be accepted from nobody");
+    }
+
+    [TestMethod]
+    public async Task TheConfiguredEntriesReachTheResolvedOptionsThroughTheProductionRegistration()
+    {
+        // The seam between "these settings" and "this trusted set". Every behavioural test above
+        // either constructs the options directly or runs over loopback, so without this one nothing
+        // says the indexed configuration keys are bound at all — a section name typo would leave the
+        // deployment trusting only the framework defaults and no test would notice.
+        await PrepareDatabaseNameAsync("tbgym_proxy_binding");
+        using var factory = CreateApiFactory(new Dictionary<string, string?>
+        {
+            ["ReverseProxy:Enabled"] = "true",
+            ["ReverseProxy:TrustedProxies:0"] = SomeOtherProxy,
+            ["ReverseProxy:TrustedNetworks:0"] = DocumentationNetwork,
+        });
+        using var client = factory.CreateClient();
+
+        var options = factory.Services.GetRequiredService<IOptions<ReverseProxyOptions>>().Value;
+
+        Assert.IsTrue(options.Enabled);
+        Assert.ContainsSingle(options.ResolvedProxies);
+        Assert.AreEqual(SomeOtherProxy, options.ResolvedProxies[0].ToString());
+        Assert.ContainsSingle(options.ResolvedNetworks);
+        Assert.AreEqual(DocumentationNetwork, options.ResolvedNetworks[0].ToString());
+
+        // And the composed trusted set carries them alongside the framework's defaults rather than
+        // in place of them.
+        var forwarded = ReverseProxyMiddlewareExtensions.BuildForwardedHeaders(options);
+        Assert.Contains(IPAddress.Parse(SomeOtherProxy), forwarded.KnownProxies);
+        Assert.Contains(IPAddress.IPv6Loopback, forwarded.KnownProxies);
     }
 
     [TestMethod]

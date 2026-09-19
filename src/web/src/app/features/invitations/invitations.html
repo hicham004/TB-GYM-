@@ -108,6 +108,10 @@
                 </span>
                 @if (invitation.developmentActionUrl) {
                   <a [href]="invitation.developmentActionUrl" i18n>Open local link</a>
+                } @else if (invitation.status === 'Pending') {
+                  <span class="hint" i18n>
+                    No local link is held for this invitation. Resend to issue a new one.
+                  </span>
                 }
               </td>
               <td>

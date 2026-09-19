@@ -110,6 +110,10 @@ services:
       # refuses startup rather than accepting forwarded headers from nobody, which would collapse
       # every per-address rate limit onto one partition. The Worker has no HTTP surface and needs
       # none of this.
+      #
+      # One address and one network, at index 0. Both settings are lists, but a variable can only
+      # fill one entry, so a deployment needing several adds ReverseProxy__TrustedProxies__1 and its
+      # siblings to this service's environment in its own configuration rather than to .env.
       ReverseProxy__Enabled: ${TB_GYM_REVERSE_PROXY_ENABLED:-false}
       ReverseProxy__TrustedProxies__0: ${TB_GYM_TRUSTED_PROXY:-}
       ReverseProxy__TrustedNetworks__0: ${TB_GYM_TRUSTED_PROXY_NETWORK:-}

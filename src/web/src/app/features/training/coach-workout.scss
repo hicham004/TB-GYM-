@@ -1,0 +1,24 @@
+:host {
+  display: block;
+  margin-block: 1rem;
+  background: #faf8f5;
+  color: #1c1b19;
+  padding: 1rem;
+  border-radius: 10px;
+}
+h3,
+h4,
+p {
+  overflow-wrap: anywhere;
+}
+.set-comparison {
+  border-block-start: 1px solid #dedad3;
+  padding-block: 0.75rem;
+}
+.note {
+  display: block;
+  white-space: pre-wrap;
+}
+button {
+  min-block-size: 44px;
+}

@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
 import { Component, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -21,6 +22,7 @@ export class Invitations {
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
 
   protected readonly invitations = signal<ClientInvitation[]>([]);
@@ -41,7 +43,9 @@ export class Invitations {
   });
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       if (tenantId && tenantId !== this.loadedTenantId) {
         this.loadedTenantId = tenantId;
@@ -51,34 +55,41 @@ export class Invitations {
   }
 
   protected async create(): Promise<void> {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      return;
-    }
+    return this.scope.run('create', async (owner) => {
+      if (this.form.invalid) {
+        this.form.markAllAsTouched();
+        return;
+      }
 
-    this.submitting.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      const value = this.form.getRawValue();
-      const invitation = await firstValueFrom(
-        this.api.createInvitation({
-          email: value.email,
-          firstName: value.firstName,
-          lastName: value.lastName,
-          phoneNumber: value.phoneNumber || null,
-          birthDate: value.birthDate || null,
-        }),
-      );
-      this.invitations.update((items) => [invitation, ...items]);
-      this.form.reset();
-      this.showForm.set(false);
-      this.notice.set($localize`Invitation created and queued for delivery.`);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The invitation could not be created.`));
-    } finally {
-      this.submitting.set(false);
-    }
+      this.submitting.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        const value = this.form.getRawValue();
+        const invitation = await owner.wait(
+          firstValueFrom(
+            this.api.createInvitation({
+              email: value.email,
+              firstName: value.firstName,
+              lastName: value.lastName,
+              phoneNumber: value.phoneNumber || null,
+              birthDate: value.birthDate || null,
+            }),
+          ),
+        );
+        this.invitations.update((items) => [invitation, ...items]);
+        this.form.reset();
+        this.showForm.set(false);
+        this.notice.set($localize`Invitation created and queued for delivery.`);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`The invitation could not be created.`));
+      } finally {
+        if (owner.current) {
+          this.submitting.set(false);
+        }
+      }
+    });
   }
 
   /**
@@ -89,32 +100,45 @@ export class Invitations {
    * press — a double click, a flaky connection — converges on one generation instead of burning two.
    */
   protected async resend(invitation: ClientInvitation): Promise<void> {
-    await this.runAction(
-      invitation.id,
-      () => this.api.resendInvitation(invitation.id, crypto.randomUUID(), invitation.version),
-      $localize`A new invitation link was sent. Any earlier link no longer works.`,
-    );
+    return this.scope.run('resend', async (owner) => {
+      await owner.wait(
+        this.runAction(
+          invitation.id,
+          () => this.api.resendInvitation(invitation.id, crypto.randomUUID(), invitation.version),
+          $localize`A new invitation link was sent. Any earlier link no longer works.`,
+        ),
+      );
+    });
   }
 
   protected async revoke(invitation: ClientInvitation): Promise<void> {
-    await this.runAction(
-      invitation.id,
-      () => this.api.revokeInvitation(invitation.id, invitation.version),
-      $localize`Invitation revoked.`,
-    );
+    return this.scope.run('revoke', async (owner) => {
+      await owner.wait(
+        this.runAction(
+          invitation.id,
+          () => this.api.revokeInvitation(invitation.id, invitation.version),
+          $localize`Invitation revoked.`,
+        ),
+      );
+    });
   }
 
   private async load(): Promise<void> {
-    this.loading.set(true);
-    this.clearMessages();
-    try {
-      this.invitations.set(await firstValueFrom(this.api.getInvitations()));
-    } catch (error) {
-      this.invitations.set([]);
-      this.error.set(apiErrorMessage(error, $localize`Invitations could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+    return this.scope.run('load', async (owner) => {
+      this.loading.set(true);
+      this.clearMessages();
+      try {
+        this.invitations.set(await owner.wait(firstValueFrom(this.api.getInvitations())));
+      } catch (error) {
+        if (!owner.current) return;
+        this.invitations.set([]);
+        this.error.set(apiErrorMessage(error, $localize`Invitations could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
+      }
+    });
   }
 
   private async runAction(
@@ -122,25 +146,42 @@ export class Invitations {
     request: () => ReturnType<ApiClient['resendInvitation']>,
     successMessage: string,
   ): Promise<void> {
-    this.actingOn.set(invitationId);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      const updated = await firstValueFrom(request());
-      this.invitations.update((items) =>
-        items.map((item) => (item.id === updated.id ? updated : item)),
-      );
-      this.notice.set(successMessage);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The invitation could not be updated.`));
-    } finally {
-      this.actingOn.set(null);
-    }
+    return this.scope.run('runAction', async (owner) => {
+      this.actingOn.set(invitationId);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        const updated = await owner.wait(firstValueFrom(request()));
+        this.invitations.update((items) =>
+          items.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        this.notice.set(successMessage);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`The invitation could not be updated.`));
+      } finally {
+        if (owner.current) {
+          this.actingOn.set(null);
+        }
+      }
+    });
   }
 
   private clearMessages(): void {
     this.error.set(null);
     this.notice.set(null);
+  }
+
+  private resetTenantState(): void {
+    this.loadedTenantId = null;
+    this.invitations.set([]);
+    this.loading.set(false);
+    this.submitting.set(false);
+    this.actingOn.set(null);
+    this.error.set(null);
+    this.notice.set(null);
+    this.showForm.set(false);
+    this.form.reset();
   }
 }
 

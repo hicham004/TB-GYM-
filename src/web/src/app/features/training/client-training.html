@@ -317,6 +317,19 @@
             <div class="mesocycle-session">
               <div>
                 <strong>{{ session.name }}</strong>
+                @if (session.workoutExecutionId) {
+                  <details>
+                    <summary i18n>View workout and notes</summary>
+                    @defer (on interaction) {
+                      <app-coach-workout
+                        [clientId]="clientId()"
+                        [workoutId]="session.workoutExecutionId"
+                      />
+                    } @placeholder {
+                      <button class="secondary-button" type="button" i18n>Load workout</button>
+                    }
+                  </details>
+                }
                 <span>
                   {{ session.scheduledDate }} &middot; {{ session.exercises.length }}
                   <span i18n>exercises</span>
@@ -469,6 +482,7 @@
             <th>e1RM</th>
             <th i18n>Volume</th>
             <th i18n>Change</th>
+            <th i18n>Client note</th>
           </tr>
         </thead>
         <tbody>
@@ -491,6 +505,7 @@
                   -
                 }
               </td>
+              <td dir="auto">{{ item.note ?? '—' }}</td>
             </tr>
           }
         </tbody>

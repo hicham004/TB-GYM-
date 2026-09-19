@@ -45,15 +45,18 @@ async function createHarness(
   await TestBed.configureTestingModule({
     imports: [ProgressView],
     providers: [
-      { provide: ApiClient, useValue: { createMediaAccess } },
+      { provide: ApiClient, useValue: {
+        createMediaAccess, getMyProgress: () => of(null),
+        getMyBodyMeasurements: () => of(null), getMyProgressPhotos: () => of(null),
+      } },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
-      // No selected tenant, so the load effect stays inert and only photo state is exercised.
-      { provide: TenantStore, useValue: { selectedTenantId: signal(null) } },
+      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ProgressView);
   fixture.detectChanges();
+  await new Promise((resolve) => setTimeout(resolve));
   return {
     harness: fixture.componentInstance as unknown as ProgressPhotoHarness,
     createMediaAccess,

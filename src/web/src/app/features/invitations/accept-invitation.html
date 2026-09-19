@@ -6,6 +6,11 @@
       <p class="eyebrow" i18n>Client invitation</p>
       <h1 i18n>Link unavailable</h1>
       <p class="form-error" role="alert">{{ error() }}</p>
+      @if (!spent() && token()) {
+        <button class="primary-button" type="button" [disabled]="loading()" (click)="load()" i18n>
+          Try again
+        </button>
+      }
       <a routerLink="/auth/sign-in" i18n>Go to sign in</a>
     </div>
   } @else if (invitation(); as invite) {
@@ -39,10 +44,20 @@
       } @else if (signedInUser() && !signedInWithInvitedEmail()) {
         <p class="notice" i18n>
           You are signed in as {{ signedInUser()?.email }}, but this invitation belongs to
-          {{ invite.email }}.
+          {{ invite.email }}. Sign out here to continue as {{ invite.email }} — you will stay on
+          this invitation.
         </p>
-        <button class="primary-button" type="button" (click)="signOut()" i18n>
-          Switch account
+        @if (error()) {
+          <p class="form-error" role="alert">{{ error() }}</p>
+        }
+        <button
+          class="primary-button"
+          type="button"
+          [disabled]="submitting() || loading()"
+          (click)="signOut()"
+          i18n
+        >
+          Sign out and continue
         </button>
       } @else if (invite.requiresExistingAccountSignIn && !signedInUser()) {
         <p class="notice" i18n>An account already exists for this email. Sign in to continue.</p>
@@ -60,12 +75,56 @@
             <h2 i18n>Create your client account</h2>
             <label>
               <span i18n>Display name</span>
-              <input type="text" formControlName="displayName" autocomplete="name" />
+              <input
+                type="text"
+                formControlName="displayName"
+                autocomplete="name"
+                [attr.aria-invalid]="
+                  accountForm.controls.displayName.touched &&
+                  accountForm.controls.displayName.invalid
+                    ? 'true'
+                    : null
+                "
+                [attr.aria-describedby]="
+                  accountForm.controls.displayName.touched &&
+                  accountForm.controls.displayName.invalid
+                    ? 'invitation-display-name-error'
+                    : null
+                "
+              />
+              @if (
+                accountForm.controls.displayName.touched && accountForm.controls.displayName.invalid
+              ) {
+                <small id="invitation-display-name-error" class="form-error" role="alert" i18n>
+                  Enter the client display name.
+                </small>
+              }
             </label>
             <label>
               <span i18n>Password</span>
-              <input type="password" formControlName="password" autocomplete="new-password" />
-              <small i18n>At least 12 characters with upper, lower, number, and symbol.</small>
+              <input
+                type="password"
+                formControlName="password"
+                autocomplete="new-password"
+                [attr.aria-invalid]="
+                  accountForm.controls.password.touched && accountForm.controls.password.invalid
+                    ? 'true'
+                    : null
+                "
+                [attr.aria-describedby]="
+                  accountForm.controls.password.touched && accountForm.controls.password.invalid
+                    ? 'invitation-password-help invitation-password-error'
+                    : 'invitation-password-help'
+                "
+              />
+              <small id="invitation-password-help" i18n>
+                At least 12 characters with upper, lower, number, and symbol.
+              </small>
+              @if (accountForm.controls.password.touched && accountForm.controls.password.invalid) {
+                <small id="invitation-password-error" class="form-error" role="alert" i18n>
+                  Use a password with at least 12 characters.
+                </small>
+              }
             </label>
             <label>
               <span i18n>Confirm password</span>
@@ -73,7 +132,27 @@
                 type="password"
                 formControlName="confirmPassword"
                 autocomplete="new-password"
+                [attr.aria-invalid]="
+                  accountForm.controls.confirmPassword.touched &&
+                  accountForm.controls.confirmPassword.invalid
+                    ? 'true'
+                    : null
+                "
+                [attr.aria-describedby]="
+                  accountForm.controls.confirmPassword.touched &&
+                  accountForm.controls.confirmPassword.invalid
+                    ? 'invitation-confirm-password-error'
+                    : null
+                "
               />
+              @if (
+                accountForm.controls.confirmPassword.touched &&
+                accountForm.controls.confirmPassword.invalid
+              ) {
+                <small id="invitation-confirm-password-error" class="form-error" role="alert" i18n>
+                  Confirm the password.
+                </small>
+              }
             </label>
             @if (error()) {
               <p class="form-error" role="alert">{{ error() }}</p>

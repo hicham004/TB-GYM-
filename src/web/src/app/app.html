@@ -19,14 +19,16 @@
 
     <div id="primary-navigation" class="authenticated-nav" [class.open]="menuOpen()">
       <nav aria-label="Primary navigation" i18n-aria-label>
-        <a
-          routerLink="/"
-          routerLinkActive="active"
-          [routerLinkActiveOptions]="{ exact: true }"
-          i18n
-        >
-          Dashboard
-        </a>
+        @if (!tenants.isClient()) {
+          <a
+            routerLink="/"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+            i18n
+          >
+            Dashboard
+          </a>
+        }
         @if (tenants.canCoach()) {
           <a routerLink="/clients" routerLinkActive="active" i18n>Clients</a>
           <a routerLink="/training/programs" routerLinkActive="active" i18n>Programs</a>
@@ -36,19 +38,13 @@
           <a routerLink="/products" routerLinkActive="active" i18n>Products</a>
           <a routerLink="/invitations" routerLinkActive="active" i18n>Invitations</a>
         }
-        @if (tenants.isClient()) {
-          <a routerLink="/training/today" routerLinkActive="active" i18n>Today</a>
-          <a routerLink="/progress" routerLinkActive="active" i18n>Progress</a>
-          <a routerLink="/checkins/me" routerLinkActive="active" i18n>Check-ins</a>
-          <a routerLink="/profile" routerLinkActive="active" i18n>My profile</a>
-        }
         @if (tenants.isOwner()) {
           <a routerLink="/workspace" routerLinkActive="active" i18n>Workspace</a>
         }
         <!-- Message unread is counted and shown separately from notification unread. An unread
              notification is a workspace event somebody scheduled; an unread message is a person
              waiting for a reply. One badge summing them could be neither explained nor acted on. -->
-        @if (messages.isAvailable()) {
+        @if (messages.isAvailable() && !tenants.isClient()) {
           <a routerLink="/messages" routerLinkActive="active" class="with-badge">
             <span i18n>Messages</span>
             @if (messages.unread() > 0) {
@@ -105,6 +101,32 @@
   }
 </header>
 
-<main [class.app-main]="auth.user()">
+@if (auth.user() && tenants.isClient()) {
+  <nav class="client-tabs" aria-label="Client navigation" i18n-aria-label>
+    <a
+      routerLink="/"
+      routerLinkActive="active"
+      [routerLinkActiveOptions]="{ exact: true }"
+      ariaCurrentWhenActive="page"
+      i18n
+      >Today</a
+    >
+    <a routerLink="/checkins/me" routerLinkActive="active" ariaCurrentWhenActive="page" i18n
+      >Check-ins</a
+    >
+    <a routerLink="/messages" routerLinkActive="active" ariaCurrentWhenActive="page">
+      <span i18n>Messages</span>
+      @if (messages.isAvailable() && messages.unread() > 0) {
+        <span class="badge" aria-hidden="true">{{ messages.unread() }}</span>
+        <span class="visually-hidden" i18n>{{ messages.unread() }} unread messages</span>
+      }
+    </a>
+    <a routerLink="/progress/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page" i18n
+      >Progress</a
+    >
+    <a routerLink="/me" routerLinkActive="active" ariaCurrentWhenActive="page" i18n>Me</a>
+  </nav>
+}
+<main [class.app-main]="auth.user()" [class.client-main]="auth.user() && tenants.isClient()">
   <router-outlet />
 </main>

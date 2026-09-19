@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { Component, effect, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -16,6 +17,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 export class Clients {
   private readonly api = inject(ApiClient);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
 
   protected readonly clients = signal<ClientSummary[]>([]);
@@ -24,7 +26,9 @@ export class Clients {
   protected readonly onboardingStatusLabel = onboardingStatusLabel;
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       if (tenantId && tenantId !== this.loadedTenantId) {
         this.loadedTenantId = tenantId;
@@ -34,15 +38,27 @@ export class Clients {
   }
 
   private async load(): Promise<void> {
-    this.loading.set(true);
+    return this.scope.run('load', async (owner) => {
+      this.loading.set(true);
+      this.error.set(null);
+      try {
+        this.clients.set(await owner.wait(firstValueFrom(this.api.getClients())));
+      } catch (error) {
+        if (!owner.current) return;
+        this.clients.set([]);
+        this.error.set(apiErrorMessage(error, $localize`Clients could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
+      }
+    });
+  }
+
+  private resetTenantState(): void {
+    this.loadedTenantId = null;
+    this.clients.set([]);
+    this.loading.set(false);
     this.error.set(null);
-    try {
-      this.clients.set(await firstValueFrom(this.api.getClients()));
-    } catch (error) {
-      this.clients.set([]);
-      this.error.set(apiErrorMessage(error, $localize`Clients could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
   }
 }

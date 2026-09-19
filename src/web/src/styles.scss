@@ -28,6 +28,53 @@
   line-height: 1.5;
 }
 
+@font-face {
+  font-family: 'Notebook Plex';
+  src: url('/fonts/ibm-plex/IBMPlexSans-Regular.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Notebook Plex';
+  src: url('/fonts/ibm-plex/IBMPlexSans-SemiBold.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Notebook Plex Arabic';
+  src: url('/fonts/ibm-plex/IBMPlexSansArabic-Regular.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Notebook Plex Arabic';
+  src: url('/fonts/ibm-plex/IBMPlexSansArabic-SemiBold.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+app-client-today,
+app-today-training,
+app-coach-workout,
+.client-tabs {
+  font-family: 'Notebook Plex', 'Notebook Plex Arabic', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+app-client-today,
+app-today-training,
+app-coach-workout {
+  h1,
+  h2,
+  h3,
+  h4,
+  strong {
+    font-weight: 600;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -59,7 +106,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 a:focus-visible {
-  outline: 3px solid rgb(15 118 110 / 24%);
+  outline: 3px solid #1c1b19;
   outline-offset: 2px;
 }
 

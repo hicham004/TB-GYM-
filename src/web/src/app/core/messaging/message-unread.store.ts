@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../tenancy/tenant-async-scope';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../api/api-client';
@@ -23,6 +24,9 @@ export class MessageUnreadStore {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(
+    () => this.tenants.selectedMembership()?.tenantId ?? null,
+  );
   /**
    * Injected here so the badge keeps the connection alive for the whole session rather than only
    * while the lazy `/messages` route is loaded. A member who never opens the screen still has to see
@@ -55,7 +59,9 @@ export class MessageUnreadStore {
   });
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const key = this.contextKey();
       if (key === this.context) {
         return;
@@ -77,6 +83,7 @@ export class MessageUnreadStore {
     // only the server can answer — it depends on which conversations are still accessible, which
     // messages are still present and where this reader's cursor is.
     effect(() => {
+      this.scope.epoch();
       const requests = this.realtime.listRefreshRequests();
       if (requests === this.handledRefreshRequests) {
         return;
@@ -91,11 +98,13 @@ export class MessageUnreadStore {
 
   /** Re-reads the count for the current context, if there is one. */
   async refresh(): Promise<void> {
-    if (this.contextKey() === null) {
-      return;
-    }
+    return this.scope.run('refresh', async (owner) => {
+      if (this.contextKey() === null) {
+        return;
+      }
 
-    await this.load(++this.generation);
+      await owner.wait(this.load(++this.generation));
+    });
   }
 
   /** Used when a screen has just read an authoritative total for the current context. */
@@ -112,23 +121,35 @@ export class MessageUnreadStore {
   }
 
   private async load(generation: number): Promise<void> {
-    this.loadingState.set(true);
-    try {
-      const unread = await firstValueFrom(this.api.getMessagingUnreadCount());
-      if (this.generation === generation) {
-        this.unreadState.set(Math.max(0, unread));
+    return this.scope.run('load', async (owner) => {
+      this.loadingState.set(true);
+      try {
+        const unread = await owner.wait(firstValueFrom(this.api.getMessagingUnreadCount()));
+        if (this.generation === generation) {
+          this.unreadState.set(Math.max(0, unread));
+        }
+      } catch {
+        if (!owner.current) return;
+        // A refused or failed count shows no badge rather than an error: the topbar is not the place
+        // to report that a background read did not work, and the messages screen reports its own
+        // failures where the user is looking.
+        if (this.generation === generation) {
+          this.unreadState.set(0);
+        }
+      } finally {
+        if (owner.current) {
+          if (this.generation === generation) {
+            this.loadingState.set(false);
+          }
+        }
       }
-    } catch {
-      // A refused or failed count shows no badge rather than an error: the topbar is not the place
-      // to report that a background read did not work, and the messages screen reports its own
-      // failures where the user is looking.
-      if (this.generation === generation) {
-        this.unreadState.set(0);
-      }
-    } finally {
-      if (this.generation === generation) {
-        this.loadingState.set(false);
-      }
-    }
+    });
+  }
+
+  private resetTenantState(): void {
+    this.unreadState.set(0);
+    this.loadingState.set(false);
+    ++this.generation;
+    this.context = null;
   }
 }

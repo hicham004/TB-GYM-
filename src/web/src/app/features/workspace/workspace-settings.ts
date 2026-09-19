@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { Component, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -18,6 +19,7 @@ export class WorkspaceSettings {
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
   private workspace: WorkspaceDetails | null = null;
 
@@ -35,7 +37,9 @@ export class WorkspaceSettings {
   });
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       if (tenantId && tenantId !== this.loadedTenantId) {
         this.loadedTenantId = tenantId;
@@ -45,48 +49,60 @@ export class WorkspaceSettings {
   }
 
   protected async save(): Promise<void> {
-    if (!this.workspace || this.form.invalid) {
-      this.form.markAllAsTouched();
-      return;
-    }
+    return this.scope.run('save', async (owner) => {
+      if (!this.workspace || this.form.invalid) {
+        this.form.markAllAsTouched();
+        return;
+      }
 
-    this.saving.set(true);
-    this.error.set(null);
-    this.notice.set(null);
-    try {
-      await this.csrf.refresh();
-      const value = this.form.getRawValue();
-      this.workspace = await firstValueFrom(
-        this.api.updateWorkspace({
-          ...this.workspace,
-          name: value.name,
-          timeZoneId: value.timeZoneId,
-          defaultCulture: value.defaultCulture,
-          defaultCurrencyCode: value.defaultCurrencyCode.toUpperCase(),
-          weekStartsOn: value.weekStartsOn,
-        }),
-      );
-      this.patch(this.workspace);
-      await this.tenants.load(this.workspace.id);
-      this.notice.set($localize`Workspace settings saved.`);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Workspace settings could not be saved.`));
-    } finally {
-      this.saving.set(false);
-    }
+      this.saving.set(true);
+      this.error.set(null);
+      this.notice.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        const value = this.form.getRawValue();
+        this.workspace = await owner.wait(
+          firstValueFrom(
+            this.api.updateWorkspace({
+              ...this.workspace,
+              name: value.name,
+              timeZoneId: value.timeZoneId,
+              defaultCulture: value.defaultCulture,
+              defaultCurrencyCode: value.defaultCurrencyCode.toUpperCase(),
+              weekStartsOn: value.weekStartsOn,
+            }),
+          ),
+        );
+        this.patch(this.workspace);
+        await owner.wait(this.tenants.load(this.workspace.id));
+        this.notice.set($localize`Workspace settings saved.`);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`Workspace settings could not be saved.`));
+      } finally {
+        if (owner.current) {
+          this.saving.set(false);
+        }
+      }
+    });
   }
 
   private async load(): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
-    try {
-      this.workspace = await firstValueFrom(this.api.getWorkspace());
-      this.patch(this.workspace);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Workspace settings could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+    return this.scope.run('load', async (owner) => {
+      this.loading.set(true);
+      this.error.set(null);
+      try {
+        this.workspace = await owner.wait(firstValueFrom(this.api.getWorkspace()));
+        this.patch(this.workspace);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`Workspace settings could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
+      }
+    });
   }
 
   private patch(workspace: WorkspaceDetails): void {
@@ -98,5 +114,15 @@ export class WorkspaceSettings {
       defaultCurrencyCode: workspace.defaultCurrencyCode,
       weekStartsOn: workspace.weekStartsOn,
     });
+  }
+
+  private resetTenantState(): void {
+    this.loadedTenantId = null;
+    this.workspace = null;
+    this.loading.set(false);
+    this.saving.set(false);
+    this.error.set(null);
+    this.notice.set(null);
+    this.form.reset();
   }
 }

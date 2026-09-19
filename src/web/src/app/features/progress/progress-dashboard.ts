@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
@@ -19,6 +20,7 @@ export class ProgressDashboardView {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
   private loadGeneration = 0;
 
@@ -30,7 +32,9 @@ export class ProgressDashboardView {
   protected readonly grantedPreviewIds = signal<ReadonlySet<string>>(new Set());
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       const clientId = this.clientId();
       const key = tenantId ? `${tenantId}:${clientId ?? 'me'}` : null;
@@ -75,36 +79,41 @@ export class ProgressDashboardView {
   }
 
   private async load(): Promise<void> {
-    const key = this.loadedKey;
-    const generation = ++this.loadGeneration;
-    this.loading.set(true);
-    this.error.set(null);
-    this.grantedPreviewIds.set(new Set());
-    try {
-      const clientId = this.clientId();
-      const dashboard = clientId
-        ? await firstValueFrom(this.api.getClientProgressDashboard(clientId))
-        : await firstValueFrom(this.api.getMyProgressDashboard());
-      if (!this.ownsLoad(key, generation)) {
-        return;
-      }
+    return this.scope.run('load', async (owner) => {
+      const key = this.loadedKey;
+      const generation = ++this.loadGeneration;
+      this.loading.set(true);
+      this.error.set(null);
+      this.grantedPreviewIds.set(new Set());
+      try {
+        const clientId = this.clientId();
+        const dashboard = clientId
+          ? await owner.wait(firstValueFrom(this.api.getClientProgressDashboard(clientId)))
+          : await owner.wait(firstValueFrom(this.api.getMyProgressDashboard()));
+        if (!this.ownsLoad(key, generation)) {
+          return;
+        }
 
-      this.dashboard.set(dashboard);
-      await this.grantPreviews(dashboard, key, generation);
-    } catch (error) {
-      if (!this.ownsLoad(key, generation)) {
-        return;
-      }
+        this.dashboard.set(dashboard);
+        await owner.wait(this.grantPreviews(dashboard, key, generation));
+      } catch (error) {
+        if (!owner.current) return;
+        if (!this.ownsLoad(key, generation)) {
+          return;
+        }
 
-      this.dashboard.set(null);
-      this.error.set(
-        apiErrorMessage(error, $localize`The progress dashboard could not be loaded.`),
-      );
-    } finally {
-      if (this.ownsLoad(key, generation)) {
-        this.loading.set(false);
+        this.dashboard.set(null);
+        this.error.set(
+          apiErrorMessage(error, $localize`The progress dashboard could not be loaded.`),
+        );
+      } finally {
+        if (owner.current) {
+          if (this.ownsLoad(key, generation)) {
+            this.loading.set(false);
+          }
+        }
       }
-    }
+    });
   }
 
   /**
@@ -124,29 +133,41 @@ export class ProgressDashboardView {
     key: string | null,
     generation: number,
   ): Promise<void> {
-    const assetIds = previewAssetIds(dashboard);
-    if (assetIds.length === 0) {
-      return;
-    }
-
-    try {
-      await this.csrf.refresh();
-      if (!this.ownsLoad(key, generation)) {
+    return this.scope.run('grantPreviews', async (owner) => {
+      const assetIds = previewAssetIds(dashboard);
+      if (assetIds.length === 0) {
         return;
       }
 
-      const batch = await firstValueFrom(this.api.createMediaAccessBatch(assetIds));
-      if (this.ownsLoad(key, generation)) {
-        this.grantedPreviewIds.set(new Set(batch.items.map((item) => item.assetId)));
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (!this.ownsLoad(key, generation)) {
+          return;
+        }
+
+        const batch = await owner.wait(firstValueFrom(this.api.createMediaAccessBatch(assetIds)));
+        if (this.ownsLoad(key, generation)) {
+          this.grantedPreviewIds.set(new Set(batch.items.map((item) => item.assetId)));
+        }
+      } catch {
+        if (!owner.current) return;
+        if (this.ownsLoad(key, generation)) {
+          this.grantedPreviewIds.set(new Set());
+        }
       }
-    } catch {
-      if (this.ownsLoad(key, generation)) {
-        this.grantedPreviewIds.set(new Set());
-      }
-    }
+    });
   }
 
   private ownsLoad(key: string | null, generation: number): boolean {
     return this.loadedKey === key && this.loadGeneration === generation;
+  }
+
+  private resetTenantState(): void {
+    this.loadedKey = null;
+    ++this.loadGeneration;
+    this.dashboard.set(null);
+    this.loading.set(false);
+    this.error.set(null);
+    this.grantedPreviewIds.set(new Set());
   }
 }

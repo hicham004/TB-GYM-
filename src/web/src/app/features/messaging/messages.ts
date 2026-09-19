@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
 import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -18,6 +19,7 @@ import {
   type ConversationRealtimeSink,
 } from '../../core/messaging/messaging-realtime.service';
 import { CommandKeys } from './command-keys';
+import { ConversationLaunch } from './conversation-launch';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
@@ -65,8 +67,10 @@ export class Messages {
   private readonly csrf = inject(CsrfService);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly unreadStore = inject(MessageUnreadStore);
   private readonly realtime = inject(MessagingRealtimeService);
+  private readonly conversationLaunch = inject(ConversationLaunch);
 
   /** Bumped whenever the recipient or the workspace changes. */
   private contextGeneration = 0;
@@ -168,7 +172,9 @@ export class Messages {
   });
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const key = this.contextKey();
       if (key === this.context) {
         return;
@@ -189,6 +195,7 @@ export class Messages {
     // service has already coalesced the burst; this turns one coalesced signal into one bounded
     // list and unread refresh. There is no timer here and nothing polls.
     effect(() => {
+      this.scope.epoch();
       const requests = this.realtime.listRefreshRequests();
       if (requests === this.handledListRefresh) {
         return;
@@ -281,179 +288,204 @@ export class Messages {
   }
 
   protected async refresh(): Promise<void> {
-    const generation = this.contextGeneration;
-    if (this.contextKey() === null) {
-      return;
-    }
+    return this.scope.run('refresh', async (owner) => {
+      const generation = this.contextGeneration;
+      if (this.contextKey() === null) {
+        return;
+      }
 
-    await this.loadConversations(generation);
-    if (this.contextGeneration !== generation) {
-      return;
-    }
+      await owner.wait(this.loadConversations(generation));
+      if (this.contextGeneration !== generation) {
+        return;
+      }
 
-    const selected = this.selectedId();
-    if (selected !== null) {
-      await this.loadThread(selected, generation, this.threadGeneration);
-    }
+      const selected = this.selectedId();
+      if (selected !== null) {
+        await owner.wait(this.loadThread(selected, generation, this.threadGeneration));
+      }
 
-    await this.unreadStore.refresh();
+      await owner.wait(this.unreadStore.refresh());
+    });
   }
 
   protected async loadMoreConversations(): Promise<void> {
-    const generation = this.contextGeneration;
-    if (!this.conversationsHasMore() || this.listLoadingMore() || this.listLoading()) {
-      return;
-    }
-
-    const request = ++this.listRequest;
-    this.listLoadingMore.set(true);
-    this.error.set(null);
-    try {
-      const page = await firstValueFrom(
-        this.api.listConversations(
-          this.nextActivityCursor(),
-          this.nextIdCursor(),
-          conversationPageSize,
-        ),
-      );
-      if (!this.ownsList(generation, request)) {
+    return this.scope.run('conversations', async (owner) => {
+      const generation = this.contextGeneration;
+      if (!this.conversationsHasMore() || this.listLoadingMore() || this.listLoading()) {
         return;
       }
 
-      // Appended by identifier: a conversation whose activity moved between the two requests can
-      // appear in both pages, and a duplicated key is a rendering error rather than a cosmetic one.
-      const seen = new Set(this.conversations().map((conversation) => conversation.id));
-      this.conversations.update((loaded) => [
-        ...loaded,
-        ...page.items.filter((conversation) => !seen.has(conversation.id)),
-      ]);
-      this.applyCursor(page);
-    } catch (error) {
-      if (this.ownsList(generation, request)) {
-        this.error.set(apiErrorMessage(error, $localize`More conversations could not be loaded.`));
+      const request = ++this.listRequest;
+      this.listLoadingMore.set(true);
+      this.error.set(null);
+      try {
+        const page = await owner.wait(
+          firstValueFrom(
+            this.api.listConversations(
+              this.nextActivityCursor(),
+              this.nextIdCursor(),
+              conversationPageSize,
+            ),
+          ),
+        );
+        if (!this.ownsList(generation, request)) {
+          return;
+        }
+
+        // Appended by identifier: a conversation whose activity moved between the two requests can
+        // appear in both pages, and a duplicated key is a rendering error rather than a cosmetic one.
+        const seen = new Set(this.conversations().map((conversation) => conversation.id));
+        this.conversations.update((loaded) => [
+          ...loaded,
+          ...page.items.filter((conversation) => !seen.has(conversation.id)),
+        ]);
+        this.applyCursor(page);
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.ownsList(generation, request)) {
+          this.error.set(
+            apiErrorMessage(error, $localize`More conversations could not be loaded.`),
+          );
+        }
+      } finally {
+        if (owner.current) {
+          if (this.ownsList(generation, request)) {
+            this.listLoadingMore.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.ownsList(generation, request)) {
-        this.listLoadingMore.set(false);
-      }
-    }
+    });
   }
 
   protected async select(conversation: Conversation): Promise<void> {
-    if (this.selectedId() === conversation.id) {
-      return;
-    }
+    return this.scope.run('select', async (owner) => {
+      if (this.selectedId() === conversation.id) {
+        return;
+      }
 
-    const generation = this.contextGeneration;
-    // The thread generation moves first, so anything already in flight for the previous conversation
-    // is invalidated before the new one is asked for.
-    const thread = ++this.threadGeneration;
-    this.resetThread();
-    this.selectedId.set(conversation.id);
-    if (!conversation.isAvailable) {
-      // The list already carries the decision, so a refused conversation explains itself without a
-      // request that would only be refused again.
-      this.deniedReason.set(conversation.accessReason);
-      return;
-    }
+      const generation = this.contextGeneration;
+      // The thread generation moves first, so anything already in flight for the previous conversation
+      // is invalidated before the new one is asked for.
+      const thread = ++this.threadGeneration;
+      this.resetThread();
+      this.selectedId.set(conversation.id);
+      if (!conversation.isAvailable) {
+        // The list already carries the decision, so a refused conversation explains itself without a
+        // request that would only be refused again.
+        this.deniedReason.set(conversation.accessReason);
+        return;
+      }
 
-    await this.loadThread(conversation.id, generation, thread);
+      await owner.wait(this.loadThread(conversation.id, generation, thread));
+    });
   }
 
   protected async loadOlder(): Promise<void> {
-    const conversationId = this.selectedId();
-    const cursor = this.oldestSequence();
-    if (
-      conversationId === null ||
-      cursor === null ||
-      !this.hasOlder() ||
-      this.threadLoadingOlder()
-    ) {
-      return;
-    }
-
-    const generation = this.contextGeneration;
-    const thread = this.threadGeneration;
-    const request = ++this.historyRequest;
-    this.threadLoadingOlder.set(true);
-    this.error.set(null);
-    try {
-      const page = await firstValueFrom(
-        this.api.listConversationMessages(conversationId, cursor, messagePageSize),
-      );
-      if (!this.ownsThread(generation, thread, request)) {
+    return this.scope.run('history', async (owner) => {
+      const conversationId = this.selectedId();
+      const cursor = this.oldestSequence();
+      if (
+        conversationId === null ||
+        cursor === null ||
+        !this.hasOlder() ||
+        this.threadLoadingOlder()
+      ) {
         return;
       }
 
-      // Merged by identifier and re-sorted by sequence, so an overlapping page cannot duplicate a
-      // row and a message that arrived at the tip cannot stall paging backwards.
-      this.messages.update((loaded) => mergeOlder(loaded, page.items));
-      this.hasOlder.set(page.items.length > 0 && page.hasOlder);
-      // The cursor advances only when the page actually contained something older; otherwise Load
-      // older would ask for the same position again for ever.
-      this.oldestSequence.set(page.items.length > 0 ? page.oldestSequence : null);
-      this.latestSequence.set(page.latestSequence);
-    } catch (error) {
-      if (this.ownsThread(generation, thread, request)) {
-        this.error.set(apiErrorMessage(error, $localize`Older messages could not be loaded.`));
+      const generation = this.contextGeneration;
+      const thread = this.threadGeneration;
+      const request = ++this.historyRequest;
+      this.threadLoadingOlder.set(true);
+      this.error.set(null);
+      try {
+        const page = await owner.wait(
+          firstValueFrom(
+            this.api.listConversationMessages(conversationId, cursor, messagePageSize),
+          ),
+        );
+        if (!this.ownsThread(generation, thread, request)) {
+          return;
+        }
+
+        // Merged by identifier and re-sorted by sequence, so an overlapping page cannot duplicate a
+        // row and a message that arrived at the tip cannot stall paging backwards.
+        this.messages.update((loaded) => mergeOlder(loaded, page.items));
+        this.hasOlder.set(page.items.length > 0 && page.hasOlder);
+        // The cursor advances only when the page actually contained something older; otherwise Load
+        // older would ask for the same position again for ever.
+        this.oldestSequence.set(page.items.length > 0 ? page.oldestSequence : null);
+        this.latestSequence.set(page.latestSequence);
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.ownsThread(generation, thread, request)) {
+          this.error.set(apiErrorMessage(error, $localize`Older messages could not be loaded.`));
+        }
+      } finally {
+        if (owner.current) {
+          if (this.ownsThread(generation, thread, request)) {
+            this.threadLoadingOlder.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.ownsThread(generation, thread, request)) {
-        this.threadLoadingOlder.set(false);
-      }
-    }
+    });
   }
 
   protected async send(): Promise<void> {
-    const conversationId = this.selectedId();
-    if (conversationId === null || this.busy()) {
-      return;
-    }
-
-    // The attempt is recorded first, so every outstanding reason becomes due whether or not the
-    // attempt gets as far as the server. A refused send reaches no API and says so out loud.
-    this.composerAttempt.attempt();
-    if (this.composerIssues().length > 0) {
-      this.composerSummary()?.nativeElement.focus();
-      return;
-    }
-
-    const generation = this.contextGeneration;
-    const thread = this.threadGeneration;
-    const body = this.draft().trim();
-    // Retained across failures. A lost response followed by a second click must reach the server as
-    // the same command, or the message it already wrote is written twice.
-    const idempotencyKey = this.commandKeys.for('send', conversationId, body);
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      await this.csrf.refresh();
-      if (!this.owns(generation, thread)) {
+    return this.scope.run('send', async (owner) => {
+      const conversationId = this.selectedId();
+      if (conversationId === null || this.busy()) {
         return;
       }
 
-      const sent = await firstValueFrom(
-        this.api.sendConversationMessage(conversationId, body, idempotencyKey),
-      );
-      if (!this.owns(generation, thread)) {
+      // The attempt is recorded first, so every outstanding reason becomes due whether or not the
+      // attempt gets as far as the server. A refused send reaches no API and says so out loud.
+      this.composerAttempt.attempt();
+      if (this.composerIssues().length > 0) {
+        this.composerSummary()?.nativeElement.focus();
         return;
       }
 
-      this.messages.update((loaded) => mergeNewer(loaded, [sent]));
-      this.latestSequence.set(Math.max(this.latestSequence(), sent.sequence));
-      this.applyToPreview(sent);
-      this.commandKeys.release('send', conversationId);
-      this.draft.set('');
-      this.composerAttempt.reset();
-    } catch (error) {
-      if (this.owns(generation, thread)) {
-        this.reportFailure(error, $localize`This message could not be sent.`);
+      const generation = this.contextGeneration;
+      const thread = this.threadGeneration;
+      const body = this.draft().trim();
+      // Retained across failures. A lost response followed by a second click must reach the server as
+      // the same command, or the message it already wrote is written twice.
+      const idempotencyKey = this.commandKeys.for('send', conversationId, body);
+      this.busy.set(true);
+      this.error.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (!this.owns(generation, thread)) {
+          return;
+        }
+
+        const sent = await owner.wait(
+          firstValueFrom(this.api.sendConversationMessage(conversationId, body, idempotencyKey)),
+        );
+        if (!this.owns(generation, thread)) {
+          return;
+        }
+
+        this.messages.update((loaded) => mergeNewer(loaded, [sent]));
+        this.latestSequence.set(Math.max(this.latestSequence(), sent.sequence));
+        this.applyToPreview(sent);
+        this.commandKeys.release('send', conversationId);
+        this.draft.set('');
+        this.composerAttempt.reset();
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.owns(generation, thread)) {
+          this.reportFailure(error, $localize`This message could not be sent.`);
+        }
+      } finally {
+        if (owner.current) {
+          if (this.owns(generation, thread)) {
+            this.busy.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.owns(generation, thread)) {
-        this.busy.set(false);
-      }
-    }
+    });
   }
 
   protected startEdit(message: Message): void {
@@ -476,104 +508,118 @@ export class Messages {
   }
 
   protected async saveEdit(message: Message): Promise<void> {
-    const conversationId = this.selectedId();
-    if (conversationId === null || this.busy()) {
-      return;
-    }
-
-    this.editAttempt.attempt();
-    if (this.editIssues().length > 0) {
-      this.editSummary()?.nativeElement.focus();
-      return;
-    }
-
-    const generation = this.contextGeneration;
-    const thread = this.threadGeneration;
-    const body = this.editDraft().trim();
-    const idempotencyKey = this.commandKeys.for('edit', message.id, body);
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      await this.csrf.refresh();
-      if (!this.owns(generation, thread)) {
+    return this.scope.run('saveEdit', async (owner) => {
+      const conversationId = this.selectedId();
+      if (conversationId === null || this.busy()) {
         return;
       }
 
-      const edited = await firstValueFrom(
-        this.api.editConversationMessage(
-          conversationId,
-          message.id,
-          body,
-          message.version,
-          idempotencyKey,
-        ),
-      );
-      if (!this.owns(generation, thread)) {
+      this.editAttempt.attempt();
+      if (this.editIssues().length > 0) {
+        this.editSummary()?.nativeElement.focus();
         return;
       }
 
-      this.messages.update((loaded) => mergeNewer(loaded, [edited]));
-      this.applyToPreview(edited);
-      this.commandKeys.release('edit', message.id);
-      this.cancelEdit();
-    } catch (error) {
-      if (this.owns(generation, thread)) {
-        // The row keeps what the server still holds. Pretending the edit landed would leave the
-        // screen and the workspace disagreeing about what was said.
-        this.reportFailure(error, $localize`This message could not be edited.`);
+      const generation = this.contextGeneration;
+      const thread = this.threadGeneration;
+      const body = this.editDraft().trim();
+      const idempotencyKey = this.commandKeys.for('edit', message.id, body);
+      this.busy.set(true);
+      this.error.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (!this.owns(generation, thread)) {
+          return;
+        }
+
+        const edited = await owner.wait(
+          firstValueFrom(
+            this.api.editConversationMessage(
+              conversationId,
+              message.id,
+              body,
+              message.version,
+              idempotencyKey,
+            ),
+          ),
+        );
+        if (!this.owns(generation, thread)) {
+          return;
+        }
+
+        this.messages.update((loaded) => mergeNewer(loaded, [edited]));
+        this.applyToPreview(edited);
+        this.commandKeys.release('edit', message.id);
+        this.cancelEdit();
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.owns(generation, thread)) {
+          // The row keeps what the server still holds. Pretending the edit landed would leave the
+          // screen and the workspace disagreeing about what was said.
+          this.reportFailure(error, $localize`This message could not be edited.`);
+        }
+      } finally {
+        if (owner.current) {
+          if (this.owns(generation, thread)) {
+            this.busy.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.owns(generation, thread)) {
-        this.busy.set(false);
-      }
-    }
+    });
   }
 
   protected async remove(message: Message): Promise<void> {
-    const conversationId = this.selectedId();
-    if (conversationId === null || this.busy()) {
-      return;
-    }
-
-    const generation = this.contextGeneration;
-    const thread = this.threadGeneration;
-    // A removal has no payload of its own, so the retained key changes only when the target does.
-    const idempotencyKey = this.commandKeys.for('delete', message.id, '');
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      await this.csrf.refresh();
-      if (!this.owns(generation, thread)) {
+    return this.scope.run('remove', async (owner) => {
+      const conversationId = this.selectedId();
+      if (conversationId === null || this.busy()) {
         return;
       }
 
-      const removed = await firstValueFrom(
-        this.api.deleteConversationMessage(
-          conversationId,
-          message.id,
-          message.version,
-          idempotencyKey,
-        ),
-      );
-      if (!this.owns(generation, thread)) {
-        return;
-      }
+      const generation = this.contextGeneration;
+      const thread = this.threadGeneration;
+      // A removal has no payload of its own, so the retained key changes only when the target does.
+      const idempotencyKey = this.commandKeys.for('delete', message.id, '');
+      this.busy.set(true);
+      this.error.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (!this.owns(generation, thread)) {
+          return;
+        }
 
-      this.messages.update((loaded) => mergeNewer(loaded, [removed]));
-      this.applyToPreview(removed);
-      this.commandKeys.release('delete', message.id);
-      if (this.editingId() === message.id) {
-        this.cancelEdit();
+        const removed = await owner.wait(
+          firstValueFrom(
+            this.api.deleteConversationMessage(
+              conversationId,
+              message.id,
+              message.version,
+              idempotencyKey,
+            ),
+          ),
+        );
+        if (!this.owns(generation, thread)) {
+          return;
+        }
+
+        this.messages.update((loaded) => mergeNewer(loaded, [removed]));
+        this.applyToPreview(removed);
+        this.commandKeys.release('delete', message.id);
+        if (this.editingId() === message.id) {
+          this.cancelEdit();
+        }
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.owns(generation, thread)) {
+          this.reportFailure(error, $localize`This message could not be removed.`);
+        }
+      } finally {
+        if (owner.current) {
+          if (this.owns(generation, thread)) {
+            this.busy.set(false);
+          }
+        }
       }
-    } catch (error) {
-      if (this.owns(generation, thread)) {
-        this.reportFailure(error, $localize`This message could not be removed.`);
-      }
-    } finally {
-      if (this.owns(generation, thread)) {
-        this.busy.set(false);
-      }
-    }
+    });
   }
 
   protected startModeration(message: Message): void {
@@ -595,55 +641,62 @@ export class Messages {
   }
 
   protected async moderate(message: Message): Promise<void> {
-    const conversationId = this.selectedId();
-    if (conversationId === null || this.busy()) {
-      return;
-    }
-
-    this.moderationAttempt.attempt();
-    if (this.moderationIssues().length > 0) {
-      this.moderationSummary()?.nativeElement.focus();
-      return;
-    }
-
-    const generation = this.contextGeneration;
-    const thread = this.threadGeneration;
-    const reason = this.moderationReason().trim();
-    const idempotencyKey = this.commandKeys.for('moderate', message.id, reason);
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      await this.csrf.refresh();
-      if (!this.owns(generation, thread)) {
+    return this.scope.run('moderate', async (owner) => {
+      const conversationId = this.selectedId();
+      if (conversationId === null || this.busy()) {
         return;
       }
 
-      const removed = await firstValueFrom(
-        this.api.moderateConversationMessage(
-          conversationId,
-          message.id,
-          reason,
-          message.version,
-          idempotencyKey,
-        ),
-      );
-      if (!this.owns(generation, thread)) {
+      this.moderationAttempt.attempt();
+      if (this.moderationIssues().length > 0) {
+        this.moderationSummary()?.nativeElement.focus();
         return;
       }
 
-      this.messages.update((loaded) => mergeNewer(loaded, [removed]));
-      this.applyToPreview(removed);
-      this.commandKeys.release('moderate', message.id);
-      this.cancelModeration();
-    } catch (error) {
-      if (this.owns(generation, thread)) {
-        this.reportFailure(error, $localize`This message could not be removed.`);
+      const generation = this.contextGeneration;
+      const thread = this.threadGeneration;
+      const reason = this.moderationReason().trim();
+      const idempotencyKey = this.commandKeys.for('moderate', message.id, reason);
+      this.busy.set(true);
+      this.error.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (!this.owns(generation, thread)) {
+          return;
+        }
+
+        const removed = await owner.wait(
+          firstValueFrom(
+            this.api.moderateConversationMessage(
+              conversationId,
+              message.id,
+              reason,
+              message.version,
+              idempotencyKey,
+            ),
+          ),
+        );
+        if (!this.owns(generation, thread)) {
+          return;
+        }
+
+        this.messages.update((loaded) => mergeNewer(loaded, [removed]));
+        this.applyToPreview(removed);
+        this.commandKeys.release('moderate', message.id);
+        this.cancelModeration();
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.owns(generation, thread)) {
+          this.reportFailure(error, $localize`This message could not be removed.`);
+        }
+      } finally {
+        if (owner.current) {
+          if (this.owns(generation, thread)) {
+            this.busy.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.owns(generation, thread)) {
-        this.busy.set(false);
-      }
-    }
+    });
   }
 
   /**
@@ -656,37 +709,52 @@ export class Messages {
    * coalesced signal, so refreshing it here would send the same request twice.
    */
   private async refreshList(generation: number): Promise<void> {
-    await this.loadConversations(generation);
+    return this.scope.run('refreshList', async (owner) => {
+      await owner.wait(this.loadConversations(generation));
+    });
   }
 
   private async loadConversations(generation: number): Promise<void> {
-    const request = ++this.listRequest;
-    // This supersedes any Load-more already in flight. Its own `finally` is guarded on being the
-    // newest request, so without clearing the flag here the control would stay disabled for ever.
-    this.listLoadingMore.set(false);
-    this.listLoading.set(true);
-    this.error.set(null);
-    try {
-      const page = await firstValueFrom(
-        this.api.listConversations(null, null, conversationPageSize),
-      );
-      if (!this.ownsList(generation, request)) {
-        return;
-      }
+    return this.scope.run('conversations', async (owner) => {
+      const request = ++this.listRequest;
+      // This supersedes any Load-more already in flight. Its own `finally` is guarded on being the
+      // newest request, so without clearing the flag here the control would stay disabled for ever.
+      this.listLoadingMore.set(false);
+      this.listLoading.set(true);
+      this.error.set(null);
+      try {
+        const page = await owner.wait(
+          firstValueFrom(this.api.listConversations(null, null, conversationPageSize)),
+        );
+        if (!this.ownsList(generation, request)) {
+          return;
+        }
 
-      this.conversations.set(page.items);
-      this.applyCursor(page);
-    } catch (error) {
-      if (this.ownsList(generation, request)) {
-        this.conversations.set([]);
-        this.conversationsHasMore.set(false);
-        this.error.set(apiErrorMessage(error, $localize`Conversations could not be loaded.`));
+        this.conversations.set(page.items);
+        this.applyCursor(page);
+        const requested = this.conversationLaunch.take(this.tenants.selectedTenantId());
+        if (requested) {
+          const conversation = page.items.find((item) => item.id === requested.id) ?? requested;
+          if (!page.items.some((item) => item.id === requested.id)) {
+            this.conversations.update((items) => [conversation, ...items]);
+          }
+          await owner.wait(this.select(conversation));
+        }
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.ownsList(generation, request)) {
+          this.conversations.set([]);
+          this.conversationsHasMore.set(false);
+          this.error.set(apiErrorMessage(error, $localize`Conversations could not be loaded.`));
+        }
+      } finally {
+        if (owner.current) {
+          if (this.ownsList(generation, request)) {
+            this.listLoading.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.ownsList(generation, request)) {
-        this.listLoading.set(false);
-      }
-    }
+    });
   }
 
   private async loadThread(
@@ -694,48 +762,51 @@ export class Messages {
     generation: number,
     thread: number,
   ): Promise<void> {
-    const request = ++this.historyRequest;
-    // Same reason as the conversation list: a superseded Load-older would otherwise leave its
-    // control disabled with nothing left to clear it.
-    this.threadLoadingOlder.set(false);
-    this.threadLoading.set(true);
-    this.error.set(null);
-    this.deniedReason.set(null);
-    try {
-      const page = await firstValueFrom(
-        this.api.listConversationMessages(conversationId, null, messagePageSize),
-      );
-      if (!this.ownsThread(generation, thread, request)) {
-        return;
-      }
+    return this.scope.run('history', async (owner) => {
+      const request = ++this.historyRequest;
+      // Same reason as the conversation list: a superseded Load-older would otherwise leave its
+      // control disabled with nothing left to clear it.
+      this.threadLoadingOlder.set(false);
+      this.threadLoading.set(true);
+      this.error.set(null);
+      this.deniedReason.set(null);
+      try {
+        const page = await owner.wait(
+          firstValueFrom(this.api.listConversationMessages(conversationId, null, messagePageSize)),
+        );
+        if (!this.ownsThread(generation, thread, request)) {
+          return;
+        }
 
-      this.applyPage(page);
-      // Subscribe, then catch up from the watermark this read just established. The overlap between
-      // the two is deliberate and harmless; the other order leaves a window in which an event
-      // committed after the read and before the join reaches nobody and is never asked for again.
-      await this.realtime.openConversation(
-        conversationId,
-        page.latestEventSequence,
-        this.threadSink,
-      );
-      if (!this.ownsThread(generation, thread, request)) {
-        return;
-      }
+        this.applyPage(page);
+        // Subscribe, then catch up from the watermark this read just established. The overlap between
+        // the two is deliberate and harmless; the other order leaves a window in which an event
+        // committed after the read and before the join reaches nobody and is never asked for again.
+        await owner.wait(
+          this.realtime.openConversation(conversationId, page.latestEventSequence, this.threadSink),
+        );
+        if (!this.ownsThread(generation, thread, request)) {
+          return;
+        }
 
-      // Read advancement is explicit and happens only after the messages have actually been
-      // displayed. Sending, receiving and any future delivery acknowledgement are not reading, and
-      // none of them writes this cursor.
-      await this.advanceRead(conversationId, page, generation, thread);
-    } catch (error) {
-      if (this.ownsThread(generation, thread, request)) {
-        this.messages.set([]);
-        this.reportFailure(error, $localize`This conversation could not be loaded.`);
+        // Read advancement is explicit and happens only after the messages have actually been
+        // displayed. Sending, receiving and any future delivery acknowledgement are not reading, and
+        // none of them writes this cursor.
+        await owner.wait(this.advanceRead(conversationId, page, generation, thread));
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.ownsThread(generation, thread, request)) {
+          this.messages.set([]);
+          this.reportFailure(error, $localize`This conversation could not be loaded.`);
+        }
+      } finally {
+        if (owner.current) {
+          if (this.ownsThread(generation, thread, request)) {
+            this.threadLoading.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.ownsThread(generation, thread, request)) {
-        this.threadLoading.set(false);
-      }
-    }
+    });
   }
 
   private async advanceRead(
@@ -744,54 +815,57 @@ export class Messages {
     generation: number,
     thread: number,
   ): Promise<void> {
-    const displayed = page.items.reduce(
-      (highest, message) => Math.max(highest, message.sequence),
-      0,
-    );
-    if (displayed <= page.readState.lastReadSequence) {
-      return;
-    }
-
-    try {
-      await this.csrf.refresh();
-      if (!this.owns(generation, thread)) {
+    return this.scope.run('advanceRead', async (owner) => {
+      const displayed = page.items.reduce(
+        (highest, message) => Math.max(highest, message.sequence),
+        0,
+      );
+      if (displayed <= page.readState.lastReadSequence) {
         return;
       }
 
-      const readState = await firstValueFrom(
-        this.api.advanceConversationReadCursor(conversationId, displayed),
-      );
-      if (!this.owns(generation, thread)) {
-        return;
-      }
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (!this.owns(generation, thread)) {
+          return;
+        }
 
-      this.conversationUnread.set(readState.unreadCount);
-      // The rows the cursor now covers stop being unread. Leaving the marks up would contradict the
-      // count beside them, and the server has just said authoritatively where the cursor is.
-      this.messages.update((loaded) =>
-        loaded.map((message) =>
-          message.isUnreadByCaller && message.sequence <= readState.lastReadSequence
-            ? { ...message, isUnreadByCaller: false }
-            : message,
-        ),
-      );
-      this.conversations.update((loaded) =>
-        loaded.map((conversation) =>
-          conversation.id === conversationId
-            ? {
-                ...conversation,
-                unreadCount: readState.unreadCount,
-                lastReadSequence: readState.lastReadSequence,
-                lastReadAtUtc: readState.lastReadAtUtc,
-              }
-            : conversation,
-        ),
-      );
-      await this.unreadStore.refresh();
-    } catch {
-      // A failed read report is not worth interrupting the reader for: the messages are on screen,
-      // and the cursor is reported again the next time the thread is opened.
-    }
+        const readState = await owner.wait(
+          firstValueFrom(this.api.advanceConversationReadCursor(conversationId, displayed)),
+        );
+        if (!this.owns(generation, thread)) {
+          return;
+        }
+
+        this.conversationUnread.set(readState.unreadCount);
+        // The rows the cursor now covers stop being unread. Leaving the marks up would contradict the
+        // count beside them, and the server has just said authoritatively where the cursor is.
+        this.messages.update((loaded) =>
+          loaded.map((message) =>
+            message.isUnreadByCaller && message.sequence <= readState.lastReadSequence
+              ? { ...message, isUnreadByCaller: false }
+              : message,
+          ),
+        );
+        this.conversations.update((loaded) =>
+          loaded.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  unreadCount: readState.unreadCount,
+                  lastReadSequence: readState.lastReadSequence,
+                  lastReadAtUtc: readState.lastReadAtUtc,
+                }
+              : conversation,
+          ),
+        );
+        await owner.wait(this.unreadStore.refresh());
+      } catch {
+        if (!owner.current) return;
+        // A failed read report is not worth interrupting the reader for: the messages are on screen,
+        // and the cursor is reported again the next time the thread is opened.
+      }
+    });
   }
 
   /**
@@ -923,6 +997,41 @@ export class Messages {
     this.busy.set(false);
     this.error.set(null);
     this.deniedReason.set(null);
+  }
+
+  private resetTenantState(): void {
+    ++this.contextGeneration;
+    ++this.threadGeneration;
+    ++this.listRequest;
+    ++this.historyRequest;
+    this.context = null;
+    this.conversations.set([]);
+    this.conversationsHasMore.set(false);
+    this.nextActivityCursor.set(null);
+    this.nextIdCursor.set(null);
+    this.selectedId.set(null);
+    this.messages.set([]);
+    this.hasOlder.set(false);
+    this.oldestSequence.set(null);
+    this.latestSequence.set(0);
+    this.conversationUnread.set(0);
+    this.draft.set('');
+    this.editingId.set(null);
+    this.editDraft.set('');
+    this.moderatingId.set(null);
+    this.moderationReason.set('');
+    this.listLoading.set(false);
+    this.listLoadingMore.set(false);
+    this.threadLoading.set(false);
+    this.threadLoadingOlder.set(false);
+    this.busy.set(false);
+    this.error.set(null);
+    this.deniedReason.set(null);
+    this.composerAttempt.reset();
+    this.editAttempt.reset();
+    this.moderationAttempt.reset();
+    this.commandKeys.clear();
+    void this.realtime.closeConversation();
   }
 }
 

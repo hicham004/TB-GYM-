@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -40,6 +41,7 @@ export class MyCheckIns {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
   private contextGeneration = 0;
   private listGeneration = 0;
@@ -83,7 +85,9 @@ export class MyCheckIns {
   });
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       if (tenantId === this.loadedTenantId) {
         return;
@@ -146,50 +150,59 @@ export class MyCheckIns {
   }
 
   protected async open(assignmentId: string): Promise<void> {
-    const tenantId = this.loadedTenantId;
-    const contextGeneration = this.contextGeneration;
-    const request = ++this.openGeneration;
-    ++this.mutationGeneration;
-    this.saving.set(false);
-    const loading = this.beginLoading();
-    this.clearMessages();
-    try {
-      const detail = await firstValueFrom(this.api.getOwnCheckInResponse(assignmentId));
-      if (!this.ownsOpen(request, tenantId, contextGeneration)) {
-        return;
-      }
+    return this.scope.run('open', async (owner) => {
+      const tenantId = this.loadedTenantId;
+      const contextGeneration = this.contextGeneration;
+      const request = ++this.openGeneration;
+      ++this.mutationGeneration;
+      this.saving.set(false);
+      const loading = this.beginLoading();
+      this.clearMessages();
+      try {
+        const detail = await owner.wait(
+          firstValueFrom(this.api.getOwnCheckInResponse(assignmentId)),
+        );
+        if (!this.ownsOpen(request, tenantId, contextGeneration)) {
+          return;
+        }
 
-      this.detail.set(detail);
-      this.draft.set(responseDraftFromDetail(detail));
-      // A newly opened check-in is pristine, whatever the last one had earned.
-      this.attempt.reset();
-    } catch (error) {
-      if (!this.ownsOpen(request, tenantId, contextGeneration)) {
-        return;
-      }
+        this.detail.set(detail);
+        this.draft.set(responseDraftFromDetail(detail));
+        // A newly opened check-in is pristine, whatever the last one had earned.
+        this.attempt.reset();
+      } catch (error) {
+        if (!owner.current) return;
+        if (!this.ownsOpen(request, tenantId, contextGeneration)) {
+          return;
+        }
 
-      this.detail.set(null);
-      this.draft.set(null);
-      const reason = featureAccessReason(error);
-      if (reason === null) {
-        this.error.set(apiErrorMessage(error, $localize`This check-in could not be opened.`));
-      } else {
-        this.denial.set(ownCheckInDenialMessage(reason));
+        this.detail.set(null);
+        this.draft.set(null);
+        const reason = featureAccessReason(error);
+        if (reason === null) {
+          this.error.set(apiErrorMessage(error, $localize`This check-in could not be opened.`));
+        } else {
+          this.denial.set(ownCheckInDenialMessage(reason));
+        }
+      } finally {
+        if (owner.current) {
+          this.endLoading(loading);
+        }
       }
-    } finally {
-      this.endLoading(loading);
-    }
+    });
   }
 
   protected async loadMoreAssignments(): Promise<void> {
-    if (this.assignments().length >= this.assignmentTotal()) {
-      return;
-    }
+    return this.scope.run('loadMoreAssignments', async (owner) => {
+      if (this.assignments().length >= this.assignmentTotal()) {
+        return;
+      }
 
-    const tenantId = this.loadedTenantId;
-    if (tenantId !== null) {
-      await this.loadAssignments(tenantId, this.contextGeneration, false);
-    }
+      const tenantId = this.loadedTenantId;
+      if (tenantId !== null) {
+        await owner.wait(this.loadAssignments(tenantId, this.contextGeneration, false));
+      }
+    });
   }
 
   protected setText(questionId: string, value: string): void {
@@ -209,42 +222,49 @@ export class MyCheckIns {
   }
 
   protected async saveDraft(): Promise<void> {
-    const draft = this.draft();
-    if (!draft || !this.editable()) {
-      return;
-    }
-
-    const tenantId = this.loadedTenantId;
-    const contextGeneration = this.contextGeneration;
-    const operation = ++this.mutationGeneration;
-    ++this.openGeneration;
-    this.saving.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+    return this.scope.run('saveDraft', async (owner) => {
+      const draft = this.draft();
+      if (!draft || !this.editable()) {
         return;
       }
 
-      const saved = await firstValueFrom(
-        this.api.saveOwnCheckInDraftResponse(draft.assignmentId, toSaveRequest(draft)),
-      );
-      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
-        return;
-      }
+      const tenantId = this.loadedTenantId;
+      const contextGeneration = this.contextGeneration;
+      const operation = ++this.mutationGeneration;
+      ++this.openGeneration;
+      this.saving.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+          return;
+        }
 
-      this.detail.set(saved);
-      this.draft.set(responseDraftFromDetail(saved));
-      this.notice.set($localize`Draft saved. You can come back and finish it later.`);
-    } catch (error) {
-      if (this.ownsMutation(operation, tenantId, contextGeneration)) {
-        this.error.set(apiErrorMessage(error, $localize`This draft could not be saved.`));
+        const saved = await owner.wait(
+          firstValueFrom(
+            this.api.saveOwnCheckInDraftResponse(draft.assignmentId, toSaveRequest(draft)),
+          ),
+        );
+        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+          return;
+        }
+
+        this.detail.set(saved);
+        this.draft.set(responseDraftFromDetail(saved));
+        this.notice.set($localize`Draft saved. You can come back and finish it later.`);
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.ownsMutation(operation, tenantId, contextGeneration)) {
+          this.error.set(apiErrorMessage(error, $localize`This draft could not be saved.`));
+        }
+      } finally {
+        if (owner.current) {
+          if (this.mutationGeneration === operation) {
+            this.saving.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.mutationGeneration === operation) {
-        this.saving.set(false);
-      }
-    }
+    });
   }
 
   /**
@@ -252,73 +272,80 @@ export class MyCheckIns {
    * the draft exactly as it was and lists every reason.
    */
   protected async submit(): Promise<void> {
-    // Recorded before the guards: trying to send an incomplete check-in is exactly the moment every
-    // outstanding reason becomes due, whether or not the attempt gets as far as the server.
-    this.attempt.attempt();
-    const draft = this.draft();
-    if (!draft || !this.editable() || !this.guard().canSubmit) {
-      // A refused send saves nothing and submits nothing, and the refusal takes focus. The button
-      // stays operable while the check-in is incomplete — see `assign` in `checkin-clients`.
-      this.summary()?.nativeElement.focus();
-      return;
-    }
-
-    const tenantId = this.loadedTenantId;
-    const contextGeneration = this.contextGeneration;
-    const operation = ++this.mutationGeneration;
-    ++this.openGeneration;
-    this.saving.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+    return this.scope.run('submit', async (owner) => {
+      // Recorded before the guards: trying to send an incomplete check-in is exactly the moment every
+      // outstanding reason becomes due, whether or not the attempt gets as far as the server.
+      this.attempt.attempt();
+      const draft = this.draft();
+      if (!draft || !this.editable() || !this.guard().canSubmit) {
+        // A refused send saves nothing and submits nothing, and the refusal takes focus. The button
+        // stays operable while the check-in is incomplete — see `assign` in `checkin-clients`.
+        this.summary()?.nativeElement.focus();
         return;
       }
 
-      const saved = await firstValueFrom(
-        this.api.saveOwnCheckInDraftResponse(draft.assignmentId, toSaveRequest(draft)),
-      );
-      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
-        return;
-      }
+      const tenantId = this.loadedTenantId;
+      const contextGeneration = this.contextGeneration;
+      const operation = ++this.mutationGeneration;
+      ++this.openGeneration;
+      this.saving.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+          return;
+        }
 
-      this.detail.set(saved);
-      this.draft.set(responseDraftFromDetail(saved));
+        const saved = await owner.wait(
+          firstValueFrom(
+            this.api.saveOwnCheckInDraftResponse(draft.assignmentId, toSaveRequest(draft)),
+          ),
+        );
+        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+          return;
+        }
 
-      const version = saved.response === null ? null : Number(saved.response.version);
-      if (version === null) {
-        this.error.set($localize`There is nothing to submit yet.`);
-        return;
-      }
+        this.detail.set(saved);
+        this.draft.set(responseDraftFromDetail(saved));
 
-      const submitted = await firstValueFrom(
-        this.api.submitOwnCheckInResponse(draft.assignmentId, version),
-      );
-      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
-        return;
-      }
+        const version = saved.response === null ? null : Number(saved.response.version);
+        if (version === null) {
+          this.error.set($localize`There is nothing to submit yet.`);
+          return;
+        }
 
-      this.detail.set(submitted);
-      this.draft.set(responseDraftFromDetail(submitted));
-      this.attempt.reset();
-      this.notice.set($localize`Check-in submitted. It can no longer be changed.`);
-    } catch (error) {
-      if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
-        return;
-      }
+        const submitted = await owner.wait(
+          firstValueFrom(this.api.submitOwnCheckInResponse(draft.assignmentId, version)),
+        );
+        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+          return;
+        }
 
-      const failures = submissionFailures(error);
-      if (failures.length > 0) {
-        this.serverIssues.set(issuesFromServer(failures));
-        this.error.set($localize`This check-in is not complete yet.`);
-      } else {
-        this.error.set(apiErrorMessage(error, $localize`This check-in could not be submitted.`));
+        this.detail.set(submitted);
+        this.draft.set(responseDraftFromDetail(submitted));
+        this.attempt.reset();
+        this.notice.set($localize`Check-in submitted. It can no longer be changed.`);
+      } catch (error) {
+        if (!owner.current) return;
+        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
+          return;
+        }
+
+        const failures = submissionFailures(error);
+        if (failures.length > 0) {
+          this.serverIssues.set(issuesFromServer(failures));
+          this.error.set($localize`This check-in is not complete yet.`);
+        } else {
+          this.error.set(apiErrorMessage(error, $localize`This check-in could not be submitted.`));
+        }
+      } finally {
+        if (owner.current) {
+          if (this.mutationGeneration === operation) {
+            this.saving.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.mutationGeneration === operation) {
-        this.saving.set(false);
-      }
-    }
+    });
   }
 
   private updateAnswer(questionId: string, change: (answer: AnswerDraft) => AnswerDraft): void {
@@ -341,43 +368,48 @@ export class MyCheckIns {
     contextGeneration: number,
     reset: boolean,
   ): Promise<void> {
-    const request = ++this.listGeneration;
-    const loading = this.beginLoading();
-    if (reset) {
-      this.clearMessages();
-    }
-
-    const skip = reset ? 0 : this.assignments().length;
-    try {
-      const list = await firstValueFrom(
-        this.api.listOwnCheckInAssignments(skip, this.assignmentPageSize),
-      );
-      if (!this.ownsList(request, tenantId, contextGeneration)) {
-        return;
+    return this.scope.run('loadAssignments', async (owner) => {
+      const request = ++this.listGeneration;
+      const loading = this.beginLoading();
+      if (reset) {
+        this.clearMessages();
       }
 
-      this.assignments.set(reset ? list.items : appendUnique(this.assignments(), list.items));
-      this.assignmentTotal.set(Number(list.total));
-    } catch (error) {
-      if (!this.ownsList(request, tenantId, contextGeneration)) {
-        return;
-      }
+      const skip = reset ? 0 : this.assignments().length;
+      try {
+        const list = await owner.wait(
+          firstValueFrom(this.api.listOwnCheckInAssignments(skip, this.assignmentPageSize)),
+        );
+        if (!this.ownsList(request, tenantId, contextGeneration)) {
+          return;
+        }
 
-      const reason = featureAccessReason(error);
-      if (reason === null) {
-        if (reset) {
+        this.assignments.set(reset ? list.items : appendUnique(this.assignments(), list.items));
+        this.assignmentTotal.set(Number(list.total));
+      } catch (error) {
+        if (!owner.current) return;
+        if (!this.ownsList(request, tenantId, contextGeneration)) {
+          return;
+        }
+
+        const reason = featureAccessReason(error);
+        if (reason === null) {
+          if (reset) {
+            this.assignments.set([]);
+            this.assignmentTotal.set(0);
+          }
+          this.error.set(apiErrorMessage(error, $localize`Your check-ins could not be loaded.`));
+        } else {
           this.assignments.set([]);
           this.assignmentTotal.set(0);
+          this.denial.set(ownCheckInDenialMessage(reason));
         }
-        this.error.set(apiErrorMessage(error, $localize`Your check-ins could not be loaded.`));
-      } else {
-        this.assignments.set([]);
-        this.assignmentTotal.set(0);
-        this.denial.set(ownCheckInDenialMessage(reason));
+      } finally {
+        if (owner.current) {
+          this.endLoading(loading);
+        }
       }
-    } finally {
-      this.endLoading(loading);
-    }
+    });
   }
 
   private resetForWorkspace(): void {
@@ -437,6 +469,27 @@ export class MyCheckIns {
     this.notice.set(null);
     this.denial.set(null);
     this.serverIssues.set([]);
+  }
+
+  private resetTenantState(): void {
+    this.loadedTenantId = null;
+    ++this.contextGeneration;
+    ++this.listGeneration;
+    ++this.openGeneration;
+    ++this.mutationGeneration;
+    ++this.loadingGeneration;
+    this.assignments.set([]);
+    this.assignmentTotal.set(0);
+    this.detail.set(null);
+    this.draft.set(null);
+    this.serverIssues.set([]);
+    this.loading.set(false);
+    this.saving.set(false);
+    this.error.set(null);
+    this.notice.set(null);
+    this.denial.set(null);
+    this.isChoice = isChoice;
+    this.attempt.reset();
   }
 }
 

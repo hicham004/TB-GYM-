@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { Component, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -23,6 +24,7 @@ export class Products {
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
 
   protected readonly catalog = signal<ProductCatalog | null>(null);
@@ -73,7 +75,9 @@ export class Products {
   });
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       if (tenantId && tenantId !== this.loadedTenantId) {
         this.loadedTenantId = tenantId;
@@ -83,45 +87,51 @@ export class Products {
   }
 
   protected async createProduct(): Promise<void> {
-    if (this.createForm.invalid) {
-      this.createForm.markAllAsTouched();
-      return;
-    }
+    return this.scope.run('createProduct', async (owner) => {
+      if (this.createForm.invalid) {
+        this.createForm.markAllAsTouched();
+        return;
+      }
 
-    const raw = this.createForm.getRawValue();
-    const offer = this.toOfferRequest(raw);
-    if (offer.features.length === 0) {
-      this.error.set($localize`Select at least one coaching feature.`);
-      return;
-    }
+      const raw = this.createForm.getRawValue();
+      const offer = this.toOfferRequest(raw);
+      if (offer.features.length === 0) {
+        this.error.set($localize`Select at least one coaching feature.`);
+        return;
+      }
 
-    await this.run(
-      async () => {
-        await firstValueFrom(
-          this.api.createCoachingProduct({
-            name: raw.name,
-            description: raw.description || null,
-            initialOffer: offer,
-          }),
-        );
-        this.createForm.reset({
-          name: '',
-          description: '',
-          offerLabel: '',
-          durationCount: 8,
-          durationUnit: 'Week',
-          priceAmount: 0,
-          currencyCode: this.catalog()?.workspaceCurrencyCode ?? '',
-          training: true,
-          nutrition: false,
-          checkIns: true,
-          messaging: false,
-          resourceLibrary: false,
-        });
-        this.createOpen.set(false);
-      },
-      $localize`Coaching product created.`,
-    );
+      await owner.wait(
+        this.run(
+          async () => {
+            await owner.wait(
+              firstValueFrom(
+                this.api.createCoachingProduct({
+                  name: raw.name,
+                  description: raw.description || null,
+                  initialOffer: offer,
+                }),
+              ),
+            );
+            this.createForm.reset({
+              name: '',
+              description: '',
+              offerLabel: '',
+              durationCount: 8,
+              durationUnit: 'Week',
+              priceAmount: 0,
+              currencyCode: this.catalog()?.workspaceCurrencyCode ?? '',
+              training: true,
+              nutrition: false,
+              checkIns: true,
+              messaging: false,
+              resourceLibrary: false,
+            });
+            this.createOpen.set(false);
+          },
+          $localize`Coaching product created.`,
+        ),
+      );
+    });
   }
 
   protected openOffer(product: CoachingProduct): void {
@@ -141,57 +151,73 @@ export class Products {
   }
 
   protected async addOffer(): Promise<void> {
-    const productId = this.offerProductId();
-    if (!productId || this.offerForm.invalid) {
-      this.offerForm.markAllAsTouched();
-      return;
-    }
+    return this.scope.run('addOffer', async (owner) => {
+      const productId = this.offerProductId();
+      if (!productId || this.offerForm.invalid) {
+        this.offerForm.markAllAsTouched();
+        return;
+      }
 
-    const offer = this.toOfferRequest(this.offerForm.getRawValue());
-    if (offer.features.length === 0) {
-      this.error.set($localize`Select at least one coaching feature.`);
-      return;
-    }
+      const offer = this.toOfferRequest(this.offerForm.getRawValue());
+      if (offer.features.length === 0) {
+        this.error.set($localize`Select at least one coaching feature.`);
+        return;
+      }
 
-    await this.run(
-      async () => {
-        await firstValueFrom(this.api.addProductOffer(productId, offer));
-        this.offerProductId.set(null);
-      },
-      $localize`New offer added. Existing enrollments were left unchanged.`,
-    );
+      await owner.wait(
+        this.run(
+          async () => {
+            await owner.wait(firstValueFrom(this.api.addProductOffer(productId, offer)));
+            this.offerProductId.set(null);
+          },
+          $localize`New offer added. Existing enrollments were left unchanged.`,
+        ),
+      );
+    });
   }
 
   protected async toggleProduct(product: CoachingProduct): Promise<void> {
-    await this.run(
-      async () => {
-        await firstValueFrom(
-          this.api.updateCoachingProduct(product.id, {
-            name: product.name,
-            description: product.description,
-            isActive: !product.isActive,
-            version: product.version,
-          }),
-        );
-      },
-      product.isActive ? $localize`Product archived.` : $localize`Product restored.`,
-    );
+    return this.scope.run('toggleProduct', async (owner) => {
+      await owner.wait(
+        this.run(
+          async () => {
+            await owner.wait(
+              firstValueFrom(
+                this.api.updateCoachingProduct(product.id, {
+                  name: product.name,
+                  description: product.description,
+                  isActive: !product.isActive,
+                  version: product.version,
+                }),
+              ),
+            );
+          },
+          product.isActive ? $localize`Product archived.` : $localize`Product restored.`,
+        ),
+      );
+    });
   }
 
   protected async toggleOffer(product: CoachingProduct, offerId: string): Promise<void> {
-    const offer = product.offers.find((item) => item.id === offerId);
-    if (!offer) {
-      return;
-    }
+    return this.scope.run('toggleOffer', async (owner) => {
+      const offer = product.offers.find((item) => item.id === offerId);
+      if (!offer) {
+        return;
+      }
 
-    await this.run(
-      async () => {
-        await firstValueFrom(
-          this.api.setOfferAvailability(offer.id, !offer.isActive, offer.version),
-        );
-      },
-      offer.isActive ? $localize`Offer retired.` : $localize`Offer restored.`,
-    );
+      await owner.wait(
+        this.run(
+          async () => {
+            await owner.wait(
+              firstValueFrom(
+                this.api.setOfferAvailability(offer.id, !offer.isActive, offer.version),
+              ),
+            );
+          },
+          offer.isActive ? $localize`Offer retired.` : $localize`Offer restored.`,
+        ),
+      );
+    });
   }
 
   protected featureLabel(feature: CoachingFeature): string {
@@ -206,20 +232,25 @@ export class Products {
   }
 
   private async load(): Promise<void> {
-    this.loading.set(true);
-    this.clearMessages();
-    try {
-      const catalog = await firstValueFrom(this.api.getProductCatalog());
-      this.catalog.set(catalog);
-      this.createForm.controls.currencyCode.setValue(catalog.workspaceCurrencyCode);
-      if (catalog.products.length === 0) {
-        this.createOpen.set(true);
+    return this.scope.run('load', async (owner) => {
+      this.loading.set(true);
+      this.clearMessages();
+      try {
+        const catalog = await owner.wait(firstValueFrom(this.api.getProductCatalog()));
+        this.catalog.set(catalog);
+        this.createForm.controls.currencyCode.setValue(catalog.workspaceCurrencyCode);
+        if (catalog.products.length === 0) {
+          this.createOpen.set(true);
+        }
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`Coaching products could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
       }
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Coaching products could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+    });
   }
 
   /**
@@ -228,18 +259,25 @@ export class Products {
    * success confirmation ever reached the screen.
    */
   private async run(command: () => Promise<void>, message: string): Promise<void> {
-    this.busy.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      await command();
-      await this.load();
-      this.notice.set(message);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The commercial change could not be saved.`));
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('run', async (owner) => {
+      this.busy.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        await owner.wait(command());
+        await owner.wait(this.load());
+        this.notice.set(message);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(
+          apiErrorMessage(error, $localize`The commercial change could not be saved.`),
+        );
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
   private toOfferRequest(raw: {
@@ -276,5 +314,18 @@ export class Products {
   private clearMessages(): void {
     this.error.set(null);
     this.notice.set(null);
+  }
+
+  private resetTenantState(): void {
+    this.loadedTenantId = null;
+    this.catalog.set(null);
+    this.loading.set(false);
+    this.busy.set(false);
+    this.createOpen.set(false);
+    this.offerProductId.set(null);
+    this.error.set(null);
+    this.notice.set(null);
+    this.createForm.reset();
+    this.offerForm.reset();
   }
 }

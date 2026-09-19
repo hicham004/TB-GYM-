@@ -2,13 +2,25 @@
   <div>
     <a routerLink="/clients" i18n>Back to clients</a>
     @if (profile(); as client) {
-      <h1>{{ client.firstName }} {{ client.lastName }}</h1>
+      <h1 dir="auto">{{ client.firstName }} {{ client.lastName }}</h1>
       <p>{{ client.email }}</p>
     } @else {
       <h1 i18n>Client profile</h1>
     }
   </div>
   @if (profile(); as client) {
+    <button
+      class="primary-button"
+      type="button"
+      [disabled]="startingConversation()"
+      (click)="messageClient()"
+    >
+      @if (startingConversation()) {
+        <span i18n>Opening conversation…</span>
+      } @else {
+        <span dir="auto" i18n>Message {{ client.firstName }}</span>
+      }
+    </button>
     <span
       class="status-badge"
       [class.success]="client.onboardingStatus === 'Completed'"
@@ -29,13 +41,13 @@
 @if (loading()) {
   <p class="loading-row" i18n>Loading client profile...</p>
 } @else if (profile(); as client) {
-  <app-client-commercial [client]="client" (profileChanged)="commercialProfileChanged($event)" />
+  <app-client-training [clientId]="client.id" />
 
   <app-progress-dashboard [clientId]="client.id" />
 
   <app-progress-view [clientId]="client.id" />
 
-  <app-client-training [clientId]="client.id" />
+  <app-client-commercial [client]="client" (profileChanged)="commercialProfileChanged($event)" />
 
   <app-client-nutrition [clientId]="client.id" />
 

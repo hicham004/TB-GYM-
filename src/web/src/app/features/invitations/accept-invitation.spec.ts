@@ -14,7 +14,7 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, fill, press, query, settle } from '../../../testing/dom';
+import { button, field as labeledField, fill, press, query, settle } from '../../../testing/dom';
 import { AcceptInvitation } from './accept-invitation';
 
 const TOKEN = 'invitation-token-1';
@@ -81,7 +81,12 @@ async function render(
         useValue: {
           user: currentUser,
           initialize: vi.fn(() => Promise.resolve()),
-          logout: vi.fn(() => Promise.resolve()),
+          // Signing out really clears the session here, because the page's behaviour after it
+          // depends on the session being gone rather than on the call having been made.
+          logout: vi.fn(() => {
+            currentUser.set(null);
+            return Promise.resolve();
+          }),
         },
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
@@ -96,6 +101,7 @@ async function render(
     fixture,
     host: fixture.nativeElement as HTMLElement,
     api: TestBed.inject(ApiClient),
+    auth: TestBed.inject(AuthStore),
     tenants: TestBed.inject(TenantStore),
     router: TestBed.inject(Router),
     scrubber,
@@ -134,6 +140,21 @@ describe('AcceptInvitation', () => {
     expect(navigate).toHaveBeenCalledWith('/profile');
   });
 
+  it('explains an invalid password instead of making the submit button appear broken', async () => {
+    const { fixture, host, api } = await render();
+
+    fill(host, 'Password', 'TooShort1!');
+    fill(host, 'Confirm password', 'TooShort1!');
+    press(host, 'Create account and join');
+    await settle(fixture);
+
+    expect(query(host, '#invitation-password-error').textContent).toContain(
+      'at least 12 characters',
+    );
+    expect(labeledField(host, 'Password').getAttribute('aria-invalid')).toBe('true');
+    expect(api.acceptInvitation).not.toHaveBeenCalled();
+  });
+
   /**
    * An already-signed-in client accepts with no credentials at all. Sending the untouched form's
    * empty strings instead of nulls would ask the server to reset their password to "".
@@ -153,13 +174,31 @@ describe('AcceptInvitation', () => {
     expect(api.acceptInvitation).toHaveBeenCalledWith(TOKEN, null, null);
   });
 
-  it('sends the signed-in user to sign in again when the account is not the invited one', async () => {
-    const { host, api } = await render({ signedInAs: user('someone-else@example.test') });
+  /**
+   * The wrong signed-in account is the ordinary case for a coach opening the link they just issued
+   * in their own browser, and it must not become a dead end. Signing out has to leave the invitee
+   * on the invitation with the account form in front of them: an invited client has no account to
+   * sign in with, so a page that sent them to sign-in offered them nothing they could use and left
+   * the token behind in a query parameter of the page they had left.
+   */
+  it('stays on the invitation and offers account creation after signing the wrong account out', async () => {
+    const { fixture, host, api, auth } = await render({
+      signedInAs: user('someone-else@example.test'),
+    });
 
     expect(host.textContent).toContain('this invitation belongs to rana@example.test');
-    expect(button(host, 'Switch account')).toBeTruthy();
     // Nothing is accepted under the wrong account.
     expect(api.acceptInvitation).not.toHaveBeenCalled();
+
+    press(host, 'Sign out and continue');
+    await settle(fixture);
+
+    expect(auth.logout).toHaveBeenCalled();
+    // Asked again, because who the invitation requires depends on who is signed in.
+    expect(api.getPublicInvitation).toHaveBeenCalledTimes(2);
+    expect(button(host, 'Create account and join')).toBeTruthy();
+    // The link is still held, and was never scrubbed on the way through.
+    expect(host.textContent).not.toContain('no longer available');
   });
 
   it('offers sign-in rather than account creation when the email already has an account', async () => {
@@ -236,6 +275,27 @@ describe('AcceptInvitation', () => {
     expect(host.textContent).toContain('This invitation link is invalid or no longer available.');
     expect(host.querySelector('form')).toBeNull();
     expect(scrubber.scrub).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * A rate limit, a restarting API or a dropped connection says nothing about the invitation.
+   * Scrubbing on one of those destroyed the holder's only copy of a link that still worked — the
+   * address bar is where it lives — so a link is spent only when the server says it is gone.
+   */
+  it('keeps a token the server never rejected and offers a retry', async () => {
+    const getPublicInvitation = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 429 })))
+      .mockReturnValueOnce(of(invitation()));
+    const { fixture, host, scrubber } = await render({ api: { getPublicInvitation } });
+
+    expect(host.textContent).toContain('Check your connection and try again.');
+    expect(scrubber.scrub).not.toHaveBeenCalled();
+
+    press(host, 'Try again');
+    await settle(fixture);
+
+    expect(button(host, 'Create account and join')).toBeTruthy();
   });
 
   it('removes a token the server rejects as expired after an acceptance attempt', async () => {

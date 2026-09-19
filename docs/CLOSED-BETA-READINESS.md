@@ -166,9 +166,9 @@ G3a  secret store + workload identity
 ## 5. Gate 1 - Staging domain, TLS, and same-origin deployment
 
 **Owner:** Deployment owner.
-**Classification:** external setup, over a **code-complete** same-origin topology - with one
-**repository gap** (section 13, gap R1) that affects rate limiting and client addresses behind a
-proxy.
+**Classification:** external setup, over a **code-complete** same-origin topology. Forwarded-header
+trust is code-complete too (section 13, R1, closed); whether to enable it is the Deployment owner's
+configuration decision below.
 **Depends on:** D3, D4, G3a. Blocks G3b, G4, G5, G8.
 
 The same-origin model is already built: `src/web/nginx.conf` serves the SPA and proxies `/api`,
@@ -193,8 +193,18 @@ repository yet (section 13, gap R2).
 | `TB_GYM_REALTIME_SCALE_OUT`, `TB_GYM_API_REPLICAS`, `REDIS_PORT` | `SingleProcess` and `1` for a beta of this size. Redis is required only when more than one replica is declared, and startup refuses the combination without it |
 | `AllowedHosts` | the beta host, not the shipped `*` |
 
+**Forwarded headers are a Deployment owner decision.** `ReverseProxy:Enabled` is false by default,
+and then the API honours forwarded headers from nobody. Leave it disabled unless the chosen topology
+has a private API behind a specifically named trusted edge or network; in that case enable it and
+name that edge in `ReverseProxy:TrustedProxies` or `ReverseProxy:TrustedNetworks`, which startup
+validates. Left disabled behind a proxy, the per-address rate limiters (public authentication and
+the provider webhook) see one address for every caller, and logs show the proxy's address rather
+than the browser's.
+
 Do not set `ASPNETCORE_HTTPS_PORT` and do not publish an HTTPS URL on the API container. TLS
-terminates at the edge; gap R1 explains why that combination would loop.
+terminates at the edge, and redirecting to HTTPS is the edge's job: with forwarding disabled the API
+sees every request as `http`, so an HTTPS port would make it redirect requests the edge has already
+secured, in a loop.
 
 ### Evidence required
 
@@ -224,8 +234,9 @@ which has to be resent after the fix.
 
 **Owner:** Database owner.
 **Classification:** external setup. The schema, its constraints and its migrations are
-**code-complete**; the migration *deployment step* has no artefact in this repository (section 13,
-gap R4).
+**code-complete**, and so is the migration artefact: `scripts/build-migration-bundle.ps1` builds a
+self-contained bundle, and CI executes one against a fresh database (section 13, gap R4). Executing
+it against the beta database is the external part.
 **Depends on:** G3a. Blocks everything that stores anything.
 
 The database is the source of truth here in a stronger sense than usual: tenant isolation,
@@ -518,7 +529,7 @@ acceptable at beta scale and is not acceptable later.
 | --- | --- |
 | API or Worker process not running | A stopped Worker queues confirmations and invitations nobody receives |
 | `/health/ready` not Healthy | Except the media entries if D2 chose Option B - encode that exception explicitly rather than muting the endpoint |
-| 5xx rate, and 401/403/409/429 rates | The shape of a beta failure, and 429 needs watching given gap R1 |
+| 5xx rate, and 401/403/409/429 rates | The shape of a beta failure. 429 needs watching: behind a proxy with forwarding disabled (Gate 1), every caller shares one per-address rate-limit partition |
 | `notification-email-provider-unauthorized`, logged at `Error` | A revoked or mistyped key. It retries and then dead-letters: visible, but not self-healing |
 | Any `Status = 'DeadLettered'` row in `identity."ActionMailRequests"` or `invitations."ActionMailRequests"` | Somebody could not register, recover their account, or be invited |
 | Backup failure | Gate 2 is worthless without this |
@@ -634,8 +645,9 @@ record it as deferred with a target date rather than pretending it happened.
   workspace A cannot read workspace B's client, enrollment, media or messages.
 - One manual authorization spot check on a protected endpoint using a client account, confirming the
   server refuses rather than the UI merely hiding it.
-- Read gap R1 in section 13 before tuning any rate limit, and record the accepted position for the
-  beta either way.
+- Before tuning any rate limit, record the Gate 1 forwarding decision: disabled, or enabled for a
+  specifically named trusted edge or network with the API private behind it - and if enabled, one
+  request through the edge whose logged client address is the browser's rather than the proxy's.
 
 Full list: [Security verification](LAUNCH-CHECKLIST.md#security-verification).
 
@@ -684,47 +696,36 @@ is not a rollback plan.
 
 ## 13. Repository gaps found during this handoff
 
-Code-level findings from reading the current tree, reported here rather than fixed. None was fixed
-as part of writing this document and none is speculative - each names its file and line. They are
+Code-level findings from reading the tree. None is speculative - each names its file. They are
 labelled R1-R5 so a reference to a gap is never mistaken for a reference to a gate.
 
-Only R1 is a defect. R2 through R5 are work that has not been done or has been deliberately
-deferred, recorded here because a beta plan that did not name them would read as though they were
-finished.
+R1 is closed in the committed tree: `c524e5a` introduced this document together with the
+forwarded-header implementation and its tests, and what remains of it is a deployment decision. R4's
+repository artefact is complete; executing it remains external. R2, R3 and R5 are work that has not
+been done or has been deliberately deferred, recorded here because a beta plan that did not name them
+would read as though they were finished.
 
-### R1 - Forwarded headers are accepted from nobody, so per-IP rate limiting collapses behind the proxy
+### R1 - Forwarded-header trust is closed; enabling it is a deployment decision
 
-**Evidence.** [Program.cs:46-49](../src/backend/TB.Gym.Api/Program.cs#L46-L49) calls
-`UseForwardedHeaders` with an inline `ForwardedHeadersOptions` that sets only `ForwardedHeaders`. A
-repository-wide search finds no `KnownProxies`, `KnownNetworks` or `ForwardLimit` anywhere under
-`src`, and no test sends `X-Forwarded-For`. ASP.NET Core defaults `KnownProxies` and `KnownNetworks`
-to IPv6 loopback only, so when a request arrives from a proxy on a container or private-subnet
-address - exactly the topology `src/web/nginx.conf` and `compose.yaml` create - the forwarded values
-are discarded and `Connection.RemoteIpAddress` stays the proxy's own address.
+**Status.** Closed in the committed tree. `c524e5a` introduced this document together with
+`ReverseProxy.cs` and `ReverseProxyForwardedHeaderTests.cs`. Forwarding is explicit opt-in: with
+`ReverseProxy:Enabled` false, the default, no forwarded-headers middleware runs and the API honours
+`X-Forwarded-For` and `X-Forwarded-Proto` from nobody. Enabled, it honours them from the configured
+edges named in `ReverseProxy:TrustedProxies` and `ReverseProxy:TrustedNetworks` as well as the
+framework's loopback defaults; configured entries are added to, never replace, those defaults.
+Startup validates those entries: it refuses malformed ones, the unspecified proxy
+address, a zero-length network prefix, and an enabled configuration that names no edge.
 
-**Consequence.**
-[DependencyInjection.cs:259](../src/backend/TB.Gym.Infrastructure/DependencyInjection.cs#L259)
-partitions the public authentication limiter on `Connection.RemoteIpAddress`, and
-[DependencyInjection.cs:284](../src/backend/TB.Gym.Infrastructure/DependencyInjection.cs#L284) does
-the same for the provider webhook. Behind the proxy every caller shares one partition, so the
-30-per-minute sign-in allowance becomes a single global bucket for the whole deployment: one noisy or
-hostile client can lock every participant out of signing in, and per-address brute-force protection
-does not exist. Client addresses in logs are the proxy's, so an incident cannot be attributed either.
-Related: with the scheme also unforwarded, `UseHttpsRedirection` sees `http`; it is inert today only
-because the container publishes no HTTPS port, which is why section 5 says not to set
-`ASPNETCORE_HTTPS_PORT`.
+**What remains.** The Deployment owner's configuration decision, recorded at Gate 1 and again at
+Gate 8: leave forwarding disabled unless the chosen topology has a private API behind a specifically
+named trusted edge or network. Disabled behind a proxy, the per-address rate limiters see one address
+for every caller and logs name the proxy; that is the cost of the decision, not a repository gap.
+[Domain, TLS, and edge](LAUNCH-CHECKLIST.md#domain-tls-and-edge) carries the operator item and its
+evidence.
 
-**Not affected.** Cookies are `CookieSecurePolicy.Always` outside Development, so cookie security does
-not depend on the forwarded scheme. Action links are built from configuration and never from a request
-header, so link integrity is unaffected.
-
-**Note.** [Domain, TLS, and edge](LAUNCH-CHECKLIST.md#domain-tls-and-edge) carries "Configure trusted
-proxy networks before accepting forwarded headers" as an operator item, but there is no configuration
-surface for it - the options are constructed in code with nothing bound to configuration. That
-checklist item cannot currently be completed by an operator.
-
-**Beta position.** Not a hard blocker at 30 users. It is a real degradation with a security
-consequence, and it needs a decision recorded in Gate 8 either way.
+**Not affected either way.** Cookies are `CookieSecurePolicy.Always` outside Development, so cookie
+security does not depend on the forwarded scheme. Action links are built from configuration and never
+from a request header, so link integrity is unaffected.
 
 ### R2 - No deployment configuration exists for a non-development environment
 
@@ -750,17 +751,43 @@ This is consistent with CLI-010 and with Phase 8, which owns production legal-do
 consent enforcement, so it is a deferral rather than a defect. It is why D5 exists and why Gate 7
 routes consent out of band.
 
-### R4 - The migration deployment step has no artefact
+### R4 - The migration deployment step has an artefact; executing it is external
 
-**Evidence.** `DatabaseInitializer.cs:34-58` applies migrations in-process when
-`Database:ApplyMigrationsOnStartup` is true, with no advisory lock. The runtime images carry no EF
-tooling, CI produces no migration bundle, and `scripts/` contains no migration script.
+**Evidence.** `scripts/build-migration-bundle.ps1` builds a self-contained EF migration bundle for
+`GymDbContext` from an explicit runtime identifier and output path, in the Production environment,
+and refuses to overwrite an existing file without `-Force`. CI's backend job builds a linux-x64
+bundle with it, executes that bundle once, with no `--connection`, against a freshly created
+database whose connection it receives only as `ConnectionStrings__Database`, requires the applied
+history to equal the repository's migrations exactly, and uploads the bundle as
+`efbundle-linux-x64-<commit>`. linux-x64 is CI coverage, not a statement about the beta host. The
+runtime images still carry no EF tooling and no bundle.
 
-**Consequence.** Gate 2's separate migration step is a procedure the Database owner must define -
-running `dotnet ef database update` from a build host against the beta database, or producing a
-migration bundle. At one API replica, `ApplyMigrationsOnStartup=true` would also work, but it makes
-every restart a schema operation and there is no lock protecting a second replica later. Recorded,
-not solved; the choice belongs to the Database owner and to D3.
+**Connection handling.** The bundle constructs its context through `GymDbContextFactory`, which reads
+`ConnectionStrings__Database` when the bundle is built and again when it runs. A build opens no
+connection with it and the bundle does not embed it, so building takes a credential-free
+placeholder. To run it, the deployment secret store injects the migration role's connection - not
+the application role's - as `ConnectionStrings__Database` into the one-shot migration job's
+environment, and the bundle is invoked without `--connection`. That option overrides the variable
+for local use only: command-line arguments are routinely exposed in process listings. Environment
+injection avoids that ordinary exposure, but the value remains secret material and requires the
+one-shot workload's normal process-isolation and secret-access controls.
+
+**Locking, precisely.** EF Core 10 takes an exclusive migration lock, and Npgsql 10 implements it as
+`LOCK TABLE platform."__EFMigrationsHistory" IN ACCESS EXCLUSIVE MODE`, which PostgreSQL holds until
+the transaction that took it ends. The bundle's own output shows it taken at the start of a run and
+again after each migration commits, so it serializes individual migrations; it does not reserve a
+whole run for one process. It is a table lock rather than an advisory lock, but it is a lock. It
+still does not make `ApplyMigrationsOnStartup=true` acceptable for production: that gives the API's
+runtime identity schema-changing privileges the least-privilege application role must not hold, and
+turns every restart and every added replica into a schema operation outside the single, backed-up
+step Gate 2 orders. `DatabaseInitializer.cs:54-58` still migrates in-process when it is enabled,
+which is why the beta sets it to `false`.
+
+**Consequence.** The runner is decided: one self-contained bundle, executed once, as a deliberate
+job. The rest belongs to the Database and Deployment owners: choose the release runtime identifier,
+create the migration role and have the secret store inject its connection into the job, take the
+backup immediately before, and execute the job - rehearsed first in staging if D3 provides one. None
+of this passes Gate 2.
 
 ### R5 - No metrics, traces or error reporting
 

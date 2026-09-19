@@ -13,6 +13,7 @@ import { ApiClient } from '../api/api-client';
 import { AuthStore } from '../auth/auth.store';
 import { CsrfService } from '../security/csrf.service';
 import { TenantStore } from '../tenancy/tenant.store';
+import { TenantContext } from '../tenancy/tenant-context';
 import type { RealtimeEvent } from '../../features/messaging/messaging.models';
 
 /**
@@ -128,6 +129,8 @@ export class MessagingRealtimeService {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
+  private readonly tenantContext = inject(TenantContext);
+  private destroyed = false;
   private readonly csrf = inject(CsrfService);
   private readonly connectionFactory = inject(MESSAGING_HUB_CONNECTION);
 
@@ -174,8 +177,14 @@ export class MessagingRealtimeService {
   });
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => void this.shutdown());
+    const remove = this.tenantContext.onChange(() => void this.shutdown());
+    inject(DestroyRef).onDestroy(() => {
+      this.destroyed = true;
+      remove();
+      void this.shutdown();
+    });
     effect(() => {
+      this.tenantContext.epoch();
       const key = this.contextKey();
       if (key === this.context) {
         return;
@@ -229,8 +238,8 @@ export class MessagingRealtimeService {
     ++this.contextGeneration;
     ++this.conversationGeneration;
     this.context = null;
-    await this.teardown();
     this.connectionState.set('idle');
+    await this.teardown();
   }
 
   // ---------- connection ----------
@@ -239,7 +248,8 @@ export class MessagingRealtimeService {
     const context = ++this.contextGeneration;
     ++this.conversationGeneration;
     await this.teardown();
-    if (key === null || !this.ownsContext(context)) {
+    if (this.destroyed || context !== this.contextGeneration) return;
+    if (key === null) {
       this.connectionState.set('idle');
       return;
     }
@@ -353,6 +363,7 @@ export class MessagingRealtimeService {
   }
 
   private async teardown(): Promise<void> {
+    this.flushingAcknowledgements = false;
     this.clearStartTimer();
     this.clearCatchUpTimer();
     this.clearAcknowledgementTimer();
@@ -416,6 +427,7 @@ export class MessagingRealtimeService {
   }
 
   private async leaveCurrentConversation(): Promise<void> {
+    this.flushingAcknowledgements = false;
     const conversationId = this.conversationId;
     this.conversationId = null;
     this.sink = null;
@@ -679,6 +691,7 @@ export class MessagingRealtimeService {
           await firstValueFrom(
             this.api.acknowledgeConversationRealtimeEvents(conversationId, batch),
           );
+          if (!this.owns(context, conversation)) return;
         } catch {
           // Retained for a later attempt, and only for the generation that owns them. Nothing about
           // an acknowledgement is worth showing the reader: the messages are on screen either way,
@@ -696,7 +709,7 @@ export class MessagingRealtimeService {
 
       this.acknowledgementAttempt = 0;
     } finally {
-      this.flushingAcknowledgements = false;
+      if (this.owns(context, conversation)) this.flushingAcknowledgements = false;
       if (retry && this.owns(context, conversation) && this.conversationId === conversationId) {
         this.scheduleAcknowledgementFlush(
           context,
@@ -710,11 +723,11 @@ export class MessagingRealtimeService {
   // ---------- ownership ----------
 
   private ownsContext(context: number): boolean {
-    return this.contextGeneration === context;
+    return !this.destroyed && this.contextGeneration === context && this.context === this.contextKey();
   }
 
   private owns(context: number, conversation: number): boolean {
-    return this.contextGeneration === context && this.conversationGeneration === conversation;
+    return this.ownsContext(context) && this.conversationGeneration === conversation;
   }
 
   private catchUpOwnerKey(conversationId: string, context: number, conversation: number): string {

@@ -442,6 +442,17 @@ integration interceptor measures 21 SQL commands for the complete authenticated 
 (including authentication, tenant policy, and commercial access) and enforces a ceiling of
 24; the schedule SQL must contain client and date predicates.
 
+Closed-beta Slice 1 adds two bounded Training read surfaces beside that dated `Today` model:
+the caller's upcoming/resumable work and a coach's client workout detail. The former distinguishes
+no assignment, unshared programming, rest/next-session and unfinished-workout states; it looks no
+more than 90 days ahead and pages at five unfinished workouts. The latter returns prescriptions,
+actuals, captured swaps and bounded append-only notes, with 50 notes per page. Both reads apply the
+existing tenant, role, publication/calendar and server-side feature-access decisions before data is
+returned. The Angular runner maps generated DTOs into owned view models, keeps local drafts keyed by
+set-performance ID, serializes same-workout set writes, and drops stale load/write/media replies on
+a tenant-context generation change. This is read/UI composition only: no training write contract,
+schema or invariant changes.
+
 ## 9. Realtime, jobs, and integrations
 
 **Phase 6B-2A built the persisted model; Phase 6B-2B added the channel over it** — see sections 16 and
@@ -727,9 +738,15 @@ Enabling it requires at least one `ReverseProxy:TrustedProxies` address or
 `ReverseProxy:TrustedNetworks` CIDR entry, and startup refuses an enabled deployment that names
 neither — accepting forwarded headers from nobody is not a safe default but a silent one, because
 the per-address rate limiters (public authentication and the provider webhook) then partition every
-caller in the world onto the proxy's single address and go on looking like limiters. A zero-length
-prefix and the unspecified address are refused for the opposite reason: both are "trust everyone"
-written as data.
+caller in the world onto the proxy's single address and go on looking like limiters. Refused for the
+opposite reason: a zero-length prefix (`0.0.0.0/0`, `::/0`), which is "trust everyone" written as
+data, and the unspecified address in either list and in either notation — `0.0.0.0` and `::` as
+proxies, `0.0.0.0/32` and `::/128` as networks — which names no proxy at all.
+
+How wide an accepted network may be is deliberately not policed: a minimum prefix length would be an
+invented rule about somebody else's topology. Prefer an exact `TrustedProxies` address wherever the
+edge has a fixed one; a network is for an edge whose address is assigned rather than fixed, and it
+should be as small as that deployment allows.
 
 The framework's own defaults — measured as `KnownProxies = [::1]` and
 `KnownIPNetworks = [127.0.0.0/8]` — are added to and never cleared. Clearing them does not narrow

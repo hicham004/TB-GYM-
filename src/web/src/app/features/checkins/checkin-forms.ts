@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -52,6 +53,7 @@ export class CheckInForms {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
 
   protected readonly forms = signal<CheckInFormSummary[]>([]);
@@ -111,7 +113,9 @@ export class CheckInForms {
   );
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       if (tenantId && tenantId !== this.loadedTenantId) {
         this.loadedTenantId = tenantId;
@@ -155,19 +159,24 @@ export class CheckInForms {
   }
 
   protected async openForm(formId: string): Promise<void> {
-    this.loading.set(true);
-    this.clearMessages();
-    try {
-      const details = await firstValueFrom(this.api.getCheckInForm(formId));
-      this.selected.set(details);
-      this.creating.set(false);
-      this.editingVersion.set(null);
-      this.renaming.set(false);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`This check-in form could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+    return this.scope.run('openForm', async (owner) => {
+      this.loading.set(true);
+      this.clearMessages();
+      try {
+        const details = await owner.wait(firstValueFrom(this.api.getCheckInForm(formId)));
+        this.selected.set(details);
+        this.creating.set(false);
+        this.editingVersion.set(null);
+        this.renaming.set(false);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`This check-in form could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
+      }
+    });
   }
 
   protected startRename(): void {
@@ -199,38 +208,45 @@ export class CheckInForms {
    * conflict is reported and nothing is written, so the two values can never end up half-saved.
    */
   protected async renameForm(): Promise<void> {
-    const details = this.selected();
-    if (!details) {
-      return;
-    }
+    return this.scope.run('renameForm', async (owner) => {
+      const details = this.selected();
+      if (!details) {
+        return;
+      }
 
-    const title = this.renameTitle().trim();
-    if (title.length === 0) {
-      this.error.set($localize`A title is required.`);
-      return;
-    }
+      const title = this.renameTitle().trim();
+      if (title.length === 0) {
+        this.error.set($localize`A title is required.`);
+        return;
+      }
 
-    this.saving.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      const description = this.renameDescription().trim();
-      const saved = await firstValueFrom(
-        this.api.renameCheckInForm(details.form.id, {
-          title,
-          description: description.length > 0 ? description : null,
-          version: Number(details.form.version),
-        }),
-      );
-      this.selected.set(saved);
-      this.renaming.set(false);
-      this.notice.set($localize`Check-in form renamed.`);
-      await this.loadForms();
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`This check-in form could not be renamed.`));
-    } finally {
-      this.saving.set(false);
-    }
+      this.saving.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        const description = this.renameDescription().trim();
+        const saved = await owner.wait(
+          firstValueFrom(
+            this.api.renameCheckInForm(details.form.id, {
+              title,
+              description: description.length > 0 ? description : null,
+              version: Number(details.form.version),
+            }),
+          ),
+        );
+        this.selected.set(saved);
+        this.renaming.set(false);
+        this.notice.set($localize`Check-in form renamed.`);
+        await owner.wait(this.loadForms());
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`This check-in form could not be renamed.`));
+      } finally {
+        if (owner.current) {
+          this.saving.set(false);
+        }
+      }
+    });
   }
 
   /** Archiving is reversible and closes the lineage to editing, publishing and assignment. */
@@ -243,66 +259,80 @@ export class CheckInForms {
   }
 
   private async setArchived(archived: boolean): Promise<void> {
-    const details = this.selected();
-    if (!details) {
-      return;
-    }
+    return this.scope.run('setArchived', async (owner) => {
+      const details = this.selected();
+      if (!details) {
+        return;
+      }
 
-    this.saving.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      const version = Number(details.form.version);
-      const saved = await firstValueFrom(
-        archived
-          ? this.api.archiveCheckInForm(details.form.id, version)
-          : this.api.restoreCheckInForm(details.form.id, version),
-      );
-      this.selected.set(saved);
-      // An archived lineage offers no editor, so anything open on it is closed rather than left
-      // pointing at a version the server will now refuse to save.
-      this.editingVersion.set(null);
-      this.notice.set(
-        archived
-          ? $localize`Check-in form archived. It can no longer be edited or assigned.`
-          : $localize`Check-in form restored.`,
-      );
-      await this.loadForms();
-    } catch (error) {
-      this.error.set(
-        apiErrorMessage(
-          error,
+      this.saving.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        const version = Number(details.form.version);
+        const saved = await owner.wait(
+          firstValueFrom(
+            archived
+              ? this.api.archiveCheckInForm(details.form.id, version)
+              : this.api.restoreCheckInForm(details.form.id, version),
+          ),
+        );
+        this.selected.set(saved);
+        // An archived lineage offers no editor, so anything open on it is closed rather than left
+        // pointing at a version the server will now refuse to save.
+        this.editingVersion.set(null);
+        this.notice.set(
           archived
-            ? $localize`This check-in form could not be archived.`
-            : $localize`This check-in form could not be restored.`,
-        ),
-      );
-    } finally {
-      this.saving.set(false);
-    }
+            ? $localize`Check-in form archived. It can no longer be edited or assigned.`
+            : $localize`Check-in form restored.`,
+        );
+        await owner.wait(this.loadForms());
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(
+          apiErrorMessage(
+            error,
+            archived
+              ? $localize`This check-in form could not be archived.`
+              : $localize`This check-in form could not be restored.`,
+          ),
+        );
+      } finally {
+        if (owner.current) {
+          this.saving.set(false);
+        }
+      }
+    });
   }
 
   /** Opens a version for editing. Only a draft is editable; a published one is read-only. */
   protected async editVersion(versionId: string): Promise<void> {
-    const form = this.selected();
-    if (!form) {
-      return;
-    }
+    return this.scope.run('editVersion', async (owner) => {
+      const form = this.selected();
+      if (!form) {
+        return;
+      }
 
-    this.loading.set(true);
-    this.clearMessages();
-    try {
-      const version = await firstValueFrom(this.api.getCheckInFormVersion(form.form.id, versionId));
-      this.editingVersion.set(version);
-      this.draft.set(draftFromVersion(version));
-      this.creating.set(false);
-      // A different version is a different form: its reasons are earned again from scratch.
-      this.attempt.reset();
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`This version could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+      this.loading.set(true);
+      this.clearMessages();
+      try {
+        const version = await owner.wait(
+          firstValueFrom(this.api.getCheckInFormVersion(form.form.id, versionId)),
+        );
+        this.editingVersion.set(version);
+        this.draft.set(draftFromVersion(version));
+        this.creating.set(false);
+        // A different version is a different form: its reasons are earned again from scratch.
+        this.attempt.reset();
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`This version could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
+      }
+    });
   }
 
   protected setTitle(title: string): void {
@@ -394,95 +424,116 @@ export class CheckInForms {
    * `checkin-clients` for what a disabled one costs.
    */
   protected async save(): Promise<void> {
-    this.attempt.attempt();
-    if (!this.validation().isValid) {
-      this.summary()?.nativeElement.focus();
-      return;
-    }
-
-    this.saving.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      const editing = this.editingVersion();
-      if (editing === null) {
-        const created = await firstValueFrom(
-          this.api.createCheckInForm(toCreateRequest(this.draft())),
-        );
-        this.selected.set(created);
-        this.creating.set(false);
-        this.attempt.reset();
-        this.notice.set($localize`Check-in form created as a draft.`);
-        await this.loadForms();
-      } else {
-        const saved = await firstValueFrom(
-          this.api.saveCheckInDraft(
-            editing.formId,
-            editing.id,
-            toSaveRequest(this.draft(), Number(editing.version)),
-          ),
-        );
-        this.editingVersion.set(saved);
-        this.notice.set($localize`Draft saved.`);
-        await this.openForm(saved.formId);
-        await this.editVersion(saved.id);
+    return this.scope.run('save', async (owner) => {
+      this.attempt.attempt();
+      if (!this.validation().isValid) {
+        this.summary()?.nativeElement.focus();
+        return;
       }
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`This draft could not be saved.`));
-    } finally {
-      this.saving.set(false);
-    }
+
+      this.saving.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        const editing = this.editingVersion();
+        if (editing === null) {
+          const created = await owner.wait(
+            firstValueFrom(this.api.createCheckInForm(toCreateRequest(this.draft()))),
+          );
+          this.selected.set(created);
+          this.creating.set(false);
+          this.attempt.reset();
+          this.notice.set($localize`Check-in form created as a draft.`);
+          await owner.wait(this.loadForms());
+        } else {
+          const saved = await owner.wait(
+            firstValueFrom(
+              this.api.saveCheckInDraft(
+                editing.formId,
+                editing.id,
+                toSaveRequest(this.draft(), Number(editing.version)),
+              ),
+            ),
+          );
+          this.editingVersion.set(saved);
+          this.notice.set($localize`Draft saved.`);
+          await owner.wait(this.openForm(saved.formId));
+          await owner.wait(this.editVersion(saved.id));
+        }
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`This draft could not be saved.`));
+      } finally {
+        if (owner.current) {
+          this.saving.set(false);
+        }
+      }
+    });
   }
 
   /** Publishing is one-way and freezes the version permanently, so it is confirmed first. */
   protected async publish(versionId: string, version: number): Promise<void> {
-    const form = this.selected();
-    if (!form) {
-      return;
-    }
+    return this.scope.run('publish', async (owner) => {
+      const form = this.selected();
+      if (!form) {
+        return;
+      }
 
-    this.saving.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      await firstValueFrom(this.api.publishCheckInVersion(form.form.id, versionId, version));
-      this.editingVersion.set(null);
-      this.notice.set($localize`Version published. It can no longer be edited.`);
-      await this.openForm(form.form.id);
-      await this.loadForms();
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`This version could not be published.`));
-    } finally {
-      this.saving.set(false);
-    }
+      this.saving.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        await owner.wait(
+          firstValueFrom(this.api.publishCheckInVersion(form.form.id, versionId, version)),
+        );
+        this.editingVersion.set(null);
+        this.notice.set($localize`Version published. It can no longer be edited.`);
+        await owner.wait(this.openForm(form.form.id));
+        await owner.wait(this.loadForms());
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`This version could not be published.`));
+      } finally {
+        if (owner.current) {
+          this.saving.set(false);
+        }
+      }
+    });
   }
 
   /** Carries every question key forward, so a re-worded question stays the same question. */
   protected async deriveDraft(sourceVersionId: string): Promise<void> {
-    const form = this.selected();
-    if (!form) {
-      return;
-    }
+    return this.scope.run('deriveDraft', async (owner) => {
+      const form = this.selected();
+      if (!form) {
+        return;
+      }
 
-    this.saving.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      const derived = await firstValueFrom(
-        this.api.deriveCheckInDraft(form.form.id, {
-          sourceVersionId,
-          formVersion: Number(form.form.version),
-        }),
-      );
-      await this.openForm(form.form.id);
-      this.editingVersion.set(derived);
-      this.draft.set(draftFromVersion(derived));
-      this.notice.set($localize`New draft created from the published version.`);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`A new draft could not be created.`));
-    } finally {
-      this.saving.set(false);
-    }
+      this.saving.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        const derived = await owner.wait(
+          firstValueFrom(
+            this.api.deriveCheckInDraft(form.form.id, {
+              sourceVersionId,
+              formVersion: Number(form.form.version),
+            }),
+          ),
+        );
+        await owner.wait(this.openForm(form.form.id));
+        this.editingVersion.set(derived);
+        this.draft.set(draftFromVersion(derived));
+        this.notice.set($localize`New draft created from the published version.`);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`A new draft could not be created.`));
+      } finally {
+        if (owner.current) {
+          this.saving.set(false);
+        }
+      }
+    });
   }
 
   private updateQuestion(index: number, change: (question: QuestionDraft) => QuestionDraft): void {
@@ -495,19 +546,41 @@ export class CheckInForms {
   }
 
   private async loadForms(): Promise<void> {
-    this.loading.set(true);
-    try {
-      const page = await firstValueFrom(this.api.listCheckInForms());
-      this.forms.set(page.items);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Check-in forms could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+    return this.scope.run('loadForms', async (owner) => {
+      this.loading.set(true);
+      try {
+        const page = await owner.wait(firstValueFrom(this.api.listCheckInForms()));
+        this.forms.set(page.items);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`Check-in forms could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
+      }
+    });
   }
 
   private clearMessages(): void {
     this.error.set(null);
     this.notice.set(null);
+  }
+
+  private resetTenantState(): void {
+    this.loadedTenantId = null;
+    this.forms.set([]);
+    this.selected.set(null);
+    this.editingVersion.set(null);
+    this.draft.set(emptyForm());
+    this.creating.set(false);
+    this.loading.set(false);
+    this.saving.set(false);
+    this.error.set(null);
+    this.notice.set(null);
+    this.renaming.set(false);
+    this.renameTitle.set('');
+    this.renameDescription.set('');
+    this.attempt.reset();
   }
 }

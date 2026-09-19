@@ -59,6 +59,47 @@ jobs:
             --startup-project src/backend/TB.Gym.Api/TB.Gym.Api.csproj \
             --no-build \
             --configuration Release
+      # Production migrations are one deliberate job that executes a self-contained bundle, never an
+      # API migrating at startup. These steps prove the repository's own generator end to end: the
+      # bundle is built with a placeholder connection, and then the bundle - not dotnet ef, and not
+      # an application image - migrates a freshly created database whose connection it receives only
+      # as ConnectionStrings__Database, the way a deployment secret store injects it, with no
+      # --connection. linux-x64 is what this runner executes. It says nothing about the beta host,
+      # whose runtime the Deployment owner chooses.
+      - name: Build a migration bundle with the repository's generator
+        shell: pwsh
+        env:
+          ConnectionStrings__Database: Host=unused;Database=unused;Username=unused;Password=unused
+        run: ./scripts/build-migration-bundle.ps1 -RuntimeIdentifier linux-x64 -OutputPath "$env:RUNNER_TEMP/efbundle-linux-x64/efbundle"
+      - name: The bundle migrates a fresh database
+        shell: bash
+        env:
+          # A placeholder that names no reachable server, in place of the job's own value, so the
+          # only connection the bundle can use is the one injected into its environment below.
+          ConnectionStrings__Database: Host=unused;Database=unused;Username=unused;Password=unused
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          database=tbgym_bundle_proof
+          docker exec "$POSTGRES_CONTAINER" createdb -U tbgym "$database"
+          # Injected into the bundle's environment alone, assembled here rather than declared under
+          # env so no step prints it, and no --connection: the production job's shape.
+          ConnectionStrings__Database="Host=localhost;Port=5433;Database=$database;Username=tbgym" \
+            "$RUNNER_TEMP/efbundle-linux-x64/efbundle"
+          # Every migration in the repository, and nothing else, is now recorded as applied.
+          find src/backend/TB.Gym.Infrastructure/Persistence/Migrations -maxdepth 1 \
+              -name '[0-9]*_*.cs' ! -name '*.Designer.cs' -printf '%f\n' \
+            | sed 's/\.cs$//' | LC_ALL=C sort > "$RUNNER_TEMP/migrations-expected.txt"
+          docker exec "$POSTGRES_CONTAINER" psql -U tbgym -d "$database" -tA -v ON_ERROR_STOP=1 \
+              -c 'SELECT "MigrationId" FROM platform."__EFMigrationsHistory"' \
+            | LC_ALL=C sort > "$RUNNER_TEMP/migrations-applied.txt"
+          test -s "$RUNNER_TEMP/migrations-expected.txt"
+          diff -u "$RUNNER_TEMP/migrations-expected.txt" "$RUNNER_TEMP/migrations-applied.txt"
+      - name: Upload the CI migration bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: efbundle-linux-x64-${{ github.sha }}
+          path: ${{ runner.temp }}/efbundle-linux-x64/efbundle
+          if-no-files-found: error
 
   web:
     runs-on: ubuntu-latest

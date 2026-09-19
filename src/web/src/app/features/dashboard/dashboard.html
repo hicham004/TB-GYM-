@@ -1,11 +1,13 @@
-<section class="page-heading">
-  <div>
-    <p class="eyebrow" i18n>Active workspace</p>
-    <h1>{{ tenants.selectedMembership()?.tenantName }}</h1>
-    <p i18n>Hello, {{ auth.user()?.displayName }}.</p>
-  </div>
-  <span class="status-badge">{{ roleLabel(tenants.selectedMembership()?.role) }}</span>
-</section>
+@if (!tenants.isClient()) {
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow" i18n>Active workspace</p>
+      <h1>{{ tenants.selectedMembership()?.tenantName }}</h1>
+      <p i18n>Hello, {{ auth.user()?.displayName }}.</p>
+    </div>
+    <span class="status-badge">{{ roleLabel(tenants.selectedMembership()?.role) }}</span>
+  </section>
+}
 
 @if (error()) {
   <p class="form-error" role="alert">{{ error() }}</p>
@@ -40,35 +42,7 @@
     <a class="primary-button" routerLink="/nutrition/library" i18n>Open nutrition library</a>
   </section>
 } @else if (tenants.isClient()) {
-  <section class="next-action">
-    <div>
-      <h2 i18n>Bodyweight progress</h2>
-      <p i18n>Record today's weight and review weekly means and the trend estimate.</p>
-    </div>
-    <a class="primary-button" routerLink="/progress" i18n>Open progress</a>
-  </section>
-  <section class="next-action">
-    <div>
-      <h2 i18n>Today's training</h2>
-      @if (onboardingStatus() === 'Completed') {
-        <p i18n>Open the workout scheduled in this workspace.</p>
-      } @else {
-        <p i18n>Complete your intake details and initial bodyweight.</p>
-      }
-    </div>
-    @if (onboardingStatus() === 'Completed') {
-      <a class="primary-button" routerLink="/training/today" i18n>Open today</a>
-    } @else {
-      <a class="primary-button" routerLink="/profile" i18n>Open my profile</a>
-    }
-  </section>
-  <section class="next-action">
-    <div>
-      <h2 i18n>Today's nutrition</h2>
-      <p i18n>Record the concrete meal choices you consumed.</p>
-    </div>
-    <a class="primary-button" routerLink="/nutrition/today" i18n>Open today's meals</a>
-  </section>
+  <app-client-today />
 } @else {
   <section class="empty-state">
     <h2 i18n>No active workspace role</h2>

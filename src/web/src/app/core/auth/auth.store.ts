@@ -13,6 +13,7 @@ export class AuthStore {
   private readonly userState = signal<CurrentUser | null>(null);
   private readonly loadingState = signal(true);
   private initialization: Promise<void> | null = null;
+  private sessionRequest = 0;
 
   readonly user = this.userState.asReadonly();
   readonly loading = this.loadingState.asReadonly();
@@ -27,37 +28,50 @@ export class AuthStore {
   }
 
   async login(email: string, password: string, rememberMe: boolean): Promise<void> {
+    const request = ++this.sessionRequest;
+    this.tenants.clear();
+    this.userState.set(null);
     this.loadingState.set(true);
     try {
       await this.csrf.refresh();
+      if (request !== this.sessionRequest) return;
       const user = await firstValueFrom(this.api.login({ email, password, rememberMe }));
+      if (request !== this.sessionRequest) return;
       this.userState.set(user);
       await this.tenants.load();
     } finally {
-      this.loadingState.set(false);
+      if (request === this.sessionRequest) this.loadingState.set(false);
     }
   }
 
   async logout(): Promise<void> {
-    await this.csrf.refresh();
-    await firstValueFrom(this.api.logout());
+    const request = ++this.sessionRequest;
     this.userState.set(null);
     this.tenants.clear();
+    this.loadingState.set(false);
     this.initialization = Promise.resolve();
+    await this.csrf.refresh();
+    if (request !== this.sessionRequest) return;
+    await firstValueFrom(this.api.logout());
   }
 
   private async loadSession(): Promise<void> {
+    const request = ++this.sessionRequest;
     this.loadingState.set(true);
     try {
       await this.csrf.refresh();
+      if (request !== this.sessionRequest) return;
       const user = await firstValueFrom(this.api.getCurrentUser());
+      if (request !== this.sessionRequest) return;
+      if (this.userState()?.id !== user.id) this.tenants.clear();
       this.userState.set(user);
       await this.tenants.load();
     } catch {
+      if (request !== this.sessionRequest) return;
       this.userState.set(null);
       this.tenants.clear();
     } finally {
-      this.loadingState.set(false);
+      if (request === this.sessionRequest) this.loadingState.set(false);
     }
   }
 }

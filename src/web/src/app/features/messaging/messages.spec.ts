@@ -14,6 +14,7 @@ import {
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, field, press, query, settle } from '../../../testing/dom';
+import { ConversationLaunch } from './conversation-launch';
 import { messagingRoutes } from './messages.routes';
 import type {
   Conversation,
@@ -159,6 +160,7 @@ interface Harness extends ApiMocks {
   user: WritableSignal<CurrentUser | null>;
   membership: WritableSignal<TenantMembership | undefined>;
   unreadRefresh: ReturnType<typeof vi.fn>;
+  conversationLaunch: ConversationLaunch;
 }
 
 /**
@@ -215,7 +217,10 @@ class RealtimeStub {
   }
 }
 
-async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
+async function render(
+  configure?: (api: ApiMocks) => void,
+  prepareLaunch?: (launch: ConversationLaunch) => void,
+): Promise<Harness> {
   const user = signal<CurrentUser | null>(COACH);
   const membership = signal<TenantMembership | undefined>(ALPHA);
   const realtime = new RealtimeStub();
@@ -256,6 +261,8 @@ async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
     ],
   }).compileComponents();
 
+  const conversationLaunch = TestBed.inject(ConversationLaunch);
+  prepareLaunch?.(conversationLaunch);
   const fixture = TestBed.createComponent(Messages);
   await settle(fixture);
   return {
@@ -266,6 +273,7 @@ async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
     host: fixture.nativeElement as HTMLElement,
     user,
     membership,
+    conversationLaunch,
   };
 }
 
@@ -349,6 +357,27 @@ describe('Messages', () => {
     expect(query(host, '.conversation').getAttribute('aria-label')).toBe(
       'Rania Haddad, 3 unread messages',
     );
+  });
+
+  it('opens a same-workspace conversation handoff outside the bounded first page', async () => {
+    const launched = conversation({
+      id: 'conversation-created',
+      clientProfileId: 'client-created',
+      counterpart: { userId: 'client-user-created', displayName: 'Maya Khoury', role: 'Client' },
+    });
+    const harness = await render(
+      ({ listConversations }) => {
+        listConversations.mockReturnValue(of(conversationPage([conversation()])));
+      },
+      (launch) => launch.open(ALPHA.tenantId, launched),
+    );
+
+    expect(harness.host.querySelectorAll('.conversation')).toHaveLength(2);
+    expect(query(harness.host, '.conversation[aria-current="true"]').textContent).toContain(
+      'Maya Khoury',
+    );
+    expect(harness.listConversationMessages).toHaveBeenCalledWith('conversation-created', null, 50);
+    expect(harness.conversationLaunch.take(ALPHA.tenantId)).toBeNull();
   });
 
   it('says a removed last message is removed rather than showing nothing', async () => {

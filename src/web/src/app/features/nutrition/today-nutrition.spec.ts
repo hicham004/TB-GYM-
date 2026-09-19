@@ -1,10 +1,11 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { signal } from '@angular/core';
+import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
+import { TenantContext } from '../../core/tenancy/tenant-context';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, field, fill, press, query, settle } from '../../../testing/dom';
 import type { NutritionDay, NutritionSlot } from './nutrition.models';
@@ -75,7 +76,17 @@ function afterSave(): NutritionDay {
   });
 }
 
-async function render(api: Partial<ApiClient> = {}, today: NutritionDay = day()) {
+interface RenderOptions {
+  readonly selectedTenantId?: WritableSignal<string | null>;
+  readonly csrfRefresh?: () => Promise<void>;
+}
+
+async function render(
+  api: Partial<ApiClient> = {},
+  today: NutritionDay = day(),
+  options: RenderOptions = {},
+) {
+  const selectedTenantId = options.selectedTenantId ?? signal<string | null>('tenant-1');
   await TestBed.configureTestingModule({
     imports: [TodayNutrition],
     providers: [
@@ -88,14 +99,50 @@ async function render(api: Partial<ApiClient> = {}, today: NutritionDay = day())
           ...api,
         },
       },
-      { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
-      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      {
+        provide: CsrfService,
+        useValue: { refresh: vi.fn(options.csrfRefresh ?? (() => Promise.resolve())) },
+      },
+      { provide: TenantStore, useValue: { selectedTenantId } },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(TodayNutrition);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api: TestBed.inject(ApiClient) };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    component: fixture.componentInstance,
+    api: TestBed.inject(ApiClient),
+    selectedTenantId,
+  };
+}
+
+function dateDay(date: string, suffix: string, slotId = 'slot-1'): NutritionDay {
+  return day({
+    date,
+    planDayId: `plan-day-${suffix}`,
+    dailyLogId: `log-${suffix}`,
+    slots: [slot({ id: slotId })],
+  });
+}
+
+function beginSave(component: TodayNutrition): Promise<void> {
+  const current = component['day']()!;
+  const currentSlot = current.slots[0];
+  component['updateChoice'](currentSlot.id, 'choice-2');
+  component['updateServings'](currentSlot.id, '1.5');
+  return component['save'](currentSlot);
+}
+
+async function changeDate(
+  component: TodayNutrition,
+  fixture: ReturnType<typeof TestBed.createComponent<TodayNutrition>>,
+  selectedDate: string,
+): Promise<void> {
+  component['selectedDate'] = selectedDate;
+  await component['changeDate']();
+  fixture.detectChanges();
 }
 
 describe('TodayNutrition', () => {
@@ -263,5 +310,166 @@ describe('TodayNutrition', () => {
     await settle(fixture);
 
     expect(api.getMyNutritionDay).toHaveBeenLastCalledWith('2026-08-20');
+  });
+
+  it('ignores a date-A save that resolves after date B is displayed', async () => {
+    const dateA = dateDay('2026-08-25', 'a');
+    const dateB = dateDay('2026-08-26', 'b');
+    const response = new Subject<NutritionDay>();
+    const record = vi.fn(() => response);
+    const getDay = vi.fn((selectedDate?: string) => of(selectedDate ? dateB : dateA));
+    const { component, fixture } = await render(
+      { getMyNutritionDay: getDay, recordMyNutritionChoice: record as never },
+      dateA,
+    );
+
+    const pending = beginSave(component);
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    await changeDate(component, fixture, dateB.date);
+    response.next(dateDay(dateA.date, 'a-saved'));
+    response.complete();
+    await pending;
+
+    expect(component['day']()?.planDayId).toBe(dateB.planDayId);
+    expect(component['notice']()).toBeNull();
+    expect(component['draft']('slot-1')?.saving).toBe(false);
+  });
+
+  it('ignores a date-A save rejection after date B is displayed', async () => {
+    const dateA = dateDay('2026-08-25', 'a');
+    const dateB = dateDay('2026-08-26', 'b');
+    const response = new Subject<NutritionDay>();
+    const record = vi.fn(() => response);
+    const { component, fixture } = await render(
+      {
+        getMyNutritionDay: vi.fn((selectedDate?: string) => of(selectedDate ? dateB : dateA)),
+        recordMyNutritionChoice: record as never,
+      },
+      dateA,
+    );
+
+    const pending = beginSave(component);
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    await changeDate(component, fixture, dateB.date);
+    response.error(new HttpErrorResponse({ status: 409, error: { title: 'Old conflict' } }));
+    await pending;
+
+    expect(component['day']()?.planDayId).toBe(dateB.planDayId);
+    expect(component['error']()).toBeNull();
+    expect(component['draft']('slot-1')?.error).toBeNull();
+  });
+
+  it('ignores a date-A completion that resolves after date B is displayed', async () => {
+    const dateA = dateDay('2026-08-25', 'a');
+    const dateB = dateDay('2026-08-26', 'b');
+    const response = new Subject<NutritionDay>();
+    const complete = vi.fn(() => response);
+    const { component, fixture } = await render(
+      {
+        getMyNutritionDay: vi.fn((selectedDate?: string) => of(selectedDate ? dateB : dateA)),
+        completeMyNutritionLog: complete as never,
+      },
+      dateA,
+    );
+
+    const pending = component['complete']();
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
+    await changeDate(component, fixture, dateB.date);
+    response.next(dateDay(dateA.date, 'a-completed'));
+    response.complete();
+    await pending;
+
+    expect(component['day']()?.planDayId).toBe(dateB.planDayId);
+    expect(component['notice']()).toBeNull();
+    expect(component['completing']()).toBe(false);
+  });
+
+  it('does not revive an original A operation after A to B to A', async () => {
+    let releaseCsrf!: () => void;
+    const csrf = new Promise<void>((resolve) => {
+      releaseCsrf = resolve;
+    });
+    const originalA = dateDay('2026-08-25', 'a-original');
+    const dateB = dateDay('2026-08-26', 'b');
+    const currentA = dateDay('2026-08-25', 'a-current');
+    const record = vi.fn(() => of(dateDay(originalA.date, 'a-saved')));
+    const getDay = vi
+      .fn()
+      .mockReturnValueOnce(of(originalA))
+      .mockReturnValueOnce(of(dateB))
+      .mockReturnValueOnce(of(currentA));
+    const { component, fixture } = await render(
+      { getMyNutritionDay: getDay, recordMyNutritionChoice: record as never },
+      originalA,
+      { csrfRefresh: () => csrf },
+    );
+
+    const pending = beginSave(component);
+    await changeDate(component, fixture, dateB.date);
+    await changeDate(component, fixture, currentA.date);
+    releaseCsrf();
+    await pending;
+
+    expect(record).not.toHaveBeenCalled();
+    expect(component['day']()?.planDayId).toBe(currentA.planDayId);
+  });
+
+  it('does not let stale cleanup alter the current date save or loading state', async () => {
+    const dateA = dateDay('2026-08-25', 'a', 'slot-a');
+    const dateB = dateDay('2026-08-26', 'b', 'slot-b');
+    const first = new Subject<NutritionDay>();
+    const second = new Subject<NutritionDay>();
+    const record = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const { component, fixture } = await render(
+      {
+        getMyNutritionDay: vi.fn((selectedDate?: string) => of(selectedDate ? dateB : dateA)),
+        recordMyNutritionChoice: record as never,
+      },
+      dateA,
+    );
+
+    const oldSave = beginSave(component);
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    await changeDate(component, fixture, dateB.date);
+    const currentSave = beginSave(component);
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(2));
+
+    first.next(dateDay(dateA.date, 'a-saved', 'slot-a'));
+    first.complete();
+    await oldSave;
+
+    expect(component['day']()?.planDayId).toBe(dateB.planDayId);
+    expect(component['draft']('slot-b')?.saving).toBe(true);
+    expect(component['loading']()).toBe(false);
+
+    second.next(dateDay(dateB.date, 'b-saved', 'slot-b'));
+    second.complete();
+    await currentSave;
+  });
+
+  it('invalidates pending date operations during tenant reset', async () => {
+    const dateA = dateDay('2026-08-25', 'a');
+    const response = new Subject<NutritionDay>();
+    const record = vi.fn(() => response);
+    const selectedTenantId = signal<string | null>('tenant-1');
+    const { component, fixture } = await render(
+      { recordMyNutritionChoice: record as never },
+      dateA,
+      { selectedTenantId },
+    );
+
+    const pending = beginSave(component);
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    selectedTenantId.set(null);
+    TestBed.inject(TenantContext).invalidate();
+    fixture.detectChanges();
+    response.next(dateDay(dateA.date, 'a-saved'));
+    response.complete();
+    await pending;
+
+    expect(component['day']()).toBeNull();
+    expect(component['draft']('slot-1')).toBeUndefined();
+    expect(component['notice']()).toBeNull();
+    expect(component['loading']()).toBe(false);
   });
 });

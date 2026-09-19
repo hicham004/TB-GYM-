@@ -31,6 +31,7 @@ async function render(
     owner?: boolean;
     unread?: number;
     unreadMessages?: number;
+    client?: boolean;
   } = {},
 ) {
   const clear = vi.fn();
@@ -81,7 +82,7 @@ async function render(
           selectedMembership: signal(options.signedIn ? MEMBERSHIP : undefined),
           canCoach: signal(Boolean(options.owner)),
           isOwner: signal(Boolean(options.owner)),
-          isClient: signal(false),
+          isClient: signal(Boolean(options.client)),
           select: vi.fn(),
         },
       },
@@ -94,6 +95,23 @@ async function render(
 }
 
 describe('App', () => {
+  it('gives clients five destinations with independent message and notification badges', async () => {
+    const { host } = await render({ signedIn: true, client: true, unread: 2, unreadMessages: 3 });
+    const tabs = host.querySelectorAll('.client-tabs a');
+    expect(tabs).toHaveLength(5);
+    expect([...tabs].map((link) => link.getAttribute('href'))).toEqual([
+      '/',
+      '/checkins/me',
+      '/messages',
+      '/progress/dashboard',
+      '/me',
+    ]);
+    expect(host.querySelector('.client-tabs')?.textContent).toContain('3 unread messages');
+    expect(host.querySelector('a[href="/notifications"]')?.textContent).toContain(
+      '2 unread notifications',
+    );
+    expect(host.querySelector('a[href*="nutrition"]')).toBeNull();
+  });
   afterEach(() => {
     TestBed.resetTestingModule();
   });

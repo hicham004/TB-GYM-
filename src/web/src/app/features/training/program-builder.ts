@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { Component, effect, inject, signal, WritableSignal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -43,6 +44,7 @@ export class ProgramBuilder {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
   private draggedWeek: number | null = null;
   private draggedSession: { week: number; session: number } | null = null;
@@ -76,7 +78,9 @@ export class ProgramBuilder {
   protected readonly setTypeLabel = trainingSetTypeLabel;
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       if (tenantId && tenantId !== this.loadedTenantId) {
         this.loadedTenantId = tenantId;
@@ -93,21 +97,28 @@ export class ProgramBuilder {
   }
 
   protected async openVersion(versionId: string): Promise<void> {
-    this.busy.set(true);
-    this.clearMessages();
-    try {
-      const version = await firstValueFrom(this.api.getProgramTemplateVersion(versionId));
-      const draft = draftFromVersion(version);
-      const template = this.templates().find((item) => item.id === version.templateId);
-      draft.sourceVersion = template ? numeric(template.version) : null;
-      this.draft.set(draft);
-      this.selectedWeeks.set(new Set());
-      this.selectedSessions.set(new Set());
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The program version could not be loaded.`));
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('openVersion', async (owner) => {
+      this.busy.set(true);
+      this.clearMessages();
+      try {
+        const version = await owner.wait(
+          firstValueFrom(this.api.getProgramTemplateVersion(versionId)),
+        );
+        const draft = draftFromVersion(version);
+        const template = this.templates().find((item) => item.id === version.templateId);
+        draft.sourceVersion = template ? numeric(template.version) : null;
+        this.draft.set(draft);
+        this.selectedWeeks.set(new Set());
+        this.selectedSessions.set(new Set());
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`The program version could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
   protected addWeek(): void {
@@ -197,24 +208,30 @@ export class ProgramBuilder {
   }
 
   protected async saveSession(session: DraftSession): Promise<void> {
-    const versionId = this.draft().sourceVersionId;
-    if (!versionId || !session.sourceId) {
-      this.error.set(
-        $localize`Save the program version before adding this session to the library.`,
-      );
-      return;
-    }
+    return this.scope.run('saveSession', async (owner) => {
+      const versionId = this.draft().sourceVersionId;
+      if (!versionId || !session.sourceId) {
+        this.error.set(
+          $localize`Save the program version before adding this session to the library.`,
+        );
+        return;
+      }
 
-    await this.runWrite(async () => {
-      await firstValueFrom(
-        this.api.saveTrainingSession({
-          name: session.name,
-          sourceTemplateVersionId: versionId,
-          sourceTemplateSessionId: session.sourceId!,
+      await owner.wait(
+        this.runWrite(async () => {
+          await owner.wait(
+            firstValueFrom(
+              this.api.saveTrainingSession({
+                name: session.name,
+                sourceTemplateVersionId: versionId,
+                sourceTemplateSessionId: session.sourceId!,
+              }),
+            ),
+          );
+          this.savedSessions.set(await owner.wait(firstValueFrom(this.api.listSavedSessions())));
+          this.notice.set($localize`Session saved to the reusable library.`);
         }),
       );
-      this.savedSessions.set(await firstValueFrom(this.api.listSavedSessions()));
-      this.notice.set($localize`Session saved to the reusable library.`);
     });
   }
 
@@ -299,24 +316,30 @@ export class ProgramBuilder {
   }
 
   protected async saveProgram(): Promise<void> {
-    const draft = this.draft();
-    const validation = this.validate(draft);
-    if (validation) {
-      this.error.set(validation);
-      return;
-    }
+    return this.scope.run('saveProgram', async (owner) => {
+      const draft = this.draft();
+      const validation = this.validate(draft);
+      if (validation) {
+        this.error.set(validation);
+        return;
+      }
 
-    await this.runWrite(async () => {
-      const request = toProgramRequest(draft);
-      const saved = draft.templateId
-        ? await firstValueFrom(this.api.addProgramTemplateVersion(draft.templateId, request))
-        : await firstValueFrom(this.api.createProgramTemplate(request));
-      await this.loadCatalog(false);
-      await this.openVersion(saved.id);
-      this.notice.set(
-        draft.templateId
-          ? $localize`New immutable program version saved.`
-          : $localize`Program template created.`,
+      await owner.wait(
+        this.runWrite(async () => {
+          const request = toProgramRequest(draft);
+          const saved = draft.templateId
+            ? await owner.wait(
+                firstValueFrom(this.api.addProgramTemplateVersion(draft.templateId, request)),
+              )
+            : await owner.wait(firstValueFrom(this.api.createProgramTemplate(request)));
+          await owner.wait(this.loadCatalog(false));
+          await owner.wait(this.openVersion(saved.id));
+          this.notice.set(
+            draft.templateId
+              ? $localize`New immutable program version saved.`
+              : $localize`Program template created.`,
+          );
+        }),
       );
     });
   }
@@ -353,55 +376,74 @@ export class ProgramBuilder {
   }
 
   private async loadCatalog(showLoading = true): Promise<void> {
-    if (showLoading) {
-      this.loading.set(true);
-    }
-    this.clearMessages();
-    try {
-      const [templatePage, exercises, savedSessions] = await Promise.all([
-        firstValueFrom(this.api.listProgramTemplates()),
-        firstValueFrom(this.api.searchExercises({})),
-        firstValueFrom(this.api.listSavedSessions()),
-      ]);
-      this.templates.set(templatePage.items);
-      this.templateTotal.set(numeric(templatePage.total));
-      this.exercises.set(exercises.items.filter((item) => !item.isArchived));
-      this.savedSessions.set(savedSessions);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Training resources could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+    return this.scope.run('catalog', async (owner) => {
+      if (showLoading) {
+        this.loading.set(true);
+      }
+      this.clearMessages();
+      try {
+        const [templatePage, exercises, savedSessions] = await owner.wait(
+          Promise.all([
+            firstValueFrom(this.api.listProgramTemplates()),
+            firstValueFrom(this.api.searchExercises({})),
+            firstValueFrom(this.api.listSavedSessions()),
+          ]),
+        );
+        this.templates.set(templatePage.items);
+        this.templateTotal.set(numeric(templatePage.total));
+        this.exercises.set(exercises.items.filter((item) => !item.isArchived));
+        this.savedSessions.set(savedSessions);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`Training resources could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
+      }
+    });
   }
 
   protected async loadMoreTemplates(): Promise<void> {
-    if (this.templates().length >= this.templateTotal()) {
-      return;
-    }
-    this.busy.set(true);
-    try {
-      const page = await firstValueFrom(this.api.listProgramTemplates(this.templates().length));
-      this.templates.update((items) => [...items, ...page.items]);
-    } catch (error) {
-      this.error.set(
-        apiErrorMessage(error, $localize`More program templates could not be loaded.`),
-      );
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('catalog', async (owner) => {
+      if (this.templates().length >= this.templateTotal()) {
+        return;
+      }
+      this.busy.set(true);
+      try {
+        const page = await owner.wait(
+          firstValueFrom(this.api.listProgramTemplates(this.templates().length)),
+        );
+        this.templates.update((items) => [...items, ...page.items]);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(
+          apiErrorMessage(error, $localize`More program templates could not be loaded.`),
+        );
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
   private async runWrite(command: () => Promise<void>): Promise<void> {
-    this.busy.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      await command();
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The training change could not be saved.`));
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('runWrite', async (owner) => {
+      this.busy.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        await owner.wait(command());
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`The training change could not be saved.`));
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
   private mutate(change: (draft: ProgramDraft) => void): void {
@@ -514,6 +556,23 @@ export class ProgramBuilder {
   }
 
   private clearMessages(): void {
+    this.error.set(null);
+    this.notice.set(null);
+  }
+
+  private resetTenantState(): void {
+    this.loadedTenantId = null;
+    this.draggedWeek = null;
+    this.draggedSession = null;
+    this.templates.set([]);
+    this.templateTotal.set(0);
+    this.exercises.set([]);
+    this.savedSessions.set([]);
+    this.draft.set(emptyProgram());
+    this.selectedWeeks.set(new Set());
+    this.selectedSessions.set(new Set());
+    this.loading.set(false);
+    this.busy.set(false);
     this.error.set(null);
     this.notice.set(null);
   }

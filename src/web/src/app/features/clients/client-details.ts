@@ -1,6 +1,7 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { Component, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
@@ -18,6 +19,7 @@ import { ClientTraining } from '../training/client-training';
 import { ClientNutrition } from '../nutrition/client-nutrition';
 import { ProgressView } from '../progress/progress-view';
 import { ProgressDashboardView } from '../progress/progress-dashboard';
+import { ConversationLaunch } from '../messaging/conversation-launch';
 
 @Component({
   selector: 'app-client-details',
@@ -39,9 +41,14 @@ export class ClientDetails {
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly conversationLaunch = inject(ConversationLaunch);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
   private readonly clientId = this.route.snapshot.paramMap.get('clientId') ?? '';
+  private readonly conversationKeys = new Map<string, string>();
+  protected readonly startingConversation = signal(false);
 
   protected readonly profile = signal<CoachClientDetails | null>(null);
   protected readonly loading = signal(false);
@@ -54,7 +61,9 @@ export class ClientDetails {
   protected readonly onboardingStatusLabel = onboardingStatusLabel;
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       const key = tenantId ? `${tenantId}:${this.clientId}` : null;
       if (key && key !== this.loadedKey) {
@@ -65,34 +74,81 @@ export class ClientDetails {
   }
 
   protected async saveIntake(request: UpdateClientIntakeRequest): Promise<void> {
-    await this.run(
-      () => this.api.updateClientIntake(this.clientId, request),
-      $localize`Client intake saved.`,
-    );
+    return this.scope.run('saveIntake', async (owner) => {
+      await owner.wait(
+        this.run(
+          () => this.api.updateClientIntake(this.clientId, request),
+          $localize`Client intake saved.`,
+        ),
+      );
+    });
+  }
+
+  protected async messageClient(): Promise<void> {
+    return this.scope.run('messageClient', async (owner) => {
+      const tenantId = this.tenants.selectedTenantId();
+      if (!tenantId || this.startingConversation()) return;
+      const key = this.conversationKeys.get(tenantId) ?? crypto.randomUUID();
+      this.conversationKeys.set(tenantId, key);
+      this.startingConversation.set(true);
+      this.error.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (tenantId !== this.tenants.selectedTenantId()) return;
+        const detail = await owner.wait(
+          firstValueFrom(this.api.createDirectConversation(this.clientId, key)),
+        );
+        if (tenantId !== this.tenants.selectedTenantId()) return;
+        this.conversationLaunch.open(tenantId, detail.conversation);
+        await owner.wait(this.router.navigateByUrl('/messages'));
+      } catch (error) {
+        if (!owner.current) return;
+        if (tenantId === this.tenants.selectedTenantId()) {
+          this.error.set(
+            apiErrorMessage(
+              error,
+              $localize`Couldn’t open this conversation. Check messaging access and retry.`,
+            ),
+          );
+        }
+      } finally {
+        if (owner.current) {
+          this.startingConversation.set(false);
+        }
+      }
+    });
   }
 
   protected async completeOnboarding(request: CompleteClientOnboardingRequest): Promise<void> {
-    await this.run(
-      () => this.api.completeClientOnboarding(this.clientId, request),
-      $localize`Client onboarding completed.`,
-    );
+    return this.scope.run('completeOnboarding', async (owner) => {
+      await owner.wait(
+        this.run(
+          () => this.api.completeClientOnboarding(this.clientId, request),
+          $localize`Client onboarding completed.`,
+        ),
+      );
+    });
   }
 
   protected async saveNotes(): Promise<void> {
-    const profile = this.profile();
-    if (!profile || this.notesForm.invalid) {
-      this.notesForm.markAllAsTouched();
-      return;
-    }
-    await this.run(
-      () =>
-        this.api.updateCoachNotes(
-          this.clientId,
-          this.notesForm.getRawValue().notes || null,
-          profile.version,
+    return this.scope.run('saveNotes', async (owner) => {
+      const profile = this.profile();
+      if (!profile || this.notesForm.invalid) {
+        this.notesForm.markAllAsTouched();
+        return;
+      }
+      await owner.wait(
+        this.run(
+          () =>
+            this.api.updateCoachNotes(
+              this.clientId,
+              this.notesForm.getRawValue().notes || null,
+              profile.version,
+            ),
+          $localize`Coach notes saved.`,
         ),
-      $localize`Coach notes saved.`,
-    );
+      );
+    });
   }
 
   protected commercialProfileChanged(profile: CoachClientDetails): void {
@@ -100,33 +156,43 @@ export class ClientDetails {
   }
 
   private async load(): Promise<void> {
-    this.loading.set(true);
-    this.clearMessages();
-    try {
-      const profile = await firstValueFrom(this.api.getClient(this.clientId));
-      this.setProfile(profile);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The client profile could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+    return this.scope.run('load', async (owner) => {
+      this.loading.set(true);
+      this.clearMessages();
+      try {
+        const profile = await owner.wait(firstValueFrom(this.api.getClient(this.clientId)));
+        this.setProfile(profile);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`The client profile could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
+      }
+    });
   }
 
   private async run(
     request: () => ReturnType<ApiClient['updateClientIntake']>,
     successMessage: string,
   ): Promise<void> {
-    this.busy.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      this.setProfile(await firstValueFrom(request()));
-      this.notice.set(successMessage);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The client profile could not be saved.`));
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('run', async (owner) => {
+      this.busy.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        this.setProfile(await owner.wait(firstValueFrom(request())));
+        this.notice.set(successMessage);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`The client profile could not be saved.`));
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
   private setProfile(profile: CoachClientDetails): void {
@@ -137,5 +203,17 @@ export class ClientDetails {
   private clearMessages(): void {
     this.error.set(null);
     this.notice.set(null);
+  }
+
+  private resetTenantState(): void {
+    this.loadedKey = null;
+    this.conversationKeys.clear();
+    this.startingConversation.set(false);
+    this.profile.set(null);
+    this.loading.set(false);
+    this.busy.set(false);
+    this.error.set(null);
+    this.notice.set(null);
+    this.notesForm.reset();
   }
 }

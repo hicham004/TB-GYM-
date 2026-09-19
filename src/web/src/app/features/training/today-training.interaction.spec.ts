@@ -1,7 +1,8 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
@@ -13,7 +14,7 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, field, fill, press, query, settle, tick } from '../../../testing/dom';
+import { button, field, fill, press, query, settle } from '../../../testing/dom';
 import { TodayTraining } from './today-training';
 
 function set(overrides: Partial<ClientSetView> = {}): ClientSetView {
@@ -101,30 +102,61 @@ function saved(overrides: Partial<WorkoutSetSaveView> = {}): WorkoutSetSaveView 
   };
 }
 
-async function render(api: Partial<ApiClient> = {}, today: ClientTrainingDayResult = day()) {
+async function render(
+  api: Partial<ApiClient> = {},
+  today: ClientTrainingDayResult = day(),
+  tenant = signal<string | null>('tenant-1'),
+) {
   await TestBed.configureTestingModule({
     imports: [TodayTraining],
     providers: [
+      provideRouter([]),
       {
         provide: ApiClient,
         useValue: {
           getMyTrainingToday: vi.fn(() => of(today)),
+          getMyUpcomingTraining: vi.fn(() =>
+            of({
+              isAllowed: true,
+              accessReason: 'Granted',
+              localDate: today.localDate,
+              hasAssignedProgram: true,
+              hasVisibleSessions: true,
+              searchThrough: '2026-11-23',
+              nextSession: null,
+              unfinishedWorkouts: [],
+              nextSkip: null,
+            }),
+          ),
           recordMyTrainingSet: vi.fn(() => of(saved())),
           startMyWorkout: vi.fn(() => of(undefined)),
-          completeMyWorkout: vi.fn(() => of(undefined)),
+          completeMyWorkout: vi.fn(() =>
+            of({
+              id: 'execution-1',
+              status: 'Completed',
+              version: 5,
+              startedAtUtc: '2026-08-25T10:00:00Z',
+              completedAtUtc: '2026-08-25T11:00:00Z',
+            }),
+          ),
           addWorkoutNote: vi.fn(() => of(undefined)),
           substituteMyTrainingExercise: vi.fn(() => of(undefined)),
           ...api,
         },
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
-      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      { provide: TenantStore, useValue: { selectedTenantId: tenant } },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(TodayTraining);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api: TestBed.inject(ApiClient) };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    api: TestBed.inject(ApiClient),
+    tenant,
+  };
 }
 
 describe('TodayTraining interactions', () => {
@@ -147,11 +179,10 @@ describe('TodayTraining interactions', () => {
     fill(host, 'Actual repetitions', '8');
     fill(host, 'Actual RPE', '8.5');
     fill(host, 'Set note', 'Felt heavy.');
-    tick(host, 'Set completed');
     await settle(fixture);
 
-    expect(button(host, 'Save').disabled).toBe(false);
-    press(host, 'Save');
+    expect(button(host, 'Log set').disabled).toBe(false);
+    press(host, 'Log set');
     await settle(fixture);
 
     expect(api.recordMyTrainingSet).toHaveBeenCalledWith('execution-1', 'performance-1', {
@@ -177,13 +208,15 @@ describe('TodayTraining interactions', () => {
 
     fill(host, 'Actual repetitions', '8');
     await settle(fixture);
-    expect(button(host, 'Complete workout').disabled).toBe(true);
+    expect(button(host, 'Finish workout').disabled).toBe(false);
 
-    press(host, 'Save');
+    press(host, 'Log set');
     await settle(fixture);
 
-    expect(button(host, 'Complete workout').disabled).toBe(false);
-    press(host, 'Complete workout');
+    expect(button(host, 'Finish workout').disabled).toBe(false);
+    press(host, 'Finish workout');
+    await settle(fixture);
+    press(host, 'Confirm finish');
     await settle(fixture);
 
     // Completion carries the version the last save returned, not the one first rendered.
@@ -197,7 +230,10 @@ describe('TodayTraining interactions', () => {
     fill(host, 'Actual repetitions', '8');
     await settle(fixture);
 
-    expect(button(host, 'Complete workout').disabled).toBe(true);
+    expect(button(host, 'Finish workout').disabled).toBe(false);
+    press(host, 'Finish workout');
+    await settle(fixture);
+    expect(query(host, '[role="alert"]').textContent).toContain('Save every edited set');
     expect(api.completeMyWorkout).not.toHaveBeenCalled();
   });
 
@@ -216,7 +252,7 @@ describe('TodayTraining interactions', () => {
 
     fill(host, 'Actual load', '60');
     await settle(fixture);
-    press(host, 'Save');
+    press(host, 'Log set');
     await settle(fixture);
 
     expect(api.recordMyTrainingSet).not.toHaveBeenCalled();
@@ -231,7 +267,7 @@ describe('TodayTraining interactions', () => {
 
     fill(host, 'Actual load', '60');
     await settle(fixture);
-    press(host, 'Save');
+    press(host, 'Log set');
     await settle(fixture);
 
     expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
@@ -313,9 +349,9 @@ describe('TodayTraining interactions', () => {
     const done = day({ workouts: [workout({ status: 'Completed' })] });
     const { host } = await render({}, done);
 
-    expect(field(host, 'Actual load').disabled).toBe(true);
-    expect(field(host, 'Set completed').disabled).toBe(true);
-    expect(() => button(host, 'Complete workout')).toThrow();
+    expect(host.querySelector('input[aria-label="Actual load"]')).toBeNull();
+    expect(host.textContent).toContain('Completed · read only');
+    expect(() => button(host, 'Finish workout')).toThrow();
   });
 
   /** An unentitled day says why, and offers no workout to log against. */
@@ -324,7 +360,7 @@ describe('TodayTraining interactions', () => {
     const { host } = await render({}, closed);
 
     expect(host.textContent).toContain('Training is not available');
-    expect(host.textContent).not.toContain('Recovery day');
+    expect(host.textContent).not.toContain('Rest day');
     expect(host.querySelector('.workout')).toBeNull();
   });
 
@@ -332,7 +368,7 @@ describe('TodayTraining interactions', () => {
     const rest = day({ workouts: [] });
     const { host } = await render({}, rest);
 
-    expect(host.textContent).toContain('Recovery day');
+    expect(host.textContent).toContain('Rest day');
     expect(host.textContent).not.toContain('Training is not available');
   });
 
@@ -347,7 +383,7 @@ describe('TodayTraining interactions', () => {
 
     fill(host, 'Actual repetitions', '8');
     await settle(fixture);
-    press(host, 'Save');
+    press(host, 'Log set');
     await settle(fixture);
 
     expect(query(host, '[role="alert"]').textContent).toContain(
@@ -365,6 +401,275 @@ describe('TodayTraining interactions', () => {
     expect(query(host, '[role="alert"]').textContent).toContain(
       "Today's training could not be loaded.",
     );
-    expect(host.textContent).not.toContain('Recovery day');
+    expect(host.textContent).not.toContain('Rest day');
+  });
+
+  it('preserves both drafts when one set fails, and retries without changing the other set', async () => {
+    const twoSets = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              sets: [
+                set(),
+                set({
+                  prescriptionId: 'prescription-2',
+                  performanceId: 'performance-2',
+                  position: 2,
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const record = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 503 })))
+      .mockReturnValueOnce(of(saved({ actualRepetitions: 7 })));
+    const { fixture, host } = await render({ recordMyTrainingSet: record }, twoSets);
+    const cards = host.querySelectorAll<HTMLElement>('.set-card');
+    fill(cards[0], 'Actual repetitions', '7');
+    fill(cards[1], 'Actual repetitions', '9');
+    await settle(fixture);
+    press(cards[0], 'Log set');
+    await settle(fixture);
+    expect(cards[0].textContent).toContain('Your entries are still on this page. Retry.');
+    expect(field(cards[0], 'Actual repetitions').value).toBe('7');
+    expect(field(cards[1], 'Actual repetitions').value).toBe('9');
+    press(cards[0], 'Log set');
+    await settle(fixture);
+    expect(field(cards[1], 'Actual repetitions').value).toBe('9');
+    press(host, 'Finish workout');
+    await settle(fixture);
+    expect(host.textContent).toContain('Save every edited set');
+  });
+
+  it('serializes clicks on two sets using the version returned by the first save', async () => {
+    const first = new Subject<WorkoutSetSaveView>();
+    const record = vi
+      .fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(
+        of(
+          saved({
+            setPerformanceId: 'performance-2',
+            executionVersion: 5,
+          }),
+        ),
+      );
+    const twoSets = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              sets: [
+                set(),
+                set({
+                  prescriptionId: 'prescription-2',
+                  performanceId: 'performance-2',
+                  position: 2,
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const { fixture, host } = await render({ recordMyTrainingSet: record }, twoSets);
+    const cards = host.querySelectorAll<HTMLElement>('.set-card');
+    press(cards[0], 'Log set');
+    press(cards[1], 'Log set');
+    await settle(fixture);
+    expect(record).toHaveBeenCalledTimes(1);
+    first.next(saved());
+    first.complete();
+    await settle(fixture);
+    expect(record).toHaveBeenNthCalledWith(
+      2,
+      'execution-1',
+      'performance-2',
+      expect.objectContaining({ version: 4, isCompleted: true }),
+    );
+  });
+
+  it('reopens an earlier workout and logs using its own saved version', async () => {
+    const earlier = workout({ sessionId: 'yesterday', executionVersion: 12 });
+    const { fixture, host, api } = await render(
+      {
+        getMyUpcomingTraining: vi.fn(() =>
+          of({
+            isAllowed: true,
+            accessReason: 'Granted',
+            localDate: '2026-08-25',
+            hasAssignedProgram: true,
+            hasVisibleSessions: true,
+            searchThrough: '2026-11-23',
+            nextSession: null,
+            unfinishedWorkouts: [{ date: '2026-08-24', workout: earlier, hasMoreNotes: false }],
+            nextSkip: null,
+          }),
+        ),
+      },
+      day({ workouts: [] }),
+    );
+    expect(host.textContent).toContain('Started for Mon 24 Aug');
+    fill(host, 'Actual repetitions', '8');
+    press(host, 'Log set');
+    await settle(fixture);
+    expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+      'execution-1',
+      'performance-1',
+      expect.objectContaining({ version: 12 }),
+    );
+  });
+
+  it('shows rest, tempo and RPE meaning and never sends calculated RIR alongside RPE', async () => {
+    const today = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              sets: [
+                set({
+                  tempo: '3-1-1',
+                  actualRpe: 8,
+                  actualRir: 2,
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const { fixture, host, api } = await render({}, today);
+    expect(host.textContent).toContain('rest 2:00');
+    expect(host.textContent).toContain('tempo 3-1-1');
+    expect(host.textContent).toContain('about 2 reps left');
+    press(host, 'Log set');
+    await settle(fixture);
+    expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+      'execution-1',
+      'performance-1',
+      expect.objectContaining({ rpe: 8, rir: null }),
+    );
+  });
+
+  it('asks for confirmation when finishing with unlogged sets', async () => {
+    const { fixture, host, api } = await render();
+    press(host, 'Finish workout');
+    await settle(fixture);
+    expect(host.textContent).toContain('0 of 1 sets logged');
+    expect(api.completeMyWorkout).not.toHaveBeenCalled();
+    press(host, 'Keep training');
+    await settle(fixture);
+    expect(host.querySelector('.finish-confirmation')).toBeNull();
+  });
+
+  it('keeps approved-upload demo entry points on the runner', async () => {
+    const withDemo = day({
+      workouts: [workout({ exercises: [exercise({ mediaAssetIds: ['asset-1'] })] })],
+    });
+    const { host } = await render({}, withDemo);
+
+    expect(button(host, 'Demo 1').disabled).toBe(false);
+  });
+
+  it('focuses the persistent error summary when finishing is refused', async () => {
+    const { fixture, host } = await render();
+    document.body.append(host);
+
+    fill(host, 'Actual repetitions', '8');
+    await settle(fixture);
+    const finish = button(host, 'Finish workout');
+    finish.focus();
+    finish.click();
+    await settle(fixture);
+
+    expect(document.activeElement).toBe(query(host, '#training-error-summary'));
+  });
+
+  it('moves focus from a logged set to Edit set and back to its inputs', async () => {
+    const { fixture, host } = await render();
+    document.body.append(host);
+
+    const log = button(host, 'Log set');
+    log.focus();
+    log.click();
+    await settle(fixture);
+
+    const edit = button(host, 'Edit set');
+    expect(document.activeElement).toBe(edit);
+    edit.focus();
+    edit.click();
+    await settle(fixture);
+
+    expect(document.activeElement).toBe(field(host, 'Actual load'));
+  });
+
+  it('moves focus through a logged set without taking it from another set while saving', async () => {
+    const firstSave = new Subject<WorkoutSetSaveView>();
+    const twoSets = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              sets: [
+                set(),
+                set({
+                  prescriptionId: 'prescription-2',
+                  performanceId: 'performance-2',
+                  position: 2,
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const { fixture, host } = await render(
+      { recordMyTrainingSet: vi.fn(() => firstSave) },
+      twoSets,
+    );
+    document.body.append(host);
+    const cards = host.querySelectorAll<HTMLElement>('.set-card');
+    const firstLog = query<HTMLButtonElement>(cards[0], '.log-set');
+    firstLog.focus();
+    firstLog.click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const secondRepetitions = field(cards[1], 'Actual repetitions');
+    secondRepetitions.focus();
+    firstSave.next(saved());
+    firstSave.complete();
+    await settle(fixture);
+
+    expect(document.activeElement).toBe(secondRepetitions);
+  });
+
+  it('drops a stale workout-start response after leaving the tenant', async () => {
+    const started = new Subject<void>();
+    const notStarted = day({
+      workouts: [workout({ workoutExecutionId: null, status: null, executionVersion: null })],
+    });
+    const { fixture, host, api, tenant } = await render(
+      { startMyWorkout: vi.fn(() => started) as unknown as ApiClient['startMyWorkout'] },
+      notStarted,
+    );
+
+    press(host, 'Start workout');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(api.startMyWorkout).toHaveBeenCalledWith('session-1');
+
+    tenant.set(null);
+    await settle(fixture);
+    started.next();
+    started.complete();
+    await settle(fixture);
+
+    expect(host.querySelector('.workout')).toBeNull();
+    expect(host.textContent).not.toContain('Workout started.');
   });
 });

@@ -303,6 +303,29 @@ public static class TrainingEndpoints
             .RequireAuthorization(AuthorizationPolicies.TenantClient)
             .WithTags(TrainingModule.Name);
 
+        coach.MapGet("/clients/{clientProfileId:guid}/workouts/{workoutExecutionId:guid}", async (
+            Guid clientProfileId,
+            Guid workoutExecutionId,
+            int? notesSkip,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await service.GetCoachWorkoutAsync(
+                clientProfileId, workoutExecutionId, Math.Max(0, notesSkip ?? 0), cancellationToken);
+            return result is null ? Results.NotFound() : Results.Ok(result);
+        })
+        .WithName("GetCoachWorkoutDetail")
+        .Produces<CoachWorkoutDetailResult>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        client.MapGet("/upcoming", async (
+            int? skip,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetUpcomingAsync(Math.Max(0, skip ?? 0), cancellationToken)))
+        .WithName("GetMyUpcomingTraining")
+        .Produces<ClientTrainingUpcomingView>();
+
         client.MapGet("/today", async (
             ITrainingApplicationService service,
             CancellationToken cancellationToken) =>

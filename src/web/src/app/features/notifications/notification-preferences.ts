@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -40,6 +41,7 @@ export class NotificationPreferencesPage {
   private readonly csrf = inject(CsrfService);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly formBuilder = inject(FormBuilder);
 
   /** Bumped whenever the member or the workspace changes; every reply is checked against it. */
@@ -105,6 +107,7 @@ export class NotificationPreferencesPage {
   });
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     // The two time controls follow the switch above them. Disabled through the forms API rather
     // than a template `[disabled]` binding, which reactive forms refuses: a control that is disabled
     // in the DOM but enabled in the model still validates and still submits.
@@ -113,6 +116,7 @@ export class NotificationPreferencesPage {
       .subscribe((enabled) => this.applyQuietHoursEnabled(enabled));
 
     effect(() => {
+      this.scope.epoch();
       const key = this.contextKey();
       if (key === this.context) {
         return;
@@ -130,81 +134,93 @@ export class NotificationPreferencesPage {
   }
 
   protected async reload(): Promise<void> {
-    if (this.contextKey() === null) {
-      return;
-    }
+    return this.scope.run('reload', async (owner) => {
+      if (this.contextKey() === null) {
+        return;
+      }
 
-    await this.load(this.contextGeneration);
+      await owner.wait(this.load(this.contextGeneration));
+    });
   }
 
   protected async save(): Promise<void> {
-    const generation = this.contextGeneration;
-    const current = this.preferences();
-    if (current === null || this.saving()) {
-      return;
-    }
-
-    const value = this.form.getRawValue();
-    if (value.quietHoursEnabled && !this.validateQuietHours(value)) {
-      return;
-    }
-
-    const submittedFingerprint = [
-      value.emailServiceEnabled,
-      value.quietHoursEnabled,
-      value.quietHoursEnabled ? value.quietHoursStartLocal : '',
-      value.quietHoursEnabled ? value.quietHoursEndLocal : '',
-    ].join('|');
-    if (this.submittedFingerprint !== null && this.submittedFingerprint !== submittedFingerprint) {
-      // The previous request may be retried with its key only while it is still the same normalized
-      // command. Once the member edits a choice, reusing that key would correctly conflict server-side.
-      this.idempotencyKey = crypto.randomUUID();
-    }
-    this.submittedFingerprint = submittedFingerprint;
-
-    this.saving.set(true);
-    this.error.set(null);
-    this.notice.set(null);
-    try {
-      await this.csrf.refresh();
-      if (this.contextGeneration !== generation) {
+    return this.scope.run('save', async (owner) => {
+      const generation = this.contextGeneration;
+      const current = this.preferences();
+      if (current === null || this.saving()) {
         return;
       }
 
-      const saved = await firstValueFrom(
-        this.api.updateNotificationPreferences({
-          emailServiceEnabled: value.emailServiceEnabled,
-          quietHoursEnabled: value.quietHoursEnabled,
-          // Leftover times are not part of a disabled window. Sending them would make two requests
-          // that both mean "off" into two different commands.
-          quietHoursStartLocal: value.quietHoursEnabled ? value.quietHoursStartLocal : null,
-          quietHoursEndLocal: value.quietHoursEnabled ? value.quietHoursEndLocal : null,
-          idempotencyKey: this.idempotencyKey,
-          version: current.version,
-        }),
-      );
-      if (this.contextGeneration !== generation) {
+      const value = this.form.getRawValue();
+      if (value.quietHoursEnabled && !this.validateQuietHours(value)) {
         return;
       }
 
-      // Settled, so the next edit is a new command.
-      this.idempotencyKey = crypto.randomUUID();
-      this.submittedFingerprint = null;
-      this.apply(saved);
-      this.notice.set($localize`Your notification settings were saved.`);
-    } catch (error) {
-      if (this.contextGeneration === generation) {
-        // The form deliberately keeps what the user typed. The server refused the change, so
-        // discarding their edit would cost them the work as well as the save.
-        this.error.set(
-          apiErrorMessage(error, $localize`Your notification settings could not be saved.`),
+      const submittedFingerprint = [
+        value.emailServiceEnabled,
+        value.quietHoursEnabled,
+        value.quietHoursEnabled ? value.quietHoursStartLocal : '',
+        value.quietHoursEnabled ? value.quietHoursEndLocal : '',
+      ].join('|');
+      if (
+        this.submittedFingerprint !== null &&
+        this.submittedFingerprint !== submittedFingerprint
+      ) {
+        // The previous request may be retried with its key only while it is still the same normalized
+        // command. Once the member edits a choice, reusing that key would correctly conflict server-side.
+        this.idempotencyKey = crypto.randomUUID();
+      }
+      this.submittedFingerprint = submittedFingerprint;
+
+      this.saving.set(true);
+      this.error.set(null);
+      this.notice.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (this.contextGeneration !== generation) {
+          return;
+        }
+
+        const saved = await owner.wait(
+          firstValueFrom(
+            this.api.updateNotificationPreferences({
+              emailServiceEnabled: value.emailServiceEnabled,
+              quietHoursEnabled: value.quietHoursEnabled,
+              // Leftover times are not part of a disabled window. Sending them would make two requests
+              // that both mean "off" into two different commands.
+              quietHoursStartLocal: value.quietHoursEnabled ? value.quietHoursStartLocal : null,
+              quietHoursEndLocal: value.quietHoursEnabled ? value.quietHoursEndLocal : null,
+              idempotencyKey: this.idempotencyKey,
+              version: current.version,
+            }),
+          ),
         );
+        if (this.contextGeneration !== generation) {
+          return;
+        }
+
+        // Settled, so the next edit is a new command.
+        this.idempotencyKey = crypto.randomUUID();
+        this.submittedFingerprint = null;
+        this.apply(saved);
+        this.notice.set($localize`Your notification settings were saved.`);
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.contextGeneration === generation) {
+          // The form deliberately keeps what the user typed. The server refused the change, so
+          // discarding their edit would cost them the work as well as the save.
+          this.error.set(
+            apiErrorMessage(error, $localize`Your notification settings could not be saved.`),
+          );
+        }
+      } finally {
+        if (owner.current) {
+          if (this.contextGeneration === generation) {
+            this.saving.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.contextGeneration === generation) {
-        this.saving.set(false);
-      }
-    }
+    });
   }
 
   /**
@@ -238,27 +254,32 @@ export class NotificationPreferencesPage {
   }
 
   private async load(generation: number): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
-    try {
-      const loaded = await firstValueFrom(this.api.getNotificationPreferences());
-      if (this.contextGeneration !== generation) {
-        return;
-      }
+    return this.scope.run('load', async (owner) => {
+      this.loading.set(true);
+      this.error.set(null);
+      try {
+        const loaded = await owner.wait(firstValueFrom(this.api.getNotificationPreferences()));
+        if (this.contextGeneration !== generation) {
+          return;
+        }
 
-      this.apply(loaded);
-    } catch (error) {
-      if (this.contextGeneration === generation) {
-        this.preferences.set(null);
-        this.error.set(
-          apiErrorMessage(error, $localize`Your notification settings could not be loaded.`),
-        );
+        this.apply(loaded);
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.contextGeneration === generation) {
+          this.preferences.set(null);
+          this.error.set(
+            apiErrorMessage(error, $localize`Your notification settings could not be loaded.`),
+          );
+        }
+      } finally {
+        if (owner.current) {
+          if (this.contextGeneration === generation) {
+            this.loading.set(false);
+          }
+        }
       }
-    } finally {
-      if (this.contextGeneration === generation) {
-        this.loading.set(false);
-      }
-    }
+    });
   }
 
   private apply(preferences: NotificationPreferences): void {
@@ -297,5 +318,19 @@ export class NotificationPreferencesPage {
     this.notice.set(null);
     this.idempotencyKey = crypto.randomUUID();
     this.submittedFingerprint = null;
+  }
+
+  private resetTenantState(): void {
+    ++this.contextGeneration;
+    this.context = null;
+    this.idempotencyKey = crypto.randomUUID();
+    this.submittedFingerprint = null;
+    this.loading.set(false);
+    this.saving.set(false);
+    this.error.set(null);
+    this.notice.set(null);
+    this.preferences.set(null);
+    this.form.reset();
+    this.quietHoursEnabled.set(false);
   }
 }

@@ -1,4 +1,5 @@
 import { signal } from '@angular/core';
+import { provideRouter } from '@angular/router';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -36,9 +37,14 @@ describe('TodayTraining media dialog', () => {
     await TestBed.configureTestingModule({
       imports: [TodayTraining],
       providers: [
+        provideRouter([]),
         {
           provide: ApiClient,
-          useValue: { createMediaAccess: vi.fn(() => of(access)) },
+          useValue: {
+            createMediaAccess: vi.fn(() => of(access)),
+            getMyTrainingToday: () => of({ isAllowed: false, workouts: [], accessReason: 'NoEntitlement' }),
+            getMyUpcomingTraining: () => of({ isAllowed: false, unfinishedWorkouts: [], accessReason: 'NoEntitlement' }),
+          },
         },
         {
           provide: CsrfService,
@@ -46,7 +52,7 @@ describe('TodayTraining media dialog', () => {
         },
         {
           provide: TenantStore,
-          useValue: { selectedTenantId: signal(null) },
+          useValue: { selectedTenantId: signal('tenant-1') },
         },
       ],
     }).compileComponents();

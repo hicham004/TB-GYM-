@@ -90,6 +90,13 @@ export const routes: Routes = [
       import('./features/profile/client-profile').then((module) => module.ClientProfilePage),
   },
   {
+    path: 'me',
+    canActivate: [authGuard, clientGuard],
+    title: $localize`Me | TB Gym`,
+    loadComponent: () =>
+      import('./features/account/client-account').then((module) => module.ClientAccount),
+  },
+  {
     path: 'progress/dashboard',
     canActivate: [authGuard, clientGuard],
     title: $localize`My progress dashboard | TB Gym`,

@@ -1,0 +1,80 @@
+<section class="today-page">
+  <header>
+    <p class="eyebrow" i18n>Your coaching</p>
+    <h1 i18n>Today</h1>
+    @if (day(); as current) {
+      <p>{{ current.localDate | date: 'EEE d MMM' }}</p>
+    }
+  </header>
+  @if (loading()) {
+    <section class="daily-action skeleton" role="status" i18n>Loading your workout…</section>
+  } @else if (error()) {
+    <section class="daily-action">
+      <p role="alert" i18n>Couldn’t load today. Try again to check your workout.</p>
+      <button type="button" class="secondary-button" (click)="load()" i18n>Retry</button>
+    </section>
+  } @else if (day(); as current) {
+    @if (!current.isAllowed || !upcoming()?.isAllowed) {
+      <section class="daily-action">
+        <h2 i18n>Training is not available</h2>
+        <p>
+          {{ accessLabel(!current.isAllowed ? current.accessReason : upcoming()!.accessReason) }}
+        </p>
+        <a routerLink="/messages" i18n>Contact your coach</a>
+      </section>
+    } @else if (primaryWorkout(); as workout) {
+      <section class="daily-action">
+        @if (upcoming()?.unfinishedWorkouts?.[0]; as earlier) {
+          <p class="eyebrow" i18n>Continue from {{ earlier.date | date: 'EEE d MMM' }}</p>
+        }
+        <h2 dir="auto">{{ workout.name }}</h2>
+        <p i18n>{{ workout.exercises.length }} exercises</p>
+        @if (workout.coachNotes) {
+          <p dir="auto">{{ workout.coachNotes }}</p>
+        }
+        <a
+          class="primary-button"
+          routerLink="/training/today"
+          [queryParams]="{ sessionId: workout.sessionId }"
+        >
+          @if (workout.status === 'Completed') {
+            <span i18n>View completed workout</span>
+          } @else if (workout.workoutExecutionId) {
+            <span i18n>Continue workout</span>
+          } @else {
+            <span i18n>Open workout</span>
+          }
+        </a>
+        <p class="muted" i18n>Your coach can read your saved sets and notes.</p>
+      </section>
+      @if (upcoming()?.unfinishedWorkouts?.length || (upcoming()?.nextSkip ?? null) !== null) {
+        <a routerLink="/training/today" i18n>All available workouts</a>
+      }
+    } @else {
+      <section class="daily-action">
+        @if (!upcoming()?.hasAssignedProgram) {
+          <h2 i18n>Nothing assigned yet</h2>
+          <p i18n>Your coach will put your program here.</p>
+        } @else if (!upcoming()?.hasVisibleSessions) {
+          <h2 i18n>No sessions shared yet</h2>
+          <p i18n>Your coach has assigned a program. Your sessions will appear when shared.</p>
+        } @else {
+          <h2 i18n>Rest day</h2>
+          <p i18n>No workout is scheduled for today.</p>
+        }
+      </section>
+    }
+    @if (upcoming()?.nextSession; as next) {
+      <section class="coming-up">
+        <h2 i18n>Coming up</h2>
+        <p dir="auto">{{ next.date | date: 'EEE d MMM' }} · {{ next.name }}</p>
+      </section>
+    }
+  }
+  <nav class="also-today" aria-label="Also today" i18n-aria-label>
+    <a routerLink="/checkins/me" i18n>Check-ins <span aria-hidden="true">›</span></a>
+    <a routerLink="/messages" i18n>Messages <span aria-hidden="true">›</span></a>
+    <a routerLink="/progress" i18n>Log weight (optional) <span aria-hidden="true">›</span></a>
+    <a routerLink="/progress/dashboard" i18n>View progress <span aria-hidden="true">›</span></a>
+  </nav>
+</section>

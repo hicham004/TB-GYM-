@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
 import { Component, effect, inject, input, output, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -28,6 +29,7 @@ export class ClientCommercial {
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
 
   readonly client = input.required<CoachClientDetails>();
@@ -76,7 +78,9 @@ export class ClientCommercial {
   });
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       const clientId = this.client().id;
       const key = tenantId ? `${tenantId}:${clientId}` : null;
@@ -98,22 +102,26 @@ export class ClientCommercial {
   }
 
   protected async assign(): Promise<void> {
-    if (this.assignForm.invalid) {
-      this.assignForm.markAllAsTouched();
-      return;
-    }
+    return this.scope.run('assign', async (owner) => {
+      if (this.assignForm.invalid) {
+        this.assignForm.markAllAsTouched();
+        return;
+      }
 
-    const request = this.assignForm.getRawValue();
-    await this.run(
-      () =>
-        firstValueFrom(
-          this.api.assignProduct(this.client().id, {
-            ...request,
-            idempotencyKey: crypto.randomUUID(),
-          }),
+      const request = this.assignForm.getRawValue();
+      await owner.wait(
+        this.run(
+          () =>
+            firstValueFrom(
+              this.api.assignProduct(this.client().id, {
+                ...request,
+                idempotencyKey: crypto.randomUUID(),
+              }),
+            ),
+          $localize`Service assigned. Access will follow payment and service dates.`,
         ),
-      $localize`Service assigned. Access will follow payment and service dates.`,
-    );
+      );
+    });
   }
 
   protected openPayment(enrollment: ClientEnrollment): void {
@@ -131,28 +139,32 @@ export class ClientCommercial {
   }
 
   protected async recordPayment(enrollment: ClientEnrollment): Promise<void> {
-    if (this.paymentForm.invalid) {
-      this.paymentForm.markAllAsTouched();
-      return;
-    }
+    return this.scope.run('recordPayment', async (owner) => {
+      if (this.paymentForm.invalid) {
+        this.paymentForm.markAllAsTouched();
+        return;
+      }
 
-    const raw = this.paymentForm.getRawValue();
-    await this.run(
-      () =>
-        firstValueFrom(
-          this.api.recordManualPayment(enrollment.id, {
-            amount: raw.amount,
-            currencyCode: raw.currencyCode.toUpperCase(),
-            receivedAtUtc: new Date(raw.receivedAtLocal).toISOString(),
-            method: raw.method,
-            reference: raw.reference || null,
-            note: raw.note || null,
-            idempotencyKey: crypto.randomUUID(),
-          }),
+      const raw = this.paymentForm.getRawValue();
+      await owner.wait(
+        this.run(
+          () =>
+            firstValueFrom(
+              this.api.recordManualPayment(enrollment.id, {
+                amount: raw.amount,
+                currencyCode: raw.currencyCode.toUpperCase(),
+                receivedAtUtc: new Date(raw.receivedAtLocal).toISOString(),
+                method: raw.method,
+                reference: raw.reference || null,
+                note: raw.note || null,
+                idempotencyKey: crypto.randomUUID(),
+              }),
+            ),
+          $localize`Payment recorded in the immutable payment history.`,
         ),
-      $localize`Payment recorded in the immutable payment history.`,
-    );
-    this.paymentEnrollmentId.set(null);
+      );
+      this.paymentEnrollmentId.set(null);
+    });
   }
 
   protected openRenewal(enrollment: ClientEnrollment): void {
@@ -166,22 +178,26 @@ export class ClientCommercial {
   }
 
   protected async renew(enrollment: ClientEnrollment): Promise<void> {
-    if (this.renewalForm.invalid) {
-      this.renewalForm.markAllAsTouched();
-      return;
-    }
+    return this.scope.run('renew', async (owner) => {
+      if (this.renewalForm.invalid) {
+        this.renewalForm.markAllAsTouched();
+        return;
+      }
 
-    await this.run(
-      () =>
-        firstValueFrom(
-          this.api.renewEnrollment(enrollment.id, {
-            ...this.renewalForm.getRawValue(),
-            idempotencyKey: crypto.randomUUID(),
-          }),
+      await owner.wait(
+        this.run(
+          () =>
+            firstValueFrom(
+              this.api.renewEnrollment(enrollment.id, {
+                ...this.renewalForm.getRawValue(),
+                idempotencyKey: crypto.randomUUID(),
+              }),
+            ),
+          $localize`Renewal created as a new historical enrollment.`,
         ),
-      $localize`Renewal created as a new historical enrollment.`,
-    );
-    this.renewalEnrollmentId.set(null);
+      );
+      this.renewalEnrollmentId.set(null);
+    });
   }
 
   protected openStatus(enrollment: ClientEnrollment, action: 'pause' | 'cancel'): void {
@@ -193,66 +209,81 @@ export class ClientCommercial {
   }
 
   protected async changeStatus(enrollment: ClientEnrollment): Promise<void> {
-    const action = this.statusAction();
-    if (!action || this.statusForm.invalid) {
-      this.statusForm.markAllAsTouched();
-      return;
-    }
+    return this.scope.run('changeStatus', async (owner) => {
+      const action = this.statusAction();
+      if (!action || this.statusForm.invalid) {
+        this.statusForm.markAllAsTouched();
+        return;
+      }
 
-    const request = { reason: this.statusForm.getRawValue().reason, version: enrollment.version };
-    await this.run(
-      () =>
-        firstValueFrom(
-          action === 'pause'
-            ? this.api.pauseEnrollment(enrollment.id, request)
-            : this.api.cancelEnrollment(enrollment.id, request),
+      const request = { reason: this.statusForm.getRawValue().reason, version: enrollment.version };
+      await owner.wait(
+        this.run(
+          () =>
+            firstValueFrom(
+              action === 'pause'
+                ? this.api.pauseEnrollment(enrollment.id, request)
+                : this.api.cancelEnrollment(enrollment.id, request),
+            ),
+          action === 'pause' ? $localize`Enrollment paused.` : $localize`Enrollment cancelled.`,
         ),
-      action === 'pause' ? $localize`Enrollment paused.` : $localize`Enrollment cancelled.`,
-    );
-    this.statusEnrollmentId.set(null);
-    this.statusAction.set(null);
+      );
+      this.statusEnrollmentId.set(null);
+      this.statusAction.set(null);
+    });
   }
 
   protected async resume(enrollment: ClientEnrollment): Promise<void> {
-    await this.run(
-      () => firstValueFrom(this.api.resumeEnrollment(enrollment.id, enrollment.version)),
-      $localize`Enrollment resumed.`,
-    );
+    return this.scope.run('resume', async (owner) => {
+      await owner.wait(
+        this.run(
+          () => firstValueFrom(this.api.resumeEnrollment(enrollment.id, enrollment.version)),
+          $localize`Enrollment resumed.`,
+        ),
+      );
+    });
   }
 
   protected async changeRelationship(): Promise<void> {
-    if (this.relationshipForm.invalid) {
-      this.relationshipForm.markAllAsTouched();
-      return;
-    }
+    return this.scope.run('changeRelationship', async (owner) => {
+      if (this.relationshipForm.invalid) {
+        this.relationshipForm.markAllAsTouched();
+        return;
+      }
 
-    this.busy.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      const client = this.client();
-      const reason = this.relationshipForm.getRawValue().reason;
-      const updated = await firstValueFrom(
-        client.isCoachBlocked
-          ? this.api.unblockClientRelationship(client.id, reason, client.version)
-          : this.api.blockClientRelationship(client.id, reason, client.version),
-      );
-      this.profileChanged.emit(updated);
-      this.relationshipFormOpen.set(false);
-      this.relationshipForm.reset({ reason: '' });
-      await this.loadOverview();
-      this.notice.set(
-        updated.isCoachBlocked
-          ? $localize`Client access blocked in this workspace only.`
-          : $localize`Workspace relationship restored.`,
-      );
-    } catch (error) {
-      this.error.set(
-        apiErrorMessage(error, $localize`The relationship status could not be changed.`),
-      );
-    } finally {
-      this.busy.set(false);
-    }
+      this.busy.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        const client = this.client();
+        const reason = this.relationshipForm.getRawValue().reason;
+        const updated = await owner.wait(
+          firstValueFrom(
+            client.isCoachBlocked
+              ? this.api.unblockClientRelationship(client.id, reason, client.version)
+              : this.api.blockClientRelationship(client.id, reason, client.version),
+          ),
+        );
+        this.profileChanged.emit(updated);
+        this.relationshipFormOpen.set(false);
+        this.relationshipForm.reset({ reason: '' });
+        await owner.wait(this.loadOverview());
+        this.notice.set(
+          updated.isCoachBlocked
+            ? $localize`Client access blocked in this workspace only.`
+            : $localize`Workspace relationship restored.`,
+        );
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(
+          apiErrorMessage(error, $localize`The relationship status could not be changed.`),
+        );
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
   protected featureLabel(feature: CoachingFeature): string {
@@ -304,51 +335,89 @@ export class ClientCommercial {
   }
 
   private async load(): Promise<void> {
-    this.loading.set(true);
-    this.clearMessages();
-    try {
-      const [catalog, overview] = await Promise.all([
-        firstValueFrom(this.api.getProductCatalog()),
-        firstValueFrom(this.api.getClientCommercialOverview(this.client().id)),
-      ]);
-      this.catalog.set(catalog);
-      this.overview.set(overview);
-      const firstOffer = catalog.products
-        .filter((product) => product.isActive)
-        .flatMap((product) => product.offers)
-        .find((offer) => offer.isActive);
-      if (firstOffer && !this.assignForm.controls.offerId.value) {
-        this.assignForm.controls.offerId.setValue(firstOffer.id);
+    return this.scope.run('load', async (owner) => {
+      this.loading.set(true);
+      this.clearMessages();
+      try {
+        const [catalog, overview] = await owner.wait(
+          Promise.all([
+            firstValueFrom(this.api.getProductCatalog()),
+            firstValueFrom(this.api.getClientCommercialOverview(this.client().id)),
+          ]),
+        );
+        this.catalog.set(catalog);
+        this.overview.set(overview);
+        const firstOffer = catalog.products
+          .filter((product) => product.isActive)
+          .flatMap((product) => product.offers)
+          .find((offer) => offer.isActive);
+        if (firstOffer && !this.assignForm.controls.offerId.value) {
+          this.assignForm.controls.offerId.setValue(firstOffer.id);
+        }
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`Commercial access could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
       }
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Commercial access could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+    });
   }
 
   private async loadOverview(): Promise<void> {
-    this.overview.set(await firstValueFrom(this.api.getClientCommercialOverview(this.client().id)));
+    return this.scope.run('loadOverview', async (owner) => {
+      this.overview.set(
+        await owner.wait(firstValueFrom(this.api.getClientCommercialOverview(this.client().id))),
+      );
+    });
   }
 
   private async run(command: () => Promise<ClientEnrollment>, message: string): Promise<void> {
-    this.busy.set(true);
-    this.clearMessages();
-    try {
-      await this.csrf.refresh();
-      await command();
-      await this.loadOverview();
-      this.notice.set(message);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The commercial change could not be saved.`));
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('run', async (owner) => {
+      this.busy.set(true);
+      this.clearMessages();
+      try {
+        await owner.wait(this.csrf.refresh());
+        await owner.wait(command());
+        await owner.wait(this.loadOverview());
+        this.notice.set(message);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(
+          apiErrorMessage(error, $localize`The commercial change could not be saved.`),
+        );
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
   private clearMessages(): void {
     this.error.set(null);
     this.notice.set(null);
+  }
+
+  private resetTenantState(): void {
+    this.loadedKey = null;
+    this.catalog.set(null);
+    this.overview.set(null);
+    this.loading.set(false);
+    this.busy.set(false);
+    this.error.set(null);
+    this.notice.set(null);
+    this.paymentEnrollmentId.set(null);
+    this.renewalEnrollmentId.set(null);
+    this.statusEnrollmentId.set(null);
+    this.statusAction.set(null);
+    this.relationshipFormOpen.set(false);
+    this.assignForm.reset();
+    this.paymentForm.reset();
+    this.renewalForm.reset();
+    this.statusForm.reset();
+    this.relationshipForm.reset();
   }
 }
 

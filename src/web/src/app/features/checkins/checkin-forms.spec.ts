@@ -101,6 +101,7 @@ function archivedDetails(
 async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }) {
   fixture.detectChanges();
   await fixture.whenStable();
+  await new Promise((resolve) => setTimeout(resolve));
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();

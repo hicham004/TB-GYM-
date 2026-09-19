@@ -1363,6 +1363,11 @@ Phase 3 approved and implemented these decisions on 2026-08-21:
 - native browser media uses a short-lived HTTP-only grant plus server reauthorization;
   historical references tombstone media instead of deleting required bytes.
 
+Closed-beta Slice 1 adds bounded Training reads and presentation only. It creates no new training
+write contract, persistence rule, schema, or invariant: the existing snapshot, access, concurrency,
+append-only-note and completion rules remain authoritative. RPE remains the canonical exertion input;
+the preferred client input scale is deliberately deferred rather than inferred from this UI work.
+
 Decisions still required for later phases and production launch:
 
 1. Are payment schedules/installments, discounts, credits, waivers, refunds, and FX settlement

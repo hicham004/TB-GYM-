@@ -90,8 +90,6 @@ internal sealed partial class TrainingApplicationService
             return execution is null
                 ? ToClientWorkout(item.MesocycleId, item.Session, exerciseNames, previous)
                 : ToClientWorkout(
-                    item.MesocycleId,
-                    item.Session,
                     execution,
                     notes.Where(note => note.WorkoutExecutionId == execution.Id).ToArray(),
                     exerciseNames,
@@ -605,15 +603,13 @@ internal sealed partial class TrainingApplicationService
             null);
 
     private static ClientWorkoutView ToClientWorkout(
-        Guid mesocycleId,
-        TrainingSession session,
         WorkoutExecution execution,
         IReadOnlyList<WorkoutNote> notes,
         IReadOnlyDictionary<Guid, string> names,
         IReadOnlyDictionary<Guid, PreviousExercisePerformanceView> previous) =>
         new(
-            session.Id,
-            mesocycleId,
+            execution.TrainingSessionId,
+            execution.MesocycleId,
             execution.Id,
             execution.SessionNameSnapshot,
             execution.SessionCoachNotesSnapshot,

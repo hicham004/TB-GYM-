@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../tenancy/tenant-async-scope';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../api/api-client';
@@ -21,6 +22,9 @@ export class NotificationStore {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(
+    () => this.tenants.selectedMembership()?.tenantId ?? null,
+  );
 
   private readonly unreadState = signal(0);
   private readonly loadingState = signal(false);
@@ -46,7 +50,9 @@ export class NotificationStore {
   });
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const key = this.contextKey();
       if (key === this.context) {
         return;
@@ -67,11 +73,13 @@ export class NotificationStore {
 
   /** Re-reads the count for the current context, if there is one. */
   async refresh(): Promise<void> {
-    if (this.contextKey() === null) {
-      return;
-    }
+    return this.scope.run('refresh', async (owner) => {
+      if (this.contextKey() === null) {
+        return;
+      }
 
-    await this.load(++this.generation);
+      await owner.wait(this.load(++this.generation));
+    });
   }
 
   /**
@@ -97,23 +105,35 @@ export class NotificationStore {
   }
 
   private async load(generation: number): Promise<void> {
-    this.loadingState.set(true);
-    try {
-      const unread = await firstValueFrom(this.api.getUnreadNotificationCount());
-      if (this.generation === generation) {
-        this.unreadState.set(Math.max(0, unread));
+    return this.scope.run('load', async (owner) => {
+      this.loadingState.set(true);
+      try {
+        const unread = await owner.wait(firstValueFrom(this.api.getUnreadNotificationCount()));
+        if (this.generation === generation) {
+          this.unreadState.set(Math.max(0, unread));
+        }
+      } catch {
+        if (!owner.current) return;
+        // A refused or failed count is shown as no badge rather than as an error: the topbar is not
+        // the place to report that a background read did not work, and the inbox itself reports its
+        // own failures where the user is looking.
+        if (this.generation === generation) {
+          this.unreadState.set(0);
+        }
+      } finally {
+        if (owner.current) {
+          if (this.generation === generation) {
+            this.loadingState.set(false);
+          }
+        }
       }
-    } catch {
-      // A refused or failed count is shown as no badge rather than as an error: the topbar is not
-      // the place to report that a background read did not work, and the inbox itself reports its
-      // own failures where the user is looking.
-      if (this.generation === generation) {
-        this.unreadState.set(0);
-      }
-    } finally {
-      if (this.generation === generation) {
-        this.loadingState.set(false);
-      }
-    }
+    });
+  }
+
+  private resetTenantState(): void {
+    this.unreadState.set(0);
+    this.loadingState.set(false);
+    ++this.generation;
+    this.context = null;
   }
 }

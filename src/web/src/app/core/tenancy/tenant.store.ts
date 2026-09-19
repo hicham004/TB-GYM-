@@ -2,12 +2,15 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../api/api-client';
 import { TenantMembership } from '../api/api.models';
+import { TenantContext } from './tenant-context';
 
 const tenantStorageKey = 'tb-gym.active-tenant';
 
 @Injectable({ providedIn: 'root' })
 export class TenantStore {
   private readonly api = inject(ApiClient);
+  private readonly context = inject(TenantContext);
+  private loadRequest = 0;
   private readonly membershipsState = signal<TenantMembership[]>([]);
   private readonly selectedTenantIdState = signal<string | null>(
     localStorage.getItem(tenantStorageKey),
@@ -28,7 +31,16 @@ export class TenantStore {
   readonly isClient = computed(() => this.selectedMembership()?.role === 'Client');
 
   async load(preferredTenantId?: string): Promise<void> {
-    const memberships = await firstValueFrom(this.api.getTenants());
+    const request = ++this.loadRequest;
+    const epoch = this.context.epoch();
+    let memberships: TenantMembership[];
+    try {
+      memberships = await firstValueFrom(this.api.getTenants());
+    } catch (error) {
+      if (request !== this.loadRequest || epoch !== this.context.epoch()) return;
+      throw error;
+    }
+    if (request !== this.loadRequest || epoch !== this.context.epoch()) return;
     this.membershipsState.set(memberships);
 
     const candidate = preferredTenantId ?? this.selectedTenantIdState();
@@ -46,7 +58,9 @@ export class TenantStore {
       return;
     }
 
+    const changed = this.selectedTenantIdState() !== tenantId;
     this.selectedTenantIdState.set(tenantId);
+    if (changed) this.context.invalidate();
     if (tenantId) {
       localStorage.setItem(tenantStorageKey, tenantId);
     } else {
@@ -55,7 +69,10 @@ export class TenantStore {
   }
 
   clear(): void {
+    ++this.loadRequest;
     this.membershipsState.set([]);
-    this.select(null);
+    this.selectedTenantIdState.set(null);
+    localStorage.removeItem(tenantStorageKey);
+    this.context.invalidate();
   }
 }

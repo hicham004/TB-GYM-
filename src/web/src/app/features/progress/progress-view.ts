@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -33,6 +34,7 @@ export class ProgressView {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
 
   protected readonly coachMode = computed(() => this.clientId() !== null);
@@ -99,7 +101,9 @@ export class ProgressView {
   protected photoRemovalReason = '';
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       const clientId = this.clientId();
       const key = tenantId ? `${tenantId}:${clientId ?? 'me'}` : null;
@@ -113,11 +117,15 @@ export class ProgressView {
   }
 
   protected async changeDisplayUnit(): Promise<void> {
-    await this.load();
+    return this.scope.run('changeDisplayUnit', async (owner) => {
+      await owner.wait(this.load());
+    });
   }
 
   protected async changeMeasurementDisplayUnit(): Promise<void> {
-    await this.loadMeasurements();
+    return this.scope.run('changeMeasurementDisplayUnit', async (owner) => {
+      await owner.wait(this.loadMeasurements());
+    });
   }
 
   protected changeMeasurementType(): void {
@@ -130,31 +138,37 @@ export class ProgressView {
   }
 
   protected async recordMeasurement(): Promise<void> {
-    if (this.measurementValue === null || !Number.isFinite(this.measurementValue)) {
-      this.error.set($localize`Enter a body measurement value.`);
-      return;
-    }
+    return this.scope.run('recordMeasurement', async (owner) => {
+      if (this.measurementValue === null || !Number.isFinite(this.measurementValue)) {
+        this.error.set($localize`Enter a body measurement value.`);
+        return;
+      }
 
-    await this.runMeasurement(
-      async () => {
-        const request = {
-          measurementType: this.measurementType,
-          value: this.measurementValue!,
-          unit: this.measurementUnit,
-          measurementDate: this.measurementDate || null,
-        };
-        const clientId = this.clientId();
-        if (clientId) {
-          await firstValueFrom(this.api.recordClientBodyMeasurement(clientId, request));
-        } else {
-          await firstValueFrom(this.api.recordMyBodyMeasurement(request));
-        }
-        this.measurementValue = null;
-        this.measurementDate = '';
-        await this.loadMeasurements(false);
-      },
-      $localize`Body measurement recorded.`,
-    );
+      await owner.wait(
+        this.runMeasurement(
+          async () => {
+            const request = {
+              measurementType: this.measurementType,
+              value: this.measurementValue!,
+              unit: this.measurementUnit,
+              measurementDate: this.measurementDate || null,
+            };
+            const clientId = this.clientId();
+            if (clientId) {
+              await owner.wait(
+                firstValueFrom(this.api.recordClientBodyMeasurement(clientId, request)),
+              );
+            } else {
+              await owner.wait(firstValueFrom(this.api.recordMyBodyMeasurement(request)));
+            }
+            this.measurementValue = null;
+            this.measurementDate = '';
+            await owner.wait(this.loadMeasurements(false));
+          },
+          $localize`Body measurement recorded.`,
+        ),
+      );
+    });
   }
 
   protected beginMeasurementCorrection(measurement: BodyMeasurement): void {
@@ -172,76 +186,93 @@ export class ProgressView {
   }
 
   protected async correctMeasurement(measurement: BodyMeasurement): Promise<void> {
-    if (
-      this.measurementCorrectionValue === null ||
-      !Number.isFinite(this.measurementCorrectionValue) ||
-      !this.measurementCorrectionReason.trim()
-    ) {
-      this.error.set($localize`Enter the corrected measurement and a reason.`);
-      return;
-    }
+    return this.scope.run('correctMeasurement', async (owner) => {
+      if (
+        this.measurementCorrectionValue === null ||
+        !Number.isFinite(this.measurementCorrectionValue) ||
+        !this.measurementCorrectionReason.trim()
+      ) {
+        this.error.set($localize`Enter the corrected measurement and a reason.`);
+        return;
+      }
 
-    await this.runMeasurement(
-      async () => {
-        const request = {
-          value: this.measurementCorrectionValue!,
-          unit: this.measurementCorrectionUnit,
-          reason: this.measurementCorrectionReason,
-          version: measurement.version,
-        };
-        const clientId = this.clientId();
-        const corrected = clientId
-          ? await firstValueFrom(
-              this.api.correctClientBodyMeasurement(clientId, measurement.id, request),
-            )
-          : await firstValueFrom(this.api.correctMyBodyMeasurement(measurement.id, request));
-        this.measurementHistory.set(corrected);
-        this.correctingMeasurementId = null;
-        await this.loadMeasurements(false);
-      },
-      $localize`Measurement correction saved with its prior value preserved.`,
-    );
+      await owner.wait(
+        this.runMeasurement(
+          async () => {
+            const request = {
+              value: this.measurementCorrectionValue!,
+              unit: this.measurementCorrectionUnit,
+              reason: this.measurementCorrectionReason,
+              version: measurement.version,
+            };
+            const clientId = this.clientId();
+            const corrected = clientId
+              ? await owner.wait(
+                  firstValueFrom(
+                    this.api.correctClientBodyMeasurement(clientId, measurement.id, request),
+                  ),
+                )
+              : await owner.wait(
+                  firstValueFrom(this.api.correctMyBodyMeasurement(measurement.id, request)),
+                );
+            this.measurementHistory.set(corrected);
+            this.correctingMeasurementId = null;
+            await owner.wait(this.loadMeasurements(false));
+          },
+          $localize`Measurement correction saved with its prior value preserved.`,
+        ),
+      );
+    });
   }
 
   protected async showMeasurementHistory(measurementId: string): Promise<void> {
-    this.error.set(null);
-    try {
-      const clientId = this.clientId();
-      this.measurementHistory.set(
-        clientId
-          ? await firstValueFrom(this.api.getClientBodyMeasurementHistory(clientId, measurementId))
-          : await firstValueFrom(this.api.getMyBodyMeasurementHistory(measurementId)),
-      );
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Measurement history could not be loaded.`));
-    }
+    return this.scope.run('showMeasurementHistory', async (owner) => {
+      this.error.set(null);
+      try {
+        const clientId = this.clientId();
+        this.measurementHistory.set(
+          clientId
+            ? await owner.wait(
+                firstValueFrom(this.api.getClientBodyMeasurementHistory(clientId, measurementId)),
+              )
+            : await owner.wait(firstValueFrom(this.api.getMyBodyMeasurementHistory(measurementId))),
+        );
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`Measurement history could not be loaded.`));
+      }
+    });
   }
 
   protected async record(): Promise<void> {
-    if (this.entryValue === null || !Number.isFinite(this.entryValue)) {
-      this.error.set($localize`Enter a bodyweight value.`);
-      return;
-    }
+    return this.scope.run('record', async (owner) => {
+      if (this.entryValue === null || !Number.isFinite(this.entryValue)) {
+        this.error.set($localize`Enter a bodyweight value.`);
+        return;
+      }
 
-    await this.run(
-      async () => {
-        const request = {
-          value: this.entryValue!,
-          unit: this.entryUnit,
-          measurementDate: this.entryDate || null,
-        };
-        const clientId = this.clientId();
-        if (clientId) {
-          await firstValueFrom(this.api.recordClientBodyweight(clientId, request));
-        } else {
-          await firstValueFrom(this.api.recordMyBodyweight(request));
-        }
-        this.entryValue = null;
-        this.entryDate = '';
-        await this.load(false);
-      },
-      $localize`Bodyweight recorded.`,
-    );
+      await owner.wait(
+        this.run(
+          async () => {
+            const request = {
+              value: this.entryValue!,
+              unit: this.entryUnit,
+              measurementDate: this.entryDate || null,
+            };
+            const clientId = this.clientId();
+            if (clientId) {
+              await owner.wait(firstValueFrom(this.api.recordClientBodyweight(clientId, request)));
+            } else {
+              await owner.wait(firstValueFrom(this.api.recordMyBodyweight(request)));
+            }
+            this.entryValue = null;
+            this.entryDate = '';
+            await owner.wait(this.load(false));
+          },
+          $localize`Bodyweight recorded.`,
+        ),
+      );
+    });
   }
 
   protected beginCorrection(observation: BodyweightObservation): void {
@@ -261,35 +292,43 @@ export class ProgressView {
   }
 
   protected async correct(observation: BodyweightObservation): Promise<void> {
-    if (
-      this.correctionValue === null ||
-      !Number.isFinite(this.correctionValue) ||
-      !this.correctionReason.trim()
-    ) {
-      this.error.set($localize`Enter the corrected value and a reason.`);
-      return;
-    }
+    return this.scope.run('correct', async (owner) => {
+      if (
+        this.correctionValue === null ||
+        !Number.isFinite(this.correctionValue) ||
+        !this.correctionReason.trim()
+      ) {
+        this.error.set($localize`Enter the corrected value and a reason.`);
+        return;
+      }
 
-    await this.run(
-      async () => {
-        const request = {
-          value: this.correctionValue!,
-          unit: this.correctionUnit,
-          reason: this.correctionReason,
-          version: observation.version,
-        };
-        const clientId = this.clientId();
-        const corrected = clientId
-          ? await firstValueFrom(
-              this.api.correctClientBodyweight(clientId, observation.id, request),
-            )
-          : await firstValueFrom(this.api.correctMyBodyweight(observation.id, request));
-        this.history.set(corrected);
-        this.correctingId = null;
-        await this.load(false);
-      },
-      $localize`Correction saved with its prior value preserved.`,
-    );
+      await owner.wait(
+        this.run(
+          async () => {
+            const request = {
+              value: this.correctionValue!,
+              unit: this.correctionUnit,
+              reason: this.correctionReason,
+              version: observation.version,
+            };
+            const clientId = this.clientId();
+            const corrected = clientId
+              ? await owner.wait(
+                  firstValueFrom(
+                    this.api.correctClientBodyweight(clientId, observation.id, request),
+                  ),
+                )
+              : await owner.wait(
+                  firstValueFrom(this.api.correctMyBodyweight(observation.id, request)),
+                );
+            this.history.set(corrected);
+            this.correctingId = null;
+            await owner.wait(this.load(false));
+          },
+          $localize`Correction saved with its prior value preserved.`,
+        ),
+      );
+    });
   }
 
   /**
@@ -312,130 +351,172 @@ export class ProgressView {
   }
 
   protected async redate(observation: BodyweightObservation): Promise<void> {
-    if (!this.redateReason.trim() || !this.redateDate) {
-      this.error.set($localize`Enter the correct date and a reason.`);
-      return;
-    }
+    return this.scope.run('redate', async (owner) => {
+      if (!this.redateReason.trim() || !this.redateDate) {
+        this.error.set($localize`Enter the correct date and a reason.`);
+        return;
+      }
 
-    if (this.redateDate === observation.measurementDate) {
-      this.error.set($localize`Pick a different date, or correct the value instead.`);
-      return;
-    }
+      if (this.redateDate === observation.measurementDate) {
+        this.error.set($localize`Pick a different date, or correct the value instead.`);
+        return;
+      }
 
-    await this.run(
-      async () => {
-        const request = {
-          measurementDate: this.redateDate,
-          reason: this.redateReason.trim(),
-          version: observation.version,
-        };
-        const clientId = this.clientId();
-        const corrected = clientId
-          ? await firstValueFrom(
-              this.api.replaceClientBodyweightDate(clientId, observation.id, request),
-            )
-          : await firstValueFrom(this.api.replaceMyBodyweightDate(observation.id, request));
-        this.correction.set(corrected);
-        this.cancelRedate();
-        await this.load(false);
-      },
-      $localize`Moved to the correct date. The original entry is kept as a voided record.`,
-    );
+      await owner.wait(
+        this.run(
+          async () => {
+            const request = {
+              measurementDate: this.redateDate,
+              reason: this.redateReason.trim(),
+              version: observation.version,
+            };
+            const clientId = this.clientId();
+            const corrected = clientId
+              ? await owner.wait(
+                  firstValueFrom(
+                    this.api.replaceClientBodyweightDate(clientId, observation.id, request),
+                  ),
+                )
+              : await owner.wait(
+                  firstValueFrom(this.api.replaceMyBodyweightDate(observation.id, request)),
+                );
+            this.correction.set(corrected);
+            this.cancelRedate();
+            await owner.wait(this.load(false));
+          },
+          $localize`Moved to the correct date. The original entry is kept as a voided record.`,
+        ),
+      );
+    });
   }
 
   protected async showHistory(observationId: string): Promise<void> {
-    this.error.set(null);
-    try {
-      const clientId = this.clientId();
-      this.history.set(
-        clientId
-          ? await firstValueFrom(this.api.getClientBodyweightHistory(clientId, observationId))
-          : await firstValueFrom(this.api.getMyBodyweightHistory(observationId)),
-      );
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Correction history could not be loaded.`));
-    }
+    return this.scope.run('showHistory', async (owner) => {
+      this.error.set(null);
+      try {
+        const clientId = this.clientId();
+        this.history.set(
+          clientId
+            ? await owner.wait(
+                firstValueFrom(this.api.getClientBodyweightHistory(clientId, observationId)),
+              )
+            : await owner.wait(firstValueFrom(this.api.getMyBodyweightHistory(observationId))),
+        );
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`Correction history could not be loaded.`));
+      }
+    });
   }
 
   private async load(showSpinner = true): Promise<void> {
-    if (showSpinner) {
-      this.loading.set(true);
-    }
-    this.error.set(null);
-    try {
-      const clientId = this.clientId();
-      this.progress.set(
-        clientId
-          ? await firstValueFrom(this.api.getClientProgress(clientId, this.displayUnit))
-          : await firstValueFrom(this.api.getMyProgress(this.displayUnit)),
-      );
-    } catch (error) {
-      this.progress.set(null);
-      this.error.set(apiErrorMessage(error, $localize`Bodyweight progress could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+    return this.scope.run('load', async (owner) => {
+      if (showSpinner) {
+        this.loading.set(true);
+      }
+      this.error.set(null);
+      try {
+        const clientId = this.clientId();
+        this.progress.set(
+          clientId
+            ? await owner.wait(
+                firstValueFrom(this.api.getClientProgress(clientId, this.displayUnit)),
+              )
+            : await owner.wait(firstValueFrom(this.api.getMyProgress(this.displayUnit))),
+        );
+      } catch (error) {
+        if (!owner.current) return;
+        this.progress.set(null);
+        this.error.set(apiErrorMessage(error, $localize`Bodyweight progress could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
+      }
+    });
   }
 
   private async loadMeasurements(showSpinner = true): Promise<void> {
-    if (showSpinner) {
-      this.measurementsLoading.set(true);
-    }
-    this.error.set(null);
-    try {
-      const clientId = this.clientId();
-      this.measurements.set(
-        clientId
-          ? await firstValueFrom(
-              this.api.getClientBodyMeasurements(clientId, this.measurementDisplayUnit),
-            )
-          : await firstValueFrom(this.api.getMyBodyMeasurements(this.measurementDisplayUnit)),
-      );
-    } catch (error) {
-      this.measurements.set(null);
-      this.error.set(apiErrorMessage(error, $localize`Body measurements could not be loaded.`));
-    } finally {
-      this.measurementsLoading.set(false);
-    }
+    return this.scope.run('loadMeasurements', async (owner) => {
+      if (showSpinner) {
+        this.measurementsLoading.set(true);
+      }
+      this.error.set(null);
+      try {
+        const clientId = this.clientId();
+        this.measurements.set(
+          clientId
+            ? await owner.wait(
+                firstValueFrom(
+                  this.api.getClientBodyMeasurements(clientId, this.measurementDisplayUnit),
+                ),
+              )
+            : await owner.wait(
+                firstValueFrom(this.api.getMyBodyMeasurements(this.measurementDisplayUnit)),
+              ),
+        );
+      } catch (error) {
+        if (!owner.current) return;
+        this.measurements.set(null);
+        this.error.set(apiErrorMessage(error, $localize`Body measurements could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.measurementsLoading.set(false);
+        }
+      }
+    });
   }
 
   private async run(action: () => Promise<void>, success: string): Promise<void> {
-    this.busy.set(true);
-    this.error.set(null);
-    this.notice.set(null);
-    try {
-      await this.csrf.refresh();
-      await action();
-      this.notice.set(success);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The bodyweight change could not be saved.`));
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('run', async (owner) => {
+      this.busy.set(true);
+      this.error.set(null);
+      this.notice.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        await owner.wait(action());
+        this.notice.set(success);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(
+          apiErrorMessage(error, $localize`The bodyweight change could not be saved.`),
+        );
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
   protected async recordPhoto(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0] ?? null;
-    if (file === null) {
-      return;
-    }
+    return this.scope.run('recordPhoto', async (owner) => {
+      const input = event.target as HTMLInputElement;
+      const file = input.files?.[0] ?? null;
+      if (file === null) {
+        return;
+      }
 
-    const clientId = this.clientId();
-    const photoDate = this.photoDate === '' ? null : this.photoDate;
-    await this.runPhoto(
-      async () => {
-        await firstValueFrom(
-          clientId
-            ? this.api.recordClientProgressPhoto(clientId, this.photoPose, photoDate, file)
-            : this.api.recordMyProgressPhoto(this.photoPose, photoDate, file),
-        );
-        // Clear the picker so re-selecting the same file still raises a change event.
-        input.value = '';
-        await this.loadPhotos(false);
-      },
-      $localize`Progress photo saved.`,
-    );
+      const clientId = this.clientId();
+      const photoDate = this.photoDate === '' ? null : this.photoDate;
+      await owner.wait(
+        this.runPhoto(
+          async () => {
+            await owner.wait(
+              firstValueFrom(
+                clientId
+                  ? this.api.recordClientProgressPhoto(clientId, this.photoPose, photoDate, file)
+                  : this.api.recordMyProgressPhoto(this.photoPose, photoDate, file),
+              ),
+            );
+            // Clear the picker so re-selecting the same file still raises a change event.
+            input.value = '';
+            await owner.wait(this.loadPhotos(false));
+          },
+          $localize`Progress photo saved.`,
+        ),
+      );
+    });
   }
 
   protected startPhotoRemoval(photo: ProgressPhoto): void {
@@ -449,43 +530,54 @@ export class ProgressView {
   }
 
   protected async removePhoto(photo: ProgressPhoto): Promise<void> {
-    if (this.photoRemovalReason.trim() === '') {
-      this.error.set($localize`Enter a reason so the removal stays auditable.`);
-      return;
-    }
+    return this.scope.run('removePhoto', async (owner) => {
+      if (this.photoRemovalReason.trim() === '') {
+        this.error.set($localize`Enter a reason so the removal stays auditable.`);
+        return;
+      }
 
-    const clientId = this.clientId();
-    const request = { reason: this.photoRemovalReason.trim(), version: photo.version };
-    await this.runPhoto(
-      async () => {
-        await firstValueFrom(
-          clientId
-            ? this.api.removeClientProgressPhoto(clientId, photo.id, request)
-            : this.api.removeMyProgressPhoto(photo.id, request),
-        );
-        this.cancelPhotoRemoval();
-        this.closePhoto();
-        await this.loadPhotos(false);
-      },
-      $localize`Progress photo removed.`,
-    );
+      const clientId = this.clientId();
+      const request = { reason: this.photoRemovalReason.trim(), version: photo.version };
+      await owner.wait(
+        this.runPhoto(
+          async () => {
+            await owner.wait(
+              firstValueFrom(
+                clientId
+                  ? this.api.removeClientProgressPhoto(clientId, photo.id, request)
+                  : this.api.removeMyProgressPhoto(photo.id, request),
+              ),
+            );
+            this.cancelPhotoRemoval();
+            this.closePhoto();
+            await owner.wait(this.loadPhotos(false));
+          },
+          $localize`Progress photo removed.`,
+        ),
+      );
+    });
   }
 
   protected async openPhoto(photo: ProgressPhoto): Promise<void> {
-    if (this.openPhotoId() === photo.id) {
-      this.closePhoto();
-      return;
-    }
+    return this.scope.run('openPhoto', async (owner) => {
+      if (this.openPhotoId() === photo.id) {
+        this.closePhoto();
+        return;
+      }
 
-    this.closePhoto();
-    try {
-      await this.csrf.refresh();
-      const access = await firstValueFrom(this.api.createMediaAccess(photo.mediaAssetId));
-      this.openPhotoId.set(photo.id);
-      this.openPhotoImage.set(mapProgressPhotoImage(photo.id, access));
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The progress photo could not be opened.`));
-    }
+      this.closePhoto();
+      try {
+        await owner.wait(this.csrf.refresh());
+        const access = await owner.wait(
+          firstValueFrom(this.api.createMediaAccess(photo.mediaAssetId)),
+        );
+        this.openPhotoId.set(photo.id);
+        this.openPhotoImage.set(mapProgressPhotoImage(photo.id, access));
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`The progress photo could not be opened.`));
+      }
+    });
   }
 
   /**
@@ -503,52 +595,110 @@ export class ProgressView {
   }
 
   private async loadPhotos(showSpinner = true): Promise<void> {
-    if (showSpinner) {
-      this.photosLoading.set(true);
-    }
+    return this.scope.run('loadPhotos', async (owner) => {
+      if (showSpinner) {
+        this.photosLoading.set(true);
+      }
 
-    try {
-      const clientId = this.clientId();
-      this.photos.set(
-        clientId
-          ? await firstValueFrom(this.api.getClientProgressPhotos(clientId))
-          : await firstValueFrom(this.api.getMyProgressPhotos()),
-      );
-    } catch (error) {
-      this.photos.set(null);
-      this.error.set(apiErrorMessage(error, $localize`Progress photos could not be loaded.`));
-    } finally {
-      this.photosLoading.set(false);
-    }
+      try {
+        const clientId = this.clientId();
+        this.photos.set(
+          clientId
+            ? await owner.wait(firstValueFrom(this.api.getClientProgressPhotos(clientId)))
+            : await owner.wait(firstValueFrom(this.api.getMyProgressPhotos())),
+        );
+      } catch (error) {
+        if (!owner.current) return;
+        this.photos.set(null);
+        this.error.set(apiErrorMessage(error, $localize`Progress photos could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.photosLoading.set(false);
+        }
+      }
+    });
   }
 
   private async runPhoto(action: () => Promise<void>, success: string): Promise<void> {
-    this.busy.set(true);
-    this.error.set(null);
-    this.notice.set(null);
-    try {
-      await this.csrf.refresh();
-      await action();
-      this.notice.set(success);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The progress photo could not be saved.`));
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('runPhoto', async (owner) => {
+      this.busy.set(true);
+      this.error.set(null);
+      this.notice.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        await owner.wait(action());
+        this.notice.set(success);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`The progress photo could not be saved.`));
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
   private async runMeasurement(action: () => Promise<void>, success: string): Promise<void> {
-    this.busy.set(true);
+    return this.scope.run('runMeasurement', async (owner) => {
+      this.busy.set(true);
+      this.error.set(null);
+      this.notice.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        await owner.wait(action());
+        this.notice.set(success);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`The measurement could not be saved.`));
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
+  }
+
+  private resetTenantState(): void {
+    this.loadedKey = null;
+    this.progress.set(null);
+    this.history.set(null);
+    this.correction.set(null);
+    this.measurements.set(null);
+    this.measurementHistory.set(null);
+    this.photos.set(null);
+    this.photosLoading.set(false);
+    this.openPhotoId.set(null);
+    this.openPhotoImage.set(null);
+    this.fullSizeRequested.set(false);
+    this.loading.set(false);
+    this.measurementsLoading.set(false);
+    this.busy.set(false);
     this.error.set(null);
     this.notice.set(null);
-    try {
-      await this.csrf.refresh();
-      await action();
-      this.notice.set(success);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The measurement could not be saved.`));
-    } finally {
-      this.busy.set(false);
-    }
+    this.displayUnit = 'Kilogram';
+    this.entryUnit = 'Kilogram';
+    this.entryValue = null;
+    this.entryDate = '';
+    this.correctingId = null;
+    this.correctionValue = null;
+    this.correctionUnit = 'Kilogram';
+    this.correctionReason = '';
+    this.redatingId = null;
+    this.redateDate = '';
+    this.redateReason = '';
+    this.measurementDisplayUnit = 'Centimetre';
+    this.measurementType = 'Waist';
+    this.measurementUnit = 'Centimetre';
+    this.measurementValue = null;
+    this.measurementDate = '';
+    this.correctingMeasurementId = null;
+    this.measurementCorrectionValue = null;
+    this.measurementCorrectionUnit = 'Centimetre';
+    this.measurementCorrectionReason = '';
+    this.photoPose = 'Front';
+    this.photoDate = '';
+    this.removingPhotoId = null;
+    this.photoRemovalReason = '';
   }
 }

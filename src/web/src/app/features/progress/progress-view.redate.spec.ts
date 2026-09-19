@@ -58,16 +58,18 @@ async function createHarness(
       {
         provide: ApiClient,
         // A successful correction reloads the view; an empty reload keeps the test on the flow.
-        useValue: { replaceMyBodyweightDate, getMyProgress: vi.fn(() => of(null)) },
+        useValue: { replaceMyBodyweightDate, getMyProgress: vi.fn(() => of(null)),
+          getMyBodyMeasurements: () => of(null), getMyProgressPhotos: () => of(null),
+        },
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
-      // No selected tenant, so the load effect stays inert and only the correction flow runs.
-      { provide: TenantStore, useValue: { selectedTenantId: signal(null) } },
+      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ProgressView);
   fixture.detectChanges();
+  await new Promise((resolve) => setTimeout(resolve));
   return {
     harness: fixture.componentInstance as unknown as RedateHarness,
     replaceMyBodyweightDate,

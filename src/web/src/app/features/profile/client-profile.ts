@@ -1,3 +1,4 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { Component, effect, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -21,6 +22,7 @@ export class ClientProfilePage {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
 
   protected readonly profile = signal<ClientSelfProfile | null>(null);
@@ -31,7 +33,9 @@ export class ClientProfilePage {
   protected readonly onboardingStatusLabel = onboardingStatusLabel;
 
   constructor() {
+    this.scope.onReset(() => this.resetTenantState());
     effect(() => {
+      this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       if (tenantId && tenantId !== this.loadedTenantId) {
         this.loadedTenantId = tenantId;
@@ -41,43 +45,70 @@ export class ClientProfilePage {
   }
 
   protected async save(request: UpdateClientIntakeRequest): Promise<void> {
-    await this.run(() => this.api.updateSelfIntake(request), $localize`Your intake was saved.`);
+    return this.scope.run('save', async (owner) => {
+      await owner.wait(
+        this.run(() => this.api.updateSelfIntake(request), $localize`Your intake was saved.`),
+      );
+    });
   }
 
   protected async complete(request: CompleteClientOnboardingRequest): Promise<void> {
-    await this.run(
-      () => this.api.completeSelfOnboarding(request),
-      $localize`Your onboarding is complete.`,
-    );
+    return this.scope.run('complete', async (owner) => {
+      await owner.wait(
+        this.run(
+          () => this.api.completeSelfOnboarding(request),
+          $localize`Your onboarding is complete.`,
+        ),
+      );
+    });
   }
 
   private async load(): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
-    try {
-      this.profile.set(await firstValueFrom(this.api.getSelfProfile()));
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Your profile could not be loaded.`));
-    } finally {
-      this.loading.set(false);
-    }
+    return this.scope.run('load', async (owner) => {
+      this.loading.set(true);
+      this.error.set(null);
+      try {
+        this.profile.set(await owner.wait(firstValueFrom(this.api.getSelfProfile())));
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`Your profile could not be loaded.`));
+      } finally {
+        if (owner.current) {
+          this.loading.set(false);
+        }
+      }
+    });
   }
 
   private async run(
     request: () => ReturnType<ApiClient['updateSelfIntake']>,
     successMessage: string,
   ): Promise<void> {
-    this.busy.set(true);
+    return this.scope.run('run', async (owner) => {
+      this.busy.set(true);
+      this.error.set(null);
+      this.notice.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        this.profile.set(await owner.wait(firstValueFrom(request())));
+        this.notice.set(successMessage);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(apiErrorMessage(error, $localize`Your profile could not be saved.`));
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
+  }
+
+  private resetTenantState(): void {
+    this.loadedTenantId = null;
+    this.profile.set(null);
+    this.loading.set(false);
+    this.busy.set(false);
     this.error.set(null);
     this.notice.set(null);
-    try {
-      await this.csrf.refresh();
-      this.profile.set(await firstValueFrom(request()));
-      this.notice.set(successMessage);
-    } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`Your profile could not be saved.`));
-    } finally {
-      this.busy.set(false);
-    }
   }
 }

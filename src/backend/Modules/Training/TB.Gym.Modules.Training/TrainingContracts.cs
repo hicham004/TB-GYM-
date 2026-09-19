@@ -88,6 +88,14 @@ public interface ITrainingApplicationService
 
     Task<ClientTrainingDayResult> GetTodayAsync(CancellationToken cancellationToken);
 
+    Task<ClientTrainingUpcomingView> GetUpcomingAsync(int skip, CancellationToken cancellationToken);
+
+    Task<CoachWorkoutDetailResult?> GetCoachWorkoutAsync(
+        Guid clientProfileId,
+        Guid workoutExecutionId,
+        int notesSkip,
+        CancellationToken cancellationToken);
+
     Task<TrainingCommandResult> StartWorkoutAsync(Guid sessionId, CancellationToken cancellationToken);
 
     Task<TrainingCommandResult> RecordSetActualAsync(
@@ -366,6 +374,28 @@ public sealed record ClientTrainingDayResult(
     string AccessReason,
     DateOnly LocalDate,
     IReadOnlyList<ClientWorkoutView> Workouts);
+
+public sealed record ClientTrainingUpcomingView(
+    bool IsAllowed,
+    string AccessReason,
+    DateOnly LocalDate,
+    string TimeZoneId,
+    bool HasAssignedProgram,
+    bool HasVisibleSessions,
+    DateOnly SearchThrough,
+    UpcomingTrainingSessionView? NextSession,
+    IReadOnlyList<DatedWorkoutView> UnfinishedWorkouts,
+    int? NextSkip);
+
+public sealed record UpcomingTrainingSessionView(Guid SessionId, DateOnly Date, string Name);
+
+public sealed record DatedWorkoutView(DateOnly Date, string TimeZoneId, ClientWorkoutView Workout, bool HasMoreNotes);
+
+public sealed record CoachWorkoutDetailResult(
+    bool IsAllowed,
+    string AccessReason,
+    DatedWorkoutView? Detail,
+    int? NextNotesSkip);
 
 public sealed record ClientWorkoutView(
     Guid SessionId,

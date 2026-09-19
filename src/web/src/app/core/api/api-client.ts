@@ -3,6 +3,10 @@ import { inject, Injectable } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import type * as Phase3Contracts from './generated';
 import {
+  mapUpcomingTraining,
+  mapCoachWorkoutDetail,
+} from '../../features/training/training-read.models';
+import {
   mapAiDraft,
   mapCalculation,
   mapClientPlan,
@@ -690,6 +694,23 @@ export class ApiClient {
 
   getMyTrainingToday(): Observable<Phase3Contracts.ClientTrainingDayResult> {
     return this.http.get<Phase3Contracts.ClientTrainingDayResult>('/api/training/me/today');
+  }
+
+  getMyUpcomingTraining(skip = 0) {
+    return this.http
+      .get<Phase3Contracts.ClientTrainingUpcomingView>('/api/training/me/upcoming', {
+        params: { skip },
+      })
+      .pipe(map(mapUpcomingTraining));
+  }
+
+  getCoachWorkoutDetail(clientId: string, workoutId: string, notesSkip = 0) {
+    return this.http
+      .get<Phase3Contracts.CoachWorkoutDetailResult>(
+        `/api/training/clients/${clientId}/workouts/${workoutId}`,
+        { params: { notesSkip } },
+      )
+      .pipe(map(mapCoachWorkoutDetail));
   }
 
   startMyWorkout(sessionId: string): Observable<Phase3Contracts.WorkoutExecutionView> {
