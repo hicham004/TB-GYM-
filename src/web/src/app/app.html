@@ -76,9 +76,15 @@
                  the two sat side by side in the topbar reading "Workspace Workspace". This one
                  chooses which workspace you are in; that one opens its settings. -->
             <span i18n>Active workspace</span>
-            <select [value]="tenants.selectedTenantId() ?? ''" (change)="selectTenant($event)">
+            <!-- Selected per option, not through `value` on the select: the options arrive from
+                 the `@for` after the select is bound, and the browser resets `selectedIndex` to 0
+                 when they do, so the picker named the first workspace whatever was active. -->
+            <select (change)="selectTenant($event)">
               @for (membership of tenants.memberships(); track membership.tenantId) {
-                <option [value]="membership.tenantId">
+                <option
+                  [value]="membership.tenantId"
+                  [selected]="membership.tenantId === tenants.selectedTenantId()"
+                >
                   {{ membership.tenantName }} ({{ roleLabel(membership.role) }})
                 </option>
               }

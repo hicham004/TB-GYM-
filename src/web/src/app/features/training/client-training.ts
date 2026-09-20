@@ -23,6 +23,7 @@ import type { ClientCommercialOverview, ClientEnrollment } from '../../core/api/
 import { mesocycleStatusLabel, strengthMaxKindLabel } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { numeric, sessionFromSaved, toTrainingSessionRequest } from './training-builder.models';
 import { changeWorkingMaxUnit, IntentIdempotencyKey } from './training-assignment-state';
 
@@ -51,6 +52,7 @@ export class ClientTraining {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly calendar = inject(WorkspaceCalendar);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
   private readonly assignmentIntent = new IntentIdempotencyKey();
@@ -78,7 +80,8 @@ export class ClientTraining {
   protected readonly assignment = {
     enrollmentId: '',
     templateVersionId: '',
-    startDate: new Date().toISOString().slice(0, 10),
+    // Filled from the workspace's own calendar once it answers; see WorkspaceCalendar.
+    startDate: '',
     loadUnit: 'Kilogram' as TrainingLoadUnit,
     loadIncrement: 2.5,
     loadRoundingMode: 'Nearest' as TrainingLoadRoundingMode,
@@ -88,7 +91,7 @@ export class ClientTraining {
     kind: 'CoachWorkingMax' as StrengthMaxKind,
     value: null as number | null,
     unit: 'Kilogram' as TrainingLoadUnit,
-    effectiveDate: new Date().toISOString().slice(0, 10),
+    effectiveDate: '',
     note: '',
   };
   protected readonly progression = { iterations: 3, rpeIncrement: 0.5 };
@@ -124,8 +127,22 @@ export class ClientTraining {
       const key = tenantId && clientId ? `${tenantId}:${clientId}` : null;
       if (key && key !== this.loadedKey) {
         this.loadedKey = key;
+        void this.applyWorkspaceDates();
         void this.load();
       }
+    });
+  }
+
+  /**
+   * Date defaults come from the workspace, not the browser: the server judges a start date in the
+   * workspace's time zone, so at 01:00 in Asia/Beirut the browser's UTC date is a day behind.
+   * A date the coach has already set is left alone.
+   */
+  private async applyWorkspaceDates(): Promise<void> {
+    return this.scope.run('workspaceDates', async (owner) => {
+      const today = await owner.wait(this.calendar.resolveToday());
+      if (!this.assignment.startDate) this.assignment.startDate = today;
+      if (!this.maxForm.effectiveDate) this.maxForm.effectiveDate = today;
     });
   }
 
@@ -677,12 +694,12 @@ export class ClientTraining {
 
   private resetTenantState(): void {
     Object.assign(this.assignment, {
-      enrollmentId: '', templateVersionId: '', startDate: new Date().toISOString().slice(0, 10),
+      enrollmentId: '', templateVersionId: '', startDate: '',
       loadUnit: 'Kilogram', loadIncrement: 2.5, loadRoundingMode: 'Nearest',
     });
     Object.assign(this.maxForm, {
       exerciseId: '', kind: 'CoachWorkingMax', value: null, unit: 'Kilogram',
-      effectiveDate: new Date().toISOString().slice(0, 10), note: '',
+      effectiveDate: '', note: '',
     });
     Object.assign(this.progression, { iterations: 3, rpeIncrement: 0.5 });
     this.loadedKey = null;

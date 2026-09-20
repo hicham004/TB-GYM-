@@ -1,3 +1,10 @@
+<!--
+  Every date on this page is a calendar date, never an instant. DatePipe parses a bare
+  `YYYY-MM-DD` as local midnight, so passing 'UTC' as the third argument shifts the rendered day
+  backwards for every zone east of UTC — a client in Asia/Beirut saw each weigh-in dated a day
+  early. Parsing and formatting in the same frame is what keeps the rendered day equal to the
+  stored one, so these pipes take no time zone.
+-->
 <section class="progress-shell" [class.coach-panel]="coachMode()">
   <div class="section-heading">
     <div>
@@ -68,8 +75,8 @@
         <strong>{{ view.trend.methodKey }} v{{ view.trend.methodVersion }}</strong>
       </div>
       <small i18n>
-        Window {{ view.trend.windowStart | date: 'mediumDate' : 'UTC' }} to
-        {{ view.trend.windowEndExclusive | date: 'mediumDate' : 'UTC' }} · time constant
+        Window {{ view.trend.windowStart | date: 'mediumDate' }} to
+        {{ view.trend.windowEndExclusive | date: 'mediumDate' }} · time constant
         {{ view.trend.timeConstantDays }} days · {{ view.trend.warmupDays }}-day warm-up
         @if (view.trend.availability === 'NotEnoughData') {
           · needs {{ view.trend.minimumSampleCount - view.trend.sampleCount }} more observations
@@ -80,7 +87,7 @@
     <div class="week-grid" aria-label="Weekly bodyweight averages" i18n-aria-label>
       @for (week of view.weeks; track week.weekStart) {
         <article>
-          <span>{{ week.weekStart | date: 'mediumDate' : 'UTC' }}</span>
+          <span>{{ week.weekStart | date: 'mediumDate' }}</span>
           <strong>
             @if (week.displayMean !== null) {
               {{ week.displayMean | number: '1.1-3' }}
@@ -97,7 +104,12 @@
     <div class="day-list">
       @for (day of view.days; track day.date) {
         <article [class.missing]="!day.observation">
-          <time [attr.datetime]="day.date">{{ day.date | date: 'EEE, mediumDate' : 'UTC' }}</time>
+          <!--
+            'mediumDate' is a named alias and cannot be embedded in a custom pattern: its own
+            letters get read as pattern characters, which rendered "Sun, 0e28iu0DPMte". The alias
+            expands to 'MMM d, y'.
+          -->
+          <time [attr.datetime]="day.date">{{ day.date | date: 'EEE, MMM d, y' }}</time>
           @if (day.observation; as observation) {
             <div class="measurement">
               <strong>
@@ -199,8 +211,8 @@
       <section class="history-panel">
         <h3 i18n>Date corrected</h3>
         <p i18n>
-          {{ moved.voided.measurementDate | date: 'mediumDate' : 'UTC' }} moved to
-          {{ moved.replacement.measurementDate | date: 'mediumDate' : 'UTC' }}. The original entry
+          {{ moved.voided.measurementDate | date: 'mediumDate' }} moved to
+          {{ moved.replacement.measurementDate | date: 'mediumDate' }}. The original entry
           is retained as a voided record.
         </p>
         <p class="muted">{{ moved.void.reason }}</p>
@@ -210,7 +222,7 @@
     @if (history(); as record) {
       <section class="history-panel">
         <h3 i18n>
-          Correction history for {{ record.current.measurementDate | date: 'mediumDate' : 'UTC' }}
+          Correction history for {{ record.current.measurementDate | date: 'mediumDate' }}
         </h3>
         @if (record.void; as voided) {
           <p class="muted" i18n>
@@ -314,7 +326,7 @@
           @for (day of measurementDays(); track day.date) {
             @for (measurement of day.measurements; track measurement.id) {
               <article>
-                <time [attr.datetime]="day.date">{{ day.date | date: 'mediumDate' : 'UTC' }}</time>
+                <time [attr.datetime]="day.date">{{ day.date | date: 'mediumDate' }}</time>
                 <div class="measurement">
                   <strong>
                     {{
@@ -425,7 +437,7 @@
       <section class="history-panel">
         <h3 i18n>
           Measurement history for
-          {{ record.current.measurementDate | date: 'mediumDate' : 'UTC' }}
+          {{ record.current.measurementDate | date: 'mediumDate' }}
         </h3>
         @if (record.previousValues.length === 0) {
           <p class="muted" i18n>No corrections have been made.</p>

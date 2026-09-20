@@ -63,7 +63,11 @@ export class AuthStore {
       if (request !== this.sessionRequest) return;
       const user = await firstValueFrom(this.api.getCurrentUser());
       if (request !== this.sessionRequest) return;
-      if (this.userState()?.id !== user.id) this.tenants.clear();
+      // Only a *different* account invalidates the persisted workspace. On a cold load there is
+      // no previous user, so the stored selection is this same user's own choice and must
+      // survive the refresh; `TenantStore.load` still discards an id they no longer belong to.
+      const previous = this.userState();
+      if (previous !== null && previous.id !== user.id) this.tenants.clear();
       this.userState.set(user);
       await this.tenants.load();
     } catch {

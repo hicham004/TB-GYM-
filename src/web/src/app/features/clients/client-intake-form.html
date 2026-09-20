@@ -16,7 +16,7 @@
       </label>
       <label>
         <span i18n>Date of birth</span>
-        <input type="date" formControlName="birthDate" [max]="maximumBirthDate" />
+        <input type="date" formControlName="birthDate" [max]="maximumBirthDate()" />
       </label>
       <label>
         <span i18n>Height</span>
@@ -99,7 +99,7 @@
         </label>
         <label>
           <span i18n>Measurement date</span>
-          <input type="date" formControlName="measurementDate" [max]="maximumMeasurementDate" />
+          <input type="date" formControlName="measurementDate" [max]="maximumMeasurementDate()" />
         </label>
       </div>
     </fieldset>

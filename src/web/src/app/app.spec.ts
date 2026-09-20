@@ -25,6 +25,16 @@ const MEMBERSHIP = {
   role: 'Owner' as const,
 };
 
+// `/api/tenants` orders by workspace name, so "Alpha Strength" is always memberships[0]. A picker
+// that silently falls back to the first option is indistinguishable from a correct one until the
+// chosen workspace is not that one.
+const ALPHA = {
+  tenantId: 'tenant-alpha',
+  tenantName: 'Alpha Strength',
+  tenantSlug: 'alpha-strength',
+  role: 'Owner' as const,
+};
+
 async function render(
   options: {
     signedIn?: boolean;
@@ -32,6 +42,8 @@ async function render(
     unread?: number;
     unreadMessages?: number;
     client?: boolean;
+    memberships?: typeof MEMBERSHIP[];
+    selectedTenantId?: string;
   } = {},
 ) {
   const clear = vi.fn();
@@ -77,8 +89,10 @@ async function render(
       {
         provide: TenantStore,
         useValue: {
-          memberships: signal(options.signedIn ? [MEMBERSHIP] : []),
-          selectedTenantId: signal(options.signedIn ? 'tenant-1' : null),
+          memberships: signal(options.signedIn ? (options.memberships ?? [MEMBERSHIP]) : []),
+          selectedTenantId: signal(
+            options.signedIn ? (options.selectedTenantId ?? 'tenant-1') : null,
+          ),
           selectedMembership: signal(options.signedIn ? MEMBERSHIP : undefined),
           canCoach: signal(Boolean(options.owner)),
           isOwner: signal(Boolean(options.owner)),
@@ -151,6 +165,25 @@ describe('App', () => {
     );
     expect(options).toHaveLength(1);
     expect(options[0].textContent).toContain('TB Gym');
+  });
+
+  /**
+   * The picker has to show the workspace the store is actually in. Binding `value` on the
+   * `<select>` does not survive the `@for` that fills it: the browser resets `selectedIndex` to 0
+   * when the options arrive, so the picker named the first workspace whichever one was active.
+   * With a single membership that is the right answer by accident, which is how it went unseen.
+   */
+  it('shows the active workspace even when it is not the first one offered', async () => {
+    const { host } = await render({
+      signedIn: true,
+      owner: true,
+      memberships: [ALPHA, MEMBERSHIP],
+      selectedTenantId: 'tenant-1',
+    });
+
+    const picker = host.querySelector<HTMLSelectElement>('.workspace-picker select')!;
+    expect(picker.value).toBe('tenant-1');
+    expect(picker.options[picker.selectedIndex].textContent).toContain('TB Gym');
   });
 
   it('offers the notifications link to every active member', async () => {

@@ -17,6 +17,7 @@ import {
 } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 
 @Component({
   selector: 'app-client-commercial',
@@ -29,6 +30,7 @@ export class ClientCommercial {
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly tenants = inject(TenantStore);
+  private readonly calendar = inject(WorkspaceCalendar);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
 
@@ -47,9 +49,11 @@ export class ClientCommercial {
   protected readonly statusAction = signal<'pause' | 'cancel' | null>(null);
   protected readonly relationshipFormOpen = signal(false);
 
+  // Start dates are filled from the workspace's own calendar once it answers; see
+  // WorkspaceCalendar. The browser's calendar is not the workspace calendar.
   protected readonly assignForm = this.formBuilder.nonNullable.group({
     offerId: ['', Validators.required],
-    startDate: [todayInput(), Validators.required],
+    startDate: ['', Validators.required],
   });
 
   protected readonly paymentForm = this.formBuilder.nonNullable.group({
@@ -66,7 +70,7 @@ export class ClientCommercial {
 
   protected readonly renewalForm = this.formBuilder.nonNullable.group({
     offerId: ['', Validators.required],
-    startDate: [todayInput(), Validators.required],
+    startDate: ['', Validators.required],
   });
 
   protected readonly statusForm = this.formBuilder.nonNullable.group({
@@ -339,14 +343,21 @@ export class ClientCommercial {
       this.loading.set(true);
       this.clearMessages();
       try {
-        const [catalog, overview] = await owner.wait(
+        const [catalog, overview, today] = await owner.wait(
           Promise.all([
             firstValueFrom(this.api.getProductCatalog()),
             firstValueFrom(this.api.getClientCommercialOverview(this.client().id)),
+            this.calendar.resolveToday(),
           ]),
         );
         this.catalog.set(catalog);
         this.overview.set(overview);
+        for (const control of [
+          this.assignForm.controls.startDate,
+          this.renewalForm.controls.startDate,
+        ]) {
+          if (!control.value) control.setValue(today);
+        }
         const firstOffer = catalog.products
           .filter((product) => product.isActive)
           .flatMap((product) => product.offers)
@@ -419,12 +430,6 @@ export class ClientCommercial {
     this.statusForm.reset();
     this.relationshipForm.reset();
   }
-}
-
-function todayInput(): string {
-  const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 10);
 }
 
 function dateTimeLocalInput(): string {

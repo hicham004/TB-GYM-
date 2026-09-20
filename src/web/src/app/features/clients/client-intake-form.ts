@@ -1,4 +1,13 @@
-import { Component, effect, inject, input, output, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import {
   BodyweightUnit,
@@ -7,6 +16,7 @@ import {
   LengthUnit,
   UpdateClientIntakeRequest,
 } from '../../core/api/api.models';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 
 @Component({
   selector: 'app-client-intake-form',
@@ -16,6 +26,7 @@ import {
 })
 export class ClientIntakeForm {
   private readonly formBuilder = inject(FormBuilder);
+  private readonly calendar = inject(WorkspaceCalendar);
 
   readonly profile = input.required<ClientIntakeProfile>();
   readonly busy = input(false);
@@ -23,8 +34,9 @@ export class ClientIntakeForm {
   readonly completeOnboarding = output<CompleteClientOnboardingRequest>();
 
   protected readonly localError = signal<string | null>(null);
-  protected readonly maximumBirthDate = adultCutoff();
-  protected readonly maximumMeasurementDate = today();
+  // Both bounds are judged in the workspace's time zone, not the browser's.
+  protected readonly maximumMeasurementDate = this.calendar.today;
+  protected readonly maximumBirthDate = computed(() => adultCutoff(this.calendar.today()));
   protected readonly form = this.formBuilder.group({
     firstName: this.formBuilder.nonNullable.control('', [
       Validators.required,
@@ -52,7 +64,7 @@ export class ClientIntakeForm {
     previousInjuries: this.formBuilder.nonNullable.control('', Validators.maxLength(4000)),
     initialBodyweightValue: this.formBuilder.control<number | null>(null, Validators.min(1)),
     initialBodyweightUnit: this.formBuilder.nonNullable.control<BodyweightUnit>('Kilogram'),
-    measurementDate: this.formBuilder.nonNullable.control(today()),
+    measurementDate: this.formBuilder.nonNullable.control(''),
   });
 
   constructor() {
@@ -76,10 +88,20 @@ export class ClientIntakeForm {
         previousInjuries: profile.previousInjuries ?? '',
         initialBodyweightValue: null,
         initialBodyweightUnit: 'Kilogram',
-        measurementDate: today(),
+        // Untracked: the workspace date must not become a dependency of this effect, or its
+        // arrival would reset the whole form under the coach.
+        measurementDate: untracked(() => this.calendar.today()),
       });
       this.localError.set(null);
+      void this.applyWorkspaceDate();
     });
+  }
+
+  /** Replaces the provisional date with the workspace's own, unless the coach already typed one. */
+  private async applyWorkspaceDate(): Promise<void> {
+    const today = await this.calendar.resolveToday();
+    const control = this.form.controls.measurementDate;
+    if (!control.dirty) control.setValue(today);
   }
 
   protected save(): void {
@@ -160,14 +182,12 @@ function blankToNull(value: string): string | null {
   return normalized || null;
 }
 
-function today(): string {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
-
-function adultCutoff(): string {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() - 18);
-  return date.toISOString().slice(0, 10);
+/**
+ * The latest birth date that is already 18 on the workspace's calendar. Built through a UTC Date
+ * so that 29 February rolls to 1 March rather than naming a day that does not exist.
+ */
+function adultCutoff(today: string): string {
+  const [year, month, day] = today.split('-').map(Number);
+  const cutoff = new Date(Date.UTC(year - 18, month - 1, day));
+  return cutoff.toISOString().slice(0, 10);
 }
