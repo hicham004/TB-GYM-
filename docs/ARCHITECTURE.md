@@ -453,6 +453,17 @@ set-performance ID, serializes same-workout set writes, and drops stale load/wri
 a tenant-context generation change. This is read/UI composition only: no training write contract,
 schema or invariant changes.
 
+Design-system foundation slice 1 (2026-09-22) adds the Figma tokens as CSS custom properties
+(`src/styles/_tokens.scss`), opt-in `.tb-*` primitive styles (`src/styles/_ui.scss`) and small
+primitives under `src/app/ui`: buttons and links, icon buttons, icons, status labels, avatars, and a
+field wrapper with a control directive over native inputs, selects, textareas and checkboxes. The
+primitives add no value accessors and change neither the validation convention above
+(`FormAttempt`) nor any cookie, antiforgery, tenancy, route-guard or API behaviour. They are
+additive: an existing route is restyled only when it is migrated on purpose. The development-only UI
+lab exists only in the development build (`fileReplacements`), and Playwright/axe browser checks
+live in `src/web/e2e`. Mapping, usage, migration boundaries and open work are in
+[FRONTEND-DESIGN-SYSTEM.md](FRONTEND-DESIGN-SYSTEM.md).
+
 ## 9. Realtime, jobs, and integrations
 
 **Phase 6B-2A built the persisted model; Phase 6B-2B added the channel over it** — see sections 16 and

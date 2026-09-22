@@ -1,0 +1,540 @@
+// Shared styles for the design-system primitives in src/app/ui.
+//
+// Every selector here is an opt-in `.tb-*` class that a primitive (or a migrated screen) applies on
+// purpose. Nothing targets bare elements and nothing redefines the pre-foundation classes
+// (.primary-button, .form-grid, ...), so unmigrated routes render exactly as before. Class
+// selectors outrank the legacy element rules in styles.scss (input, button:disabled,
+// input[readonly], label > span, ...) without !important; each property those rules set is
+// restated here so the legacy values never leak through.
+//
+// Buttons and native controls are styled here rather than in component styles because the
+// primitives are directives on native <button>, <a>, <input>, <select> and <textarea>: a directive
+// has no stylesheet, and emulated component styles cannot reach projected native elements. The
+// field and checkbox wrappers live here for the same reason (their labels react to the projected
+// control's state through :has()). Self-contained components (icon, status label, avatar) keep
+// normal encapsulated component styles.
+
+// ----------------------------------------------------------------------------------------------
+// Theme scope and typography
+// ----------------------------------------------------------------------------------------------
+
+// Opt-in root for migrated screens and the UI lab: font, base text style and colour.
+.tb-theme {
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-body-size);
+  font-synthesis: none;
+  line-height: var(--text-body-line-height);
+}
+
+// Arabic text uses the Arabic face first, so digits and punctuation inside it match the script.
+.tb-theme:lang(ar),
+.tb-theme [lang|='ar'] {
+  font-family: var(--font-sans-arabic);
+}
+
+.tb-text-display {
+  font-size: var(--text-display-size);
+  font-weight: var(--font-weight-strong);
+  letter-spacing: 0;
+  line-height: var(--text-display-line-height);
+}
+
+.tb-text-page-title {
+  font-size: var(--text-page-title-size);
+  font-weight: var(--font-weight-strong);
+  letter-spacing: 0;
+  line-height: var(--text-page-title-line-height);
+}
+
+.tb-text-section-title {
+  font-size: var(--text-section-title-size);
+  font-weight: var(--font-weight-strong);
+  letter-spacing: 0;
+  line-height: var(--text-section-title-line-height);
+}
+
+.tb-text-body,
+.tb-text-body-strong {
+  font-size: var(--text-body-size);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--text-body-line-height);
+}
+
+.tb-text-compact,
+.tb-text-compact-strong {
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--text-compact-line-height);
+}
+
+.tb-text-metadata,
+.tb-text-metadata-strong {
+  font-size: var(--text-metadata-size);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--text-metadata-line-height);
+}
+
+.tb-text-body-strong,
+.tb-text-compact-strong,
+.tb-text-metadata-strong {
+  font-weight: var(--font-weight-strong);
+}
+
+// Loads, reps, money, dates and metric columns (Foundations: tabular figures).
+.tb-numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+.tb-visually-hidden {
+  block-size: 1px;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+}
+
+// ----------------------------------------------------------------------------------------------
+// Buttons (Action/Button 46:3) and icon buttons (Action/Icon button 101:164)
+// ----------------------------------------------------------------------------------------------
+
+.tb-button,
+.tb-icon-button {
+  align-items: center;
+  background-color: transparent;
+  // Transparent, not absent: forced-colours mode paints it, so every button keeps a visible edge.
+  border: 1px solid transparent;
+  border-radius: var(--radius-6);
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  justify-content: center;
+  margin: 0;
+  opacity: 1;
+  position: relative;
+  text-decoration: none;
+  touch-action: manipulation;
+  vertical-align: middle;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tb-button {
+  color: var(--color-text-primary);
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  gap: var(--space-8);
+  line-height: var(--text-compact-line-height);
+  max-inline-size: 100%;
+  min-block-size: var(--control-height-40);
+  min-inline-size: var(--control-height-40);
+  overflow-wrap: anywhere;
+  // Figma draws button strokes inside the frame, outside layout; CSS borders take space, so the
+  // padding gives the border back and the label sits where Figma puts it.
+  padding-block: calc(var(--space-8) - 1px);
+  padding-inline: calc(var(--space-16) - 1px);
+  text-align: center;
+  white-space: normal;
+}
+
+.tb-button--touch {
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+  min-block-size: var(--control-height-48);
+  min-inline-size: var(--control-height-48);
+  padding-block: calc(var(--space-12) - 1px);
+}
+
+.tb-icon-button {
+  block-size: var(--control-height-40);
+  color: var(--color-text-primary);
+  flex: none;
+  inline-size: var(--control-height-40);
+  padding: 0;
+}
+
+.tb-icon-button--touch {
+  block-size: var(--control-height-48);
+  inline-size: var(--control-height-48);
+}
+
+.tb-button:focus-visible,
+.tb-icon-button:focus-visible {
+  // The outline follows the 6px corner at a 2px offset, which is Figma's 8px ring radius.
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
+}
+
+.tb-button--filled {
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.tb-button--outlined {
+  border-color: var(--color-border-control);
+}
+
+.tb-button--text {
+  color: var(--color-accent);
+}
+
+@media (hover: hover) {
+  .tb-button--filled:hover:not(:disabled, [aria-disabled='true']) {
+    background-color: var(--color-accent-hover);
+  }
+
+  .tb-button--outlined:hover:not(:disabled, [aria-disabled='true']),
+  .tb-button--text:hover:not(:disabled, [aria-disabled='true']),
+  .tb-icon-button:hover:not(:disabled, [aria-disabled='true']) {
+    background-color: var(--color-surface-subtle);
+  }
+
+  .tb-button--text:hover:not(:disabled, [aria-disabled='true']) {
+    color: var(--color-accent-hover);
+  }
+}
+
+// Pressed: Figma's 2px inside stroke is the 1px border plus a 1px inset shadow.
+.tb-button--filled:active:not(:disabled, [aria-disabled='true']) {
+  background-color: var(--color-accent-hover);
+  border-color: var(--color-on-accent);
+  box-shadow: inset 0 0 0 1px var(--color-on-accent);
+}
+
+.tb-button--outlined:active:not(:disabled, [aria-disabled='true']) {
+  background-color: var(--color-accent-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-border-control);
+}
+
+.tb-button--text:active:not(:disabled, [aria-disabled='true']),
+.tb-icon-button:active:not(:disabled, [aria-disabled='true']) {
+  background-color: var(--color-accent-subtle);
+}
+
+// Disabled and loading: content at 45% (Figma), fill at 45% on Filled. Colour alpha rather than
+// element opacity keeps the Outlined border at full strength, as drawn. The opacity reset lives
+// here because the legacy `button:disabled` rule (0,1,1) outranks the base `.tb-button` (0,1,0).
+.tb-button:disabled,
+.tb-button[aria-disabled='true'],
+.tb-icon-button:disabled,
+.tb-icon-button[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.tb-button--filled:disabled,
+.tb-button--filled[aria-disabled='true'] {
+  background-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  color: color-mix(in srgb, var(--color-on-accent) 45%, transparent);
+}
+
+.tb-button--outlined:disabled,
+.tb-button--outlined[aria-disabled='true'],
+.tb-icon-button:disabled,
+.tb-icon-button[aria-disabled='true'] {
+  color: color-mix(in srgb, var(--color-text-primary) 45%, transparent);
+}
+
+.tb-button--text:disabled,
+.tb-button--text[aria-disabled='true'] {
+  color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+// Loading (code-side addition; Figma has no loading variant yet): a decorative spinner replaces
+// the leading icon. The accessible name is unchanged; aria-disabled announces the state.
+.tb-button.tb-button--loading,
+.tb-icon-button.tb-icon-button--loading {
+  cursor: progress;
+}
+
+.tb-button--loading::before,
+.tb-icon-button--loading::before {
+  animation: tb-spin 0.8s linear infinite;
+  block-size: 16px;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: var(--radius-full);
+  box-sizing: border-box;
+  content: '';
+  flex: none;
+  inline-size: 16px;
+}
+
+.tb-button--loading > .tb-icon,
+.tb-icon-button--loading > .tb-icon {
+  display: none;
+}
+
+@keyframes tb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-button--loading::before,
+  .tb-icon-button--loading::before {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .tb-button:disabled,
+  .tb-button[aria-disabled='true'],
+  .tb-icon-button:disabled,
+  .tb-icon-button[aria-disabled='true'] {
+    border-color: GrayText;
+    color: GrayText;
+  }
+}
+
+// ----------------------------------------------------------------------------------------------
+// Native controls (Form/Text field 236:583, Form/Select 237:553, Form/Text area 238:553)
+// ----------------------------------------------------------------------------------------------
+
+.tb-control {
+  appearance: none;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-6);
+  box-sizing: border-box;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-regular);
+  inline-size: 100%;
+  line-height: var(--text-compact-line-height);
+  margin: 0;
+  // A minimum, not a height: enlarged or translated text grows the box instead of clipping.
+  min-block-size: var(--control-height-40);
+  min-inline-size: 0;
+  padding-block: 0;
+  padding-inline: var(--space-12);
+}
+
+.tb-control--compact {
+  min-block-size: var(--control-height-32);
+  padding-inline: var(--space-8);
+}
+
+.tb-control::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 1;
+}
+
+.tb-control:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
+}
+
+// Error follows the real ARIA state, so the red border can never disagree with what is announced.
+.tb-control[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.tb-control[readonly] {
+  background-color: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+}
+
+.tb-control:disabled {
+  background-color: var(--color-surface-subtle);
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.tb-textarea {
+  // Four 20px lines plus 12px padding (Figma: 104px minimum); resize only lengthens it.
+  min-block-size: 104px;
+  padding-block: var(--space-12);
+  resize: vertical;
+}
+
+// The chevron is a background image because <select> cannot hold children. Its colour is baked
+// into the data URI (text-primary #161b1a; 45% when disabled) since custom properties cannot reach
+// inside an image; it sits at the logical inline end in both directions.
+.tb-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%23161b1a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right var(--space-8) center;
+  background-repeat: no-repeat;
+  background-size: 20px 20px;
+  cursor: pointer;
+  padding-inline-end: calc(var(--space-8) + 20px + var(--space-4));
+  text-overflow: ellipsis;
+}
+
+.tb-select:dir(rtl) {
+  background-position: left var(--space-8) center;
+}
+
+// Compact: flush to the end with no gap; the 8x4 glyph keeps its own optical margin.
+.tb-select.tb-control--compact {
+  background-position: right 0 center;
+  padding-inline-end: 20px;
+}
+
+.tb-select.tb-control--compact:dir(rtl) {
+  background-position: left 0 center;
+}
+
+.tb-select:disabled {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%23161b1a' stroke-opacity='.45' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  cursor: not-allowed;
+}
+
+// ----------------------------------------------------------------------------------------------
+// Field wrapper (ui/field): label, projected control, one help-or-error slot
+// ----------------------------------------------------------------------------------------------
+
+.tb-field {
+  align-content: start;
+  display: grid;
+  gap: var(--space-8);
+  min-inline-size: 0;
+}
+
+.tb-field--compact {
+  gap: var(--space-4);
+}
+
+// Labels wrap to any number of lines and never truncate.
+.tb-field__label {
+  color: var(--color-text-primary);
+  display: block;
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  line-height: var(--text-compact-line-height);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.tb-field--compact .tb-field__label {
+  color: var(--color-text-secondary);
+  font-size: var(--text-metadata-size);
+  line-height: var(--text-metadata-line-height);
+}
+
+.tb-field:has(.tb-control:disabled) .tb-field__label {
+  color: var(--color-text-secondary);
+}
+
+// Fills the field's width and wraps; the field grows downward instead of truncating.
+.tb-field__support {
+  color: var(--color-text-secondary);
+  font-size: var(--text-metadata-size);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--text-metadata-line-height);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.tb-field__support--error {
+  color: var(--color-danger);
+}
+
+.tb-field__message {
+  display: block;
+}
+
+// ----------------------------------------------------------------------------------------------
+// Checkbox (Form/Checkbox 239:530): row and label here, box below
+// ----------------------------------------------------------------------------------------------
+
+.tb-checkbox {
+  align-items: start;
+  color: var(--color-text-primary);
+  display: flex;
+  min-block-size: var(--control-height-32);
+}
+
+// Padding-block centres one text line on the 32px row: (32 - 20) / 2, derived rather than a token.
+// The inline-start padding is the 8px gap, inside the label so it is part of the click target.
+.tb-checkbox__label {
+  cursor: pointer;
+  flex: 1 1 auto;
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--text-compact-line-height);
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  padding-block: calc((var(--control-height-32) - var(--text-compact-line-height)) / 2);
+  padding-inline-start: var(--space-8);
+}
+
+.tb-checkbox:has(.tb-checkbox-input:disabled) {
+  color: var(--color-text-secondary);
+}
+
+.tb-checkbox:has(.tb-checkbox-input:disabled) .tb-checkbox__label {
+  cursor: not-allowed;
+}
+
+// ----------------------------------------------------------------------------------------------
+// Checkbox box (the native input inside ui/checkbox)
+// ----------------------------------------------------------------------------------------------
+
+.tb-checkbox-input {
+  appearance: none;
+  background-color: var(--color-surface);
+  background-origin: border-box;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 16px 16px;
+  block-size: 16px;
+  border: 1.5px solid var(--color-border-control);
+  border-radius: var(--radius-4);
+  box-sizing: border-box;
+  cursor: pointer;
+  flex: none;
+  inline-size: 16px;
+  // Centres the 16px box on a 32px first line (Figma's 16 x 32 indicator slot).
+  margin-block: calc((var(--control-height-32) - 16px) / 2);
+  margin-inline: 0;
+  min-block-size: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+
+.tb-checkbox-input:checked {
+  background-color: var(--color-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 8l2.75 2.75L12 5.25' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  border-color: var(--color-accent);
+}
+
+.tb-checkbox-input:focus-visible {
+  // 4px corner + 2px offset = Figma's 6px ring radius around the box.
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
+}
+
+.tb-checkbox-input:disabled {
+  background-color: var(--color-surface-subtle);
+  border-color: var(--color-border-control);
+  cursor: not-allowed;
+}
+
+.tb-checkbox-input:disabled:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 8l2.75 2.75L12 5.25' stroke='%237d8783' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+// Forced colours: hand the chevron and the box back to the platform, which draws them in system
+// colours. The baked-in SVG colours would be invisible against a forced background.
+@media (forced-colors: active) {
+  .tb-select,
+  .tb-select:disabled {
+    appearance: auto;
+    background-image: none;
+    padding-inline-end: var(--space-12);
+  }
+
+  .tb-checkbox-input,
+  .tb-checkbox-input:checked,
+  .tb-checkbox-input:disabled:checked {
+    appearance: auto;
+    background-image: none;
+  }
+}

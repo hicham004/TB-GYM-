@@ -66,7 +66,13 @@
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/app/dev/dev-routes.ts",
+                  "with": "src/app/dev/dev-routes.development.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"

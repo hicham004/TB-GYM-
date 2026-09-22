@@ -78,7 +78,11 @@ export function field<T extends Control = HTMLInputElement>(host: ParentNode, la
   }
 
   if (captioned.length === 1) {
-    const control = captioned[0].querySelector<T>('input, select, textarea');
+    // A nested control first, as before; then a `for`/`id` association, which is how the
+    // design-system field and checkbox label a projected control.
+    const control =
+      captioned[0].querySelector<T>('input, select, textarea') ??
+      (captioned[0].control as T | null);
     if (control === null) {
       throw new Error(`The field labelled "${label}" has no control in it.`);
     }

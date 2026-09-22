@@ -1,0 +1,486 @@
+<div class="lab" [attr.dir]="direction()">
+  <header class="lab-header">
+    <p class="lab-eyebrow tb-text-metadata-strong">Development build only</p>
+    <h1 class="tb-text-page-title">UI lab</h1>
+    <p class="lab-lede">
+      The design-system foundation built from the real primitives: tokens, buttons, icons, status
+      labels, avatars and native form controls. Every value is synthetic, nothing is sent anywhere,
+      and this route does not exist in production builds.
+    </p>
+    <nav class="lab-row" aria-label="Lab direction">
+      <a
+        appButton
+        [variant]="direction() === 'ltr' ? 'filled' : 'outlined'"
+        [routerLink]="[]"
+        routerLinkActive
+        [routerLinkActiveOptions]="exactLink"
+        ariaCurrentWhenActive="page"
+        >Left to right (English)</a
+      >
+      <a
+        appButton
+        [variant]="direction() === 'rtl' ? 'filled' : 'outlined'"
+        [routerLink]="[]"
+        [queryParams]="{ dir: 'rtl' }"
+        routerLinkActive
+        [routerLinkActiveOptions]="exactLink"
+        ariaCurrentWhenActive="page"
+        >Right to left</a
+      >
+    </nav>
+  </header>
+
+  <section class="lab-section" aria-labelledby="lab-buttons-title">
+    <h2 id="lab-buttons-title" class="tb-text-section-title">Buttons</h2>
+
+    <h3 class="lab-group-title">Emphasis · Pointer / 40</h3>
+    <div class="lab-row">
+      <button appButton type="button" (click)="press('Save changes')">Save changes</button>
+      <button appButton type="button" variant="outlined" (click)="press('Apply')">Apply</button>
+      <button appButton type="button" variant="text" (click)="press('Edit')">Edit</button>
+    </div>
+
+    <h3 class="lab-group-title">Leading icon</h3>
+    <div class="lab-row">
+      <button appButton type="button" (click)="press('New exercise')">
+        <app-icon name="plus" />New exercise
+      </button>
+      <button appButton type="button" variant="text" (click)="press('Add muscle')">
+        <app-icon name="plus" />Add muscle
+      </button>
+    </div>
+
+    <h3 class="lab-group-title">Touch / 48 · touch-first client screens</h3>
+    <div class="lab-row">
+      <button appButton type="button" size="touch" (click)="press('Open workout')">
+        Open workout
+      </button>
+      <button appButton type="button" size="touch" variant="outlined" (click)="press('Cancel')">
+        Cancel
+      </button>
+      <button appButton type="button" size="touch" variant="text" (click)="press('Skip for now')">
+        Skip for now
+      </button>
+    </div>
+
+    <h3 class="lab-group-title">Disabled</h3>
+    <div class="lab-row">
+      <button appButton type="button" disabled (click)="press('Publish')">Publish</button>
+      <button appButton type="button" variant="outlined" disabled (click)="press('Archive')">
+        Archive
+      </button>
+      <button appButton type="button" variant="text" disabled (click)="press('Restore')">
+        Restore
+      </button>
+    </div>
+    <p class="lab-caption">
+      Native disabled leaves the tab order, so the reason is written out: there is no saved version
+      to publish, archive or restore.
+    </p>
+
+    <h3 class="lab-group-title">Loading</h3>
+    <div class="lab-row">
+      <button appButton type="button" [loading]="demoLoading()" (click)="startDemoSave()">
+        @if (demoLoading()) {
+          Saving…
+        } @else {
+          Save changes (loading demo)
+        }
+      </button>
+      <app-checkbox label="Hold the loading state">
+        <input type="checkbox" appControl [formControl]="holdLoading" />
+      </app-checkbox>
+    </div>
+    <p class="lab-caption">
+      While loading, the button keeps focus, is announced as unavailable, and ignores clicks, Enter
+      and Space.
+    </p>
+
+    <h3 class="lab-group-title">Long label in a narrow container</h3>
+    <div class="lab-narrow">
+      <button appButton type="button" (click)="press('Save and publish')">
+        Save changes and publish version 5 to every assigned client
+      </button>
+    </div>
+
+    <h3 class="lab-group-title">Icon buttons</h3>
+    <div class="lab-row">
+      <button appIconButton type="button" label="Notifications" (click)="press('Notifications')">
+        <app-icon name="bell" />
+      </button>
+      <button appIconButton type="button" label="Add set" (click)="press('Add set')">
+        <app-icon name="plus" />
+      </button>
+      <button
+        appIconButton
+        type="button"
+        size="touch"
+        label="Notifications, touch size"
+        (click)="press('Notifications, touch size')"
+      >
+        <app-icon name="bell" />
+      </button>
+      <button appIconButton type="button" label="Add set, disabled" disabled>
+        <app-icon name="plus" />
+      </button>
+      <button
+        appIconButton
+        type="button"
+        label="Notifications, loading demo"
+        [loading]="demoLoading()"
+        (click)="press('Notifications, loading demo')"
+      >
+        <app-icon name="bell" />
+      </button>
+    </div>
+
+    <div class="lab-log">
+      <p>
+        Last pressed: <strong>{{ lastPressed() ?? 'nothing yet' }}</strong>
+      </p>
+      @if (pressLog().length > 0) {
+        <ul class="lab-counts">
+          @for (entry of pressLog(); track entry.name) {
+            <li>{{ entry.name }}: {{ entry.count }}</li>
+          }
+        </ul>
+      }
+    </div>
+  </section>
+
+  <section class="lab-section" aria-labelledby="lab-status-title">
+    <h2 id="lab-status-title" class="tb-text-section-title">Status labels and avatars</h2>
+    <div class="lab-row">
+      @for (status of statuses; track status.label) {
+        <app-status-label [label]="status.label" [tone]="status.tone" [marker]="status.marker" />
+      }
+    </div>
+    <div class="lab-narrow">
+      <app-status-label
+        label="Draft · version 3 is published and version 4 has unpublished edits"
+        tone="warning"
+      />
+    </div>
+    <p class="lab-caption">
+      The text carries the meaning; tone only colours the marker. The long label wraps with its
+      marker on the first line.
+    </p>
+
+    <ul class="lab-avatars">
+      @for (avatar of avatars; track avatar.caption) {
+        <li>
+          <app-avatar [initials]="avatar.initials" [presentation]="avatar.presentation" />
+          <span class="lab-caption">{{ avatar.caption }}</span>
+        </li>
+      }
+    </ul>
+  </section>
+
+  <section id="lab-form" class="lab-section" aria-labelledby="lab-form-title">
+    <h2 id="lab-form-title" class="tb-text-section-title">Form controls</h2>
+    <p class="lab-caption">
+      A reactive form. Reasons appear after a field is left or a submit is refused, never on a
+      pristine form; submit stays operable while the form is invalid.
+    </p>
+
+    <form class="lab-form" [formGroup]="form" (ngSubmit)="submit()">
+      <div class="lab-form-grid">
+        @let nameMessages = nameReasons();
+        <app-field
+          class="lab-span-all"
+          label="Exercise name"
+          help="Required. Up to 160 characters and unique in this workspace, including archived exercises."
+          [errors]="attempt.shows('name', nameMessages) ? nameMessages : null"
+        >
+          <input
+            appControl
+            type="text"
+            formControlName="name"
+            autocomplete="off"
+            (blur)="attempt.touch('name')"
+          />
+        </app-field>
+
+        @let instructionMessages = instructionReasons();
+        <app-field
+          class="lab-span-all"
+          label="Instructions"
+          help="Optional. Up to 8,000 characters. Visible to coaches only."
+          [errors]="attempt.shows('instructions', instructionMessages) ? instructionMessages : null"
+        >
+          <textarea
+            appControl
+            formControlName="instructions"
+            rows="4"
+            (blur)="attempt.touch('instructions')"
+          ></textarea>
+        </app-field>
+
+        @let equipmentMessages = equipmentReasons();
+        <app-field
+          label="Equipment"
+          [errors]="attempt.shows('equipment', equipmentMessages) ? equipmentMessages : null"
+        >
+          <select appControl formControlName="equipment" (blur)="attempt.touch('equipment')">
+            <option value="">Choose equipment…</option>
+            @for (option of equipment; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </app-field>
+
+        <app-field label="Classification">
+          <select appControl formControlName="classification">
+            @for (option of classifications; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </app-field>
+
+        <app-field
+          label="Exercise ID"
+          help="Read-only: set by the system, still focusable and submitted."
+        >
+          <input appControl type="text" formControlName="exerciseId" class="tb-numeric" readonly />
+        </app-field>
+
+        <app-field
+          label="Workspace"
+          help="Disabled: it belongs to the workspace, so it cannot change here and is skipped by Tab."
+        >
+          <input appControl type="text" formControlName="workspace" />
+        </app-field>
+
+        <div class="lab-span-all lab-checks">
+          <app-checkbox
+            label="Main lift: coaches may swap it only for approved alternatives, and clients see it first in every session that includes it"
+          >
+            <input type="checkbox" appControl formControlName="mainLift" />
+          </app-checkbox>
+          <app-checkbox label="Include in new templates">
+            <input type="checkbox" appControl formControlName="includeInTemplates" />
+          </app-checkbox>
+        </div>
+      </div>
+
+      <!-- The one assertive region: present from the start, filled only by a refused submit. -->
+      <p id="lab-summary" class="lab-summary" role="alert" tabindex="-1" #summary>
+        @if (attempt.wasTried() && formReasons().length > 0) {
+          <span>This exercise cannot be saved yet:</span>
+          @for (reason of formReasons(); track reason) {
+            <span>{{ reason }}</span>
+          }
+        }
+      </p>
+
+      <div class="lab-row">
+        <button appButton type="submit" [loading]="saving()" aria-describedby="lab-summary">
+          @if (saving()) {
+            Saving…
+          } @else {
+            Save exercise
+          }
+        </button>
+        <button appButton type="button" variant="outlined" (click)="reset()">Reset</button>
+      </div>
+      <p class="lab-notice" role="status">
+        @if (saved()) {
+          Saved in this lab only. Nothing was sent.
+        }
+      </p>
+    </form>
+
+    <h3 class="lab-group-title">Form state</h3>
+    <dl class="lab-state">
+      <div>
+        <dt>Valid</dt>
+        <dd>{{ form.valid ? 'yes' : 'no' }}</dd>
+      </div>
+      <div>
+        <dt>Dirty</dt>
+        <dd>{{ form.dirty ? 'yes' : 'no' }}</dd>
+      </div>
+      <div>
+        <dt>Touched</dt>
+        <dd>{{ form.touched ? 'yes' : 'no' }}</dd>
+      </div>
+      <div>
+        <dt>Saves started</dt>
+        <dd>{{ saveCount() }}</dd>
+      </div>
+    </dl>
+    <pre class="lab-value" dir="ltr">{{ form.getRawValue() | json }}</pre>
+  </section>
+
+  <section class="lab-section" aria-labelledby="lab-dense-title">
+    <h2 id="lab-dense-title" class="tb-text-section-title">Dense editor · Compact / 32</h2>
+    <p class="lab-caption">
+      Compact controls belong in dense editors and data grids only. Touch-first client screens stay
+      on Standard.
+    </p>
+    <div class="lab-dense">
+      <app-field label="Rest seconds" density="compact">
+        <input
+          appControl
+          type="number"
+          inputmode="numeric"
+          class="tb-numeric"
+          [formControl]="restSeconds"
+        />
+      </app-field>
+      <app-field label="Set type" density="compact">
+        <select appControl [formControl]="setType">
+          @for (option of setTypes; track option) {
+            <option [value]="option">{{ option }}</option>
+          }
+        </select>
+      </app-field>
+      <app-field label="Tempo" density="compact">
+        <input
+          appControl
+          type="text"
+          dir="ltr"
+          inputmode="numeric"
+          class="tb-numeric"
+          [formControl]="tempo"
+        />
+      </app-field>
+    </div>
+  </section>
+
+  <section class="lab-section" aria-labelledby="lab-widths-title">
+    <h2 id="lab-widths-title" class="tb-text-section-title">Widths and wrapping</h2>
+    <div class="lab-widths">
+      <div class="lab-narrow">
+        @let repsMessages = minimumRepsReasons();
+        <app-field
+          label="Minimum repetitions for the first working set, before any back-off sets"
+          help="Whole numbers from 1 to 100."
+          [errors]="repsMessages"
+        >
+          <input
+            appControl
+            type="number"
+            inputmode="numeric"
+            class="tb-numeric"
+            [formControl]="minimumReps"
+          />
+        </app-field>
+        <p class="lab-caption">Narrow · touched and invalid · two-line error replaces the help</p>
+      </div>
+
+      <div class="lab-medium">
+        <app-field label="Search exercises" hideLabel>
+          <input
+            appControl
+            type="search"
+            placeholder="Search by name or tag"
+            [formControl]="searchQuery"
+          />
+        </app-field>
+        <p class="lab-caption">
+          Toolbar search: the label is visually hidden but remains the accessible name; the
+          placeholder is only a hint.
+        </p>
+      </div>
+
+      <div class="lab-wide">
+        <app-field
+          label="Coach notes"
+          help="Shown to the client beside the exercise. Keep it short: clients read this between sets, often on a phone, so one or two sentences work best."
+        >
+          <textarea appControl rows="3" [formControl]="coachNotes"></textarea>
+        </app-field>
+        <p class="lab-caption">Wide · multiline help fills the field width</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="lab-section" aria-labelledby="lab-edges-title">
+    <h2 id="lab-edges-title" class="tb-text-section-title">Focus near edges</h2>
+    <p class="lab-caption">
+      The ring reaches 5px beyond a control (2px gap plus 3px ring). Containers keep that margin, so
+      no ring is clipped, including the first and last rows of a scroll region.
+    </p>
+    <div class="lab-edge-card">
+      <button appButton type="button" variant="outlined" (click)="press('Start edge')">
+        Start edge
+      </button>
+      <button appButton type="button" variant="outlined" (click)="press('End edge')">
+        End edge
+      </button>
+    </div>
+    <div class="lab-scroll" role="group" aria-label="Scrolling options">
+      @for (option of edgeOptions; track option) {
+        <app-checkbox [label]="option">
+          <input type="checkbox" appControl />
+        </app-checkbox>
+      }
+    </div>
+  </section>
+
+  <section class="lab-section" lang="ar" dir="rtl" aria-labelledby="lab-arabic-title">
+    <h2 id="lab-arabic-title" class="tb-text-section-title">{{ arabic.heading }}</h2>
+    <p class="lab-caption">{{ arabic.intro }}</p>
+    <div class="lab-form-grid">
+      @let arabicNameMessages = arabicNameReasons();
+      <app-field [label]="arabic.nameLabel" [help]="arabic.nameHelp" [errors]="arabicNameMessages">
+        <input appControl type="text" dir="auto" [formControl]="arabicName" />
+      </app-field>
+      <app-field [label]="arabic.equipmentLabel">
+        <select appControl [formControl]="arabicEquipment">
+          <option value="">{{ arabic.equipmentPlaceholder }}</option>
+          @for (option of arabic.equipmentOptions; track option) {
+            <option [value]="option">{{ option }}</option>
+          }
+        </select>
+      </app-field>
+      <app-field [label]="arabic.tempoLabel">
+        <input
+          appControl
+          type="text"
+          dir="ltr"
+          inputmode="numeric"
+          class="tb-numeric"
+          [formControl]="arabicTempo"
+        />
+      </app-field>
+      <p class="lab-span-all lab-bidi">
+        {{ arabic.loadLabel }}: <bdi dir="ltr" class="tb-numeric">82.5 kg</bdi>
+      </p>
+      <div class="lab-span-all lab-checks">
+        <app-checkbox [label]="arabic.includeArchived">
+          <input type="checkbox" appControl [formControl]="arabicIncludeArchived" />
+        </app-checkbox>
+        <app-checkbox [label]="arabic.mainLift">
+          <input type="checkbox" appControl [formControl]="arabicMainLift" />
+        </app-checkbox>
+      </div>
+    </div>
+    <div class="lab-row">
+      <button appButton type="button" (click)="press(arabic.save)">{{ arabic.save }}</button>
+      <button appButton type="button" variant="outlined" (click)="press(arabic.cancel)">
+        {{ arabic.cancel }}
+      </button>
+      <button appButton type="button" variant="text" (click)="press(arabic.addMuscle)">
+        <app-icon name="plus" />{{ arabic.addMuscle }}
+      </button>
+      <button
+        appIconButton
+        type="button"
+        [label]="arabic.notifications"
+        (click)="press(arabic.notifications)"
+      >
+        <app-icon name="bell" />
+      </button>
+    </div>
+    <div class="lab-row">
+      <app-status-label [label]="arabic.active" tone="success" marker="check" />
+      <app-status-label [label]="arabic.archived" />
+      <span class="lab-identity">
+        <app-avatar [initials]="arabic.coachInitials" presentation="message-sender" />
+        {{ arabic.coachName }}
+      </span>
+    </div>
+  </section>
+</div>

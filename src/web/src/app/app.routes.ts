@@ -6,6 +6,7 @@ import {
   ownerGuard,
   signedOutGuard,
 } from './core/auth/auth.guards';
+import { devRoutes } from './dev/dev-routes';
 
 export const routes: Routes = [
   {
@@ -126,5 +127,7 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/account/account-security').then((module) => module.AccountSecurity),
   },
+  // Empty in production; the development build swaps in the UI lab (see dev/dev-routes.ts).
+  ...devRoutes,
   { path: '**', redirectTo: '' },
 ];

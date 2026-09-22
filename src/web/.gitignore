@@ -38,6 +38,10 @@ yarn-error.log
 testem.log
 /typings
 __screenshots__/
+# Playwright output (screenshot baselines under e2e/ are tracked)
+/test-results
+/playwright-report
+/blob-report
 
 # System files
 .DS_Store

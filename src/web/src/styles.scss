@@ -1,3 +1,8 @@
+// Design-system foundation: Figma tokens and opt-in `.tb-*` primitive styles. Additive only; see
+// docs/FRONTEND-DESIGN-SYSTEM.md before replacing any of the legacy rules below.
+@use 'styles/tokens';
+@use 'styles/ui';
+
 :root {
   --accent: #0f766e;
   --accent-strong: #0b625c;

@@ -1,0 +1,239 @@
+// Layout for the development-only UI lab. Sizes are content-driven; the fixed widths below exist
+// only to show the primitives in narrow and wide containers.
+:host {
+  background-color: var(--color-background);
+  display: block;
+  padding-block: var(--space-24) var(--space-48);
+  padding-inline: var(--page-padding-mobile);
+}
+
+@media (min-width: 768px) {
+  :host {
+    padding-inline: var(--page-padding-desktop);
+  }
+}
+
+h2,
+h3,
+p,
+ul,
+dl,
+pre {
+  margin: 0;
+}
+
+.lab {
+  display: grid;
+  gap: var(--space-24);
+  margin-inline: auto;
+  max-inline-size: var(--content-width-1200);
+}
+
+.lab-header {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.lab-eyebrow {
+  color: var(--color-accent);
+}
+
+.lab-lede {
+  color: var(--color-text-secondary);
+  max-inline-size: var(--content-width-720);
+}
+
+.lab-section {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  display: grid;
+  gap: var(--space-16);
+  min-inline-size: 0;
+  padding: var(--space-16);
+}
+
+@media (min-width: 768px) {
+  .lab-section {
+    padding: var(--space-24);
+  }
+}
+
+.lab-group-title {
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  line-height: var(--text-compact-line-height);
+}
+
+.lab-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+.lab-caption,
+.lab-log {
+  color: var(--color-text-secondary);
+  font-size: var(--text-metadata-size);
+  line-height: var(--text-metadata-line-height);
+}
+
+.lab-counts {
+  padding-inline-start: var(--space-16);
+}
+
+.lab-narrow {
+  display: grid;
+  gap: var(--space-8);
+  max-inline-size: 14rem;
+}
+
+.lab-medium {
+  display: grid;
+  gap: var(--space-8);
+  max-inline-size: 22rem;
+}
+
+.lab-wide {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.lab-widths {
+  align-items: start;
+  display: grid;
+  gap: var(--space-24);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
+.lab-avatars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-16) var(--space-24);
+  list-style: none;
+  padding: 0;
+
+  li {
+    align-items: center;
+    display: flex;
+    gap: var(--space-8);
+  }
+}
+
+.lab-form {
+  display: grid;
+  gap: var(--space-16);
+}
+
+.lab-form-grid {
+  align-items: start;
+  display: grid;
+  gap: var(--space-16) var(--space-24);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+
+.lab-span-all {
+  grid-column: 1 / -1;
+}
+
+.lab-checks {
+  display: grid;
+  gap: var(--space-4);
+}
+
+// Empty until a submit is refused; the region itself always exists.
+.lab-summary:not(:empty) {
+  background-color: var(--color-danger-subtle);
+  border-radius: var(--radius-6);
+  color: var(--color-danger);
+  display: grid;
+  font-size: var(--text-compact-size);
+  gap: var(--space-4);
+  line-height: var(--text-compact-line-height);
+  padding: var(--space-12);
+}
+
+.lab-summary:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
+}
+
+.lab-notice {
+  color: var(--color-success);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+}
+
+.lab-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-24);
+  font-size: var(--text-compact-size);
+
+  div {
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  dt {
+    color: var(--color-text-secondary);
+  }
+
+  dd {
+    font-weight: var(--font-weight-strong);
+    margin: 0;
+  }
+}
+
+.lab-value {
+  background-color: var(--color-surface-subtle);
+  border-radius: var(--radius-6);
+  font-size: var(--text-metadata-size);
+  line-height: var(--text-metadata-line-height);
+  overflow-wrap: anywhere;
+  padding: var(--space-12);
+  white-space: pre-wrap;
+}
+
+.lab-dense {
+  display: grid;
+  gap: var(--space-4) var(--space-8);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  max-inline-size: 30rem;
+}
+
+// Controls sit at the card's inline edges; 8px padding clears the 5px ring.
+.lab-edge-card {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+  justify-content: space-between;
+  padding: var(--space-8);
+}
+
+// The only vertical scroller in the lab. Padding and scroll-padding keep the first and last rows'
+// focus rings inside the clip edge; nothing may scroll sideways.
+.lab-scroll {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  max-block-size: 10rem;
+  overflow-y: auto;
+  padding: var(--space-8);
+  scroll-padding-block: var(--space-8);
+}
+
+.lab-bidi {
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+}
+
+.lab-identity {
+  align-items: center;
+  display: inline-flex;
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  gap: var(--space-8);
+}

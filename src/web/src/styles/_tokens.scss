@@ -1,0 +1,106 @@
+// Design tokens from the TB Gym Figma file (key 7N4K2BM3XFoYhBjUnsi4wa, page "01 - Foundations").
+//
+// Custom-property names are the Figma variables' WEB code syntax, so Figma Dev Mode and this file
+// name every value the same way. Semantic colours keep their Figma aliases as var() references to
+// the primitives. Product code uses the semantic roles; primitives exist only as alias targets.
+//
+// Deliberate deduplication: the Figma collection "Button v1" repeats border-control as #7f8985 and
+// maps icon/foreground per mode. It is not exported. Buttons use --color-border-control (#7d8783,
+// the Color collection value, 3.71:1 on surface) and icons inherit currentColor, which is what the
+// On surface / On accent modes resolve to. See docs/FRONTEND-DESIGN-SYSTEM.md.
+//
+// These tokens are additive: nothing here restyles an existing route. The pre-foundation palette
+// (--accent, --surface, --border-strong, ...) in styles.scss stays until each route is migrated.
+:root {
+  // Primitives (Figma collection "Primitives", hidden from Figma pickers).
+  --primitive-neutral-background: #f7f7f3;
+  --primitive-neutral-surface: #ffffff;
+  --primitive-neutral-surface-subtle: #f1f3f2;
+  --primitive-neutral-text-primary: #161b1a;
+  --primitive-neutral-text-secondary: #66716e;
+  --primitive-neutral-border-subtle: #d7ddda;
+  --primitive-neutral-border-control: #7d8783;
+  --primitive-teal-accent: #0f766e;
+  --primitive-teal-accent-hover: #0b5f59;
+  --primitive-teal-accent-subtle: #e7f4f2;
+  --primitive-success-base: #237a57;
+  --primitive-success-subtle: #eaf6ef;
+  --primitive-warning-base: #a05a00;
+  --primitive-warning-subtle: #fff4df;
+  --primitive-danger-base: #b42318;
+  --primitive-danger-subtle: #fdecec;
+  --primitive-information-base: #2563eb;
+  --primitive-information-subtle: #eaf1ff;
+
+  // Semantic colour roles (Figma collection "Color", mode Light).
+  --color-background: var(--primitive-neutral-background);
+  --color-surface: var(--primitive-neutral-surface);
+  --color-surface-subtle: var(--primitive-neutral-surface-subtle);
+  --color-text-primary: var(--primitive-neutral-text-primary);
+  --color-text-secondary: var(--primitive-neutral-text-secondary);
+  --color-border-subtle: var(--primitive-neutral-border-subtle);
+  --color-border-control: var(--primitive-neutral-border-control);
+  --color-accent: var(--primitive-teal-accent);
+  --color-accent-hover: var(--primitive-teal-accent-hover);
+  --color-accent-subtle: var(--primitive-teal-accent-subtle);
+  --color-on-accent: var(--primitive-neutral-surface);
+  --color-success: var(--primitive-success-base);
+  --color-success-subtle: var(--primitive-success-subtle);
+  --color-warning: var(--primitive-warning-base);
+  --color-warning-subtle: var(--primitive-warning-subtle);
+  --color-danger: var(--primitive-danger-base);
+  --color-danger-subtle: var(--primitive-danger-subtle);
+  --color-information: var(--primitive-information-base);
+  --color-information-subtle: var(--primitive-information-subtle);
+  // Inverse (dark sidebar) surfaces only: 6.0:1 on #161b1a, 2.7:1 on the app background.
+  --color-text-on-inverse-muted: #969898;
+
+  // Layout (Figma collection "Layout").
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-48: 48px;
+  --radius-4: 4px;
+  --radius-6: 6px;
+  --radius-8: 8px;
+  --radius-full: 9999px;
+  --control-height-32: 32px;
+  --control-height-40: 40px;
+  --control-height-48: 48px;
+  --content-width-720: 720px;
+  --content-width-960: 960px;
+  --content-width-1200: 1200px;
+  --page-padding-mobile: 16px;
+  --page-padding-desktop-compact: 24px;
+  --page-padding-desktop: 32px;
+  --focus-separation-gap: 2px;
+  --focus-ring-width: 3px;
+
+  // Typography: the nine Figma text styles (Typography/*). Code-owned tokens: sizes and line
+  // heights are rem at the default 16px root, so a larger browser font setting enlarges text;
+  // strong styles share their size and line height and change only the weight.
+  --font-sans:
+    'Notebook Plex', 'Notebook Plex Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans-arabic: 'Notebook Plex Arabic', 'Notebook Plex', system-ui, sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-strong: 600;
+  --text-display-size: 2.25rem; // 36 / 44
+  --text-display-line-height: 2.75rem;
+  --text-page-title-size: 1.75rem; // 28 / 36
+  --text-page-title-line-height: 2.25rem;
+  --text-section-title-size: 1.25rem; // 20 / 28
+  --text-section-title-line-height: 1.75rem;
+  --text-body-size: 1rem; // 16 / 24
+  --text-body-line-height: 1.5rem;
+  --text-compact-size: 0.875rem; // 14 / 20
+  --text-compact-line-height: 1.25rem;
+  --text-metadata-size: 0.75rem; // 12 / 16
+  --text-metadata-line-height: 1rem;
+
+  // Elevation (Figma effect style Elevation/Overlay): menus, dialogs and sticky overlays only.
+  // Normal surfaces use borders.
+  --elevation-overlay: 0 8px 24px -8px rgb(22 27 26 / 14%);
+}

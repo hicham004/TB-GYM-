@@ -1025,6 +1025,15 @@ Dependencies: validated core product.
 Exit: production SLOs, recovery objectives, compliance obligations, support process, and
 unit economics are known and exercised.
 
+## Frontend redesign track (cross-cutting; opens no domain phase)
+
+- Foundation slice 1 (2026-09-22): Figma tokens as CSS custom properties, opt-in primitives in
+  `src/web/src/app/ui`, a development-only UI lab, and Playwright/axe browser checks. Additive — no
+  route is migrated yet. See `docs/FRONTEND-DESIGN-SYSTEM.md`.
+- Next bounded slice: the coach shell, preserving workspace switching, account actions and
+  role-aware routes. Screen migrations follow it, gated by the feature conditions listed in that
+  document. This track changes no API, schema or domain rule, and Phase 4 remains unstarted.
+
 ## Continuous requirements
 
 Every phase must update architecture/domain docs, ship migrations with rollback/recovery
