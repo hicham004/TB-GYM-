@@ -248,3 +248,9 @@ label.inline {
 .scroll-x {
   overflow-x: auto;
 }
+
+/* The Check-ins section links above the page heading (reachability for client check-ins). */
+.section-links {
+  display: block;
+  margin-block-end: 16px;
+}

@@ -538,3 +538,165 @@
     background-image: none;
   }
 }
+
+// ----------------------------------------------------------------------------------------------
+// Data table (Exercises 266:1429) and modal dialog — added with the coach-shell slice
+// ----------------------------------------------------------------------------------------------
+
+// A real `<table>`, so rows and columns keep their semantics. The elements also carry explicit
+// ARIA roles, which is what lets the narrow layout below restyle them without the table stopping
+// being a table. Put `.tb-table-scope` on the card around it: the stacked layout answers that
+// container's width, and the query is in `em`, so enlarged text stacks it as a narrow card does.
+.tb-table-scope {
+  container-name: tb-table;
+  container-type: inline-size;
+}
+
+.tb-table {
+  border-collapse: collapse;
+  inline-size: 100%;
+  table-layout: auto;
+}
+
+.tb-table th,
+.tb-table td {
+  padding-block: var(--space-8);
+  padding-inline: var(--space-8);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.tb-table th:first-child,
+.tb-table td:first-child {
+  padding-inline-start: var(--space-24);
+}
+
+.tb-table th:last-child,
+.tb-table td:last-child {
+  padding-inline-end: var(--space-24);
+}
+
+// The header row stays with the rows it names when the list is scrolled inside its card.
+.tb-table thead th {
+  background-color: var(--color-surface-subtle);
+  border-block-end: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--text-metadata-size);
+  font-weight: var(--font-weight-strong);
+  inset-block-start: 0;
+  letter-spacing: 0.6px;
+  line-height: var(--text-metadata-line-height);
+  // Wraps between words, never inside one: a header reading CLASSIFICATI / ON is worse than a
+  // column that takes the width its own title needs.
+  overflow-wrap: normal;
+  position: sticky;
+  text-transform: uppercase;
+  z-index: 1;
+}
+
+// Arabic has no case, and tracking breaks its joined letters.
+.tb-table thead th:lang(ar) {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.tb-table tbody td {
+  border-block-end: 1px solid var(--color-border-subtle);
+  color: var(--color-text-primary);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  overflow-wrap: break-word;
+}
+
+.tb-table tbody tr:last-child td {
+  border-block-end: 0;
+}
+
+// Each cell's own column label, hidden while the column headers are visible.
+.tb-table__label {
+  display: none;
+}
+
+@container tb-table (max-width: 60em) {
+  .tb-table,
+  .tb-table tbody,
+  .tb-table tr,
+  .tb-table td {
+    display: block;
+    inline-size: auto;
+  }
+
+  // Kept for assistive technology, which still reads the columns; only the visual grid is gone.
+  .tb-table thead {
+    block-size: 1px;
+    clip-path: inset(50%);
+    display: block;
+    inline-size: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+  }
+
+  .tb-table tbody tr {
+    border-block-end: 1px solid var(--color-border-subtle);
+    padding: var(--space-12) var(--space-16);
+  }
+
+  .tb-table tbody tr:last-child {
+    border-block-end: 0;
+  }
+
+  .tb-table tbody td {
+    border-block-end: 0;
+    display: grid;
+    gap: var(--space-4) var(--space-12);
+    grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
+    padding: var(--space-4) 0;
+  }
+
+  .tb-table__label {
+    color: var(--color-text-secondary);
+    display: block;
+    font-size: var(--text-metadata-size);
+    font-weight: var(--font-weight-strong);
+    line-height: var(--text-compact-line-height);
+    overflow-wrap: anywhere;
+  }
+}
+
+// A native modal `<dialog>`: the platform owns the focus trap, the inert background and the top
+// layer. Escape is handled by the component that opens it, so focus returns the same way on every
+// path. Elevation is the overlay effect style; dialogs and menus are the only places it appears.
+.tb-dialog {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  box-shadow: var(--elevation-overlay);
+  box-sizing: border-box;
+  color: var(--color-text-primary);
+  inline-size: min(28rem, calc(100vw - 2 * var(--page-padding-mobile)));
+  max-block-size: calc(100dvh - 2 * var(--space-24));
+  padding: var(--space-24);
+}
+
+.tb-dialog::backdrop {
+  background-color: rgb(22 27 26 / 48%);
+}
+
+.tb-dialog h2 {
+  margin: 0 0 var(--space-12);
+  overflow-wrap: anywhere;
+}
+
+.tb-dialog p {
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-12);
+}
+
+.tb-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  justify-content: flex-end;
+  margin-block-start: var(--space-24);
+}

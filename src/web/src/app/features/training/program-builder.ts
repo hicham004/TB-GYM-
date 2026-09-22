@@ -14,6 +14,7 @@ import type {
 import { trainingLoadStrategyLabel, trainingSetTypeLabel } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { SectionNav } from '../../ui/section-nav';
 import {
   DraftExercise,
   DraftSession,
@@ -36,11 +37,16 @@ import {
 
 @Component({
   selector: 'app-program-builder',
-  imports: [FormsModule],
+  imports: [FormsModule, SectionNav],
   templateUrl: './program-builder.html',
   styleUrl: './program-builder.scss',
 })
 export class ProgramBuilder {
+  protected readonly sections = [
+    { label: $localize`Programs`, link: '/training/programs' },
+    { label: $localize`Exercises`, link: '/training/exercises' },
+  ];
+
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);

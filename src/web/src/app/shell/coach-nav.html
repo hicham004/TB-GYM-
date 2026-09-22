@@ -1,0 +1,37 @@
+<nav class="coach-nav" aria-label="Primary navigation" i18n-aria-label>
+  @for (group of groups(); track group.label) {
+    <div class="group">
+      <!-- A plain heading, never a control: groups have no route and no selected state. -->
+      <h2 class="group-label">{{ group.label }}</h2>
+      <ul class="destinations">
+        @for (destination of group.destinations; track destination.key) {
+          @let current = state(destination);
+          <li>
+            <a
+              class="item"
+              [routerLink]="destination.link"
+              [class.selected]="current !== null"
+              [attr.aria-current]="
+                current === 'page' ? 'page' : current === 'section' ? 'true' : null
+              "
+              [attr.data-destination]="destination.key"
+              (click)="navigated.emit()"
+            >
+              <app-icon [name]="destination.icon" />
+              <span class="label">{{ destination.label }}</span>
+              <!-- Message unread only. It is never summed with notification unread: one is a
+                   person waiting for a reply, the other a workspace event somebody scheduled. -->
+              @if (destination.messaging && unread() > 0) {
+                <span class="count" aria-hidden="true">{{ unreadCount() }}</span>
+                <span class="tb-visually-hidden" i18n>{unread(), plural,
+                  =1 {1 unread message}
+                  other {{{ unreadText() }} unread messages}
+                }</span>
+              }
+            </a>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+</nav>

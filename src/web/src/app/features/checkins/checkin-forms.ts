@@ -13,6 +13,7 @@ import type {
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { SectionNav } from '../../ui/section-nav';
 import {
   CHECK_IN_LIMITS,
   draftFromVersion,
@@ -36,11 +37,16 @@ import {
  */
 @Component({
   selector: 'app-checkin-forms',
-  imports: [FormsModule],
+  imports: [FormsModule, SectionNav],
   templateUrl: './checkin-forms.html',
   styleUrl: './checkins.scss',
 })
 export class CheckInForms {
+  protected readonly sections = [
+    { label: $localize`Check-in forms`, link: '/checkins/forms' },
+    { label: $localize`Client check-ins`, link: '/checkins/clients' },
+  ];
+
   protected readonly limits = CHECK_IN_LIMITS;
   protected readonly questionTypes: readonly CheckInQuestionType[] = [
     'ShortText',

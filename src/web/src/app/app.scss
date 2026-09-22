@@ -3,6 +3,38 @@
   min-height: 100vh;
 }
 
+// Coach shell: the sidebar spans both rows of the first column; the top bar and <main> share the
+// second. The shell component's host is `display: contents`, so its sidebar and top bar are grid
+// items here. In RTL the grid mirrors, so the sidebar sits at the inline end (right).
+:host(.coach-layout) {
+  background-color: var(--color-background);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  min-block-size: 100dvh;
+}
+
+.coach-main {
+  box-sizing: border-box;
+  grid-column: 2;
+  grid-row: 2;
+  min-inline-size: 0;
+  padding-block: var(--space-24) var(--page-padding-desktop);
+  padding-inline: var(--page-padding-desktop);
+}
+
+@media (max-width: 1023.98px) {
+  :host(.coach-layout) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coach-main {
+    grid-column: 1;
+    padding-block: var(--space-16) var(--space-24);
+    padding-inline: var(--page-padding-mobile);
+  }
+}
+
 .topbar {
   align-items: center;
   background: var(--surface);
@@ -135,6 +167,23 @@ nav a.with-badge {
 .public-nav,
 .session-loading {
   margin-inline-start: auto;
+}
+
+// Enlarged text (200%) used to push "Coach registration" past the viewport on every signed-out
+// route: the button is `nowrap` and nothing in the bar could shrink. The bar now wraps, the nav may
+// shrink, and the button's label may break — none of which changes anything at the default size.
+.topbar.public {
+  flex-wrap: wrap;
+  gap: 8px 0;
+}
+
+.public-nav {
+  min-inline-size: 0;
+}
+
+.public-nav .primary-button {
+  text-align: center;
+  white-space: normal;
 }
 
 .public-nav .primary-button,

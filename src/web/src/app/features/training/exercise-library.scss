@@ -1,196 +1,324 @@
+// Coach desktop — Training / Exercises (Figma 266:1429): the migrated page header and library
+// card. The unchanged editor and media sections keep their own stylesheet, exercise-library.legacy.scss.
 :host {
   display: block;
 }
 
-.filter-bar {
-  align-items: end;
-  background: var(--surface);
-  border-block: 1px solid var(--border);
+// ----------------------------------------------------------------------------------------------
+// Page header: heading + section links + the one Filled action
+// ----------------------------------------------------------------------------------------------
+
+.page-header {
+  column-gap: var(--space-24);
   display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(130px, 1fr)) auto auto;
-  margin-block-end: 20px;
-  padding: 14px;
+  grid-template-areas:
+    'heading actions'
+    'sections sections';
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: var(--space-16);
 }
 
-.archive-filter {
-  align-items: center;
+.page-title {
   display: flex;
-  gap: 7px;
-  min-height: 42px;
+  flex-direction: column;
+  gap: var(--space-4);
+  grid-area: heading;
+  min-inline-size: 0;
 }
 
-.archive-filter input,
-.media-picker input {
-  min-height: auto;
-  width: auto;
+.page-title h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
-.archive-filter span,
-.media-picker label > span {
+.scope {
+  color: var(--color-text-secondary);
+  margin: 0;
+  max-inline-size: var(--content-width-720);
+}
+
+.page-sections {
+  grid-area: sections;
+}
+
+.page-actions {
+  align-self: center;
+  display: flex;
+  grid-area: actions;
+  justify-content: flex-end;
+}
+
+// Messages keep their live regions in the DOM from first render, so an announcement is not the
+// first thing that registers them. Empty regions take no space.
+.page-error,
+.page-notice {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.page-error:not(:empty),
+.page-notice:not(:empty) {
+  border-radius: var(--radius-6);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  margin-block-start: var(--space-16);
+  padding: var(--space-8) var(--space-12);
+}
+
+.page-error:not(:empty) {
+  background-color: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.page-notice:not(:empty) {
+  background-color: var(--color-success-subtle);
+  color: var(--color-success);
+}
+
+// ----------------------------------------------------------------------------------------------
+// Library card
+// ----------------------------------------------------------------------------------------------
+
+.library {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  display: flex;
+  flex-direction: column;
+  margin-block-start: var(--space-24);
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.library:focus {
+  outline: none;
+}
+
+.library:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.toolbar {
+  border-block-end: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-24);
+}
+
+.filters {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+// Figma widths at the default text size; in rem as well, so enlarged text widens the field
+// instead of breaking its label across two lines.
+.search-filter {
+  flex: 1 1 max(256px, 16rem);
+  max-inline-size: max(330px, 20.5rem);
+  min-inline-size: 0;
+}
+
+.equipment-filter,
+.classification-filter {
+  flex: 0 1 max(160px, 10rem);
+}
+
+.pattern-filter {
+  flex: 0 1 max(184px, 11.5rem);
+}
+
+.archived-filter {
+  // Aligns the 32px checkbox row with the 40px controls beside it.
+  margin-block-end: var(--space-4);
+}
+
+.apply {
+  flex: none;
+}
+
+.summary {
+  color: var(--color-text-secondary);
+  font-size: var(--text-metadata-size);
+  line-height: var(--text-metadata-line-height);
+  margin: 0;
+  min-block-size: var(--text-metadata-line-height);
+  overflow-wrap: anywhere;
+  text-align: end;
+}
+
+.list-state {
+  color: var(--color-text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  align-items: start;
+  margin: 0;
+  padding: var(--space-24);
+}
+
+.list-state p {
   margin: 0;
 }
 
-.editor-section,
-.media-section {
-  margin-block-end: 20px;
+.list-error {
+  color: var(--color-danger);
 }
 
-.editor-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+// ----------------------------------------------------------------------------------------------
+// Table
+// ----------------------------------------------------------------------------------------------
+
+// Only the rows move when the card runs out of room; the column headers stay with them.
+.rows-scroll {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  // Focus inside a row that is scrolled to the edge stays clear of the sticky header row.
+  scroll-padding-block: 3rem var(--space-8);
 }
 
-.editor-grid select[multiple] {
-  min-height: 92px;
+// Figma column widths. `table-layout: auto` treats them as preferences, so a longer translation
+// takes the width it needs from the Exercise column instead of overflowing.
+// Figma's 132px and 112px are measured in its own text rendering; the browser needs a few pixels
+// more for MOVEMENT PATTERN and PRIMARY MUSCLE to stay on one line, as drawn.
+.col-pattern {
+  inline-size: 148px;
 }
 
-.span-full {
-  grid-column: 1 / -1;
+.col-muscle {
+  inline-size: 136px;
 }
 
-.media-picker {
-  border: 1px solid var(--border);
+.col-classification {
+  inline-size: 112px;
+}
+
+.col-equipment {
+  inline-size: 104px;
+}
+
+.col-status {
+  inline-size: 136px;
+}
+
+.col-actions {
+  inline-size: 144px;
+}
+
+.col-exercise {
+  min-inline-size: 12rem;
+}
+
+// Two lines, then an ellipsis. The full name stays in `title` and in every action's name.
+.exercise-name {
+  -webkit-box-orient: vertical;
+  color: var(--color-text-primary);
+  display: -webkit-box;
+  font-weight: var(--font-weight-strong);
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.exercise-tags {
+  color: var(--color-text-secondary);
+  display: block;
+  font-size: var(--text-metadata-size);
+  line-height: var(--text-metadata-line-height);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-cell {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  margin: 0;
-  padding: 12px;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
-.media-picker legend {
-  color: #344149;
-  font-size: 0.82rem;
-  font-weight: 700;
+.status-note {
+  color: var(--color-text-secondary);
+  font-size: var(--text-metadata-size);
+  line-height: var(--text-metadata-line-height);
 }
 
-.media-picker label {
-  align-items: center;
-  display: inline-flex;
-  gap: 7px;
-}
-
-.media-picker small {
-  color: var(--muted-text);
-}
-
-.media-commands {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: 1fr 1fr;
-}
-
-.media-command {
-  align-items: end;
-  border: 1px solid var(--border);
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(120px, 1fr) minmax(150px, 1.5fr) auto;
-  padding: 12px;
-}
-
-.media-command .provider-field {
-  max-width: 110px;
-}
-
-.media-list {
-  border-block-start: 1px solid var(--border);
-  margin-block-start: 14px;
-}
-
-.media-list > div {
-  align-items: center;
-  border-block-end: 1px solid var(--border);
-  display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(150px, 1fr) minmax(180px, 2fr) auto;
-  padding: 9px 4px;
-}
-
-.media-list span {
-  color: var(--muted-text);
-  font-size: 0.78rem;
-}
-
-.exercise-list {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-}
-
-.exercise-list article {
-  align-items: center;
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(180px, 1fr) minmax(260px, 2fr) auto;
-  min-height: 66px;
-  padding: 11px 16px;
-}
-
-.exercise-list article + article {
-  border-block-start: 1px solid var(--border);
-}
-
-.exercise-list article.archived {
-  background: var(--surface-subtle);
-  opacity: 0.72;
-}
-
-.exercise-title,
-.exercise-meta {
-  align-items: center;
+// Figma sizes this column by its widest content (144px in English, more in French or German), so
+// the actions stay on one line and the column takes the width they need; the Exercise column gives
+// it up. At narrow widths the row stacks and they wrap normally.
+.row-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
 }
 
-.exercise-meta {
-  color: var(--muted-text);
-  font-size: 0.79rem;
+.row-actions .tb-button {
+  white-space: nowrap;
 }
 
-.tag {
-  background: #eaf5f4;
-  border: 1px solid #b9dcda;
-  border-radius: 4px;
-  color: var(--accent-strong);
-  padding: 2px 5px;
+// ----------------------------------------------------------------------------------------------
+// Narrow card: what this screen adds to the foundation’s stacked table layout.
+// ----------------------------------------------------------------------------------------------
+
+@container tb-table (max-width: 60em) {
+  // The column widths are a table-layout preference; stacked rows are blocks and take the row.
+  .col-exercise,
+  .col-pattern,
+  .col-muscle,
+  .col-equipment,
+  .col-classification,
+  .col-status,
+  .col-actions {
+    inline-size: auto;
+    min-inline-size: 0;
+  }
+
+  .exercise-table tbody td.col-exercise {
+    display: block;
+    padding-block-end: var(--space-8);
+  }
+
+  .exercise-table tbody td.col-actions {
+    display: block;
+    padding-block-start: var(--space-8);
+  }
+
+  .row-actions {
+    justify-content: flex-start;
+  }
+
+  .exercise-name {
+    font-size: var(--text-body-size);
+    line-height: var(--text-body-line-height);
+  }
 }
 
-@media (max-width: 1050px) {
-  .filter-bar {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .search-field {
-    grid-column: span 2;
-  }
-
-  .editor-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .media-commands {
-    grid-template-columns: 1fr;
+// At a desktop width with room to spare the card fills the viewport and the rows scroll inside it,
+// as drawn. The bound is in `rem`, so enlarged text shrinks the card instead of pushing the page
+// header off screen; below these sizes the page simply scrolls.
+@media (min-width: 1024px) and (min-height: 720px) {
+  .library {
+    // Never smaller than about ten rows: at 200% text the page scrolls instead of
+    // leaving a scroll region too short to read.
+    max-block-size: max(24rem, calc(100dvh - 16rem));
   }
 }
 
 @media (max-width: 700px) {
-  .filter-bar,
-  .editor-grid,
-  .media-command,
-  .exercise-list article,
-  .media-list > div {
-    grid-template-columns: 1fr;
+  .page-header {
+    grid-template-areas:
+      'heading'
+      'sections'
+      'actions';
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .search-field,
-  .span-full {
-    grid-column: auto;
-  }
-
-  .media-command .provider-field {
-    max-width: none;
+  .page-actions {
+    justify-content: flex-start;
   }
 }

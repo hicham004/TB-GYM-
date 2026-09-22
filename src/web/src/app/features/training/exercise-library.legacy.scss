@@ -1,0 +1,120 @@
+// Styles for the parts of this screen that were NOT migrated: the inline editor and the media
+// management beside it. They are unchanged, deliberately outside `.tb-theme`, and kept in their own
+// file so the migrated screen's stylesheet stays small and separate.
+
+.editor-section,
+.media-section {
+  margin-block: 20px;
+}
+
+.editor-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.editor-grid select[multiple] {
+  min-height: 92px;
+}
+
+.span-full {
+  grid-column: 1 / -1;
+}
+
+.media-picker {
+  border: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 12px;
+}
+
+.media-picker input {
+  min-height: auto;
+  width: auto;
+}
+
+.media-picker label > span {
+  margin: 0;
+}
+
+.media-picker legend {
+  color: #344149;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.media-picker label {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+}
+
+.media-picker small {
+  color: var(--muted-text);
+}
+
+.media-commands {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.media-command {
+  align-items: end;
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(120px, 1fr) minmax(150px, 1.5fr) auto;
+  padding: 12px;
+}
+
+.media-command .provider-field {
+  max-width: 110px;
+}
+
+.media-list {
+  border-block-start: 1px solid var(--border);
+  margin-block-start: 14px;
+}
+
+.media-list > div {
+  align-items: center;
+  border-block-end: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(150px, 1fr) minmax(180px, 2fr) auto;
+  padding: 9px 4px;
+}
+
+.media-list span {
+  color: var(--muted-text);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 1050px) {
+  .editor-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .media-commands {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .editor-grid,
+  .media-command,
+  .media-list > div {
+    grid-template-columns: 1fr;
+  }
+
+  .span-full {
+    grid-column: auto;
+  }
+
+  .media-command .provider-field {
+    max-width: none;
+  }
+}

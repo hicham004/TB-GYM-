@@ -1,4 +1,4 @@
-import { expect, type Page, type Route } from '@playwright/test';
+import { expect, test as base, type Page, type Route } from '@playwright/test';
 
 /**
  * Test-only network doubles. The application, its interceptors and its route guards run unchanged;
@@ -21,6 +21,35 @@ async function mockApi(page: Page, handlers: Record<string, Handler>): Promise<v
   );
 }
 
+/**
+ * A stand-in for the messaging hub, so a signed-in page reaches a server that answers instead of a
+ * 404 that the SignalR client reports as an error on every retry. It negotiates once and then
+ * behaves as a connected hub with nothing to say: it completes the handshake and answers pings.
+ * No event is ever pushed — realtime delivery is not what these checks are about.
+ */
+async function mockMessagingHub(page: Page): Promise<void> {
+  await page.routeWebSocket(/\/hubs\//, (ws) => {
+    ws.onMessage((message) => {
+      const text = typeof message === 'string' ? message : message.toString();
+      if (text.includes('"protocol"')) {
+        ws.send('{}\u001e'); // handshake accepted
+      } else if (text.includes('"type":6')) {
+        ws.send('{"type":6}\u001e'); // ping, answered so the client does not time out
+      }
+    });
+  });
+}
+
+const hubHandlers: Record<string, Handler> = {
+  'POST /hubs/chat/negotiate': (route) =>
+    json(route, 200, {
+      negotiateVersion: 1,
+      connectionId: 'e2e-connection',
+      connectionToken: 'e2e-token',
+      availableTransports: [{ transport: 'WebSockets', transferFormats: ['Text', 'Binary'] }],
+    }),
+};
+
 /** A visitor with no session: the shell renders its public navigation. */
 export async function mockSignedOut(page: Page): Promise<void> {
   await mockApi(page, {
@@ -36,30 +65,92 @@ export const OWNER_MEMBERSHIP = {
   role: 'Owner',
 };
 
-/** A signed-in workspace owner, plus whatever feature responses the page under test needs. */
+export const COACH_MEMBERSHIP = {
+  tenantId: '00000000-0000-4000-8000-000000000002',
+  tenantName: 'Beirut Barbell',
+  tenantSlug: 'beirut-barbell',
+  role: 'Coach',
+};
+
+export const SIGNED_IN_USER = {
+  id: '00000000-0000-4000-8000-0000000000aa',
+  email: 'coach@example.test',
+  displayName: 'Hicham Haddad',
+  preferredCulture: 'en-LB',
+  emailConfirmed: true,
+  roles: [],
+};
+
+/** A signed-in member, plus whatever feature responses the page under test needs. */
+export async function mockSession(
+  page: Page,
+  options: {
+    memberships?: (typeof OWNER_MEMBERSHIP)[];
+    unreadNotifications?: number;
+    unreadMessages?: number;
+    extra?: Record<string, Handler>;
+  } = {},
+): Promise<void> {
+  await mockMessagingHub(page);
+  await mockApi(page, {
+    'GET /api/auth/csrf': (route) => json(route, 200, { token: 'e2e-csrf' }),
+    'GET /api/auth/me': (route) => json(route, 200, SIGNED_IN_USER),
+    'GET /api/tenants': (route) => json(route, 200, options.memberships ?? [OWNER_MEMBERSHIP]),
+    'GET /api/notifications/unread-count': (route) =>
+      json(route, 200, { unread: options.unreadNotifications ?? 0 }),
+    'GET /api/messaging/unread-count': (route) =>
+      json(route, 200, { unread: options.unreadMessages ?? 0 }),
+    ...hubHandlers,
+    ...(options.extra ?? {}),
+  });
+}
+
+/** A signed-in workspace owner. */
 export async function mockOwnerSession(
   page: Page,
   extra: Record<string, Handler> = {},
 ): Promise<void> {
-  await mockApi(page, {
-    'GET /api/auth/csrf': (route) => json(route, 200, { token: 'e2e-csrf' }),
-    'GET /api/auth/me': (route) =>
-      json(route, 200, {
-        id: '00000000-0000-4000-8000-0000000000aa',
-        email: 'coach@example.test',
-        displayName: 'Sample Coach',
-        preferredCulture: 'en-LB',
-        emailConfirmed: true,
-        roles: [],
-      }),
-    'GET /api/tenants': (route) => json(route, 200, [OWNER_MEMBERSHIP]),
-    'GET /api/notifications/unread-count': (route) => json(route, 200, { unread: 0 }),
-    'GET /api/messaging/unread-count': (route) => json(route, 200, { unread: 0 }),
-    ...extra,
-  });
+  await mockSession(page, { extra });
 }
 
-export { json };
+export { expect, json };
+
+/**
+ * Every check runs with the browser console watched. An unexpected console error or an uncaught
+ * page error fails the test that produced it, because both are defects a screenshot cannot show.
+ *
+ * `allowedConsoleErrors` is the explicit, per-test escape hatch, and the default list holds exactly
+ * one entry: a signed-out visitor's `GET /api/auth/me` is answered 401 by the real API too, and the
+ * browser logs every failed request. Pretending it succeeded would be a worse lie than allowing it.
+ */
+export const test = base.extend<{
+  // An object rather than a bare array: Playwright reads a two-element array as a fixture tuple.
+  allowedConsoleErrors: { patterns: RegExp[] };
+  consoleGuard: void;
+}>({
+  allowedConsoleErrors: [{ patterns: [/status of 401 .*\/api\/auth\/me/] }, { option: true }],
+  consoleGuard: [
+    async ({ page, allowedConsoleErrors }, use) => {
+      const problems: string[] = [];
+      const allowed = (message: string) =>
+        allowedConsoleErrors.patterns.some((pattern) => pattern.test(message));
+
+      page.on('console', (message) => {
+        if (message.type() !== 'error') return;
+        const text = `${message.text()} ${message.location().url}`;
+        if (!allowed(text)) problems.push(`console: ${text}`);
+      });
+      page.on('pageerror', (error) => {
+        if (!allowed(error.message)) problems.push(`page error: ${error.message}`);
+      });
+
+      await use();
+
+      expect(problems, 'the page reported errors').toEqual([]);
+    },
+    { auto: true },
+  ],
+});
 
 /**
  * Screenshots must not race the web fonts. The bundled IBM Plex faces load on first use, so each
@@ -74,6 +165,17 @@ export async function waitForFonts(page: Page): Promise<void> {
       document.fonts.load('600 14px "Notebook Plex Arabic"', 'م'),
     ]);
     await document.fonts.ready;
+  });
+}
+
+/**
+ * Switches the document to right-to-left the way a locale build would. The application sets `dir`
+ * once, at start-up, from its locale; these checks change it afterwards so the same build can be
+ * measured in both directions.
+ */
+export async function useRtl(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    document.documentElement.dir = 'rtl';
   });
 }
 

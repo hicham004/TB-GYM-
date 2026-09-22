@@ -1,0 +1,189 @@
+<ng-template #brand>
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">TB</span>
+    <span class="brand-copy">
+      <span class="brand-name">TB Gym</span>
+      <span class="brand-descriptor" i18n>Coaching OS</span>
+    </span>
+  </div>
+</ng-template>
+
+<!-- The signed-in person and their role in the selected workspace, both read from the session and
+     the validated membership. Static identity, not a control; account actions live in the top bar. -->
+<ng-template #identity>
+  <div class="identity">
+    <app-avatar [initials]="initials()" presentation="coach-account" />
+    <span class="identity-copy">
+      <span class="identity-name" dir="auto">{{ displayName() }}</span>
+      <span class="identity-role">{{ roleLabel() }}</span>
+    </span>
+  </div>
+</ng-template>
+
+<!-- A complementary landmark, so the brand and the signed-in identity beside the navigation are
+     inside one too, rather than loose page content. -->
+<aside class="sidebar tb-theme" aria-label="Workspace" i18n-aria-label>
+  <ng-container [ngTemplateOutlet]="brand" />
+  <!-- The only part that scrolls when the window is short; brand and identity stay put. -->
+  <div class="sidebar-nav">
+    <app-coach-nav />
+  </div>
+  <ng-container [ngTemplateOutlet]="identity" />
+</aside>
+
+<header class="topbar tb-theme">
+  <button
+    #menuButton
+    appButton
+    variant="outlined"
+    type="button"
+    class="menu-button"
+    aria-haspopup="dialog"
+    aria-controls="coach-navigation-dialog"
+    [attr.aria-expanded]="navOpen()"
+    (click)="openNav()"
+    i18n
+  >
+    Menu
+  </button>
+
+  <div #workspaceArea class="workspace" (focusout)="closeMenuOnFocusOut($event, 'workspace')">
+    @if (canSwitch()) {
+      <button
+        #workspaceButton
+        type="button"
+        class="workspace-context workspace-button"
+        aria-controls="workspace-menu"
+        [attr.aria-expanded]="openMenu() === 'workspace'"
+        (click)="toggleMenu('workspace')"
+      >
+        <span class="tb-visually-hidden" i18n>Switch workspace. Current workspace:</span>
+        <span class="workspace-name" dir="auto">{{ membership()?.tenantName }}</span>
+        <span class="context-dot" aria-hidden="true"></span>
+        <span class="workspace-kind" i18n>Coach workspace</span>
+        <app-icon name="chevron-down" />
+      </button>
+      @if (openMenu() === 'workspace') {
+        <div id="workspace-menu" class="menu-panel workspace-panel">
+          <p class="menu-heading" id="workspace-menu-heading" i18n>Workspaces</p>
+          <ul class="menu-list" aria-labelledby="workspace-menu-heading">
+            @for (option of tenants.memberships(); track option.tenantId) {
+              @let current = option.tenantId === tenants.selectedTenantId();
+              <li>
+                <button
+                  type="button"
+                  class="menu-item"
+                  [attr.aria-current]="current ? 'true' : null"
+                  (click)="chooseWorkspace(option.tenantId)"
+                >
+                  <span class="menu-item-copy">
+                    <span class="menu-item-title" dir="auto">{{ option.tenantName }}</span>
+                    <span class="menu-item-meta">{{ roleOf(option.role) }}</span>
+                  </span>
+                  @if (current) {
+                    <app-icon name="check-circle" />
+                    <span class="tb-visually-hidden" i18n>(current)</span>
+                  }
+                </button>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    } @else {
+      <p class="workspace-context">
+        <span class="workspace-name" dir="auto">{{ membership()?.tenantName }}</span>
+        <span class="context-dot" aria-hidden="true"></span>
+        <span class="workspace-kind" i18n>Coach workspace</span>
+      </p>
+    }
+  </div>
+
+  <div class="tools">
+    <!-- Notification unread only, counted and shown apart from message unread (sidebar). -->
+    @if (notifications.isAvailable()) {
+      <a
+        class="tb-icon-button notifications-link"
+        routerLink="/notifications"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        ariaCurrentWhenActive="page"
+      >
+        <app-icon name="bell" />
+        <span class="tb-visually-hidden" i18n>{unreadNotifications(), plural,
+          =0 {Notifications}
+          =1 {Notifications, 1 unread}
+          other {Notifications, {{ unreadNotificationsText() }} unread}
+        }</span>
+        @if (unreadNotifications() > 0) {
+          <span class="count" aria-hidden="true">{{ unreadNotificationsCount() }}</span>
+        }
+      </a>
+    }
+
+    <div #accountArea class="account" (focusout)="closeMenuOnFocusOut($event, 'account')">
+      <button
+        #accountButton
+        appIconButton
+        type="button"
+        class="account-button"
+        [label]="accountLabel()"
+        aria-controls="account-menu"
+        [attr.aria-expanded]="openMenu() === 'account'"
+        (click)="toggleMenu('account')"
+      >
+        <app-avatar [initials]="initials()" presentation="top-bar-user" />
+      </button>
+      @if (openMenu() === 'account') {
+        <div id="account-menu" class="menu-panel account-panel">
+          <div class="account-summary">
+            <p class="menu-item-title" dir="auto">{{ displayName() }}</p>
+            <p class="menu-item-meta" dir="auto">{{ auth.user()?.email }}</p>
+          </div>
+          <ul class="menu-list">
+            <li>
+              <a class="menu-item" routerLink="/account/security" i18n>Account security</a>
+            </li>
+            <li>
+              <button type="button" class="menu-item" (click)="requestSignOut()" i18n>
+                Sign out
+              </button>
+            </li>
+          </ul>
+        </div>
+      }
+    </div>
+  </div>
+</header>
+
+<!-- Below 1024px: the same navigation in a modal dialog. The coach navigation is rendered into it
+     only while it is open, so a closed dialog holds no second navigation landmark. -->
+<dialog
+  #navDialog
+  id="coach-navigation-dialog"
+  class="nav-dialog tb-theme"
+  aria-label="Navigation"
+  i18n-aria-label
+  (cancel)="cancelNav($event)"
+  (close)="navOpen.set(false)"
+>
+  <div class="nav-dialog-header">
+    <ng-container [ngTemplateOutlet]="brand" />
+    <button
+      appButton
+      variant="outlined"
+      type="button"
+      class="nav-close"
+      (click)="closeNav(true)"
+      i18n
+    >
+      Close
+    </button>
+  </div>
+  <div class="sidebar-nav">
+    @if (navOpen()) {
+      <app-coach-nav (navigated)="closeNav(false)" />
+    }
+  </div>
+  <ng-container [ngTemplateOutlet]="identity" />
+</dialog>

@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import os from 'node:os';
-import { expectNoHorizontalOverflow, mockSignedOut, waitForFonts } from './support';
+import { expect, expectNoHorizontalOverflow, mockSignedOut, test, waitForFonts } from './support';
 
 /**
  * Browser checks for the development-only UI lab: layout at phone, tablet and desktop widths in

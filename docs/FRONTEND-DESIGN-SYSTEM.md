@@ -1,7 +1,9 @@
-# TB Gym — Frontend Design System (Foundation Slice 1)
+# TB Gym — Frontend Design System
 
-Status: foundation slice 1 implemented 2026-09-22 on top of `c18903f`. Tokens, core primitives, a
-development-only UI lab and browser checks exist. **No production route has been migrated yet.**
+Status: foundation slice 1 implemented 2026-09-22 on top of `c18903f` and committed as
+`feat(web): add frontend design-system foundation`. Slice 2, on top of it, adds the **production
+coach shell** and migrates the **exercise library's default list state** — the first migrated route.
+Every other route still renders its pre-existing markup inside the new shell.
 
 This is the handoff for anyone migrating a screen to the approved design. It covers the Figma-to-code
 mapping, how to use the primitives, how to run the lab and tests, what the foundation deliberately
@@ -13,7 +15,8 @@ does not change, and what is still open. It corresponds to Task 2 of
 | Path | What it is |
 |---|---|
 | `src/web/src/styles/_tokens.scss` | Figma variables as CSS custom properties on `:root` |
-| `src/web/src/styles/_ui.scss` | Opt-in `.tb-*` classes: theme scope, typography, buttons, native controls, field, checkbox |
+| `src/web/src/styles/_ui.scss` | Opt-in `.tb-*` classes: theme scope, typography, buttons, native controls, field, checkbox, data table, dialog |
+| `src/web/src/app/shell/` | The coach shell: navigation model, `app-coach-nav`, `app-coach-shell` (slice 2) |
 | `src/web/src/app/ui/` | Primitives: `button.ts`, `icon.ts`, `status-label.ts`, `avatar.ts`, `field.ts`, `checkbox.ts` (+ specs) |
 | `src/web/src/app/dev/` | Development-only routes and the UI lab (`/dev/ui-lab`) |
 | `src/web/e2e/` | Playwright + axe browser checks and their screenshot baselines |
@@ -84,11 +87,17 @@ Open Font License 1.1 (see its `README.md` and `LICENSE.txt`). Arabic text (`:la
 | Identity/Avatar `66:29` | `Avatar` | `<app-avatar initials="…" presentation="…">`; seven named presets; always `aria-hidden` |
 | Form/Text field `236:583`, Form/Select `237:553`, Form/Text area `238:553` | `Field` + `Control` (`ui/field.ts`) | `<app-field label help [errors] density hideLabel>` around `<input\|select\|textarea appControl>` |
 | Form/Checkbox `239:530` | `Checkbox` + `Control` (`ui/checkbox.ts`) | `<app-checkbox label="…">` around `<input type="checkbox" appControl>` |
-| Icon/Chevron down `234:485` | CSS | Background image of `.tb-select`, at the logical inline end |
+| Icon/Chevron down `234:485` | CSS, and `<app-icon name="chevron-down">` for the workspace switcher | Background image of `.tb-select`, at the logical inline end |
 
-Not built in this slice: Feedback/Linear progress `71:45`, Navigation/Sidebar item `121:165` and the
-navigation icon masters (coach-shell slice), tables, cards, empty/error/locked states, dialogs,
-confirmation tiers, date pickers.
+Added with slice 2: Navigation/Sidebar item `121:165` as `app-coach-nav`'s row; the eight navigation
+glyph masters plus the chevron in `ui/icon.ts`; `app-section-nav` for a section's pages
+(Figma `266:1484`); `.tb-table`/`.tb-table__label` and `.tb-dialog`/`.tb-dialog__actions` in
+`_ui.scss`. The eight glyphs are the masters' own exported path data, with each master's subpaths
+joined into one path; seven of them carry a 0.68 group opacity in Figma that Icon/Overview does not,
+and that is not copied, because the navigation spec gives labels and icons the same 17.4:1 contrast.
+
+Still not built: Feedback/Linear progress `71:45`, cards, locked states, confirmation tiers beyond
+the one dialog, date pickers.
 
 ## 4. Usage
 
@@ -216,10 +225,23 @@ scroll and an axe scan of the lab (WCAG 2.0–2.2 A/AA plus best practices) with
 every tab stop's 3px accent ring; unclipped rings at a scroll region's edges; loading and disabled
 buttons ignoring clicks, Enter and Space; Enter unable to resubmit a saving form; checkbox
 first-line alignment; wrapping labels and multi-line errors; 200% text and 320px reflow; reduced
-motion; forced colours. `e2e/existing-routes.e2e.ts` compares sign-in, coach registration and the
-exercise library (owner session, mocked) against baselines captured at `c18903f` before any
-foundation code existed, as a guard against global-style regressions. All API responses are
-test-only `page.route` mocks; the application's guards and interceptors run unchanged.
+motion; forced colours. `e2e/existing-routes.e2e.ts` compares sign-in and coach registration against
+baselines captured at `c18903f` before any foundation code existed, as a guard against global-style
+regressions, and checks that both reflow at 200% text (the defect slice 2 fixed in the signed-out
+bar). `e2e/coach-shell.e2e.ts` covers the shell at 1440 and 390 px in both directions, Owner and
+Coach, the navigation dialog's keyboard behaviour, the sidebar's focus rings inside its scroll
+region, workspace switching and 200% text. `e2e/exercises.e2e.ts` covers the library's loading,
+populated, empty, error and capped-result states, its filters (Apply, Enter, and a select that does
+not apply on its own), the archive dialog and its focus return, and the stacked narrow layout. All
+API responses are test-only `page.route` mocks; the application's guards and interceptors run
+unchanged.
+
+**No console noise.** `e2e/support.ts` fails a test on any unexpected console error or uncaught page
+error. The messaging hub is answered — a negotiate response plus a mocked WebSocket that completes
+the SignalR handshake and replies to pings — so a signed-in page no longer retries a 404 hub and logs
+an error each time. The allow-list has one default entry: a signed-out visitor's `GET /api/auth/me`
+is answered 401 by the real API too, and the browser logs every failed request. One test adds the
+500 its own error state is about.
 
 **Screenshot baselines** live beside each spec (`*-snapshots/*-chromium-win32.png`, about 1.5 MB)
 and are environment-specific: they were recorded with Playwright 1.63.0's Chrome for Testing
@@ -258,13 +280,112 @@ against the pre-change fingerprints: every frame matched, then the edits were re
 | `373:2170` annotation | Adds that answer presentation is neutral and not value-dependent |
 | `294:1814` annotation (Exercise editor `292:1719`) | CSS note corrected: one vertical form-scroll region; `overflow-x: visible` computes to `auto` beside `overflow-y: auto`; prevent sideways overflow by layout and padding; verify first/last focus in the browser |
 
-## 9. Remaining work
+## 9. Slice 2 — the coach shell
 
-**Next bounded slice — coach shell.** Sidebar item, top bar, account and workspace switching built
-from these primitives, preserving workspace switching, account actions and role-aware routes. It
-should also fix a pre-existing defect found here: the current shell's public navigation keeps
-"Coach registration" on one line (`.primary-button` is `nowrap`), so at 200% text the page scrolls
-sideways on every signed-out route, `/auth/sign-in` included.
+Figma: coach proof `15:2` and Desktop Navigation v1 `118:135` (the Navigation/Sidebar item component
+set `121:165` and its eight icon masters). Code: `src/app/shell/`.
+
+**Three shells, one at a time, chosen from the validated membership.** `App.shell()` returns `coach`
+when `TenantStore.canCoach()`, `member` for a client or an account with no workspace (the
+pre-existing top bar, unchanged, plus the client bottom tabs), `public` for a visitor, and `pending`
+while a session's first membership list is still loading — so an owner never sees the member bar
+flash first. **This is presentation.** Guards, tenant headers and server decisions are untouched:
+Settings is omitted for a Coach while `ownerGuard` and the API still refuse `/workspace`.
+
+**Layout.** `app-coach-shell` is `display: contents`, so its `<aside class="sidebar">` (a
+complementary landmark) and `<header class="topbar">` (banner) are grid items of the app root beside
+its single `<main>` and router outlet. The sidebar is `max(232px, 14.5rem)` — Figma's 232px at the
+default text size, growing with a larger browser text setting rather than truncating every label.
+Brand and account footer are fixed; only the navigation region scrolls, with 24px inline and 8px end
+padding so a row's 5px focus reach is never clipped. In RTL the grid mirrors and the sidebar sits at
+the inline end.
+
+**Route selection.** One destination per section, pointing at that section's landing page:
+
+| Destination | Link | Section it stands for |
+|---|---|---|
+| Overview | `/` | that page only |
+| Clients | `/clients` | `/clients`, `/invitations` (its "Invite client" page) |
+| Training | `/training/programs` | `/training/*` |
+| Nutrition | `/nutrition/library` | `/nutrition/*` |
+| Check-ins | `/checkins/forms` | `/checkins/*` |
+| Messages | `/messages` | `/messages/*`, shown only while `MessageUnreadStore.isAvailable()` |
+| Products | `/products` | `/products/*` |
+| Settings | `/workspace` | `/workspace/*`, Owner only |
+
+`destinationState()` returns `page` only when the open path **is** the link's path, and `section`
+when another page of that section is open; the template maps those to `aria-current="page"` and
+`aria-current="true"`. Selection is a filled row plus `aria-current`, and forced-colours mode
+substitutes the system selection colours, so it never depends on colour alone.
+
+**Reachability.** Sections with a second page carry `app-section-nav` links on their own pages
+(Programs | Exercises, Check-in forms | Client check-ins), which is how `/training/exercises` and
+`/checkins/clients` stay reachable without their own sidebar rows. Invitations is reached from
+Clients. Notifications is the top-bar bell (its own unread count, never summed with messages),
+account security and sign-out are in the account menu, and workspace switching is the workspace
+control in the top bar when the user belongs to more than one.
+
+**Responsive.** Below 1024px the sidebar is replaced by a **Menu** button that opens the same
+navigation in a native modal `<dialog>`: the platform owns the focus trap, the inert background and
+the top layer, while the component owns Escape (so focus returns to the Menu button on every path)
+and closes it on navigation, on a workspace change and when the window grows past the breakpoint.
+Figma has no hamburger or close glyph, so both controls are text buttons rather than invented icons.
+
+**Session safety.** `TenantContext.onChange` closes every menu and the dialog synchronously, so
+nothing opened for one workspace can act on another; workspace switching and sign-out run through
+`App`, which keeps the existing `select` → invalidate → navigate and clear-both-counts → logout →
+navigate sequences.
+
+## 10. Slice 2 — the exercise library (first migrated route)
+
+Figma `266:1429`, including its development, interaction, content and accessibility annotations.
+Only the **default list state** is migrated. `New exercise` and `Edit` still open the pre-existing
+inline editor and its media management, whose markup, payload construction and calls are unchanged
+and deliberately outside `.tb-theme` (`exercise-library.legacy.scss`).
+
+| Figma | Code |
+|---|---|
+| Training header `266:1477`, scope copy `266:1481` | `.page-header` (heading, section links, one Filled action) |
+| Section navigation `266:1484` | `app-section-nav` — links with `aria-current="page"`, never a tablist |
+| Search and filters `267:1581` | `<form role="search">` over the existing `GET /api/exercises` parameters |
+| Library summary `266:1494` | `role="status"` line, repeated as the table `<caption>` |
+| List header `266:1496` and rows `269:1570`… | `.tb-table` with `<th scope="col">`, a visually hidden Actions header and explicit ARIA roles |
+| Status `269:1578` | `app-status-label` (success + check / neutral + dot) plus "Not in new templates" |
+| Row actions `268:1630` | Text buttons whose accessible names carry the exercise name |
+
+**Honest counts.** The client asks for `take=100`, which is what the server returns at most (it
+clamps `take` to 1-100; the previous `take=200` claimed a page size that never existed). The summary
+says `N exercises · sorted by name` when every match is loaded and
+`Showing the first X of N. Refine the search.` when it is not. Both are plural-aware ICU messages
+with locale number formatting and `<bdi>` around every count. No archived count is invented: `total`
+counts every match while the rows are capped, so the two could disagree.
+
+**Filters** stay server-side and are applied only by **Apply** or **Enter** in the search field.
+Draft control values and applied values are separate signals, so a select changed but not applied
+never leaks into the reload that follows an archive or restore.
+
+**Archive asks first.** `Archive` opens a modal dialog titled `Archive {name}?` that explains what
+changes and what is kept; only its `Archive exercise` button sends `{ isArchived: true, version }`.
+Cancel and Escape send nothing and return focus to the row's Archive button. `Restore` is direct.
+A 409 reloads the list and says so in the polite status region without applying stale local state,
+and a tenant switch, a sign-out or leaving the screen closes the dialog and clears the busy state.
+Archived rows offer `Restore` alone, because the server refuses to edit an archived exercise.
+
+**Table behaviour.** Desktop keeps Figma's column widths as `table-layout: auto` preferences, so a
+longer translation takes the width it needs from the Exercise column; headers wrap between words and
+never inside one; names clamp to two lines with the full name in `title` and in the action names.
+Below `60em` of card width — a container query in `em`, so enlarged text stacks too — each row
+becomes a labelled block, with the column headers kept for assistive technology and explicit ARIA
+roles keeping it a table. The page never scrolls sideways in either direction.
+
+**Deliberate deviations.** The Figma quick search and its ⌘K hint are not rendered: no such
+repository capability is wired. The list scrolls inside its card at desktop sizes with a sticky
+header row, but the card is bounded by `max(24rem, calc(100dvh - 16rem))` rather than owning the
+viewport, so enlarged text scrolls the page instead of shrinking the region to nothing. Media
+management appears with the legacy editor rather than on the default list, which is where Figma puts
+it (`292:1719`); every media call is unchanged.
+
+## 11. Remaining work
 
 **Foundation follow-ups:** grid-cell error wiring; Linear progress; aligning the global focus rule
 and removing the legacy palette after migration; Linux baselines if e2e joins CI; `@types/node`
@@ -282,7 +403,9 @@ text only).
 - Programs search: backend query support is unresolved.
 - Paging: the backend supports paging; do not repeat the outdated "no paging endpoint" claim.
 - Today: the remaining coverage-state ambiguities need a contract decision.
-- Production shells must preserve workspace switching, account actions and role-aware routes.
+- Production shells must preserve workspace switching, account actions and role-aware routes. The
+  coach shell does (slice 2, §9); the client and signed-out shells are still the pre-existing ones
+  and are migrated in their own slices.
 - Historical backend integration-test failures remain separate work: the messaging rate-limit test
   that failed only under full-suite load, and the media-purge test that reproduces locally (a
   Windows-related cause is a hypothesis, not a diagnosis).

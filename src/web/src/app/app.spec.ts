@@ -39,15 +39,22 @@ async function render(
   options: {
     signedIn?: boolean;
     owner?: boolean;
+    coach?: boolean;
     unread?: number;
     unreadMessages?: number;
     client?: boolean;
-    memberships?: typeof MEMBERSHIP[];
+    loading?: boolean;
+    memberships?: (typeof MEMBERSHIP)[];
     selectedTenantId?: string;
   } = {},
 ) {
   const clear = vi.fn();
   const clearMessages = vi.fn();
+  const select = vi.fn();
+  const canCoach = Boolean(options.owner || options.coach);
+  const membership = options.owner
+    ? MEMBERSHIP
+    : { ...MEMBERSHIP, role: options.coach ? ('Coach' as const) : ('Client' as const) };
   await TestBed.configureTestingModule({
     imports: [App],
     providers: [
@@ -81,7 +88,7 @@ async function render(
         provide: AuthStore,
         useValue: {
           user: signal(options.signedIn ? OWNER : null),
-          loading: signal(false),
+          loading: signal(Boolean(options.loading)),
           initialize: vi.fn().mockResolvedValue(undefined),
           logout: vi.fn().mockResolvedValue(undefined),
         },
@@ -93,11 +100,11 @@ async function render(
           selectedTenantId: signal(
             options.signedIn ? (options.selectedTenantId ?? 'tenant-1') : null,
           ),
-          selectedMembership: signal(options.signedIn ? MEMBERSHIP : undefined),
-          canCoach: signal(Boolean(options.owner)),
+          selectedMembership: signal(options.signedIn ? membership : undefined),
+          canCoach: signal(canCoach),
           isOwner: signal(Boolean(options.owner)),
           isClient: signal(Boolean(options.client)),
-          select: vi.fn(),
+          select,
         },
       },
     ],
@@ -105,12 +112,47 @@ async function render(
 
   const fixture = TestBed.createComponent(App);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, clear, clearMessages };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    clear,
+    clearMessages,
+    select,
+  };
 }
 
 describe('App', () => {
-  it('gives clients five destinations with independent message and notification badges', async () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('creates the application shell', async () => {
+    const { fixture, host } = await render();
+
+    expect(fixture.componentInstance).toBeTruthy();
+    expect(host.querySelector('.brand')?.textContent).toContain('TB Gym');
+  });
+
+  /**
+   * Three shells, and only ever one of them. A client must never be handed the coach sidebar, and a
+   * signed-out visitor must never be handed either: the shell follows the membership the tenant
+   * store validated, while the server and the route guards remain the thing that decides access.
+   */
+  it('gives an owner the coach shell and nobody else the client or public one', async () => {
+    const { host } = await render({ signedIn: true, owner: true });
+
+    expect(host.querySelector('app-coach-shell')).not.toBeNull();
+    expect(host.querySelector('.client-tabs')).toBeNull();
+    expect(host.querySelector('.public-nav')).toBeNull();
+    // The pre-existing member top bar and its workspace picker belong to the other shell.
+    expect(host.querySelector('.authenticated-nav')).toBeNull();
+    expect(host.querySelector('.workspace-picker')).toBeNull();
+  });
+
+  it('keeps the client shell exactly as it was, with no coach sidebar', async () => {
     const { host } = await render({ signedIn: true, client: true, unread: 2, unreadMessages: 3 });
+
+    expect(host.querySelector('app-coach-shell')).toBeNull();
     const tabs = host.querySelectorAll('.client-tabs a');
     expect(tabs).toHaveLength(5);
     expect([...tabs].map((link) => link.getAttribute('href'))).toEqual([
@@ -126,68 +168,39 @@ describe('App', () => {
     );
     expect(host.querySelector('a[href*="nutrition"]')).toBeNull();
   });
-  afterEach(() => {
-    TestBed.resetTestingModule();
-  });
 
-  it('creates the application shell', async () => {
-    const { fixture, host } = await render();
+  it('keeps the signed-out shell separate from both', async () => {
+    const { host } = await render();
 
-    expect(fixture.componentInstance).toBeTruthy();
-    expect(host.querySelector('.brand')?.textContent).toContain('TB Gym');
-  });
-
-  /**
-   * The owner navigation carries a "Workspace" link to the settings page, and the session controls
-   * carry a workspace picker. Both captions read "Workspace", so an owner saw the word twice side
-   * by side in the topbar with no way to tell which was which.
-   */
-  it('names the workspace picker apart from the workspace nav link', async () => {
-    const { host } = await render({ signedIn: true, owner: true });
-
-    expect(host.querySelector('nav a[href="/workspace"]')?.textContent?.trim()).toBe('Workspace');
-    expect(host.querySelector('.workspace-picker span')?.textContent?.trim()).toBe(
-      'Active workspace',
-    );
-
-    // No two captions in the topbar say the same thing.
-    const captions = Array.from(
-      host.querySelectorAll('.authenticated-nav nav a, .authenticated-nav .workspace-picker span'),
-    ).map((element) => element.textContent?.trim());
-    expect(new Set(captions).size).toBe(captions.length);
-  });
-
-  it('offers the picker every workspace the user belongs to', async () => {
-    const { host } = await render({ signedIn: true, owner: true });
-
-    const options = Array.from(
-      host.querySelectorAll<HTMLOptionElement>('.workspace-picker option'),
-    );
-    expect(options).toHaveLength(1);
-    expect(options[0].textContent).toContain('TB Gym');
+    expect(host.querySelector('app-coach-shell')).toBeNull();
+    expect(host.querySelector('.client-tabs')).toBeNull();
+    expect(host.querySelector('.public-nav a[href="/auth/sign-in"]')).not.toBeNull();
+    expect(host.querySelector('.public-nav a[href="/auth/register"]')).not.toBeNull();
   });
 
   /**
-   * The picker has to show the workspace the store is actually in. Binding `value` on the
-   * `<select>` does not survive the `@for` that fills it: the browser resets `selectedIndex` to 0
-   * when the options arrive, so the picker named the first workspace whichever one was active.
-   * With a single membership that is the right answer by accident, which is how it went unseen.
+   * An account with a session but no workspace keeps the member top bar: it has no membership, so
+   * there is no coach navigation to show and nothing to switch between.
    */
-  it('shows the active workspace even when it is not the first one offered', async () => {
-    const { host } = await render({
-      signedIn: true,
-      owner: true,
-      memberships: [ALPHA, MEMBERSHIP],
-      selectedTenantId: 'tenant-1',
-    });
+  it('keeps the member top bar for a signed-in account without a workspace', async () => {
+    const { host } = await render({ signedIn: true, memberships: [] });
 
-    const picker = host.querySelector<HTMLSelectElement>('.workspace-picker select')!;
-    expect(picker.value).toBe('tenant-1');
-    expect(picker.options[picker.selectedIndex].textContent).toContain('TB Gym');
+    expect(host.querySelector('app-coach-shell')).toBeNull();
+    expect(host.querySelector('.authenticated-nav')).not.toBeNull();
+    expect(host.querySelector('.workspace-picker')).toBeNull();
+  });
+
+  /** A known session that is being re-read keeps its shell rather than flashing another one. */
+  it('waits for the first membership list instead of flashing the member bar', async () => {
+    const { host } = await render({ signedIn: true, owner: true, loading: true, memberships: [] });
+
+    expect(host.querySelector('app-coach-shell')).toBeNull();
+    expect(host.querySelector('.authenticated-nav')).toBeNull();
+    expect(host.textContent).toContain('Checking session');
   });
 
   it('offers the notifications link to every active member', async () => {
-    const { host } = await render({ signedIn: true, owner: true });
+    const { host } = await render({ signedIn: true, client: true });
 
     const link = host.querySelector('nav a[href="/notifications"]');
     expect(link).not.toBeNull();
@@ -197,18 +210,18 @@ describe('App', () => {
   it('hides the notifications link when nobody is signed in', async () => {
     const { host } = await render();
 
-    expect(host.querySelector('nav a[href="/notifications"]')).toBeNull();
+    expect(host.querySelector('a[href="/notifications"]')).toBeNull();
   });
 
   it('shows no badge when nothing is unread', async () => {
-    const { host } = await render({ signedIn: true, unread: 0 });
+    const { host } = await render({ signedIn: true, client: true, unread: 0 });
 
     expect(host.querySelector('nav a[href="/notifications"] .badge')).toBeNull();
     expect(host.querySelector('nav a[href="/notifications"]')?.textContent).not.toContain('unread');
   });
 
   it('announces one unread notification in words as well as in the badge', async () => {
-    const { host } = await render({ signedIn: true, unread: 1 });
+    const { host } = await render({ signedIn: true, client: true, unread: 1 });
 
     expect(host.querySelector('nav a[href="/notifications"] .badge')?.textContent?.trim()).toBe(
       '1',
@@ -219,17 +232,10 @@ describe('App', () => {
     ).toContain('1 unread notifications');
   });
 
-  it('shows a badge for many unread notifications', async () => {
-    const { host } = await render({ signedIn: true, unread: 12 });
-
-    expect(host.querySelector('nav a[href="/notifications"] .badge')?.textContent?.trim()).toBe(
-      '12',
-    );
-  });
-
-  it('clears the badge as part of signing out', async () => {
+  it('clears both badges as part of signing out', async () => {
     const { host, clear, clearMessages } = await render({
       signedIn: true,
+      client: true,
       unread: 4,
       unreadMessages: 2,
     });
@@ -243,52 +249,51 @@ describe('App', () => {
     expect(clearMessages).toHaveBeenCalled();
   });
 
-  it('offers the messages link to every active member', async () => {
-    const { host } = await render({ signedIn: true, owner: true });
-
-    const link = host.querySelector('nav a[href="/messages"]');
-    expect(link).not.toBeNull();
-    expect(link?.textContent).toContain('Messages');
-  });
-
-  it('hides the messages link when nobody is signed in', async () => {
-    const { host } = await render();
-
-    expect(host.querySelector('nav a[href="/messages"]')).toBeNull();
-  });
-
-  it('shows no message badge when nothing is unread', async () => {
-    const { host } = await render({ signedIn: true, unreadMessages: 0 });
-
-    expect(host.querySelector('nav a[href="/messages"] .badge')).toBeNull();
-    expect(host.querySelector('nav a[href="/messages"]')?.textContent).not.toContain('unread');
-  });
-
-  it('announces one unread message in words as well as in the badge', async () => {
-    const { host } = await render({ signedIn: true, unreadMessages: 1 });
-
-    expect(host.querySelector('nav a[href="/messages"] .badge')?.textContent?.trim()).toBe('1');
-    expect(host.querySelector('nav a[href="/messages"] .visually-hidden')?.textContent).toContain(
-      '1 unread messages',
-    );
-  });
-
-  it('shows a badge for many unread messages', async () => {
-    const { host } = await render({ signedIn: true, unreadMessages: 9 });
-
-    expect(host.querySelector('nav a[href="/messages"] .badge')?.textContent?.trim()).toBe('9');
-  });
-
   /**
    * Two counts, two badges. Summing an unread notification and an unread message would produce a
-   * number nobody could explain or act on, so the topbar keeps them apart.
+   * number nobody could explain or act on, so they stay apart in both shells.
    */
   it('keeps the message badge separate from the notification badge', async () => {
-    const { host } = await render({ signedIn: true, unread: 4, unreadMessages: 2 });
+    const { host } = await render({
+      signedIn: true,
+      client: true,
+      unread: 4,
+      unreadMessages: 2,
+    });
 
-    expect(host.querySelector('nav a[href="/notifications"] .badge')?.textContent?.trim()).toBe(
-      '4',
+    expect(host.querySelector('a[href="/notifications"] .badge')?.textContent?.trim()).toBe('4');
+    expect(host.querySelector('.client-tabs a[href="/messages"] .badge')?.textContent?.trim()).toBe(
+      '2',
     );
-    expect(host.querySelector('nav a[href="/messages"] .badge')?.textContent?.trim()).toBe('2');
+  });
+
+  /** The member shell's picker still shows the workspace the store is actually in. */
+  it('shows the active workspace in the member picker even when it is not the first offered', async () => {
+    const { host } = await render({
+      signedIn: true,
+      client: true,
+      memberships: [ALPHA, MEMBERSHIP],
+      selectedTenantId: 'tenant-1',
+    });
+
+    const picker = host.querySelector<HTMLSelectElement>('.workspace-picker select')!;
+    expect(picker.value).toBe('tenant-1');
+    expect(picker.options[picker.selectedIndex].textContent).toContain('TB Gym');
+  });
+
+  it('selects a workspace through the same path as the coach shell', async () => {
+    const { fixture, host, select } = await render({
+      signedIn: true,
+      client: true,
+      memberships: [ALPHA, MEMBERSHIP],
+      selectedTenantId: 'tenant-1',
+    });
+
+    const picker = host.querySelector<HTMLSelectElement>('.workspace-picker select')!;
+    picker.value = 'tenant-alpha';
+    picker.dispatchEvent(new Event('change'));
+    await settle(fixture);
+
+    expect(select).toHaveBeenCalledWith('tenant-alpha');
   });
 });

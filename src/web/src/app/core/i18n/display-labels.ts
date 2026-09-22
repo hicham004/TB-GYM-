@@ -9,6 +9,7 @@ import type {
   MessageDeletionKind,
   MesocycleStatus,
   MovementPattern,
+  MuscleGroup,
   StrengthMaxKind,
   TrainingLoadStrategy,
   TrainingSetType,
@@ -81,6 +82,27 @@ export function movementPatternLabel(value: MovementPattern): string {
     Locomotion: $localize`Locomotion`,
     Isolation: $localize`Isolation`,
     Mobility: $localize`Mobility`,
+    Other: $localize`Other`,
+  };
+  return labels[value];
+}
+
+export function muscleGroupLabel(value: MuscleGroup): string {
+  const labels: Record<MuscleGroup, string> = {
+    Chest: $localize`Chest`,
+    Back: $localize`Back`,
+    Shoulders: $localize`Shoulders`,
+    Biceps: $localize`Biceps`,
+    Triceps: $localize`Triceps`,
+    Forearms: $localize`Forearms`,
+    Quadriceps: $localize`Quadriceps`,
+    Hamstrings: $localize`Hamstrings`,
+    Glutes: $localize`Glutes`,
+    Calves: $localize`Calves`,
+    Abdominals: $localize`Abdominals`,
+    Adductors: $localize`Adductors`,
+    Abductors: $localize`Abductors`,
+    FullBody: $localize`Full body`,
     Other: $localize`Other`,
   };
   return labels[value];

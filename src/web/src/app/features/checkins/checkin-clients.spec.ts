@@ -1,5 +1,6 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -291,6 +292,7 @@ async function render(
   await TestBed.configureTestingModule({
     imports: [CheckInClients],
     providers: [
+      provideRouter([]),
       {
         provide: ApiClient,
         useValue: {

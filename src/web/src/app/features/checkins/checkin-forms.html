@@ -1,4 +1,7 @@
 <section class="checkins">
+  <!-- The two pages of the Check-ins section; the sidebar links to this one. Links, not tabs. -->
+  <app-section-nav class="section-links" label="Check-in sections" i18n-label [links]="sections" />
+
   <header class="page-head">
     <h2 i18n>Check-in forms</h2>
     <button type="button" class="primary-button" (click)="startNewForm()" i18n>New form</button>

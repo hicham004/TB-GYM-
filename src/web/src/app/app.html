@@ -1,138 +1,127 @@
-<header class="topbar">
-  <a class="brand" routerLink="/" aria-label="TB Gym home" i18n-aria-label>
-    <span class="brand-mark" aria-hidden="true">TB</span>
-    <span>TB Gym</span>
-  </a>
-
-  @if (auth.user()) {
-    <button
-      class="menu-button"
-      type="button"
-      [attr.aria-expanded]="menuOpen()"
-      aria-controls="primary-navigation"
-      aria-label="Toggle navigation"
-      i18n-aria-label
-      (click)="menuOpen.set(!menuOpen())"
-    >
-      <span aria-hidden="true">&#9776;</span>
-    </button>
-
-    <div id="primary-navigation" class="authenticated-nav" [class.open]="menuOpen()">
-      <nav aria-label="Primary navigation" i18n-aria-label>
-        @if (!tenants.isClient()) {
-          <a
-            routerLink="/"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: true }"
-            i18n
-          >
-            Dashboard
-          </a>
-        }
-        @if (tenants.canCoach()) {
-          <a routerLink="/clients" routerLinkActive="active" i18n>Clients</a>
-          <a routerLink="/training/programs" routerLinkActive="active" i18n>Programs</a>
-          <a routerLink="/training/exercises" routerLinkActive="active" i18n>Exercises</a>
-          <a routerLink="/checkins/forms" routerLinkActive="active" i18n>Check-in forms</a>
-          <a routerLink="/checkins/clients" routerLinkActive="active" i18n>Client check-ins</a>
-          <a routerLink="/products" routerLinkActive="active" i18n>Products</a>
-          <a routerLink="/invitations" routerLinkActive="active" i18n>Invitations</a>
-        }
-        @if (tenants.isOwner()) {
-          <a routerLink="/workspace" routerLinkActive="active" i18n>Workspace</a>
-        }
-        <!-- Message unread is counted and shown separately from notification unread. An unread
-             notification is a workspace event somebody scheduled; an unread message is a person
-             waiting for a reply. One badge summing them could be neither explained nor acted on. -->
-        @if (messages.isAvailable() && !tenants.isClient()) {
-          <a routerLink="/messages" routerLinkActive="active" class="with-badge">
-            <span i18n>Messages</span>
-            @if (messages.unread() > 0) {
-              <span class="badge" aria-hidden="true">{{ messages.unread() }}</span>
-              <span class="visually-hidden" i18n>{{ messages.unread() }} unread messages</span>
-            }
-          </a>
-        }
-        <!-- Every active member has an inbox, whatever their role in the workspace. The count is
-             announced in words rather than left as a bare number beside the link, so it is not read
-             out as "Notifications 3" with no explanation of what 3 is. -->
-        @if (notifications.isAvailable()) {
-          <a routerLink="/notifications" routerLinkActive="active" class="with-badge">
-            <span i18n>Notifications</span>
-            @if (notifications.unread() > 0) {
-              <span class="badge" aria-hidden="true">{{ notifications.unread() }}</span>
-              <span class="visually-hidden" i18n
-                >{{ notifications.unread() }} unread notifications</span
-              >
-            }
-          </a>
-        }
-      </nav>
-
-      <div class="session-controls">
-        @if (tenants.memberships().length > 0) {
-          <label class="workspace-picker">
-            <!-- "Active workspace", not "Workspace": an owner also has a Workspace nav link, and
-                 the two sat side by side in the topbar reading "Workspace Workspace". This one
-                 chooses which workspace you are in; that one opens its settings. -->
-            <span i18n>Active workspace</span>
-            <!-- Selected per option, not through `value` on the select: the options arrive from
-                 the `@for` after the select is bound, and the browser resets `selectedIndex` to 0
-                 when they do, so the picker named the first workspace whatever was active. -->
-            <select (change)="selectTenant($event)">
-              @for (membership of tenants.memberships(); track membership.tenantId) {
-                <option
-                  [value]="membership.tenantId"
-                  [selected]="membership.tenantId === tenants.selectedTenantId()"
-                >
-                  {{ membership.tenantName }} ({{ roleLabel(membership.role) }})
-                </option>
-              }
-            </select>
-          </label>
-        }
-        <a class="account-link" routerLink="/account/security" routerLinkActive="active">
-          {{ auth.user()?.displayName }}
-        </a>
-        <button class="quiet-button" type="button" (click)="logout()" i18n>Sign out</button>
-      </div>
-    </div>
-  } @else if (!auth.loading()) {
-    <nav class="public-nav" aria-label="Account navigation" i18n-aria-label>
-      <a routerLink="/auth/sign-in" routerLinkActive="active" i18n>Sign in</a>
-      <a class="primary-button compact" routerLink="/auth/register" i18n>Coach registration</a>
-    </nav>
-  } @else {
-    <span class="session-loading" i18n>Checking session...</span>
-  }
-</header>
-
-@if (auth.user() && tenants.isClient()) {
-  <nav class="client-tabs" aria-label="Client navigation" i18n-aria-label>
-    <a
-      routerLink="/"
-      routerLinkActive="active"
-      [routerLinkActiveOptions]="{ exact: true }"
-      ariaCurrentWhenActive="page"
-      i18n
-      >Today</a
-    >
-    <a routerLink="/checkins/me" routerLinkActive="active" ariaCurrentWhenActive="page" i18n
-      >Check-ins</a
-    >
-    <a routerLink="/messages" routerLinkActive="active" ariaCurrentWhenActive="page">
-      <span i18n>Messages</span>
-      @if (messages.isAvailable() && messages.unread() > 0) {
-        <span class="badge" aria-hidden="true">{{ messages.unread() }}</span>
-        <span class="visually-hidden" i18n>{{ messages.unread() }} unread messages</span>
-      }
+@if (shell() === 'coach') {
+  <!-- Owners and coaches: sidebar and top bar from the design system, placed on this component's
+       grid beside the one <main> below. Workspace and sign-out requests come back here, so both
+       shells share one switching path and one sign-out sequence. -->
+  <app-coach-shell (workspaceSelected)="switchWorkspace($event)" (signOut)="logout()" />
+} @else {
+  <!-- Clients, accounts without a workspace and signed-out visitors keep the existing top bar. -->
+  <header class="topbar" [class.public]="shell() === 'public'">
+    <a class="brand" routerLink="/" aria-label="TB Gym home" i18n-aria-label>
+      <span class="brand-mark" aria-hidden="true">TB</span>
+      <span>TB Gym</span>
     </a>
-    <a routerLink="/progress/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page" i18n
-      >Progress</a
-    >
-    <a routerLink="/me" routerLinkActive="active" ariaCurrentWhenActive="page" i18n>Me</a>
-  </nav>
+
+    @if (shell() === 'member') {
+      <button
+        class="menu-button"
+        type="button"
+        [attr.aria-expanded]="menuOpen()"
+        aria-controls="primary-navigation"
+        aria-label="Toggle navigation"
+        i18n-aria-label
+        (click)="menuOpen.set(!menuOpen())"
+      >
+        <span aria-hidden="true">&#9776;</span>
+      </button>
+
+      <div id="primary-navigation" class="authenticated-nav" [class.open]="menuOpen()">
+        <nav aria-label="Primary navigation" i18n-aria-label>
+          @if (!tenants.isClient()) {
+            <a
+              routerLink="/"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: true }"
+              i18n
+            >
+              Dashboard
+            </a>
+          }
+          <!-- Every active member has an inbox, whatever their role in the workspace. The count is
+               announced in words rather than left as a bare number beside the link, so it is not
+               read out as "Notifications 3" with no explanation of what 3 is. -->
+          @if (notifications.isAvailable()) {
+            <a routerLink="/notifications" routerLinkActive="active" class="with-badge">
+              <span i18n>Notifications</span>
+              @if (notifications.unread() > 0) {
+                <span class="badge" aria-hidden="true">{{ notifications.unread() }}</span>
+                <span class="visually-hidden" i18n
+                  >{{ notifications.unread() }} unread notifications</span
+                >
+              }
+            </a>
+          }
+        </nav>
+
+        <div class="session-controls">
+          @if (tenants.memberships().length > 0) {
+            <label class="workspace-picker">
+              <span i18n>Active workspace</span>
+              <!-- Selected per option, not through `value` on the select: the options arrive from
+                   the `@for` after the select is bound, and the browser resets `selectedIndex` to 0
+                   when they do, so the picker named the first workspace whatever was active. -->
+              <select (change)="selectTenant($event)">
+                @for (membership of tenants.memberships(); track membership.tenantId) {
+                  <option
+                    [value]="membership.tenantId"
+                    [selected]="membership.tenantId === tenants.selectedTenantId()"
+                  >
+                    {{ membership.tenantName }} ({{ roleLabel(membership.role) }})
+                  </option>
+                }
+              </select>
+            </label>
+          }
+          <a class="account-link" routerLink="/account/security" routerLinkActive="active">
+            {{ auth.user()?.displayName }}
+          </a>
+          <button class="quiet-button" type="button" (click)="logout()" i18n>Sign out</button>
+        </div>
+      </div>
+    } @else if (shell() === 'public') {
+      <nav class="public-nav" aria-label="Account navigation" i18n-aria-label>
+        <a routerLink="/auth/sign-in" routerLinkActive="active" i18n>Sign in</a>
+        <a class="primary-button compact" routerLink="/auth/register" i18n>Coach registration</a>
+      </nav>
+    } @else {
+      <span class="session-loading" i18n>Checking session...</span>
+    }
+  </header>
+
+  @if (shell() === 'member' && tenants.isClient()) {
+    <nav class="client-tabs" aria-label="Client navigation" i18n-aria-label>
+      <a
+        routerLink="/"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        ariaCurrentWhenActive="page"
+        i18n
+        >Today</a
+      >
+      <a routerLink="/checkins/me" routerLinkActive="active" ariaCurrentWhenActive="page" i18n
+        >Check-ins</a
+      >
+      <a routerLink="/messages" routerLinkActive="active" ariaCurrentWhenActive="page">
+        <span i18n>Messages</span>
+        @if (messages.isAvailable() && messages.unread() > 0) {
+          <span class="badge" aria-hidden="true">{{ messages.unread() }}</span>
+          <span class="visually-hidden" i18n>{{ messages.unread() }} unread messages</span>
+        }
+      </a>
+      <a
+        routerLink="/progress/dashboard"
+        routerLinkActive="active"
+        ariaCurrentWhenActive="page"
+        i18n
+        >Progress</a
+      >
+      <a routerLink="/me" routerLinkActive="active" ariaCurrentWhenActive="page" i18n>Me</a>
+    </nav>
+  }
 }
-<main [class.app-main]="auth.user()" [class.client-main]="auth.user() && tenants.isClient()">
+<main
+  [class.app-main]="shell() !== 'coach' && auth.user()"
+  [class.client-main]="shell() === 'member' && tenants.isClient()"
+  [class.coach-main]="shell() === 'coach'"
+>
   <router-outlet />
 </main>

@@ -464,6 +464,27 @@ lab exists only in the development build (`fileReplacements`), and Playwright/ax
 live in `src/web/e2e`. Mapping, usage, migration boundaries and open work are in
 [FRONTEND-DESIGN-SYSTEM.md](FRONTEND-DESIGN-SYSTEM.md).
 
+Design-system slice 2 (2026-09-22) adds the coach shell (`src/app/shell/`) and migrates the exercise
+library's default list state. **Which shell renders is presentation, and only that**: `App` picks the
+coach shell when the selected membership is Owner or Coach, keeps the pre-existing top bar for a
+client or an account with no workspace, and keeps the signed-out bar for a visitor. Route guards,
+tenant headers, `TenantAsyncScope` and every server decision are unchanged; Settings is omitted for a
+coach in the sidebar while `ownerGuard` and the API still refuse `/workspace` either way. A sidebar
+destination is marked `aria-current="page"` only on its own page and `aria-current="true"` when
+another page of its section is open, so the shell never claims a page the user is not on. Workspace
+switching runs through one path in `App` for both shells: `TenantStore.select` invalidates the tenant
+context synchronously, which resets every `TenantAsyncScope`, and the shell closes its menus and its
+responsive navigation dialog on that same signal. Sign-out keeps its existing sequence — both unread
+counts cleared, then the request, then the navigation.
+
+The migrated exercise library keeps every request it made before and adds no new one. Its filters
+stay server-side and are applied on Apply or Enter only; the list asks for the 100 rows the server is
+willing to return (it clamps `take` to 1-100) and says either "N exercises · sorted by name" or
+"Showing the first X of N", never a count it cannot show. Archiving now opens a confirmation and only
+that dialog's own action calls `PUT /api/exercises/{id}/archive`; a 409 reloads the list and says so
+rather than applying stale local state. The exercise editor and its media management are deliberately
+untouched — same form, same payload, same calls — and are entered from New exercise or Edit.
+
 ## 9. Realtime, jobs, and integrations
 
 **Phase 6B-2A built the persisted model; Phase 6B-2B added the channel over it** — see sections 16 and

@@ -1,0 +1,200 @@
+// Coach shell (Figma 15:2 / 266:1429 chrome, Desktop Navigation v1 118:135). The host is
+// `display: contents`: `.sidebar` and `.topbar` are grid items of the app root, beside its <main>.
+:host {
+  display: contents;
+}
+
+// ----------------------------------------------------------------------------------------------
+// Sidebar: brand and identity fixed, only the navigation region scrolls
+// ----------------------------------------------------------------------------------------------
+
+.sidebar {
+  align-self: start;
+  background-color: var(--color-text-primary);
+  block-size: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  inset-block-start: 0;
+  // 232px at the default text size (Figma); grows with a larger browser text setting so the
+  // one-line labels do not all truncate at 200% text.
+  inline-size: max(232px, 14.5rem);
+  padding-block: var(--space-24);
+  position: sticky;
+}
+
+.brand {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: var(--space-12);
+  padding-inline: var(--space-24);
+}
+
+.brand-mark {
+  align-items: center;
+  background-color: var(--color-accent);
+  block-size: 36px;
+  border-radius: var(--radius-8);
+  color: var(--color-on-accent);
+  display: inline-flex;
+  flex: none;
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  inline-size: 36px;
+  justify-content: center;
+  line-height: var(--text-compact-line-height);
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  font-weight: var(--font-weight-strong);
+  min-inline-size: 0;
+}
+
+.brand-name {
+  color: var(--color-on-accent);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+}
+
+.brand-descriptor {
+  color: var(--color-text-on-inverse-muted);
+  font-size: var(--text-metadata-size);
+  letter-spacing: 0.6px;
+  line-height: var(--text-metadata-line-height);
+  text-transform: uppercase;
+}
+
+.brand-descriptor:lang(ar) {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+// Brand to first group is 32px in Figma: the sidebar's 24px gap plus 8px here. The region spans
+// the full sidebar width with 24px inline and 8px end padding, so a row's 5px focus ring (2px gap
+// + 3px ring) is never clipped by the scroll edge.
+.sidebar-nav {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-block: var(--space-8);
+  padding-inline: var(--space-24);
+  scroll-padding-block: var(--space-8);
+}
+
+.identity {
+  align-items: center;
+  border-block-start: 1px solid rgb(255 255 255 / 14%);
+  display: flex;
+  flex: none;
+  gap: var(--space-12);
+  margin-inline: var(--space-24);
+  padding-block-start: var(--space-16);
+}
+
+.identity-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.identity-name,
+.identity-role {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity-name {
+  color: var(--color-on-accent);
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  line-height: var(--text-compact-line-height);
+}
+
+.identity-role {
+  color: var(--color-text-on-inverse-muted);
+  font-size: var(--text-metadata-size);
+  line-height: var(--text-metadata-line-height);
+}
+
+// ----------------------------------------------------------------------------------------------
+// Narrow-width navigation dialog
+// ----------------------------------------------------------------------------------------------
+
+.nav-dialog {
+  background-color: var(--color-text-primary);
+  block-size: 100dvh;
+  border: 0;
+  box-sizing: border-box;
+  color: var(--color-on-accent);
+  flex-direction: column;
+  gap: var(--space-24);
+  inline-size: min(max(288px, 18rem), 100vw);
+  inset-block: 0;
+  inset-inline: 0 auto;
+  margin: 0;
+  max-block-size: 100dvh;
+  max-inline-size: 100vw;
+  padding-block: var(--space-16) var(--space-24);
+  padding-inline: 0;
+}
+
+.nav-dialog[open] {
+  display: flex;
+}
+
+.nav-dialog::backdrop {
+  background-color: rgb(22 27 26 / 48%);
+}
+
+.nav-dialog-header {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: var(--space-12);
+  justify-content: space-between;
+  padding-inline-end: var(--space-16);
+}
+
+.nav-dialog-header .brand {
+  min-inline-size: 0;
+}
+
+// Outlined, redrawn for the inverse surface: the light-surface colours would vanish on it.
+.nav-dialog .nav-close {
+  border-color: var(--color-text-on-inverse-muted);
+  color: var(--color-on-accent);
+}
+
+.nav-dialog .nav-close:focus-visible {
+  outline-color: var(--color-on-accent);
+}
+
+@media (hover: hover) {
+  .nav-dialog .nav-close:hover:not([aria-disabled='true']) {
+    background-color: rgb(255 255 255 / 8%);
+  }
+}
+
+.nav-dialog .nav-close:active:not([aria-disabled='true']) {
+  background-color: rgb(255 255 255 / 14%);
+  box-shadow: none;
+}
+
+// ----------------------------------------------------------------------------------------------
+// Below the desktop breakpoint the sidebar is replaced by the navigation dialog
+// ----------------------------------------------------------------------------------------------
+
+@media (max-width: 1023.98px) {
+  .sidebar {
+    display: none;
+  }
+}

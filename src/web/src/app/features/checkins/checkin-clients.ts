@@ -17,6 +17,7 @@ import type { ClientSummary } from '../../core/api/api.models';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { SectionNav } from '../../ui/section-nav';
 import { validateAssignment, type AssignmentDraft } from './checkin-builder.models';
 import { comparisonRows, formatAnswer, type ComparisonRowView } from './checkin-response.models';
 
@@ -26,11 +27,16 @@ import { comparisonRows, formatAnswer, type ComparisonRowView } from './checkin-
  */
 @Component({
   selector: 'app-checkin-clients',
-  imports: [DatePipe, FormsModule],
+  imports: [DatePipe, FormsModule, SectionNav],
   templateUrl: './checkin-clients.html',
   styleUrl: './checkins.scss',
 })
 export class CheckInClients {
+  protected readonly sections = [
+    { label: $localize`Check-in forms`, link: '/checkins/forms' },
+    { label: $localize`Client check-ins`, link: '/checkins/clients' },
+  ];
+
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
