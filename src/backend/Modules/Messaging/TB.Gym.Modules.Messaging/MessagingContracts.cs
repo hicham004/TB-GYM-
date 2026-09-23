@@ -48,7 +48,8 @@ public sealed record ConversationSummary(
     DateTimeOffset? LastReadAtUtc,
     bool IsAvailable,
     FeatureAccessReason AccessReason,
-    ConversationMessagePreview? LastMessage);
+    ConversationMessagePreview? LastMessage,
+    bool IsReadOnly = false);
 
 /// <summary>
 /// One keyset page of the caller's own conversations, newest activity first.
@@ -166,6 +167,12 @@ public static class MessagingConflictCodes
     public const string StaleMessageVersion = "messaging_stale_message_version";
 
     public const string MessageAlreadyRemoved = "messaging_message_already_removed";
+
+    /// <summary>
+    /// The client now has a different coach. The client keeps reading this thread, and nobody can
+    /// write to it again unless the client is assigned back to that coach (ADR 0026).
+    /// </summary>
+    public const string ConversationReadOnly = "messaging_conversation_read_only";
 }
 
 public sealed record ConversationCommandResult(

@@ -42,6 +42,17 @@ public interface IClientProfileApplicationService
         Guid clientId,
         ChangeClientRelationshipRequest request,
         CancellationToken cancellationToken);
+
+    /// <summary>The owner moves a client to another active Owner or Coach of the workspace.</summary>
+    Task<ClientCommandResult> ReassignCoachAsync(
+        Guid clientId,
+        ReassignClientCoachRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>The client's coach history, oldest first, or null for an unknown client.</summary>
+    Task<IReadOnlyList<ClientCoachAssignmentView>?> ListCoachAssignmentsAsync(
+        Guid clientId,
+        CancellationToken cancellationToken);
 }
 
 public sealed record ClientSummary(
@@ -52,7 +63,9 @@ public sealed record ClientSummary(
     string? PhoneNumber,
     ClientOnboardingStatus OnboardingStatus,
     bool IsCoachBlocked,
-    uint Version);
+    uint Version,
+    Guid AssignedCoachUserId,
+    string AssignedCoachName);
 
 public sealed record CoachClientDetails(
     Guid Id,
@@ -78,7 +91,9 @@ public sealed record CoachClientDetails(
     ClientOnboardingStatus OnboardingStatus,
     DateTimeOffset? OnboardingCompletedAtUtc,
     bool IsCoachBlocked,
-    uint Version);
+    uint Version,
+    Guid AssignedCoachUserId,
+    string AssignedCoachName);
 
 public sealed record ClientSelfProfile(
     Guid Id,
@@ -149,6 +164,24 @@ public sealed record CompleteClientOnboardingRequest(
 public sealed record UpdateCoachNotesRequest(string? Notes, uint Version);
 
 public sealed record ChangeClientRelationshipRequest(string Reason, uint Version);
+
+/// <summary>
+/// The coach to move the client to, an optional note kept in the history, and the client version the
+/// owner saw, so a stale screen conflicts instead of overwriting a newer assignment.
+/// </summary>
+public sealed record ReassignClientCoachRequest(Guid CoachUserId, string? Note, uint Version);
+
+public sealed record ClientCoachAssignmentView(
+    Guid Id,
+    int Sequence,
+    Guid CoachUserId,
+    string CoachName,
+    Guid? PreviousCoachUserId,
+    string? PreviousCoachName,
+    ClientCoachAssignmentReason Reason,
+    string? Note,
+    DateTimeOffset AssignedAtUtc,
+    Guid? AssignedByUserId);
 
 public sealed record ClientCommandResult(
     ClientCommandStatus Status,

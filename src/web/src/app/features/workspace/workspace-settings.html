@@ -6,6 +6,13 @@
   </div>
 </section>
 
+<app-section-nav
+  class="settings-sections tb-theme"
+  label="Settings sections"
+  i18n-label
+  [links]="sections"
+/>
+
 @if (error()) {
   <p class="form-error" role="alert">{{ error() }}</p>
 }

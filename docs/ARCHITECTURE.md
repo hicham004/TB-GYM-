@@ -243,6 +243,14 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   unavailable, with its reason and no content. Omitting it would be indistinguishable from
   emptiness, and populating it would leak exactly what the entitlement gates.
 
+Within a workspace a Coach acts only on the clients assigned to them; the Owner acts on all (ADR
+0026). `CoachClientScope` in Infrastructure is the one place that decides it. The tenant
+authorization handler applies it to every route parameter named `clientProfileId` or `clientId`,
+and a route that reaches a client through another row (mesocycle, enrollment, workout note,
+conversation, progress photo) asks it after loading that row. Another coach's client answers 404,
+the same as a missing one. An integration test fails if a client-named route parameter uses
+another name.
+
 Legal document versions are global identity records, while a workspace consent acceptance is
 contextual. Listing current documents accepts an optional workspace context, verifies active
 membership, and never treats acceptance in Workspace A as acceptance in Workspace B.

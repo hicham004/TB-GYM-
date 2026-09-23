@@ -7,14 +7,17 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import { DayOfWeek, WorkspaceDetails } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { SectionNav } from '../../ui/section-nav';
+import { SETTINGS_SECTIONS } from './settings-sections';
 
 @Component({
   selector: 'app-workspace-settings',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, SectionNav],
   templateUrl: './workspace-settings.html',
   styleUrl: './workspace-settings.scss',
 })
 export class WorkspaceSettings {
+  protected readonly sections = SETTINGS_SECTIONS;
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);

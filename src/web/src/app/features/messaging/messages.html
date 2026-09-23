@@ -241,7 +241,7 @@
                   }
                 </p>
 
-                @if (!message.isDeleted && editingId() !== message.id) {
+                @if (!message.isDeleted && editingId() !== message.id && !selected()?.isReadOnly) {
                   <div class="actions">
                     @if (message.canEdit) {
                       <button
@@ -339,51 +339,60 @@
           }
         </ol>
 
-        @let composerReasons = composerIssues();
-        @let showsComposer = composerAttempt.shows('draft', composerReasons);
-        <form class="composer" (ngSubmit)="send()">
-          <label>
-            <span i18n>Write a message</span>
-            <textarea
-              rows="3"
-              id="draft"
-              name="draft"
-              [maxlength]="maximumLength"
-              [ngModel]="draft()"
-              (ngModelChange)="draft.set($event)"
-              (blur)="composerAttempt.touch('draft')"
-              [attr.aria-invalid]="showsComposer ? 'true' : null"
-              [attr.aria-describedby]="showsComposer ? 'draft-reason' : null"
-            ></textarea>
-          </label>
-          @if (showsComposer) {
-            <p class="reason" id="draft-reason">{{ composerReasons[0] }}</p>
-          }
-          <p class="detail" role="status" i18n>
-            {{ remaining() }} of {{ maximumLength }} characters left. Plain text only.
+        @if (selected()?.isReadOnly) {
+          <!-- The client moved to another coach. The thread stays readable here and nowhere
+               accepts a new message; the API refuses one too (ADR 0026). -->
+          <p class="read-only-notice" i18n>
+            This conversation is read-only because you now have a different coach. You can still
+            read it.
           </p>
-          <p
-            class="error summary"
-            id="composer-summary"
-            role="alert"
-            tabindex="-1"
-            #composerSummary
-          >
-            @if (composerAttempt.wasTried() && composerReasons.length > 0) {
-              <ng-container i18n>This message cannot be sent yet:</ng-container>
-              <span>{{ composerReasons[0] }}</span>
+        } @else {
+          @let composerReasons = composerIssues();
+          @let showsComposer = composerAttempt.shows('draft', composerReasons);
+          <form class="composer" (ngSubmit)="send()">
+            <label>
+              <span i18n>Write a message</span>
+              <textarea
+                rows="3"
+                id="draft"
+                name="draft"
+                [maxlength]="maximumLength"
+                [ngModel]="draft()"
+                (ngModelChange)="draft.set($event)"
+                (blur)="composerAttempt.touch('draft')"
+                [attr.aria-invalid]="showsComposer ? 'true' : null"
+                [attr.aria-describedby]="showsComposer ? 'draft-reason' : null"
+              ></textarea>
+            </label>
+            @if (showsComposer) {
+              <p class="reason" id="draft-reason">{{ composerReasons[0] }}</p>
             }
-          </p>
-          <button
-            type="submit"
-            class="primary-button"
-            aria-describedby="composer-summary"
-            [disabled]="busy()"
-            i18n
-          >
-            Send message
-          </button>
-        </form>
+            <p class="detail" role="status" i18n>
+              {{ remaining() }} of {{ maximumLength }} characters left. Plain text only.
+            </p>
+            <p
+              class="error summary"
+              id="composer-summary"
+              role="alert"
+              tabindex="-1"
+              #composerSummary
+            >
+              @if (composerAttempt.wasTried() && composerReasons.length > 0) {
+                <ng-container i18n>This message cannot be sent yet:</ng-container>
+                <span>{{ composerReasons[0] }}</span>
+              }
+            </p>
+            <button
+              type="submit"
+              class="primary-button"
+              aria-describedby="composer-summary"
+              [disabled]="busy()"
+              i18n
+            >
+              Send message
+            </button>
+          </form>
+        }
       }
     </div>
   </div>

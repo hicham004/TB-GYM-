@@ -1,0 +1,45 @@
+:host {
+  display: block;
+}
+
+.coach-line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+  margin-block-end: var(--space-16);
+}
+
+.coach-line p {
+  margin: 0;
+}
+
+.coach-label {
+  color: var(--color-text-secondary);
+  margin-inline-end: var(--space-8);
+}
+
+.coach-name {
+  font-weight: var(--font-weight-strong);
+  overflow-wrap: anywhere;
+}
+
+.coach-notice:empty,
+.reassign-error:empty {
+  display: none;
+}
+
+.coach-notice {
+  color: var(--color-success);
+  flex-basis: 100%;
+}
+
+.reassign-form {
+  display: grid;
+  gap: var(--space-16);
+}
+
+.reassign-error {
+  color: var(--color-danger);
+  margin: 0;
+}

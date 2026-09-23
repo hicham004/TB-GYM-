@@ -60,6 +60,8 @@ export interface Conversation {
   readonly isAvailable: boolean;
   readonly accessReason: FeatureAccessReason;
   readonly lastMessage: MessagePreview | null;
+  /** The client's thread with a coach they no longer have: readable, never writable (ADR 0026). */
+  readonly isReadOnly: boolean;
 }
 
 export interface ConversationPage {
@@ -190,6 +192,7 @@ export function mapConversation(value: ContractConversationSummary): Conversatio
     isAvailable: value.isAvailable,
     accessReason: value.accessReason,
     lastMessage: value.lastMessage ? mapPreview(value.lastMessage) : null,
+    isReadOnly: value.isReadOnly ?? false,
   };
 }
 

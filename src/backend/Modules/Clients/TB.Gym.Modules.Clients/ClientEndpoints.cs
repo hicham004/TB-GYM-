@@ -116,6 +116,38 @@ public static class ClientEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // Only the owner moves clients between coaches; a coach cannot give a client away or take one.
+        coachGroup.MapPost("/{clientId:guid}/coach", async (
+            Guid clientId,
+            ReassignClientCoachRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.ReassignCoachAsync(clientId, request, cancellationToken));
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("ReassignClientCoach")
+        .Produces<CoachClientDetails>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        coachGroup.MapGet("/{clientId:guid}/coach-assignments", async (
+            Guid clientId,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var history = await service.ListCoachAssignmentsAsync(clientId, cancellationToken);
+            return history is null ? Results.NotFound() : Results.Ok(history);
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .WithName("ListClientCoachAssignments")
+        .Produces<ClientCoachAssignmentView[]>()
+        .Produces(StatusCodes.Status404NotFound);
+
         var selfGroup = endpoints
             .MapGroup("/api/client-profile")
             .RequireAuthorization(AuthorizationPolicies.TenantClient)

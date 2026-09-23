@@ -11,15 +11,24 @@ internal sealed class ClientProfileApplicationService(
     GymDbContext dbContext,
     IClock clock,
     ICurrentUser currentUser,
-    ITenantContext tenantContext)
+    ITenantContext tenantContext,
+    CoachClientScope coachClientScope)
     : IClientProfileApplicationService
 {
-    public async Task<IReadOnlyList<ClientSummary>> ListAsync(CancellationToken cancellationToken) =>
-        await dbContext.ClientProfiles
-            .AsNoTracking()
-            .OrderBy(client => client.FirstName)
-            .ThenBy(client => client.LastName)
-            .Select(client => new ClientSummary(
+    /// <summary>The Owner lists every client; a Coach lists only the clients assigned to them.</summary>
+    public async Task<IReadOnlyList<ClientSummary>> ListAsync(CancellationToken cancellationToken)
+    {
+        var query = dbContext.ClientProfiles.AsNoTracking();
+        if (await coachClientScope.RestrictedCoachUserIdAsync(cancellationToken) is { } coachUserId)
+        {
+            query = query.Where(client => client.AssignedCoachUserId == coachUserId);
+        }
+
+        return await (
+            from client in query
+            join coach in dbContext.Users.AsNoTracking() on client.AssignedCoachUserId equals coach.Id
+            orderby client.FirstName, client.LastName
+            select new ClientSummary(
                 client.Id,
                 client.FirstName,
                 client.LastName,
@@ -27,8 +36,11 @@ internal sealed class ClientProfileApplicationService(
                 client.PhoneNumber,
                 client.OnboardingStatus,
                 client.IsCoachBlocked,
-                client.Version))
+                client.Version,
+                client.AssignedCoachUserId,
+                coach.DisplayName))
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<CoachClientDetails?> GetForCoachAsync(
         Guid clientId,
@@ -37,7 +49,120 @@ internal sealed class ClientProfileApplicationService(
         var client = await dbContext.ClientProfiles
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == clientId, cancellationToken);
-        return client is null ? null : ToCoachDetails(client);
+        return client is null ? null : await ToCoachDetailsAsync(client, cancellationToken);
+    }
+
+    public async Task<ClientCommandResult> ReassignCoachAsync(
+        Guid clientId,
+        ReassignClientCoachRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.CoachUserId == Guid.Empty)
+        {
+            return Invalid("coachUserId", "Choose a coach.");
+        }
+
+        try
+        {
+            return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                dbContext.ChangeTracker.Clear();
+                await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+                var profile = await dbContext.ClientProfiles.SingleOrDefaultAsync(
+                    client => client.Id == clientId,
+                    cancellationToken);
+                if (profile is null)
+                {
+                    return new ClientCommandResult(ClientCommandStatus.NotFound);
+                }
+
+                // Shares the target coach's membership row with other assignments and conflicts with
+                // a concurrent removal of that coach, which locks it for update. Whichever commits
+                // second sees the other: a removal waits and then moves this client too, or this
+                // request waits and then finds the coach no longer active.
+                if (!await CoachTeam.LockActiveStaffAsync(dbContext, tenantContext.TenantId, request.CoachUserId, cancellationToken))
+                {
+                    return Invalid("coachUserId", "Choose an active coach of this workspace.");
+                }
+
+                dbContext.Entry(profile).Property(client => client.Version).OriginalValue = request.Version;
+                var previousCoachUserId = profile.AssignedCoachUserId;
+                if (profile.AssignCoach(request.CoachUserId))
+                {
+                    var sequence = await CoachTeam.NextAssignmentSequenceAsync(dbContext, profile.Id, cancellationToken);
+                    dbContext.ClientCoachAssignments.Add(ClientCoachAssignment.ForChange(
+                        profile.TenantId,
+                        profile.Id,
+                        sequence,
+                        previousCoachUserId,
+                        request.CoachUserId,
+                        ClientCoachAssignmentReason.Reassigned,
+                        request.Note,
+                        clock.UtcNow));
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
+                else if (profile.Version != request.Version)
+                {
+                    // Already with that coach, but the caller's view is stale: say so rather than
+                    // reporting success for a screen that did not see the latest state.
+                    return new ClientCommandResult(ClientCommandStatus.Conflict);
+                }
+
+                await transaction.CommitAsync(cancellationToken);
+                return new ClientCommandResult(
+                    ClientCommandStatus.Success,
+                    CoachDetails: await ToCoachDetailsAsync(profile, cancellationToken));
+            });
+        }
+        catch (ArgumentException exception)
+        {
+            dbContext.ChangeTracker.Clear();
+            return Invalid("coachUserId", exception.Message);
+        }
+        catch (DbUpdateException)
+        {
+            // A stale version, or a concurrent reassignment that took the same history number.
+            dbContext.ChangeTracker.Clear();
+            return new ClientCommandResult(ClientCommandStatus.Conflict);
+        }
+    }
+
+    public async Task<IReadOnlyList<ClientCoachAssignmentView>?> ListCoachAssignmentsAsync(
+        Guid clientId,
+        CancellationToken cancellationToken)
+    {
+        if (!await dbContext.ClientProfiles.AsNoTracking().AnyAsync(client => client.Id == clientId, cancellationToken))
+        {
+            return null;
+        }
+
+        var history = await dbContext.ClientCoachAssignments
+            .AsNoTracking()
+            .Where(item => item.ClientProfileId == clientId)
+            .OrderBy(item => item.Sequence)
+            .ToListAsync(cancellationToken);
+        var userIds = history
+            .SelectMany(item => new[] { item.CoachUserId, item.PreviousCoachUserId ?? Guid.Empty })
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        var names = await dbContext.Users
+            .AsNoTracking()
+            .Where(user => userIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, user => user.DisplayName, cancellationToken);
+        return history
+            .Select(item => new ClientCoachAssignmentView(
+                item.Id,
+                item.Sequence,
+                item.CoachUserId,
+                names.GetValueOrDefault(item.CoachUserId, string.Empty),
+                item.PreviousCoachUserId,
+                item.PreviousCoachUserId is { } previous ? names.GetValueOrDefault(previous, string.Empty) : null,
+                item.Reason,
+                item.Note,
+                item.AssignedAtUtc,
+                item.CreatedByUserId))
+            .ToArray();
     }
 
     public async Task<ClientSelfProfile?> GetSelfAsync(CancellationToken cancellationToken)
@@ -128,7 +253,7 @@ internal sealed class ClientProfileApplicationService(
 
             return new ClientCommandResult(
                 ClientCommandStatus.Success,
-                CoachDetails: ToCoachDetails(profile));
+                CoachDetails: await ToCoachDetailsAsync(profile, cancellationToken));
         }
         catch (ArgumentException exception)
         {
@@ -183,7 +308,7 @@ internal sealed class ClientProfileApplicationService(
 
             return new ClientCommandResult(
                 ClientCommandStatus.Success,
-                CoachDetails: ToCoachDetails(profile));
+                CoachDetails: await ToCoachDetailsAsync(profile, cancellationToken));
         }
         catch (ArgumentException exception)
         {
@@ -225,7 +350,7 @@ internal sealed class ClientProfileApplicationService(
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
 
-            return Success(profile, returnSelf);
+            return await SuccessAsync(profile, returnSelf, cancellationToken);
         }
         catch (ArgumentException exception)
         {
@@ -270,7 +395,7 @@ internal sealed class ClientProfileApplicationService(
                     : RecordedMassUnit.Pound);
             return existingObservation.MeasurementDate == request.MeasurementDate &&
                    decimal.Abs(existingObservation.ValueKilograms - requestedKilograms) < 0.001m
-                ? Success(profile, returnSelf)
+                ? await SuccessAsync(profile, returnSelf, cancellationToken)
                 : new ClientCommandResult(ClientCommandStatus.Conflict);
         }
 
@@ -319,7 +444,7 @@ internal sealed class ClientProfileApplicationService(
                 ClientChangeSource.OnboardingCompletion,
                 changedFields.Append("InitialBodyweight")));
             await dbContext.SaveChangesAsync(cancellationToken);
-            return Success(profile, returnSelf);
+            return await SuccessAsync(profile, returnSelf, cancellationToken);
         }
         catch (ArgumentException exception)
         {
@@ -363,17 +488,34 @@ internal sealed class ClientProfileApplicationService(
         return DateOnly.FromDateTime(localNow.DateTime);
     }
 
-    private static ClientCommandResult Success(ClientProfile profile, bool returnSelf) =>
+    private async Task<ClientCommandResult> SuccessAsync(
+        ClientProfile profile,
+        bool returnSelf,
+        CancellationToken cancellationToken) =>
         returnSelf
             ? new ClientCommandResult(ClientCommandStatus.Success, SelfProfile: ToSelfProfile(profile))
-            : new ClientCommandResult(ClientCommandStatus.Success, CoachDetails: ToCoachDetails(profile));
+            : new ClientCommandResult(
+                ClientCommandStatus.Success,
+                CoachDetails: await ToCoachDetailsAsync(profile, cancellationToken));
+
+    private async Task<CoachClientDetails> ToCoachDetailsAsync(
+        ClientProfile client,
+        CancellationToken cancellationToken)
+    {
+        var coachName = await dbContext.Users
+            .AsNoTracking()
+            .Where(user => user.Id == client.AssignedCoachUserId)
+            .Select(user => user.DisplayName)
+            .SingleOrDefaultAsync(cancellationToken);
+        return ToCoachDetails(client, coachName ?? string.Empty);
+    }
 
     private static ClientCommandResult Invalid(string field, string message) =>
         new(
             ClientCommandStatus.Invalid,
             Errors: new Dictionary<string, string[]> { [field] = [message] });
 
-    private static CoachClientDetails ToCoachDetails(ClientProfile client) =>
+    private static CoachClientDetails ToCoachDetails(ClientProfile client, string coachName) =>
         new(
             client.Id,
             client.UserId,
@@ -398,7 +540,9 @@ internal sealed class ClientProfileApplicationService(
             client.OnboardingStatus,
             client.OnboardingCompletedAtUtc,
             client.IsCoachBlocked,
-            client.Version);
+            client.Version,
+            client.AssignedCoachUserId,
+            coachName);
 
     private static ClientSelfProfile ToSelfProfile(ClientProfile client) =>
         new(

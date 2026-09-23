@@ -39,6 +39,8 @@ export class AcceptInvitation implements OnInit {
   protected readonly returnUrl = computed(
     () => `/invite?token=${encodeURIComponent(this.token())}`,
   );
+  /** A coach invitation adds the person to the team rather than making them a client (ADR 0026). */
+  protected readonly isCoachInvitation = computed(() => this.invitation()?.kind === 'Coach');
   protected readonly signedInWithInvitedEmail = computed(() => {
     const userEmail = this.signedInUser()?.email;
     const invitedEmail = this.invitation()?.email;
@@ -142,7 +144,8 @@ export class AcceptInvitation implements OnInit {
       await this.scrubber.scrub(this.route);
       await this.auth.initialize(true);
       await this.tenants.load(result.tenantId);
-      await this.router.navigateByUrl('/profile');
+      // A new coach starts on the coach dashboard; a new client completes their profile.
+      await this.router.navigateByUrl(result.kind === 'Coach' ? '/' : '/profile');
     } catch (error) {
       const code = error instanceof HttpErrorResponse ? error.error?.code : null;
       if (code === 'existing_account_sign_in_required') {

@@ -133,6 +133,7 @@ public sealed class Phase1DomainRulesTests
         ClientProfile.CreateForAcceptedInvitation(
             TenantId,
             UserId,
+            Guid.Parse("20000000-0000-0000-0000-000000000002"),
             "Mira",
             "Haddad",
             "mira@example.com",

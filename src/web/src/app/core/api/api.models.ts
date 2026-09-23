@@ -14,6 +14,7 @@ import type {
   DayOfWeek as ContractDayOfWeek,
   EmailActionResponse as ContractEmailActionResponse,
   InvitationAcceptanceResponse,
+  InvitationKind as ContractInvitationKind,
   InvitationStatus as ContractInvitationStatus,
   LengthUnit as ContractLengthUnit,
   LoginRequest as ContractLoginRequest,
@@ -99,7 +100,11 @@ export interface ClientInvitation {
   /** The optimistic-concurrency token a resend or revoke must present. */
   version: number;
   developmentActionUrl: string | null;
+  /** Whether accepting makes the person a client or a coach of the workspace. */
+  kind: InvitationKind;
 }
+
+export type InvitationKind = ContractInvitationKind;
 
 export interface ClientSummary {
   id: string;
@@ -110,6 +115,32 @@ export interface ClientSummary {
   onboardingStatus: ClientOnboardingStatus;
   isCoachBlocked: boolean;
   version: number;
+  /** The one Owner or Coach who coaches this client (ADR 0026). */
+  assignedCoachUserId: string;
+  assignedCoachName: string;
+}
+
+/** An active Owner or Coach of the workspace, as the owner's team page lists them. */
+export interface TeamMember {
+  userId: string;
+  displayName: string;
+  email: string;
+  role: TenantRole;
+  assignedClientCount: number;
+  joinedAtUtc: string;
+  /** The membership version a removal must present. */
+  version: number;
+}
+
+export interface CoachRemoval {
+  reassignedClientCount: number;
+  reassignedInvitationCount: number;
+}
+
+export interface CreateCoachInvitationRequest {
+  email: string;
+  firstName: string;
+  lastName: string;
 }
 
 export interface ClientIntakeProfile {
@@ -140,6 +171,8 @@ export interface CoachClientDetails extends ClientIntakeProfile {
   userId: string | null;
   coachNotes: string | null;
   isCoachBlocked: boolean;
+  assignedCoachUserId: string;
+  assignedCoachName: string;
 }
 
 export type ClientSelfProfile = ClientIntakeProfile;

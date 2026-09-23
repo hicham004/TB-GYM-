@@ -41,6 +41,10 @@
 @if (loading()) {
   <p class="loading-row" i18n>Loading client profile...</p>
 } @else if (profile(); as client) {
+  @if (isOwner()) {
+    <app-client-coach [client]="client" (profileChanged)="coachChanged($event)" />
+  }
+
   <app-client-training [clientId]="client.id" />
 
   <app-progress-dashboard [clientId]="client.id" />

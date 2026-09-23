@@ -47,7 +47,8 @@ internal sealed class MessagingApplicationService(
     IClock clock,
     ICurrentUser currentUser,
     ITenantContext tenantContext,
-    ICoachingFeatureAccessService featureAccessService)
+    ICoachingFeatureAccessService featureAccessService,
+    CoachClientScope coachClientScope)
     : IMessagingApplicationService
 {
     /// <summary>
@@ -129,6 +130,12 @@ internal sealed class MessagingApplicationService(
             .Select(profile => new { profile.Id, profile.UserId })
             .SingleOrDefaultAsync(cancellationToken);
         if (client?.UserId is not { } clientUserId)
+        {
+            return ConversationCommandResult.NotFound();
+        }
+
+        // Another coach's client is refused exactly as a missing one is. The owner may message anyone.
+        if (!await coachClientScope.MayCoachAsync(coachUserId, request.ClientProfileId, cancellationToken))
         {
             return ConversationCommandResult.NotFound();
         }
@@ -307,6 +314,11 @@ internal sealed class MessagingApplicationService(
                 : MessageCommandResult.NotFound();
         }
 
+        if (access.IsReadOnly)
+        {
+            return ReadOnlyConversation();
+        }
+
         if (!MessageContentPolicy.TryNormalize(request.Body, out var body, out var failure))
         {
             return MessageCommandResult.Invalid("body", BodyFailureMessage(failure));
@@ -387,6 +399,11 @@ internal sealed class MessagingApplicationService(
             return access.Status == MessagingCommandStatus.Forbidden
                 ? MessageCommandResult.Forbidden(access.Reason!.Value)
                 : MessageCommandResult.NotFound();
+        }
+
+        if (access.IsReadOnly)
+        {
+            return ReadOnlyConversation();
         }
 
         if (!MessageContentPolicy.TryNormalize(request.Body, out var body, out var failure))
@@ -583,6 +600,8 @@ internal sealed class MessagingApplicationService(
             {
                 conversation.Id,
                 conversation.ClientProfileId,
+                conversation.CoachUserId,
+                participant.Role,
                 participant.LastReadSequence,
             })
             .ToListAsync(cancellationToken);
@@ -594,6 +613,13 @@ internal sealed class MessagingApplicationService(
         var available = new List<Guid>(memberships.Count);
         foreach (var membership in memberships)
         {
+            // A coach's badge never counts a thread they are no longer allowed to open.
+            if (membership.Role == ConversationParticipantRole.Coach &&
+                !await coachClientScope.MayCoachAsync(membership.CoachUserId, membership.ClientProfileId, cancellationToken))
+            {
+                continue;
+            }
+
             var decision = await EvaluateAsync(membership.ClientProfileId, cancellationToken);
             if (decision.IsAllowed)
             {
@@ -898,6 +924,11 @@ internal sealed class MessagingApplicationService(
             return access.Status == MessagingCommandStatus.Forbidden
                 ? MessageCommandResult.Forbidden(access.Reason!.Value)
                 : MessageCommandResult.NotFound();
+        }
+
+        if (access.IsReadOnly)
+        {
+            return ReadOnlyConversation();
         }
 
         var isModeration = commandType == MessagingCommandType.ModerateMessage;
@@ -1224,10 +1255,21 @@ internal sealed class MessagingApplicationService(
             return new ConversationAccess(MessagingCommandStatus.NotFound, null, null, null);
         }
 
+        // A thread belongs to the coach who has the client now. After a reassignment the old coach is
+        // refused like a stranger and the client keeps a read-only copy (ADR 0026).
+        var isCurrent = await coachClientScope.MayCoachAsync(
+            conversation.CoachUserId,
+            conversation.ClientProfileId,
+            cancellationToken);
+        if (!isCurrent && participant.Role == ConversationParticipantRole.Coach)
+        {
+            return new ConversationAccess(MessagingCommandStatus.NotFound, null, null, null);
+        }
+
         var decision = await EvaluateAsync(conversation.ClientProfileId, cancellationToken);
         return decision.IsAllowed
-            ? new ConversationAccess(MessagingCommandStatus.Success, conversation, participant, null)
-            : new ConversationAccess(MessagingCommandStatus.Forbidden, conversation, participant, decision.Reason);
+            ? new ConversationAccess(MessagingCommandStatus.Success, conversation, participant, null, !isCurrent)
+            : new ConversationAccess(MessagingCommandStatus.Forbidden, conversation, participant, decision.Reason, !isCurrent);
     }
 
     private async Task<FeatureAccessDecision> EvaluateAsync(
@@ -1301,6 +1343,10 @@ internal sealed class MessagingApplicationService(
             var participant = participants[conversation.Id];
             var decision = decisions[conversation.Id];
             var counterpartId = conversation.CounterpartOf(userId);
+            var isReadOnly = !await coachClientScope.MayCoachAsync(
+                conversation.CoachUserId,
+                conversation.ClientProfileId,
+                cancellationToken);
             summaries.Add(new ConversationSummary(
                 conversation.Id,
                 conversation.ClientProfileId,
@@ -1320,7 +1366,8 @@ internal sealed class MessagingApplicationService(
                 participant.LastReadAtUtc,
                 decision.IsAllowed,
                 decision.Reason,
-                decision.IsAllowed ? previews.GetValueOrDefault(conversation.Id) : null));
+                decision.IsAllowed ? previews.GetValueOrDefault(conversation.Id) : null,
+                isReadOnly));
         }
 
         return summaries;
@@ -1501,7 +1548,9 @@ internal sealed class MessagingApplicationService(
 
         // A row-value comparison, so PostgreSQL can walk the (LastActivityAtUtc, Id) index from the
         // cursor rather than filtering after sorting. Written as SQL because the tie-breaker compares
-        // two uuids, which LINQ has no operator for.
+        // two uuids, which LINQ has no operator for. On the coach side a thread is listed only while
+        // its coach still has the client (the owner always does), the same rule ResolveAsync applies,
+        // so a page is never short because rows were dropped after the query.
         if (beforeActivityAtUtc is { } activity && beforeConversationId is { } cursorId)
         {
             return await dbContext.Database.SqlQuery<Guid>($"""
@@ -1511,6 +1560,13 @@ internal sealed class MessagingApplicationService(
                     ON p."TenantId" = c."TenantId" AND p."ConversationId" = c."Id"
                 WHERE c."TenantId" = {tenantId}
                   AND p."UserId" = {userId}
+                  AND (p."Role" <> 'Coach'
+                       OR EXISTS (SELECT 1 FROM tenancy."Memberships" AS m
+                                  WHERE m."TenantId" = c."TenantId" AND m."UserId" = c."CoachUserId"
+                                    AND m."Role" = 'Owner' AND m."Status" = 'Active')
+                       OR EXISTS (SELECT 1 FROM clients."ClientProfiles" AS cp
+                                  WHERE cp."TenantId" = c."TenantId" AND cp."Id" = c."ClientProfileId"
+                                    AND cp."AssignedCoachUserId" = c."CoachUserId"))
                   AND (c."LastActivityAtUtc", c."Id") < ({activity}, {cursorId})
                 ORDER BY c."LastActivityAtUtc" DESC, c."Id" DESC
                 LIMIT {limit}
@@ -1524,6 +1580,13 @@ internal sealed class MessagingApplicationService(
                 ON p."TenantId" = c."TenantId" AND p."ConversationId" = c."Id"
             WHERE c."TenantId" = {tenantId}
               AND p."UserId" = {userId}
+              AND (p."Role" <> 'Coach'
+                   OR EXISTS (SELECT 1 FROM tenancy."Memberships" AS m
+                              WHERE m."TenantId" = c."TenantId" AND m."UserId" = c."CoachUserId"
+                                AND m."Role" = 'Owner' AND m."Status" = 'Active')
+                   OR EXISTS (SELECT 1 FROM clients."ClientProfiles" AS cp
+                              WHERE cp."TenantId" = c."TenantId" AND cp."Id" = c."ClientProfileId"
+                                AND cp."AssignedCoachUserId" = c."CoachUserId"))
             ORDER BY c."LastActivityAtUtc" DESC, c."Id" DESC
             LIMIT {limit}
             """).ToListAsync(cancellationToken);
@@ -1599,6 +1662,11 @@ internal sealed class MessagingApplicationService(
             MessagingConflictCodes.StaleMessageVersion,
             "This message changed since it was read. Reload the conversation and try again.");
 
+    private static MessageCommandResult ReadOnlyConversation() =>
+        MessageCommandResult.Conflict(
+            MessagingConflictCodes.ConversationReadOnly,
+            "This conversation is read-only because the client now has a different coach.");
+
     private static string BodyFailureMessage(MessageContentFailure failure) => failure switch
     {
         MessageContentFailure.TooLong =>
@@ -1640,11 +1708,15 @@ internal sealed class MessagingApplicationService(
         ^ BitConverter.ToInt64(idempotencyKey.ToByteArray(), 8)
         ^ IdempotencyLockNamespace;
 
+    /// <param name="IsReadOnly">
+    /// The client's side of a thread whose coach no longer has this client. Readable, never writable.
+    /// </param>
     private sealed record ConversationAccess(
         MessagingCommandStatus Status,
         Conversation? Conversation,
         ConversationParticipant? Participant,
-        FeatureAccessReason? Reason);
+        FeatureAccessReason? Reason,
+        bool IsReadOnly = false);
 
     /// <summary>What a command body decided: either a refusal that rolls back, or what it wrote.</summary>
     private sealed record CommandOutcome<TResult>(TResult? Refusal, Guid? TargetId);

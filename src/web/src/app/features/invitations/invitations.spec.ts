@@ -24,6 +24,7 @@ function invitation(overrides: Partial<ClientInvitation> = {}): ClientInvitation
     createdAtUtc: '2026-08-25T09:00:00Z',
     version: 7,
     developmentActionUrl: null,
+    kind: 'Client',
     ...overrides,
   };
 }

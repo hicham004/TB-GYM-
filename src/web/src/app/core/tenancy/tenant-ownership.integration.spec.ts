@@ -17,6 +17,7 @@ import { settle } from '../../../testing/dom';
 const client = (id: string): ClientSummary => ({
   id, firstName: id, lastName: 'Client', email: `${id}@example.test`, phoneNumber: null,
   onboardingStatus: 'Completed', isCoachBlocked: false, version: 1,
+  assignedCoachUserId: 'owner-1', assignedCoachName: 'Olivia Owner',
 });
 const invitation = (id: string) => ({id, status: 'Pending'} as ClientInvitation);
 

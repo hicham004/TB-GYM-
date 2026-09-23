@@ -84,6 +84,21 @@ context where applicable. TB Gym must not seed invented legal wording or allow a
 draft to become an accepted production document. Current-document resolution verifies the
 requested workspace membership; acceptance in one workspace never satisfies another.
 
+**CLI-011** The owner invites coaches by email; accepting creates an active Coach membership (or
+reactivates a removed coach's). Only the owner manages coach invitations and removes coaches, and a
+workspace has exactly one active owner. See `docs/adr/0026-coach-team-and-client-assignment.md`.
+
+**CLI-012** Every client has exactly one coach, an active Owner or Coach of the workspace: whoever
+sent their invitation, or the owner when that coach has left. Every change appends to an
+append-only coach history. Only the owner reassigns a client.
+
+**CLI-013** A Coach sees and acts only on their own clients in every module; the Owner sees every
+client. Another coach's client answers as a missing one. Chats stay private to their participants:
+after a reassignment the old coach loses the thread and the client keeps it read-only.
+
+**CLI-014** Removing a coach moves all their clients and pending client invitations to the owner in
+one transaction and deletes nothing. Releasing a client from the workspace is not built yet.
+
 ## 3. Products, enrollments, payments, programs, and access
 
 **SUB-001** Product/catalog identity, offer/price, client enrollment, payment operation,
@@ -1251,6 +1266,9 @@ At minimum, later migrations should enforce:
 | One completion per assigned day                                                                                      | Unique `(TenantId, AssignmentDayId, ClientId)`                                                        |
 | Valid macro inputs                                                                                                   | Non-negative checks; aggregate validation in domain transaction                                       |
 | Tenant-safe child relationship                                                                                       | Composite FK including `TenantId` where practical                                                     |
+| One active owner per workspace                                                                                       | Partial unique `(TenantId)` where `Role = 'Owner' AND Status = 'Active'`                              |
+| A client's coach is active staff, and a coach change is recorded in the history                                      | Composite FK to memberships plus deferred constraint triggers on the client and the membership       |
+| Append-only, gap-free client coach history                                                                           | Unique `(TenantId, ClientProfileId, Sequence)`, chain check and trigger, append-only trigger          |
 | Concurrency                                                                                                          | PostgreSQL `xmin` token plus conflict handling                                                        |
 | Immutable published check-in version and its questions/options                                                       | PostgreSQL trigger refusing update and delete                                                         |
 | Contiguous check-in question/option order and per-version key uniqueness                                             | Deferred constraint triggers checked at commit                                                        |

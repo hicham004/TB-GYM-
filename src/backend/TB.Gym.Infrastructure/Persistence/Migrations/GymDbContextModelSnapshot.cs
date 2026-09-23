@@ -824,6 +824,76 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("CheckInResponseEvents", "checkins");
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Clients.ClientCoachAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AssignedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ClientProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CoachUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("PreviousCoachUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CoachUserId");
+
+                    b.HasIndex("TenantId", "PreviousCoachUserId");
+
+                    b.HasIndex("TenantId", "ClientProfileId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("ClientCoachAssignments", "clients", t =>
+                        {
+                            t.HasCheckConstraint("CK_ClientCoachAssignments_Chain", "(\"Sequence\" = 1 AND \"PreviousCoachUserId\" IS NULL AND \"Reason\" IN ('Invitation', 'Migration')) OR (\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS NOT NULL AND \"PreviousCoachUserId\" <> \"CoachUserId\" AND \"Reason\" IN ('Reassigned', 'CoachRemoved'))");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Clients.ClientProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -833,6 +903,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<string>("Allergies")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
+
+                    b.Property<Guid>("AssignedCoachUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("AverageDailySteps")
                         .HasColumnType("integer");
@@ -952,6 +1025,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "AssignedCoachUserId");
 
                     b.HasIndex("TenantId", "NormalizedEmail")
                         .IsUnique();
@@ -1861,6 +1936,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("AcceptedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AssignedCoachUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateOnly?>("BirthDate")
                         .HasColumnType("date");
 
@@ -1884,6 +1962,13 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Client");
 
                     b.Property<string>("LastName")
                         .IsRequired()
@@ -1934,6 +2019,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcceptedByUserId");
 
+                    b.HasIndex("TenantId", "AssignedCoachUserId");
+
                     b.HasIndex("TenantId", "NormalizedEmail")
                         .IsUnique()
                         .HasFilter("\"Status\" = 'Pending'");
@@ -1941,6 +2028,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("ClientInvitations", "invitations", t =>
                         {
                             t.HasCheckConstraint("CK_ClientInvitations_AcceptedState", "\"Status\" <> 'Accepted' OR (\"AcceptedByUserId\" IS NOT NULL AND \"AcceptedAtUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ClientInvitations_Kind", "\"Kind\" = 'Client' OR (\"Kind\" = 'Coach' AND \"AssignedCoachUserId\" IS NULL AND \"PhoneNumber\" IS NULL AND \"BirthDate\" IS NULL)");
 
                             t.HasCheckConstraint("CK_ClientInvitations_LogicalSendGeneration", "\"LogicalSendGeneration\" >= 1 AND \"LogicalSendGeneration\" <= \"SendCount\"");
 
@@ -7932,6 +8021,10 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId", "Status");
 
+                    b.HasIndex(new[] { "TenantId" }, "IX_Memberships_TenantId_ActiveOwner")
+                        .IsUnique()
+                        .HasFilter("\"Role\" = 'Owner' AND \"Status\" = 'Active'");
+
                     b.ToTable("Memberships", "tenancy");
                 });
 
@@ -9799,6 +9892,29 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Clients.ClientCoachAssignment", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CoachUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PreviousCoachUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Clients.ClientProfile", b =>
                 {
                     b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
@@ -9811,6 +9927,13 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "AssignedCoachUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Clients.ClientProfileChange", b =>
@@ -9942,6 +10065,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "AssignedCoachUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Invitations.InvitationActionMailAttempt", b =>

@@ -20,6 +20,8 @@ function client(overrides: Partial<ClientSummary> = {}): ClientSummary {
     onboardingStatus: 'Completed',
     isCoachBlocked: false,
     version: 1,
+    assignedCoachUserId: 'owner-1',
+    assignedCoachName: 'Olivia Owner',
     ...overrides,
   };
 }

@@ -2,20 +2,31 @@ using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Modules.Invitations;
 
+/// <remarks>
+/// Every list, resend and revoke names the <see cref="InvitationKind"/> its route serves, so the
+/// client-invitation routes a Coach can reach never touch a coach invitation, which only the owner's
+/// team routes can. A Coach sees and manages only the client invitations assigned to them.
+/// </remarks>
 public interface IInvitationApplicationService
 {
-    Task<IReadOnlyList<InvitationSummary>> ListAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<InvitationSummary>> ListAsync(InvitationKind kind, CancellationToken cancellationToken);
 
     Task<InvitationCommandResult> CreateAsync(
         CreateClientInvitationRequest request,
         CancellationToken cancellationToken);
 
+    Task<InvitationCommandResult> CreateCoachAsync(
+        CreateCoachInvitationRequest request,
+        CancellationToken cancellationToken);
+
     Task<InvitationCommandResult> ResendAsync(
+        InvitationKind kind,
         Guid invitationId,
         ResendClientInvitationRequest request,
         CancellationToken cancellationToken);
 
     Task<InvitationCommandResult> RevokeAsync(
+        InvitationKind kind,
         Guid invitationId,
         RevokeClientInvitationRequest request,
         CancellationToken cancellationToken);
@@ -63,10 +74,14 @@ public sealed record InvitationMailAuthorization(
     bool IsAuthorized,
     string? SuppressionCode = null,
     string? RecipientAddress = null,
-    DateTimeOffset? ExpiresAtUtc = null)
+    DateTimeOffset? ExpiresAtUtc = null,
+    InvitationKind Kind = InvitationKind.Client)
 {
-    public static InvitationMailAuthorization Allowed(string recipientAddress, DateTimeOffset expiresAtUtc) =>
-        new(true, null, recipientAddress, expiresAtUtc);
+    public static InvitationMailAuthorization Allowed(
+        string recipientAddress,
+        DateTimeOffset expiresAtUtc,
+        InvitationKind kind = InvitationKind.Client) =>
+        new(true, null, recipientAddress, expiresAtUtc, kind);
 
     public static InvitationMailAuthorization Refused(string suppressionCode) =>
         new(false, suppressionCode);
@@ -125,6 +140,13 @@ public sealed record CreateClientInvitationRequest(
     DateOnly? BirthDate,
     Guid? IdempotencyKey = null);
 
+/// <summary>The owner invites a coach. The names only label the invitation on the team page.</summary>
+public sealed record CreateCoachInvitationRequest(
+    string Email,
+    string FirstName,
+    string LastName,
+    Guid? IdempotencyKey = null);
+
 /// <summary>
 /// A deliberate resend.
 /// </summary>
@@ -155,7 +177,8 @@ public sealed record InvitationSummary(
     int LogicalSendGeneration,
     DateTimeOffset CreatedAtUtc,
     uint Version,
-    string? DevelopmentActionUrl = null);
+    string? DevelopmentActionUrl = null,
+    InvitationKind Kind = InvitationKind.Client);
 
 public sealed record PublicInvitationDetails(
     string WorkspaceName,
@@ -164,7 +187,8 @@ public sealed record PublicInvitationDetails(
     string LastName,
     InvitationStatus Status,
     DateTimeOffset ExpiresAtUtc,
-    bool RequiresExistingAccountSignIn);
+    bool RequiresExistingAccountSignIn,
+    InvitationKind Kind = InvitationKind.Client);
 
 public sealed record InvitationCommandResult(
     InvitationCommandStatus Status,
@@ -184,12 +208,18 @@ public sealed record InvitationAcceptanceResult(
     Guid? TenantId = null,
     Guid? ClientProfileId = null,
     bool SignedIn = false,
-    IReadOnlyDictionary<string, string[]>? Errors = null);
+    IReadOnlyDictionary<string, string[]>? Errors = null,
+    InvitationKind Kind = InvitationKind.Client);
 
+/// <summary>
+/// <see cref="ClientProfileId"/> is present for an accepted client invitation and absent for a coach
+/// invitation, which creates a membership and no client profile.
+/// </summary>
 public sealed record InvitationAcceptanceResponse(
     Guid TenantId,
-    Guid ClientProfileId,
-    bool SignedIn);
+    Guid? ClientProfileId,
+    bool SignedIn,
+    InvitationKind Kind);
 
 public enum InvitationAcceptanceStatus
 {

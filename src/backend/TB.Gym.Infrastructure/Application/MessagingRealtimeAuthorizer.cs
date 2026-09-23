@@ -28,7 +28,8 @@ namespace TB.Gym.Infrastructure.Application;
 internal sealed class MessagingRealtimeAuthorizer(
     GymDbContext dbContext,
     IMutableTenantContext tenantContext,
-    ICoachingFeatureAccessService featureAccessService)
+    ICoachingFeatureAccessService featureAccessService,
+    CoachClientScope coachClientScope)
     : IMessagingRealtimeAuthorizer
 {
     public async Task<bool> BindVerifiedTenantAsync(
@@ -86,9 +87,16 @@ internal sealed class MessagingRealtimeAuthorizer(
                 candidate.Id == conversationId &&
                 dbContext.ConversationParticipants.Any(participant =>
                     participant.ConversationId == conversationId && participant.UserId == userId))
-            .Select(candidate => new { candidate.ClientProfileId })
+            .Select(candidate => new { candidate.ClientProfileId, candidate.CoachUserId })
             .SingleOrDefaultAsync(cancellationToken);
         if (conversation is null)
+        {
+            return false;
+        }
+
+        // A coach whose client was reassigned away no longer reads this thread (ADR 0026).
+        if (conversation.CoachUserId == userId &&
+            !await coachClientScope.MayCoachAsync(userId, conversation.ClientProfileId, cancellationToken))
         {
             return false;
         }
@@ -154,7 +162,7 @@ internal sealed class MessagingRealtimeAuthorizer(
         var conversation = await dbContext.Conversations
             .AsNoTracking()
             .Where(candidate => candidate.Id == conversationId)
-            .Select(candidate => new { candidate.ClientProfileId })
+            .Select(candidate => new { candidate.ClientProfileId, candidate.CoachUserId })
             .SingleOrDefaultAsync(cancellationToken);
         if (conversation is null)
         {
@@ -171,6 +179,12 @@ internal sealed class MessagingRealtimeAuthorizer(
         if (!isParticipant)
         {
             return MessagingRealtimeSuppressionCodes.NotAParticipant;
+        }
+
+        if (conversation.CoachUserId == recipientUserId &&
+            !await coachClientScope.MayCoachAsync(recipientUserId, conversation.ClientProfileId, cancellationToken))
+        {
+            return MessagingRealtimeSuppressionCodes.CoachNotAssigned;
         }
 
         // The relationship block is reported separately from the entitlement even though the feature

@@ -20,6 +20,11 @@ namespace TB.Gym.Modules.Invitations;
 /// retry mints against the <i>same</i> generation and appends — which leaves a link that is already
 /// sitting in somebody's mailbox working, however many times the dispatcher tries.
 /// </para>
+/// <para>
+/// The name predates coach invitations. Since ADR 0026 the same aggregate, token lifecycle and mail
+/// pipeline also invite a coach to the team, told apart by <see cref="Kind"/>; a coach invitation
+/// carries no client prefill and no assigned coach.
+/// </para>
 /// </remarks>
 public sealed class ClientInvitation : TenantEntity
 {
@@ -32,6 +37,8 @@ public sealed class ClientInvitation : TenantEntity
 
     private ClientInvitation(
         Guid tenantId,
+        InvitationKind kind,
+        Guid? assignedCoachUserId,
         string email,
         string firstName,
         string lastName,
@@ -40,6 +47,8 @@ public sealed class ClientInvitation : TenantEntity
         DateTimeOffset expiresAtUtc)
         : base(tenantId)
     {
+        Kind = kind;
+        AssignedCoachUserId = assignedCoachUserId;
         Email = email;
         NormalizedEmail = email.ToUpperInvariant();
         FirstName = firstName;
@@ -51,6 +60,16 @@ public sealed class ClientInvitation : TenantEntity
         SendCount = 1;
         LogicalSendGeneration = FirstLogicalSendGeneration;
     }
+
+    /// <summary>Whether accepting makes the person a client or a coach of the workspace.</summary>
+    public InvitationKind Kind { get; private set; }
+
+    /// <summary>
+    /// For a client invitation, the coach the client will be assigned to: whoever sent it. Empty for a
+    /// coach invitation, and for invitations sent before coach assignment existed; acceptance falls back
+    /// to the owner whenever this coach is no longer an active member.
+    /// </summary>
+    public Guid? AssignedCoachUserId { get; private set; }
 
     public string Email { get; private set; } = string.Empty;
 
@@ -96,6 +115,72 @@ public sealed class ClientInvitation : TenantEntity
         string? phoneNumber,
         DateOnly? birthDate,
         DateTimeOffset expiresAtUtc,
+        DateTimeOffset now,
+        Guid? assignedCoachUserId = null)
+    {
+        if (assignedCoachUserId == Guid.Empty)
+        {
+            throw new ArgumentException("An assigned coach id cannot be empty.", nameof(assignedCoachUserId));
+        }
+
+        return Build(
+            tenantId,
+            InvitationKind.Client,
+            assignedCoachUserId,
+            email,
+            firstName,
+            lastName,
+            NormalizeOptional(phoneNumber),
+            birthDate,
+            expiresAtUtc,
+            now);
+    }
+
+    /// <summary>The owner invites a coach to the team. Accepting creates a Coach membership.</summary>
+    public static ClientInvitation CreateForCoach(
+        Guid tenantId,
+        string email,
+        string firstName,
+        string lastName,
+        DateTimeOffset expiresAtUtc,
+        DateTimeOffset now) =>
+        Build(tenantId, InvitationKind.Coach, null, email, firstName, lastName, null, null, expiresAtUtc, now);
+
+    /// <summary>
+    /// The coach this pending client invitation was sent for has left the team; the client will land
+    /// with <paramref name="coachUserId"/> instead. The link in their mailbox keeps working.
+    /// </summary>
+    public bool HandOverTo(Guid coachUserId)
+    {
+        if (Kind != InvitationKind.Client || Status != InvitationStatus.Pending)
+        {
+            throw new InvalidOperationException("Only a pending client invitation can be handed to another coach.");
+        }
+
+        if (coachUserId == Guid.Empty)
+        {
+            throw new ArgumentException("A coach id is required.", nameof(coachUserId));
+        }
+
+        if (AssignedCoachUserId == coachUserId)
+        {
+            return false;
+        }
+
+        AssignedCoachUserId = coachUserId;
+        return true;
+    }
+
+    private static ClientInvitation Build(
+        Guid tenantId,
+        InvitationKind kind,
+        Guid? assignedCoachUserId,
+        string email,
+        string firstName,
+        string lastName,
+        string? phoneNumber,
+        DateOnly? birthDate,
+        DateTimeOffset expiresAtUtc,
         DateTimeOffset now)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
@@ -118,10 +203,12 @@ public sealed class ClientInvitation : TenantEntity
 
         return new ClientInvitation(
             tenantId,
+            kind,
+            assignedCoachUserId,
             normalizedEmail,
             normalizedFirstName,
             normalizedLastName,
-            NormalizeOptional(phoneNumber),
+            phoneNumber,
             birthDate,
             expiresAtUtc);
     }
@@ -414,4 +501,10 @@ public enum InvitationStatus
     Accepted = 2,
     Revoked = 3,
     Expired = 4,
+}
+
+public enum InvitationKind
+{
+    Client = 1,
+    Coach = 2,
 }

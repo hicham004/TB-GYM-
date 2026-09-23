@@ -49,6 +49,9 @@ public static class MessagingRealtimeSuppressionCodes
     /// <summary>No explicit participant row for this user in this conversation any more.</summary>
     public const string NotAParticipant = "messaging-realtime-not-a-participant";
 
+    /// <summary>The recipient is the thread's coach, and the client has since moved to another coach.</summary>
+    public const string CoachNotAssigned = "messaging-realtime-coach-not-assigned";
+
     /// <summary>The Messaging entitlement decision is currently denied.</summary>
     public const string FeatureDenied = "messaging-realtime-feature-denied";
 

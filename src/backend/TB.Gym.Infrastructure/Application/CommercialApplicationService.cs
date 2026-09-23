@@ -16,7 +16,8 @@ internal sealed class CommercialApplicationService(
     ICurrentUser currentUser,
     ITenantContext tenantContext,
     ICoachingFeatureAccessService featureAccessService,
-    IOptions<NotificationEmailOptions> notificationEmailOptions)
+    IOptions<NotificationEmailOptions> notificationEmailOptions,
+    CoachClientScope coachClientScope)
     : ICommercialApplicationService
 {
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
@@ -180,7 +181,8 @@ internal sealed class CommercialApplicationService(
         RecordManualPaymentRequest request,
         CancellationToken cancellationToken)
     {
-        if (currentUser.UserId is not { } actorId)
+        if (currentUser.UserId is not { } actorId ||
+            await IsOutsideCoachScopeAsync(enrollmentId, cancellationToken))
         {
             return NotFound();
         }
@@ -319,7 +321,7 @@ internal sealed class CommercialApplicationService(
         var source = await dbContext.ClientEnrollments
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == enrollmentId, cancellationToken);
-        if (source is null)
+        if (source is null || await coachClientScope.ExcludesAsync(source.ClientProfileId, cancellationToken))
         {
             return NotFound();
         }
@@ -559,7 +561,7 @@ internal sealed class CommercialApplicationService(
         var enrollment = await dbContext.ClientEnrollments
             .Include(item => item.Entitlements)
             .SingleOrDefaultAsync(item => item.Id == enrollmentId, cancellationToken);
-        if (enrollment is null)
+        if (enrollment is null || await coachClientScope.ExcludesAsync(enrollment.ClientProfileId, cancellationToken))
         {
             return NotFound();
         }
@@ -1045,6 +1047,20 @@ internal sealed class CommercialApplicationService(
         new(
             CommercialCommandStatus.Invalid,
             Errors: new Dictionary<string, string[]> { [field] = [message] });
+
+    /// <summary>
+    /// An enrollment of another coach's client, which a Coach reaches only as a missing one. An
+    /// unknown enrollment is left to the command's own not-found answer.
+    /// </summary>
+    private async Task<bool> IsOutsideCoachScopeAsync(Guid enrollmentId, CancellationToken cancellationToken)
+    {
+        var clientProfileId = await dbContext.ClientEnrollments
+            .AsNoTracking()
+            .Where(item => item.Id == enrollmentId)
+            .Select(item => (Guid?)item.ClientProfileId)
+            .SingleOrDefaultAsync(cancellationToken);
+        return clientProfileId is { } id && await coachClientScope.ExcludesAsync(id, cancellationToken);
+    }
 
     private static CommercialCommandResult NotFound() =>
         new(CommercialCommandStatus.NotFound);

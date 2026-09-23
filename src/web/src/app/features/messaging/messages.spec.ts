@@ -66,6 +66,7 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
     isAvailable: true,
     accessReason: 'Granted',
     lastMessage: null,
+    isReadOnly: false,
     ...overrides,
   };
 }
@@ -488,6 +489,34 @@ describe('Messages', () => {
     expect(body.querySelector('img')).toBeNull();
     expect(body.querySelector('b')).toBeNull();
     expect(body.children).toHaveLength(0);
+  });
+
+  /**
+   * ADR 0026: after a client moves to another coach, their old thread stays readable to them and
+   * nobody can write to it. Offering a composer the server will refuse would invite a message that
+   * can never be delivered.
+   */
+  it('shows a read-only thread without a composer or message actions', async () => {
+    const harness = await render(({ listConversations, listConversationMessages }) => {
+      listConversations.mockReturnValue(
+        of(conversationPage([conversation({ isReadOnly: true, callerRole: 'Client' })])),
+      );
+      listConversationMessages.mockReturnValue(
+        of(
+          messagePage([
+            message(1, { body: 'Welcome aboard' }),
+            message(2, { isFromCaller: true, canEdit: true, canDelete: true }),
+          ]),
+        ),
+      );
+    });
+    await open(harness);
+
+    expect(bodies(harness.host)).toContain('Welcome aboard');
+    expect(harness.host.textContent).toContain('This conversation is read-only');
+    expect(harness.host.querySelector('form.composer')).toBeNull();
+    expect(harness.host.querySelector('.actions')).toBeNull();
+    expect(harness.sendConversationMessage).not.toHaveBeenCalled();
   });
 
   it('sends a message and clears the composer', async () => {

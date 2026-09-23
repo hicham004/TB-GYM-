@@ -199,6 +199,40 @@ public sealed class TenantMembership : AuditableEntity
 
     public static TenantMembership Create(Guid tenantId, Guid userId, TenantRole role) =>
         new(tenantId, userId, role);
+
+    /// <summary>Whether this member may coach clients here: an active Owner or Coach.</summary>
+    public bool IsActiveStaff =>
+        Status == MembershipStatus.Active && Role is TenantRole.Owner or TenantRole.Coach;
+
+    /// <summary>
+    /// The owner removes a coach from the workspace. The row is kept so the coach's authored work and
+    /// the assignment history still name a real member; access ends because it is no longer Active.
+    /// </summary>
+    public void RemoveCoach()
+    {
+        if (Role != TenantRole.Coach)
+        {
+            throw new InvalidOperationException("Only a coach membership can be removed from the team.");
+        }
+
+        if (Status != MembershipStatus.Active)
+        {
+            throw new InvalidOperationException("Only an active coach can be removed.");
+        }
+
+        Status = MembershipStatus.Removed;
+    }
+
+    /// <summary>A removed coach accepted a new coach invitation to the same workspace.</summary>
+    public void RejoinAsCoach()
+    {
+        if (Role != TenantRole.Coach || Status != MembershipStatus.Removed)
+        {
+            throw new InvalidOperationException("Only a removed coach can rejoin the team.");
+        }
+
+        Status = MembershipStatus.Active;
+    }
 }
 
 public enum TenantRole

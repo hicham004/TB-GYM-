@@ -53,6 +53,9 @@
 - Every tenant-owned entity needs `TenantId`, a global query filter, write-scope guard,
   tenant-aware indexes/constraints, and cross-tenant negative tests.
 - Authorization belongs on API/resource operations. Angular role checks are presentation.
+- A Coach acts only on assigned clients (ADR 0026). Name client route parameters `clientProfileId`
+  or `clientId` so the tenant handler checks them; any other route reaching a client must ask
+  `CoachClientScope` and answer 404 for another coach's client.
 - Keep Identity in HTTP-only same-origin cookies with antiforgery on state changes. Never put
   session credentials in local/session storage.
 - Sensitive profile/health/media data must not appear in logs, analytics, exceptions, or

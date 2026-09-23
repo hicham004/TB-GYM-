@@ -1034,6 +1034,15 @@ unit economics are known and exercised.
   role-aware routes. Screen migrations follow it, gated by the feature conditions listed in that
   document. This track changes no API, schema or domain rule, and Phase 4 remains unstarted.
 
+## Commercial launch track (agreed 2026-09-22)
+
+- Step 1, gym team support (complete, 2026-09-23): owner invites and removes coaches, one coach per
+  client with append-only history, owner reassignment, Coach sees only their own clients, Team page
+  under Settings and a reassign action on the client page. See ADR 0026.
+- Next, before Step 2: "release client", which lets the owner end a client's relationship with the
+  workspace (the option chosen for a coach who leaves and takes clients). Not built.
+- Step 2, manual platform billing: not started.
+
 ## Continuous requirements
 
 Every phase must update architecture/domain docs, ship migrations with rollback/recovery

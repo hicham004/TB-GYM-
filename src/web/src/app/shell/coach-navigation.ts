@@ -100,7 +100,8 @@ export const COACH_NAVIGATION: readonly CoachNavigationGroup[] = [
         label: $localize`Settings`,
         icon: 'settings',
         link: '/workspace',
-        section: ['/workspace'],
+        // Team is a Settings page (Workspace · Team), opened from the section links on both.
+        section: ['/workspace', '/team'],
         ownerOnly: true,
       },
     ],

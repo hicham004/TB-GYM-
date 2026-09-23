@@ -35,7 +35,8 @@ internal sealed class InvitationApplicationService(
     IClock clock,
     ICurrentUser currentUser,
     ITenantContext tenantContext,
-    IMutableTenantContext mutableTenantContext)
+    IMutableTenantContext mutableTenantContext,
+    CoachClientScope coachClientScope)
     : IInvitationApplicationService
 {
     private static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
@@ -43,10 +44,12 @@ internal sealed class InvitationApplicationService(
     /// <summary>The unit separator that delimits fields inside a payload fingerprint.</summary>
     private const char FieldSeparator = '\u001F';
 
-    public async Task<IReadOnlyList<InvitationSummary>> ListAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<InvitationSummary>> ListAsync(
+        InvitationKind kind,
+        CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
-        var invitations = await dbContext.ClientInvitations
+        var invitations = await (await ScopedAsync(kind, cancellationToken))
             .OrderByDescending(invitation => invitation.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
@@ -88,9 +91,15 @@ internal sealed class InvitationApplicationService(
                 "Client birth date must represent an adult between 18 and 120 years old.");
         }
 
+        if (currentUser.UserId is not { } inviterUserId)
+        {
+            return new InvitationCommandResult(InvitationCommandStatus.NotFound);
+        }
+
         ClientInvitation invitation;
         try
         {
+            // The client will be assigned to whoever invited them, the owner included.
             invitation = ClientInvitation.Create(
                 tenant.Id,
                 request.Email,
@@ -99,7 +108,8 @@ internal sealed class InvitationApplicationService(
                 request.PhoneNumber,
                 request.BirthDate,
                 now.Add(InvitationLifetime),
-                now);
+                now,
+                inviterUserId);
         }
         catch (ArgumentException exception)
         {
@@ -110,16 +120,74 @@ internal sealed class InvitationApplicationService(
         var fingerprint = Fingerprint(
             "create",
             tenant.Id.ToString(),
+            inviterUserId.ToString(),
             invitation.NormalizedEmail,
             invitation.FirstName,
             invitation.LastName,
             invitation.PhoneNumber ?? string.Empty,
             invitation.BirthDate?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty);
+        return await CreateCoreAsync(tenant, invitation, idempotencyKey, fingerprint, cancellationToken);
+    }
+
+    public async Task<InvitationCommandResult> CreateCoachAsync(
+        CreateCoachInvitationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!tenantContext.HasTenant)
+        {
+            return new InvitationCommandResult(InvitationCommandStatus.NotFound);
+        }
+
+        var tenant = await dbContext.Tenants.SingleOrDefaultAsync(
+            item => item.Id == tenantContext.TenantId && item.IsActive,
+            cancellationToken);
+        if (tenant is null)
+        {
+            return new InvitationCommandResult(InvitationCommandStatus.NotFound);
+        }
+
+        var now = clock.UtcNow;
+        ClientInvitation invitation;
+        try
+        {
+            invitation = ClientInvitation.CreateForCoach(
+                tenant.Id,
+                request.Email,
+                request.FirstName,
+                request.LastName,
+                now.Add(InvitationLifetime),
+                now);
+        }
+        catch (ArgumentException exception)
+        {
+            return Invalid("invitation", exception.Message);
+        }
+
+        var idempotencyKey = request.IdempotencyKey ?? Guid.CreateVersion7();
+        var fingerprint = Fingerprint(
+            "create-coach",
+            tenant.Id.ToString(),
+            invitation.NormalizedEmail,
+            invitation.FirstName,
+            invitation.LastName);
+        return await CreateCoreAsync(tenant, invitation, idempotencyKey, fingerprint, cancellationToken);
+    }
+
+    private async Task<InvitationCommandResult> CreateCoreAsync(
+        Tenant tenant,
+        ClientInvitation invitation,
+        Guid idempotencyKey,
+        string fingerprint,
+        CancellationToken cancellationToken)
+    {
+        var now = clock.UtcNow;
         if (await ReplayAsync(idempotencyKey, fingerprint, cancellationToken) is { } replayed)
         {
             return replayed;
         }
 
+        // A person already in this workspace in any role cannot be invited into it again. The one
+        // exception is a removed coach, whom a coach invitation brings back.
         var existingRelationship = await dbContext.ClientProfiles.AnyAsync(
             client => client.NormalizedEmail == invitation.NormalizedEmail,
             cancellationToken);
@@ -127,7 +195,12 @@ internal sealed class InvitationApplicationService(
         if (existingUser is not null)
         {
             existingRelationship |= await dbContext.TenantMemberships.AnyAsync(
-                membership => membership.TenantId == tenant.Id && membership.UserId == existingUser.Id,
+                membership =>
+                    membership.TenantId == tenant.Id &&
+                    membership.UserId == existingUser.Id &&
+                    !(invitation.Kind == InvitationKind.Coach &&
+                      membership.Role == TenantRole.Coach &&
+                      membership.Status == MembershipStatus.Removed),
                 cancellationToken);
         }
 
@@ -184,6 +257,7 @@ internal sealed class InvitationApplicationService(
     }
 
     public async Task<InvitationCommandResult> ResendAsync(
+        InvitationKind kind,
         Guid invitationId,
         ResendClientInvitationRequest request,
         CancellationToken cancellationToken)
@@ -193,7 +267,7 @@ internal sealed class InvitationApplicationService(
             return Invalid("idempotencyKey", "An idempotency key is required.");
         }
 
-        var invitation = await dbContext.ClientInvitations.SingleOrDefaultAsync(
+        var invitation = await (await ScopedAsync(kind, cancellationToken)).SingleOrDefaultAsync(
             item => item.Id == invitationId,
             cancellationToken);
         if (invitation is null)
@@ -281,11 +355,12 @@ internal sealed class InvitationApplicationService(
     }
 
     public async Task<InvitationCommandResult> RevokeAsync(
+        InvitationKind kind,
         Guid invitationId,
         RevokeClientInvitationRequest request,
         CancellationToken cancellationToken)
     {
-        var invitation = await dbContext.ClientInvitations.SingleOrDefaultAsync(
+        var invitation = await (await ScopedAsync(kind, cancellationToken)).SingleOrDefaultAsync(
             item => item.Id == invitationId,
             cancellationToken);
         if (invitation is null)
@@ -375,7 +450,8 @@ internal sealed class InvitationApplicationService(
             invitation.LastName,
             invitation.Status,
             invitation.ExpiresAtUtc,
-            existingUser is not null && currentUser.UserId != existingUser.Id);
+            existingUser is not null && currentUser.UserId != existingUser.Id,
+            invitation.Kind);
     }
 
     public async Task<InvitationAcceptanceResult> AcceptAsync(
@@ -439,6 +515,15 @@ internal sealed class InvitationApplicationService(
             if (invitation is null)
             {
                 return AcceptanceOutcome.From(InvitationAcceptanceStatus.InvalidOrExpired);
+            }
+
+            // Lock the coach this client would join before deciding anything. A removal of that coach
+            // already in flight commits first, and the reload then sees its hand-over to the owner
+            // instead of failing on the invitation row it changed; a later removal waits for us.
+            if (invitation.Kind == InvitationKind.Client && invitation.AssignedCoachUserId is { } invitedFor)
+            {
+                await CoachTeam.LockActiveStaffAsync(dbContext, invitation.TenantId, invitedFor, cancellationToken);
+                await dbContext.Entry(invitation).ReloadAsync(cancellationToken);
             }
 
             var now = clock.UtcNow;
@@ -549,33 +634,64 @@ internal sealed class InvitationApplicationService(
                 createdUser = true;
             }
 
-            var relationshipExists = await dbContext.TenantMemberships.AnyAsync(
+            var existingMembership = await dbContext.TenantMemberships.SingleOrDefaultAsync(
                 membership => membership.TenantId == invitation.TenantId && membership.UserId == user.Id,
-                cancellationToken) ||
-                await dbContext.ClientProfiles.AnyAsync(
-                    profile => profile.UserId == user.Id || profile.NormalizedEmail == invitation.NormalizedEmail,
-                    cancellationToken);
-            if (relationshipExists)
+                cancellationToken);
+            var existingProfile = await dbContext.ClientProfiles.AnyAsync(
+                profile => profile.UserId == user.Id || profile.NormalizedEmail == invitation.NormalizedEmail,
+                cancellationToken);
+            var rejoiningCoach = invitation.Kind == InvitationKind.Coach &&
+                existingMembership is { Role: TenantRole.Coach, Status: MembershipStatus.Removed };
+            if (existingProfile || (existingMembership is not null && !rejoiningCoach))
             {
                 return AcceptanceOutcome.From(InvitationAcceptanceStatus.Conflict);
             }
 
-            var profile = ClientProfile.CreateForAcceptedInvitation(
-                invitation.TenantId,
-                user.Id,
-                invitation.FirstName,
-                invitation.LastName,
-                invitation.Email,
-                invitation.PhoneNumber,
-                invitation.BirthDate);
-            dbContext.TenantMemberships.Add(
-                TenantMembership.Create(invitation.TenantId, user.Id, TenantRole.Client));
-            dbContext.ClientProfiles.Add(profile);
-            dbContext.ClientProfileChanges.Add(ClientProfileChange.Create(
-                invitation.TenantId,
-                profile.Id,
-                ClientChangeSource.InvitationAcceptance,
-                [nameof(ClientProfile.UserId), nameof(ClientProfile.Email)]));
+            Guid? clientProfileId = null;
+            if (invitation.Kind == InvitationKind.Coach)
+            {
+                if (rejoiningCoach)
+                {
+                    existingMembership!.RejoinAsCoach();
+                }
+                else
+                {
+                    dbContext.TenantMemberships.Add(
+                        TenantMembership.Create(invitation.TenantId, user.Id, TenantRole.Coach));
+                }
+            }
+            else
+            {
+                // The coach who sent the invitation, or the owner when that coach has since left.
+                var coachUserId = await CoachTeam.ResolveStartingCoachAsync(
+                    dbContext,
+                    invitation.TenantId,
+                    invitation.AssignedCoachUserId,
+                    cancellationToken);
+                var profile = ClientProfile.CreateForAcceptedInvitation(
+                    invitation.TenantId,
+                    user.Id,
+                    coachUserId,
+                    invitation.FirstName,
+                    invitation.LastName,
+                    invitation.Email,
+                    invitation.PhoneNumber,
+                    invitation.BirthDate);
+                dbContext.TenantMemberships.Add(
+                    TenantMembership.Create(invitation.TenantId, user.Id, TenantRole.Client));
+                dbContext.ClientProfiles.Add(profile);
+                dbContext.ClientCoachAssignments.Add(ClientCoachAssignment.ForInvitation(
+                    invitation.TenantId,
+                    profile.Id,
+                    coachUserId,
+                    now));
+                dbContext.ClientProfileChanges.Add(ClientProfileChange.Create(
+                    invitation.TenantId,
+                    profile.Id,
+                    ClientChangeSource.InvitationAcceptance,
+                    [nameof(ClientProfile.UserId), nameof(ClientProfile.Email)]));
+                clientProfileId = profile.Id;
+            }
 
             // Single-use, and concurrency-safe through two independent guards: the invitation row's
             // own optimistic concurrency refuses a second Pending -> Accepted transition, and the
@@ -601,10 +717,25 @@ internal sealed class InvitationApplicationService(
                 new InvitationAcceptanceResult(
                     InvitationAcceptanceStatus.Accepted,
                     invitation.TenantId,
-                    profile.Id,
-                    SignedIn: currentUser.UserId == user.Id),
+                    clientProfileId,
+                    SignedIn: currentUser.UserId == user.Id,
+                    Kind: invitation.Kind),
                 createdUser ? user : null);
         });
+    }
+
+    /// <summary>
+    /// The invitations one route may see: only its own kind, and for a Coach only the client
+    /// invitations that will land with them. Anything else answers like a missing row.
+    /// </summary>
+    private async Task<IQueryable<ClientInvitation>> ScopedAsync(
+        InvitationKind kind,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.ClientInvitations.Where(invitation => invitation.Kind == kind);
+        return await coachClientScope.RestrictedCoachUserIdAsync(cancellationToken) is { } coachUserId
+            ? query.Where(invitation => invitation.AssignedCoachUserId == coachUserId)
+            : query;
     }
 
     /// <summary>
@@ -794,6 +925,7 @@ internal sealed class InvitationApplicationService(
                 (issue, invitation) => new
                 {
                     invitation.TenantId,
+                    invitation.Kind,
                     invitation.Status,
                     invitation.AcceptedByUserId,
                     issue.RedeemedAtUtc,
@@ -810,6 +942,16 @@ internal sealed class InvitationApplicationService(
         }
 
         mutableTenantContext.SetTenant(accepted.TenantId);
+        if (accepted.Kind == InvitationKind.Coach)
+        {
+            // A coach invitation created a membership and no client profile.
+            return new InvitationAcceptanceResult(
+                InvitationAcceptanceStatus.Accepted,
+                accepted.TenantId,
+                SignedIn: currentUser.UserId == acceptedByUserId,
+                Kind: InvitationKind.Coach);
+        }
+
         var profileId = await dbContext.ClientProfiles
             .AsNoTracking()
             .Where(profile => profile.UserId == acceptedByUserId)
@@ -843,7 +985,8 @@ internal sealed class InvitationApplicationService(
             invitation.LogicalSendGeneration,
             invitation.CreatedAtUtc,
             invitation.Version,
-            developmentActionUrl);
+            developmentActionUrl,
+            invitation.Kind);
 
     private static DateOnly GetTenantDate(DateTimeOffset now, string timeZoneId) =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId)).DateTime);

@@ -33,7 +33,10 @@ describe('ClientDetails messaging entry', () => {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: convertToParamMap({ clientId: 'client-1' }) } },
         },
-        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+        {
+          provide: TenantStore,
+          useValue: { selectedTenantId: signal('tenant-1'), isOwner: signal(false) },
+        },
         { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
         {
           provide: ApiClient,

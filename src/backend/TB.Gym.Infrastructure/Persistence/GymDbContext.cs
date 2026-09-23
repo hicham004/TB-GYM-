@@ -37,6 +37,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<ClientRelationshipEvent> ClientRelationshipEvents => Set<ClientRelationshipEvent>();
 
+    public DbSet<ClientCoachAssignment> ClientCoachAssignments => Set<ClientCoachAssignment>();
+
     public DbSet<ClientInvitation> ClientInvitations => Set<ClientInvitation>();
 
     /// <summary>
@@ -382,6 +384,11 @@ public sealed partial class GymDbContext(
             entity.Property(membership => membership.Role).HasConversion<string>().HasMaxLength(32);
             entity.Property(membership => membership.Status).HasConversion<string>().HasMaxLength(32);
             entity.HasIndex(membership => new { membership.UserId, membership.Status });
+            // One owner per workspace. A removed coach's clients move to "the owner", which is only a
+            // well-defined destination while there is exactly one.
+            entity.HasIndex(membership => membership.TenantId, "IX_Memberships_TenantId_ActiveOwner")
+                .IsUnique()
+                .HasFilter("\"Role\" = 'Owner' AND \"Status\" = 'Active'");
             entity.HasOne<Tenant>()
                 .WithMany()
                 .HasForeignKey(membership => membership.TenantId)
@@ -436,6 +443,14 @@ public sealed partial class GymDbContext(
                 .WithMany()
                 .HasForeignKey(client => client.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            // The assigned coach is a member of this same workspace. Active Owner/Coach status is a
+            // deferred trigger, because it depends on the membership row's current state.
+            entity.HasIndex(client => new { client.TenantId, client.AssignedCoachUserId });
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(client => new { client.TenantId, client.AssignedCoachUserId })
+                .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(client =>
                 tenantContext.HasTenant && client.TenantId == tenantContext.TenantId);
             entity.ToTable(table =>
@@ -467,6 +482,43 @@ public sealed partial class GymDbContext(
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasQueryFilter(change =>
                 tenantContext.HasTenant && change.TenantId == tenantContext.TenantId);
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<ClientCoachAssignment>(entity =>
+        {
+            entity.ToTable("ClientCoachAssignments", "clients");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Reason).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.Note).HasMaxLength(ClientCoachAssignment.NoteMaximumLength);
+            entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.Sequence }).IsUnique();
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(client => new { client.TenantId, client.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.CoachUserId })
+                .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.PreviousCoachUserId })
+                .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table =>
+            {
+                // Entry 1 is where a client started and names no predecessor; every later entry is a
+                // change and names the different coach it replaced. A trigger checks that it names
+                // the coach of the entry before it.
+                table.HasCheckConstraint(
+                    "CK_ClientCoachAssignments_Chain",
+                    "(\"Sequence\" = 1 AND \"PreviousCoachUserId\" IS NULL AND \"Reason\" IN ('Invitation', 'Migration')) OR " +
+                    "(\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS NOT NULL AND \"PreviousCoachUserId\" <> \"CoachUserId\" AND \"Reason\" IN ('Reassigned', 'CoachRemoved'))");
+            });
             ConfigureAuditable(entity);
         });
 
@@ -502,9 +554,20 @@ public sealed partial class GymDbContext(
             entity.Property(invitation => invitation.PhoneNumber).HasMaxLength(32);
             entity.Property(invitation => invitation.BirthDate).HasColumnType("date");
             entity.Property(invitation => invitation.Status).HasConversion<string>().HasMaxLength(32);
+            entity.Property(invitation => invitation.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(16)
+                .HasDefaultValue(InvitationKind.Client)
+                .HasSentinel((InvitationKind)0);
             entity.HasIndex(invitation => new { invitation.TenantId, invitation.NormalizedEmail })
                 .IsUnique()
                 .HasFilter("\"Status\" = 'Pending'");
+            entity.HasIndex(invitation => new { invitation.TenantId, invitation.AssignedCoachUserId });
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(invitation => new { invitation.TenantId, invitation.AssignedCoachUserId })
+                .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Tenant>()
                 .WithMany()
                 .HasForeignKey(invitation => invitation.TenantId)
@@ -535,6 +598,10 @@ public sealed partial class GymDbContext(
                 table.HasCheckConstraint(
                     "CK_ClientInvitations_NormalizedEmail",
                     "\"NormalizedEmail\" = upper(\"Email\")");
+                // A coach invitation carries no client prefill and nobody to be assigned to.
+                table.HasCheckConstraint(
+                    "CK_ClientInvitations_Kind",
+                    "\"Kind\" = 'Client' OR (\"Kind\" = 'Coach' AND \"AssignedCoachUserId\" IS NULL AND \"PhoneNumber\" IS NULL AND \"BirthDate\" IS NULL)");
             });
             ConfigureAuditable(entity);
         });
@@ -797,6 +864,7 @@ public sealed partial class GymDbContext(
     {
         RejectAppendOnlyMutations<PaymentRecord>("Payment records are append-only.");
         RejectAppendOnlyMutations<ClientRelationshipEvent>("Client relationship events are append-only.");
+        RejectAppendOnlyMutations<ClientCoachAssignment>("Client coach assignment history is append-only.");
         RejectAppendOnlyMutations<LegalConsentAcceptance>("Legal consent acceptances are append-only.");
         RejectAppendOnlyMutations<StrengthMaxRecord>("Strength max history is append-only.");
         RejectAppendOnlyMutations<MesocycleWorkingMaxSnapshot>("Working-max snapshots are append-only.");

@@ -1519,7 +1519,7 @@ export class ApiClient {
   }
 }
 
-function toNumber(value: number | string): number {
+export function toNumber(value: number | string): number {
   return typeof value === 'number' ? value : Number(value);
 }
 
@@ -1531,13 +1531,14 @@ function toWorkspace(value: ContractWorkspaceDetails): WorkspaceDetails {
   return { ...value, version: toNumber(value.version) };
 }
 
-function toInvitation(value: InvitationSummary): ClientInvitation {
+export function toInvitation(value: InvitationSummary): ClientInvitation {
   return {
     ...value,
     sendCount: toNumber(value.sendCount),
     logicalSendGeneration: toNumber(value.logicalSendGeneration),
     version: toNumber(value.version),
     developmentActionUrl: value.developmentActionUrl ?? null,
+    kind: value.kind ?? 'Client',
   };
 }
 
@@ -1558,7 +1559,7 @@ function toSelfProfile(value: ContractClientSelfProfile): ClientSelfProfile {
   };
 }
 
-function toCoachClient(value: ContractCoachClientDetails): CoachClientDetails {
+export function toCoachClient(value: ContractCoachClientDetails): CoachClientDetails {
   return {
     ...value,
     heightCentimeters: toNullableNumber(value.heightCentimeters),

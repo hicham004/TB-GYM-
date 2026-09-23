@@ -24,7 +24,8 @@ internal sealed class MediaApplicationService(
     IMutableTenantContext tenantContext,
     ICoachingFeatureAccessService featureAccessService,
     IClock clock,
-    ILogger<MediaApplicationService> logger)
+    ILogger<MediaApplicationService> logger,
+    CoachClientScope coachClientScope)
     : IMediaApplicationService
 {
     /// <summary>
@@ -1284,7 +1285,10 @@ internal sealed class MediaApplicationService(
             return false;
         }
 
-        return role is TenantRole.Owner or TenantRole.Coach;
+        // The Owner sees every client's photos; a Coach only those of their own clients (ADR 0026).
+        return role == TenantRole.Owner ||
+            (role == TenantRole.Coach &&
+             await coachClientScope.MayCoachAsync(userId, photo.ClientProfileId, cancellationToken));
     }
 
     /// <summary>

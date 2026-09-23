@@ -40,6 +40,8 @@ const CLIENT: CoachClientDetails = {
   coachNotes: null,
   isCoachBlocked: false,
   version: 3,
+  assignedCoachUserId: 'owner-1',
+  assignedCoachName: 'Olivia Owner',
 };
 
 const CATALOG: ProductCatalog = {

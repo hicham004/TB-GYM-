@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
@@ -37,6 +38,7 @@ async function render(api: Partial<ApiClient> = {}) {
           ...api,
         },
       },
+      provideRouter([]),
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       {
         provide: TenantStore,

@@ -20,10 +20,12 @@ import { ClientNutrition } from '../nutrition/client-nutrition';
 import { ProgressView } from '../progress/progress-view';
 import { ProgressDashboardView } from '../progress/progress-dashboard';
 import { ConversationLaunch } from '../messaging/conversation-launch';
+import { ClientCoach } from './client-coach';
 
 @Component({
   selector: 'app-client-details',
   imports: [
+    ClientCoach,
     ClientCommercial,
     ClientIntakeForm,
     ClientTraining,
@@ -59,6 +61,8 @@ export class ClientDetails {
     notes: ['', Validators.maxLength(8000)],
   });
   protected readonly onboardingStatusLabel = onboardingStatusLabel;
+  /** Presentation only: the API decides who may reassign a client. */
+  protected readonly isOwner = this.tenants.isOwner;
 
   constructor() {
     this.scope.onReset(() => this.resetTenantState());
@@ -152,6 +156,10 @@ export class ClientDetails {
   }
 
   protected commercialProfileChanged(profile: CoachClientDetails): void {
+    this.setProfile(profile);
+  }
+
+  protected coachChanged(profile: CoachClientDetails): void {
     this.setProfile(profile);
   }
 

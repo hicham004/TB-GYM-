@@ -16,10 +16,18 @@
   } @else if (invitation(); as invite) {
     <div class="accept-panel">
       <p class="eyebrow" i18n>Invitation from {{ invite.workspaceName }}</p>
-      <h1 i18n>Join your coaching workspace</h1>
+      @if (isCoachInvitation()) {
+        <h1 i18n>Join the coaching team</h1>
+      } @else {
+        <h1 i18n>Join your coaching workspace</h1>
+      }
       <dl class="invitation-details">
         <div>
-          <dt i18n>Client</dt>
+          @if (isCoachInvitation()) {
+            <dt i18n>Coach</dt>
+          } @else {
+            <dt i18n>Client</dt>
+          }
           <dd>{{ invite.firstName }} {{ invite.lastName }}</dd>
         </div>
         <div>
@@ -72,7 +80,11 @@
       } @else {
         @if (!signedInUser()) {
           <form [formGroup]="accountForm" (ngSubmit)="accept()" novalidate>
-            <h2 i18n>Create your client account</h2>
+            @if (isCoachInvitation()) {
+              <h2 i18n>Create your coach account</h2>
+            } @else {
+              <h2 i18n>Create your client account</h2>
+            }
             <label>
               <span i18n>Display name</span>
               <input

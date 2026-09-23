@@ -1,0 +1,57 @@
+@if (members().length > 1) {
+  <div class="coach-line tb-theme">
+    <p class="tb-text-compact">
+      <span class="coach-label" i18n>Coach</span>
+      <span class="coach-name" dir="auto">{{ client().assignedCoachName }}</span>
+    </p>
+    <button #reassignTrigger appButton variant="outlined" type="button" (click)="open()" i18n>
+      Reassign coach
+    </button>
+    <p class="coach-notice tb-text-compact" role="status">{{ notice() }}</p>
+  </div>
+
+  <dialog
+    #reassignDialog
+    class="tb-dialog tb-theme"
+    aria-labelledby="reassign-dialog-title"
+    (cancel)="cancel($event)"
+  >
+    <h2 id="reassign-dialog-title" class="tb-text-section-title" dir="auto" i18n>
+      Reassign {{ client().firstName }}
+    </h2>
+    <p class="tb-text-compact" i18n>
+      The new coach sees this client and all their history right away. The current coach loses
+      access, and their chat with the client stays readable to the client only.
+    </p>
+    <form class="reassign-form" [formGroup]="form" (ngSubmit)="reassign()" novalidate>
+      <app-field label="New coach" i18n-label>
+        <select appControl formControlName="coachUserId">
+          @for (member of candidates(); track member.userId) {
+            <option [value]="member.userId">{{ member.displayName }}</option>
+          }
+        </select>
+      </app-field>
+      <app-field
+        label="Note (optional)"
+        i18n-label
+        help="Kept in the client’s coach history. Up to 500 characters."
+        i18n-help
+      >
+        <textarea appControl dir="auto" rows="3" formControlName="note"></textarea>
+      </app-field>
+      <p class="reassign-error tb-text-compact" role="alert">{{ error() }}</p>
+      <div class="tb-dialog__actions">
+        <button appButton variant="outlined" type="button" (click)="cancel($event)" i18n>
+          Cancel
+        </button>
+        <button appButton type="submit" [loading]="saving()">
+          @if (saving()) {
+            <ng-container i18n>Reassigning…</ng-container>
+          } @else {
+            <ng-container i18n>Reassign</ng-container>
+          }
+        </button>
+      </div>
+    </form>
+  </dialog>
+}

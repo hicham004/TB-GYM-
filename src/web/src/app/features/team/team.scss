@@ -1,0 +1,113 @@
+// Settings / Team (ADR 0026). Built from the foundation's primitives and the exercise library's
+// page header pattern; no new visual language.
+:host {
+  display: block;
+}
+
+.page-header {
+  display: grid;
+  gap: var(--space-16);
+}
+
+.page-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-inline-size: 0;
+}
+
+.page-title h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.scope {
+  color: var(--color-text-secondary);
+  margin: 0;
+  max-inline-size: var(--content-width-720);
+}
+
+// Live regions stay in the DOM from first render; empty ones take no space.
+.page-error,
+.page-notice {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.page-error:not(:empty),
+.page-notice:not(:empty) {
+  border-radius: var(--radius-6);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  margin-block-start: var(--space-16);
+  padding: var(--space-8) var(--space-12);
+}
+
+.page-error:not(:empty) {
+  background-color: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.page-notice:not(:empty) {
+  background-color: var(--color-success-subtle);
+  color: var(--color-success);
+}
+
+.card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  margin-block-start: var(--space-24);
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.card-title {
+  margin: 0;
+  padding: var(--space-16) var(--space-24) var(--space-8);
+}
+
+.card-help,
+.card-state {
+  color: var(--color-text-secondary);
+  margin: 0;
+  padding: 0 var(--space-24) var(--space-12);
+}
+
+.member-name,
+.member-email {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.member-email {
+  color: var(--color-text-secondary);
+}
+
+.col-actions {
+  text-align: end;
+}
+
+.row-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  justify-content: flex-end;
+}
+
+.invite-form {
+  display: grid;
+  gap: var(--space-16);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  padding: 0 var(--space-24) var(--space-24);
+}
+
+.invite-actions {
+  align-self: end;
+  display: flex;
+}
+
+.dev-link {
+  margin: 0;
+  padding: 0 var(--space-24) var(--space-16);
+}

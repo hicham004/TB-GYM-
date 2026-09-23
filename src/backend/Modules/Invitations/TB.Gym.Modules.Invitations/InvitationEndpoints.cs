@@ -19,7 +19,7 @@ public static class InvitationEndpoints
         coachGroup.MapGet("/", async (
             IInvitationApplicationService service,
             CancellationToken cancellationToken) =>
-            Results.Ok(await service.ListAsync(cancellationToken)))
+            Results.Ok(await service.ListAsync(InvitationKind.Client, cancellationToken)))
             .WithName("ListClientInvitations")
             .Produces<InvitationSummary[]>();
 
@@ -52,7 +52,11 @@ public static class InvitationEndpoints
             CancellationToken cancellationToken) =>
         {
             await antiforgery.ValidateRequestAsync(context);
-            return ToCommandResult(await service.ResendAsync(invitationId, request, cancellationToken));
+            return ToCommandResult(await service.ResendAsync(
+                InvitationKind.Client,
+                invitationId,
+                request,
+                cancellationToken));
         })
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("ResendClientInvitation")
@@ -69,10 +73,84 @@ public static class InvitationEndpoints
             CancellationToken cancellationToken) =>
         {
             await antiforgery.ValidateRequestAsync(context);
-            return ToCommandResult(await service.RevokeAsync(invitationId, request, cancellationToken));
+            return ToCommandResult(await service.RevokeAsync(
+                InvitationKind.Client,
+                invitationId,
+                request,
+                cancellationToken));
         })
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("RevokeClientInvitation")
+        .Produces<InvitationSummary>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        // Coach invitations: the same aggregate, token lifecycle and mail pipeline, owner-only.
+        var teamGroup = endpoints
+            .MapGroup("/api/team/invitations")
+            .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+            .WithTags(InvitationsModule.Name);
+
+        teamGroup.MapGet("/", async (
+            IInvitationApplicationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListAsync(InvitationKind.Coach, cancellationToken)))
+            .WithName("ListCoachInvitations")
+            .Produces<InvitationSummary[]>();
+
+        teamGroup.MapPost("/", async (
+            CreateCoachInvitationRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IInvitationApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToCommandResult(
+                await service.CreateCoachAsync(request, cancellationToken),
+                created: true,
+                conflictMessage: CoachConflictMessage);
+        })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("CreateCoachInvitation")
+        .Produces<InvitationSummary>(StatusCodes.Status201Created)
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        teamGroup.MapPost("/{invitationId:guid}/resend", async (
+            Guid invitationId,
+            ResendClientInvitationRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IInvitationApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToCommandResult(
+                await service.ResendAsync(InvitationKind.Coach, invitationId, request, cancellationToken),
+                conflictMessage: CoachConflictMessage);
+        })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("ResendCoachInvitation")
+        .Produces<InvitationSummary>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        teamGroup.MapPost("/{invitationId:guid}/revoke", async (
+            Guid invitationId,
+            RevokeClientInvitationRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IInvitationApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToCommandResult(
+                await service.RevokeAsync(InvitationKind.Coach, invitationId, request, cancellationToken),
+                conflictMessage: CoachConflictMessage);
+        })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("RevokeCoachInvitation")
         .Produces<InvitationSummary>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
@@ -106,8 +184,9 @@ public static class InvitationEndpoints
                 InvitationAcceptanceStatus.Accepted => Results.Ok(
                     new InvitationAcceptanceResponse(
                         result.TenantId!.Value,
-                        result.ClientProfileId!.Value,
-                        result.SignedIn)),
+                        result.ClientProfileId,
+                        result.SignedIn,
+                        result.Kind)),
                 InvitationAcceptanceStatus.ExistingAccountSignInRequired => Results.Conflict(new
                 {
                     code = "existing_account_sign_in_required",
@@ -147,7 +226,16 @@ public static class InvitationEndpoints
         return endpoints;
     }
 
-    private static IResult ToCommandResult(InvitationCommandResult result, bool created = false) =>
+    private const string ClientConflictMessage =
+        "An active invitation or client relationship already exists for this email.";
+
+    private const string CoachConflictMessage =
+        "An active invitation or workspace membership already exists for this email.";
+
+    private static IResult ToCommandResult(
+        InvitationCommandResult result,
+        bool created = false,
+        string conflictMessage = ClientConflictMessage) =>
         result.Status switch
         {
             InvitationCommandStatus.Success when created => Results.Created(
@@ -160,7 +248,7 @@ public static class InvitationEndpoints
             _ => Results.Conflict(new
             {
                 code = "invitation_conflict",
-                message = "An active invitation or client relationship already exists for this email.",
+                message = conflictMessage,
             }),
         };
 }

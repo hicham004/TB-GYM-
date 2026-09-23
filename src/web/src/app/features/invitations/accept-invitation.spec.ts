@@ -36,6 +36,7 @@ const ACCEPTED: InvitationAcceptance = {
   tenantId: 'tenant-1',
   clientProfileId: 'client-1',
   signedIn: true,
+  kind: 'Client',
 };
 
 function user(email: string): CurrentUser {
@@ -138,6 +139,36 @@ describe('AcceptInvitation', () => {
     // The workspace the invitation belongs to becomes the active one, not whatever was last used.
     expect(tenants.load).toHaveBeenCalledWith('tenant-1');
     expect(navigate).toHaveBeenCalledWith('/profile');
+  });
+
+  /** A coach invitation adds the person to the team (ADR 0026); they land on the coach dashboard. */
+  it('joins a coach to the team and opens the coach dashboard rather than a client profile', async () => {
+    const { fixture, host, api, tenants, router } = await render({
+      invitation: invitation({ kind: 'Coach' }),
+      api: {
+        acceptInvitation: vi.fn(() =>
+          of<InvitationAcceptance>({ ...ACCEPTED, clientProfileId: null, kind: 'Coach' }),
+        ),
+      },
+    });
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    expect(host.querySelector('h1')?.textContent).toContain('Join the coaching team');
+    expect(host.textContent).toContain('Create your coach account');
+
+    fill(host, 'Password', 'correct-horse-battery');
+    fill(host, 'Confirm password', 'correct-horse-battery');
+    await settle(fixture);
+    press(host, 'Create account and join');
+    await settle(fixture);
+
+    expect(api.acceptInvitation).toHaveBeenCalledWith(
+      TOKEN,
+      'Rana Haddad',
+      'correct-horse-battery',
+    );
+    expect(tenants.load).toHaveBeenCalledWith('tenant-1');
+    expect(navigate).toHaveBeenCalledWith('/');
   });
 
   it('explains an invalid password instead of making the submit button appear broken', async () => {

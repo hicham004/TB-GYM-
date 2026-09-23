@@ -351,6 +351,12 @@ internal sealed partial class TrainingApplicationService
                 item.Status == MembershipStatus.Active)
             .Select(item => (TenantRole?)item.Role)
             .SingleOrDefaultAsync(cancellationToken);
+        if (role == TenantRole.Coach &&
+            await coachClientScope.ExcludesAsync(execution.ClientProfileId, cancellationToken))
+        {
+            return NotFound();
+        }
+
         var authorRole = role switch
         {
             TenantRole.Owner or TenantRole.Coach => WorkoutNoteAuthorRole.Coach,

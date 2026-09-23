@@ -536,6 +536,22 @@ export type CheckInResponseView = {
   answersWithheld?: boolean;
 };
 
+export type ClientCoachAssignmentReason =
+  'Invitation' | 'Reassigned' | 'CoachRemoved' | 'Migration';
+
+export type ClientCoachAssignmentView = {
+  id: string;
+  sequence: number | string;
+  coachUserId: string;
+  coachName: string;
+  previousCoachUserId: null | string;
+  previousCoachName: null | string;
+  reason: ClientCoachAssignmentReason;
+  note: null | string;
+  assignedAtUtc: string;
+  assignedByUserId: null | string;
+};
+
 export type ClientCommercialOverview = {
   clientProfileId: string;
   isRelationshipBlocked: boolean;
@@ -671,6 +687,8 @@ export type ClientSummary = {
   onboardingStatus: ClientOnboardingStatus;
   isCoachBlocked: boolean;
   version: number | string;
+  assignedCoachUserId: string;
+  assignedCoachName: string;
 };
 
 export type ClientTrainingDayResult = {
@@ -730,6 +748,8 @@ export type CoachClientDetails = {
   onboardingCompletedAtUtc: null | string;
   isCoachBlocked: boolean;
   version: number | string;
+  assignedCoachUserId: string;
+  assignedCoachName: string;
 };
 
 export type CoachingFeature =
@@ -747,6 +767,11 @@ export type CoachingProductView = {
 export type CoachRegistrationResponse = {
   email: string;
   developmentConfirmationUrl: null | string;
+};
+
+export type CoachRemovalResponse = {
+  reassignedClientCount: number | string;
+  reassignedInvitationCount: number | string;
 };
 
 export type CoachWorkoutDetailResult = {
@@ -843,6 +868,7 @@ export type ConversationSummary = {
   isAvailable: boolean;
   accessReason: FeatureAccessReason;
   lastMessage: null | ConversationMessagePreview;
+  isReadOnly?: boolean;
 };
 
 export type CookingFactorKind = 'Yield' | 'Retention';
@@ -897,6 +923,13 @@ export type CreateCoachingProductRequest = {
   name: string;
   description: null | string;
   initialOffer: CreateProductOfferRequest;
+};
+
+export type CreateCoachInvitationRequest = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  idempotencyKey?: null | string;
 };
 
 export type CreateCookingFactorRequest = {
@@ -1330,9 +1363,12 @@ export type ImportUsdaFoodRequest = {
 
 export type InvitationAcceptanceResponse = {
   tenantId: string;
-  clientProfileId: string;
+  clientProfileId: null | string;
   signedIn: boolean;
+  kind: InvitationKind;
 };
+
+export type InvitationKind = 'Client' | 'Coach';
 
 export type InvitationStatus = 'Pending' | 'Accepted' | 'Revoked' | 'Expired';
 
@@ -1348,6 +1384,7 @@ export type InvitationSummary = {
   createdAtUtc: string;
   version: number | string;
   developmentActionUrl?: null | string;
+  kind?: InvitationKind;
 };
 
 export type LegalConsentAcceptanceView = {
@@ -1903,6 +1940,7 @@ export type PublicInvitationDetails = {
   status: InvitationStatus;
   expiresAtUtc: string;
   requiresExistingAccountSignIn: boolean;
+  kind?: InvitationKind;
 };
 
 export type RealtimeAcknowledgementResult = {
@@ -1928,6 +1966,12 @@ export type RealtimeEventView = {
   kind: MessagingRealtimeEventKind;
   occurredAtUtc: string;
   message: null | MessageView;
+};
+
+export type ReassignClientCoachRequest = {
+  coachUserId: string;
+  note: null | string;
+  version: number | string;
 };
 
 export type RecipeIngredientRequest = {
@@ -2032,6 +2076,10 @@ export type RegisterExternalMediaRequest = {
   title: string;
   provider: ExternalMediaProvider;
   externalMediaId: string;
+};
+
+export type RemoveCoachRequest = {
+  version: number | string;
 };
 
 export type RemoveProgressPhotoRequest = {
@@ -2232,6 +2280,16 @@ export type SystemStatusResponse = {
   architecture: string;
   framework: string;
   utcTime: string;
+};
+
+export type TeamMemberSummary = {
+  userId: string;
+  displayName: string;
+  email: string;
+  role: TenantRole;
+  assignedClientCount: number | string;
+  joinedAtUtc: string;
+  version: number | string;
 };
 
 export type TenantMembershipSummary = {
@@ -3017,6 +3075,53 @@ export type AcceptLegalDocumentResponses = {
 export type AcceptLegalDocumentResponse =
   AcceptLegalDocumentResponses[keyof AcceptLegalDocumentResponses];
 
+export type ListTeamMembersData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/team/members';
+};
+
+export type ListTeamMembersResponses = {
+  /**
+   * OK
+   */
+  200: Array<TeamMemberSummary>;
+};
+
+export type ListTeamMembersResponse = ListTeamMembersResponses[keyof ListTeamMembersResponses];
+
+export type RemoveTeamCoachData = {
+  body: RemoveCoachRequest;
+  path: {
+    coachUserId: string;
+  };
+  query?: never;
+  url: '/api/team/members/{coachUserId}/remove';
+};
+
+export type RemoveTeamCoachErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RemoveTeamCoachError = RemoveTeamCoachErrors[keyof RemoveTeamCoachErrors];
+
+export type RemoveTeamCoachResponses = {
+  /**
+   * OK
+   */
+  200: CoachRemovalResponse;
+};
+
+export type RemoveTeamCoachResponse = RemoveTeamCoachResponses[keyof RemoveTeamCoachResponses];
+
 export type ListClientInvitationsData = {
   body?: never;
   path?: never;
@@ -3130,6 +3235,120 @@ export type RevokeClientInvitationResponses = {
 
 export type RevokeClientInvitationResponse =
   RevokeClientInvitationResponses[keyof RevokeClientInvitationResponses];
+
+export type ListCoachInvitationsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/team/invitations';
+};
+
+export type ListCoachInvitationsResponses = {
+  /**
+   * OK
+   */
+  200: Array<InvitationSummary>;
+};
+
+export type ListCoachInvitationsResponse =
+  ListCoachInvitationsResponses[keyof ListCoachInvitationsResponses];
+
+export type CreateCoachInvitationData = {
+  body: CreateCoachInvitationRequest;
+  path?: never;
+  query?: never;
+  url: '/api/team/invitations';
+};
+
+export type CreateCoachInvitationErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CreateCoachInvitationError =
+  CreateCoachInvitationErrors[keyof CreateCoachInvitationErrors];
+
+export type CreateCoachInvitationResponses = {
+  /**
+   * Created
+   */
+  201: InvitationSummary;
+};
+
+export type CreateCoachInvitationResponse =
+  CreateCoachInvitationResponses[keyof CreateCoachInvitationResponses];
+
+export type ResendCoachInvitationData = {
+  body: ResendClientInvitationRequest;
+  path: {
+    invitationId: string;
+  };
+  query?: never;
+  url: '/api/team/invitations/{invitationId}/resend';
+};
+
+export type ResendCoachInvitationErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ResendCoachInvitationError =
+  ResendCoachInvitationErrors[keyof ResendCoachInvitationErrors];
+
+export type ResendCoachInvitationResponses = {
+  /**
+   * OK
+   */
+  200: InvitationSummary;
+};
+
+export type ResendCoachInvitationResponse =
+  ResendCoachInvitationResponses[keyof ResendCoachInvitationResponses];
+
+export type RevokeCoachInvitationData = {
+  body: RevokeClientInvitationRequest;
+  path: {
+    invitationId: string;
+  };
+  query?: never;
+  url: '/api/team/invitations/{invitationId}/revoke';
+};
+
+export type RevokeCoachInvitationErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RevokeCoachInvitationError =
+  RevokeCoachInvitationErrors[keyof RevokeCoachInvitationErrors];
+
+export type RevokeCoachInvitationResponses = {
+  /**
+   * OK
+   */
+  200: InvitationSummary;
+};
+
+export type RevokeCoachInvitationResponse =
+  RevokeCoachInvitationResponses[keyof RevokeCoachInvitationResponses];
 
 export type ListClientsData = {
   body?: never;
@@ -3337,6 +3556,64 @@ export type UnblockClientRelationshipResponses = {
 
 export type UnblockClientRelationshipResponse =
   UnblockClientRelationshipResponses[keyof UnblockClientRelationshipResponses];
+
+export type ReassignClientCoachData = {
+  body: ReassignClientCoachRequest;
+  path: {
+    clientId: string;
+  };
+  query?: never;
+  url: '/api/clients/{clientId}/coach';
+};
+
+export type ReassignClientCoachErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ReassignClientCoachError = ReassignClientCoachErrors[keyof ReassignClientCoachErrors];
+
+export type ReassignClientCoachResponses = {
+  /**
+   * OK
+   */
+  200: CoachClientDetails;
+};
+
+export type ReassignClientCoachResponse =
+  ReassignClientCoachResponses[keyof ReassignClientCoachResponses];
+
+export type ListClientCoachAssignmentsData = {
+  body?: never;
+  path: {
+    clientId: string;
+  };
+  query?: never;
+  url: '/api/clients/{clientId}/coach-assignments';
+};
+
+export type ListClientCoachAssignmentsErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type ListClientCoachAssignmentsResponses = {
+  /**
+   * OK
+   */
+  200: Array<ClientCoachAssignmentView>;
+};
+
+export type ListClientCoachAssignmentsResponse =
+  ListClientCoachAssignmentsResponses[keyof ListClientCoachAssignmentsResponses];
 
 export type GetOwnClientProfileData = {
   body?: never;

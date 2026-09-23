@@ -273,6 +273,22 @@ public sealed partial class Phase6B2AMessagingTests
 
         var first = await StartConversationAsync(workspace.Coach, workspace.ClientProfileId);
         var secondCoach = await AddSecondCoachAsync(workspace, "authority");
+
+        // Since ADR 0026 a Coach may message only their own clients, so the second coach is refused
+        // until the owner assigns the client to them.
+        await RefreshCsrfAsync(secondCoach.Client);
+        await AssertStatusAsync(
+            await CreateConversationAsync(secondCoach.Client, workspace.ClientProfileId),
+            HttpStatusCode.NotFound);
+        var client = await RequiredJsonAsync<ClientDetails>(
+            await workspace.Coach.GetAsync($"/api/clients/{workspace.ClientProfileId}"));
+        await RefreshCsrfAsync(workspace.Coach);
+        await AssertStatusAsync(
+            await workspace.Coach.PostAsJsonAsync(
+                $"/api/clients/{workspace.ClientProfileId}/coach",
+                new { coachUserId = secondCoach.UserId, note = (string?)null, version = client.Version }),
+            HttpStatusCode.OK);
+
         var theirs = await StartConversationAsync(secondCoach.Client, workspace.ClientProfileId);
 
         Assert.AreNotEqual(

@@ -481,7 +481,7 @@ internal sealed class InvitationActionMailService(
                 cancellationToken);
         }
 
-        var content = InvitationActionEmailTemplates.Render(actionUrl);
+        var content = InvitationActionEmailTemplates.Render(actionUrl, authorization.Kind);
         var result = await transport.SendAsync(
             new ActionEmailMessage(
                 ActionMailScopes.Invitation,
@@ -763,6 +763,6 @@ internal sealed class InvitationMailAuthorizationService(GymDbContext dbContext,
 
         return string.IsNullOrWhiteSpace(invitation.Email)
             ? InvitationMailAuthorization.Refused(InvitationActionMailCodes.AddressUnavailable)
-            : InvitationMailAuthorization.Allowed(invitation.Email, invitation.ExpiresAtUtc);
+            : InvitationMailAuthorization.Allowed(invitation.Email, invitation.ExpiresAtUtc, invitation.Kind);
     }
 }

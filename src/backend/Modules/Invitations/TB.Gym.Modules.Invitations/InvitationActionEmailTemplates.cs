@@ -30,20 +30,33 @@ public static class InvitationActionEmailTemplates
 
     public const string InviteKey = "invitation.client-invite";
 
-    public static IReadOnlyList<string> PublishedKeys { get; } = [InviteKey];
+    public const string CoachInviteKey = "invitation.coach-invite";
 
-    public static InvitationActionEmailContent Render(string actionUrl)
+    public static IReadOnlyList<string> PublishedKeys { get; } = [InviteKey, CoachInviteKey];
+
+    public static InvitationActionEmailContent Render(string actionUrl, InvitationKind kind = InvitationKind.Client)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actionUrl);
-        return new InvitationActionEmailContent(
-            InviteKey,
-            CurrentVersion,
-            "You have been invited to TB Gym",
-            string.Concat(
-                "A coach has invited you to join them on TB Gym.\n\n",
-                "Open this link to see the invitation and accept it:\n\n",
-                actionUrl,
-                "\n\nThe link can be used once and expires. If you were not expecting this, ignore this\n",
-                "message: nothing is created until the invitation is accepted.\n"));
+        return kind == InvitationKind.Coach
+            ? new InvitationActionEmailContent(
+                CoachInviteKey,
+                CurrentVersion,
+                "You have been invited to coach on TB Gym",
+                string.Concat(
+                    "You have been invited to join a coaching team on TB Gym as a coach.\n\n",
+                    "Open this link to see the invitation and accept it:\n\n",
+                    actionUrl,
+                    "\n\nThe link can be used once and expires. If you were not expecting this, ignore this\n",
+                    "message: nothing is created until the invitation is accepted.\n"))
+            : new InvitationActionEmailContent(
+                InviteKey,
+                CurrentVersion,
+                "You have been invited to TB Gym",
+                string.Concat(
+                    "A coach has invited you to join them on TB Gym.\n\n",
+                    "Open this link to see the invitation and accept it:\n\n",
+                    actionUrl,
+                    "\n\nThe link can be used once and expires. If you were not expecting this, ignore this\n",
+                    "message: nothing is created until the invitation is accepted.\n"));
     }
 }

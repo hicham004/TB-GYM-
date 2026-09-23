@@ -12,6 +12,7 @@ public sealed class ClientProfile : TenantEntity
     private ClientProfile(
         Guid tenantId,
         Guid userId,
+        Guid assignedCoachUserId,
         string firstName,
         string lastName,
         string email,
@@ -20,6 +21,7 @@ public sealed class ClientProfile : TenantEntity
         : base(tenantId)
     {
         UserId = userId;
+        AssignedCoachUserId = assignedCoachUserId;
         FirstName = firstName;
         LastName = lastName;
         Email = email;
@@ -30,6 +32,13 @@ public sealed class ClientProfile : TenantEntity
     }
 
     public Guid? UserId { get; private set; }
+
+    /// <summary>
+    /// The one active Owner or Coach of this workspace who coaches this client. A Coach sees and acts
+    /// only on the clients assigned to them; the Owner sees every client. Every change appends a
+    /// <see cref="ClientCoachAssignment"/>, and the database refuses a change that does not.
+    /// </summary>
+    public Guid AssignedCoachUserId { get; private set; }
 
     public string FirstName { get; private set; } = string.Empty;
 
@@ -78,6 +87,7 @@ public sealed class ClientProfile : TenantEntity
     public static ClientProfile CreateForAcceptedInvitation(
         Guid tenantId,
         Guid userId,
+        Guid assignedCoachUserId,
         string firstName,
         string lastName,
         string email,
@@ -89,11 +99,17 @@ public sealed class ClientProfile : TenantEntity
             throw new ArgumentException("A user id is required.", nameof(userId));
         }
 
+        if (assignedCoachUserId == Guid.Empty || assignedCoachUserId == userId)
+        {
+            throw new ArgumentException("A client is assigned to a coach other than themselves.", nameof(assignedCoachUserId));
+        }
+
         var names = ValidateNames(firstName, lastName);
         var normalizedEmail = ValidateEmail(email);
         return new ClientProfile(
             tenantId,
             userId,
+            assignedCoachUserId,
             names.FirstName,
             names.LastName,
             normalizedEmail,
@@ -197,6 +213,26 @@ public sealed class ClientProfile : TenantEntity
         }
 
         CoachNotes = normalized;
+        return true;
+    }
+
+    /// <summary>
+    /// Moves this client to another coach. Returns false when they already have that coach, so a
+    /// repeated request records no history.
+    /// </summary>
+    public bool AssignCoach(Guid coachUserId)
+    {
+        if (coachUserId == Guid.Empty || coachUserId == UserId)
+        {
+            throw new ArgumentException("A client is assigned to a coach other than themselves.", nameof(coachUserId));
+        }
+
+        if (AssignedCoachUserId == coachUserId)
+        {
+            return false;
+        }
+
+        AssignedCoachUserId = coachUserId;
         return true;
     }
 

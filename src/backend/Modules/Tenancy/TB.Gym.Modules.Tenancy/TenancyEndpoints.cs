@@ -108,6 +108,7 @@ public static class TenancyEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        endpoints.MapTeamEndpoints();
         return endpoints;
     }
 }

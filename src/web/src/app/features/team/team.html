@@ -1,0 +1,234 @@
+<div class="team tb-theme">
+  <header class="page-header">
+    <div class="page-title">
+      <h1 class="tb-text-section-title" i18n>Settings</h1>
+      <p class="scope tb-text-compact" i18n>
+        Coaches in this workspace. Each client has one coach, and a coach sees only their own
+        clients. You see every client.
+      </p>
+    </div>
+    <app-section-nav
+      class="page-sections"
+      label="Settings sections"
+      i18n-label
+      [links]="sections"
+    />
+  </header>
+
+  <p class="page-error" role="alert">{{ error() }}</p>
+  <p class="page-notice" role="status">{{ notice() }}</p>
+
+  <section class="card tb-table-scope" aria-labelledby="team-members-title">
+    <h2 id="team-members-title" class="card-title tb-text-body-strong" i18n>Team</h2>
+    @if (loading() && members().length === 0) {
+      <p class="card-state" i18n>Loading team…</p>
+    } @else {
+      <table class="tb-table" role="table">
+        <thead role="rowgroup">
+          <tr role="row">
+            <th role="columnheader" scope="col" i18n>Name</th>
+            <th role="columnheader" scope="col" i18n>Role</th>
+            <th role="columnheader" scope="col" i18n>Clients</th>
+            <th role="columnheader" scope="col" i18n>Joined</th>
+            <th role="columnheader" scope="col">
+              <span class="tb-visually-hidden" i18n>Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody role="rowgroup">
+          @for (member of members(); track member.userId) {
+            <tr role="row" [attr.data-member]="member.userId">
+              <td role="cell">
+                <span class="member-name" dir="auto">{{ member.displayName }}</span>
+                <span class="member-email">{{ member.email }}</span>
+              </td>
+              <td role="cell">
+                <span class="tb-table__label" aria-hidden="true" i18n>Role</span>
+                <span>{{ roleLabel(member) }}</span>
+              </td>
+              <td role="cell">
+                <span class="tb-table__label" aria-hidden="true" i18n>Clients</span>
+                <span class="tb-numeric">{{ member.assignedClientCount }}</span>
+              </td>
+              <td role="cell">
+                <span class="tb-table__label" aria-hidden="true" i18n>Joined</span>
+                <span>{{ member.joinedAtUtc | date: 'mediumDate' }}</span>
+              </td>
+              <td role="cell" class="col-actions">
+                @if (member.role === 'Coach') {
+                  <button
+                    appButton
+                    variant="text"
+                    type="button"
+                    (click)="requestRemoval(member, $event)"
+                  >
+                    <ng-container i18n
+                      >Remove<span class="tb-visually-hidden">
+                        {{ member.displayName }}</span
+                      ></ng-container
+                    >
+                  </button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+
+  <section class="card" aria-labelledby="invite-coach-title">
+    <h2 id="invite-coach-title" class="card-title tb-text-body-strong" i18n>Invite a coach</h2>
+    <p class="card-help tb-text-compact" i18n>
+      They get an email link. Accepting adds them to this workspace as a coach with no clients yet.
+    </p>
+    <form class="invite-form" [formGroup]="inviteForm" (ngSubmit)="invite()" novalidate>
+      <app-field label="Email" i18n-label [errors]="shownErrors('email')">
+        <input
+          appControl
+          type="email"
+          autocomplete="off"
+          formControlName="email"
+          (blur)="attempt.touch('email')"
+        />
+      </app-field>
+      <app-field label="First name" i18n-label [errors]="shownErrors('firstName')">
+        <input
+          appControl
+          type="text"
+          dir="auto"
+          formControlName="firstName"
+          (blur)="attempt.touch('firstName')"
+        />
+      </app-field>
+      <app-field label="Last name" i18n-label [errors]="shownErrors('lastName')">
+        <input
+          appControl
+          type="text"
+          dir="auto"
+          formControlName="lastName"
+          (blur)="attempt.touch('lastName')"
+        />
+      </app-field>
+      <div class="invite-actions">
+        <button appButton type="submit" [loading]="inviting()">
+          @if (inviting()) {
+            <ng-container i18n>Sending…</ng-container>
+          } @else {
+            <ng-container i18n>Send invitation</ng-container>
+          }
+        </button>
+      </div>
+    </form>
+    @if (lastLink(); as link) {
+      <p class="dev-link tb-text-compact">
+        <a [href]="link" i18n>Open local link</a>
+      </p>
+    }
+  </section>
+
+  @if (pendingInvitations().length > 0) {
+    <section class="card tb-table-scope" aria-labelledby="pending-coaches-title">
+      <h2 id="pending-coaches-title" class="card-title tb-text-body-strong" i18n>
+        Pending coach invitations
+      </h2>
+      <table class="tb-table" role="table">
+        <thead role="rowgroup">
+          <tr role="row">
+            <th role="columnheader" scope="col" i18n>Invited</th>
+            <th role="columnheader" scope="col" i18n>Status</th>
+            <th role="columnheader" scope="col" i18n>Expires</th>
+            <th role="columnheader" scope="col">
+              <span class="tb-visually-hidden" i18n>Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody role="rowgroup">
+          @for (invitation of pendingInvitations(); track invitation.id) {
+            <tr role="row" [attr.data-invitation]="invitation.id">
+              <td role="cell">
+                <span class="member-name" dir="auto"
+                  >{{ invitation.firstName }} {{ invitation.lastName }}</span
+                >
+                <span class="member-email">{{ invitation.email }}</span>
+              </td>
+              <td role="cell">
+                <span class="tb-table__label" aria-hidden="true" i18n>Status</span>
+                <app-status-label label="Waiting to accept" i18n-label tone="warning" />
+              </td>
+              <td role="cell">
+                <span class="tb-table__label" aria-hidden="true" i18n>Expires</span>
+                <span>{{ invitation.expiresAtUtc | date: 'medium' }}</span>
+              </td>
+              <td role="cell" class="col-actions">
+                <span class="row-actions">
+                  <button
+                    appButton
+                    variant="text"
+                    type="button"
+                    [loading]="pendingRow() === invitation.id"
+                    (click)="resend(invitation)"
+                  >
+                    <ng-container i18n
+                      >Resend<span class="tb-visually-hidden">
+                        {{ invitation.email }}</span
+                      ></ng-container
+                    >
+                  </button>
+                  <button
+                    appButton
+                    variant="text"
+                    type="button"
+                    [loading]="pendingRow() === invitation.id"
+                    (click)="revoke(invitation)"
+                  >
+                    <ng-container i18n
+                      >Revoke<span class="tb-visually-hidden">
+                        {{ invitation.email }}</span
+                      ></ng-container
+                    >
+                  </button>
+                </span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+  }
+</div>
+
+<!-- Removal is confirmed before anything is sent. Only "Remove coach" calls the endpoint. -->
+<dialog
+  #removeDialog
+  class="tb-dialog tb-theme"
+  aria-labelledby="remove-dialog-title"
+  (cancel)="cancelRemoval($event)"
+  (close)="pendingRemoval.set(null)"
+>
+  @if (pendingRemoval(); as member) {
+    <h2 id="remove-dialog-title" class="tb-text-section-title" dir="auto" i18n>
+      Remove {{ member.displayName }}?
+    </h2>
+    <p class="tb-text-compact" i18n>
+      They lose access to this workspace right away. Their clients, {{ member.assignedClientCount }}
+      in total, move to you with all their history, and any client invitation they sent will land
+      with you. Nothing is deleted, and you can reassign each client afterwards.
+    </p>
+    <div class="tb-dialog__actions">
+      <button
+        #removeCancel
+        appButton
+        variant="outlined"
+        type="button"
+        (click)="cancelRemoval($event)"
+        i18n
+      >
+        Cancel
+      </button>
+      <button appButton type="button" [loading]="removing()" (click)="confirmRemoval()" i18n>
+        Remove coach
+      </button>
+    </div>
+  }
+</dialog>

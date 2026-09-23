@@ -128,8 +128,11 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAuthorizationHandler, TenantRoleAuthorizationHandler>();
+        services.AddSingleton<IAuthorizationMiddlewareResultHandler, TenantAuthorizationResultHandler>();
+        services.AddScoped<CoachClientScope>();
         services.AddScoped<ITenantMembershipStore, TenantMembershipStore>();
         services.AddScoped<IWorkspaceApplicationService, WorkspaceApplicationService>();
+        services.AddScoped<ITeamApplicationService, TeamApplicationService>();
         services.AddScoped<IInvitationApplicationService, InvitationApplicationService>();
         services.AddScoped<IClientProfileApplicationService, ClientProfileApplicationService>();
         services.AddScoped<ICoachingFeatureAccessService, CoachingFeatureAccessService>();
