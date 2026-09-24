@@ -694,12 +694,20 @@ export class ClientTraining {
 
   private resetTenantState(): void {
     Object.assign(this.assignment, {
-      enrollmentId: '', templateVersionId: '', startDate: '',
-      loadUnit: 'Kilogram', loadIncrement: 2.5, loadRoundingMode: 'Nearest',
+      enrollmentId: '',
+      templateVersionId: '',
+      startDate: '',
+      loadUnit: 'Kilogram',
+      loadIncrement: 2.5,
+      loadRoundingMode: 'Nearest',
     });
     Object.assign(this.maxForm, {
-      exerciseId: '', kind: 'CoachWorkingMax', value: null, unit: 'Kilogram',
-      effectiveDate: '', note: '',
+      exerciseId: '',
+      kind: 'CoachWorkingMax',
+      value: null,
+      unit: 'Kilogram',
+      effectiveDate: '',
+      note: '',
     });
     Object.assign(this.progression, { iterations: 3, rpeIncrement: 0.5 });
     this.loadedKey = null;

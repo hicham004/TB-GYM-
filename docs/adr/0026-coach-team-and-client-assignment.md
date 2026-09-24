@@ -28,7 +28,7 @@ Business rules, decided by the product owner on 2026-09-23:
 - **Removing a coach moves all their clients, and their pending client invitations, to the owner**
   in one transaction. Nothing about a client is deleted. **A coach can also resign themselves**, with
   the same effect, recorded as `CoachResigned` rather than `CoachRemoved` (2026-09-24). The owner
-  cannot resign.
+  cannot resign. When a coach resigns, the owner is told in-app.
 - **When a coach resigns or is removed, each of their clients with access is told** in-app and by
   one email through the workspace notice queue (ADR 0027): their coach is no longer with this
   workspace and the workspace will assign a new coach. The wording names no coach or workspace.

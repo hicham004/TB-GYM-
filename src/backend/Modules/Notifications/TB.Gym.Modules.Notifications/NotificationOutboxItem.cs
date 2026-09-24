@@ -160,14 +160,18 @@ public enum CommercialNotificationKind
     EnrollmentExpired = 4,
     EnrollmentRenewed = 5,
 
-    // The two workspace kinds below are not commercial; the enum's name predates them (ADR 0027).
-    // Both are in-app only and carry a WorkspaceNotificationPayload rather than an enrollment.
+    // The workspace kinds below are not commercial; the enum's name predates them (ADR 0027). All are
+    // in-app only. The first two carry a WorkspaceNotificationPayload and CoachResigned a
+    // CoachNotificationPayload, rather than an enrollment.
 
     /// <summary>To a client: their coach resigned or was removed, and a new one will be assigned.</summary>
     CoachDeparted = 6,
 
     /// <summary>To the owner and the client's coach: a client left the workspace.</summary>
     ClientLeft = 7,
+
+    /// <summary>To the owner: a coach resigned, and their clients are now the owner's.</summary>
+    CoachResigned = 8,
 }
 
 /// <summary>

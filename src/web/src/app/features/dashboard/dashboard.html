@@ -43,6 +43,16 @@
   </section>
 } @else if (tenants.isClient()) {
   <app-client-today />
+} @else if (tenants.memberships().length === 0) {
+  <!-- An account that left, was released, or resigned from its last workspace still signs in. -->
+  <section class="empty-state" data-no-workspace>
+    <h2 i18n>You are not part of a workspace right now</h2>
+    <p i18n>
+      Your TB Gym account still works, but it is not linked to any coaching workspace. This happens
+      after you leave a workspace or a workspace ends your access.
+    </p>
+    <p i18n>To join one again, ask your coach to send you a new invitation.</p>
+  </section>
 } @else {
   <section class="empty-state">
     <h2 i18n>No active workspace role</h2>

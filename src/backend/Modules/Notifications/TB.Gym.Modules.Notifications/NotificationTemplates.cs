@@ -81,6 +81,13 @@ public static class NotificationTemplateCatalog
             DefaultCulture,
             "A client left the workspace",
             "A client has left this workspace. The owner keeps their record, read-only, under Former clients."),
+        // To the owner. Names nobody, like the others; the clients are already on the owner's list.
+        [CommercialNotificationKind.CoachResigned] = new NotificationTemplate(
+            "workspace.coach-resigned",
+            CurrentVersion,
+            DefaultCulture,
+            "A coach left your team",
+            "A coach resigned from this workspace. Their clients and pending client invitations are now assigned to you, and you can reassign them from Clients."),
     };
 
     /// <summary>

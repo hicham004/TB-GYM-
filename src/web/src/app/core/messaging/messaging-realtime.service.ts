@@ -723,7 +723,9 @@ export class MessagingRealtimeService {
   // ---------- ownership ----------
 
   private ownsContext(context: number): boolean {
-    return !this.destroyed && this.contextGeneration === context && this.context === this.contextKey();
+    return (
+      !this.destroyed && this.contextGeneration === context && this.context === this.contextKey()
+    );
   }
 
   private owns(context: number, conversation: number): boolean {

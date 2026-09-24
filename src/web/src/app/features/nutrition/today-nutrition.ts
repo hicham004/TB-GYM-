@@ -209,9 +209,7 @@ export class TodayNutrition {
   }
 
   private ownsDate(owner: NutritionDateOwner): boolean {
-    return (
-      owner.generation === this.dateGeneration && owner.selectedDate === this.selectedDate
-    );
+    return owner.generation === this.dateGeneration && owner.selectedDate === this.selectedDate;
   }
 
   private invalidateDateState(): void {

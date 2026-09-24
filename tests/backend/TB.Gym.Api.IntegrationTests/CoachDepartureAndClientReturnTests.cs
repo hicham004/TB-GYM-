@@ -56,6 +56,14 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual("Your coach has changed", told.Title);
         StringAssert.Contains(told.Body, "assign you a new coach");
 
+        // The owner is told too, once, without the coach being named.
+        var ownerInbox = await RequiredJsonAsync<DepartureInbox>(await owner.GetAsync("/api/notifications"));
+        var resignedNotice = ownerInbox.Items.Single(item => item.Kind == "CoachResigned");
+        Assert.AreEqual("A coach left your team", resignedNotice.Title);
+        StringAssert.Contains(resignedNotice.Body, "now assigned to you");
+        Assert.DoesNotContain("Rhea", resignedNotice.Body);
+        Assert.IsFalse(inbox.Items.Any(item => item.Kind == "CoachResigned"), "Only the owner hears of a resignation.");
+
         // ... and by one email that names nobody.
         CapturedNoticeMail.Clear();
         Assert.AreEqual(1, (await SweepWorkspaceNoticesAsync()).Materialized);
@@ -90,6 +98,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.HasCount(1, told.Items.Where(item => item.Kind == "CoachDeparted"));
         var untouched = await RequiredJsonAsync<DepartureInbox>(await ownersClient.GetAsync("/api/notifications"));
         Assert.IsFalse(untouched.Items.Any(item => item.Kind == "CoachDeparted"), "The owner's own client kept their coach.");
+        var ownerInbox = await RequiredJsonAsync<DepartureInbox>(await owner.GetAsync("/api/notifications"));
+        Assert.IsFalse(
+            ownerInbox.Items.Any(item => item.Kind == "CoachResigned"),
+            "The owner removed the coach themselves; there is nothing to tell them.");
 
         CapturedNoticeMail.Clear();
         Assert.AreEqual(1, (await SweepWorkspaceNoticesAsync()).Materialized);

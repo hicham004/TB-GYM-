@@ -45,10 +45,15 @@ async function createHarness(
   await TestBed.configureTestingModule({
     imports: [ProgressView],
     providers: [
-      { provide: ApiClient, useValue: {
-        createMediaAccess, getMyProgress: () => of(null),
-        getMyBodyMeasurements: () => of(null), getMyProgressPhotos: () => of(null),
-      } },
+      {
+        provide: ApiClient,
+        useValue: {
+          createMediaAccess,
+          getMyProgress: () => of(null),
+          getMyBodyMeasurements: () => of(null),
+          getMyProgressPhotos: () => of(null),
+        },
+      },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
     ],

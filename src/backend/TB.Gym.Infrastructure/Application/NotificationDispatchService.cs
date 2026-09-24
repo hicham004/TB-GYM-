@@ -618,7 +618,8 @@ internal sealed class NotificationDispatchService(
     /// <remarks>
     /// A coach departure is still worth saying while the client is a current member with that same
     /// profile and the history entry that moved them exists. A client leaving is worth saying to staff
-    /// who are still active staff, while that relationship is still ended. Both are in-app only.
+    /// who are still active staff, while that relationship is still ended. A coach resigning is worth
+    /// saying to the active owner while that coach is still gone. All are in-app only.
     /// </remarks>
     private static async Task<Eligibility> EvaluateWorkspaceKindAsync(
         GymDbContext context,
@@ -626,61 +627,25 @@ internal sealed class NotificationDispatchService(
         NotificationChannelDelivery delivery,
         CancellationToken cancellationToken)
     {
-        WorkspaceNotificationPayload? payload;
-        try
+        if (item.Kind == CommercialNotificationKind.CoachResigned)
         {
-            payload = JsonSerializer.Deserialize<WorkspaceNotificationPayload>(item.PayloadJson, PayloadJsonOptions);
-        }
-        catch (JsonException)
-        {
-            payload = null;
+            return await EvaluateCoachResignedAsync(context, item, delivery, cancellationToken);
         }
 
-        if (payload is null ||
+        if (!TryReadWorkspacePayload(item.PayloadJson, out WorkspaceNotificationPayload? payload) ||
             payload.ClientProfileId == Guid.Empty ||
             payload.SchemaVersion != WorkspaceNotificationPayload.CurrentSchemaVersion)
         {
             return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
         }
 
-        var tenant = await context.Tenants
-            .AsNoTracking()
-            .Where(candidate => candidate.Id == item.TenantId)
-            .Select(candidate => new { candidate.IsActive, candidate.DefaultCulture })
-            .SingleOrDefaultAsync(cancellationToken);
-        if (tenant is null)
+        var audience = await ResolveWorkspaceAudienceAsync(context, item, cancellationToken);
+        if (audience.Refusal is { } refusal)
         {
-            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+            return refusal;
         }
 
-        if (!tenant.IsActive)
-        {
-            return Eligibility.Suppress(NotificationSuppressionCodes.TenantInactive);
-        }
-
-        var recipientBlocked = await context.Users
-            .AsNoTracking()
-            .Where(user => user.Id == item.RecipientUserId)
-            .Select(user => (bool?)user.IsPlatformBlocked)
-            .SingleOrDefaultAsync(cancellationToken);
-        if (recipientBlocked is null)
-        {
-            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
-        }
-
-        if (recipientBlocked.Value)
-        {
-            return Eligibility.Suppress(NotificationSuppressionCodes.RecipientBlocked);
-        }
-
-        var recipientRole = await context.TenantMemberships
-            .AsNoTracking()
-            .Where(membership =>
-                membership.TenantId == item.TenantId &&
-                membership.UserId == item.RecipientUserId &&
-                membership.Status == MembershipStatus.Active)
-            .Select(membership => (TenantRole?)membership.Role)
-            .SingleOrDefaultAsync(cancellationToken);
+        var recipientRole = audience.RecipientRole;
         var client = await context.ClientProfiles
             .AsNoTracking()
             .Where(profile => profile.Id == payload.ClientProfileId)
@@ -733,14 +698,137 @@ internal sealed class NotificationDispatchService(
             }
         }
 
+        return InAppOnly(item, delivery, audience.Culture);
+    }
+
+    /// <summary>
+    /// To the owner, while the coach who resigned is still gone: a coach who rejoined before this was
+    /// said has not left any more, and a new resignation carries its own notice.
+    /// </summary>
+    private static async Task<Eligibility> EvaluateCoachResignedAsync(
+        GymDbContext context,
+        NotificationOutboxItem item,
+        NotificationChannelDelivery delivery,
+        CancellationToken cancellationToken)
+    {
+        if (!TryReadWorkspacePayload(item.PayloadJson, out CoachNotificationPayload? payload) ||
+            payload.CoachUserId == Guid.Empty ||
+            payload.SchemaVersion != CoachNotificationPayload.CurrentSchemaVersion)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
+        }
+
+        var audience = await ResolveWorkspaceAudienceAsync(context, item, cancellationToken);
+        if (audience.Refusal is { } refusal)
+        {
+            return refusal;
+        }
+
+        var coach = await context.TenantMemberships
+            .AsNoTracking()
+            .Where(membership => membership.Id == item.AggregateId && membership.TenantId == item.TenantId)
+            .Select(membership => new { membership.UserId, membership.Role, membership.Status })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (coach is null || coach.UserId != payload.CoachUserId || coach.Role != TenantRole.Coach)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+        }
+
+        if (audience.RecipientRole != TenantRole.Owner)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.MembershipInactive);
+        }
+
+        if (coach.Status == MembershipStatus.Active)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
+        }
+
+        return InAppOnly(item, delivery, audience.Culture);
+    }
+
+    /// <summary>
+    /// The checks every workspace kind shares: the workspace still exists and is active, and the
+    /// recipient still exists and is not blocked. Answers the recipient's active role, if any.
+    /// </summary>
+    private static async Task<WorkspaceAudience> ResolveWorkspaceAudienceAsync(
+        GymDbContext context,
+        NotificationOutboxItem item,
+        CancellationToken cancellationToken)
+    {
+        var tenant = await context.Tenants
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == item.TenantId)
+            .Select(candidate => new { candidate.IsActive, candidate.DefaultCulture })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (tenant is null)
+        {
+            return WorkspaceAudience.Refused(Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch));
+        }
+
+        if (!tenant.IsActive)
+        {
+            return WorkspaceAudience.Refused(Eligibility.Suppress(NotificationSuppressionCodes.TenantInactive));
+        }
+
+        var recipientBlocked = await context.Users
+            .AsNoTracking()
+            .Where(user => user.Id == item.RecipientUserId)
+            .Select(user => (bool?)user.IsPlatformBlocked)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (recipientBlocked is null)
+        {
+            return WorkspaceAudience.Refused(Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch));
+        }
+
+        if (recipientBlocked.Value)
+        {
+            return WorkspaceAudience.Refused(Eligibility.Suppress(NotificationSuppressionCodes.RecipientBlocked));
+        }
+
+        var recipientRole = await context.TenantMemberships
+            .AsNoTracking()
+            .Where(membership =>
+                membership.TenantId == item.TenantId &&
+                membership.UserId == item.RecipientUserId &&
+                membership.Status == MembershipStatus.Active)
+            .Select(membership => (TenantRole?)membership.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+        return new WorkspaceAudience(null, tenant.DefaultCulture, recipientRole);
+    }
+
+    private static Eligibility InAppOnly(NotificationOutboxItem item, NotificationChannelDelivery delivery, string culture)
+    {
         if (delivery.Channel != NotificationChannel.InApp)
         {
             return Eligibility.Suppress(NotificationSuppressionCodes.EmailChannelUnavailable);
         }
 
-        return NotificationTemplateCatalog.TryResolve(item.Kind, tenant.DefaultCulture, out var template)
+        return NotificationTemplateCatalog.TryResolve(item.Kind, culture, out var template)
             ? Eligibility.InApp(template)
             : Eligibility.Permanent(NotificationFailureCodes.TemplateMissing);
+    }
+
+    private static bool TryReadWorkspacePayload<TPayload>(
+        string payloadJson,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out TPayload? payload)
+        where TPayload : class
+    {
+        try
+        {
+            payload = JsonSerializer.Deserialize<TPayload>(payloadJson, PayloadJsonOptions);
+        }
+        catch (JsonException)
+        {
+            payload = null;
+        }
+
+        return payload is not null;
+    }
+
+    private sealed record WorkspaceAudience(Eligibility? Refusal, string Culture, TenantRole? RecipientRole)
+    {
+        public static WorkspaceAudience Refused(Eligibility refusal) => new(refusal, string.Empty, null);
     }
 
     private static bool TryReadPayload(string payloadJson, out CommercialNotificationPayload payload)

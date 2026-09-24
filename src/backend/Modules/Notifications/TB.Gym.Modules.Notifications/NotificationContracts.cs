@@ -35,6 +35,17 @@ public sealed record WorkspaceNotificationPayload(
     public const int CurrentSchemaVersion = 1;
 }
 
+/// <summary>
+/// The versioned payload of a notification about a coach rather than a client: which coach, and
+/// nothing else. The outbox aggregate is their membership row.
+/// </summary>
+public sealed record CoachNotificationPayload(
+    Guid CoachUserId,
+    int SchemaVersion = CoachNotificationPayload.CurrentSchemaVersion)
+{
+    public const int CurrentSchemaVersion = 1;
+}
+
 /// <summary>The signed-in recipient view of one of their own notifications.</summary>
 public sealed record NotificationView(
     Guid Id,

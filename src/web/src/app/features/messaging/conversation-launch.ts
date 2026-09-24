@@ -8,7 +8,9 @@ export class ConversationLaunch {
   private pending: { tenantId: string; conversation: Conversation } | null = null;
 
   constructor() {
-    const remove = inject(TenantContext).onChange(() => { this.pending = null; });
+    const remove = inject(TenantContext).onChange(() => {
+      this.pending = null;
+    });
     inject(DestroyRef).onDestroy(remove);
   }
 

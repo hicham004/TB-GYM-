@@ -493,6 +493,11 @@ context synchronously, which resets every `TenantAsyncScope`, and the shell clos
 responsive navigation dialog on that same signal. Sign-out keeps its existing sequence — both unread
 counts cleared, then the request, then the navigation.
 
+The public homepage shares `/` with the signed-in dashboard. A session-aware route match selects the
+homepage for visitors and the existing guarded dashboard for members; protected feature routes and
+the invitation-only client onboarding flow are unchanged. The homepage has its own navigation, so
+the sign-in and registration screens retain their existing public top bar.
+
 The migrated exercise library keeps every request it made before and adds no new one. Its filters
 stay server-side and are applied on Apply or Enter only; the list asks for the 100 rows the server is
 willing to return (it clamps `take` to 1-100) and says either "N exercises · sorted by name" or
@@ -1423,7 +1428,7 @@ dead-letter view.
 A third queue, `tenancy."NoticeMailRequests"` (ADR 0027), carries plain workspace notices — "your
 access to a workspace has ended" to a released client, and "your coach has changed" to each client of
 a coach who resigned or was removed. The in-app side of those events uses the notification outbox as
-in-app-only intents (`CoachDeparted`, `ClientLeft`). The notice queue is tenant-owned like the
+in-app-only intents (`CoachDeparted`, `ClientLeft`, and `CoachResigned` to the owner). The notice queue is tenant-owned like the
 invitation queue and shares its claim, attempt, retry and dead-letter lifecycle, but mints no token
 and carries no link. Its recipient is a membership row, current or former, and eligibility is the
 notice's own fact re-checked before sending, not an active membership. The same Worker loop sweeps it.

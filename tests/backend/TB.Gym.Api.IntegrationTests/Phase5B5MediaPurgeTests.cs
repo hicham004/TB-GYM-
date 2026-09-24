@@ -46,7 +46,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         // recoverable for the whole retention window.
         await AssertPhotoReadableAsync(client, photo.MediaAssetId, true);
 
-        // Nothing is due yet, so a sweep run now must not touch it.
+        // Nothing is due yet, so a sweep run now must not touch it. Minting the grant above moved the
+        // clock to real time, which is past a window pinned to 2026-08-22, so pin it back to just
+        // before the purge time.
+        RequiredTestClock.Set(scheduled.PurgeAfterUtc!.Value.AddMinutes(-1));
         Assert.AreEqual(0, (await Phase5B5SweepAsync()).Claimed);
         Assert.AreEqual(MediaAssetStatus.Tombstoned, (await Phase5B5ReadAssetAsync(photo.MediaAssetId)).Status);
     }

@@ -42,8 +42,10 @@ describe('TodayTraining media dialog', () => {
           provide: ApiClient,
           useValue: {
             createMediaAccess: vi.fn(() => of(access)),
-            getMyTrainingToday: () => of({ isAllowed: false, workouts: [], accessReason: 'NoEntitlement' }),
-            getMyUpcomingTraining: () => of({ isAllowed: false, unfinishedWorkouts: [], accessReason: 'NoEntitlement' }),
+            getMyTrainingToday: () =>
+              of({ isAllowed: false, workouts: [], accessReason: 'NoEntitlement' }),
+            getMyUpcomingTraining: () =>
+              of({ isAllowed: false, unfinishedWorkouts: [], accessReason: 'NoEntitlement' }),
           },
         },
         {

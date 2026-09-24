@@ -58,8 +58,11 @@ async function createHarness(
       {
         provide: ApiClient,
         // A successful correction reloads the view; an empty reload keeps the test on the flow.
-        useValue: { replaceMyBodyweightDate, getMyProgress: vi.fn(() => of(null)),
-          getMyBodyMeasurements: () => of(null), getMyProgressPhotos: () => of(null),
+        useValue: {
+          replaceMyBodyweightDate,
+          getMyProgress: vi.fn(() => of(null)),
+          getMyBodyMeasurements: () => of(null),
+          getMyProgressPhotos: () => of(null),
         },
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },

@@ -163,6 +163,20 @@ internal sealed class TeamApplicationService(
                 }
 
                 membership.RemoveCoach();
+
+                // The owner removed a coach themselves, so only a resignation is news to them.
+                if (reason == ClientCoachAssignmentReason.CoachResigned)
+                {
+                    WorkspaceRelationshipNotices.CoachResigned(
+                        dbContext,
+                        tenantId,
+                        timeZoneId,
+                        ownerUserId,
+                        membership.Id,
+                        coachUserId,
+                        now);
+                }
+
                 await dbContext.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 return new CoachRemovalResult(CoachRemovalStatus.Removed, clients.Count, invitations.Count);

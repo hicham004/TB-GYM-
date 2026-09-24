@@ -805,7 +805,8 @@ export type CommercialNotificationKind =
   | 'EnrollmentExpired'
   | 'EnrollmentRenewed'
   | 'CoachDeparted'
-  | 'ClientLeft';
+  | 'ClientLeft'
+  | 'CoachResigned';
 
 export type CompleteClientOnboardingRequest = {
   intake: UpdateClientIntakeRequest;

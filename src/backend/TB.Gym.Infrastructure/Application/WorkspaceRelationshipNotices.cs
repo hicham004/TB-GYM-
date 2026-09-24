@@ -41,7 +41,7 @@ internal static class WorkspaceRelationshipNotices
             clientUserId,
             coachAssignmentId,
             CommercialNotificationKind.CoachDeparted,
-            clientProfileId,
+            Payload(new WorkspaceNotificationPayload(clientProfileId)),
             $"coach-departed:{coachAssignmentId:N}:v1",
             now);
         dbContext.WorkspaceNoticeMailRequests.Add(WorkspaceNoticeMailRequest.CoachDeparted(
@@ -67,8 +67,31 @@ internal static class WorkspaceRelationshipNotices
             staffUserId,
             clientProfileId,
             CommercialNotificationKind.ClientLeft,
-            clientProfileId,
+            Payload(new WorkspaceNotificationPayload(clientProfileId)),
             $"client-left:{clientProfileId:N}:{staffUserId:N}:v1",
+            now);
+
+    /// <summary>
+    /// Tells the owner, in-app only, that a coach resigned and their clients are now the owner's. A
+    /// coach who rejoins and resigns again is a new departure, so the key carries its instant.
+    /// </summary>
+    public static void CoachResigned(
+        GymDbContext dbContext,
+        Guid tenantId,
+        string tenantTimeZoneId,
+        Guid ownerUserId,
+        Guid coachMembershipId,
+        Guid coachUserId,
+        DateTimeOffset now) =>
+        ScheduleInApp(
+            dbContext,
+            tenantId,
+            tenantTimeZoneId,
+            ownerUserId,
+            coachMembershipId,
+            CommercialNotificationKind.CoachResigned,
+            Payload(new CoachNotificationPayload(coachUserId)),
+            $"coach-resigned:{coachMembershipId:N}:{now.UtcTicks}:v1",
             now);
 
     public static Task<string> TenantTimeZoneAsync(
@@ -80,6 +103,9 @@ internal static class WorkspaceRelationshipNotices
             .Select(tenant => tenant.TimeZoneId)
             .SingleAsync(cancellationToken);
 
+    private static string Payload<TPayload>(TPayload payload) =>
+        JsonSerializer.Serialize(payload, PayloadJsonOptions);
+
     private static void ScheduleInApp(
         GymDbContext dbContext,
         Guid tenantId,
@@ -87,7 +113,7 @@ internal static class WorkspaceRelationshipNotices
         Guid recipientUserId,
         Guid aggregateId,
         CommercialNotificationKind kind,
-        Guid clientProfileId,
+        string payloadJson,
         string deduplicationKey,
         DateTimeOffset now)
     {
@@ -97,7 +123,7 @@ internal static class WorkspaceRelationshipNotices
             aggregateId,
             kind,
             deduplicationKey,
-            JsonSerializer.Serialize(new WorkspaceNotificationPayload(clientProfileId), PayloadJsonOptions),
+            payloadJson,
             now,
             tenantTimeZoneId);
         dbContext.NotificationOutboxItems.Add(item);

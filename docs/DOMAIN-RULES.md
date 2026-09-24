@@ -99,7 +99,7 @@ after a reassignment the old coach loses the thread and the client keeps it read
 **CLI-014** Removing a coach, or a coach resigning themselves, moves all their clients and pending
 client invitations to the owner in one transaction and deletes nothing. Each of those clients with
 access is told in-app and by one email that the workspace will assign a new coach, naming nobody.
-The owner cannot resign.
+When a coach resigns, the owner is told in-app, naming nobody. The owner cannot resign.
 
 **CLI-015** The owner releases a client with a reason, or a client leaves with an optional one. Their
 membership ends at once; their running and future plans, programs and meal plans are cancelled
