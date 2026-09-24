@@ -239,6 +239,8 @@ rows cannot be rewritten even when templates or future prescriptions change.
 zone. Completed and Cancelled are explicit terminal states. Cancellation requires an audit
 reason, preserves history, releases future primary-overlap blocking, and cannot occur while
 a workout is in progress. Completion requires every programmed session to be complete.
+A terminal mesocycle's programming is never edited, and an assignment is never deleted to
+correct it.
 
 **TRN-014** One Training-owned coverage policy authorizes every date-changing operation:
 assignment, rescheduling, and progression apply. Preview exposes projected overflow, but the
@@ -251,6 +253,9 @@ Prescribed values and actual performance remain separate and visible after compl
 **TRN-016** Recording a non-null actual load requires an explicit kg or lb unit. When a set
 has no prescribed load/unit, the client UI presents an unselected unit choice rather than
 displaying a default that is absent from the draft or silently assuming a measurement system.
+
+**TRN-017** Unsaved workout entries are client-side drafts kept separate from API DTOs and keyed
+by set-performance ID. Saving or failing one set never erases another set's unsaved values.
 
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
@@ -291,6 +296,11 @@ mesocycle with unit, positive increment, and Nearest/Down/Up mode. Phase 3 does 
 convert kg and lb; selected maxes must use the mesocycle unit. A positive recommendation that
 would round to zero is rejected as no practical external load; a coach must choose a smaller
 increment, round up deliberately, use a manual override, or explicitly prescribe no load.
+
+**STR-009** Every progression strategy, not only RPE progression v1, follows
+`Preview -> hash/concurrency check -> Apply`. No bulk transform persists before the coach
+reviews the preview, and apply rechecks enrollment coverage server-side through the TRN-014
+policy.
 
 ## 6. Nutrition, recipes, and calorie targets
 

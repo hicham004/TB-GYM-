@@ -1030,9 +1030,11 @@ unit economics are known and exercised.
 - Foundation slice 1 (2026-09-22): Figma tokens as CSS custom properties, opt-in primitives in
   `src/web/src/app/ui`, a development-only UI lab, and Playwright/axe browser checks. Additive — no
   route is migrated yet. See `docs/FRONTEND-DESIGN-SYSTEM.md`.
-- Next bounded slice: the coach shell, preserving workspace switching, account actions and
-  role-aware routes. Screen migrations follow it, gated by the feature conditions listed in that
-  document. This track changes no API, schema or domain rule, and Phase 4 remains unstarted.
+- Slice 2 (2026-09-22): the coach shell, preserving workspace switching, account actions and
+  role-aware routes, and the Exercises library as the first migrated route. See sections 9-10 of
+  that document. Slices 1 and 2 changed no API, schema or domain rule.
+- Next: only the Client Today and coach client workspace redesign (commercial Step 3); other
+  slices are parked. Screen migrations stay gated by the feature conditions in that document.
 
 ## Commercial launch track (agreed 2026-09-22)
 

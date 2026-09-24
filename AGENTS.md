@@ -13,34 +13,36 @@
 - **Verify in proportion:** during work, run the tests for the area you changed. Run the full
   suite once before reporting. Click through any new or changed screen in a real browser.
   Security, tenant isolation and money correctness are always tested, never traded off.
-- **Keep docs light:** update existing docs in a few lines. Write an ADR (one page at most)
-  only for a business decision or a module boundary change. No new reports, audits or
-  checklists unless the user asks.
+- **Keep docs light:** when a decision, boundary, invariant or phase changes, update the
+  existing docs in a few lines. Write an ADR (one page at most) only for a business decision or
+  a module boundary change. No new reports, audits or checklists unless the user asks.
 - **Report plainly:** what changed for coaches and clients, test results, what was not done
   or not verified, and the next step. Commit only when the user says so.
 
 ## Read first
 
-- Read `docs/ARCHITECTURE.md`, `docs/DOMAIN-RULES.md`, and `docs/ROADMAP.md` before changing
-  architecture or domain behavior.
-- Read ADRs 0005-0007 before changing commercial access, training, strength, progression,
-  notifications, media, or legal consent.
+- Read the sections of `docs/ARCHITECTURE.md`, `docs/DOMAIN-RULES.md` and `docs/ROADMAP.md` that
+  cover the area you change.
+- Before changing an area, read its ADR(s) in `docs/adr/`.
 - Current work follows the commercial plan in `docs/ROADMAP.md`; do not start a roadmap phase
   or feature outside it without the user's approval.
 - `base44/` is a preserved legacy reference, not the new architecture. Do not edit, delete,
   or copy its generic CRUD/security model unless the user explicitly requests legacy work.
-- The backend/database is the source of truth. Never implement an invariant only in Angular.
+- The backend/database is the source of truth. Never implement an invariant only in Angular;
+  authorization belongs on API/resource operations, and Angular role checks are presentation.
+  A working UI is not evidence that business state is correct.
 
 ## Stack and structure
 
 - Backend: .NET 10 LTS, C# 14, ASP.NET Core, EF Core 10, Npgsql, PostgreSQL 18.
-- Frontend: Angular 22 standalone components, Signals, strict TypeScript, lazy feature routes.
+- Frontend: Angular 22 standalone components, Signals, strict TypeScript; keep feature routes lazy.
 - Architecture: modular monolith. Do not introduce microservices, a distributed event bus,
   or separate databases without an approved ADR and demonstrated need.
 - Keep `TB.Gym.SharedKernel` tiny. Module projects may reference SharedKernel only, never
   another `TB.Gym.Modules.*` assembly. Infrastructure and API compose modules.
-- `ICoachingFeatureAccessService` is the approved shared authorization port. Future training,
-  nutrition, check-in, messaging, and resource APIs must evaluate it server-side.
+- `ICoachingFeatureAccessService` is the approved shared authorization port. Training, nutrition,
+  check-in, messaging, and resource APIs must keep evaluating it server-side, as must any new
+  coaching-feature API.
 - A module owns its entities, rules, tables, and terminology. Cross-module work uses narrow
   contracts or durable integration events, never another module's `DbSet`/repository.
 
@@ -58,21 +60,14 @@
 - Use UTC instants, `DateOnly` for calendar dates, explicit tenant time zones, half-open
   periods `[start, endExclusive)`, exact decimal money plus currency, and explicit units.
 - Use succinct comments only for non-obvious reasoning. Do not commit secrets or user data.
-- Never round-trip repository files through Windows PowerShell 5.1 `Get-Content -Raw`,
-  `Set-Content` or `Add-Content`. They decode UTF-8 as ANSI and write ANSI back, so every em dash,
-  curly quote and accent becomes a two- or three-character mojibake sequence (the A-circumflex and
-  A-tilde prefixes) and a BOM can appear from nowhere — corruption that compiles and reviews
-  clean. Use the editing tools, or
-  `[System.IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false))` and `WriteAllText` with
-  the same encoding; pass `-Encoding utf8` when a cmdlet must write. Keep `.ps1` files pure ASCII
-  for the same reason: a non-ASCII literal in a script corrupts the script itself.
+- PowerShell 5.1 `Get-Content`/`Set-Content`/`Add-Content` corrupt UTF-8; for repo files use
+  `[IO.File]::ReadAllText`/`WriteAllText` with `[Text.UTF8Encoding]::new($false)`; keep `.ps1` ASCII.
 
 ## Security and tenancy
 
 - Treat `X-Tenant-Id` as untrusted until active membership is verified server-side.
 - Every tenant-owned entity needs `TenantId`, a global query filter, write-scope guard,
   tenant-aware indexes/constraints, and cross-tenant negative tests.
-- Authorization belongs on API/resource operations. Angular role checks are presentation.
 - A Coach acts only on assigned clients (ADR 0026). Name client route parameters `clientProfileId`
   or `clientId` so the tenant handler checks them; any other route reaching a client must ask
   `CoachClientScope` and answer 404 for another coach's client.
@@ -89,23 +84,26 @@
 - Use database checks, unique/composite foreign keys, and PostgreSQL exclusion constraints
   for critical invariants where possible, plus friendly domain validation.
 - Preserve audit/history for subscriptions, payments, blocks, programs, strength snapshots,
-  and calculations. Do not overwrite history or hard-delete paid/completed facts.
-- Commercial naming is deliberate: `CoachingProduct` -> immutable `ProductOffer` -> dated
-  `ClientEnrollment` -> feature coverage and append-only `PaymentRecord`. Do not collapse
-  these into a generic Subscription DTO/table.
-- Renewal creates a new enrollment. A new price/duration/currency creates a new offer. Never
-  mutate enrollment snapshots or payment history.
-- Enrollment overlap is prohibited per tenant/client/feature/date range, not globally. Keep
-  the PostgreSQL GiST exclusion constraint and concurrency test intact.
+  and calculations. Never overwrite history or hard-delete paid/completed facts; enrollment
+  snapshots, payment history, strength observations and mesocycle working maxes are append-only.
+- These rules cover money between a coach and their client.
+  - Commercial naming is deliberate: `CoachingProduct` -> immutable `ProductOffer` -> dated
+    `ClientEnrollment` -> feature coverage and append-only `PaymentRecord`. Do not collapse
+    these into a generic Subscription DTO/table.
+  - Renewal creates a new enrollment. A new price/duration/currency creates a new offer.
+  - Enrollment overlap is prohibited per tenant/client/feature/date range, not globally. Keep
+    the PostgreSQL GiST exclusion constraint and concurrency test intact.
+  - Phase 2 manual receipts must match enrollment currency; partial receipts grant no access
+    until the exact price is paid. Do not add FX, credit, refunds, waiver, or recurring billing
+    behavior without an approved domain decision and ledger operation design.
+- Platform billing (TB Gym billing workspaces for seats and active clients, Step 2) is a separate
+  concern with its own ADR; it must still use exact money plus currency, append-only payment
+  history and server-side enforcement.
 - Workspace relationship block overrides feature access only in that tenant. It must never
   become a global Identity block.
-- Phase 2 manual receipts must match enrollment currency; partial receipts grant no access
-  until the exact price is paid. Do not add FX, credit, refunds, waiver, or recurring billing
-  behavior without an approved domain decision and ledger operation design.
 - Idempotency keys are bound to normalized command payloads. Identical concurrent retries
   return the original result; changed payloads with a reused key must conflict.
-- Notification outbox keys are idempotent and schedules are calculated in tenant time. Do not
-  claim provider delivery until a durable dispatcher exists.
+- Notification outbox keys are idempotent and schedules are calculated in tenant time.
 - Legal acceptances are append-only and require an approved published document version. Do
   not invent or seed legal wording.
 - Mutable aggregates require optimistic concurrency and conflict handling.
@@ -117,24 +115,12 @@
 - One enrollment may authorize zero or several sequential mesocycles. Do not collapse
   enrollment and mesocycle. Keep the primary-mesocycle GiST overlap constraint. Assignment,
   rescheduling, and progression must all use `TrainingCoveragePolicy`.
-- Planned/Active mesocycle status is date-derived. Completed/Cancelled is terminal and
-  audited; never delete an assignment to correct it or mutate terminal programming.
-- Main lifts are `Locked`. `CoachApprovedSwap` permits only captured alternatives and records
-  the performed exercise without changing the prescription.
-- Strength observations and mesocycle working maxes are append-only snapshots. Do not
-  silently rebase a program after a global max changes or convert kg/lb implicitly.
-- RPE is canonical: Phase 3 accepts RPE 5-10 or RIR 0-5 in 0.5 steps. Calculation,
-  progression, and rounding strategies must remain named, versioned, explainable, and tested;
-  manual coach overrides win.
-- Progression must remain `Preview -> hash/concurrency check -> Apply`; no bulk transform may
-  persist before coach review, and apply must recheck enrollment coverage server-side.
-- Private media access must reauthorize tenant/user/asset, validate signature and size, use
-  generated object keys, and fail closed in production when scanning is unavailable. Native
-  image/video requests use the short-lived path-scoped grant cookie, never public URLs or a
-  required `X-Tenant-Id` subresource header.
-- Keep unsaved workout-entry drafts separate from API DTOs and keyed by set-performance ID.
-  Saving or failing one set must not erase another set's dirty values.
-- Keep formulas named/versioned with inputs and provenance. Add fixed reference tests.
+- Do not silently rebase a program after a global max changes or convert kg/lb implicitly.
+- RPE is canonical: Phase 3 accepts RPE 5-10 or RIR 0-5 in 0.5 steps.
+- Keep formulas and calculation, progression and rounding strategies named, versioned and
+  explainable, with inputs and provenance and fixed reference tests; manual coach overrides win.
+- Training work: read `docs/DOMAIN-RULES.md` sections 4-5 first.
+- Media work: read the MED rules in `docs/DOMAIN-RULES.md` section 8 and ADRs 0023-0025 first.
 
 ## Testing
 
@@ -142,9 +128,10 @@
 - Module/dependency change: update architecture tests.
 - Endpoint/security/persistence change: add API integration tests, including unauthorized,
   wrong-tenant, constraint, and concurrency cases.
-- Angular state/interaction change: add Vitest coverage. Keep feature routes lazy.
+- Angular state/interaction change: add Vitest coverage.
 - PostgreSQL-specific behavior must be tested against PostgreSQL, not SQLite/in-memory EF.
-- Run `./scripts/check.ps1` before finishing. Also run `git diff --check`.
+- Run `./scripts/check.ps1` before reporting; if Docker isn't running, run its steps directly.
+  Also run `git diff --check`.
 
 ## Commands
 
@@ -167,6 +154,3 @@ dotnet ef migrations add <Name> `
   --context GymDbContext `
   --output-dir Persistence/Migrations
 ```
-
-Update the three docs when a decision, boundary, invariant, or phase changes. A working UI is
-not evidence that business state is correct.
