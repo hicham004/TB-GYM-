@@ -436,10 +436,14 @@ public sealed partial class GymDbContext(
                 .HasMaxLength(32)
                 .HasDefaultValue(ClientOnboardingStatus.NotStarted)
                 .HasSentinel((ClientOnboardingStatus)0);
-            entity.HasIndex(client => new { client.TenantId, client.NormalizedEmail }).IsUnique();
+            // One current profile per person and address. An ended profile no longer counts, so a
+            // former client invited back gets a new one beside it (ADR 0027).
+            entity.HasIndex(client => new { client.TenantId, client.NormalizedEmail })
+                .IsUnique()
+                .HasFilter("\"ReleasedAtUtc\" IS NULL");
             entity.HasIndex(client => new { client.TenantId, client.UserId })
                 .IsUnique()
-                .HasFilter("\"UserId\" IS NOT NULL");
+                .HasFilter("\"UserId\" IS NOT NULL AND \"ReleasedAtUtc\" IS NULL");
             // The owner's "Former clients" list.
             entity.HasIndex(client => new { client.TenantId, client.ReleasedAtUtc })
                 .HasFilter("\"ReleasedAtUtc\" IS NOT NULL");
@@ -525,7 +529,7 @@ public sealed partial class GymDbContext(
                 table.HasCheckConstraint(
                     "CK_ClientCoachAssignments_Chain",
                     "(\"Sequence\" = 1 AND \"PreviousCoachUserId\" IS NULL AND \"Reason\" IN ('Invitation', 'Migration')) OR " +
-                    "(\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS NOT NULL AND \"PreviousCoachUserId\" <> \"CoachUserId\" AND \"Reason\" IN ('Reassigned', 'CoachRemoved', 'Released'))");
+                    "(\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS NOT NULL AND \"PreviousCoachUserId\" <> \"CoachUserId\" AND \"Reason\" IN ('Reassigned', 'CoachRemoved', 'Released', 'CoachResigned', 'ClientLeft'))");
             });
             ConfigureAuditable(entity);
         });

@@ -537,7 +537,13 @@ export type CheckInResponseView = {
 };
 
 export type ClientCoachAssignmentReason =
-  'Invitation' | 'Reassigned' | 'CoachRemoved' | 'Migration' | 'Released';
+  | 'Invitation'
+  | 'Reassigned'
+  | 'CoachRemoved'
+  | 'Migration'
+  | 'Released'
+  | 'CoachResigned'
+  | 'ClientLeft';
 
 export type ClientCoachAssignmentView = {
   id: string;
@@ -558,6 +564,8 @@ export type ClientCommercialOverview = {
   featureAccess: Array<FeatureAccessDecision>;
   enrollments: Array<ClientEnrollmentView>;
 };
+
+export type ClientDepartureKind = 'ReleasedByOwner' | 'LeftByClient';
 
 export type ClientEnrollmentView = {
   id: string;
@@ -637,6 +645,7 @@ export type ClientReleaseView = {
   reason: string;
   releasedByUserId: null | string;
   releasedByName: string;
+  departureKind: ClientDepartureKind;
 };
 
 export type ClientSelfProfile = {
@@ -794,7 +803,9 @@ export type CommercialNotificationKind =
   | 'EnrollmentActivated'
   | 'EnrollmentEndingSoon'
   | 'EnrollmentExpired'
-  | 'EnrollmentRenewed';
+  | 'EnrollmentRenewed'
+  | 'CoachDeparted'
+  | 'ClientLeft';
 
 export type CompleteClientOnboardingRequest = {
   intake: UpdateClientIntakeRequest;
@@ -1351,6 +1362,7 @@ export type FormerClientSummary = {
   email: string;
   releasedAtUtc: string;
   reason: string;
+  departureKind: ClientDepartureKind;
 };
 
 export type FormulaSex = 'Female' | 'Male';
@@ -1402,6 +1414,11 @@ export type InvitationSummary = {
   version: number | string;
   developmentActionUrl?: null | string;
   kind?: InvitationKind;
+};
+
+export type LeaveWorkspaceRequest = {
+  reason: null | string;
+  version: number | string;
 };
 
 export type LegalConsentAcceptanceView = {
@@ -2654,6 +2671,35 @@ export type UpdateCurrentWorkspaceResponses = {
 export type UpdateCurrentWorkspaceResponse =
   UpdateCurrentWorkspaceResponses[keyof UpdateCurrentWorkspaceResponses];
 
+export type ResignFromTeamData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/team/me/resign';
+};
+
+export type ResignFromTeamErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ResignFromTeamError = ResignFromTeamErrors[keyof ResignFromTeamErrors];
+
+export type ResignFromTeamResponses = {
+  /**
+   * OK
+   */
+  200: CoachRemovalResponse;
+};
+
+export type ResignFromTeamResponse = ResignFromTeamResponses[keyof ResignFromTeamResponses];
+
 export type GetPublicClientInvitationData = {
   body?: never;
   path: {
@@ -3739,6 +3785,35 @@ export type UpdateOwnClientIntakeResponses = {
 
 export type UpdateOwnClientIntakeResponse =
   UpdateOwnClientIntakeResponses[keyof UpdateOwnClientIntakeResponses];
+
+export type LeaveWorkspaceData = {
+  body: LeaveWorkspaceRequest;
+  path?: never;
+  query?: never;
+  url: '/api/client-profile/me/leave';
+};
+
+export type LeaveWorkspaceErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type LeaveWorkspaceError = LeaveWorkspaceErrors[keyof LeaveWorkspaceErrors];
+
+export type LeaveWorkspaceResponses = {
+  /**
+   * No Content
+   */
+  204: void;
+};
+
+export type LeaveWorkspaceResponse = LeaveWorkspaceResponses[keyof LeaveWorkspaceResponses];
 
 export type CompleteOwnClientOnboardingData = {
   body: CompleteClientOnboardingRequest;

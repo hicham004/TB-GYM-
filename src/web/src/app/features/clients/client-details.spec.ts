@@ -136,6 +136,7 @@ describe('ClientDetails for a former client', () => {
         releasedAtUtc: '2026-09-20T10:00:00Z',
         reason: 'Followed her coach',
         releasedByName: 'Olivia Owner',
+        departureKind: 'ReleasedByOwner',
       },
     });
 
@@ -149,6 +150,22 @@ describe('ClientDetails for a former client', () => {
     expect(host.querySelector('app-client-nutrition')).toBeNull();
     expect(host.querySelector('app-client-commercial')).not.toBeNull();
     expect(host.querySelector<HTMLFieldSetElement>('fieldset.record-fields')?.disabled).toBe(true);
+  });
+
+  it('says when a client left on their own rather than naming who released them', async () => {
+    const host = await render({
+      release: {
+        releasedAtUtc: '2026-09-21T10:00:00Z',
+        reason: 'Moving abroad',
+        releasedByName: 'Maya Khoury',
+        departureKind: 'LeftByClient',
+      },
+    });
+
+    expect(host.textContent).toContain('Left the workspace on Sep 21, 2026.');
+    expect(host.textContent).not.toContain('Released on');
+    expect(host.textContent).toContain('Moving abroad');
+    expect(host.textContent).toContain('You can invite them back as a new client.');
   });
 
   it('offers the release action to the owner of a current client only', async () => {

@@ -892,7 +892,7 @@ internal sealed class MediaApplicationService(
         }
 
         var client = await dbContext.ClientProfiles.AsNoTracking()
-            .Where(item => item.UserId == userId)
+            .CurrentFor(userId)
             .Select(item => new { item.Id })
             .SingleOrDefaultAsync(cancellationToken);
         if (client is null)

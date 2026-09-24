@@ -1,6 +1,6 @@
 # ADR 0026: Coach team and client assignment
 
-Status: accepted, 2026-09-23
+Status: accepted, 2026-09-23; amended 2026-09-24 (a coach can resign, and their clients are told)
 
 ## Context
 
@@ -26,8 +26,14 @@ Business rules, decided by the product owner on 2026-09-23:
   change.
 - **The owner reassigns** a client (optional note, optimistic concurrency on the client version).
 - **Removing a coach moves all their clients, and their pending client invitations, to the owner**
-  in one transaction. Nothing about a client is deleted. Letting a departing coach take clients, or
-  releasing a client from the workspace, is deliberately a later feature ("release client" is next).
+  in one transaction. Nothing about a client is deleted. **A coach can also resign themselves**, with
+  the same effect, recorded as `CoachResigned` rather than `CoachRemoved` (2026-09-24). The owner
+  cannot resign.
+- **When a coach resigns or is removed, each of their clients with access is told** in-app and by
+  one email through the workspace notice queue (ADR 0027): their coach is no longer with this
+  workspace and the workspace will assign a new coach. The wording names no coach or workspace.
+  Releasing a client, a client leaving, and coming back are in ADR 0027; following a coach to a new
+  workspace is a normal invitation from that workspace.
 - **Chats stay private.** The owner cannot read another coach's chats. After a reassignment the old
   coach loses the thread, the client keeps it read-only, and the new coach starts a fresh one.
   Reassigning back reopens it, because nothing was deleted.

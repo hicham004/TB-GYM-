@@ -237,6 +237,21 @@ public sealed class TenantMembership : AuditableEntity
         Status = MembershipStatus.Removed;
     }
 
+    /// <summary>
+    /// A former client accepted a new client invitation to the same workspace (ADR 0027). The
+    /// membership row is reused, because a person has one per workspace; the relationship is new,
+    /// with a new client profile, and the old profile stays read-only.
+    /// </summary>
+    public void RejoinAsClient()
+    {
+        if (Role != TenantRole.Client || Status != MembershipStatus.Removed)
+        {
+            throw new InvalidOperationException("Only a former client can rejoin as a client.");
+        }
+
+        Status = MembershipStatus.Active;
+    }
+
     /// <summary>A removed coach accepted a new coach invitation to the same workspace.</summary>
     public void RejoinAsCoach()
     {

@@ -24,6 +24,17 @@ public sealed record CommercialNotificationPayload(
     public const int CurrentSchemaVersion = 1;
 }
 
+/// <summary>
+/// The versioned payload of a workspace-relationship notification (ADR 0027): the client it is about,
+/// and nothing else. Every fact is re-read at dispatch, like the commercial payload.
+/// </summary>
+public sealed record WorkspaceNotificationPayload(
+    Guid ClientProfileId,
+    int SchemaVersion = WorkspaceNotificationPayload.CurrentSchemaVersion)
+{
+    public const int CurrentSchemaVersion = 1;
+}
+
 /// <summary>The signed-in recipient view of one of their own notifications.</summary>
 public sealed record NotificationView(
     Guid Id,

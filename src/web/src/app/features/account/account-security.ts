@@ -6,10 +6,11 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
+import { LeaveWorkspace } from './leave-workspace';
 
 @Component({
   selector: 'app-account-security',
-  imports: [ReactiveFormsModule],
+  imports: [LeaveWorkspace, ReactiveFormsModule],
   templateUrl: './account-security.html',
   styleUrl: './account-security.scss',
 })

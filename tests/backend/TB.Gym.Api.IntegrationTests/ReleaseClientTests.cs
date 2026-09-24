@@ -143,18 +143,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(coachUserId, history[^1].PreviousCoachUserId);
         Assert.AreEqual(ownerUserId, history[^1].CoachUserId);
 
-        // Not re-invitable, as a client or as a coach.
+        // Not invitable as a coach; invitable back as a client, which is a new relationship (see
+        // AFormerClientCanBeInvitedBackAsANewRelationship).
         await RefreshCsrfAsync(owner);
-        await AssertStatusAsync(
-            await owner.PostAsJsonAsync("/api/invitations", new
-            {
-                email = "rel-client@example.test",
-                firstName = "Again",
-                lastName = "Client",
-                phoneNumber = "+96170000000",
-                birthDate = "1995-04-02",
-            }),
-            HttpStatusCode.Conflict);
         await AssertStatusAsync(
             await owner.PostAsJsonAsync("/api/team/invitations", new { email = "rel-client@example.test", firstName = "A", lastName = "B" }),
             HttpStatusCode.Conflict);

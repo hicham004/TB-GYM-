@@ -1266,6 +1266,16 @@ internal sealed class MessagingApplicationService(
             return new ConversationAccess(MessagingCommandStatus.NotFound, null, null, null);
         }
 
+        // A thread of an ended relationship belongs to the owner's read-only record. A former client
+        // invited back starts fresh and does not see it (ADR 0027).
+        if (participant.Role == ConversationParticipantRole.Client &&
+            await dbContext.ClientProfiles.AsNoTracking().AnyAsync(
+                profile => profile.Id == conversation.ClientProfileId && profile.ReleasedAtUtc != null,
+                cancellationToken))
+        {
+            return new ConversationAccess(MessagingCommandStatus.NotFound, null, null, null);
+        }
+
         var decision = await EvaluateAsync(conversation.ClientProfileId, cancellationToken);
         return decision.IsAllowed
             ? new ConversationAccess(MessagingCommandStatus.Success, conversation, participant, null, !isCurrent)
@@ -1567,6 +1577,10 @@ internal sealed class MessagingApplicationService(
                        OR EXISTS (SELECT 1 FROM clients."ClientProfiles" AS cp
                                   WHERE cp."TenantId" = c."TenantId" AND cp."Id" = c."ClientProfileId"
                                     AND cp."AssignedCoachUserId" = c."CoachUserId"))
+                  AND (p."Role" <> 'Client'
+                       OR EXISTS (SELECT 1 FROM clients."ClientProfiles" AS own
+                                  WHERE own."TenantId" = c."TenantId" AND own."Id" = c."ClientProfileId"
+                                    AND own."ReleasedAtUtc" IS NULL))
                   AND (c."LastActivityAtUtc", c."Id") < ({activity}, {cursorId})
                 ORDER BY c."LastActivityAtUtc" DESC, c."Id" DESC
                 LIMIT {limit}
@@ -1587,6 +1601,10 @@ internal sealed class MessagingApplicationService(
                    OR EXISTS (SELECT 1 FROM clients."ClientProfiles" AS cp
                               WHERE cp."TenantId" = c."TenantId" AND cp."Id" = c."ClientProfileId"
                                 AND cp."AssignedCoachUserId" = c."CoachUserId"))
+              AND (p."Role" <> 'Client'
+                   OR EXISTS (SELECT 1 FROM clients."ClientProfiles" AS own
+                              WHERE own."TenantId" = c."TenantId" AND own."Id" = c."ClientProfileId"
+                                AND own."ReleasedAtUtc" IS NULL))
             ORDER BY c."LastActivityAtUtc" DESC, c."Id" DESC
             LIMIT {limit}
             """).ToListAsync(cancellationToken);

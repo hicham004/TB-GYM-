@@ -355,6 +355,24 @@ internal sealed class WorkspaceNoticeMailService(
                         membership.UserId == request.RecipientUserId &&
                         membership.Status == MembershipStatus.Active,
                     cancellationToken),
+            // Still a current client of this workspace, through the same profile the history entry
+            // moved; a client who has since left or been released is not told about a coach.
+            WorkspaceNoticeKind.CoachDeparted =>
+                await (
+                    from entry in context.ClientCoachAssignments.AsNoTracking()
+                    join client in context.ClientProfiles.AsNoTracking() on entry.ClientProfileId equals client.Id
+                    where entry.Id == request.SubjectId &&
+                          client.UserId == request.RecipientUserId &&
+                          client.ReleasedAtUtc == null
+                    select client.Id)
+                    .AnyAsync(cancellationToken) &&
+                await context.TenantMemberships.AsNoTracking().AnyAsync(
+                    membership =>
+                        membership.TenantId == request.TenantId &&
+                        membership.UserId == request.RecipientUserId &&
+                        membership.Role == TenantRole.Client &&
+                        membership.Status == MembershipStatus.Active,
+                    cancellationToken),
             _ => false,
         };
 

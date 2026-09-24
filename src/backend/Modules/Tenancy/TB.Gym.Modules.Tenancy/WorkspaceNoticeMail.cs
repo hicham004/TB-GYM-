@@ -60,7 +60,11 @@ public sealed class WorkspaceNoticeMailRequest : TenantEntity
     /// <summary>The member, current or former, this notice is for.</summary>
     public Guid RecipientUserId { get; private set; }
 
-    /// <summary>What the notice is about. For <see cref="WorkspaceNoticeKind.ClientReleased"/>, the client profile.</summary>
+    /// <summary>
+    /// What the notice is about: for <see cref="WorkspaceNoticeKind.ClientReleased"/> the client
+    /// profile, for <see cref="WorkspaceNoticeKind.CoachDeparted"/> the coach-history entry that moved
+    /// the client, so a client whose coach leaves twice is told twice.
+    /// </summary>
     public Guid SubjectId { get; private set; }
 
     public int SchemaVersion { get; private set; }
@@ -111,6 +115,21 @@ public sealed class WorkspaceNoticeMailRequest : TenantEntity
             clientProfileId,
             releasedByUserId,
             releasedAtUtc);
+
+    /// <summary>The notice that a client's coach left the workspace and the client moved to the owner.</summary>
+    public static WorkspaceNoticeMailRequest CoachDeparted(
+        Guid tenantId,
+        Guid clientUserId,
+        Guid coachAssignmentId,
+        Guid? requestedByUserId,
+        DateTimeOffset requestedAtUtc) =>
+        new(
+            tenantId,
+            WorkspaceNoticeKind.CoachDeparted,
+            clientUserId,
+            coachAssignmentId,
+            requestedByUserId,
+            requestedAtUtc);
 
     public bool IsClaimable(DateTimeOffset now) =>
         (Status == WorkspaceNoticeMailStatus.Pending && NextAttemptAtUtc <= now) || IsClaimExpired(now);
@@ -409,6 +428,9 @@ public enum WorkspaceNoticeKind
 {
     /// <summary>The owner released the recipient, a client, from the workspace.</summary>
     ClientReleased = 1,
+
+    /// <summary>The recipient's coach resigned or was removed; the workspace will assign a new one.</summary>
+    CoachDeparted = 2,
 }
 
 public enum WorkspaceNoticeMailStatus

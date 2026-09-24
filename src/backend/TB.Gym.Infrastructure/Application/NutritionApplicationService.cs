@@ -1014,7 +1014,7 @@ internal sealed class NutritionApplicationService(
         featureAccessService.EvaluateAsync(tenantContext.TenantId, clientProfileId, CoachingFeature.Nutrition, cancellationToken);
 
     private async Task<ClientProfile?> FindSelfClientAsync(CancellationToken cancellationToken) =>
-        currentUser.UserId is not { } userId ? null : await dbContext.ClientProfiles.SingleOrDefaultAsync(item => item.UserId == userId, cancellationToken);
+        currentUser.UserId is not { } userId ? null : await dbContext.ClientProfiles.CurrentFor(userId).SingleOrDefaultAsync(cancellationToken);
 
     private async Task<CoverageLookup> EvaluateCoverageAsync(Guid clientProfileId, Guid enrollmentId, DateOnly startDate, DateOnly endDateExclusive, CancellationToken cancellationToken)
     {

@@ -52,7 +52,7 @@ internal sealed class CheckInAccessResolver(
 
         var clientProfileId = await dbContext.ClientProfiles
             .AsNoTracking()
-            .Where(client => client.UserId == userId)
+            .CurrentFor(userId)
             .Select(client => (Guid?)client.Id)
             .SingleOrDefaultAsync(cancellationToken);
         return clientProfileId is { } resolved

@@ -68,6 +68,19 @@ public static class NotificationTemplateCatalog
             DefaultCulture,
             "A renewal was created",
             "A renewal of your coaching service has been created. Open your workspace to see its status."),
+        [CommercialNotificationKind.CoachDeparted] = new NotificationTemplate(
+            "workspace.coach-departed",
+            CurrentVersion,
+            DefaultCulture,
+            "Your coach has changed",
+            "Your coach is no longer with this workspace. The workspace will assign you a new coach."),
+        // To staff. Which client left is on the Former clients list, behind the owner's sign-in.
+        [CommercialNotificationKind.ClientLeft] = new NotificationTemplate(
+            "workspace.client-left",
+            CurrentVersion,
+            DefaultCulture,
+            "A client left the workspace",
+            "A client has left this workspace. The owner keeps their record, read-only, under Former clients."),
     };
 
     /// <summary>

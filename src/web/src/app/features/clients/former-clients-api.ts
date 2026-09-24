@@ -27,6 +27,7 @@ export class FormerClientsApi {
           email: item.email,
           releasedAtUtc: item.releasedAtUtc,
           reason: item.reason,
+          departureKind: item.departureKind,
         })),
       ),
     );

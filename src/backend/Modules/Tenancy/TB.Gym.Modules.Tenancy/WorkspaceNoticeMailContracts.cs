@@ -43,8 +43,18 @@ public static class WorkspaceNoticeEmailTemplates
 
     public const string ClientReleasedKey = "workspace-notice.client-released";
 
+    public const string CoachDepartedKey = "workspace-notice.coach-departed";
+
     public static WorkspaceNoticeEmailContent Render(WorkspaceNoticeKind kind) => kind switch
     {
+        WorkspaceNoticeKind.CoachDeparted => new WorkspaceNoticeEmailContent(
+            CoachDepartedKey,
+            CurrentVersion,
+            "Your coach on TB Gym has changed",
+            string.Concat(
+                "Your coach is no longer with a coaching workspace you belong to on TB Gym. The\n",
+                "workspace will assign you a new coach.\n\n",
+                "You can keep using TB Gym as usual. Nothing you recorded there has changed.\n")),
         WorkspaceNoticeKind.ClientReleased => new WorkspaceNoticeEmailContent(
             ClientReleasedKey,
             CurrentVersion,

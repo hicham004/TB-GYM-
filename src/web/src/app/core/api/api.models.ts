@@ -177,11 +177,15 @@ export interface CoachClientDetails extends ClientIntakeProfile {
   release: ClientRelease | null;
 }
 
-/** When, why and by whom the owner released a client. */
+/** Who ended a former client's relationship: the owner, or the client themselves (ADR 0027). */
+export type ClientDepartureKind = 'ReleasedByOwner' | 'LeftByClient';
+
+/** When, why and by whom a client's relationship with the workspace ended. */
 export interface ClientRelease {
   releasedAtUtc: string;
   reason: string;
   releasedByName: string;
+  departureKind: ClientDepartureKind;
 }
 
 /** One row of the owner's "Former clients" list. */
@@ -192,6 +196,7 @@ export interface FormerClient {
   email: string;
   releasedAtUtc: string;
   reason: string;
+  departureKind: ClientDepartureKind;
 }
 
 export type ClientSelfProfile = ClientIntakeProfile;

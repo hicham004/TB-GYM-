@@ -96,15 +96,23 @@ append-only coach history. Only the owner reassigns a client.
 client. Another coach's client answers as a missing one. Chats stay private to their participants:
 after a reassignment the old coach loses the thread and the client keeps it read-only.
 
-**CLI-014** Removing a coach moves all their clients and pending client invitations to the owner in
-one transaction and deletes nothing.
+**CLI-014** Removing a coach, or a coach resigning themselves, moves all their clients and pending
+client invitations to the owner in one transaction and deletes nothing. Each of those clients with
+access is told in-app and by one email that the workspace will assign a new coach, naming nobody.
+The owner cannot resign.
 
-**CLI-015** Only the owner releases a client, with a reason. Their membership ends at once; their
-running and future plans, programmes and meal plans are cancelled (payments kept, no refund; a
-programme with a workout in progress stays as it is); they move to the owner; and they are emailed
-once without the workspace, coach or reason named. The record is kept read-only for the owner under
-Former clients: every change answers 409 `client_released`. There is no undo or re-invite, and a
-released client is not an active client. See `docs/adr/0027-release-client.md`.
+**CLI-015** The owner releases a client with a reason, or a client leaves with an optional one. Their
+membership ends at once; their running and future plans, programs and meal plans are cancelled
+(payments kept, no refund; a program with a workout in progress stays as it is); they move to the
+owner. A released client is emailed once without the workspace, coach or reason named; when a client
+leaves, the owner and their coach are told in-app instead. The record is kept read-only for the owner
+under Former clients, marked released or left: every change answers 409 `client_released`. There is
+no undo, and a former client is not an active client. See `docs/adr/0027-release-client.md`.
+
+**CLI-016** A former client can be invited back as a client, never as a coach. Accepting starts a new
+relationship with a new profile and reactivates their one membership row; the old record stays
+read-only and is not shown to them. Following a coach to another workspace is a normal invitation
+from that workspace; history does not move between workspaces.
 
 ## 3. Products, enrollments, payments, programs, and access
 

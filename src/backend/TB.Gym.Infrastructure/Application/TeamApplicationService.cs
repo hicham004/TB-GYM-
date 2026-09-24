@@ -13,6 +13,7 @@ namespace TB.Gym.Infrastructure.Application;
 internal sealed class TeamApplicationService(
     GymDbContext dbContext,
     IClock clock,
+    ICurrentUser currentUser,
     ITenantContext tenantContext)
     : ITeamApplicationService
 {
@@ -57,9 +58,26 @@ internal sealed class TeamApplicationService(
             .ToArray();
     }
 
-    public async Task<CoachRemovalResult> RemoveCoachAsync(
+    public Task<CoachRemovalResult> RemoveCoachAsync(
         Guid coachUserId,
         RemoveCoachRequest request,
+        CancellationToken cancellationToken) =>
+        DepartAsync(coachUserId, request.Version, ClientCoachAssignmentReason.CoachRemoved, cancellationToken);
+
+    public Task<CoachRemovalResult> ResignAsync(CancellationToken cancellationToken) =>
+        currentUser.UserId is { } coachUserId
+            ? DepartAsync(coachUserId, expectedVersion: null, ClientCoachAssignmentReason.CoachResigned, cancellationToken)
+            : Task.FromResult(new CoachRemovalResult(CoachRemovalStatus.NotFound));
+
+    /// <summary>
+    /// A coach leaves the team, removed by the owner or of their own accord. Their clients and pending
+    /// client invitations move to the owner, and each client with access is told in-app and by email
+    /// that the workspace will assign a new coach (ADR 0027).
+    /// </summary>
+    private async Task<CoachRemovalResult> DepartAsync(
+        Guid coachUserId,
+        uint? expectedVersion,
+        ClientCoachAssignmentReason reason,
         CancellationToken cancellationToken)
     {
         var tenantId = tenantContext.TenantId;
@@ -84,29 +102,52 @@ internal sealed class TeamApplicationService(
                     return new CoachRemovalResult(CoachRemovalStatus.NotFound);
                 }
 
-                if (membership.Version != request.Version)
+                if (expectedVersion is { } version && membership.Version != version)
                 {
                     return new CoachRemovalResult(CoachRemovalStatus.Conflict);
                 }
 
                 var ownerUserId = await CoachTeam.OwnerUserIdAsync(dbContext, tenantId, cancellationToken);
+                var timeZoneId = await WorkspaceRelationshipNotices.TenantTimeZoneAsync(dbContext, tenantId, cancellationToken);
                 var now = clock.UtcNow;
 
                 var clients = await dbContext.ClientProfiles
                     .Where(client => client.AssignedCoachUserId == coachUserId)
                     .ToListAsync(cancellationToken);
+                var clientUserIds = clients.Where(client => client.UserId is not null).Select(client => client.UserId!.Value).ToList();
+                var activeClientUserIds = await dbContext.TenantMemberships
+                    .Where(item =>
+                        item.TenantId == tenantId &&
+                        clientUserIds.Contains(item.UserId) &&
+                        item.Role == TenantRole.Client &&
+                        item.Status == MembershipStatus.Active)
+                    .Select(item => item.UserId)
+                    .ToListAsync(cancellationToken);
                 foreach (var client in clients)
                 {
                     client.AssignCoach(ownerUserId);
-                    dbContext.ClientCoachAssignments.Add(ClientCoachAssignment.ForChange(
+                    var entry = ClientCoachAssignment.ForChange(
                         tenantId,
                         client.Id,
                         await CoachTeam.NextAssignmentSequenceAsync(dbContext, client.Id, cancellationToken),
                         coachUserId,
                         ownerUserId,
-                        ClientCoachAssignmentReason.CoachRemoved,
+                        reason,
                         null,
-                        now));
+                        now);
+                    dbContext.ClientCoachAssignments.Add(entry);
+                    if (client.UserId is { } clientUserId && activeClientUserIds.Contains(clientUserId))
+                    {
+                        WorkspaceRelationshipNotices.CoachDeparted(
+                            dbContext,
+                            tenantId,
+                            timeZoneId,
+                            clientUserId,
+                            client.Id,
+                            entry.Id,
+                            currentUser.UserId,
+                            now);
+                    }
                 }
 
                 // Their pending client invitations stay valid; the client will land with the owner.

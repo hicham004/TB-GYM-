@@ -1167,9 +1167,7 @@ internal sealed partial class ProgressApplicationService(
     private Task<ClientProfile?> FindSelfAsync(CancellationToken cancellationToken) =>
         currentUser.UserId is not { } userId
             ? Task.FromResult<ClientProfile?>(null)
-            : dbContext.ClientProfiles.SingleOrDefaultAsync(
-                client => client.UserId == userId,
-                cancellationToken);
+            : dbContext.ClientProfiles.CurrentFor(userId).SingleOrDefaultAsync(cancellationToken);
 
     private Task<bool?> FindClientRelationshipAsync(
         Guid clientProfileId,

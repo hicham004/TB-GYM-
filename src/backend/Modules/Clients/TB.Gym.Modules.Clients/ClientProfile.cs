@@ -85,8 +85,9 @@ public sealed class ClientProfile : TenantEntity
     public DateTimeOffset? OnboardingCompletedAtUtc { get; private set; }
 
     /// <summary>
-    /// When the owner released this client from the workspace. Permanent: the record is kept but is
-    /// read-only from then on, and a database trigger refuses any later change to the row.
+    /// When this relationship ended — the owner released the client, or the client left (ADR 0027).
+    /// Permanent: the record is kept but is read-only from then on, and a database trigger refuses any
+    /// later change to the row. A client invited back gets a new profile; this one stays as it is.
     /// </summary>
     public DateTimeOffset? ReleasedAtUtc { get; private set; }
 
@@ -248,8 +249,9 @@ public sealed class ClientProfile : TenantEntity
     }
 
     /// <summary>
-    /// Ends this client's relationship with the workspace. Nothing is deleted; the caller also ends
-    /// the client's membership, closes their open plans and programs, and records why.
+    /// Ends this client's relationship with the workspace, whether the owner released them or they
+    /// left. Nothing is deleted; the caller also ends the membership, closes open plans and programs,
+    /// and records who ended it and why.
     /// </summary>
     /// <remarks>
     /// The client must already be with the owner, so a former client never keeps a coach's list
@@ -533,6 +535,16 @@ public enum ClientRelationshipEventType
 
     /// <summary>The owner ended the client's relationship with the workspace. Permanent.</summary>
     Released = 3,
+
+    /// <summary>The client ended their own relationship with the workspace. Permanent, like a release.</summary>
+    Left = 4,
+}
+
+/// <summary>Who ended a former client's relationship with the workspace (ADR 0027).</summary>
+public enum ClientDepartureKind
+{
+    ReleasedByOwner = 1,
+    LeftByClient = 2,
 }
 
 /// <summary>

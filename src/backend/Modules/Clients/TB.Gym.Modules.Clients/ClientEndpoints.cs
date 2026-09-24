@@ -206,6 +206,24 @@ public static class ClientEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // A client leaves the workspace themselves (ADR 0027). Their access ends with this request.
+        selfGroup.MapPost("/me/leave", async (
+            LeaveWorkspaceRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var result = await service.LeaveAsync(request, cancellationToken);
+            return result.Status == ClientCommandStatus.Success ? Results.NoContent() : ToResult(result);
+        })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("LeaveWorkspace")
+        .Produces(StatusCodes.Status204NoContent)
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
         selfGroup.MapPost("/me/complete-onboarding", async (
             CompleteClientOnboardingRequest request,
             HttpContext context,

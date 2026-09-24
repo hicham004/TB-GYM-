@@ -1048,6 +1048,9 @@ Work follows this order; anything outside it needs the user's approval first.
   under Former clients, the client is emailed once, and there is no undo or re-invite. Released
   clients are not active clients. See ADR 0027. Moving a client with their history to another
   workspace is a later feature.
+- Coach departure and client choice (complete, 2026-09-24): a coach can resign; their clients are told
+  in-app and by email; a client can leave on their own; a former client can be invited back as a new
+  relationship. See ADR 0026 and 0027.
 - Step 2, manual platform billing: not started.
 - Step 3, redesign of Client Today and the coach client workspace: not started. Other redesign
   slices are parked.

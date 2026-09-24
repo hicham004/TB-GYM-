@@ -6,18 +6,19 @@
       <p class="muted" i18n>Payment, dates, entitlements, and relationship status resolve here.</p>
     </div>
     <div class="relationship-state">
-      <span
-        class="status-badge"
-        [class.success]="!client().isCoachBlocked"
-        [class.danger]="client().isCoachBlocked"
-      >
-        @if (client().isCoachBlocked) {
-          <span i18n>Blocked</span>
-        } @else {
-          <span i18n>Relationship active</span>
-        }
-      </span>
+      <!-- A former client's relationship has ended; the page heading already says so. -->
       @if (!readOnly()) {
+        <span
+          class="status-badge"
+          [class.success]="!client().isCoachBlocked"
+          [class.danger]="client().isCoachBlocked"
+        >
+          @if (client().isCoachBlocked) {
+            <span i18n>Blocked</span>
+          } @else {
+            <span i18n>Relationship active</span>
+          }
+        </span>
         <button
           [class.danger-button]="!client().isCoachBlocked"
           [class.secondary-button]="client().isCoachBlocked"
@@ -123,7 +124,9 @@
     @if (commercial.enrollments.length === 0) {
       <div class="empty-state compact-empty">
         <h2 i18n>No services assigned</h2>
-        <p i18n>Choose an offer above to begin the client's commercial history.</p>
+        @if (!readOnly()) {
+          <p i18n>Choose an offer above to begin the client's commercial history.</p>
+        }
       </div>
     } @else {
       <div class="enrollment-list">

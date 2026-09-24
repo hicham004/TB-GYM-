@@ -98,9 +98,13 @@ public sealed class ClientCoachAssignment : TenantEntity
 
         if (reason is not (ClientCoachAssignmentReason.Reassigned
             or ClientCoachAssignmentReason.CoachRemoved
-            or ClientCoachAssignmentReason.Released))
+            or ClientCoachAssignmentReason.Released
+            or ClientCoachAssignmentReason.CoachResigned
+            or ClientCoachAssignmentReason.ClientLeft))
         {
-            throw new ArgumentOutOfRangeException(nameof(reason), "A change is a reassignment, a coach removal or a release.");
+            throw new ArgumentOutOfRangeException(
+                nameof(reason),
+                "A change is a reassignment, a coach departure, a release or a client leaving.");
         }
 
         return new ClientCoachAssignment(
@@ -152,4 +156,10 @@ public enum ClientCoachAssignmentReason
 
     /// <summary>The owner released the client, who moved to the owner as the record's keeper.</summary>
     Released = 5,
+
+    /// <summary>The client's coach left the team of their own accord and the client moved to the owner.</summary>
+    CoachResigned = 6,
+
+    /// <summary>The client left the workspace and moved to the owner as the record's keeper.</summary>
+    ClientLeft = 7,
 }

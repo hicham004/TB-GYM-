@@ -52,10 +52,19 @@
     <!-- A former client (ADR 0027): the record is kept and read-only. The API refuses every change. -->
     <section class="surface-section release-summary tb-theme" aria-labelledby="release-title">
       <h2 id="release-title" class="tb-text-section-title" i18n>Former client</h2>
+      @if (release.departureKind === 'LeftByClient') {
+        <p class="tb-text-compact" i18n>
+          Left the workspace on {{ release.releasedAtUtc | date: 'mediumDate' }}.
+        </p>
+      } @else {
+        <p class="tb-text-compact" i18n>
+          Released on {{ release.releasedAtUtc | date: 'mediumDate' }} by
+          {{ release.releasedByName }}.
+        </p>
+      }
       <p class="tb-text-compact" i18n>
-        Released on {{ release.releasedAtUtc | date: 'mediumDate' }} by
-        {{ release.releasedByName }}. Their access to this workspace ended then, and their open
-        plans and programmes were closed. This record is kept read-only.
+        Their access to this workspace ended then, and their open plans and programs were closed.
+        This record is kept read-only. You can invite them back as a new client.
       </p>
       <p class="tb-text-compact">
         <span class="release-label" i18n>Reason</span>

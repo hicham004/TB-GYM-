@@ -16,6 +16,10 @@
   padding: 0;
 }
 
+.release-summary {
+  margin-block-end: var(--space-16);
+}
+
 .release-summary p {
   margin-block: var(--space-8) 0;
 }

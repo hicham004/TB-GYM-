@@ -392,7 +392,7 @@ internal sealed class CommercialApplicationService(
         }
 
         var clientId = await dbContext.ClientProfiles
-            .Where(item => item.UserId == userId)
+            .CurrentFor(userId)
             .Select(item => (Guid?)item.Id)
             .SingleOrDefaultAsync(cancellationToken);
         return clientId is null

@@ -16,6 +16,13 @@ public interface ITeamApplicationService
         Guid coachUserId,
         RemoveCoachRequest request,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The signed-in coach leaves the team themselves (ADR 0027). The same effect as a removal —
+    /// their clients and pending client invitations move to the owner — recorded as a resignation.
+    /// The owner cannot resign; a workspace always has one.
+    /// </summary>
+    Task<CoachRemovalResult> ResignAsync(CancellationToken cancellationToken);
 }
 
 public sealed record TeamMemberSummary(

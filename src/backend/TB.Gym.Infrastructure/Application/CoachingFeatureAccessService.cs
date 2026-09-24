@@ -41,9 +41,11 @@ internal sealed class CoachingFeatureAccessService(
         var client = await dbContext.ClientProfiles
             .AsNoTracking()
             .Where(item => item.Id == clientProfileId)
-            .Select(item => new { item.UserId, item.IsCoachBlocked })
+            .Select(item => new { item.UserId, item.IsCoachBlocked, item.ReleasedAtUtc })
             .SingleOrDefaultAsync(cancellationToken);
-        if (client?.UserId is not { } userId)
+        // An ended relationship grants nothing, even when the same person has since been invited back:
+        // their membership is active again, but for their new profile, not this one (ADR 0027).
+        if (client?.UserId is not { } userId || client.ReleasedAtUtc is not null)
         {
             return ForEveryFeature(FeatureAccessReason.MembershipInactive);
         }

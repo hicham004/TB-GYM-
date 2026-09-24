@@ -10,6 +10,7 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { button, field, fill, press, query, settle } from '../../../testing/dom';
 import { AccountSecurity } from './account-security';
+import { LeaveWorkspaceApi } from './leave-workspace-api';
 
 const USER: CurrentUser = {
   id: 'user-1',
@@ -38,6 +39,7 @@ async function render(api: Partial<ApiClient> = {}) {
         useValue: { user: signal(USER), initialize: vi.fn(() => Promise.resolve()) },
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: LeaveWorkspaceApi, useValue: {} },
     ],
   }).compileComponents();
 

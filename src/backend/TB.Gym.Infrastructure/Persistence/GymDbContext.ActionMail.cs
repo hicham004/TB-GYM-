@@ -81,7 +81,7 @@ public sealed partial class GymDbContext
                     "(\"ClaimToken\" IS NULL) = (\"ClaimExpiresAtUtc\" IS NULL) AND ((\"Status\" = 'Processing') = (\"ClaimToken\" IS NOT NULL))");
                 table.HasCheckConstraint(
                     "CK_NoticeMailRequests_Vocabulary",
-                    "\"Kind\" IN ('ClientReleased') AND \"Status\" IN ('Pending', 'Processing', 'Materialized', 'Suppressed', 'DeadLettered')");
+                    "\"Kind\" IN ('ClientReleased', 'CoachDeparted') AND \"Status\" IN ('Pending', 'Processing', 'Materialized', 'Suppressed', 'DeadLettered')");
                 table.HasCheckConstraint(
                     "CK_NoticeMailRequests_Materialized",
                     "(\"Status\" = 'Materialized') = (\"MaterializedAtUtc\" IS NOT NULL)");

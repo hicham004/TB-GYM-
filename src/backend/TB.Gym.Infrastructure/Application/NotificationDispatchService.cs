@@ -412,6 +412,11 @@ internal sealed class NotificationDispatchService(
             return Eligibility.Suppress(NotificationSuppressionCodes.IntentCancelled);
         }
 
+        if (NotificationPurposeCatalog.IsWorkspaceKind(item.Kind))
+        {
+            return await EvaluateWorkspaceKindAsync(context, item, delivery, cancellationToken);
+        }
+
         if (!TryReadPayload(item.PayloadJson, out var payload) || payload.EnrollmentId != item.AggregateId)
         {
             return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
@@ -604,6 +609,138 @@ internal sealed class NotificationDispatchService(
         }
 
         return Eligibility.Email();
+    }
+
+    /// <summary>
+    /// The workspace-relationship kinds (ADR 0027): no enrollment to re-check, but the same refusal to
+    /// tell anybody something that is no longer true, or to somebody who is no longer there.
+    /// </summary>
+    /// <remarks>
+    /// A coach departure is still worth saying while the client is a current member with that same
+    /// profile and the history entry that moved them exists. A client leaving is worth saying to staff
+    /// who are still active staff, while that relationship is still ended. Both are in-app only.
+    /// </remarks>
+    private static async Task<Eligibility> EvaluateWorkspaceKindAsync(
+        GymDbContext context,
+        NotificationOutboxItem item,
+        NotificationChannelDelivery delivery,
+        CancellationToken cancellationToken)
+    {
+        WorkspaceNotificationPayload? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<WorkspaceNotificationPayload>(item.PayloadJson, PayloadJsonOptions);
+        }
+        catch (JsonException)
+        {
+            payload = null;
+        }
+
+        if (payload is null ||
+            payload.ClientProfileId == Guid.Empty ||
+            payload.SchemaVersion != WorkspaceNotificationPayload.CurrentSchemaVersion)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
+        }
+
+        var tenant = await context.Tenants
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == item.TenantId)
+            .Select(candidate => new { candidate.IsActive, candidate.DefaultCulture })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (tenant is null)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+        }
+
+        if (!tenant.IsActive)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.TenantInactive);
+        }
+
+        var recipientBlocked = await context.Users
+            .AsNoTracking()
+            .Where(user => user.Id == item.RecipientUserId)
+            .Select(user => (bool?)user.IsPlatformBlocked)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (recipientBlocked is null)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+        }
+
+        if (recipientBlocked.Value)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.RecipientBlocked);
+        }
+
+        var recipientRole = await context.TenantMemberships
+            .AsNoTracking()
+            .Where(membership =>
+                membership.TenantId == item.TenantId &&
+                membership.UserId == item.RecipientUserId &&
+                membership.Status == MembershipStatus.Active)
+            .Select(membership => (TenantRole?)membership.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+        var client = await context.ClientProfiles
+            .AsNoTracking()
+            .Where(profile => profile.Id == payload.ClientProfileId)
+            .Select(profile => new { profile.UserId, profile.ReleasedAtUtc })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (client is null)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+        }
+
+        if (item.Kind == CommercialNotificationKind.CoachDeparted)
+        {
+            if (!await context.ClientCoachAssignments.AsNoTracking().AnyAsync(
+                    entry => entry.Id == item.AggregateId && entry.ClientProfileId == payload.ClientProfileId,
+                    cancellationToken))
+            {
+                return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+            }
+
+            if (recipientRole != TenantRole.Client)
+            {
+                return Eligibility.Suppress(NotificationSuppressionCodes.MembershipInactive);
+            }
+
+            if (client.UserId != item.RecipientUserId)
+            {
+                return Eligibility.Suppress(NotificationSuppressionCodes.RecipientUnlinked);
+            }
+
+            if (client.ReleasedAtUtc is not null)
+            {
+                return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
+            }
+        }
+        else
+        {
+            if (item.AggregateId != payload.ClientProfileId)
+            {
+                return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
+            }
+
+            if (recipientRole is not (TenantRole.Owner or TenantRole.Coach))
+            {
+                return Eligibility.Suppress(NotificationSuppressionCodes.MembershipInactive);
+            }
+
+            if (client.ReleasedAtUtc is null)
+            {
+                return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
+            }
+        }
+
+        if (delivery.Channel != NotificationChannel.InApp)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.EmailChannelUnavailable);
+        }
+
+        return NotificationTemplateCatalog.TryResolve(item.Kind, tenant.DefaultCulture, out var template)
+            ? Eligibility.InApp(template)
+            : Eligibility.Permanent(NotificationFailureCodes.TemplateMissing);
     }
 
     private static bool TryReadPayload(string payloadJson, out CommercialNotificationPayload payload)

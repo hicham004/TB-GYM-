@@ -1,0 +1,71 @@
+@if (canLeave()) {
+  <section class="surface-section leave-section tb-theme" aria-labelledby="leave-title">
+    <h2 id="leave-title" class="tb-text-section-title" dir="auto" i18n>
+      Leave {{ membership()?.tenantName }}
+    </h2>
+    @if (isClient()) {
+      <p class="tb-text-compact" i18n>
+        Stop being a client of this workspace. Your TB Gym account and any other workspaces you
+        belong to are not affected.
+      </p>
+    } @else {
+      <p class="tb-text-compact" i18n>
+        Stop coaching in this workspace. Your clients move to the owner, who will assign them a new
+        coach.
+      </p>
+    }
+    <button #leaveTrigger appButton variant="outlined" type="button" (click)="open()" i18n>
+      Leave workspace
+    </button>
+  </section>
+
+  <!-- Leaving is confirmed before anything is sent. Only "Leave permanently" calls the API. -->
+  <dialog
+    #leaveDialog
+    class="tb-dialog tb-theme"
+    aria-labelledby="leave-dialog-title"
+    (cancel)="cancel($event)"
+  >
+    <h2 id="leave-dialog-title" class="tb-text-section-title" dir="auto" i18n>
+      Leave {{ membership()?.tenantName }}?
+    </h2>
+    @if (isClient()) {
+      <p class="tb-text-compact" i18n>
+        You lose access to this workspace right away, including your history there. Your open plans
+        and programs are closed, with no refund. The workspace keeps your record and can invite you
+        back later as a new client. This cannot be undone.
+      </p>
+    } @else {
+      <p class="tb-text-compact" i18n>
+        You lose access to this workspace right away. Your clients and any client invitations you
+        sent move to the owner, and each client is told their coach has changed. The owner can
+        invite you back later.
+      </p>
+    }
+    <form class="leave-form" [formGroup]="form" (ngSubmit)="leave()" novalidate>
+      @if (isClient()) {
+        <app-field
+          label="Reason (optional)"
+          i18n-label
+          help="The workspace owner will see this. Up to 500 characters."
+          i18n-help
+        >
+          <textarea appControl dir="auto" rows="3" formControlName="reason"></textarea>
+        </app-field>
+      }
+      <p class="leave-error tb-text-compact" role="alert">{{ error() }}</p>
+      <div class="tb-dialog__actions">
+        <button appButton variant="outlined" type="button" (click)="cancel($event)" i18n>
+          Cancel
+        </button>
+        <button appButton type="submit" [loading]="saving()">
+          @if (saving()) {
+            <ng-container i18n>Leaving…</ng-container>
+          } @else {
+            <ng-container i18n>Leave permanently</ng-container>
+          }
+        </button>
+      </div>
+    </form>
+  </dialog>
+}

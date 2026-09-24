@@ -63,7 +63,14 @@ public interface IClientProfileApplicationService
         ReleaseClientRequest request,
         CancellationToken cancellationToken);
 
-    /// <summary>The owner's released clients, most recently released first.</summary>
+    /// <summary>
+    /// The signed-in client leaves this workspace themselves. The same effect as a release — access
+    /// ends, open work closes, the owner keeps a read-only record — recorded as left by the client, and
+    /// the owner and the client's coach are told in-app. No email: the client did it.
+    /// </summary>
+    Task<ClientCommandResult> LeaveAsync(LeaveWorkspaceRequest request, CancellationToken cancellationToken);
+
+    /// <summary>The owner's former clients, released or departed, most recent first.</summary>
     Task<IReadOnlyList<FormerClientSummary>> ListFormerAsync(CancellationToken cancellationToken);
 }
 
@@ -108,12 +115,16 @@ public sealed record CoachClientDetails(
     string AssignedCoachName,
     ClientReleaseView? Release = null);
 
-/// <summary>When, why and by whom a client was released. Present only on a former client.</summary>
+/// <summary>
+/// When, why and by whom a client's relationship ended: released by the owner or left by the client.
+/// Present only on a former client.
+/// </summary>
 public sealed record ClientReleaseView(
     DateTimeOffset ReleasedAtUtc,
     string Reason,
     Guid? ReleasedByUserId,
-    string ReleasedByName);
+    string ReleasedByName,
+    ClientDepartureKind DepartureKind);
 
 /// <summary>One row of the owner's "Former clients" list.</summary>
 public sealed record FormerClientSummary(
@@ -122,7 +133,8 @@ public sealed record FormerClientSummary(
     string LastName,
     string Email,
     DateTimeOffset ReleasedAtUtc,
-    string Reason);
+    string Reason,
+    ClientDepartureKind DepartureKind);
 
 public sealed record ClientSelfProfile(
     Guid Id,
@@ -205,6 +217,12 @@ public sealed record ReassignClientCoachRequest(Guid CoachUserId, string? Note, 
 /// the client version the owner saw.
 /// </summary>
 public sealed record ReleaseClientRequest(string Reason, uint Version);
+
+/// <summary>
+/// A client leaving on their own: an optional reason the owner will see, and the profile version the
+/// client saw.
+/// </summary>
+public sealed record LeaveWorkspaceRequest(string? Reason, uint Version);
 
 public sealed record ClientCoachAssignmentView(
     Guid Id,

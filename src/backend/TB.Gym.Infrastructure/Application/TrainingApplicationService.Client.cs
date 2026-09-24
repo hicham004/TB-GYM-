@@ -460,7 +460,7 @@ internal sealed partial class TrainingApplicationService
     private async Task<ClientProfile?> FindSelfClientAsync(CancellationToken cancellationToken) =>
         currentUser.UserId is not { } userId
             ? null
-            : await dbContext.ClientProfiles.SingleOrDefaultAsync(item => item.UserId == userId, cancellationToken);
+            : await dbContext.ClientProfiles.CurrentFor(userId).SingleOrDefaultAsync(cancellationToken);
 
     private Task<FeatureAccessDecision> GetTrainingAccessAsync(
         Guid clientProfileId,

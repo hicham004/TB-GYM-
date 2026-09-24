@@ -88,6 +88,7 @@ describe('Clients', () => {
           email: 'omar@example.test',
           releasedAtUtc: '2026-09-20T10:00:00Z',
           reason: 'Followed his coach to another gym',
+          departureKind: 'LeftByClient' as const,
         },
       ]),
     );
@@ -104,6 +105,7 @@ describe('Clients', () => {
     expect(host.textContent).toContain('Omar Nasr');
     expect(host.textContent).toContain('Followed his coach to another gym');
     expect(host.textContent).toContain('Sep 20, 2026');
+    expect(host.textContent).toContain('Left by client');
     expect(query<HTMLAnchorElement>(host, 'tbody a').getAttribute('href')).toBe(
       '/clients/client-9',
     );

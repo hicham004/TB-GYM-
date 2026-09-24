@@ -251,10 +251,13 @@ conversation, progress photo) asks it after loading that row. Another coach's cl
 the same as a missing one. An integration test fails if a client-named route parameter uses
 another name.
 
-A released client (ADR 0027) is read-only for everyone. The same handler refuses any non-GET
-request whose route names one, and the indirect writes call `CoachClientScope.EnsureNotReleasedAsync`;
-both answer 409 `client_released` through one exception handler. Database triggers freeze the
-released profile row and keep the client's membership from ever becoming active again.
+A released or departed client (ADR 0027) is read-only for everyone. The same handler refuses any
+non-GET request whose route names one, and the indirect writes call
+`CoachClientScope.EnsureNotReleasedAsync`; both answer 409 `client_released` through one exception
+handler. Database triggers freeze the ended profile row. A former client invited back reuses their one
+membership row with a new profile, so client self-service resolves `ClientProfiles.CurrentFor(userId)`
+(linked and not ended), feature access answers `MembershipInactive` for an ended profile, and a
+client membership may become active again only with a current profile.
 
 Legal document versions are global identity records, while a workspace consent acceptance is
 contextual. Listing current documents accepts an optional workspace context, verifies active
@@ -1417,8 +1420,10 @@ dead-letter view.
 | Needs membership | No — the account may have none | No — the invitee is not a member yet |
 | Generations | None; Identity's security stamp invalidates outstanding tokens | One per deliberate send |
 
-A third queue, `tenancy."NoticeMailRequests"` (ADR 0027), carries plain workspace notices — today
-only "your access to a workspace has ended" to a released client. It is tenant-owned like the
+A third queue, `tenancy."NoticeMailRequests"` (ADR 0027), carries plain workspace notices — "your
+access to a workspace has ended" to a released client, and "your coach has changed" to each client of
+a coach who resigned or was removed. The in-app side of those events uses the notification outbox as
+in-app-only intents (`CoachDeparted`, `ClientLeft`). The notice queue is tenant-owned like the
 invitation queue and shares its claim, attempt, retry and dead-letter lifecycle, but mints no token
 and carries no link. Its recipient is a membership row, current or former, and eligibility is the
 notice's own fact re-checked before sending, not an active membership. The same Worker loop sweeps it.

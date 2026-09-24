@@ -3,7 +3,10 @@
     <p class="eyebrow" i18n>Coach workspace</p>
     @if (showingFormer) {
       <h1 i18n>Former clients</h1>
-      <p i18n>Clients released from this workspace. Their records are kept, read-only.</p>
+      <p i18n>
+        Clients you released and clients who left. Their records are kept, read-only; you can invite
+        any of them back as a new client.
+      </p>
     } @else {
       <h1 i18n>Clients</h1>
       <p i18n>Accepted client profiles in the active workspace.</p>
@@ -27,7 +30,7 @@
     @if (former().length === 0) {
       <div class="empty-state">
         <h2 i18n>No former clients</h2>
-        <p i18n>A client you release from a profile page is listed here.</p>
+        <p i18n>A client you release, or who leaves, is listed here.</p>
       </div>
     } @else {
       <div class="table-scroll">
@@ -35,7 +38,8 @@
           <thead>
             <tr>
               <th scope="col" i18n>Client</th>
-              <th scope="col" i18n>Released</th>
+              <th scope="col" i18n>Ended</th>
+              <th scope="col" i18n>How</th>
               <th scope="col" i18n>Reason</th>
               <th scope="col"></th>
             </tr>
@@ -48,6 +52,13 @@
                   <small>{{ client.email }}</small>
                 </td>
                 <td>{{ client.releasedAtUtc | date: 'mediumDate' }}</td>
+                <td>
+                  @if (client.departureKind === 'LeftByClient') {
+                    <ng-container i18n>Left by client</ng-container>
+                  } @else {
+                    <ng-container i18n>Released by owner</ng-container>
+                  }
+                </td>
                 <td dir="auto">{{ client.reason }}</td>
                 <td><a [routerLink]="['/clients', client.id]" i18n>Open record</a></td>
               </tr>

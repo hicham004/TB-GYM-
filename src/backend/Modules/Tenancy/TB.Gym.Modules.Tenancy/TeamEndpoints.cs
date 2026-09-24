@@ -51,6 +51,36 @@ public static class TeamEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // A coach leaves the team themselves (ADR 0027). Their access ends with this request.
+        endpoints.MapPost("/api/team/me/resign", async (
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITeamApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var result = await service.ResignAsync(cancellationToken);
+            return result.Status switch
+            {
+                CoachRemovalStatus.Removed => Results.Ok(new CoachRemovalResponse(
+                    result.ReassignedClientCount,
+                    result.ReassignedInvitationCount)),
+                CoachRemovalStatus.NotFound => Results.NotFound(),
+                _ => Results.Conflict(new
+                {
+                    code = "concurrency_conflict",
+                    message = "Your clients changed while you were leaving. Try again.",
+                }),
+            };
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithTags(TenancyModule.Name)
+        .WithName("ResignFromTeam")
+        .Produces<CoachRemovalResponse>()
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
         return endpoints;
     }
 }

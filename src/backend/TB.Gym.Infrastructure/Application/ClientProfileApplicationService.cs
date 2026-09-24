@@ -18,8 +18,11 @@ internal sealed class ClientProfileApplicationService(
     CoachClientScope coachClientScope)
     : IClientProfileApplicationService
 {
-    /// <summary>What a release writes on each plan and programme it closes.</summary>
+    /// <summary>What a release writes on each plan and program it closes.</summary>
     internal const string ReleaseClosureReason = "Closed because the client was released from the workspace.";
+
+    /// <summary>What a client leaving writes on each plan and program it closes.</summary>
+    internal const string LeaveClosureReason = "Closed because the client left the workspace.";
 
     /// <summary>
     /// The Owner lists every current client; a Coach lists only the clients assigned to them. Released
@@ -136,53 +139,100 @@ internal sealed class ClientProfileApplicationService(
         }
     }
 
-    public async Task<IReadOnlyList<FormerClientSummary>> ListFormerAsync(CancellationToken cancellationToken) =>
-        await dbContext.ClientProfiles
+    public async Task<IReadOnlyList<FormerClientSummary>> ListFormerAsync(CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.ClientProfiles
             .AsNoTracking()
             .Where(client => client.ReleasedAtUtc != null)
             .OrderByDescending(client => client.ReleasedAtUtc)
             .ThenBy(client => client.FirstName)
-            .Select(client => new FormerClientSummary(
+            .Select(client => new
+            {
                 client.Id,
                 client.FirstName,
                 client.LastName,
                 client.Email,
-                client.ReleasedAtUtc!.Value,
-                dbContext.ClientRelationshipEvents
+                ReleasedAtUtc = client.ReleasedAtUtc!.Value,
+                Ending = dbContext.ClientRelationshipEvents
                     .Where(item =>
                         item.ClientProfileId == client.Id &&
-                        item.EventType == ClientRelationshipEventType.Released)
-                    .Select(item => item.Reason)
-                    .FirstOrDefault() ?? string.Empty))
+                        (item.EventType == ClientRelationshipEventType.Released ||
+                         item.EventType == ClientRelationshipEventType.Left))
+                    .Select(item => new { item.Reason, item.EventType })
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
+        return rows
+            .Select(row => new FormerClientSummary(
+                row.Id,
+                row.FirstName,
+                row.LastName,
+                row.Email,
+                row.ReleasedAtUtc,
+                row.Ending?.Reason ?? string.Empty,
+                DepartureKindOf(row.Ending?.EventType)))
+            .ToArray();
+    }
 
     /// <summary>
-    /// Releases a client in one transaction (ADR 0027). Everything that made them a current client
-    /// ends; nothing that happened is deleted or rewritten.
+    /// Releases a client (ADR 0027): the owner ends the relationship, and the client is emailed.
+    /// </summary>
+    public Task<ClientCommandResult> ReleaseAsync(
+        Guid clientId,
+        ReleaseClientRequest request,
+        CancellationToken cancellationToken) =>
+        string.IsNullOrWhiteSpace(request.Reason)
+            ? Task.FromResult(Invalid("reason", "Say why this client is being released."))
+            : EndRelationshipAsync(
+                client => client.Id == clientId,
+                request.Reason,
+                request.Version,
+                ClientDepartureKind.ReleasedByOwner,
+                cancellationToken);
+
+    /// <summary>
+    /// The signed-in client leaves (ADR 0027): the same ending as a release, recorded as theirs, with
+    /// the owner and their coach told in-app instead of the client being emailed.
+    /// </summary>
+    public Task<ClientCommandResult> LeaveAsync(LeaveWorkspaceRequest request, CancellationToken cancellationToken) =>
+        currentUser.UserId is not { } userId
+            ? Task.FromResult(new ClientCommandResult(ClientCommandStatus.NotFound))
+            : EndRelationshipAsync(
+                client => client.UserId == userId && client.ReleasedAtUtc == null,
+                string.IsNullOrWhiteSpace(request.Reason) ? LeftWithoutReason : request.Reason,
+                request.Version,
+                ClientDepartureKind.LeftByClient,
+                cancellationToken);
+
+    /// <summary>What a client who gave no reason for leaving is recorded with.</summary>
+    internal const string LeftWithoutReason = "The client left without giving a reason.";
+
+    /// <summary>
+    /// Ends a client's relationship with the workspace in one transaction. Everything that made them a
+    /// current client ends; nothing that happened is deleted or rewritten.
     /// </summary>
     /// <remarks>
     /// In order: the client moves to the owner (with a history entry) so no coach keeps them; the
-    /// profile is marked released and the owner's reason recorded; their membership ends, which cuts
-    /// every client route at once; open or future plans, programmes and meal plans are cancelled
-    /// through their own audited transitions, payments untouched; and the notice email is queued. A
-    /// programme with a workout in progress is left as it is, because the training rules refuse to
-    /// cancel one mid-workout and a release must not fail for that.
+    /// profile is marked ended and the reason recorded as a release or a departure; their membership
+    /// ends, which cuts every client route at once; open or future plans, programs and meal plans are
+    /// cancelled through their own audited transitions, payments untouched; and the notices are
+    /// queued — an email to a released client, in-app notices to the owner and their coach when a
+    /// client leaves. A program with a workout in progress is left as it is, because the training
+    /// rules refuse to cancel one mid-workout and ending a relationship must not fail for that.
     /// </remarks>
-    public async Task<ClientCommandResult> ReleaseAsync(
-        Guid clientId,
-        ReleaseClientRequest request,
+    private async Task<ClientCommandResult> EndRelationshipAsync(
+        System.Linq.Expressions.Expression<Func<ClientProfile, bool>> which,
+        string reason,
+        uint version,
+        ClientDepartureKind kind,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Reason))
-        {
-            return Invalid("reason", "Say why this client is being released.");
-        }
-
         if (currentUser.UserId is not { } actorUserId)
         {
             return new ClientCommandResult(ClientCommandStatus.NotFound);
         }
 
+        var releasedByOwner = kind == ClientDepartureKind.ReleasedByOwner;
         try
         {
             return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -190,15 +240,13 @@ internal sealed class ClientProfileApplicationService(
                 dbContext.ChangeTracker.Clear();
                 await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
                 var tenantId = tenantContext.TenantId;
-                var profile = await dbContext.ClientProfiles.SingleOrDefaultAsync(
-                    client => client.Id == clientId,
-                    cancellationToken);
+                var profile = await dbContext.ClientProfiles.SingleOrDefaultAsync(which, cancellationToken);
                 if (profile is null)
                 {
                     return new ClientCommandResult(ClientCommandStatus.NotFound);
                 }
 
-                if (profile.IsReleased || profile.Version != request.Version)
+                if (profile.IsReleased || profile.Version != version)
                 {
                     return new ClientCommandResult(ClientCommandStatus.Conflict);
                 }
@@ -206,7 +254,7 @@ internal sealed class ClientProfileApplicationService(
                 var now = clock.UtcNow;
                 var ownerUserId = await CoachTeam.OwnerUserIdAsync(dbContext, tenantId, cancellationToken);
                 await CoachTeam.LockActiveStaffAsync(dbContext, tenantId, ownerUserId, cancellationToken);
-                dbContext.Entry(profile).Property(client => client.Version).OriginalValue = request.Version;
+                dbContext.Entry(profile).Property(client => client.Version).OriginalValue = version;
                 var previousCoachUserId = profile.AssignedCoachUserId;
                 if (profile.AssignCoach(ownerUserId))
                 {
@@ -216,7 +264,7 @@ internal sealed class ClientProfileApplicationService(
                         await CoachTeam.NextAssignmentSequenceAsync(dbContext, profile.Id, cancellationToken),
                         previousCoachUserId,
                         ownerUserId,
-                        ClientCoachAssignmentReason.Released,
+                        releasedByOwner ? ClientCoachAssignmentReason.Released : ClientCoachAssignmentReason.ClientLeft,
                         null,
                         now));
                 }
@@ -225,8 +273,8 @@ internal sealed class ClientProfileApplicationService(
                 dbContext.ClientRelationshipEvents.Add(ClientRelationshipEvent.Create(
                     tenantId,
                     profile.Id,
-                    ClientRelationshipEventType.Released,
-                    request.Reason,
+                    releasedByOwner ? ClientRelationshipEventType.Released : ClientRelationshipEventType.Left,
+                    reason,
                     now));
 
                 if (profile.UserId is { } clientUserId &&
@@ -242,18 +290,31 @@ internal sealed class ClientProfileApplicationService(
                         membership.ReleaseClient();
                     }
 
-                    dbContext.WorkspaceNoticeMailRequests.Add(WorkspaceNoticeMailRequest.ClientReleased(
-                        tenantId,
-                        clientUserId,
-                        profile.Id,
-                        actorUserId,
-                        now));
+                    if (releasedByOwner)
+                    {
+                        dbContext.WorkspaceNoticeMailRequests.Add(WorkspaceNoticeMailRequest.ClientReleased(
+                            tenantId,
+                            clientUserId,
+                            profile.Id,
+                            actorUserId,
+                            now));
+                    }
+                }
+
+                if (!releasedByOwner)
+                {
+                    var timeZoneId = await WorkspaceRelationshipNotices.TenantTimeZoneAsync(dbContext, tenantId, cancellationToken);
+                    foreach (var staffUserId in new[] { ownerUserId, previousCoachUserId }.Distinct())
+                    {
+                        WorkspaceRelationshipNotices.ClientLeft(dbContext, tenantId, timeZoneId, staffUserId, profile.Id, now);
+                    }
                 }
 
                 await CloseOpenCoachingAsync(
                     profile.Id,
                     await GetTenantTodayAsync(cancellationToken),
                     actorUserId,
+                    releasedByOwner ? ReleaseClosureReason : LeaveClosureReason,
                     now,
                     cancellationToken);
 
@@ -261,7 +322,7 @@ internal sealed class ClientProfileApplicationService(
                 await transaction.CommitAsync(cancellationToken);
                 return new ClientCommandResult(
                     ClientCommandStatus.Success,
-                    CoachDetails: await ToCoachDetailsAsync(profile, cancellationToken));
+                    CoachDetails: releasedByOwner ? await ToCoachDetailsAsync(profile, cancellationToken) : null);
             });
         }
         catch (ArgumentException exception)
@@ -285,6 +346,7 @@ internal sealed class ClientProfileApplicationService(
         Guid clientProfileId,
         DateOnly tenantToday,
         Guid actorUserId,
+        string closureReason,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -300,7 +362,7 @@ internal sealed class ClientProfileApplicationService(
             .ToListAsync(cancellationToken);
         foreach (var enrollment in enrollments)
         {
-            enrollment.Cancel(now, ReleaseClosureReason);
+            enrollment.Cancel(now, closureReason);
             await CommercialApplicationService.CancelScheduledNotificationsAsync(
                 dbContext,
                 enrollment.Id,
@@ -326,7 +388,7 @@ internal sealed class ClientProfileApplicationService(
                 MesocycleLifecycleEventType.Cancelled,
                 previous,
                 MesocycleStatus.Cancelled,
-                ReleaseClosureReason,
+                closureReason,
                 now));
         }
 
@@ -346,7 +408,7 @@ internal sealed class ClientProfileApplicationService(
                 NutritionPlanLifecycleEventType.Cancelled,
                 previous,
                 plan.Status,
-                ReleaseClosureReason,
+                closureReason,
                 actorUserId,
                 now));
         }
@@ -399,7 +461,7 @@ internal sealed class ClientProfileApplicationService(
 
         var client = await dbContext.ClientProfiles
             .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.UserId == userId, cancellationToken);
+            .CurrentFor(userId).SingleOrDefaultAsync(cancellationToken);
         return client is null ? null : ToSelfProfile(client);
     }
 
@@ -692,9 +754,7 @@ internal sealed class ClientProfileApplicationService(
     private Task<ClientProfile?> FindSelfAsync(CancellationToken cancellationToken) =>
         currentUser.UserId is not { } userId
             ? Task.FromResult<ClientProfile?>(null)
-            : dbContext.ClientProfiles.SingleOrDefaultAsync(
-                client => client.UserId == userId,
-                cancellationToken);
+            : dbContext.ClientProfiles.CurrentFor(userId).SingleOrDefaultAsync(cancellationToken);
 
     private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken)
     {
@@ -744,17 +804,31 @@ internal sealed class ClientProfileApplicationService(
 
         var release = await (
             from item in dbContext.ClientRelationshipEvents.AsNoTracking()
-            where item.ClientProfileId == client.Id && item.EventType == ClientRelationshipEventType.Released
+            where item.ClientProfileId == client.Id &&
+                  (item.EventType == ClientRelationshipEventType.Released ||
+                   item.EventType == ClientRelationshipEventType.Left)
             join user in dbContext.Users.AsNoTracking() on item.CreatedByUserId equals user.Id into actors
             from actor in actors.DefaultIfEmpty()
-            select new { item.Reason, item.CreatedByUserId, Name = actor == null ? null : actor.DisplayName })
+            select new
+            {
+                item.Reason,
+                item.EventType,
+                item.CreatedByUserId,
+                Name = actor == null ? null : actor.DisplayName,
+            })
             .FirstOrDefaultAsync(cancellationToken);
         return new ClientReleaseView(
             releasedAtUtc,
             release?.Reason ?? string.Empty,
             release?.CreatedByUserId,
-            release?.Name ?? string.Empty);
+            release?.Name ?? string.Empty,
+            DepartureKindOf(release?.EventType));
     }
+
+    private static ClientDepartureKind DepartureKindOf(ClientRelationshipEventType? eventType) =>
+        eventType == ClientRelationshipEventType.Left
+            ? ClientDepartureKind.LeftByClient
+            : ClientDepartureKind.ReleasedByOwner;
 
     private static ClientCommandResult Invalid(string field, string message) =>
         new(

@@ -1,4 +1,5 @@
 using TB.Gym.Modules.Clients;
+using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.Tenancy;
 
 namespace TB.Gym.Domain.Tests;
@@ -165,6 +166,66 @@ public sealed class ReleaseClientDomainTests
         Assert.Contains("Nothing you recorded there was deleted", content.Body);
         Assert.DoesNotContain("http", content.Body, "The notice carries no link.");
         Assert.DoesNotContain("{", content.Body, "Nothing is composed into the wording.");
+    }
+
+    [TestMethod]
+    public void ACoachResignationAndAClientLeavingAreTheirOwnHistoryReasons()
+    {
+        var resigned = ClientCoachAssignment.ForChange(
+            TenantId, Guid.NewGuid(), 2, CoachUserId, OwnerUserId, ClientCoachAssignmentReason.CoachResigned, null, Now);
+        var left = ClientCoachAssignment.ForChange(
+            TenantId, Guid.NewGuid(), 2, CoachUserId, OwnerUserId, ClientCoachAssignmentReason.ClientLeft, null, Now);
+
+        Assert.AreEqual(ClientCoachAssignmentReason.CoachResigned, resigned.Reason);
+        Assert.AreEqual(ClientCoachAssignmentReason.ClientLeft, left.Reason);
+        Assert.Throws<ArgumentOutOfRangeException>(() => ClientCoachAssignment.ForChange(
+            TenantId, Guid.NewGuid(), 2, CoachUserId, OwnerUserId, ClientCoachAssignmentReason.Invitation, null, Now));
+    }
+
+    [TestMethod]
+    public void OnlyAFormerClientMembershipRejoinsAsAClient()
+    {
+        var client = TenantMembership.Create(TenantId, ClientUserId, TenantRole.Client);
+        Assert.Throws<InvalidOperationException>(client.RejoinAsClient, "An active client has not left.");
+
+        client.ReleaseClient();
+        client.RejoinAsClient();
+        Assert.AreEqual(MembershipStatus.Active, client.Status);
+
+        var coach = TenantMembership.Create(TenantId, CoachUserId, TenantRole.Coach);
+        coach.RemoveCoach();
+        Assert.Throws<InvalidOperationException>(coach.RejoinAsClient, "A removed coach is not a former client.");
+    }
+
+    [TestMethod]
+    public void ACoachDepartureNoticeIsAboutTheHistoryEntryAndNamesNobody()
+    {
+        var entryId = Guid.NewGuid();
+        var request = WorkspaceNoticeMailRequest.CoachDeparted(TenantId, ClientUserId, entryId, CoachUserId, Now);
+        Assert.AreEqual(WorkspaceNoticeKind.CoachDeparted, request.Kind);
+        Assert.AreEqual(entryId, request.SubjectId, "Keyed by the move, so a second departure is a second notice.");
+
+        var content = WorkspaceNoticeEmailTemplates.Render(WorkspaceNoticeKind.CoachDeparted);
+        Assert.AreEqual(WorkspaceNoticeEmailTemplates.CoachDepartedKey, content.TemplateKey);
+        Assert.Contains("assign you a new coach", content.Body);
+        Assert.DoesNotContain("http", content.Body);
+    }
+
+    [TestMethod]
+    public void WorkspaceNotificationKindsAreInAppOnlyServiceNotices()
+    {
+        foreach (var kind in new[] { CommercialNotificationKind.CoachDeparted, CommercialNotificationKind.ClientLeft })
+        {
+            Assert.IsTrue(NotificationPurposeCatalog.IsWorkspaceKind(kind));
+            Assert.AreEqual(NotificationPurpose.ServiceTransactional, NotificationPurposeCatalog.For(kind));
+            Assert.IsTrue(NotificationTemplateCatalog.TryResolve(kind, "en-LB", out _));
+        }
+
+        var channels = NotificationChannelPlanner.Plan(
+            NotificationPurpose.ServiceTransactional,
+            new NotificationChannelPlanInputs(false, false, false));
+        Assert.AreEqual(NotificationChannel.InApp, channels.Single().Channel);
+        Assert.IsFalse(NotificationPurposeCatalog.IsWorkspaceKind(CommercialNotificationKind.PaymentRequired));
     }
 
     private static ClientProfile CreateProfile(Guid coachUserId) =>

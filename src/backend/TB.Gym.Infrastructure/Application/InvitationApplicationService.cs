@@ -186,10 +186,12 @@ internal sealed class InvitationApplicationService(
             return replayed;
         }
 
-        // A person already in this workspace in any role cannot be invited into it again. The one
-        // exception is a removed coach, whom a coach invitation brings back.
+        // A person already in this workspace in any role cannot be invited into it again. The
+        // exceptions are a removed coach, whom a coach invitation brings back, and a former client,
+        // whom a client invitation brings back as a new relationship (ADR 0027). A former client's old
+        // profile is ended and never counts as a current one.
         var existingRelationship = await dbContext.ClientProfiles.AnyAsync(
-            client => client.NormalizedEmail == invitation.NormalizedEmail,
+            client => client.NormalizedEmail == invitation.NormalizedEmail && client.ReleasedAtUtc == null,
             cancellationToken);
         var existingUser = await userManager.FindByEmailAsync(invitation.Email);
         if (existingUser is not null)
@@ -200,6 +202,9 @@ internal sealed class InvitationApplicationService(
                     membership.UserId == existingUser.Id &&
                     !(invitation.Kind == InvitationKind.Coach &&
                       membership.Role == TenantRole.Coach &&
+                      membership.Status == MembershipStatus.Removed) &&
+                    !(invitation.Kind == InvitationKind.Client &&
+                      membership.Role == TenantRole.Client &&
                       membership.Status == MembershipStatus.Removed),
                 cancellationToken);
         }
@@ -637,12 +642,16 @@ internal sealed class InvitationApplicationService(
             var existingMembership = await dbContext.TenantMemberships.SingleOrDefaultAsync(
                 membership => membership.TenantId == invitation.TenantId && membership.UserId == user.Id,
                 cancellationToken);
+            // Only a current profile blocks: a former client's ended one stays as it is (ADR 0027).
             var existingProfile = await dbContext.ClientProfiles.AnyAsync(
-                profile => profile.UserId == user.Id || profile.NormalizedEmail == invitation.NormalizedEmail,
+                profile => profile.ReleasedAtUtc == null &&
+                    (profile.UserId == user.Id || profile.NormalizedEmail == invitation.NormalizedEmail),
                 cancellationToken);
             var rejoiningCoach = invitation.Kind == InvitationKind.Coach &&
                 existingMembership is { Role: TenantRole.Coach, Status: MembershipStatus.Removed };
-            if (existingProfile || (existingMembership is not null && !rejoiningCoach))
+            var rejoiningClient = invitation.Kind == InvitationKind.Client &&
+                existingMembership is { Role: TenantRole.Client, Status: MembershipStatus.Removed };
+            if (existingProfile || (existingMembership is not null && !rejoiningCoach && !rejoiningClient))
             {
                 return AcceptanceOutcome.From(InvitationAcceptanceStatus.Conflict);
             }
@@ -677,8 +686,18 @@ internal sealed class InvitationApplicationService(
                     invitation.Email,
                     invitation.PhoneNumber,
                     invitation.BirthDate);
-                dbContext.TenantMemberships.Add(
-                    TenantMembership.Create(invitation.TenantId, user.Id, TenantRole.Client));
+                // A former client reuses their one membership row; the relationship itself is the new
+                // profile, and the old one is left exactly as it was.
+                if (rejoiningClient)
+                {
+                    existingMembership!.RejoinAsClient();
+                }
+                else
+                {
+                    dbContext.TenantMemberships.Add(
+                        TenantMembership.Create(invitation.TenantId, user.Id, TenantRole.Client));
+                }
+
                 dbContext.ClientProfiles.Add(profile);
                 dbContext.ClientCoachAssignments.Add(ClientCoachAssignment.ForInvitation(
                     invitation.TenantId,
@@ -952,11 +971,14 @@ internal sealed class InvitationApplicationService(
                 Kind: InvitationKind.Coach);
         }
 
+        // The newest profile is the one this acceptance created: a former client invited back also
+        // has their old, ended one here (ADR 0027).
         var profileId = await dbContext.ClientProfiles
             .AsNoTracking()
             .Where(profile => profile.UserId == acceptedByUserId)
+            .OrderByDescending(profile => profile.CreatedAtUtc)
             .Select(profile => (Guid?)profile.Id)
-            .SingleOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken);
         return profileId is null
             ? null
             : new InvitationAcceptanceResult(

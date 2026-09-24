@@ -1,0 +1,27 @@
+:host {
+  display: block;
+}
+
+// The same measure as the account page's own sections.
+.leave-section {
+  max-width: 760px;
+}
+
+.leave-section p {
+  margin-block: var(--space-8) var(--space-16);
+}
+
+.leave-form {
+  display: grid;
+  gap: var(--space-16);
+  margin-block-start: var(--space-16);
+}
+
+.leave-error {
+  color: var(--color-danger);
+  margin: 0;
+}
+
+.leave-error:empty {
+  display: none;
+}
