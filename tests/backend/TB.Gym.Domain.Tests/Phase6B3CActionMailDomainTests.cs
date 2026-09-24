@@ -1,5 +1,6 @@
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
+using TB.Gym.Modules.Tenancy;
 
 namespace TB.Gym.Domain.Tests;
 
@@ -37,7 +38,8 @@ public sealed class Phase6B3CActionMailDomainTests
         // Compared through arrays rather than directly, because these are compile-time constants and
         // a direct comparison is one the analyzer can fold away - which would leave the duplication
         // unguarded at exactly the moment somebody changes one of them.
-        string[] names = [AccountActionMailRetryPolicy.Name, InvitationActionMailRetryPolicy.Name];
+        string[] names =
+            [AccountActionMailRetryPolicy.Name, InvitationActionMailRetryPolicy.Name, WorkspaceNoticeMailRetryPolicy.Name];
         Assert.AreEqual(
             1,
             names.Distinct(StringComparer.Ordinal).Count(),
@@ -47,13 +49,29 @@ public sealed class Phase6B3CActionMailDomainTests
             AccountActionMailRetryPolicy.Schedule.ToArray(),
             InvitationActionMailRetryPolicy.Schedule.ToArray(),
             "The two queues' backoff tables have drifted apart.");
+        CollectionAssert.AreEqual(
+            AccountActionMailRetryPolicy.Schedule.ToArray(),
+            WorkspaceNoticeMailRetryPolicy.Schedule.ToArray(),
+            "The workspace notice queue's backoff table has drifted from the others.");
 
         int[] defaults =
-            [AccountActionMailLimits.DefaultMaximumAttempts, InvitationActionMailLimits.DefaultMaximumAttempts];
+        [
+            AccountActionMailLimits.DefaultMaximumAttempts,
+            InvitationActionMailLimits.DefaultMaximumAttempts,
+            WorkspaceNoticeMailLimits.DefaultMaximumAttempts,
+        ];
         int[] minimums =
-            [AccountActionMailLimits.MinimumMaximumAttempts, InvitationActionMailLimits.MinimumMaximumAttempts];
+        [
+            AccountActionMailLimits.MinimumMaximumAttempts,
+            InvitationActionMailLimits.MinimumMaximumAttempts,
+            WorkspaceNoticeMailLimits.MinimumMaximumAttempts,
+        ];
         int[] maximums =
-            [AccountActionMailLimits.MaximumMaximumAttempts, InvitationActionMailLimits.MaximumMaximumAttempts];
+        [
+            AccountActionMailLimits.MaximumMaximumAttempts,
+            InvitationActionMailLimits.MaximumMaximumAttempts,
+            WorkspaceNoticeMailLimits.MaximumMaximumAttempts,
+        ];
 
         Assert.AreEqual(1, defaults.Distinct().Count(), "The default attempt budgets have drifted apart.");
         Assert.AreEqual(1, minimums.Distinct().Count(), "The minimum attempt bounds have drifted apart.");

@@ -115,4 +115,7 @@ public static class ActionMailScopes
 
     /// <summary>Tenant-owned invitation mail.</summary>
     public const string Invitation = "invitation";
+
+    /// <summary>Tenant-owned plain notices to a current or former member (ADR 0027).</summary>
+    public const string WorkspaceNotice = "workspace-notice";
 }

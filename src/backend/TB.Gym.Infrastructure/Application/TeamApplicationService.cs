@@ -35,8 +35,10 @@ internal sealed class TeamApplicationService(
                 membership.Version,
             })
             .ToListAsync(cancellationToken);
+        // Current clients only: a released client stays with the owner as a record, not as work.
         var counts = await dbContext.ClientProfiles
             .AsNoTracking()
+            .Where(client => client.ReleasedAtUtc == null)
             .GroupBy(client => client.AssignedCoachUserId)
             .Select(group => new { CoachUserId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(item => item.CoachUserId, item => item.Count, cancellationToken);

@@ -326,6 +326,7 @@ internal sealed class CommercialApplicationService(
             return NotFound();
         }
 
+        await coachClientScope.EnsureNotReleasedAsync(source.ClientProfileId, cancellationToken);
         var offerProductId = await dbContext.ProductOffers
             .Where(item => item.Id == request.OfferId)
             .Select(item => (Guid?)item.ProductId)
@@ -566,6 +567,7 @@ internal sealed class CommercialApplicationService(
             return NotFound();
         }
 
+        await coachClientScope.EnsureNotReleasedAsync(enrollment.ClientProfileId, cancellationToken);
         try
         {
             if (await GetTenantTodayAsync(cancellationToken) >= enrollment.EndDateExclusive)
@@ -896,6 +898,12 @@ internal sealed class CommercialApplicationService(
         string eventKey) =>
         Schedule(enrollment, context, kind, eventKey, clock.UtcNow);
 
+    private Task CancelScheduledNotificationsAsync(
+        Guid enrollmentId,
+        CommercialNotificationKind? kind,
+        CancellationToken cancellationToken) =>
+        CancelScheduledNotificationsAsync(dbContext, enrollmentId, kind, clock.UtcNow, cancellationToken);
+
     /// <summary>
     /// The business withdrew one or more scheduled notifications for an enrollment.
     /// </summary>
@@ -905,14 +913,15 @@ internal sealed class CommercialApplicationService(
     /// out from under it: the dispatcher re-establishes eligibility before it materializes anything,
     /// sees the cancelled intent, and closes its own claimed row honestly with the attempt it already
     /// started. Terminal deliveries — an inbox row already written — are historical facts and are
-    /// never rewritten.
+    /// never rewritten. Shared with client release, which closes enrollments the same way.
     /// </remarks>
-    private async Task CancelScheduledNotificationsAsync(
+    internal static async Task CancelScheduledNotificationsAsync(
+        GymDbContext dbContext,
         Guid enrollmentId,
         CommercialNotificationKind? kind,
+        DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var now = clock.UtcNow;
         var intents = await dbContext.NotificationOutboxItems
             .Where(item =>
                 item.AggregateId == enrollmentId &&
@@ -1050,7 +1059,8 @@ internal sealed class CommercialApplicationService(
 
     /// <summary>
     /// An enrollment of another coach's client, which a Coach reaches only as a missing one. An
-    /// unknown enrollment is left to the command's own not-found answer.
+    /// unknown enrollment is left to the command's own not-found answer. A released client's
+    /// enrollment is refused outright, because recording a payment is a write (ADR 0027).
     /// </summary>
     private async Task<bool> IsOutsideCoachScopeAsync(Guid enrollmentId, CancellationToken cancellationToken)
     {
@@ -1059,7 +1069,18 @@ internal sealed class CommercialApplicationService(
             .Where(item => item.Id == enrollmentId)
             .Select(item => (Guid?)item.ClientProfileId)
             .SingleOrDefaultAsync(cancellationToken);
-        return clientProfileId is { } id && await coachClientScope.ExcludesAsync(id, cancellationToken);
+        if (clientProfileId is not { } id)
+        {
+            return false;
+        }
+
+        if (await coachClientScope.ExcludesAsync(id, cancellationToken))
+        {
+            return true;
+        }
+
+        await coachClientScope.EnsureNotReleasedAsync(id, cancellationToken);
+        return false;
     }
 
     private static CommercialCommandResult NotFound() =>

@@ -96,9 +96,11 @@ public sealed class ClientCoachAssignment : TenantEntity
             throw new ArgumentException("A change names a different previous coach.", nameof(previousCoachUserId));
         }
 
-        if (reason is not (ClientCoachAssignmentReason.Reassigned or ClientCoachAssignmentReason.CoachRemoved))
+        if (reason is not (ClientCoachAssignmentReason.Reassigned
+            or ClientCoachAssignmentReason.CoachRemoved
+            or ClientCoachAssignmentReason.Released))
         {
-            throw new ArgumentOutOfRangeException(nameof(reason), "A change is a reassignment or a coach removal.");
+            throw new ArgumentOutOfRangeException(nameof(reason), "A change is a reassignment, a coach removal or a release.");
         }
 
         return new ClientCoachAssignment(
@@ -147,4 +149,7 @@ public enum ClientCoachAssignmentReason
 
     /// <summary>An existing client was given to the workspace owner when coach assignment shipped.</summary>
     Migration = 4,
+
+    /// <summary>The owner released the client, who moved to the owner as the record's keeper.</summary>
+    Released = 5,
 }

@@ -1039,8 +1039,11 @@ unit economics are known and exercised.
 - Step 1, gym team support (complete, 2026-09-23): owner invites and removes coaches, one coach per
   client with append-only history, owner reassignment, Coach sees only their own clients, Team page
   under Settings and a reassign action on the client page. See ADR 0026.
-- Next, before Step 2: "release client", which lets the owner end a client's relationship with the
-  workspace (the option chosen for a coach who leaves and takes clients). Not built.
+- Release client (complete, 2026-09-23): the owner ends a client's relationship with the workspace —
+  access ends at once, open plans and programmes close with no refund, the record stays read-only
+  under Former clients, the client is emailed once, and there is no undo or re-invite. Released
+  clients are not active clients. See ADR 0027. Moving a client with their history to another
+  workspace is a later feature.
 - Step 2, manual platform billing: not started.
 
 ## Continuous requirements

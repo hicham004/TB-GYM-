@@ -1566,6 +1566,7 @@ export function toCoachClient(value: ContractCoachClientDetails): CoachClientDet
     heightEnteredValue: toNullableNumber(value.heightEnteredValue),
     averageDailySteps: toNullableNumber(value.averageDailySteps),
     version: toNumber(value.version),
+    release: value.release ?? null,
   };
 }
 

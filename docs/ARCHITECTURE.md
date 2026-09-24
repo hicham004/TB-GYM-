@@ -251,6 +251,11 @@ conversation, progress photo) asks it after loading that row. Another coach's cl
 the same as a missing one. An integration test fails if a client-named route parameter uses
 another name.
 
+A released client (ADR 0027) is read-only for everyone. The same handler refuses any non-GET
+request whose route names one, and the indirect writes call `CoachClientScope.EnsureNotReleasedAsync`;
+both answer 409 `client_released` through one exception handler. Database triggers freeze the
+released profile row and keep the client's membership from ever becoming active again.
+
 Legal document versions are global identity records, while a workspace consent acceptance is
 contextual. Listing current documents accepts an optional workspace context, verifies active
 membership, and never treats acceptance in Workspace A as acceptance in Workspace B.
@@ -1411,6 +1416,12 @@ dead-letter view.
 | Authorized by | The Identity account and its security stamp | The invitation aggregate, through a narrow module contract |
 | Needs membership | No — the account may have none | No — the invitee is not a member yet |
 | Generations | None; Identity's security stamp invalidates outstanding tokens | One per deliberate send |
+
+A third queue, `tenancy."NoticeMailRequests"` (ADR 0027), carries plain workspace notices — today
+only "your access to a workspace has ended" to a released client. It is tenant-owned like the
+invitation queue and shares its claim, attempt, retry and dead-letter lifecycle, but mints no token
+and carries no link. Its recipient is a membership row, current or former, and eligibility is the
+notice's own fact re-checked before sending, not an active membership. The same Worker loop sweeps it.
 
 The absence of a tenant column on the global queue is the design, not an omission. ADR 0021 refuses
 assigning a fabricated or "first available" workspace so that global mail can fit a tenant-shaped

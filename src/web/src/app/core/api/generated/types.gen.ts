@@ -537,7 +537,7 @@ export type CheckInResponseView = {
 };
 
 export type ClientCoachAssignmentReason =
-  'Invitation' | 'Reassigned' | 'CoachRemoved' | 'Migration';
+  'Invitation' | 'Reassigned' | 'CoachRemoved' | 'Migration' | 'Released';
 
 export type ClientCoachAssignmentView = {
   id: string;
@@ -631,6 +631,13 @@ export type ClientNutritionPlanSummary = {
 };
 
 export type ClientOnboardingStatus = 'NotStarted' | 'InProgress' | 'Completed';
+
+export type ClientReleaseView = {
+  releasedAtUtc: string;
+  reason: string;
+  releasedByUserId: null | string;
+  releasedByName: string;
+};
 
 export type ClientSelfProfile = {
   id: string;
@@ -750,6 +757,7 @@ export type CoachClientDetails = {
   version: number | string;
   assignedCoachUserId: string;
   assignedCoachName: string;
+  release?: null | ClientReleaseView;
 };
 
 export type CoachingFeature =
@@ -1334,6 +1342,15 @@ export type FoodVersionView = {
 
 export type ForgotPasswordRequest = {
   email: string;
+};
+
+export type FormerClientSummary = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  releasedAtUtc: string;
+  reason: string;
 };
 
 export type FormulaSex = 'Female' | 'Male';
@@ -2076,6 +2093,11 @@ export type RegisterExternalMediaRequest = {
   title: string;
   provider: ExternalMediaProvider;
   externalMediaId: string;
+};
+
+export type ReleaseClientRequest = {
+  reason: string;
+  version: number | string;
 };
 
 export type RemoveCoachRequest = {
@@ -3614,6 +3636,54 @@ export type ListClientCoachAssignmentsResponses = {
 
 export type ListClientCoachAssignmentsResponse =
   ListClientCoachAssignmentsResponses[keyof ListClientCoachAssignmentsResponses];
+
+export type ReleaseClientData = {
+  body: ReleaseClientRequest;
+  path: {
+    clientId: string;
+  };
+  query?: never;
+  url: '/api/clients/{clientId}/release';
+};
+
+export type ReleaseClientErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ReleaseClientError = ReleaseClientErrors[keyof ReleaseClientErrors];
+
+export type ReleaseClientResponses = {
+  /**
+   * OK
+   */
+  200: CoachClientDetails;
+};
+
+export type ReleaseClientResponse = ReleaseClientResponses[keyof ReleaseClientResponses];
+
+export type ListFormerClientsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/clients/former';
+};
+
+export type ListFormerClientsResponses = {
+  /**
+   * OK
+   */
+  200: Array<FormerClientSummary>;
+};
+
+export type ListFormerClientsResponse =
+  ListFormerClientsResponses[keyof ListFormerClientsResponses];
 
 export type GetOwnClientProfileData = {
   body?: never;

@@ -1,0 +1,43 @@
+<button #releaseTrigger appButton variant="outlined" type="button" (click)="open()" i18n>
+  Release client
+</button>
+
+<!-- Release is confirmed before anything is sent. Only "Release permanently" calls the API. -->
+<dialog
+  #releaseDialog
+  class="tb-dialog tb-theme"
+  aria-labelledby="release-dialog-title"
+  (cancel)="cancel($event)"
+>
+  <h2 id="release-dialog-title" class="tb-text-section-title" dir="auto" i18n>
+    Release {{ client().firstName }} {{ client().lastName }}?
+  </h2>
+  <p class="tb-text-compact" i18n>
+    They lose access to this workspace right away, and we email them that their access has ended.
+    Their open plans and programmes are closed, with no refund. Nothing is deleted: you keep their
+    record, read-only, under Former clients. This cannot be undone, and they cannot be invited back.
+  </p>
+  <form class="release-form" [formGroup]="form" (ngSubmit)="release()" novalidate>
+    <app-field
+      label="Reason"
+      i18n-label
+      help="Kept in this workspace only; it is not included in the email. Up to 500 characters."
+      i18n-help
+    >
+      <textarea appControl dir="auto" rows="3" formControlName="reason" required></textarea>
+    </app-field>
+    <p class="release-error tb-text-compact" role="alert">{{ error() }}</p>
+    <div class="tb-dialog__actions">
+      <button appButton variant="outlined" type="button" (click)="cancel($event)" i18n>
+        Cancel
+      </button>
+      <button appButton type="submit" [loading]="saving()">
+        @if (saving()) {
+          <ng-container i18n>Releasing…</ng-container>
+        } @else {
+          <ng-container i18n>Release permanently</ng-container>
+        }
+      </button>
+    </div>
+  </form>
+</dialog>

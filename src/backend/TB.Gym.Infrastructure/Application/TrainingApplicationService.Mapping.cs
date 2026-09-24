@@ -461,6 +461,12 @@ internal sealed partial class TrainingApplicationService
             return null;
         }
 
+        // A tracked load is always a write, and a released client's programme is read-only (ADR 0027).
+        if (tracking)
+        {
+            await coachClientScope.EnsureNotReleasedAsync(clientProfileId.Value, cancellationToken);
+        }
+
         var query = dbContext.TrainingMesocycles
             .Include(item => item.Weeks).ThenInclude(item => item.Sessions).ThenInclude(item => item.Exercises).ThenInclude(item => item.Sets)
             .Include(item => item.Weeks).ThenInclude(item => item.Sessions).ThenInclude(item => item.Exercises).ThenInclude(item => item.Alternatives)

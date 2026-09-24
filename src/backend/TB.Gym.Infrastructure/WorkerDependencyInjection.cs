@@ -10,6 +10,7 @@ using TB.Gym.Infrastructure.Security;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Notifications;
+using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure;
@@ -211,6 +212,8 @@ public static class WorkerDependencyInjection
         services.TryAddScoped<InvitationActionMailService>();
         services.TryAddScoped<IInvitationActionMailDispatchService>(provider =>
             provider.GetRequiredService<InvitationActionMailService>());
+
+        services.TryAddScoped<IWorkspaceNoticeMailDispatchService, WorkspaceNoticeMailService>();
 
         return services;
     }

@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
@@ -9,6 +9,7 @@ import type { ClientSummary } from '../../core/api/api.models';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { query, settle } from '../../../testing/dom';
 import { Clients } from './clients';
+import { FormerClientsApi } from './former-clients-api';
 
 function client(overrides: Partial<ClientSummary> = {}): ClientSummary {
   return {
@@ -26,13 +27,27 @@ function client(overrides: Partial<ClientSummary> = {}): ClientSummary {
   };
 }
 
-async function render(api: Partial<ApiClient> = {}, tenantId: string | null = 'tenant-1') {
+async function render(
+  api: Partial<ApiClient> = {},
+  tenantId: string | null = 'tenant-1',
+  options: { isOwner?: boolean; view?: 'former'; former?: Partial<FormerClientsApi> } = {},
+) {
   await TestBed.configureTestingModule({
     imports: [Clients],
     providers: [
       provideRouter([]),
+      ...(options.view
+        ? [{ provide: ActivatedRoute, useValue: { snapshot: { data: { view: options.view } } } }]
+        : []),
       { provide: ApiClient, useValue: { getClients: vi.fn(() => of([client()])), ...api } },
-      { provide: TenantStore, useValue: { selectedTenantId: signal(tenantId) } },
+      {
+        provide: FormerClientsApi,
+        useValue: { getFormerClients: vi.fn(() => of([])), ...options.former },
+      },
+      {
+        provide: TenantStore,
+        useValue: { selectedTenantId: signal(tenantId), isOwner: signal(options.isOwner ?? false) },
+      },
     ],
   }).compileComponents();
 
@@ -44,6 +59,54 @@ async function render(api: Partial<ApiClient> = {}, tenantId: string | null = 't
 describe('Clients', () => {
   afterEach(() => {
     TestBed.resetTestingModule();
+  });
+
+  /** ADR 0027: the owner switches between current and former clients; a coach has one list. */
+  it('offers the former-clients list to the owner only', async () => {
+    const { host } = await render({}, 'tenant-1', { isOwner: true });
+    const links = Array.from(host.querySelectorAll('app-section-nav a')).map((link) => ({
+      text: link.textContent?.trim(),
+      href: link.getAttribute('href'),
+    }));
+    expect(links).toEqual([
+      { text: 'Current clients', href: '/clients' },
+      { text: 'Former clients', href: '/clients/former' },
+    ]);
+
+    TestBed.resetTestingModule();
+    const coach = await render();
+    expect(coach.host.querySelector('app-section-nav')).toBeNull();
+  });
+
+  it('lists former clients with when and why they were released', async () => {
+    const getFormerClients = vi.fn(() =>
+      of([
+        {
+          id: 'client-9',
+          firstName: 'Omar',
+          lastName: 'Nasr',
+          email: 'omar@example.test',
+          releasedAtUtc: '2026-09-20T10:00:00Z',
+          reason: 'Followed his coach to another gym',
+        },
+      ]),
+    );
+    const getClients = vi.fn(() => of([client()]));
+    const { host } = await render({ getClients }, 'tenant-1', {
+      isOwner: true,
+      view: 'former',
+      former: { getFormerClients },
+    });
+
+    expect(getFormerClients).toHaveBeenCalledTimes(1);
+    expect(getClients).not.toHaveBeenCalled();
+    expect(host.querySelector('h1')?.textContent).toContain('Former clients');
+    expect(host.textContent).toContain('Omar Nasr');
+    expect(host.textContent).toContain('Followed his coach to another gym');
+    expect(host.textContent).toContain('Sep 20, 2026');
+    expect(query<HTMLAnchorElement>(host, 'tbody a').getAttribute('href')).toBe(
+      '/clients/client-9',
+    );
   });
 
   it('lists each client with a link into their profile', async () => {

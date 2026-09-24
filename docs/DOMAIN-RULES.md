@@ -97,7 +97,14 @@ client. Another coach's client answers as a missing one. Chats stay private to t
 after a reassignment the old coach loses the thread and the client keeps it read-only.
 
 **CLI-014** Removing a coach moves all their clients and pending client invitations to the owner in
-one transaction and deletes nothing. Releasing a client from the workspace is not built yet.
+one transaction and deletes nothing.
+
+**CLI-015** Only the owner releases a client, with a reason. Their membership ends at once; their
+running and future plans, programmes and meal plans are cancelled (payments kept, no refund; a
+programme with a workout in progress stays as it is); they move to the owner; and they are emailed
+once without the workspace, coach or reason named. The record is kept read-only for the owner under
+Former clients: every change answers 409 `client_released`. There is no undo or re-invite, and a
+released client is not an active client. See `docs/adr/0027-release-client.md`.
 
 ## 3. Products, enrollments, payments, programs, and access
 

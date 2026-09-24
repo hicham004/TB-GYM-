@@ -9,25 +9,32 @@
     }
   </div>
   @if (profile(); as client) {
-    <button
-      class="primary-button"
-      type="button"
-      [disabled]="startingConversation()"
-      (click)="messageClient()"
-    >
-      @if (startingConversation()) {
-        <span i18n>Opening conversation…</span>
-      } @else {
-        <span dir="auto" i18n>Message {{ client.firstName }}</span>
+    @if (client.release) {
+      <app-status-label label="Former client" i18n-label />
+    } @else {
+      <button
+        class="primary-button"
+        type="button"
+        [disabled]="startingConversation()"
+        (click)="messageClient()"
+      >
+        @if (startingConversation()) {
+          <span i18n>Opening conversation…</span>
+        } @else {
+          <span dir="auto" i18n>Message {{ client.firstName }}</span>
+        }
+      </button>
+      <span
+        class="status-badge"
+        [class.success]="client.onboardingStatus === 'Completed'"
+        [class.warning]="client.onboardingStatus === 'InProgress'"
+      >
+        {{ onboardingStatusLabel(client.onboardingStatus) }}
+      </span>
+      @if (isOwner()) {
+        <app-client-release [client]="client" (released)="clientReleased($event)" />
       }
-    </button>
-    <span
-      class="status-badge"
-      [class.success]="client.onboardingStatus === 'Completed'"
-      [class.warning]="client.onboardingStatus === 'InProgress'"
-    >
-      {{ onboardingStatusLabel(client.onboardingStatus) }}
-    </span>
+    }
   }
 </section>
 
@@ -41,50 +48,77 @@
 @if (loading()) {
   <p class="loading-row" i18n>Loading client profile...</p>
 } @else if (profile(); as client) {
-  @if (isOwner()) {
-    <app-client-coach [client]="client" (profileChanged)="coachChanged($event)" />
+  @if (client.release; as release) {
+    <!-- A former client (ADR 0027): the record is kept and read-only. The API refuses every change. -->
+    <section class="surface-section release-summary tb-theme" aria-labelledby="release-title">
+      <h2 id="release-title" class="tb-text-section-title" i18n>Former client</h2>
+      <p class="tb-text-compact" i18n>
+        Released on {{ release.releasedAtUtc | date: 'mediumDate' }} by
+        {{ release.releasedByName }}. Their access to this workspace ended then, and their open
+        plans and programmes were closed. This record is kept read-only.
+      </p>
+      <p class="tb-text-compact">
+        <span class="release-label" i18n>Reason</span>
+        <span dir="auto">{{ release.reason }}</span>
+      </p>
+      <p class="tb-text-compact muted" i18n>
+        Training, nutrition and detailed progress records are kept but are not shown for former
+        clients.
+      </p>
+    </section>
+
+    <app-progress-dashboard [clientId]="client.id" />
+
+    <app-client-commercial [client]="client" [readOnly]="true" />
+  } @else {
+    @if (isOwner()) {
+      <app-client-coach [client]="client" (profileChanged)="coachChanged($event)" />
+    }
+
+    <app-client-training [clientId]="client.id" />
+
+    <app-progress-dashboard [clientId]="client.id" />
+
+    <app-progress-view [clientId]="client.id" />
+
+    <app-client-commercial [client]="client" (profileChanged)="commercialProfileChanged($event)" />
+
+    <app-client-nutrition [clientId]="client.id" />
   }
 
-  <app-client-training [clientId]="client.id" />
-
-  <app-progress-dashboard [clientId]="client.id" />
-
-  <app-progress-view [clientId]="client.id" />
-
-  <app-client-commercial [client]="client" (profileChanged)="commercialProfileChanged($event)" />
-
-  <app-client-nutrition [clientId]="client.id" />
-
-  <section class="surface-section">
-    <div class="section-heading">
-      <div>
-        <h2 i18n>Client intake</h2>
-        <p class="muted" i18n>Contact, training, nutrition, and health details.</p>
+  <!-- Disabled as a whole for a former client, so nothing below can be edited or submitted. -->
+  <fieldset class="record-fields" [disabled]="!!client.release">
+    <section class="surface-section">
+      <div class="section-heading">
+        <div>
+          <h2 i18n>Client intake</h2>
+          <p class="muted" i18n>Contact, training, nutrition, and health details.</p>
+        </div>
       </div>
-    </div>
-    <app-client-intake-form
-      [profile]="client"
-      [busy]="busy()"
-      (saveIntake)="saveIntake($event)"
-      (completeOnboarding)="completeOnboarding($event)"
-    />
-  </section>
+      <app-client-intake-form
+        [profile]="client"
+        [busy]="busy()"
+        (saveIntake)="saveIntake($event)"
+        (completeOnboarding)="completeOnboarding($event)"
+      />
+    </section>
 
-  <section class="surface-section coach-notes">
-    <div class="section-heading">
-      <div>
-        <h2 i18n>Coach-only notes</h2>
-        <p class="muted" i18n>These notes are not exposed through the client profile API.</p>
+    <section class="surface-section coach-notes">
+      <div class="section-heading">
+        <div>
+          <h2 i18n>Coach-only notes</h2>
+          <p class="muted" i18n>These notes are not exposed through the client profile API.</p>
+        </div>
       </div>
-    </div>
-    <form [formGroup]="notesForm" (ngSubmit)="saveNotes()">
-      <label>
-        <span i18n>Notes</span>
-        <textarea formControlName="notes"></textarea>
-      </label>
-      <div class="form-actions">
-        <button class="primary-button" type="submit" [disabled]="busy()" i18n>Save notes</button>
-      </div>
-    </form>
-  </section>
+      <form [formGroup]="notesForm" (ngSubmit)="saveNotes()">
+        <label>
+          <span i18n>Notes</span>
+          <textarea formControlName="notes"></textarea>
+        </label>
+        <div class="form-actions">
+          <button class="primary-button" type="submit" [disabled]="busy()" i18n>Save notes</button>
+        </div>
+      </form>
+    </section>
+  </fieldset>
 }

@@ -3,14 +3,15 @@ using Microsoft.Extensions.Options;
 using TB.Gym.Infrastructure.Application;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
+using TB.Gym.Modules.Tenancy;
 
 namespace TB.Gym.Worker;
 
 /// <summary>
-/// Sweeps both action-mail queues on a fixed interval.
+/// Sweeps the three action-mail queues — account, invitation and workspace notice — on a fixed interval.
 /// </summary>
 /// <remarks>
-/// One loop, two queues, deliberately. Global account mail and tenant-owned invitation mail have
+/// One loop, several queues, deliberately. Global account mail and tenant-owned invitation mail have
 /// different owners, different authorization and different tables, and nothing about one may reach the
 /// other — but they are the same <i>kind</i> of work on the same schedule, and a second process to run
 /// a second timer would be ceremony rather than isolation. Each queue is drained by its own service in
@@ -127,6 +128,21 @@ public sealed class ActionMailDispatchWorker(
                     string.Create(
                         CultureInfo.InvariantCulture,
                         $"{invitation.Materialized} materialized, {invitation.Suppressed} suppressed, {invitation.Retried} retrying, {invitation.DeadLettered} dead-lettered, {invitation.Reclaimed} reclaimed"),
+                    null);
+            }
+
+            var notice = await scope.ServiceProvider
+                .GetRequiredService<IWorkspaceNoticeMailDispatchService>()
+                .DispatchDueAsync(stoppingToken);
+            if (notice.Total > 0)
+            {
+                LogSwept(
+                    logger,
+                    ActionMailScopes.WorkspaceNotice,
+                    notice.Claimed,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{notice.Materialized} materialized, {notice.Suppressed} suppressed, {notice.Retried} retrying, {notice.DeadLettered} dead-lettered, {notice.Reclaimed} reclaimed"),
                     null);
             }
         }

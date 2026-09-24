@@ -7,3 +7,20 @@
 .coach-notes {
   max-width: 900px;
 }
+
+// A bare container: the fieldset exists only to disable a former client's forms at once.
+.record-fields {
+  border: 0;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+
+.release-summary p {
+  margin-block: var(--space-8) 0;
+}
+
+.release-label {
+  color: var(--color-text-secondary);
+  margin-inline-end: var(--space-8);
+}

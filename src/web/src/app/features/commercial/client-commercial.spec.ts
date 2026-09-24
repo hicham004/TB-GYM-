@@ -42,6 +42,7 @@ const CLIENT: CoachClientDetails = {
   version: 3,
   assignedCoachUserId: 'owner-1',
   assignedCoachName: 'Olivia Owner',
+  release: null,
 };
 
 const CATALOG: ProductCatalog = {
@@ -130,7 +131,9 @@ function overview(overrides: Partial<ClientCommercialOverview> = {}): ClientComm
   };
 }
 
-async function render(options: { client?: CoachClientDetails; api?: Partial<ApiClient> } = {}) {
+async function render(
+  options: { client?: CoachClientDetails; api?: Partial<ApiClient>; readOnly?: boolean } = {},
+) {
   await TestBed.configureTestingModule({
     imports: [ClientCommercial],
     providers: [
@@ -155,6 +158,7 @@ async function render(options: { client?: CoachClientDetails; api?: Partial<ApiC
 
   const fixture = TestBed.createComponent(ClientCommercial);
   fixture.componentRef.setInput('client', options.client ?? CLIENT);
+  fixture.componentRef.setInput('readOnly', options.readOnly ?? false);
   await settle(fixture);
   return { fixture, host: fixture.nativeElement as HTMLElement, api: TestBed.inject(ApiClient) };
 }
@@ -192,6 +196,40 @@ describe('ClientCommercial', () => {
       idempotencyKey: '11111111-2222-3333-4444-555555555555',
     });
     expect(host.textContent).toContain('Service assigned.');
+  });
+
+  /** ADR 0027: a former client's plans and payments stay visible, and nothing offers to change them. */
+  it('shows a read-only history with no action that would change it', async () => {
+    const paid = enrollment({
+      storedStatus: 'Cancelled',
+      effectiveStatus: 'Cancelled',
+      paidAmount: 450,
+      balanceAmount: 0,
+      payments: [
+        {
+          id: 'payment-1',
+          operation: 'Receipt',
+          amount: 450,
+          currencyCode: 'USD',
+          receivedAtUtc: '2026-09-02T09:00:00Z',
+          method: 'Cash',
+          reference: null,
+          note: null,
+          createdAtUtc: '2026-09-02T09:00:00Z',
+        },
+      ] as ClientEnrollment['payments'],
+    });
+    const { host } = await render({
+      readOnly: true,
+      api: { getClientCommercialOverview: vi.fn(() => of(overview({ enrollments: [paid] }))) },
+    });
+
+    expect(host.textContent).toContain('Online coaching');
+    expect(host.textContent).toContain('Payment history (1)');
+    expect(host.textContent).not.toContain('Assign a service');
+    expect(host.querySelector('.enrollment-actions')).toBeNull();
+    expect(host.textContent).not.toContain('Block access');
+    expect(host.querySelectorAll('button')).toHaveLength(0);
   });
 
   it('offers no assignment form when the workspace has no active offer', async () => {

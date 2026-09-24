@@ -77,6 +77,7 @@ const client: CoachClientDetails = {
   isCoachBlocked: false,
   assignedCoachUserId: 'owner-1',
   assignedCoachName: 'Olivia Owner',
+  release: null,
 };
 
 const emptyPage = { items: [], total: 0 };

@@ -129,6 +129,7 @@ public static class DependencyInjection
 
         services.AddScoped<IAuthorizationHandler, TenantRoleAuthorizationHandler>();
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, TenantAuthorizationResultHandler>();
+        services.AddExceptionHandler<ClientReleasedExceptionHandler>();
         services.AddScoped<CoachClientScope>();
         services.AddScoped<ITenantMembershipStore, TenantMembershipStore>();
         services.AddScoped<IWorkspaceApplicationService, WorkspaceApplicationService>();

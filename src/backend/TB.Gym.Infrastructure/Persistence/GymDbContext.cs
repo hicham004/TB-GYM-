@@ -67,6 +67,11 @@ public sealed partial class GymDbContext(
 
     public DbSet<AccountActionMailAttempt> AccountActionMailAttempts => Set<AccountActionMailAttempt>();
 
+    /// <summary>The tenant-owned queue of plain notices to a current or former member (ADR 0027).</summary>
+    public DbSet<WorkspaceNoticeMailRequest> WorkspaceNoticeMailRequests => Set<WorkspaceNoticeMailRequest>();
+
+    public DbSet<WorkspaceNoticeMailAttempt> WorkspaceNoticeMailAttempts => Set<WorkspaceNoticeMailAttempt>();
+
     public DbSet<BodyweightObservation> BodyweightObservations => Set<BodyweightObservation>();
 
     public DbSet<BodyweightCorrection> BodyweightCorrections => Set<BodyweightCorrection>();
@@ -435,6 +440,9 @@ public sealed partial class GymDbContext(
             entity.HasIndex(client => new { client.TenantId, client.UserId })
                 .IsUnique()
                 .HasFilter("\"UserId\" IS NOT NULL");
+            // The owner's "Former clients" list.
+            entity.HasIndex(client => new { client.TenantId, client.ReleasedAtUtc })
+                .HasFilter("\"ReleasedAtUtc\" IS NOT NULL");
             entity.HasOne<Tenant>()
                 .WithMany()
                 .HasForeignKey(client => client.TenantId)
@@ -517,7 +525,7 @@ public sealed partial class GymDbContext(
                 table.HasCheckConstraint(
                     "CK_ClientCoachAssignments_Chain",
                     "(\"Sequence\" = 1 AND \"PreviousCoachUserId\" IS NULL AND \"Reason\" IN ('Invitation', 'Migration')) OR " +
-                    "(\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS NOT NULL AND \"PreviousCoachUserId\" <> \"CoachUserId\" AND \"Reason\" IN ('Reassigned', 'CoachRemoved'))");
+                    "(\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS NOT NULL AND \"PreviousCoachUserId\" <> \"CoachUserId\" AND \"Reason\" IN ('Reassigned', 'CoachRemoved', 'Released'))");
             });
             ConfigureAuditable(entity);
         });

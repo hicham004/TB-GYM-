@@ -173,6 +173,25 @@ export interface CoachClientDetails extends ClientIntakeProfile {
   isCoachBlocked: boolean;
   assignedCoachUserId: string;
   assignedCoachName: string;
+  /** Present only on a former client: the record is then read-only (ADR 0027). */
+  release: ClientRelease | null;
+}
+
+/** When, why and by whom the owner released a client. */
+export interface ClientRelease {
+  releasedAtUtc: string;
+  reason: string;
+  releasedByName: string;
+}
+
+/** One row of the owner's "Former clients" list. */
+export interface FormerClient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  releasedAtUtc: string;
+  reason: string;
 }
 
 export type ClientSelfProfile = ClientIntakeProfile;

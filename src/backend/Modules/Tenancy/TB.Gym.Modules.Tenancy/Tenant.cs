@@ -223,6 +223,20 @@ public sealed class TenantMembership : AuditableEntity
         Status = MembershipStatus.Removed;
     }
 
+    /// <summary>
+    /// The owner released this client from the workspace. The row is kept, like a removed coach's,
+    /// and a database trigger refuses ever making it active again.
+    /// </summary>
+    public void ReleaseClient()
+    {
+        if (Role != TenantRole.Client || Status != MembershipStatus.Active)
+        {
+            throw new InvalidOperationException("Only an active client membership can be released.");
+        }
+
+        Status = MembershipStatus.Removed;
+    }
+
     /// <summary>A removed coach accepted a new coach invitation to the same workspace.</summary>
     public void RejoinAsCoach()
     {

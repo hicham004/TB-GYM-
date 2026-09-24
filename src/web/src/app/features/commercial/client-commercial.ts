@@ -35,6 +35,8 @@ export class ClientCommercial {
   private loadedKey: string | null = null;
 
   readonly client = input.required<CoachClientDetails>();
+  /** A former client's history (ADR 0027): shown, with every action that would change it hidden. */
+  readonly readOnly = input(false);
   readonly profileChanged = output<CoachClientDetails>();
 
   protected readonly catalog = signal<ProductCatalog | null>(null);

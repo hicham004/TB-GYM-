@@ -84,6 +84,14 @@ public sealed class ClientProfile : TenantEntity
 
     public DateTimeOffset? OnboardingCompletedAtUtc { get; private set; }
 
+    /// <summary>
+    /// When the owner released this client from the workspace. Permanent: the record is kept but is
+    /// read-only from then on, and a database trigger refuses any later change to the row.
+    /// </summary>
+    public DateTimeOffset? ReleasedAtUtc { get; private set; }
+
+    public bool IsReleased => ReleasedAtUtc is not null;
+
     public static ClientProfile CreateForAcceptedInvitation(
         Guid tenantId,
         Guid userId,
@@ -120,6 +128,7 @@ public sealed class ClientProfile : TenantEntity
     public IReadOnlyList<string> UpdateIntake(ClientIntakeInput input, DateOnly tenantToday)
     {
         ArgumentNullException.ThrowIfNull(input);
+        EnsureNotReleased();
         var changed = new List<string>();
         var names = ValidateNames(input.FirstName, input.LastName);
 
@@ -206,6 +215,7 @@ public sealed class ClientProfile : TenantEntity
 
     public bool UpdateCoachNotes(string? notes)
     {
+        EnsureNotReleased();
         var normalized = NormalizeOptional(notes, 8_000, nameof(notes));
         if (CoachNotes == normalized)
         {
@@ -227,6 +237,7 @@ public sealed class ClientProfile : TenantEntity
             throw new ArgumentException("A client is assigned to a coach other than themselves.", nameof(coachUserId));
         }
 
+        EnsureNotReleased();
         if (AssignedCoachUserId == coachUserId)
         {
             return false;
@@ -236,8 +247,28 @@ public sealed class ClientProfile : TenantEntity
         return true;
     }
 
+    /// <summary>
+    /// Ends this client's relationship with the workspace. Nothing is deleted; the caller also ends
+    /// the client's membership, closes their open plans and programs, and records why.
+    /// </summary>
+    /// <remarks>
+    /// The client must already be with the owner, so a former client never keeps a coach's list
+    /// populated or stops that coach being removed later.
+    /// </remarks>
+    public void Release(Guid ownerUserId, DateTimeOffset now)
+    {
+        EnsureNotReleased();
+        if (AssignedCoachUserId != ownerUserId)
+        {
+            throw new InvalidOperationException("A client is moved to the owner before being released.");
+        }
+
+        ReleasedAtUtc = now;
+    }
+
     public bool BlockCoachAccess()
     {
+        EnsureNotReleased();
         if (IsCoachBlocked)
         {
             return false;
@@ -249,6 +280,7 @@ public sealed class ClientProfile : TenantEntity
 
     public bool UnblockCoachAccess()
     {
+        EnsureNotReleased();
         if (!IsCoachBlocked)
         {
             return false;
@@ -256,6 +288,14 @@ public sealed class ClientProfile : TenantEntity
 
         IsCoachBlocked = false;
         return true;
+    }
+
+    private void EnsureNotReleased()
+    {
+        if (IsReleased)
+        {
+            throw new ClientReleasedException();
+        }
     }
 
     private static (string FirstName, string LastName) ValidateNames(string firstName, string lastName)
@@ -490,4 +530,18 @@ public enum ClientRelationshipEventType
 {
     Blocked = 1,
     Unblocked = 2,
+
+    /// <summary>The owner ended the client's relationship with the workspace. Permanent.</summary>
+    Released = 3,
 }
+
+/// <summary>
+/// A write reached a client the owner has released. Their record is kept and readable by the owner,
+/// but nothing about it changes any more; the API answers 409 <c>client_released</c>.
+/// </summary>
+/// <remarks>
+/// Deliberately not an <see cref="InvalidOperationException"/>: application services translate those
+/// into their own validation answers, and this one has to reach the API's single handler unchanged.
+/// </remarks>
+public sealed class ClientReleasedException()
+    : Exception("This client has been released from the workspace; their record is read-only.");

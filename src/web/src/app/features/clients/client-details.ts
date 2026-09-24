@@ -1,4 +1,5 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { DatePipe } from '@angular/common';
 import { Component, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -21,6 +22,8 @@ import { ProgressView } from '../progress/progress-view';
 import { ProgressDashboardView } from '../progress/progress-dashboard';
 import { ConversationLaunch } from '../messaging/conversation-launch';
 import { ClientCoach } from './client-coach';
+import { ClientRelease } from './client-release';
+import { StatusLabel } from '../../ui/status-label';
 
 @Component({
   selector: 'app-client-details',
@@ -28,12 +31,15 @@ import { ClientCoach } from './client-coach';
     ClientCoach,
     ClientCommercial,
     ClientIntakeForm,
+    ClientRelease,
     ClientTraining,
     ClientNutrition,
+    DatePipe,
     ProgressDashboardView,
     ProgressView,
     ReactiveFormsModule,
     RouterLink,
+    StatusLabel,
   ],
   templateUrl: './client-details.html',
   styleUrl: './client-details.scss',
@@ -161,6 +167,15 @@ export class ClientDetails {
 
   protected coachChanged(profile: CoachClientDetails): void {
     this.setProfile(profile);
+  }
+
+  /** The owner released this client; the page turns into the read-only former-client record. */
+  protected clientReleased(profile: CoachClientDetails): void {
+    this.setProfile(profile);
+    this.error.set(null);
+    this.notice.set(
+      $localize`${profile.firstName}:name: was released. Their access has ended and they are being emailed.`,
+    );
   }
 
   private async load(): Promise<void> {

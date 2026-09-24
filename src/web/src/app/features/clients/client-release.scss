@@ -1,0 +1,17 @@
+:host {
+  display: contents;
+}
+
+.release-form {
+  display: grid;
+  gap: var(--space-16);
+}
+
+.release-error {
+  color: var(--color-danger);
+  margin: 0;
+}
+
+.release-error:empty {
+  display: none;
+}

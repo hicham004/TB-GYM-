@@ -53,6 +53,18 @@ public interface IClientProfileApplicationService
     Task<IReadOnlyList<ClientCoachAssignmentView>?> ListCoachAssignmentsAsync(
         Guid clientId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The owner releases a client: their workspace access ends at once, their open plans and
+    /// programs close, their record is kept read-only, and they are emailed. See ADR 0027.
+    /// </summary>
+    Task<ClientCommandResult> ReleaseAsync(
+        Guid clientId,
+        ReleaseClientRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>The owner's released clients, most recently released first.</summary>
+    Task<IReadOnlyList<FormerClientSummary>> ListFormerAsync(CancellationToken cancellationToken);
 }
 
 public sealed record ClientSummary(
@@ -93,7 +105,24 @@ public sealed record CoachClientDetails(
     bool IsCoachBlocked,
     uint Version,
     Guid AssignedCoachUserId,
-    string AssignedCoachName);
+    string AssignedCoachName,
+    ClientReleaseView? Release = null);
+
+/// <summary>When, why and by whom a client was released. Present only on a former client.</summary>
+public sealed record ClientReleaseView(
+    DateTimeOffset ReleasedAtUtc,
+    string Reason,
+    Guid? ReleasedByUserId,
+    string ReleasedByName);
+
+/// <summary>One row of the owner's "Former clients" list.</summary>
+public sealed record FormerClientSummary(
+    Guid Id,
+    string FirstName,
+    string LastName,
+    string Email,
+    DateTimeOffset ReleasedAtUtc,
+    string Reason);
 
 public sealed record ClientSelfProfile(
     Guid Id,
@@ -170,6 +199,12 @@ public sealed record ChangeClientRelationshipRequest(string Reason, uint Version
 /// owner saw, so a stale screen conflicts instead of overwriting a newer assignment.
 /// </summary>
 public sealed record ReassignClientCoachRequest(Guid CoachUserId, string? Note, uint Version);
+
+/// <summary>
+/// Why the owner is releasing the client — kept in the relationship history and never emailed — and
+/// the client version the owner saw.
+/// </summary>
+public sealed record ReleaseClientRequest(string Reason, uint Version);
 
 public sealed record ClientCoachAssignmentView(
     Guid Id,

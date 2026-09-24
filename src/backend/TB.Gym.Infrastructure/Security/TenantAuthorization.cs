@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using TB.Gym.Infrastructure.Application;
+using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
@@ -28,6 +30,8 @@ internal sealed class TenantRoleAuthorizationHandler(
     public static readonly IReadOnlyList<string> ClientRouteParameters = ["clientProfileId", "clientId"];
 
     public const string ClientNotAssignedFailure = "client_not_assigned";
+
+    public const string ClientReleasedFailure = "client_released";
 
     protected override async Task HandleRequirementAsync(
         AuthorizationHandlerContext context,
@@ -56,16 +60,30 @@ internal sealed class TenantRoleAuthorizationHandler(
 
         tenantContext.SetTenant(tenantId);
 
+        var routeClientId = RouteClientId(httpContext);
         if (membership.Role == TenantRole.Coach &&
-            RouteClientId(httpContext) is { } clientProfileId &&
+            routeClientId is { } clientProfileId &&
             await coachClientScope.ExcludesAsync(clientProfileId, httpContext.RequestAborted))
         {
             context.Fail(new AuthorizationFailureReason(this, ClientNotAssignedFailure));
             return;
         }
 
+        // A released client's record is read-only for everyone (ADR 0027): every state-changing
+        // request that names one is refused here, once, instead of in each module's handlers.
+        if (routeClientId is { } releasedCandidate &&
+            !IsReadOnlyMethod(httpContext.Request.Method) &&
+            await coachClientScope.IsReleasedAsync(releasedCandidate, httpContext.RequestAborted))
+        {
+            context.Fail(new AuthorizationFailureReason(this, ClientReleasedFailure));
+            return;
+        }
+
         context.Succeed(requirement);
     }
+
+    private static bool IsReadOnlyMethod(string method) =>
+        HttpMethods.IsGet(method) || HttpMethods.IsHead(method) || HttpMethods.IsOptions(method);
 
     private static Guid? RouteClientId(HttpContext httpContext)
     {
@@ -105,6 +123,44 @@ internal sealed class TenantAuthorizationResultHandler : IAuthorizationMiddlewar
             return Task.CompletedTask;
         }
 
+        if (authorizeResult.Forbidden &&
+            authorizeResult.AuthorizationFailure?.FailureReasons.Any(reason =>
+                reason.Message == TenantRoleAuthorizationHandler.ClientReleasedFailure) == true)
+        {
+            return ClientReleasedExceptionHandler.WriteAsync(context);
+        }
+
         return defaultHandler.HandleAsync(next, context, policy, authorizeResult);
+    }
+}
+
+/// <summary>
+/// Turns a write that reached a released client into 409 <c>client_released</c>, the same answer the
+/// authorization handler gives when the client is named in the route (ADR 0027).
+/// </summary>
+internal sealed class ClientReleasedExceptionHandler : IExceptionHandler
+{
+    public async ValueTask<bool> TryHandleAsync(
+        HttpContext httpContext,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        if (exception is not ClientReleasedException)
+        {
+            return false;
+        }
+
+        await WriteAsync(httpContext);
+        return true;
+    }
+
+    public static Task WriteAsync(HttpContext context)
+    {
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        return context.Response.WriteAsJsonAsync(new
+        {
+            code = TenantRoleAuthorizationHandler.ClientReleasedFailure,
+            message = "This client has been released from the workspace; their record is read-only.",
+        });
     }
 }

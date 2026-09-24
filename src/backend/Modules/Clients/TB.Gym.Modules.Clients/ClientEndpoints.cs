@@ -148,6 +148,33 @@ public static class ClientEndpoints
         .Produces<ClientCoachAssignmentView[]>()
         .Produces(StatusCodes.Status404NotFound);
 
+        // Only the owner ends a client's relationship with the workspace (ADR 0027). There is no undo.
+        coachGroup.MapPost("/{clientId:guid}/release", async (
+            Guid clientId,
+            ReleaseClientRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.ReleaseAsync(clientId, request, cancellationToken));
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("ReleaseClient")
+        .Produces<CoachClientDetails>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        coachGroup.MapGet("/former", async (
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListFormerAsync(cancellationToken)))
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .WithName("ListFormerClients")
+        .Produces<FormerClientSummary[]>();
+
         var selfGroup = endpoints
             .MapGroup("/api/client-profile")
             .RequireAuthorization(AuthorizationPolicies.TenantClient)

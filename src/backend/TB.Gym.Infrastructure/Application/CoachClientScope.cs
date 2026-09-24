@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TB.Gym.Infrastructure.Persistence;
+using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
@@ -72,6 +73,31 @@ internal sealed class CoachClientScope(
             .AnyAsync(
                 client => client.Id == clientProfileId && client.AssignedCoachUserId == coachUserId,
                 cancellationToken);
+    }
+
+    /// <summary>
+    /// Whether the owner released this client (ADR 0027). A released client is always with the owner,
+    /// so a Coach never gets this far; the Owner may read the record but change nothing about it.
+    /// </summary>
+    public Task<bool> IsReleasedAsync(Guid clientProfileId, CancellationToken cancellationToken) =>
+        dbContext.ClientProfiles
+            .AsNoTracking()
+            .AnyAsync(
+                client => client.Id == clientProfileId && client.ReleasedAtUtc != null,
+                cancellationToken);
+
+    /// <summary>
+    /// Refuses a write to a released client's record. Routes that name the client as a route
+    /// parameter are refused centrally by the tenant authorization handler; a write that reaches the
+    /// client through another row (an enrollment, a mesocycle, a workout) calls this after loading it.
+    /// </summary>
+    /// <exception cref="ClientReleasedException">The client has been released.</exception>
+    public async Task EnsureNotReleasedAsync(Guid clientProfileId, CancellationToken cancellationToken)
+    {
+        if (await IsReleasedAsync(clientProfileId, cancellationToken))
+        {
+            throw new ClientReleasedException();
+        }
     }
 
     /// <summary>

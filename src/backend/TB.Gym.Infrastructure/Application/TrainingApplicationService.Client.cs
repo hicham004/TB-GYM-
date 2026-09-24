@@ -357,6 +357,7 @@ internal sealed partial class TrainingApplicationService
             return NotFound();
         }
 
+        await coachClientScope.EnsureNotReleasedAsync(execution.ClientProfileId, cancellationToken);
         var authorRole = role switch
         {
             TenantRole.Owner or TenantRole.Coach => WorkoutNoteAuthorRole.Coach,

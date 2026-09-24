@@ -29,6 +29,134 @@ public sealed partial class GymDbContext
     {
         ConfigureAccountActionMail(builder);
         ConfigureInvitationActionMail(builder);
+        ConfigureWorkspaceNoticeMail(builder);
+    }
+
+    /// <summary>
+    /// The workspace notice queue (ADR 0027): the invitation queue's shape without a token or link.
+    /// </summary>
+    /// <remarks>
+    /// The recipient is a composite foreign key to a membership row of the same workspace. Membership
+    /// rows are never deleted, so a former member stays addressable, and a user who was never a member
+    /// of this workspace cannot be sent its notices at all.
+    /// </remarks>
+    private void ConfigureWorkspaceNoticeMail(ModelBuilder builder)
+    {
+        builder.Entity<WorkspaceNoticeMailRequest>(entity =>
+        {
+            entity.ToTable("NoticeMailRequests", "tenancy");
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => new { item.TenantId, item.Id });
+            entity.Property(item => item.Kind).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.FailureCode).HasMaxLength(100);
+            entity.Property(item => item.TransportAdapter).HasMaxLength(40);
+            entity.Property(item => item.ProviderMessageId).HasMaxLength(200);
+            // One notice per fact: a client is released once, so they are told once.
+            entity.HasIndex(item => new { item.TenantId, item.Kind, item.SubjectId })
+                .IsUnique()
+                .HasDatabaseName("IX_NoticeMailRequests_TenantId_Kind_SubjectId");
+            entity.HasIndex(item => new { item.Status, item.NextAttemptAtUtc, item.Id })
+                .HasDatabaseName("IX_NoticeMailRequests_Status_NextAttemptAtUtc_Id");
+            entity.HasIndex(item => new { item.Status, item.ClaimExpiresAtUtc })
+                .HasDatabaseName("IX_NoticeMailRequests_Status_ClaimExpiresAtUtc");
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.RecipientUserId })
+                .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(item => item.RequestedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_Counters",
+                    "\"AttemptCount\" >= 0 AND \"SchemaVersion\" >= 1");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_Claim",
+                    "(\"ClaimToken\" IS NULL) = (\"ClaimExpiresAtUtc\" IS NULL) AND ((\"Status\" = 'Processing') = (\"ClaimToken\" IS NOT NULL))");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_Vocabulary",
+                    "\"Kind\" IN ('ClientReleased') AND \"Status\" IN ('Pending', 'Processing', 'Materialized', 'Suppressed', 'DeadLettered')");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_Materialized",
+                    "(\"Status\" = 'Materialized') = (\"MaterializedAtUtc\" IS NOT NULL)");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_DeadLettered",
+                    "(\"Status\" = 'DeadLettered') = (\"DeadLetteredAtUtc\" IS NOT NULL)");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_Completion",
+                    "(\"Status\" IN ('Materialized', 'Suppressed', 'DeadLettered')) = (\"CompletedAtUtc\" IS NOT NULL)");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_NextAttempt",
+                    "\"NextAttemptAtUtc\" >= \"RequestedAtUtc\"");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_ProviderEvidence",
+                    "((\"ProviderMessageId\" IS NULL) = (\"ProviderAcceptedAtUtc\" IS NULL)) AND (\"ProviderMessageId\" IS NULL OR (\"Status\" = 'Materialized' AND \"TransportAdapter\" IN ('resend')))");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_CapturedHasNoProvider",
+                    "\"TransportAdapter\" <> 'captured' OR (\"ProviderMessageId\" IS NULL AND \"ProviderAcceptedAtUtc\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_Transport",
+                    "\"TransportAdapter\" IS NULL OR \"Status\" = 'Materialized'");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailRequests_Failure",
+                    "(\"Status\" = 'Materialized' AND \"FailureCode\" IS NULL) OR (\"Status\" IN ('Suppressed', 'DeadLettered') AND \"FailureCode\" IS NOT NULL) OR \"Status\" IN ('Pending', 'Processing')");
+            });
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<WorkspaceNoticeMailAttempt>(entity =>
+        {
+            entity.ToTable("NoticeMailAttempts", "tenancy");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Outcome).HasConversion<string>().HasMaxLength(24);
+            entity.Property(item => item.ProviderIdempotencyKey).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.FailureCode).HasMaxLength(100);
+            entity.Property(item => item.ProviderMessageId).HasMaxLength(200);
+            entity.HasIndex(item => new { item.TenantId, item.RequestId, item.AttemptNumber })
+                .IsUnique()
+                .HasDatabaseName("IX_NoticeMailAttempts_TenantId_RequestId_AttemptNumber");
+            entity.HasIndex(item => new { item.TenantId, item.RequestId, item.ClaimToken })
+                .IsUnique()
+                .HasDatabaseName("IX_NoticeMailAttempts_TenantId_RequestId_ClaimToken");
+            entity.HasIndex(item => item.ProviderIdempotencyKey)
+                .IsUnique()
+                .HasDatabaseName("IX_NoticeMailAttempts_ProviderIdempotencyKey");
+            entity.HasOne<WorkspaceNoticeMailRequest>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.RequestId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_NoticeMailAttempts_AttemptNumber",
+                    "\"AttemptNumber\" >= 1");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailAttempts_Completion",
+                    "(\"Outcome\" = 'Started') = (\"CompletedAtUtc\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailAttempts_Success",
+                    "(\"Outcome\" IN ('Started', 'Succeeded')) = (\"FailureCode\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailAttempts_Vocabulary",
+                    "\"Outcome\" IN ('Started', 'Succeeded', 'TransientFailure', 'PermanentFailure', 'Abandoned', 'Suppressed')");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailAttempts_ProviderEvidence",
+                    "\"ProviderMessageId\" IS NULL OR \"Outcome\" = 'Succeeded'");
+                table.HasCheckConstraint(
+                    "CK_NoticeMailAttempts_ProviderKeyShape",
+                    "\"ProviderIdempotencyKey\" = 'workspace-notice:' || replace(\"RequestId\"::text, '-', '') || ':a' || \"AttemptNumber\"::text || ':v1:' || right(\"ProviderIdempotencyKey\", 32) AND right(\"ProviderIdempotencyKey\", 32) ~ '^[0-9a-f]{32}$'");
+            });
+            ConfigureAuditable(entity);
+        });
     }
 
     private static void ConfigureAccountActionMail(ModelBuilder builder)
