@@ -1,12 +1,32 @@
 # Instructions for TB Gym Coding Agents
 
+## How we work
+
+- **Goal:** every session moves TB Gym closer to coaches and gyms using it and paying for it.
+  Follow the agreed order in `docs/ROADMAP.md`; anything else goes in your report as a
+  suggested follow-up, not into the code.
+- **Plan first:** before coding, state in a few lines what you will build, what you won't,
+  and any business question. Ask business questions with your recommendation; decide
+  technical questions yourself.
+- **Build complete slices:** backend rule, API, screen and tests together, small enough to
+  finish and commit in one session.
+- **Verify in proportion:** during work, run the tests for the area you changed. Run the full
+  suite once before reporting. Click through any new or changed screen in a real browser.
+  Security, tenant isolation and money correctness are always tested, never traded off.
+- **Keep docs light:** update existing docs in a few lines. Write an ADR (one page at most)
+  only for a business decision or a module boundary change. No new reports, audits or
+  checklists unless the user asks.
+- **Report plainly:** what changed for coaches and clients, test results, what was not done
+  or not verified, and the next step. Commit only when the user says so.
+
 ## Read first
 
 - Read `docs/ARCHITECTURE.md`, `docs/DOMAIN-RULES.md`, and `docs/ROADMAP.md` before changing
   architecture or domain behavior.
 - Read ADRs 0005-0007 before changing commercial access, training, strength, progression,
-  notifications, media, or legal consent. Phase 3 is complete; do not begin Phase 4 without
-  the user's approval.
+  notifications, media, or legal consent.
+- Current work follows the commercial plan in `docs/ROADMAP.md`; do not start a roadmap phase
+  or feature outside it without the user's approval.
 - `base44/` is a preserved legacy reference, not the new architecture. Do not edit, delete,
   or copy its generic CRUD/security model unless the user explicitly requests legacy work.
 - The backend/database is the source of truth. Never implement an invariant only in Angular.

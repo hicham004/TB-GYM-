@@ -1036,6 +1036,8 @@ unit economics are known and exercised.
 
 ## Commercial launch track (agreed 2026-09-22)
 
+Work follows this order; anything outside it needs the user's approval first.
+
 - Step 1, gym team support (complete, 2026-09-23): owner invites and removes coaches, one coach per
   client with append-only history, owner reassignment, Coach sees only their own clients, Team page
   under Settings and a reassign action on the client page. See ADR 0026.
@@ -1045,6 +1047,11 @@ unit economics are known and exercised.
   clients are not active clients. See ADR 0027. Moving a client with their history to another
   workspace is a later feature.
 - Step 2, manual platform billing: not started.
+- Step 3, redesign of Client Today and the coach client workspace: not started. Other redesign
+  slices are parked.
+- Step 4, lean go-live with the founding coaches: not started.
+- Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
+  only after a Whish agreement and legal review.
 
 ## Continuous requirements
 
