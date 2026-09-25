@@ -22,6 +22,19 @@ export interface UpcomingTraining {
   nextSession: { sessionId: string; date: string; name: string } | null;
   unfinishedWorkouts: DatedWorkout[];
   nextSkip: number | null;
+  todayCoverage: TodayCoverage | null;
+}
+
+/** Which block covers the workspace's today (null when training is not allowed). */
+export interface TodayCoverage {
+  activeBlock: {
+    id: string;
+    name: string;
+    weekNumber: number;
+    weekCount: number;
+    isCurrentWeekPublished: boolean;
+  } | null;
+  nextBlockStartDate: string | null;
 }
 
 export interface CoachWorkoutDetail {
@@ -37,6 +50,18 @@ export function mapUpcomingTraining(value: ClientTrainingUpcomingView): Upcoming
     nextSession: value.nextSession ? { ...value.nextSession } : null,
     unfinishedWorkouts: value.unfinishedWorkouts.map((item) => ({ ...item })),
     nextSkip: value.nextSkip == null ? null : Number(value.nextSkip),
+    todayCoverage: value.todayCoverage
+      ? {
+          activeBlock: value.todayCoverage.activeBlock
+            ? {
+                ...value.todayCoverage.activeBlock,
+                weekNumber: Number(value.todayCoverage.activeBlock.weekNumber),
+                weekCount: Number(value.todayCoverage.activeBlock.weekCount),
+              }
+            : null,
+          nextBlockStartDate: value.todayCoverage.nextBlockStartDate,
+        }
+      : null,
   };
 }
 

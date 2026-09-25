@@ -1,0 +1,150 @@
+@if (visible()) {
+  <section class="also tb-theme" aria-labelledby="also-today-heading">
+    <h2 id="also-today-heading" #heading tabindex="-1" i18n>Also today</h2>
+    <ul class="rows">
+      @let meals = nutrition();
+      @if (meals.kind !== 'hidden') {
+        <li>
+          @if (meals.kind === 'loading') {
+            <div class="row row-skeleton" aria-hidden="true">
+              <span class="bar"></span><span class="bar bar-short"></span>
+            </div>
+          } @else if (meals.kind === 'failed') {
+            <div class="row">
+              <app-icon name="nutrition" />
+              <span class="row-copy">
+                <span class="row-title" i18n>Nutrition</span>
+                <span class="tb-visually-hidden">, </span>
+                <span class="row-status" i18n>Couldn’t load nutrition</span>
+              </span>
+              <button appButton type="button" variant="text" (click)="retry('nutrition')">
+                <ng-container i18n>Retry</ng-container
+                ><span class="tb-visually-hidden" i18n> nutrition</span>
+              </button>
+            </div>
+          } @else {
+            <a class="row" routerLink="/nutrition/today">
+              <app-icon name="nutrition" />
+              <span class="row-copy">
+                <span class="row-title" i18n>Nutrition</span>
+                <span class="tb-visually-hidden">, </span>
+                <span class="row-status">
+                  @if (meals.kind === 'closed') {
+                    {{ accessLabel(meals.reason) }}
+                  } @else {
+                    @switch (meals.value.kind) {
+                      @case ('no-plan') {
+                        <ng-container i18n>No meal plan for today</ng-container>
+                      }
+                      @case ('planned') {
+                        <ng-container i18n>{meals.value.total, plural,
+                          =1 {1 meal planned · nothing logged yet}
+                          other {{{ meals.value.total }} meals planned · nothing logged yet}
+                        }</ng-container>
+                      }
+                      @case ('logging') {
+                        <ng-container i18n>{meals.value.total, plural,
+                          =1 {{{ meals.value.logged }} of 1 meal logged}
+                          other {{{ meals.value.logged }} of {{ meals.value.total }} meals logged}
+                        }</ng-container>
+                      }
+                      @case ('completed') {
+                        <ng-container i18n
+                          >Day completed ·
+                          {meals.value.total, plural,
+                            =1 {{{ meals.value.logged }} of 1 meal}
+                            other {{{ meals.value.logged }} of {{ meals.value.total }} meals}
+                          }</ng-container
+                        >
+                      }
+                    }
+                  }
+                </span>
+              </span>
+              <app-icon name="chevron-down" class="chevron" />
+            </a>
+          }
+        </li>
+      }
+
+      @let checkin = checkIn();
+      @if (checkin.kind !== 'hidden') {
+        <li>
+          @if (checkin.kind === 'loading') {
+            <div class="row row-skeleton" aria-hidden="true">
+              <span class="bar"></span><span class="bar bar-short"></span>
+            </div>
+          } @else if (checkin.kind === 'failed') {
+            <div class="row">
+              <app-icon name="check-ins" />
+              <span class="row-copy">
+                <span class="row-title" i18n>Check-ins</span>
+                <span class="tb-visually-hidden">, </span>
+                <span class="row-status" i18n>Couldn’t load check-ins</span>
+              </span>
+              <button appButton type="button" variant="text" (click)="retry('checkIns')">
+                <ng-container i18n>Retry</ng-container
+                ><span class="tb-visually-hidden" i18n> check-ins</span>
+              </button>
+            </div>
+          } @else {
+            <a class="row" routerLink="/checkins/me">
+              <app-icon name="check-ins" />
+              <span class="row-copy">
+                @if (checkin.kind === 'closed') {
+                  <span class="row-title" i18n>Check-ins</span>
+                  <span class="tb-visually-hidden">, </span>
+                  <span class="row-status">{{ accessLabel(checkin.reason) }}</span>
+                } @else {
+                  @switch (checkin.value.kind) {
+                    @case ('due') {
+                      <span class="row-title" dir="auto">{{ checkin.value.title }}</span>
+                      <span class="tb-visually-hidden">, </span>
+                      <span class="row-status">
+                        @switch (checkin.value.when) {
+                          @case ('today') {
+                            <ng-container i18n>Due today</ng-container>
+                          }
+                          @case ('later') {
+                            <ng-container i18n
+                              >Due {{ checkin.value.dueDate | date: 'EEE d MMM' }}</ng-container
+                            >
+                          }
+                          @case ('overdue') {
+                            <span class="overdue" i18n
+                              >Overdue since {{ checkin.value.dueDate | date: 'EEE d MMM' }}</span
+                            >
+                          }
+                        }
+                        @if (checkin.value.draft) {
+                          · <ng-container i18n>draft saved</ng-container>
+                        }
+                      </span>
+                    }
+                    @case ('submitted-today') {
+                      <span class="row-title" dir="auto">{{ checkin.value.title }}</span>
+                      <span class="tb-visually-hidden">, </span>
+                      <span class="row-status" i18n>Submitted today · awaiting coach review</span>
+                    }
+                    @case ('reviewed-today') {
+                      <span class="row-title" dir="auto">{{ checkin.value.title }}</span>
+                      <span class="tb-visually-hidden">, </span>
+                      <span class="row-status" i18n>Reviewed by your coach</span>
+                    }
+                    @case ('nothing-due') {
+                      <span class="row-title" i18n>Check-ins</span>
+                      <span class="tb-visually-hidden">, </span>
+                      <span class="row-status" i18n>Nothing due</span>
+                    }
+                  }
+                }
+              </span>
+              <app-icon name="chevron-down" class="chevron" />
+            </a>
+          }
+        </li>
+      }
+    </ul>
+    <p class="tb-visually-hidden" role="status">{{ failures() }}</p>
+  </section>
+}

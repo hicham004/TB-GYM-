@@ -1,80 +1,226 @@
-<section class="today-page">
-  <header>
-    <p class="eyebrow" i18n>Your coaching</p>
-    <h1 i18n>Today</h1>
-    @if (day(); as current) {
-      <p>{{ current.localDate | date: 'EEE d MMM' }}</p>
-    }
-  </header>
-  @if (loading()) {
-    <section class="daily-action skeleton" role="status" i18n>Loading your workout…</section>
-  } @else if (error()) {
-    <section class="daily-action">
-      <p role="alert" i18n>Couldn’t load today. Try again to check your workout.</p>
-      <button type="button" class="secondary-button" (click)="load()" i18n>Retry</button>
-    </section>
-  } @else if (day(); as current) {
-    @if (!current.isAllowed || !upcoming()?.isAllowed) {
-      <section class="daily-action">
-        <h2 i18n>Training is not available</h2>
-        <p>
-          {{ accessLabel(!current.isAllowed ? current.accessReason : upcoming()!.accessReason) }}
-        </p>
-        <a routerLink="/messages" i18n>Contact your coach</a>
-      </section>
-    } @else if (primaryWorkout(); as workout) {
-      <section class="daily-action">
-        @if (upcoming()?.unfinishedWorkouts?.[0]; as earlier) {
-          <p class="eyebrow" i18n>Continue from {{ earlier.date | date: 'EEE d MMM' }}</p>
-        }
-        <h2 dir="auto">{{ workout.name }}</h2>
-        <p i18n>{{ workout.exercises.length }} exercises</p>
-        @if (workout.coachNotes) {
-          <p dir="auto">{{ workout.coachNotes }}</p>
-        }
-        <a
-          class="primary-button"
-          routerLink="/training/today"
-          [queryParams]="{ sessionId: workout.sessionId }"
-        >
-          @if (workout.status === 'Completed') {
-            <span i18n>View completed workout</span>
-          } @else if (workout.workoutExecutionId) {
-            <span i18n>Continue workout</span>
-          } @else {
-            <span i18n>Open workout</span>
-          }
-        </a>
-        <p class="muted" i18n>Your coach can read your saved sets and notes.</p>
-      </section>
-      @if (upcoming()?.unfinishedWorkouts?.length || (upcoming()?.nextSkip ?? null) !== null) {
-        <a routerLink="/training/today" i18n>All available workouts</a>
+<div class="today tb-theme">
+  <header class="today-header">
+    <div class="today-title">
+      @if (localDate(); as date) {
+        <p class="today-date">{{ date | date: 'EEEE d MMMM' }}</p>
       }
-    } @else {
-      <section class="daily-action">
-        @if (!upcoming()?.hasAssignedProgram) {
-          <h2 i18n>Nothing assigned yet</h2>
-          <p i18n>Your coach will put your program here.</p>
-        } @else if (!upcoming()?.hasVisibleSessions) {
-          <h2 i18n>No sessions shared yet</h2>
-          <p i18n>Your coach has assigned a program. Your sessions will appear when shared.</p>
-        } @else {
-          <h2 i18n>Rest day</h2>
-          <p i18n>No workout is scheduled for today.</p>
+      <h1 #heading tabindex="-1" class="tb-text-section-title" i18n>Today</h1>
+    </div>
+    <div class="today-actions">
+      <a class="tb-icon-button tb-icon-button--touch today-bell" routerLink="/notifications">
+        <app-icon name="bell" />
+        <span class="tb-visually-hidden" i18n>{unread(), plural,
+          =0 {Notifications}
+          =1 {Notifications, 1 unread}
+          other {Notifications, {{ unreadText() }} unread}
+        }</span>
+        @if (unread() > 0) {
+          <span class="today-count" aria-hidden="true">{{ unreadCount() }}</span>
         }
-      </section>
-    }
-    @if (upcoming()?.nextSession; as next) {
-      <section class="coming-up">
-        <h2 i18n>Coming up</h2>
-        <p dir="auto">{{ next.date | date: 'EEE d MMM' }} · {{ next.name }}</p>
-      </section>
-    }
+      </a>
+      <a class="today-me" routerLink="/me">
+        <app-avatar [initials]="initials()" presentation="mobile-account" />
+        <span class="tb-visually-hidden" i18n>Me: {{ displayName() }}</span>
+      </a>
+    </div>
+  </header>
+
+  @let current = card();
+  @if (loading() || error() || (current && current.kind !== 'hidden')) {
+    <section
+      class="today-card"
+      [attr.aria-labelledby]="!loading() && !error() && current ? 'today-training-heading' : null"
+    >
+      @if (loading()) {
+        <div class="today-skeleton" role="status">
+          <span class="tb-visually-hidden" i18n>Loading your workout…</span>
+          <span class="bar bar-short" aria-hidden="true"></span>
+          <span class="bar bar-long" aria-hidden="true"></span>
+          <span class="bar bar-mid" aria-hidden="true"></span>
+        </div>
+      } @else if (error()) {
+        <p role="alert" i18n>Couldn’t load today. Try again to check your workout.</p>
+        <button appButton type="button" variant="outlined" size="touch" (click)="retry()" i18n>
+          Retry
+        </button>
+      } @else if (current) {
+        @switch (current.kind) {
+          @case ('scheduled') {
+            <p class="today-state today-state-accent" i18n>Scheduled today</p>
+            <h2 id="today-training-heading" #trainingHeading tabindex="-1" dir="auto">
+              {{ current.workout.name }}
+            </h2>
+            <p class="summary">
+              <span i18n>{current.summary.exercises, plural,
+                =1 {1 exercise}
+                other {{{ current.summary.exercises }} exercises}
+              }</span>
+              ·
+              <span i18n>{current.summary.sets, plural,
+                =1 {1 set}
+                other {{{ current.summary.sets }} sets}
+              }</span>
+            </p>
+            @if (current.workout.coachNotes) {
+              <p class="note">
+                <ng-container i18n>Coach’s note:</ng-container>
+                <bdi dir="auto"> {{ current.workout.coachNotes }}</bdi>
+              </p>
+            }
+            <a
+              appButton
+              size="touch"
+              class="today-action"
+              routerLink="/training/today"
+              [queryParams]="{ sessionId: current.workout.sessionId }"
+              i18n
+              >Open workout</a
+            >
+            <p class="hint" i18n>Nothing is recorded until you start the workout.</p>
+            @if (current.moreToday > 0) {
+              <a class="text-link" routerLink="/training/today" i18n>{current.moreToday, plural,
+                =1 {1 more session today}
+                other {{{ current.moreToday }} more sessions today}
+              }</a>
+            }
+          }
+          @case ('in-progress') {
+            @if (current.startedOn) {
+              <p class="today-state" i18n>Started {{ current.startedOn | date: 'EEE d MMM' }}</p>
+            } @else {
+              <p class="today-state" i18n>
+                In progress ·
+                {current.summary.sets, plural,
+                  =1 {{{ current.summary.setsLogged }} of 1 set logged}
+                  other {{{ current.summary.setsLogged }} of {{ current.summary.sets }} sets logged}
+                }
+              </p>
+            }
+            <h2 id="today-training-heading" #trainingHeading tabindex="-1" dir="auto">
+              {{ current.workout.name }}
+            </h2>
+            <p class="summary">
+              <span i18n>{current.summary.exercises, plural,
+                =1 {1 exercise}
+                other {{{ current.summary.exercises }} exercises}
+              }</span>
+              ·
+              <span i18n>{current.summary.sets, plural,
+                =1 {1 set}
+                other {{{ current.summary.sets }} sets}
+              }</span>
+            </p>
+            @if (current.workout.coachNotes) {
+              <p class="note">
+                <ng-container i18n>Coach’s note:</ng-container>
+                <bdi dir="auto"> {{ current.workout.coachNotes }}</bdi>
+              </p>
+            }
+            <a
+              appButton
+              size="touch"
+              class="today-action"
+              routerLink="/training/today"
+              [queryParams]="{ sessionId: current.workout.sessionId }"
+              i18n
+              >Continue workout</a
+            >
+            @if (current.alsoToday; as also) {
+              <a
+                class="text-link"
+                routerLink="/training/today"
+                [queryParams]="{ sessionId: also.sessionId }"
+              >
+                <ng-container i18n>Also scheduled today:</ng-container>
+                <bdi dir="auto"> {{ also.name }}</bdi>
+              </a>
+            }
+            @if (current.moreToday > 0) {
+              <a class="text-link" routerLink="/training/today" i18n>{current.moreToday, plural,
+                =1 {1 more session today}
+                other {{{ current.moreToday }} more sessions today}
+              }</a>
+            }
+          }
+          @case ('completed') {
+            <div class="today-state-row">
+              <p class="today-state" i18n>Completed today</p>
+              <app-status-label label="Completed" i18n-label tone="success" marker="check" />
+            </div>
+            <h2 id="today-training-heading" #trainingHeading tabindex="-1" dir="auto">
+              {{ current.workout.name }}
+            </h2>
+            <p class="summary">
+              <span i18n>{current.summary.exercises, plural,
+                =1 {1 exercise}
+                other {{{ current.summary.exercises }} exercises}
+              }</span>
+              ·
+              <span i18n>{current.summary.sets, plural,
+                =1 {1 set}
+                other {{{ current.summary.sets }} sets}
+              }</span>
+            </p>
+            <a
+              appButton
+              size="touch"
+              variant="outlined"
+              class="today-action"
+              routerLink="/training/today"
+              [queryParams]="{ sessionId: current.workout.sessionId }"
+              i18n
+              >View workout</a
+            >
+          }
+          @case ('rest-day') {
+            <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>Rest day</h2>
+            <p i18n>No workout is scheduled today.</p>
+            @if (current.next; as next) {
+              <p class="summary">
+                <ng-container i18n>Next:</ng-container> {{ next.date | date: 'EEE d MMM' }} ·
+                <bdi dir="auto">{{ next.name }}</bdi>
+              </p>
+            }
+            <a class="text-link" routerLink="/training/today" i18n>View training</a>
+          }
+          @case ('week-not-shared') {
+            <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
+              This week’s plan is on its way.
+            </h2>
+            <p i18n>Check back soon.</p>
+          }
+          @case ('between-programs') {
+            <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
+              Your next program starts
+              <span class="today-date-value">{{ current.startsOn | date: 'EEE d MMM' }}</span>
+            </h2>
+            @if (canMessage()) {
+              <a class="text-link" routerLink="/messages" i18n>Message your coach</a>
+            }
+          }
+          @case ('nothing-assigned') {
+            <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
+              Nothing assigned yet
+            </h2>
+            <p i18n>Your coach will put your program here.</p>
+            @if (canMessage()) {
+              <a class="text-link" routerLink="/messages" i18n>Message your coach</a>
+            }
+          }
+          @case ('access-closed') {
+            <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
+              Training is not available
+            </h2>
+            <p>{{ accessLabel(current.reason) }}</p>
+            @if (canMessage()) {
+              <a class="text-link" routerLink="/messages" i18n>Contact your coach</a>
+            }
+          }
+        }
+      }
+    </section>
   }
-  <nav class="also-today" aria-label="Also today" i18n-aria-label>
-    <a routerLink="/checkins/me" i18n>Check-ins <span aria-hidden="true">›</span></a>
-    <a routerLink="/messages" i18n>Messages <span aria-hidden="true">›</span></a>
-    <a routerLink="/progress" i18n>Log weight (optional) <span aria-hidden="true">›</span></a>
-    <a routerLink="/progress/dashboard" i18n>View progress <span aria-hidden="true">›</span></a>
-  </nav>
-</section>
+
+  <app-today-also [today]="localDate()" />
+  <app-today-coach-message [today]="localDate()" />
+</div>

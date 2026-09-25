@@ -385,9 +385,23 @@ public sealed record ClientTrainingUpcomingView(
     DateOnly SearchThrough,
     UpcomingTrainingSessionView? NextSession,
     IReadOnlyList<DatedWorkoutView> UnfinishedWorkouts,
-    int? NextSkip);
+    int? NextSkip,
+    TodayTrainingCoverageView? TodayCoverage);
 
 public sealed record UpcomingTrainingSessionView(Guid SessionId, DateOnly Date, string Name);
+
+/// <summary>
+/// Which block, if any, covers the workspace's today, so the client's Today can tell a rest day from
+/// a week that is not shared yet and from a gap between blocks. Null when training is not allowed.
+/// </summary>
+public sealed record TodayTrainingCoverageView(ActiveTrainingBlockView? ActiveBlock, DateOnly? NextBlockStartDate);
+
+public sealed record ActiveTrainingBlockView(
+    Guid Id,
+    string Name,
+    int WeekNumber,
+    int WeekCount,
+    bool IsCurrentWeekPublished);
 
 public sealed record DatedWorkoutView(DateOnly Date, string TimeZoneId, ClientWorkoutView Workout, bool HasMoreNotes);
 

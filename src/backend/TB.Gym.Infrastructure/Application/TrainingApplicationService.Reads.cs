@@ -25,13 +25,16 @@ internal sealed partial class TrainingApplicationService
         if (client is null || access is not { IsAllowed: true })
         {
             return new(false, (access?.Reason ?? FeatureAccessReason.MembershipInactive).ToString(),
-                today, timeZoneId, false, false, through, null, [], null);
+                today, timeZoneId, false, false, through, null, [], null, null);
         }
 
         var hasProgram = await dbContext.TrainingMesocycles.AsNoTracking().AnyAsync(item =>
             item.ClientProfileId == client.Id && item.EndDateExclusive > today &&
             item.Status != MesocycleStatus.Cancelled && item.Status != MesocycleStatus.Completed,
             cancellationToken);
+        var coverage = hasProgram
+            ? await GetTodayCoverageAsync(client.Id, today, cancellationToken)
+            : new TodayTrainingCoverageView(null, null);
 
         // Primary blocks cannot overlap; each has at most 52 weeks. Across a 90-day window
         // even boundary-spanning blocks fit under 128 week rows. Only metadata is read here.
@@ -79,7 +82,38 @@ internal sealed partial class TrainingApplicationService
             .Select(item => item.Id).ToArray();
         var unfinished = await ReadWorkoutDetailsAsync(visibleIds, 0, cancellationToken);
         return new(true, access.Reason.ToString(), today, timeZoneId, hasProgram, hasVisibleSessions, through,
-            next, unfinished, candidates.Count > UnfinishedPageSize ? skip + UnfinishedPageSize : null);
+            next, unfinished, candidates.Count > UnfinishedPageSize ? skip + UnfinishedPageSize : null, coverage);
+    }
+
+    private async Task<TodayTrainingCoverageView> GetTodayCoverageAsync(
+        Guid clientProfileId,
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        // Ordered by start, a block covering today precedes every later one, and primary blocks
+        // cannot overlap, so the first few open blocks answer both "active" and "next".
+        var blocks = await dbContext.TrainingMesocycles.AsNoTracking()
+            .Where(item => item.ClientProfileId == clientProfileId && item.EndDateExclusive > today &&
+                item.Status != MesocycleStatus.Cancelled && item.Status != MesocycleStatus.Completed)
+            .OrderBy(item => item.StartDate).ThenBy(item => item.Id)
+            .Take(8)
+            .Select(item => new { item.Id, item.Name, item.Kind, item.Status, item.StartDate, item.EndDateExclusive })
+            .ToListAsync(cancellationToken);
+        var coveringIds = blocks.Where(item => item.StartDate <= today).Select(item => item.Id).ToArray();
+        var publishedWeeks = await dbContext.MesocycleWeeks.AsNoTracking()
+            .Where(item => coveringIds.Contains(item.MesocycleId) && item.IsPublished)
+            .Select(item => new { item.MesocycleId, item.WeekNumber })
+            .ToListAsync(cancellationToken);
+        return TodayCoveragePolicy.Evaluate(
+            blocks.Select(item => new TodayCoverageBlock(
+                item.Id,
+                item.Name,
+                item.Kind,
+                item.Status,
+                item.StartDate,
+                item.EndDateExclusive,
+                publishedWeeks.Where(week => week.MesocycleId == item.Id).Select(week => week.WeekNumber).ToArray())),
+            today);
     }
 
     public async Task<CoachWorkoutDetailResult?> GetCoachWorkoutAsync(

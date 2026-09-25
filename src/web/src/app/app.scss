@@ -85,7 +85,6 @@ nav,
   gap: 6px;
 }
 
-nav a,
 .account-link {
   border-radius: 5px;
   color: var(--muted-text);
@@ -95,63 +94,14 @@ nav a,
   text-decoration: none;
 }
 
-nav a:hover,
-nav a.active,
 .account-link:hover,
 .account-link.active {
   background: var(--surface-subtle);
   color: var(--text);
 }
 
-nav a.with-badge {
-  align-items: center;
-  display: inline-flex;
-  gap: 6px;
-}
-
-/* A count, not a status colour: the badge is a number a reader can see and the same number is
-   announced in words beside it, so nothing here depends on being able to distinguish a colour. */
-.badge {
-  background: var(--surface-subtle);
-  border: 1px solid var(--border, #d8dde3);
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  line-height: 1;
-  min-width: 1.1rem;
-  padding: 3px 6px;
-  text-align: center;
-}
-
-.visually-hidden {
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  height: 1px;
-  overflow: hidden;
-  position: absolute;
-  white-space: nowrap;
-  width: 1px;
-}
-
 .session-controls {
   gap: 12px;
-}
-
-.workspace-picker {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
-.workspace-picker span {
-  color: var(--muted-text);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.workspace-picker select {
-  max-width: 220px;
-  min-height: 36px;
 }
 
 .menu-button {
@@ -196,7 +146,6 @@ nav a.with-badge {
   }
 
   .authenticated-nav.open,
-  .authenticated-nav nav,
   .authenticated-nav .session-controls {
     display: flex;
   }
@@ -206,19 +155,9 @@ nav a.with-badge {
     gap: 14px;
   }
 
-  .authenticated-nav nav,
   .authenticated-nav .session-controls {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .workspace-picker {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .workspace-picker select {
-    max-width: none;
   }
 
   .app-main {
@@ -226,44 +165,50 @@ nav a.with-badge {
   }
 }
 
-:host .client-tabs {
+// Client shell: the page column, then the bottom tabs (sticky, so they keep their own place at the
+// end of the column and never cover its last row, whatever the text size).
+:host(.client-layout) {
+  background-color: var(--color-background);
   display: flex;
-  justify-content: center;
-  background: #faf8f5;
-  border-block-end: 1px solid #dedad3;
-  a {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-    padding: 0.75rem;
-    min-block-size: 48px;
-    color: #1f5e4b;
-  }
-  a.active {
-    color: #1c1b19;
-    box-shadow: inset 0 -3px #1f5e4b;
-    font-weight: 600;
+  flex-direction: column;
+  min-block-size: 100dvh;
+}
+
+.client-main {
+  box-sizing: border-box;
+  flex: 1 0 auto;
+  inline-size: 100%;
+  padding-block: var(--space-24);
+  padding-inline: var(--page-padding-mobile);
+}
+
+// Wide screens keep the spacing the unmigrated client pages were laid out with.
+@media (min-width: 60rem) {
+  .client-main {
+    padding: var(--space-32);
   }
 }
-@media (max-width: 640px) {
-  :host .client-tabs {
-    position: fixed;
-    inset-block-end: 0;
-    inset-inline: 0;
-    z-index: 20;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    padding-block-end: env(safe-area-inset-bottom);
-    border-block-start: 1px solid #dedad3;
-    a {
-      flex-wrap: wrap;
-      font-size: 0.75rem;
-      padding: 0.75rem 0.125rem;
-      overflow-wrap: anywhere;
-    }
-  }
-  :host .client-main {
-    padding-block-end: calc(5rem + env(safe-area-inset-bottom));
-  }
+
+// The skip link's target; focus lands on the region, which needs no ring of its own.
+.client-main:focus {
+  outline: none;
+}
+
+.skip-link {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-6);
+  color: var(--color-accent);
+  font-weight: var(--font-weight-strong);
+  inset-block-start: var(--space-8);
+  inset-inline-start: var(--space-8);
+  padding: var(--space-8) var(--space-12);
+  position: absolute;
+  transform: translateY(-200%);
+  z-index: 30;
+}
+
+.skip-link:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
+  transform: none;
 }

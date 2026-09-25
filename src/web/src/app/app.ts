@@ -1,12 +1,20 @@
 import { DOCUMENT } from '@angular/common';
-import { Component, computed, inject, LOCALE_ID, OnInit, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import {
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  LOCALE_ID,
+  OnInit,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthStore } from './core/auth/auth.store';
-import { tenantRoleLabel } from './core/i18n/display-labels';
-import { MessageUnreadStore } from './core/messaging/message-unread.store';
-import { NotificationStore } from './core/notifications/notification.store';
+import { SessionActions } from './core/auth/session-actions';
 import { TenantStore } from './core/tenancy/tenant.store';
 import { BillingBanner } from './features/billing/billing-banner';
+import { ClientTabs } from './shell/client-tabs';
 import { CoachShell } from './shell/coach-shell';
 
 /**
@@ -14,30 +22,32 @@ import { CoachShell } from './shell/coach-shell';
  * the API authorises every request, so choosing a shell never grants or withholds anything.
  *
  * - `coach`: an Owner or Coach membership is selected — the design-system coach shell.
- * - `member`: signed in without one — a Client (who also gets the bottom tabs) or an account with
- *   no workspace. This is the pre-existing top bar, unchanged.
+ * - `client`: a Client membership is selected — no top bar, the bottom tabs (339:2142); workspace
+ *   switching and sign-out are on the Me page, notifications and Me are in Today's header.
+ * - `member`: signed in without a workspace — the pre-existing top bar.
  * - `public`: nobody is signed in.
  * - `pending`: the session, or the first membership list after signing in, is still loading.
  */
-export type ShellKind = 'coach' | 'member' | 'public' | 'pending';
+export type ShellKind = 'coach' | 'client' | 'member' | 'public' | 'pending';
 
 @Component({
   selector: 'app-root',
-  imports: [BillingBanner, CoachShell, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [BillingBanner, ClientTabs, CoachShell, RouterLink, RouterLinkActive, RouterOutlet],
   templateUrl: './app.html',
   styleUrl: './app.scss',
-  host: { '[class.coach-layout]': "shell() === 'coach'" },
+  host: {
+    '[class.coach-layout]': "shell() === 'coach'",
+    '[class.client-layout]': "shell() === 'client'",
+  },
 })
 export class App implements OnInit {
   private readonly document = inject(DOCUMENT);
   private readonly locale = inject(LOCALE_ID);
-  private readonly router = inject(Router);
+  private readonly session = inject(SessionActions);
+  private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
   protected readonly auth = inject(AuthStore);
   protected readonly tenants = inject(TenantStore);
-  protected readonly notifications = inject(NotificationStore);
-  protected readonly messages = inject(MessageUnreadStore);
   protected readonly menuOpen = signal(false);
-  protected readonly roleLabel = tenantRoleLabel;
 
   protected readonly shell = computed<ShellKind>(() => {
     if (this.auth.user() === null) {
@@ -48,7 +58,8 @@ export class App implements OnInit {
     if (this.auth.loading() && this.tenants.memberships().length === 0) {
       return 'pending';
     }
-    return this.tenants.canCoach() ? 'coach' : 'member';
+    if (this.tenants.canCoach()) return 'coach';
+    return this.tenants.isClient() ? 'client' : 'member';
   });
 
   ngOnInit(): void {
@@ -57,30 +68,26 @@ export class App implements OnInit {
     void this.auth.initialize();
   }
 
-  protected selectTenant(event: Event): void {
-    const value = (event.target as HTMLSelectElement).value;
-    this.switchWorkspace(value || null);
-  }
-
   /**
-   * One path for both shells' workspace controls. `select` invalidates the tenant context
-   * synchronously, so every tenant-scoped request still in flight is discarded before it can paint
-   * the new workspace, and the coach shell closes its menus and navigation dialog on that change.
+   * The coach shell's workspace control. The coach shell closes its menus and navigation dialog on
+   * the tenant change this causes.
    */
   protected switchWorkspace(tenantId: string | null): void {
-    this.tenants.select(tenantId);
     this.menuOpen.set(false);
-    void this.router.navigateByUrl('/');
+    this.session.switchWorkspace(tenantId);
   }
 
   protected async logout(): Promise<void> {
     this.menuOpen.set(false);
-    // Cleared here as well as by the store's own effect on the signed-in user, so the badge is gone
-    // before the sign-out request completes rather than one change-detection pass afterwards.
-    this.notifications.clear();
-    // Message unread is a separate count with a separate source, so it is cleared separately.
-    this.messages.clear();
-    await this.auth.logout();
-    await this.router.navigateByUrl('/auth/sign-in');
+    await this.session.signOut();
+  }
+
+  /**
+   * A fragment link would resolve against `<base href="/">` and navigate home, so the skip link
+   * moves focus itself.
+   */
+  protected skipToContent(event: Event): void {
+    event.preventDefault();
+    this.main().nativeElement.focus();
   }
 }

@@ -92,6 +92,8 @@ html {
 body {
   margin: 0;
   min-width: 320px;
+  // index.html asks for viewport-fit=cover, so a landscape notch is kept clear here, once.
+  padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
 }
 
 button,

@@ -292,6 +292,15 @@ displaying a default that is absent from the draft or silently assuming a measur
 **TRN-017** Unsaved workout entries are client-side drafts kept separate from API DTOs and keyed
 by set-performance ID. Saving or failing one set never erases another set's unsaved values.
 
+**TRN-018** The client's Today never calls a day a rest day on a guess (Step 3B). The upcoming read
+returns `todayCoverage`: the block covering the workspace's today with the same predicates as the
+today read (not cancelled or completed, `StartDate ≤ today < EndDateExclusive`; a primary block
+before a supplemental one), its week number and whether that week is published, and the earliest
+later block's start (`TodayCoveragePolicy`). A rest day needs a covering block whose current week is
+published; an unpublished week reads "This week's plan is on its way", and no covering block reads
+"Your next program starts …" or "Nothing assigned yet". Wording shown to the client never blames
+the coach.
+
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated

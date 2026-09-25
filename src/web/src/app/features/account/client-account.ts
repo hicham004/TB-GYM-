@@ -1,30 +1,49 @@
-import { Component } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { AuthStore } from '../../core/auth/auth.store';
+import { SessionActions } from '../../core/auth/session-actions';
+import { tenantRoleLabel } from '../../core/i18n/display-labels';
+import { TenantStore } from '../../core/tenancy/tenant.store';
+import { initialsOf } from '../../shell/initials';
+import { Avatar } from '../../ui/avatar';
+import { Button } from '../../ui/button';
 
+/**
+ * A client's own account page, reached from the "Me" avatar in Today's header. The client shell has
+ * no top bar, so workspace switching and sign-out live here, through the same sequences the coach
+ * shell uses.
+ */
 @Component({
   selector: 'app-client-account',
-  imports: [RouterLink],
-  template: `
-    <section class="surface-section">
-      <h1 i18n>Me</h1>
-      <nav aria-label="My account" i18n-aria-label>
-        <a routerLink="/profile" i18n>My profile</a>
-        <a routerLink="/account/security" i18n>Account security</a>
-        <a routerLink="/notifications/settings" i18n>Notification settings</a>
-        <a routerLink="/progress" i18n>Weight and measurements</a>
-      </nav>
-      <p i18n>Use the account menu above to switch workspace or sign out.</p>
-    </section>
-  `,
-  styles: `
-    nav {
-      display: grid;
-      gap: 0.5rem;
-    }
-    a {
-      padding: 0.75rem;
-      min-height: 44px;
-    }
-  `,
+  imports: [Avatar, Button, RouterLink],
+  templateUrl: './client-account.html',
+  styleUrl: './client-account.scss',
 })
-export class ClientAccount {}
+export class ClientAccount {
+  private readonly session = inject(SessionActions);
+  protected readonly auth = inject(AuthStore);
+  protected readonly tenants = inject(TenantStore);
+  protected readonly roleLabel = tenantRoleLabel;
+  protected readonly signingOut = signal(false);
+
+  protected readonly displayName = computed(() => this.auth.user()?.displayName ?? '');
+  protected readonly initials = computed(() =>
+    initialsOf(this.displayName(), this.auth.user()?.email ?? ''),
+  );
+  protected readonly isPlatformAdmin = computed(
+    () => this.auth.user()?.roles?.includes('PlatformAdmin') ?? false,
+  );
+
+  protected chooseWorkspace(tenantId: string): void {
+    this.session.switchWorkspace(tenantId);
+  }
+
+  protected async signOut(): Promise<void> {
+    this.signingOut.set(true);
+    try {
+      await this.session.signOut();
+    } finally {
+      this.signingOut.set(false);
+    }
+  }
+}

@@ -1,56 +1,86 @@
+// Client Today (339:2140): one column, 24px between parts, capped at 720px on wide screens.
 :host {
   display: block;
-  color: #1c1b19;
 }
-.today-page {
-  max-inline-size: 40rem;
+
+.today {
+  display: grid;
+  gap: var(--space-24);
   margin-inline: auto;
-  padding: 1rem;
-  background: #faf8f5;
-  border-radius: 10px;
+  max-inline-size: var(--content-width-720);
 }
+
+.today-header {
+  align-items: center;
+  display: flex;
+  gap: var(--space-12);
+  justify-content: space-between;
+  min-block-size: var(--control-height-48);
+}
+
+.today-title {
+  min-inline-size: 0;
+}
+
+.today-date {
+  color: var(--color-text-secondary);
+  font-size: var(--text-metadata-size);
+  line-height: var(--text-metadata-line-height);
+  margin: 0;
+}
+
 h1 {
-  margin-block: 0.25rem;
-  font-size: 1.75rem;
+  margin: 0;
 }
-h2 {
-  font-size: 1.25rem;
-  overflow-wrap: anywhere;
+
+// Focused on arrival for screen readers; the heading is not a control, so no ring is drawn.
+h1:focus {
+  outline: none;
 }
-.daily-action {
-  background: #fff;
-  padding: 1.5rem;
-  border: 1px solid #dedad3;
-  border-radius: 10px;
-  margin-block: 1rem;
+
+.today-actions {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: var(--space-8);
 }
-.daily-action p {
-  overflow-wrap: anywhere;
+
+.today-bell {
+  position: relative;
+  text-decoration: none;
 }
-.primary-button {
-  background: #1f5e4b;
-  border-color: #1f5e4b;
-  min-block-size: 48px;
-  inline-size: 100%;
+
+.today-count {
+  background-color: var(--color-accent);
+  border: 1px solid var(--color-surface);
+  border-radius: var(--radius-full);
+  box-sizing: border-box;
+  color: var(--color-on-accent);
+  font-size: var(--text-metadata-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+  inset-block-start: var(--space-4);
+  inset-inline-end: var(--space-4);
+  line-height: var(--text-metadata-line-height);
+  min-inline-size: 18px;
+  padding-inline: var(--space-4);
+  position: absolute;
   text-align: center;
 }
-.muted {
-  color: #5f5b55;
-  font-size: 0.875rem;
+
+.today-me {
+  border-radius: var(--radius-8);
+  display: inline-flex;
+  text-decoration: none;
 }
-.also-today a {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  min-block-size: 48px;
-  padding-block: 0.75rem;
-  border-block-end: 1px solid #dedad3;
-  color: #1f5e4b;
+
+.today-me:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
 }
-.coming-up {
-  padding-block: 0.5rem;
-}
-.skeleton {
-  min-block-size: 10rem;
-  color: #5f5b55;
+
+@media (forced-colors: active) {
+  .today-count {
+    border-color: CanvasText;
+  }
 }

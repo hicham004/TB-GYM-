@@ -89,6 +89,7 @@ import {
   CreateProductOfferRequest,
   CurrentUser,
   EmailActionResponse,
+  FeatureAccessDecision,
   InvitationAcceptance,
   LoginRequest,
   PaymentRecord,
@@ -327,6 +328,13 @@ export class ApiClient {
         version,
       })
       .pipe(map(toCoachingProduct));
+  }
+
+  /** The signed-in client's own access to each coaching feature in the selected workspace. */
+  getOwnFeatureAccess(): Observable<FeatureAccessDecision[]> {
+    return this.http
+      .get<ContractFeatureAccessDecision[]>('/api/client-access/me')
+      .pipe(map((decisions) => decisions.map(toFeatureAccess)));
   }
 
   getClientCommercialOverview(clientId: string): Observable<ClientCommercialOverview> {

@@ -1,0 +1,70 @@
+<section class="me-page tb-theme">
+  <header class="me-header">
+    <app-avatar [initials]="initials()" presentation="mobile-account" />
+    <div class="me-identity">
+      <h1 class="tb-text-page-title" i18n>Me</h1>
+      <p class="me-name" dir="auto">{{ displayName() }}</p>
+    </div>
+  </header>
+
+  <nav aria-label="My account" i18n-aria-label>
+    <ul class="me-list">
+      <li><a class="me-row" routerLink="/profile" i18n>My profile</a></li>
+      <li><a class="me-row" routerLink="/account/security" i18n>Account security</a></li>
+      <li>
+        <a class="me-row" routerLink="/notifications/settings" i18n>Notification settings</a>
+      </li>
+      <li><a class="me-row" routerLink="/progress" i18n>Weight and measurements</a></li>
+      @if (isPlatformAdmin()) {
+        <li><a class="me-row" routerLink="/admin/billing" i18n>Platform billing</a></li>
+      }
+    </ul>
+  </nav>
+
+  @if (tenants.memberships().length > 1) {
+    <section class="me-section" aria-labelledby="me-workspaces">
+      <h2 id="me-workspaces" class="tb-text-section-title" i18n>Workspaces</h2>
+      <ul class="me-list">
+        @for (membership of tenants.memberships(); track membership.tenantId) {
+          <li>
+            @if (membership.tenantId === tenants.selectedTenantId()) {
+              <p class="me-row me-workspace" aria-current="true">
+                <span class="me-workspace-name" dir="auto">{{ membership.tenantName }}</span>
+                <span class="me-meta"
+                  >{{ roleLabel(membership.role) }} ·
+                  <ng-container i18n>open now</ng-container></span
+                >
+              </p>
+            } @else {
+              <button
+                type="button"
+                class="me-row me-workspace"
+                (click)="chooseWorkspace(membership.tenantId)"
+              >
+                <span class="me-workspace-name">
+                  <ng-container i18n>Switch to</ng-container>
+                  <span dir="auto"> {{ membership.tenantName }}</span>
+                </span>
+                <span class="tb-visually-hidden">, </span>
+                <span class="me-meta">{{ roleLabel(membership.role) }}</span>
+              </button>
+            }
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
+  <button
+    appButton
+    type="button"
+    variant="outlined"
+    size="touch"
+    class="me-sign-out"
+    [loading]="signingOut()"
+    (click)="signOut()"
+    i18n
+  >
+    Sign out
+  </button>
+</section>

@@ -235,6 +235,9 @@ buttons ignoring clicks, Enter and Space; Enter unable to resubmit a saving form
 first-line alignment; wrapping labels and multi-line errors; 200% text and 320px reflow; reduced
 motion; forced colours. `e2e/existing-routes.e2e.ts` compares sign-in and coach registration against
 baselines of the signed-out redesign (§12) and checks that both reflow at 200% text.
+`e2e/client-today.e2e.ts` covers the client shell and Today (§10b): every training state at 390 px
+with axe and a card baseline, full-page baselines at 390 and 1440 px, keyboard order from the skip
+link to the tabs, 200% text, a feature outside the plan and the Me page.
 `e2e/coach-shell.e2e.ts` covers the shell at 1440 and 390 px in both directions, Owner and Coach,
 the navigation dialog's keyboard behaviour, the sidebar's focus rings inside its scroll region,
 workspace switching and 200% text. `e2e/exercises.e2e.ts` covers the library's loading,
@@ -292,11 +295,10 @@ against the pre-change fingerprints: every frame matched, then the edits were re
 Figma: coach proof `15:2` and Desktop Navigation v1 `118:135` (the Navigation/Sidebar item component
 set `121:165` and its eight icon masters). Code: `src/app/shell/`.
 
-**Three shells, one at a time, chosen from the validated membership.** `App.shell()` returns `coach`
-when `TenantStore.canCoach()`, `member` for a client or an account with no workspace (the
-pre-existing top bar, unchanged, plus the client bottom tabs), `public` for a visitor, and `pending`
-while a session's first membership list is still loading — so an owner never sees the member bar
-flash first. **This is presentation.** Guards, tenant headers and server decisions are untouched:
+**Shells, one at a time, chosen from the validated membership.** `App.shell()` returns `coach`
+when `TenantStore.canCoach()`, `client` for a Client membership (§10b), `member` for an account with
+no workspace (the pre-existing top bar), `public` for a visitor, and `pending` while a session's
+first membership list is still loading — so an owner never sees the member bar flash first. **This is presentation.** Guards, tenant headers and server decisions are untouched:
 Settings is omitted for a Coach while `ownerGuard` and the API still refuse `/workspace`.
 
 **Layout.** `app-coach-shell` is `display: contents`, so its `<aside class="sidebar">` (a
@@ -415,6 +417,31 @@ of its last day, nothing following it) links to `service?renew=<id>`, which open
 feature outside the client's plan says so instead of showing empty figures; the quick search is
 still not rendered. Section links now ignore the query string when marking the current page.
 
+## 10b. Step 3B — the client shell and Today (2026-09-25)
+
+Figma `339:2140` and its 19 annotations. **Shell** (`shell/client-tabs.*`, `client-navigation.ts`):
+no top bar; a skip link, `<main>`, then `app-client-tabs` (Today, Training, Nutrition, Progress,
+Messages; selection is the 2px bar, weight and colour together, `aria-current="page"` or `"true"`
+for another page of the section). A tab is hidden only when `ClientAccessStore` (from
+`GET /api/client-access/me`) says `NoEntitlement`; while that is unknown every tab shows. The Me page
+holds workspace switching and sign-out through `SessionActions`, shared with the coach shell. The
+Progress glyph is the frame's local vector (`progress` in `ui/icon.ts`).
+
+**Today** (`features/dashboard/client-today.*`, `today-also.*`, `today-coach-message.*`, rules in
+`today.models.ts`): header with the workspace date (training read, else `GET /api/workspace`, else
+none — never the browser clock), h1 focused on arrival, Notifications and Me; the training card,
+switched on the new `todayCoverage` (TRN-018); Also today (nutrition, then the check-in due first);
+the coach's latest message. Each reads and retries on its own; row failures share one polite status.
+Route title "Today | TB Gym" through a title resolver on `/`.
+
+Deviations from `339:2140`: the tabs are `position: sticky` at the end of the page column, not
+`fixed` with a reserved padding, so enlarged or translated labels can grow the bar without covering
+the last row; the business wording decided on 2026-09-25 replaces the annotation's "This week isn't
+shared yet" and "Your next block starts"; a client whose plan has training outside it but other
+features in it gets no training card; offline status, "Week 4 of 8" and re-reading the date when a
+page left open overnight returns are not built. `index.html` now has `viewport-fit=cover`, with the
+side safe-area insets padded once on `body`.
+
 ## 11. Remaining work
 
 **Foundation follow-ups:** grid-cell error wiring; Linear progress; aligning the global focus rule
@@ -432,10 +459,11 @@ text only).
   address navigation and reload recovery before shipping that flow.
 - Programs search: backend query support is unresolved.
 - Paging: the backend supports paging; do not repeat the outdated "no paging endpoint" claim.
-- Today: the remaining coverage-state ambiguities need a contract decision.
+- Today: coverage states decided and built (§10b). Still open: a server filter for the next open
+  check-in (the row reads the first 50), and the ended-plan wording and "Ask to renew" (Step 3B2).
 - Production shells must preserve workspace switching, account actions and role-aware routes. The
-  coach shell does (slice 2, §9) and the signed-out screens have their own frame (§12); the client
-  shell is still the pre-existing one and is migrated in its own slice.
+  coach shell does (slice 2, §9), the signed-out screens have their own frame (§12), and the client
+  shell has its own (§10b); only an account with no workspace keeps the pre-existing top bar.
 - Historical backend integration-test failures remain separate work: the messaging rate-limit test
   that failed only under full-suite load, and the media-purge test that reproduces locally (a
   Windows-related cause is a hypothesis, not a diagnosis).

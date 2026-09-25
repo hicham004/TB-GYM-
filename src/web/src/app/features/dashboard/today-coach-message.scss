@@ -1,0 +1,93 @@
+// Latest coach message (340:2199): not a card; the sender row, then a preview clamped to 3 lines.
+:host {
+  display: block;
+}
+
+.coach-link {
+  border-radius: var(--radius-8);
+  color: var(--color-text-primary);
+  display: grid;
+  gap: var(--space-12);
+  text-decoration: none;
+}
+
+.coach-link:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
+}
+
+.coach-top {
+  align-items: center;
+  display: flex;
+  gap: var(--space-12);
+}
+
+.coach-id {
+  display: grid;
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.coach-name {
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  line-height: var(--text-compact-line-height);
+  overflow-wrap: anywhere;
+}
+
+.coach-meta {
+  color: var(--color-text-secondary);
+  font-size: var(--text-metadata-size);
+  line-height: var(--text-metadata-line-height);
+}
+
+.coach-preview {
+  -webkit-box-orient: vertical;
+  display: -webkit-box;
+  font-size: var(--text-compact-size);
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  line-height: var(--text-compact-line-height);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.coach-failed {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-12);
+  justify-content: space-between;
+}
+
+.coach-failed p {
+  color: var(--color-text-secondary);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  margin: 0;
+}
+
+h2:focus {
+  outline: none;
+}
+
+.coach-skeleton {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.bar {
+  background-color: var(--color-surface-subtle);
+  block-size: 16px;
+  border-radius: var(--radius-4);
+  display: block;
+}
+
+.bar-name {
+  block-size: var(--control-height-40);
+  inline-size: 55%;
+}
+
+.bar-short {
+  inline-size: 60%;
+}

@@ -1,0 +1,108 @@
+// "Also today" (339:2175): a heading and one bordered list of full-width rows (72px minimum).
+:host {
+  display: block;
+}
+
+.also {
+  display: grid;
+  gap: var(--space-12);
+}
+
+h2 {
+  font-size: var(--text-body-size);
+  font-weight: var(--font-weight-strong);
+  line-height: var(--text-body-line-height);
+  margin: 0;
+}
+
+// Takes focus after a successful Retry; not a control, so no ring is drawn.
+h2:focus {
+  outline: none;
+}
+
+.rows {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rows > li + li {
+  border-block-start: 1px solid var(--color-border-subtle);
+}
+
+.row {
+  align-items: center;
+  border-radius: var(--radius-8);
+  box-sizing: border-box;
+  color: var(--color-text-secondary);
+  display: flex;
+  gap: var(--space-12);
+  min-block-size: 72px;
+  padding: var(--space-12) var(--space-16);
+  text-decoration: none;
+}
+
+a.row:hover {
+  background-color: var(--color-surface-subtle);
+}
+
+a.row:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
+}
+
+.row-copy {
+  display: grid;
+  flex: 1;
+  gap: var(--space-4);
+  min-inline-size: 0;
+}
+
+.row-title {
+  color: var(--color-text-primary);
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  line-height: var(--text-compact-line-height);
+  overflow-wrap: anywhere;
+}
+
+.row-status {
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  overflow-wrap: anywhere;
+}
+
+// Colour only supplements the words "Overdue since".
+.overdue {
+  color: var(--color-warning);
+}
+
+// Icon/Chevron down turned to point at the inline end, and mirrored with the text in RTL.
+.chevron {
+  transform: rotate(-90deg);
+}
+
+:host-context([dir='rtl']) .chevron {
+  transform: rotate(90deg);
+}
+
+.row-skeleton {
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.bar {
+  background-color: var(--color-surface-subtle);
+  block-size: 16px;
+  border-radius: var(--radius-4);
+  display: block;
+  inline-size: 40%;
+}
+
+.bar-short {
+  inline-size: 65%;
+}

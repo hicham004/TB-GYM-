@@ -1063,9 +1063,12 @@ Work follows this order; anything outside it needs the user's approval first.
 - Step 3, redesign of Client Today and the coach client workspace: in progress. Part A, the coach's
   client record (Figma 131:419), built 2026-09-25: one route per section, an Overview of this week,
   a coach-only "This week isn't shared yet" line, and a renewal prompt 14 days before a plan ends.
-  Part B next: the client shell and Today, the coverage states ("This week's plan is on its way",
-  "Your next program starts …") and an "Ask to renew" button for an ended plan that notifies the
-  coach at most once per 7 days per client, enforced server-side. Other redesign slices are parked.
+  Part B1, built 2026-09-25: the client shell (bottom tabs, a tab hidden only for a feature outside
+  the plan, workspace switching and sign-out on Me) and Today (Figma 339:2140) with the coverage
+  states ("This week's plan is on its way", "Your next program starts …") from a new `todayCoverage`
+  on the upcoming read (TRN-018). Part B2 next: an "Ask to renew" button for an ended plan that
+  notifies the coach in-app, naming the client, at most once per 7 days per client, enforced
+  server-side. Other redesign slices are parked.
 - Step 4, lean go-live with the founding coaches: not started.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.

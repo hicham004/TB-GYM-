@@ -3,11 +3,13 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
+import { ClientAccessStore } from './core/access/client-access.store';
 import { AuthStore } from './core/auth/auth.store';
 import { MessageUnreadStore } from './core/messaging/message-unread.store';
 import { NotificationStore } from './core/notifications/notification.store';
 import { TenantStore } from './core/tenancy/tenant.store';
 import { settle } from '../testing/dom';
+import { fakeClientAccess } from '../testing/today-fixtures';
 
 const OWNER = {
   id: 'user-1',
@@ -22,16 +24,6 @@ const MEMBERSHIP = {
   tenantId: 'tenant-1',
   tenantName: 'TB Gym',
   tenantSlug: 'tb-gym',
-  role: 'Owner' as const,
-};
-
-// `/api/tenants` orders by workspace name, so "Alpha Strength" is always memberships[0]. A picker
-// that silently falls back to the first option is indistinguishable from a correct one until the
-// chosen workspace is not that one.
-const ALPHA = {
-  tenantId: 'tenant-alpha',
-  tenantName: 'Alpha Strength',
-  tenantSlug: 'alpha-strength',
   role: 'Owner' as const,
 };
 
@@ -61,6 +53,7 @@ async function render(
       // A catch-all so signing out can navigate to /auth/sign-in without the router rejecting the
       // URL. The shell itself is what is under test; where it navigates to is a routing concern.
       provideRouter([{ path: '**', children: [] }]),
+      { provide: ClientAccessStore, useValue: fakeClientAccess() },
       {
         provide: NotificationStore,
         useValue: {
@@ -142,30 +135,43 @@ describe('App', () => {
     const { host } = await render({ signedIn: true, owner: true });
 
     expect(host.querySelector('app-coach-shell')).not.toBeNull();
-    expect(host.querySelector('.client-tabs')).toBeNull();
-    // The pre-existing member top bar and its workspace picker belong to the other shell.
+    expect(host.querySelector('app-client-tabs')).toBeNull();
+    // The pre-existing member top bar belongs to the other shell.
     expect(host.querySelector('.authenticated-nav')).toBeNull();
-    expect(host.querySelector('.workspace-picker')).toBeNull();
   });
 
-  it('keeps the client shell exactly as it was, with no coach sidebar', async () => {
+  /**
+   * A client gets the bottom tabs and no top bar at all: Notifications and Me are in Today's header,
+   * and workspace switching and sign-out are on the Me page (339:2140).
+   */
+  it('gives a client the bottom tabs after the page, with no top bar', async () => {
     const { host } = await render({ signedIn: true, client: true, unread: 2, unreadMessages: 3 });
 
     expect(host.querySelector('app-coach-shell')).toBeNull();
-    const tabs = host.querySelectorAll('.client-tabs a');
-    expect(tabs).toHaveLength(5);
-    expect([...tabs].map((link) => link.getAttribute('href'))).toEqual([
-      '/',
-      '/checkins/me',
-      '/messages',
-      '/progress/dashboard',
-      '/me',
-    ]);
-    expect(host.querySelector('.client-tabs')?.textContent).toContain('3 unread messages');
-    expect(host.querySelector('a[href="/notifications"]')?.textContent).toContain(
-      '2 unread notifications',
+    expect(host.querySelector('header.topbar')).toBeNull();
+    expect(host.querySelector('.workspace-picker')).toBeNull();
+    const tabs = host.querySelector('app-client-tabs');
+    expect(tabs).not.toBeNull();
+    // After <main>, so the tabs come last in reading and focus order.
+    expect(host.querySelector('main')?.compareDocumentPosition(tabs!)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(host.querySelector('a[href*="nutrition"]')).toBeNull();
+    expect(host.querySelector('main')?.classList).toContain('client-main');
+    expect(host.classList).toContain('client-layout');
+  });
+
+  it('lets a client skip to the page, without a fragment navigation', async () => {
+    const { host } = await render({ signedIn: true, client: true });
+    const skip = host.querySelector<HTMLAnchorElement>('a.skip-link')!;
+    const main = host.querySelector<HTMLElement>('main')!;
+
+    expect(host.firstElementChild).toBe(skip);
+    expect(main.getAttribute('tabindex')).toBe('-1');
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    skip.dispatchEvent(click);
+
+    expect(click.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(main);
   });
 
   /**
@@ -176,7 +182,7 @@ describe('App', () => {
     const { host } = await render();
 
     expect(host.querySelector('app-coach-shell')).toBeNull();
-    expect(host.querySelector('.client-tabs')).toBeNull();
+    expect(host.querySelector('app-client-tabs')).toBeNull();
     expect(host.querySelector('header.topbar')).toBeNull();
     expect(host.querySelector('main router-outlet')).not.toBeNull();
   });
@@ -189,6 +195,7 @@ describe('App', () => {
     const { host } = await render({ signedIn: true, memberships: [] });
 
     expect(host.querySelector('app-coach-shell')).toBeNull();
+    expect(host.querySelector('app-client-tabs')).toBeNull();
     expect(host.querySelector('.authenticated-nav')).not.toBeNull();
     expect(host.querySelector('.workspace-picker')).toBeNull();
   });
@@ -202,46 +209,8 @@ describe('App', () => {
     expect(host.textContent).toContain('Checking session');
   });
 
-  it('offers the notifications link to every active member', async () => {
-    const { host } = await render({ signedIn: true, client: true });
-
-    const link = host.querySelector('nav a[href="/notifications"]');
-    expect(link).not.toBeNull();
-    expect(link?.textContent).toContain('Notifications');
-  });
-
-  it('hides the notifications link when nobody is signed in', async () => {
-    const { host } = await render();
-
-    expect(host.querySelector('a[href="/notifications"]')).toBeNull();
-  });
-
-  it('shows no badge when nothing is unread', async () => {
-    const { host } = await render({ signedIn: true, client: true, unread: 0 });
-
-    expect(host.querySelector('nav a[href="/notifications"] .badge')).toBeNull();
-    expect(host.querySelector('nav a[href="/notifications"]')?.textContent).not.toContain('unread');
-  });
-
-  it('announces one unread notification in words as well as in the badge', async () => {
-    const { host } = await render({ signedIn: true, client: true, unread: 1 });
-
-    expect(host.querySelector('nav a[href="/notifications"] .badge')?.textContent?.trim()).toBe(
-      '1',
-    );
-    // The number alone would be announced as "Notifications 1" with no explanation of what 1 is.
-    expect(
-      host.querySelector('nav a[href="/notifications"] .visually-hidden')?.textContent,
-    ).toContain('1 unread notifications');
-  });
-
-  it('clears both badges as part of signing out', async () => {
-    const { host, clear, clearMessages } = await render({
-      signedIn: true,
-      client: true,
-      unread: 4,
-      unreadMessages: 2,
-    });
+  it('clears both badges as part of signing out from the member bar', async () => {
+    const { host, clear, clearMessages } = await render({ signedIn: true, memberships: [] });
 
     const signOut = Array.from(host.querySelectorAll('button')).find(
       (candidate) => candidate.textContent?.trim() === 'Sign out',
@@ -250,53 +219,5 @@ describe('App', () => {
 
     expect(clear).toHaveBeenCalled();
     expect(clearMessages).toHaveBeenCalled();
-  });
-
-  /**
-   * Two counts, two badges. Summing an unread notification and an unread message would produce a
-   * number nobody could explain or act on, so they stay apart in both shells.
-   */
-  it('keeps the message badge separate from the notification badge', async () => {
-    const { host } = await render({
-      signedIn: true,
-      client: true,
-      unread: 4,
-      unreadMessages: 2,
-    });
-
-    expect(host.querySelector('a[href="/notifications"] .badge')?.textContent?.trim()).toBe('4');
-    expect(host.querySelector('.client-tabs a[href="/messages"] .badge')?.textContent?.trim()).toBe(
-      '2',
-    );
-  });
-
-  /** The member shell's picker still shows the workspace the store is actually in. */
-  it('shows the active workspace in the member picker even when it is not the first offered', async () => {
-    const { host } = await render({
-      signedIn: true,
-      client: true,
-      memberships: [ALPHA, MEMBERSHIP],
-      selectedTenantId: 'tenant-1',
-    });
-
-    const picker = host.querySelector<HTMLSelectElement>('.workspace-picker select')!;
-    expect(picker.value).toBe('tenant-1');
-    expect(picker.options[picker.selectedIndex].textContent).toContain('TB Gym');
-  });
-
-  it('selects a workspace through the same path as the coach shell', async () => {
-    const { fixture, host, select } = await render({
-      signedIn: true,
-      client: true,
-      memberships: [ALPHA, MEMBERSHIP],
-      selectedTenantId: 'tenant-1',
-    });
-
-    const picker = host.querySelector<HTMLSelectElement>('.workspace-picker select')!;
-    picker.value = 'tenant-alpha';
-    picker.dispatchEvent(new Event('change'));
-    await settle(fixture);
-
-    expect(select).toHaveBeenCalledWith('tenant-alpha');
   });
 });

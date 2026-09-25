@@ -3,9 +3,13 @@
        grid beside the one <main> below. Workspace and sign-out requests come back here, so both
        shells share one switching path and one sign-out sequence. -->
   <app-coach-shell (workspaceSelected)="switchWorkspace($event)" (signOut)="logout()" />
+} @else if (shell() === 'client') {
+  <!-- Clients have no top bar: Today's header holds Notifications and Me, and the Me page holds
+       workspace switching and sign-out. -->
+  <a class="skip-link" href="#main-content" (click)="skipToContent($event)" i18n>Skip to content</a>
 } @else if (shell() !== 'public') {
-  <!-- Clients and accounts without a workspace keep the existing top bar. Signed-out pages (the
-       homepage, sign-in and the rest of /auth, invitations) draw their own header. -->
+  <!-- An account with no workspace keeps the existing top bar. Signed-out pages (the homepage,
+       sign-in and the rest of /auth, invitations) draw their own header. -->
   <header class="topbar">
     <a class="brand" routerLink="/" aria-label="TB Gym home" i18n-aria-label>
       <span class="brand-mark" aria-hidden="true">TB</span>
@@ -26,52 +30,7 @@
       </button>
 
       <div id="primary-navigation" class="authenticated-nav" [class.open]="menuOpen()">
-        <nav aria-label="Primary navigation" i18n-aria-label>
-          @if (!tenants.isClient()) {
-            <a
-              routerLink="/"
-              routerLinkActive="active"
-              [routerLinkActiveOptions]="{ exact: true }"
-              i18n
-            >
-              Dashboard
-            </a>
-          }
-          <!-- Every active member has an inbox, whatever their role in the workspace. The count is
-               announced in words rather than left as a bare number beside the link, so it is not
-               read out as "Notifications 3" with no explanation of what 3 is. -->
-          @if (notifications.isAvailable()) {
-            <a routerLink="/notifications" routerLinkActive="active" class="with-badge">
-              <span i18n>Notifications</span>
-              @if (notifications.unread() > 0) {
-                <span class="badge" aria-hidden="true">{{ notifications.unread() }}</span>
-                <span class="visually-hidden" i18n
-                  >{{ notifications.unread() }} unread notifications</span
-                >
-              }
-            </a>
-          }
-        </nav>
-
         <div class="session-controls">
-          @if (tenants.memberships().length > 0) {
-            <label class="workspace-picker">
-              <span i18n>Active workspace</span>
-              <!-- Selected per option, not through `value` on the select: the options arrive from
-                   the `@for` after the select is bound, and the browser resets `selectedIndex` to 0
-                   when they do, so the picker named the first workspace whatever was active. -->
-              <select (change)="selectTenant($event)">
-                @for (membership of tenants.memberships(); track membership.tenantId) {
-                  <option
-                    [value]="membership.tenantId"
-                    [selected]="membership.tenantId === tenants.selectedTenantId()"
-                  >
-                    {{ membership.tenantName }} ({{ roleLabel(membership.role) }})
-                  </option>
-                }
-              </select>
-            </label>
-          }
           @if (auth.user()?.roles?.includes('PlatformAdmin')) {
             <a class="account-link" routerLink="/admin/billing" routerLinkActive="active" i18n
               >Platform billing</a
@@ -87,41 +46,13 @@
       <span class="session-loading" i18n>Checking session...</span>
     }
   </header>
-
-  @if (shell() === 'member' && tenants.isClient()) {
-    <nav class="client-tabs" aria-label="Client navigation" i18n-aria-label>
-      <a
-        routerLink="/"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-        ariaCurrentWhenActive="page"
-        i18n
-        >Today</a
-      >
-      <a routerLink="/checkins/me" routerLinkActive="active" ariaCurrentWhenActive="page" i18n
-        >Check-ins</a
-      >
-      <a routerLink="/messages" routerLinkActive="active" ariaCurrentWhenActive="page">
-        <span i18n>Messages</span>
-        @if (messages.isAvailable() && messages.unread() > 0) {
-          <span class="badge" aria-hidden="true">{{ messages.unread() }}</span>
-          <span class="visually-hidden" i18n>{{ messages.unread() }} unread messages</span>
-        }
-      </a>
-      <a
-        routerLink="/progress/dashboard"
-        routerLinkActive="active"
-        ariaCurrentWhenActive="page"
-        i18n
-        >Progress</a
-      >
-      <a routerLink="/me" routerLinkActive="active" ariaCurrentWhenActive="page" i18n>Me</a>
-    </nav>
-  }
 }
 <main
+  #main
+  id="main-content"
+  [attr.tabindex]="shell() === 'client' ? -1 : null"
   [class.app-main]="shell() !== 'coach' && auth.user()"
-  [class.client-main]="shell() === 'member' && tenants.isClient()"
+  [class.client-main]="shell() === 'client'"
   [class.coach-main]="shell() === 'coach'"
 >
   @if (shell() === 'coach') {
@@ -132,3 +63,7 @@
   }
   <router-outlet />
 </main>
+@if (shell() === 'client') {
+  <!-- After <main>, so the tabs come last in reading and focus order (339:2140). -->
+  <app-client-tabs />
+}

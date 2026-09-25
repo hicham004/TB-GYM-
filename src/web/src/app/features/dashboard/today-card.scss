@@ -1,0 +1,134 @@
+// The training card (339:2157): surface, subtle border, 16px padding and gap, one dominant action.
+.today-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: var(--space-16);
+}
+
+.today-card > * {
+  margin: 0;
+}
+
+.today-card h2 {
+  font-size: var(--text-section-title-size);
+  font-weight: var(--font-weight-strong);
+  line-height: var(--text-section-title-line-height);
+  overflow-wrap: anywhere;
+}
+
+// The heading takes focus after a successful Retry; it is not a control, so no ring is drawn.
+.today-card h2:focus {
+  outline: none;
+}
+
+// Name and size are one group (4px), as in the design's session summary.
+.today-card h2 + .summary {
+  margin-block-start: calc(-1 * var(--space-12));
+}
+
+.today-state {
+  color: var(--color-text-secondary);
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  line-height: var(--text-compact-line-height);
+}
+
+.today-state-accent {
+  color: var(--color-accent);
+}
+
+.today-state-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  justify-content: space-between;
+}
+
+.today-state-row .today-state {
+  margin: 0;
+}
+
+.summary,
+.note,
+.today-card p:not([class]) {
+  color: var(--color-text-secondary);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  overflow-wrap: anywhere;
+}
+
+.today-action {
+  inline-size: 100%;
+}
+
+// The explanation belongs to the action above it (8px), not to the card's 16px rhythm.
+.today-action + .hint {
+  margin-block-start: calc(-1 * var(--space-8));
+}
+
+// A date is one unit: "Mon 5 Oct" never breaks across lines.
+.today-date-value {
+  white-space: nowrap;
+}
+
+.hint {
+  color: var(--color-text-secondary);
+  font-size: var(--text-metadata-size);
+  line-height: var(--text-metadata-line-height);
+}
+
+// Scoped under the card so it outranks the card's own `> *` margin reset.
+.today-card .text-link {
+  align-self: flex-start;
+  color: var(--color-accent);
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  line-height: var(--text-compact-line-height);
+  // A 44px target without changing how the text sits in the card.
+  margin-block: calc((var(--text-compact-line-height) - 44px) / 2);
+  padding-block: calc((44px - var(--text-compact-line-height)) / 2);
+  text-underline-offset: 3px;
+}
+
+.today-card .text-link:focus-visible {
+  border-radius: var(--radius-4);
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
+}
+
+.today-card [role='alert'] {
+  color: var(--color-text-primary);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+}
+
+.today-skeleton {
+  display: grid;
+  gap: var(--space-12);
+}
+
+.bar {
+  background-color: var(--color-surface-subtle);
+  block-size: 20px;
+  border-radius: var(--radius-4);
+  display: block;
+}
+
+.bar-short {
+  inline-size: 35%;
+}
+
+.bar-long {
+  block-size: 28px;
+  inline-size: 80%;
+}
+
+.bar-mid {
+  block-size: var(--control-height-48);
+  inline-size: 100%;
+}

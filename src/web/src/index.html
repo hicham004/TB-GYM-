@@ -51,7 +51,8 @@
       crossorigin
     />
     <base href="/" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- viewport-fit=cover lets the client's bottom tabs pad themselves clear of the home indicator. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <!--
       Action links carry a single-use credential in the query string until the page exchanges it.
       The API and the production nginx configuration both send `Referrer-Policy: no-referrer`, and

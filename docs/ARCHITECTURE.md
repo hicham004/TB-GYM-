@@ -480,6 +480,15 @@ set-performance ID, serializes same-workout set writes, and drops stale load/wri
 a tenant-context generation change. This is read/UI composition only: no training write contract,
 schema or invariant changes.
 
+Step 3B (2026-09-25) adds `todayCoverage` to the upcoming read (TRN-018): two bounded metadata
+queries (at most eight open blocks, then the published week numbers of the ones covering today)
+feed the pure `TodayCoveragePolicy`, only when a client has an open block. The client shell has no
+top bar: bottom tabs after `<main>`, hidden per feature only for `NoEntitlement` from
+`GET /api/client-access/me` (`ClientAccessStore`, presentation only), and workspace switching and
+sign-out on `/me` through the same `SessionActions` the coach shell uses. Today reads training,
+nutrition, check-ins and the latest conversation independently, each with its own retry and tenant
+scope. No schema, write contract or invariant changed.
+
 Design-system foundation slice 1 (2026-09-22) adds the Figma tokens as CSS custom properties
 (`src/styles/_tokens.scss`), opt-in `.tb-*` primitive styles (`src/styles/_ui.scss`) and small
 primitives under `src/app/ui`: buttons and links, icon buttons, icons, status labels, avatars, and a

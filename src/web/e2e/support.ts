@@ -86,6 +86,7 @@ export async function mockSession(
   page: Page,
   options: {
     memberships?: (typeof OWNER_MEMBERSHIP)[];
+    user?: typeof SIGNED_IN_USER;
     unreadNotifications?: number;
     unreadMessages?: number;
     extra?: Record<string, Handler>;
@@ -94,7 +95,7 @@ export async function mockSession(
   await mockMessagingHub(page);
   await mockApi(page, {
     'GET /api/auth/csrf': (route) => json(route, 200, { token: 'e2e-csrf' }),
-    'GET /api/auth/me': (route) => json(route, 200, SIGNED_IN_USER),
+    'GET /api/auth/me': (route) => json(route, 200, options.user ?? SIGNED_IN_USER),
     'GET /api/tenants': (route) => json(route, 200, options.memberships ?? [OWNER_MEMBERSHIP]),
     'GET /api/notifications/unread-count': (route) =>
       json(route, 200, { unread: options.unreadNotifications ?? 0 }),

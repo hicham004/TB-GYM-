@@ -1,0 +1,79 @@
+@let message = state();
+@switch (message.kind) {
+  @case ('ready') {
+    @let conversation = message.value;
+    @let last = conversation.lastMessage!;
+    <section class="coach tb-theme" aria-labelledby="coach-heading">
+      <h2 id="coach-heading" #heading tabindex="-1" class="tb-visually-hidden" i18n>
+        Latest from your coach
+      </h2>
+      <a
+        class="coach-link"
+        routerLink="/messages"
+        (click)="open(conversation)"
+        aria-labelledby="coach-name coach-meta coach-unread"
+        aria-describedby="coach-preview"
+      >
+        <span class="coach-top">
+          <app-avatar
+            [initials]="initialsOf(conversation.counterpart.displayName)"
+            presentation="message-sender"
+          />
+          <span class="coach-id">
+            <span id="coach-name" class="coach-name" dir="auto">{{
+              conversation.counterpart.displayName
+            }}</span>
+            <span id="coach-meta" class="coach-meta">
+              @if (conversation.isReadOnly) {
+                <ng-container i18n>Your former coach</ng-container>
+              } @else {
+                <ng-container i18n>Your coach</ng-container>
+              }
+              ·
+              <bdi>{{
+                sentToday(conversation)
+                  ? (last.sentAtUtc | date: 'shortTime')
+                  : (last.sentAtUtc | date: 'EEE d MMM')
+              }}</bdi>
+            </span>
+          </span>
+          @if (conversation.unreadCount > 0 && !last.isFromCaller) {
+            <app-status-label id="coach-unread" label="Unread" i18n-label />
+          }
+        </span>
+        <span id="coach-preview" class="coach-preview" dir="auto">
+          @if (!conversation.isAvailable) {
+            {{ accessLabel(conversation.accessReason) }}
+          } @else if (last.isDeleted) {
+            <ng-container i18n>Message removed</ng-container>
+          } @else if (last.isFromCaller) {
+            <ng-container i18n>You:</ng-container> {{ last.body }}
+          } @else {
+            {{ last.body }}
+          }
+        </span>
+      </a>
+    </section>
+  }
+  @case ('loading') {
+    <div class="coach coach-skeleton" aria-hidden="true">
+      <span class="bar bar-name"></span>
+      <span class="bar"></span>
+      <span class="bar bar-short"></span>
+    </div>
+  }
+  @case ('failed') {
+    <section class="coach tb-theme" aria-labelledby="coach-heading">
+      <h2 id="coach-heading" #heading tabindex="-1" class="tb-visually-hidden" i18n>
+        Latest from your coach
+      </h2>
+      <div class="coach-failed">
+        <p role="status" i18n>Couldn’t load your coach’s latest message.</p>
+        <button appButton type="button" variant="text" (click)="retry()">
+          <ng-container i18n>Retry</ng-container
+          ><span class="tb-visually-hidden" i18n> latest message</span>
+        </button>
+      </div>
+    </section>
+  }
+}

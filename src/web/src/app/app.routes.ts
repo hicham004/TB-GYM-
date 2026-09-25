@@ -1,4 +1,5 @@
-import { Routes } from '@angular/router';
+import { inject } from '@angular/core';
+import { ResolveFn, Routes } from '@angular/router';
 import {
   authGuard,
   clientGuard,
@@ -7,8 +8,13 @@ import {
   publicHomeGuard,
   signedOutGuard,
 } from './core/auth/auth.guards';
+import { TenantStore } from './core/tenancy/tenant.store';
 import { devRoutes } from './dev/dev-routes';
 import { platformAdminGuard } from './features/platform-admin/platform-admin.guard';
+
+/** `/` is a client's Today and everyone else's dashboard; the guard has loaded the membership. */
+const homeTitle: ResolveFn<string> = () =>
+  inject(TenantStore).isClient() ? $localize`Today | TB Gym` : $localize`Dashboard | TB Gym`;
 
 export const routes: Routes = [
   {
@@ -33,7 +39,7 @@ export const routes: Routes = [
     path: '',
     pathMatch: 'full',
     canActivate: [authGuard],
-    title: $localize`Dashboard | TB Gym`,
+    title: homeTitle,
     loadComponent: () =>
       import('./features/dashboard/dashboard').then((module) => module.Dashboard),
   },

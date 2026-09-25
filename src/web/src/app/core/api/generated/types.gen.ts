@@ -19,6 +19,14 @@ export type AcknowledgeRealtimeEventsRequest = {
   eventSequences: Array<number | string>;
 };
 
+export type ActiveTrainingBlockView = {
+  id: string;
+  name: string;
+  weekNumber: number | string;
+  weekCount: number | string;
+  isCurrentWeekPublished: boolean;
+};
+
 export type AddFoodVersionRequest = {
   basisQuantity: number | string;
   basisUnit: FoodQuantityUnit;
@@ -762,6 +770,7 @@ export type ClientTrainingUpcomingView = {
   nextSession: null | UpcomingTrainingSessionView;
   unfinishedWorkouts: Array<DatedWorkoutView>;
   nextSkip: null | number | string;
+  todayCoverage: null | TodayTrainingCoverageView;
 };
 
 export type ClientWorkoutView = {
@@ -2485,6 +2494,11 @@ export type TenantMembershipSummary = {
 };
 
 export type TenantRole = 'Owner' | 'Coach' | 'Client';
+
+export type TodayTrainingCoverageView = {
+  activeBlock: null | ActiveTrainingBlockView;
+  nextBlockStartDate: null | string;
+};
 
 export type TrainingLoadRoundingMode = 'Nearest' | 'Down' | 'Up';
 

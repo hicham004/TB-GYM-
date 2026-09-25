@@ -81,6 +81,9 @@ const GLYPHS = {
   },
   // Icon/Messages 119:165
   messages: { size: 20, path: 'M3 4.5H17V14H8L4 17V14H3V4.5ZM6.5 8H13.5M6.5 10.8H11' },
+  // The client Progress tab's local vector (340:2230 in Today 339:2140; no Icon/Progress master),
+  // moved by its (3, 3) offset inside the 20px frame.
+  progress: { size: 20, path: 'M3 3V17H17M6 12L10 8L13 10L17 4' },
   // Icon/Products 175:370 (tag with an eyelet)
   products: {
     size: 20,
