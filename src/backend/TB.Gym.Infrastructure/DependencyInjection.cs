@@ -24,6 +24,7 @@ using TB.Gym.Modules.ExerciseLibrary;
 using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Messaging;
 using TB.Gym.Modules.Notifications;
+using TB.Gym.Modules.PlatformBilling;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
@@ -110,8 +111,11 @@ public static class DependencyInjection
 
         services.AddAuthorization(options =>
         {
-            options.AddPolicy(AuthorizationPolicies.PlatformAdmin, policy =>
-                policy.RequireRole(SystemRoles.PlatformAdmin));
+            // Both the cookie's role claim and the account as it is in the database now (ADR 0028).
+            options.AddPolicy(AuthorizationPolicies.PlatformAdmin, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireRole(SystemRoles.PlatformAdmin)
+                .AddRequirements(new PlatformAdminRequirement()));
             options.AddPolicy(AuthorizationPolicies.TenantMember, policy =>
                 policy.AddRequirements(new TenantRoleRequirement(
                     TenantRole.Owner,
@@ -128,6 +132,11 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAuthorizationHandler, TenantRoleAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, PlatformAdminAuthorizationHandler>();
+        services.AddScoped<WorkspaceBillingLock>();
+        services.AddScoped<IWorkspaceBillingService, WorkspaceBillingService>();
+        services.AddScoped<IPlatformBillingAdminService, PlatformBillingAdminService>();
+        services.AddPlatformBilling(configuration);
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, TenantAuthorizationResultHandler>();
         services.AddExceptionHandler<ClientReleasedExceptionHandler>();
         services.AddScoped<CoachClientScope>();

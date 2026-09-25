@@ -256,6 +256,7 @@ public static class TrainingEndpoints
                 });
             }
         })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
         .WithName("PreviewTrainingProgression")
         .Produces<ProgressionPreviewView>()
         .ProducesValidationProblem()

@@ -1,0 +1,359 @@
+<div class="platform-admin tb-theme">
+  <header class="page-header">
+    <div class="page-title">
+      <h1 class="tb-text-section-title" i18n>Platform billing</h1>
+      <p class="scope tb-text-compact" i18n>
+        What each workspace owes TB Gym. The server calculates every amount; a payment must be the
+        exact invoice total, and nothing is ever deleted.
+      </p>
+    </div>
+    <button
+      appButton
+      variant="outlined"
+      type="button"
+      [loading]="busy()"
+      (click)="issueInvoices()"
+      data-issue
+      i18n
+    >
+      Issue last month's invoices
+    </button>
+  </header>
+
+  <p class="page-error" role="alert">{{ error() }}</p>
+  <p class="page-notice" role="status">{{ notice() }}</p>
+
+  <section class="card tb-table-scope" aria-labelledby="admin-workspaces-title">
+    <h2 id="admin-workspaces-title" class="card-title tb-text-body-strong" i18n>Workspaces</h2>
+    @if (loading() && workspaces().length === 0) {
+      <p class="card-state" i18n>Loading workspaces…</p>
+    } @else if (workspaces().length === 0) {
+      <p class="card-state" i18n>No workspaces yet.</p>
+    } @else {
+      <div class="table-wrap">
+        <table class="tb-table">
+          <thead>
+            <tr>
+              <th scope="col" i18n>Workspace</th>
+              <th scope="col" i18n>Status</th>
+              <th scope="col" i18n>Seats this month</th>
+              <th scope="col" i18n>Billable clients</th>
+              <th scope="col" i18n>Unpaid</th>
+              <th scope="col" i18n>Discount now</th>
+              <th scope="col"><span class="tb-visually-hidden" i18n>Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (workspace of workspaces(); track workspace.tenantId) {
+              <tr [attr.data-workspace]="workspace.tenantId">
+                <td>
+                  <span class="name" dir="auto">{{ workspace.name }}</span>
+                  <span class="meta" dir="auto"
+                    >{{ workspace.ownerName }} · {{ workspace.ownerEmail }}</span
+                  >
+                </td>
+                <td>
+                  <app-status-label
+                    [tone]="statusTone(workspace.status)"
+                    [label]="statusLabel(workspace.status)"
+                  />
+                </td>
+                <td>{{ workspace.seatsThisMonth }}</td>
+                <td>{{ workspace.billableClientsThisMonth }}</td>
+                <td>{{ money(workspace.unpaidTotal, workspace.currencyCode) }}</td>
+                <td>{{ workspace.currentDiscountPercent }}%</td>
+                <td>
+                  <button appButton variant="text" type="button" (click)="open(workspace)">
+                    <ng-container i18n>Open</ng-container>
+                    <span class="tb-visually-hidden"> {{ workspace.name }}</span>
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  @if (detail(); as detail) {
+    <section class="card" aria-labelledby="admin-detail-title" data-workspace-detail>
+      <h2 id="admin-detail-title" class="card-title tb-text-body-strong" dir="auto">
+        {{ detail.summary.name }}
+      </h2>
+      <div class="card-body">
+        <p class="meta" i18n>
+          Owner {{ detail.summary.ownerName }} ({{ detail.summary.ownerEmail }}). Trial until
+          {{ day(detail.summary.trialEndsAtUtc) }}.
+        </p>
+        <p i18n>
+          {{ month(detail.currentMonth.periodStart) }} so far: seats
+          {{ detail.currentMonth.amounts.seats }}, billable clients
+          {{ detail.currentMonth.amounts.billableClients }}, estimate
+          {{ money(detail.currentMonth.amounts.total, detail.currentMonth.amounts.currencyCode) }}.
+        </p>
+
+        <h3 class="tb-text-body-strong" i18n>Invoices</h3>
+        @if (detail.invoices.length === 0) {
+          <p class="meta" i18n>No invoices yet.</p>
+        }
+        <ul class="rows">
+          @for (invoice of detail.invoices; track invoice.id) {
+            <li [attr.data-invoice]="invoice.id">
+              <div class="row-head">
+                <span class="name">{{ month(invoice.periodStart) }}</span>
+                <code dir="ltr">{{ invoice.referenceCode }}</code>
+                <strong>{{ money(invoice.amounts.total, invoice.amounts.currencyCode) }}</strong>
+                <app-status-label
+                  [tone]="invoiceTone(invoice.status)"
+                  [label]="invoiceLabel(invoice.status)"
+                />
+                <span class="meta" i18n
+                  >Plan v{{ invoice.pricePlanVersion }} · {{ invoice.amounts.seats }} seats ·
+                  {{ invoice.amounts.billableClients }} clients · due {{ day(invoice.dueOn) }}</span
+                >
+              </div>
+              @if (invoice.payment; as payment) {
+                <p class="meta" i18n>
+                  Paid {{ day(payment.receivedOn) }}, reference {{ payment.reference }}.
+                  {{ payment.note }}
+                </p>
+              }
+              @if (invoice.voidReason) {
+                <p class="meta" i18n>Voided: {{ invoice.voidReason }}</p>
+              }
+              @if (isUnpaid(invoice)) {
+                <div class="row-actions">
+                  <button
+                    appButton
+                    variant="outlined"
+                    type="button"
+                    (click)="startAction('pay', invoice)"
+                    i18n
+                  >
+                    Record payment
+                  </button>
+                  <button
+                    appButton
+                    variant="text"
+                    type="button"
+                    (click)="startAction('void', invoice)"
+                    i18n
+                  >
+                    Void
+                  </button>
+                </div>
+              }
+              @if (action()?.invoiceId === invoice.id && action()?.kind === 'pay') {
+                <form
+                  class="inline-form"
+                  [formGroup]="paymentForm"
+                  (ngSubmit)="recordPayment(invoice)"
+                  novalidate
+                >
+                  <app-field label="Amount" i18n-label [help]="amountHelp(invoice)">
+                    <input appControl type="number" step="0.01" min="0" formControlName="amount" />
+                  </app-field>
+                  <app-field label="Whish or transfer reference" i18n-label>
+                    <input appControl type="text" autocomplete="off" formControlName="reference" />
+                  </app-field>
+                  <app-field label="Note (optional)" i18n-label>
+                    <input appControl type="text" formControlName="note" />
+                  </app-field>
+                  <div class="row-actions">
+                    <button
+                      appButton
+                      type="submit"
+                      [loading]="busy()"
+                      [disabled]="paymentForm.invalid"
+                      i18n
+                    >
+                      Record payment
+                    </button>
+                    <button appButton variant="text" type="button" (click)="cancelAction()" i18n>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              }
+              @if (action()?.invoiceId === invoice.id && action()?.kind === 'void') {
+                <form
+                  class="inline-form"
+                  [formGroup]="voidForm"
+                  (ngSubmit)="voidInvoice(invoice)"
+                  novalidate
+                >
+                  <app-field label="Why is it void?" i18n-label>
+                    <input appControl type="text" formControlName="reason" />
+                  </app-field>
+                  <label class="check">
+                    <input type="checkbox" formControlName="reissue" />
+                    <span i18n>Reissue a corrected invoice at the same prices</span>
+                  </label>
+                  <div class="row-actions">
+                    <button
+                      appButton
+                      type="submit"
+                      [loading]="busy()"
+                      [disabled]="voidForm.invalid"
+                      i18n
+                    >
+                      Void invoice
+                    </button>
+                    <button appButton variant="text" type="button" (click)="cancelAction()" i18n>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              }
+            </li>
+          }
+        </ul>
+
+        <h3 class="tb-text-body-strong" i18n>Discounts</h3>
+        <ul class="rows">
+          @for (discount of detail.discounts; track discount.id) {
+            <li [attr.data-discount]="discount.id">
+              <div class="row-head">
+                <strong>{{ discount.percent }}%</strong>
+                <span i18n
+                  >{{ day(discount.startsOn) }} to {{ lastDay(discount.endsOnExclusive) }}</span
+                >
+                <span class="meta" dir="auto">{{ discount.note }}</span>
+                @if (discount.revokedAtUtc) {
+                  <span class="meta" i18n>Revoked {{ day(discount.revokedAtUtc) }}</span>
+                } @else {
+                  <button
+                    appButton
+                    variant="text"
+                    type="button"
+                    (click)="revokeDiscount(discount.id)"
+                    i18n
+                  >
+                    Revoke
+                  </button>
+                }
+              </div>
+            </li>
+          } @empty {
+            <li class="meta" i18n>No discounts.</li>
+          }
+        </ul>
+        <form
+          class="inline-form"
+          [formGroup]="discountForm"
+          (ngSubmit)="grantDiscount(detail.summary.tenantId)"
+          novalidate
+        >
+          <app-field label="Percent off" i18n-label>
+            <input
+              appControl
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              formControlName="percent"
+            />
+          </app-field>
+          <app-field label="First day" i18n-label>
+            <input appControl type="date" formControlName="startsOn" />
+          </app-field>
+          <app-field label="Last day" i18n-label>
+            <input appControl type="date" formControlName="lastDay" />
+          </app-field>
+          <app-field label="What it is for" i18n-label>
+            <input appControl type="text" formControlName="note" />
+          </app-field>
+          <div class="row-actions">
+            <button
+              appButton
+              type="submit"
+              [loading]="busy()"
+              [disabled]="discountForm.invalid"
+              i18n
+            >
+              Grant discount
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+  }
+
+  <section class="card" aria-labelledby="admin-plans-title">
+    <h2 id="admin-plans-title" class="card-title tb-text-body-strong" i18n>Price plan</h2>
+    <div class="card-body">
+      @if (currentPlan(); as plan) {
+        <p data-current-plan i18n>
+          Version {{ plan.versionNumber }}, since {{ day(plan.publishedAtUtc) }}:
+          {{ money(plan.seatPrice, plan.currencyCode) }} a seat with
+          {{ plan.includedClientsPerSeat }} clients included,
+          {{ money(plan.extraClientPrice, plan.currencyCode) }} an extra client, a
+          {{ money(plan.gymFee, plan.currencyCode) }} gym fee from
+          {{ plan.gymFeeMinimumSeats }} seats. {{ plan.trialDays }}-day trial, due in
+          {{ plan.paymentTermDays }} days, read-only {{ plan.graceDays }} days after that.
+        </p>
+      }
+      <p class="meta" i18n>
+        Publishing makes a new version. New invoices use it; issued invoices keep the prices they
+        were issued with. Amounts are in USD.
+      </p>
+      <form class="plan-form" [formGroup]="planForm" (ngSubmit)="publishPlan()" novalidate>
+        <app-field label="Seat price" i18n-label>
+          <input appControl type="number" step="0.01" min="0" formControlName="seatPrice" />
+        </app-field>
+        <app-field label="Clients included per seat" i18n-label>
+          <input
+            appControl
+            type="number"
+            step="1"
+            min="0"
+            formControlName="includedClientsPerSeat"
+          />
+        </app-field>
+        <app-field label="Extra client price" i18n-label>
+          <input appControl type="number" step="0.01" min="0" formControlName="extraClientPrice" />
+        </app-field>
+        <app-field label="Gym fee" i18n-label>
+          <input appControl type="number" step="0.01" min="0" formControlName="gymFee" />
+        </app-field>
+        <app-field label="Gym fee from seats" i18n-label>
+          <input appControl type="number" step="1" min="1" formControlName="gymFeeMinimumSeats" />
+        </app-field>
+        <app-field label="Trial days" i18n-label>
+          <input appControl type="number" step="1" min="0" formControlName="trialDays" />
+        </app-field>
+        <app-field label="Days to pay" i18n-label>
+          <input appControl type="number" step="1" min="0" formControlName="paymentTermDays" />
+        </app-field>
+        <app-field label="Grace days before read-only" i18n-label>
+          <input appControl type="number" step="1" min="0" formControlName="graceDays" />
+        </app-field>
+        <app-field class="wide" label="Note (optional)" i18n-label>
+          <input appControl type="text" formControlName="note" />
+        </app-field>
+        <div class="row-actions wide">
+          <button appButton type="submit" [loading]="busy()" [disabled]="planForm.invalid" i18n>
+            Publish new version
+          </button>
+        </div>
+      </form>
+      <ul class="rows">
+        @for (plan of plans(); track plan.id) {
+          <li class="meta" [attr.data-plan]="plan.versionNumber">
+            <span i18n
+              >v{{ plan.versionNumber }} · {{ day(plan.publishedAtUtc) }} ·
+              {{ money(plan.seatPrice, plan.currencyCode) }} a seat ·
+              {{ plan.includedClientsPerSeat }} included ·
+              {{ money(plan.extraClientPrice, plan.currencyCode) }} extra ·
+              {{ money(plan.gymFee, plan.currencyCode) }} gym fee</span
+            >
+            @if (plan.note) {
+              <span dir="auto"> — {{ plan.note }}</span>
+            }
+          </li>
+        }
+      </ul>
+    </div>
+  </section>
+</div>

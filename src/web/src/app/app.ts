@@ -6,6 +6,7 @@ import { tenantRoleLabel } from './core/i18n/display-labels';
 import { MessageUnreadStore } from './core/messaging/message-unread.store';
 import { NotificationStore } from './core/notifications/notification.store';
 import { TenantStore } from './core/tenancy/tenant.store';
+import { BillingBanner } from './features/billing/billing-banner';
 import { CoachShell } from './shell/coach-shell';
 
 /**
@@ -22,7 +23,7 @@ export type ShellKind = 'coach' | 'member' | 'public' | 'pending';
 
 @Component({
   selector: 'app-root',
-  imports: [CoachShell, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [BillingBanner, CoachShell, RouterLink, RouterLinkActive, RouterOutlet],
   templateUrl: './app.html',
   styleUrl: './app.scss',
   host: { '[class.coach-layout]': "shell() === 'coach'" },

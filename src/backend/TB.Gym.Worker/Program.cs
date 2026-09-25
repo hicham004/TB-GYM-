@@ -42,6 +42,9 @@ internal static class WorkerProgram
         // different urgency, different retry schedules and different consequences when they are late;
         // sharing one loop would make either queue's backlog the other's latency.
         builder.Services.AddHostedService<ActionMailDispatchWorker>();
+        // Platform billing (ADR 0028): issues last month's invoices and queues reminders. Its emails
+        // ride the workspace notice queue the action-mail sweep drains.
+        builder.Services.AddHostedService<PlatformBillingWorker>();
 
         var host = builder.Build();
         await host.RunAsync();

@@ -1051,7 +1051,10 @@ Work follows this order; anything outside it needs the user's approval first.
 - Coach departure and client choice (complete, 2026-09-24): a coach can resign; their clients are told
   in-app and by email; a client can leave on their own; a former client can be invited back as a new
   relationship. See ADR 0026 and 0027.
-- Step 2, manual platform billing: not started.
+- Step 2, manual platform billing (complete, 2026-09-24): versioned placeholder price plan, monthly
+  invoices from seats and covered clients, owner Billing page, platform admin screen (payments,
+  void and reissue, discounts, new plan versions), email notices, and read-only for staff when
+  unpaid. See ADR 0028. Prices are placeholders until validated with founding coaches.
 - Step 3, redesign of Client Today and the coach client workspace: not started. Other redesign
   slices are parked.
 - Step 4, lean go-live with the founding coaches: not started.

@@ -71,6 +71,11 @@
               </select>
             </label>
           }
+          @if (auth.user()?.roles?.includes('PlatformAdmin')) {
+            <a class="account-link" routerLink="/admin/billing" routerLinkActive="active" i18n
+              >Platform billing</a
+            >
+          }
           <a class="account-link" routerLink="/account/security" routerLinkActive="active">
             {{ auth.user()?.displayName }}
           </a>
@@ -123,5 +128,11 @@
   [class.client-main]="shell() === 'member' && tenants.isClient()"
   [class.coach-main]="shell() === 'coach'"
 >
+  @if (shell() === 'coach') {
+    <!-- Deferred: nothing about the first paint depends on it, and it keeps the shell's bundle small. -->
+    @defer (on idle) {
+      <app-billing-banner />
+    }
+  }
   <router-outlet />
 </main>

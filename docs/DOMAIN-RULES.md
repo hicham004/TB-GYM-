@@ -189,6 +189,33 @@ outbox items cannot be dispatched again.
 is reserved, but invoice schedules, automatic charging, retries, dunning, grace periods, and
 provider webhook behavior require a later approved design.
 
+### Platform billing (what TB Gym charges workspaces, ADR 0028)
+
+**PBL-001** Each workspace is billed monthly, in USD, for the previous UTC month
+`[first day, first day of next month)`. Only the owner sees the bill; the platform admin manages it.
+
+**PBL-002** Seats are the owner plus every coach active at any moment of the month, from the
+append-only membership history. Billable clients are people with coverage for any coaching feature
+at any moment of the month, zero-price plans included. Whoever touched the month counts once. Paused
+time is not coverage: a client paused for the whole month is not billable, one paused for part of it
+is. Pauses come from the append-only enrollment status history.
+
+**PBL-003** Every price, the included clients, the gym-fee threshold, and the trial, payment and
+grace days come from the latest published price plan version; nothing is a constant in code. An
+invoice snapshots its plan, quantities and the calculation name `platform-invoice-v1`, and is never
+changed: a correction voids it and reissues at the same plan's prices. A workspace's trial length
+is the one of the plan current when it was created.
+
+**PBL-004** One exact, append-only payment per invoice, never on a voided one; a paid invoice is
+never voided. No partial payments, refunds or credit.
+
+**PBL-005** From the plan's grace days after the due date, an unpaid invoice makes the workspace
+read-only for the owner and coaches; clients keep full use and nothing is deleted. Recording the
+payment lifts it at once.
+
+**PBL-006** Platform admin is a global role granted only by the `platform-admin` command, checked
+against the database on every request, and never implied by any workspace role.
+
 ## 4. Program templates and assigned snapshots
 
 **TRN-001** A training template is coach-owned reusable content. Assigning it creates a deep,

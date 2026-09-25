@@ -74,6 +74,7 @@ public static class StrengthEndpoints
                 });
             }
         })
+            .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
             .WithName("EstimateOneRepMax")
             .Produces<OneRepMaxEstimateView>()
             .ProducesValidationProblem();

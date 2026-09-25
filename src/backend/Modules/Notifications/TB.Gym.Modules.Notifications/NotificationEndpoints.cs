@@ -56,6 +56,7 @@ public static class NotificationEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.UpdateOwnAsync(request, token));
         })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
         .WithName("UpdateOwnNotificationPreferences")
         .Produces<NotificationPreferenceView>()
         .ProducesValidationProblem()
@@ -105,6 +106,7 @@ public static class NotificationEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.MarkOwnReadAsync(notificationId, token));
         })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
         .WithName("MarkOwnNotificationRead")
         .Produces<NotificationView>()
         .ProducesValidationProblem()

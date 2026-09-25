@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TB.Gym.Infrastructure.Persistence;
+using TB.Gym.Modules.PlatformBilling;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
@@ -230,7 +231,7 @@ internal sealed class WorkspaceNoticeMailService(
                 return Preparation.Started(existing.Id, existing.AttemptNumber, existing.ProviderIdempotencyKey, request.Kind);
             }
 
-            var eligibility = await EvaluateAsync(context, request, cancellationToken);
+            var eligibility = await EvaluateAsync(context, request, clock.UtcNow, cancellationToken);
             if (eligibility.SuppressionCode is { } suppression)
             {
                 request.Suppress(work.ClaimToken, now, suppression);
@@ -292,7 +293,7 @@ internal sealed class WorkspaceNoticeMailService(
         var request = await context.WorkspaceNoticeMailRequests
             .AsNoTracking()
             .SingleAsync(item => item.Id == work.RequestId, cancellationToken);
-        var eligibility = await EvaluateAsync(context, request, cancellationToken);
+        var eligibility = await EvaluateAsync(context, request, clock.UtcNow, cancellationToken);
         if (eligibility.SuppressionCode is { } suppression)
         {
             return await FinalizeAsync(context, work, preparation, FinalOutcome.Suppression(suppression), cancellationToken);
@@ -319,6 +320,7 @@ internal sealed class WorkspaceNoticeMailService(
     private static async Task<Eligibility> EvaluateAsync(
         GymDbContext context,
         WorkspaceNoticeMailRequest request,
+        DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         var tenantIsActive = await context.Tenants
@@ -373,12 +375,42 @@ internal sealed class WorkspaceNoticeMailService(
                         membership.Role == TenantRole.Client &&
                         membership.Status == MembershipStatus.Active,
                     cancellationToken),
+            WorkspaceNoticeKind.InvoiceIssued or WorkspaceNoticeKind.InvoiceDueSoon or WorkspaceNoticeKind.InvoiceOverdue =>
+                await BillingNoticeStillTrueAsync(context, request, PaymentSchedule.Today(now), cancellationToken),
             _ => false,
         };
 
         return stillTrue
             ? Eligibility.Allowed(recipient.Email)
             : Eligibility.Suppress(WorkspaceNoticeMailCodes.StateChanged);
+    }
+
+    /// <summary>
+    /// A billing notice (ADR 0028) is worth sending while the invoice still owes money — not voided, not
+    /// paid — to the workspace's current owner. "Due soon" is not sent once the invoice is overdue.
+    /// </summary>
+    private static async Task<bool> BillingNoticeStillTrueAsync(
+        GymDbContext context,
+        WorkspaceNoticeMailRequest request,
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        var invoice = await WorkspaceBillingLock.UnpaidInvoices(context, request.TenantId)
+            .Where(item => item.Id == request.SubjectId)
+            .Select(item => new { item.DueOn })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (invoice is null || (request.Kind == WorkspaceNoticeKind.InvoiceDueSoon && today > invoice.DueOn))
+        {
+            return false;
+        }
+
+        return await context.TenantMemberships.AsNoTracking().AnyAsync(
+            membership =>
+                membership.TenantId == request.TenantId &&
+                membership.UserId == request.RecipientUserId &&
+                membership.Role == TenantRole.Owner &&
+                membership.Status == MembershipStatus.Active,
+            cancellationToken);
     }
 
     private static FinalOutcome Classify(ActionEmailTransportResult result) => result.Outcome switch

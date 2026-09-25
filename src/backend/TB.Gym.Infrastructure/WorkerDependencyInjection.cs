@@ -10,6 +10,7 @@ using TB.Gym.Infrastructure.Security;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Notifications;
+using TB.Gym.Modules.PlatformBilling;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
@@ -75,6 +76,25 @@ public static class WorkerDependencyInjection
         services.AddNotificationDispatch(configuration);
         services.AddNotificationEmail(configuration, isProduction);
         services.AddActionMail(configuration, isProduction, isDevelopment);
+        services.AddPlatformBilling(configuration);
+        return services;
+    }
+
+    /// <summary>
+    /// Platform billing's settings and its monthly run (ADR 0028). Composed in both roots: the Worker
+    /// runs it on a timer and the admin can run the invoice step by hand through the API.
+    /// </summary>
+    internal static IServiceCollection AddPlatformBilling(this IServiceCollection services, IConfiguration configuration)
+    {
+        var settings = new PlatformBillingOptions();
+        configuration.GetSection(PlatformBillingOptions.SectionName).Bind(settings);
+        services.AddOptions<PlatformBillingOptions>()
+            .Bind(configuration.GetSection(PlatformBillingOptions.SectionName))
+            .Validate(
+                options => options.Validate() is null,
+                settings.Validate() ?? $"{PlatformBillingOptions.SectionName} is not a valid platform billing configuration.")
+            .ValidateOnStart();
+        services.TryAddScoped<IPlatformInvoiceRun, PlatformInvoiceRun>();
         return services;
     }
 

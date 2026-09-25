@@ -45,6 +45,8 @@ function knownCodeMessage(code: string): string | null {
       return $localize`A weight is already recorded for that date. Correct that entry instead of moving this one onto it.`;
     case 'BodyweightObservationVoided':
       return $localize`That entry was already replaced by a correction. Work from the replacement instead.`;
+    case 'workspace_read_only':
+      return $localize`This workspace is read-only until its TB Gym bill is paid. You can still view everything.`;
     default:
       return null;
   }

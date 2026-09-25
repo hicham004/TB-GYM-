@@ -55,6 +55,28 @@ export type AddWorkoutNoteRequest = {
   text: string;
 };
 
+export type AdminWorkspaceDetail = {
+  summary: AdminWorkspaceSummary;
+  currentMonth: CurrentMonthEstimateView;
+  invoices: Array<PlatformInvoiceView>;
+  discounts: Array<WorkspaceDiscountView>;
+};
+
+export type AdminWorkspaceSummary = {
+  tenantId: string;
+  name: string;
+  ownerName: string;
+  ownerEmail: string;
+  createdAtUtc: string;
+  status: WorkspaceBillingStatus;
+  trialEndsAtUtc: string;
+  seatsThisMonth: number | string;
+  billableClientsThisMonth: number | string;
+  unpaidTotal: number | string;
+  currencyCode: string;
+  currentDiscountPercent: number | string;
+};
+
 export type AdvanceReadCursorRequest = {
   throughSequence: number | string;
 };
@@ -139,6 +161,21 @@ export type AssignProductRequest = {
   offerId: string;
   startDate: string;
   idempotencyKey: string;
+};
+
+export type BillingAmountsView = {
+  seats: number | string;
+  billableClients: number | string;
+  includedClients: number | string;
+  extraClients: number | string;
+  seatAmount: number | string;
+  extraClientAmount: number | string;
+  gymFeeAmount: number | string;
+  subtotal: number | string;
+  discountPercent: number | string;
+  discountAmount: number | string;
+  total: number | string;
+  currencyCode: string;
 };
 
 export type BodyMeasurementDayView = {
@@ -1024,6 +1061,16 @@ export type CsrfResponse = {
   token: string;
 };
 
+export type CurrentMonthEstimateView = {
+  periodStart: string;
+  periodEndExclusive: string;
+  usageFromUtc: string;
+  usageToUtc: string;
+  inTrial: boolean;
+  pricePlanVersion: number | string;
+  amounts: BillingAmountsView;
+};
+
 export type CurrentUserResponse = {
   id: string;
   email: string;
@@ -1374,6 +1421,13 @@ export type GenerateAiMealDraftRequest = {
   culture: string;
 };
 
+export type GrantDiscountRequest = {
+  percent: number | string;
+  startsOn: string;
+  endsOnExclusive: string;
+  note: string;
+};
+
 export type HttpValidationProblemDetails = {
   type?: null | string;
   title?: null | string;
@@ -1415,6 +1469,17 @@ export type InvitationSummary = {
   version: number | string;
   developmentActionUrl?: null | string;
   kind?: InvitationKind;
+};
+
+export type InvoiceRunOutcome = {
+  periodStart: string;
+  issued: number | string;
+  alreadyIssued: number | string;
+  inTrial: number | string;
+};
+
+export type IssueInvoicesRequest = {
+  periodStart: null | string;
 };
 
 export type LeaveWorkspaceRequest = {
@@ -1794,6 +1859,10 @@ export type OneRepMaxEstimateView = {
   qualification: string;
 };
 
+export type PaymentInstructionsView = {
+  whishNumber: null | string;
+};
+
 export type PaymentOperation = 'Receipt' | 'Refund' | 'Reversal';
 
 export type PaymentRecordView = {
@@ -1812,6 +1881,45 @@ export type PaymentRecordView = {
 
 export type PaymentSource = 'Manual' | 'Provider';
 
+export type PlatformInvoiceStatus = 'Open' | 'Overdue' | 'Paid' | 'Void' | 'NothingToPay';
+
+export type PlatformInvoiceView = {
+  id: string;
+  referenceCode: string;
+  periodStart: string;
+  periodEndExclusive: string;
+  usageFromUtc: string;
+  issuedAtUtc: string;
+  dueOn: string;
+  readOnlyFrom: string;
+  pricePlanVersion: number | string;
+  calculationName: string;
+  planSeatPrice: number | string;
+  planIncludedClientsPerSeat: number | string;
+  planExtraClientPrice: number | string;
+  planGymFee: number | string;
+  planGymFeeMinimumSeats: number | string;
+  amounts: BillingAmountsView;
+  status: PlatformInvoiceStatus;
+  locksWorkspace: boolean;
+  payment: null | PlatformPaymentView;
+  voidedAtUtc: null | string;
+  voidReason: null | string;
+  replacesInvoiceId: null | string;
+  replacedByInvoiceId: null | string;
+};
+
+export type PlatformPaymentView = {
+  id: string;
+  invoiceId: string;
+  amount: number | string;
+  currencyCode: string;
+  reference: string;
+  note: null | string;
+  receivedOn: string;
+  recordedAtUtc: string;
+};
+
 export type PreparationBasis = 'Raw' | 'Cooked' | 'AsSold' | 'Prepared';
 
 export type PrescriptionModificationPolicy = 'Locked' | 'CoachApprovedSwap';
@@ -1822,6 +1930,23 @@ export type PreviousExercisePerformanceView = {
   unit: null | TrainingLoadUnit;
   repetitions: null | number | string;
   rpe: null | number | string;
+};
+
+export type PricePlanView = {
+  id: string;
+  versionNumber: number | string;
+  currencyCode: string;
+  seatPrice: number | string;
+  includedClientsPerSeat: number | string;
+  extraClientPrice: number | string;
+  gymFee: number | string;
+  gymFeeMinimumSeats: number | string;
+  trialDays: number | string;
+  paymentTermDays: number | string;
+  graceDays: number | string;
+  note: null | string;
+  publishedAtUtc: string;
+  isCurrent: boolean;
 };
 
 export type ProblemDetails = {
@@ -1978,6 +2103,19 @@ export type PublicInvitationDetails = {
   kind?: InvitationKind;
 };
 
+export type PublishPricePlanRequest = {
+  seatPrice: number | string;
+  includedClientsPerSeat: number | string;
+  extraClientPrice: number | string;
+  gymFee: number | string;
+  gymFeeMinimumSeats: number | string;
+  trialDays: number | string;
+  paymentTermDays: number | string;
+  graceDays: number | string;
+  expectedCurrentVersion: number | string;
+  note: null | string;
+};
+
 export type RealtimeAcknowledgementResult = {
   conversationId: string;
   accepted: number | string;
@@ -2070,6 +2208,13 @@ export type RecordNutritionChoiceRequest = {
   choiceId: string;
   actualServings: number | string;
   dailyLogVersion: null | number | string;
+};
+
+export type RecordPlatformPaymentRequest = {
+  amount: number | string;
+  reference: string;
+  note: null | string;
+  receivedOn: null | string;
 };
 
 export type RecordSetActualRequest = {
@@ -2490,6 +2635,16 @@ export type UpdateWorkspaceRequest = {
   version: number | string;
 };
 
+export type VoidInvoiceRequest = {
+  reason: string;
+  reissue: boolean;
+};
+
+export type VoidInvoiceResponse = {
+  voided: PlatformInvoiceView;
+  reissued: null | PlatformInvoiceView;
+};
+
 export type WorkingMaxSelectionRequest = {
   exerciseId: string;
   strengthMaxRecordId: null | string;
@@ -2543,6 +2698,25 @@ export type WorkoutSetSaveView = {
   clientNote: null | string;
 };
 
+export type WorkspaceBillingAccessView = {
+  isReadOnly: boolean;
+  hasOverdueInvoice: boolean;
+  readOnlyFrom: null | string;
+};
+
+export type WorkspaceBillingStatus = 'Trial' | 'Active' | 'Overdue' | 'ReadOnly';
+
+export type WorkspaceBillingView = {
+  status: WorkspaceBillingStatus;
+  trialEndsAtUtc: string;
+  currentMonth: CurrentMonthEstimateView;
+  invoices: Array<PlatformInvoiceView>;
+  unpaidTotal: number | string;
+  currencyCode: string;
+  readOnlyFrom: null | string;
+  paymentInstructions: PaymentInstructionsView;
+};
+
 export type WorkspaceDetails = {
   id: string;
   name: string;
@@ -2553,6 +2727,16 @@ export type WorkspaceDetails = {
   weekStartsOn: DayOfWeek;
   currentDate: string;
   version: number | string;
+};
+
+export type WorkspaceDiscountView = {
+  id: string;
+  percent: number | string;
+  startsOn: string;
+  endsOnExclusive: string;
+  note: string;
+  grantedAtUtc: string;
+  revokedAtUtc: null | string;
 };
 
 export type GetSystemStatusData = {
@@ -2900,6 +3084,40 @@ export type ListWorkspaceNotificationDeadLettersResponses = {
 
 export type ListWorkspaceNotificationDeadLettersResponse =
   ListWorkspaceNotificationDeadLettersResponses[keyof ListWorkspaceNotificationDeadLettersResponses];
+
+export type GetWorkspaceBillingData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/billing';
+};
+
+export type GetWorkspaceBillingResponses = {
+  /**
+   * OK
+   */
+  200: WorkspaceBillingView;
+};
+
+export type GetWorkspaceBillingResponse =
+  GetWorkspaceBillingResponses[keyof GetWorkspaceBillingResponses];
+
+export type GetWorkspaceBillingAccessData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/billing/access';
+};
+
+export type GetWorkspaceBillingAccessResponses = {
+  /**
+   * OK
+   */
+  200: WorkspaceBillingAccessView;
+};
+
+export type GetWorkspaceBillingAccessResponse =
+  GetWorkspaceBillingAccessResponses[keyof GetWorkspaceBillingAccessResponses];
 
 export type GetCsrfTokenData = {
   body?: never;
@@ -8340,3 +8558,261 @@ export type UpdateOwnNotificationPreferencesResponses = {
 
 export type UpdateOwnNotificationPreferencesResponse =
   UpdateOwnNotificationPreferencesResponses[keyof UpdateOwnNotificationPreferencesResponses];
+
+export type ListBillingWorkspacesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/workspaces';
+};
+
+export type ListBillingWorkspacesResponses = {
+  /**
+   * OK
+   */
+  200: Array<AdminWorkspaceSummary>;
+};
+
+export type ListBillingWorkspacesResponse =
+  ListBillingWorkspacesResponses[keyof ListBillingWorkspacesResponses];
+
+export type GetBillingWorkspaceData = {
+  body?: never;
+  path: {
+    tenantId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/workspaces/{tenantId}';
+};
+
+export type GetBillingWorkspaceErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetBillingWorkspaceResponses = {
+  /**
+   * OK
+   */
+  200: AdminWorkspaceDetail;
+};
+
+export type GetBillingWorkspaceResponse =
+  GetBillingWorkspaceResponses[keyof GetBillingWorkspaceResponses];
+
+export type ListPricePlansData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/price-plans';
+};
+
+export type ListPricePlansResponses = {
+  /**
+   * OK
+   */
+  200: Array<PricePlanView>;
+};
+
+export type ListPricePlansResponse = ListPricePlansResponses[keyof ListPricePlansResponses];
+
+export type PublishPricePlanData = {
+  body: PublishPricePlanRequest;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/price-plans';
+};
+
+export type PublishPricePlanErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PublishPricePlanError = PublishPricePlanErrors[keyof PublishPricePlanErrors];
+
+export type PublishPricePlanResponses = {
+  /**
+   * OK
+   */
+  200: PricePlanView;
+};
+
+export type PublishPricePlanResponse = PublishPricePlanResponses[keyof PublishPricePlanResponses];
+
+export type IssuePlatformInvoicesData = {
+  body: IssueInvoicesRequest;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/invoices/issue';
+};
+
+export type IssuePlatformInvoicesErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+};
+
+export type IssuePlatformInvoicesError =
+  IssuePlatformInvoicesErrors[keyof IssuePlatformInvoicesErrors];
+
+export type IssuePlatformInvoicesResponses = {
+  /**
+   * OK
+   */
+  200: InvoiceRunOutcome;
+};
+
+export type IssuePlatformInvoicesResponse =
+  IssuePlatformInvoicesResponses[keyof IssuePlatformInvoicesResponses];
+
+export type RecordPlatformPaymentData = {
+  body: RecordPlatformPaymentRequest;
+  path: {
+    invoiceId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/invoices/{invoiceId}/payments';
+};
+
+export type RecordPlatformPaymentErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RecordPlatformPaymentError =
+  RecordPlatformPaymentErrors[keyof RecordPlatformPaymentErrors];
+
+export type RecordPlatformPaymentResponses = {
+  /**
+   * OK
+   */
+  200: PlatformPaymentView;
+};
+
+export type RecordPlatformPaymentResponse =
+  RecordPlatformPaymentResponses[keyof RecordPlatformPaymentResponses];
+
+export type VoidPlatformInvoiceData = {
+  body: VoidInvoiceRequest;
+  path: {
+    invoiceId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/invoices/{invoiceId}/void';
+};
+
+export type VoidPlatformInvoiceErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type VoidPlatformInvoiceError = VoidPlatformInvoiceErrors[keyof VoidPlatformInvoiceErrors];
+
+export type VoidPlatformInvoiceResponses = {
+  /**
+   * OK
+   */
+  200: VoidInvoiceResponse;
+};
+
+export type VoidPlatformInvoiceResponse =
+  VoidPlatformInvoiceResponses[keyof VoidPlatformInvoiceResponses];
+
+export type GrantWorkspaceDiscountData = {
+  body: GrantDiscountRequest;
+  path: {
+    tenantId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/workspaces/{tenantId}/discounts';
+};
+
+export type GrantWorkspaceDiscountErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type GrantWorkspaceDiscountError =
+  GrantWorkspaceDiscountErrors[keyof GrantWorkspaceDiscountErrors];
+
+export type GrantWorkspaceDiscountResponses = {
+  /**
+   * OK
+   */
+  200: WorkspaceDiscountView;
+};
+
+export type GrantWorkspaceDiscountResponse =
+  GrantWorkspaceDiscountResponses[keyof GrantWorkspaceDiscountResponses];
+
+export type RevokeWorkspaceDiscountData = {
+  body?: never;
+  path: {
+    discountId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/discounts/{discountId}/revoke';
+};
+
+export type RevokeWorkspaceDiscountErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RevokeWorkspaceDiscountError =
+  RevokeWorkspaceDiscountErrors[keyof RevokeWorkspaceDiscountErrors];
+
+export type RevokeWorkspaceDiscountResponses = {
+  /**
+   * OK
+   */
+  200: WorkspaceDiscountView;
+};
+
+export type RevokeWorkspaceDiscountResponse =
+  RevokeWorkspaceDiscountResponses[keyof RevokeWorkspaceDiscountResponses];

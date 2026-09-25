@@ -45,8 +45,41 @@ public static class WorkspaceNoticeEmailTemplates
 
     public const string CoachDepartedKey = "workspace-notice.coach-departed";
 
+    public const string InvoiceIssuedKey = "workspace-notice.invoice-issued";
+
+    public const string InvoiceDueSoonKey = "workspace-notice.invoice-due-soon";
+
+    public const string InvoiceOverdueKey = "workspace-notice.invoice-overdue";
+
+    // The billing notices name no amount, date or workspace either: the Billing page, behind the
+    // owner's sign-in, shows the amount, the due date and how to pay (ADR 0028).
     public static WorkspaceNoticeEmailContent Render(WorkspaceNoticeKind kind) => kind switch
     {
+        WorkspaceNoticeKind.InvoiceIssued => new WorkspaceNoticeEmailContent(
+            InvoiceIssuedKey,
+            CurrentVersion,
+            "Your TB Gym invoice is ready",
+            string.Concat(
+                "A monthly TB Gym invoice for a workspace you own is ready.\n\n",
+                "Sign in to TB Gym and open Billing under Settings to see the amount, the due date\n",
+                "and how to pay.\n")),
+        WorkspaceNoticeKind.InvoiceDueSoon => new WorkspaceNoticeEmailContent(
+            InvoiceDueSoonKey,
+            CurrentVersion,
+            "Your TB Gym invoice is due soon",
+            string.Concat(
+                "A TB Gym invoice for a workspace you own is due soon and has not been paid yet.\n\n",
+                "Sign in to TB Gym and open Billing under Settings to see the amount and how to pay.\n",
+                "If you have already paid, you can ignore this message.\n")),
+        WorkspaceNoticeKind.InvoiceOverdue => new WorkspaceNoticeEmailContent(
+            InvoiceOverdueKey,
+            CurrentVersion,
+            "Your TB Gym invoice is overdue",
+            string.Concat(
+                "A TB Gym invoice for a workspace you own is past its due date.\n\n",
+                "If it stays unpaid, the workspace becomes read-only for you and your coaches until it\n",
+                "is paid. Your clients keep their access, and nothing is deleted.\n\n",
+                "Sign in to TB Gym and open Billing under Settings to see the amount and how to pay.\n")),
         WorkspaceNoticeKind.CoachDeparted => new WorkspaceNoticeEmailContent(
             CoachDepartedKey,
             CurrentVersion,

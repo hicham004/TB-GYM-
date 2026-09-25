@@ -63,7 +63,8 @@ public sealed class WorkspaceNoticeMailRequest : TenantEntity
     /// <summary>
     /// What the notice is about: for <see cref="WorkspaceNoticeKind.ClientReleased"/> the client
     /// profile, for <see cref="WorkspaceNoticeKind.CoachDeparted"/> the coach-history entry that moved
-    /// the client, so a client whose coach leaves twice is told twice.
+    /// the client, so a client whose coach leaves twice is told twice, and for the billing kinds the
+    /// platform invoice (ADR 0028).
     /// </summary>
     public Guid SubjectId { get; private set; }
 
@@ -130,6 +131,20 @@ public sealed class WorkspaceNoticeMailRequest : TenantEntity
             coachAssignmentId,
             requestedByUserId,
             requestedAtUtc);
+
+    /// <summary>
+    /// A platform billing notice to the owner about one invoice: issued, due soon or overdue (ADR 0028).
+    /// Requested by the platform, so it names no requester.
+    /// </summary>
+    public static WorkspaceNoticeMailRequest Billing(
+        Guid tenantId,
+        WorkspaceNoticeKind kind,
+        Guid ownerUserId,
+        Guid invoiceId,
+        DateTimeOffset requestedAtUtc) =>
+        kind is WorkspaceNoticeKind.InvoiceIssued or WorkspaceNoticeKind.InvoiceDueSoon or WorkspaceNoticeKind.InvoiceOverdue
+            ? new(tenantId, kind, ownerUserId, invoiceId, null, requestedAtUtc)
+            : throw new ArgumentOutOfRangeException(nameof(kind), "Only a billing kind is a billing notice.");
 
     public bool IsClaimable(DateTimeOffset now) =>
         (Status == WorkspaceNoticeMailStatus.Pending && NextAttemptAtUtc <= now) || IsClaimExpired(now);
@@ -431,6 +446,15 @@ public enum WorkspaceNoticeKind
 
     /// <summary>The recipient's coach resigned or was removed; the workspace will assign a new one.</summary>
     CoachDeparted = 2,
+
+    /// <summary>To the owner: a TB Gym invoice for their workspace was issued.</summary>
+    InvoiceIssued = 3,
+
+    /// <summary>To the owner: an unpaid TB Gym invoice is due soon.</summary>
+    InvoiceDueSoon = 4,
+
+    /// <summary>To the owner: a TB Gym invoice is past its due date.</summary>
+    InvoiceOverdue = 5,
 }
 
 public enum WorkspaceNoticeMailStatus

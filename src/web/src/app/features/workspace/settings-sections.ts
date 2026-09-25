@@ -4,4 +4,5 @@ import type { SectionLink } from '../../ui/section-nav';
 export const SETTINGS_SECTIONS: readonly SectionLink[] = [
   { label: $localize`Workspace`, link: '/workspace' },
   { label: $localize`Team`, link: '/team' },
+  { label: $localize`Billing`, link: '/billing' },
 ];

@@ -200,6 +200,7 @@ public static class MessagingEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToReadStateResult(await service.AdvanceReadCursorAsync(conversationId, request, token));
         })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
         .WithName("AdvanceOwnConversationReadCursor")
         .Produces<ConversationReadState>()
         .ProducesValidationProblem()
@@ -251,6 +252,7 @@ public static class MessagingEndpoints
             return ToAcknowledgementResult(
                 await service.AcknowledgeRealtimeEventsAsync(conversationId, request, token));
         })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
         .WithName("AcknowledgeConversationRealtimeEvents")
         .Produces<RealtimeAcknowledgementResult>()
         .ProducesValidationProblem()

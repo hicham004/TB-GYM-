@@ -76,6 +76,7 @@ public static class TeamEndpoints
         .RequireAuthorization(AuthorizationPolicies.TenantCoach)
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithTags(TenancyModule.Name)
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
         .WithName("ResignFromTeam")
         .Produces<CoachRemovalResponse>()
         .Produces(StatusCodes.Status404NotFound)

@@ -6716,6 +6716,445 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("RecipeVersionAllergens", "nutrition");
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.PlatformInvoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BillableClients")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CalculationName")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("DiscountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<DateOnly>("DueOn")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("ExtraClientAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("ExtraClients")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("GymFeeAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("IncludedClients")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("IssuedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("PeriodEndExclusive")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("PlanExtraClientPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("PlanGymFee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("PlanGymFeeMinimumSeats")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PlanIncludedClientsPerSeat")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("PlanSeatPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("PricePlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PricePlanVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("ReadOnlyFrom")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ReferenceCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid?>("ReplacesInvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("SeatAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Seats")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UsageFromUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PricePlanId");
+
+                    b.HasIndex("ReferenceCode")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "PeriodStart")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Invoices_TenantId_PeriodStart_Original")
+                        .HasFilter("\"ReplacesInvoiceId\" IS NULL");
+
+                    b.HasIndex("TenantId", "ReadOnlyFrom");
+
+                    b.HasIndex("TenantId", "ReplacesInvoiceId")
+                        .IsUnique()
+                        .HasFilter("\"ReplacesInvoiceId\" IS NOT NULL");
+
+                    b.ToTable("Invoices", "billing", t =>
+                        {
+                            t.HasCheckConstraint("CK_Invoices_Amounts", "\"SeatAmount\" >= 0 AND \"ExtraClientAmount\" >= 0 AND \"GymFeeAmount\" >= 0 AND \"DiscountAmount\" >= 0 AND \"Subtotal\" = \"SeatAmount\" + \"ExtraClientAmount\" + \"GymFeeAmount\" AND \"Total\" = \"Subtotal\" - \"DiscountAmount\" AND \"Total\" >= 0");
+
+                            t.HasCheckConstraint("CK_Invoices_Currency", "\"CurrencyCode\" ~ '^[A-Z]{3}$'");
+
+                            t.HasCheckConstraint("CK_Invoices_Dates", "\"DueOn\" >= (\"IssuedAtUtc\" AT TIME ZONE 'UTC')::date AND \"ReadOnlyFrom\" > \"DueOn\" AND \"IssuedAtUtc\" >= (\"PeriodEndExclusive\"::timestamp AT TIME ZONE 'UTC')");
+
+                            t.HasCheckConstraint("CK_Invoices_Discount", "\"DiscountPercent\" >= 0 AND \"DiscountPercent\" <= 100");
+
+                            t.HasCheckConstraint("CK_Invoices_Period", "EXTRACT(DAY FROM \"PeriodStart\") = 1 AND \"PeriodEndExclusive\" = (\"PeriodStart\" + INTERVAL '1 month')::date");
+
+                            t.HasCheckConstraint("CK_Invoices_Quantities", "\"Seats\" >= 1 AND \"BillableClients\" >= 0 AND \"IncludedClients\" = \"Seats\" * \"PlanIncludedClientsPerSeat\" AND \"ExtraClients\" = GREATEST(0, \"BillableClients\" - \"IncludedClients\")");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.PlatformInvoiceVoid", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTimeOffset>("VoidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("VoidedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.ToTable("InvoiceVoids", "billing");
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.PlatformPayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateOnly>("ReceivedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RecordedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "InvoiceId")
+                        .IsUnique();
+
+                    b.ToTable("Payments", "billing", t =>
+                        {
+                            t.HasCheckConstraint("CK_Payments_Amount", "\"Amount\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.PlatformPricePlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<decimal>("ExtraClientPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("GraceDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("GymFee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("GymFeeMinimumSeats")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IncludedClientsPerSeat")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("PaymentTermDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PublishedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("SeatPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("TrialDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("PricePlans", "billing", t =>
+                        {
+                            t.HasCheckConstraint("CK_PricePlans_Counts", "\"IncludedClientsPerSeat\" >= 0 AND \"GymFeeMinimumSeats\" >= 1 AND \"TrialDays\" >= 0 AND \"PaymentTermDays\" >= 0 AND \"GraceDays\" >= 0");
+
+                            t.HasCheckConstraint("CK_PricePlans_Currency", "\"CurrencyCode\" = 'USD'");
+
+                            t.HasCheckConstraint("CK_PricePlans_Prices", "\"SeatPrice\" >= 0 AND \"ExtraClientPrice\" >= 0 AND \"GymFee\" >= 0");
+
+                            t.HasCheckConstraint("CK_PricePlans_Version", "\"VersionNumber\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.WorkspaceDiscount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EndsOnExclusive")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("GrantedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GrantedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("Percent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<DateTimeOffset?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RevokedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("StartsOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "StartsOn");
+
+                    b.ToTable("WorkspaceDiscounts", "billing", t =>
+                        {
+                            t.HasCheckConstraint("CK_WorkspaceDiscounts_Dates", "\"EndsOnExclusive\" > \"StartsOn\"");
+
+                            t.HasCheckConstraint("CK_WorkspaceDiscounts_Percent", "\"Percent\" > 0 AND \"Percent\" <= 100");
+
+                            t.HasCheckConstraint("CK_WorkspaceDiscounts_Revocation", "(\"RevokedAtUtc\" IS NULL) = (\"RevokedByUserId\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Progress.BodyMeasurement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7677,6 +8116,33 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.EnrollmentStatusChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "EnrollmentId", "ChangedAtUtc");
+
+                    b.ToTable("EnrollmentStatusChanges", "subscriptions");
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Subscriptions.OfferEntitlement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7897,6 +8363,41 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_ProductOffers_PriceCurrency", "\"PriceCurrency\" ~ '^[A-Z]{3}$'");
                         });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Tenancy.MembershipStatusChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "MembershipId", "ChangedAtUtc");
+
+                    b.ToTable("MembershipStatusChanges", "tenancy");
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Tenancy.Tenant", b =>
@@ -8259,7 +8760,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_NoticeMailRequests_Transport", "\"TransportAdapter\" IS NULL OR \"Status\" = 'Materialized'");
 
-                            t.HasCheckConstraint("CK_NoticeMailRequests_Vocabulary", "\"Kind\" IN ('ClientReleased', 'CoachDeparted') AND \"Status\" IN ('Pending', 'Processing', 'Materialized', 'Suppressed', 'DeadLettered')");
+                            t.HasCheckConstraint("CK_NoticeMailRequests_Vocabulary", "\"Kind\" IN ('ClientReleased', 'CoachDeparted', 'InvoiceIssued', 'InvoiceDueSoon', 'InvoiceOverdue') AND \"Status\" IN ('Pending', 'Processing', 'Materialized', 'Suppressed', 'DeadLettered')");
                         });
                 });
 
@@ -11052,6 +11553,56 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany("Allergens")
                         .HasForeignKey("TenantId", "RecipeVersionId")
                         .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.PlatformInvoice", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.PlatformBilling.PlatformPricePlan", null)
+                        .WithMany()
+                        .HasForeignKey("PricePlanId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.PlatformBilling.PlatformInvoiceVoid", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ReplacesInvoiceId")
+                        .HasPrincipalKey("TenantId", "InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.PlatformInvoiceVoid", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.PlatformBilling.PlatformInvoice", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "InvoiceId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.PlatformPayment", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.PlatformBilling.PlatformInvoice", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "InvoiceId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.WorkspaceDiscount", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

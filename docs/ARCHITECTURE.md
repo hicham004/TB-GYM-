@@ -77,6 +77,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Media            | Object metadata, provider-neutral locators and ranges, scan evidence, protected access, subordinate renditions, external embeds, retention and leased purge                              |
 | Gamification     | Tenant theme, levels, ranks and auditable experience events                                                                                                                              |
 | Integrations     | AI, payment, nutrition-data and other external provider contracts                                                                                                                        |
+| Platform billing | What TB Gym charges workspaces: versioned price plans, monthly invoices, voids, payments, discounts, the `platform-invoice-v1` calculation (ADR 0028)                                     |
 
 Theme and gamification currently share one boundary because theme-driven labels and rewards
 are one optional presentation capability. Split them only if their lifecycles diverge.
@@ -258,6 +259,16 @@ handler. Database triggers freeze the ended profile row. A former client invited
 membership row with a new profile, so client self-service resolves `ClientProfiles.CurrentFor(userId)`
 (linked and not ended), feature access answers `MembershipInactive` for an ended profile, and a
 client membership may become active again only with a current profile.
+
+An unpaid platform invoice past its grace days makes the workspace read-only for its owner and
+coaches (ADR 0028). The same tenant authorization handler refuses their state-changing requests with
+403 `workspace_read_only`, except routes marked `AllowedWhileWorkspaceReadOnly` (reads sent as POST,
+personal settings, resigning); clients are never affected. The platform admin's routes use the
+`PlatformAdmin` policy, which needs the role claim and re-reads the account and role from the
+database on every request; no workspace header is involved, and only the `platform-admin` command
+grants the role. The Worker issues last month's invoices and queues billing notices on a timer,
+idempotently; seats come from `tenancy."MembershipStatusChanges"` and client pauses from
+`subscriptions."EnrollmentStatusChanges"`, both written by database triggers.
 
 Legal document versions are global identity records, while a workspace consent acceptance is
 contextual. Listing current documents accepts an optional workspace context, verifies active

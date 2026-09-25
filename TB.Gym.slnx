@@ -42,6 +42,9 @@
   <Folder Name="/src/backend/Modules/Nutrition/">
     <Project Path="src/backend/Modules/Nutrition/TB.Gym.Modules.Nutrition/TB.Gym.Modules.Nutrition.csproj" />
   </Folder>
+  <Folder Name="/src/backend/Modules/PlatformBilling/">
+    <Project Path="src/backend/Modules/PlatformBilling/TB.Gym.Modules.PlatformBilling/TB.Gym.Modules.PlatformBilling.csproj" />
+  </Folder>
   <Folder Name="/src/backend/Modules/Progress/">
     <Project Path="src/backend/Modules/Progress/TB.Gym.Modules.Progress/TB.Gym.Modules.Progress.csproj" />
   </Folder>

@@ -23,6 +23,18 @@ describe('apiErrorMessage', () => {
     expect(message).not.toBe(fallback);
   });
 
+  it('says an unpaid workspace is read-only instead of reporting a generic refusal', () => {
+    const refused = new HttpErrorResponse({
+      status: 403,
+      statusText: 'Forbidden',
+      error: { code: 'workspace_read_only', message: 'Server wording' },
+    });
+
+    expect(apiErrorMessage(refused, fallback)).toBe(
+      'This workspace is read-only until its TB Gym bill is paid. You can still view everything.',
+    );
+  });
+
   it('distinguishes a full client allowance from a full workspace allowance', () => {
     const message = apiErrorMessage(
       conflict({

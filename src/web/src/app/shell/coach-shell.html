@@ -144,6 +144,12 @@
             <li>
               <a class="menu-item" routerLink="/account/security" i18n>Account security</a>
             </li>
+            <!-- A global role, not a workspace one (ADR 0028). Presentation only; the API decides. -->
+            @if (auth.user()?.roles?.includes('PlatformAdmin')) {
+              <li>
+                <a class="menu-item" routerLink="/admin/billing" i18n>Platform billing</a>
+              </li>
+            }
             <li>
               <button type="button" class="menu-item" (click)="requestSignOut()" i18n>
                 Sign out

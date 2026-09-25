@@ -20,7 +20,8 @@ internal sealed class TenantRoleAuthorizationHandler(
     ICurrentUser currentUser,
     IMutableTenantContext tenantContext,
     ITenantMembershipStore membershipStore,
-    CoachClientScope coachClientScope)
+    CoachClientScope coachClientScope,
+    WorkspaceBillingLock billingLock)
     : AuthorizationHandler<TenantRoleRequirement>
 {
     /// <summary>
@@ -32,6 +33,8 @@ internal sealed class TenantRoleAuthorizationHandler(
     public const string ClientNotAssignedFailure = "client_not_assigned";
 
     public const string ClientReleasedFailure = "client_released";
+
+    public const string WorkspaceReadOnlyFailure = "workspace_read_only";
 
     protected override async Task HandleRequirementAsync(
         AuthorizationHandlerContext context,
@@ -76,6 +79,18 @@ internal sealed class TenantRoleAuthorizationHandler(
             await coachClientScope.IsReleasedAsync(releasedCandidate, httpContext.RequestAborted))
         {
             context.Fail(new AuthorizationFailureReason(this, ClientReleasedFailure));
+            return;
+        }
+
+        // An unpaid platform bill makes the workspace read-only for its owner and coaches (ADR 0028),
+        // decided here once for every module. Clients are never affected, and a route marked
+        // AllowedWhileWorkspaceReadOnly (a read sent as POST, or the person's own settings) stays open.
+        if (membership.Role is TenantRole.Owner or TenantRole.Coach &&
+            !IsReadOnlyMethod(httpContext.Request.Method) &&
+            httpContext.GetEndpoint()?.Metadata.GetMetadata<AllowedWhileWorkspaceReadOnly>() is null &&
+            await billingLock.IsReadOnlyAsync(tenantId, httpContext.RequestAborted))
+        {
+            context.Fail(new AuthorizationFailureReason(this, WorkspaceReadOnlyFailure));
             return;
         }
 
@@ -128,6 +143,18 @@ internal sealed class TenantAuthorizationResultHandler : IAuthorizationMiddlewar
                 reason.Message == TenantRoleAuthorizationHandler.ClientReleasedFailure) == true)
         {
             return ClientReleasedExceptionHandler.WriteAsync(context);
+        }
+
+        if (authorizeResult.Forbidden &&
+            authorizeResult.AuthorizationFailure?.FailureReasons.Any(reason =>
+                reason.Message == TenantRoleAuthorizationHandler.WorkspaceReadOnlyFailure) == true)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return context.Response.WriteAsJsonAsync(new
+            {
+                code = TenantRoleAuthorizationHandler.WorkspaceReadOnlyFailure,
+                message = "This workspace is read-only until its TB Gym bill is paid. You can still view everything.",
+            });
         }
 
         return defaultHandler.HandleAsync(next, context, policy, authorizeResult);

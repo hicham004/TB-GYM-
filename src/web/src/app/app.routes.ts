@@ -7,6 +7,7 @@ import {
   signedOutGuard,
 } from './core/auth/auth.guards';
 import { devRoutes } from './dev/dev-routes';
+import { platformAdminGuard } from './features/platform-admin/platform-admin.guard';
 
 export const routes: Routes = [
   {
@@ -125,6 +126,20 @@ export const routes: Routes = [
     canActivate: [authGuard, ownerGuard],
     title: $localize`Team | TB Gym`,
     loadComponent: () => import('./features/team/team').then((module) => module.Team),
+  },
+  {
+    path: 'billing',
+    canActivate: [authGuard, ownerGuard],
+    title: $localize`Billing | TB Gym`,
+    loadComponent: () => import('./features/billing/billing').then((module) => module.Billing),
+  },
+  {
+    // The platform admin's screen (ADR 0028): a global role, needing no workspace at all.
+    path: 'admin/billing',
+    canActivate: [authGuard, platformAdminGuard],
+    title: $localize`Platform billing | TB Gym`,
+    loadComponent: () =>
+      import('./features/platform-admin/platform-admin').then((module) => module.PlatformAdmin),
   },
   {
     path: 'account/security',

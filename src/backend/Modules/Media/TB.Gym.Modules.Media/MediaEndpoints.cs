@@ -110,6 +110,7 @@ public static class MediaEndpoints
                 _ => Results.NotFound(),
             };
         })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
         .WithName("CreatePrivateMediaAccess")
         .Produces<MediaAccessView>()
         .Produces(StatusCodes.Status403Forbidden)
@@ -149,6 +150,7 @@ public static class MediaEndpoints
             return Results.Ok(new MediaAccessBatchView(
                 [.. result.Grants.Select(grant => grant.Access)]));
         })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
         .WithName("CreatePrivateMediaAccessBatch")
         .Produces<MediaAccessBatchView>()
         .ProducesValidationProblem();

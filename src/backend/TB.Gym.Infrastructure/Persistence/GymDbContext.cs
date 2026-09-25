@@ -11,6 +11,7 @@ using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Messaging;
 using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.Nutrition;
+using TB.Gym.Modules.PlatformBilling;
 using TB.Gym.Modules.Progress;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
@@ -311,6 +312,7 @@ public sealed partial class GymDbContext(
         ConfigureCheckIns(builder);
         ConfigureMessaging(builder);
         ConfigureMessagingRealtime(builder);
+        ConfigurePlatformBilling(builder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -891,6 +893,42 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<BodyweightCorrection>("Bodyweight correction history is append-only.");
         RejectAppendOnlyMutations<BodyweightObservationVoid>("Bodyweight void history is append-only.");
         RejectAppendOnlyMutations<BodyMeasurementCorrection>("Body measurement correction history is append-only.");
+
+        // Platform billing (ADR 0028). A plan version, an issued invoice, a void and a payment are facts
+        // that are never rewritten; a correction is a void plus a new invoice. Database triggers are the
+        // guarantee; these name the mistake in the code path that made it.
+        RejectAppendOnlyMutations<PlatformPricePlan>("Price plan versions are immutable; publish a new version.");
+        RejectAppendOnlyMutations<PlatformInvoice>("Issued invoices are immutable; void and reissue instead.");
+        RejectAppendOnlyMutations<PlatformInvoiceVoid>("Invoice voids are append-only.");
+        RejectAppendOnlyMutations<PlatformPayment>("Platform payments are append-only.");
+        if (ChangeTracker.Entries<MembershipStatusChange>().Any(item => item.State != EntityState.Unchanged))
+        {
+            throw new InvalidOperationException("Membership history is written by the database, never by the application.");
+        }
+
+        if (ChangeTracker.Entries<EnrollmentStatusChange>().Any(item => item.State != EntityState.Unchanged))
+        {
+            throw new InvalidOperationException("Enrollment history is written by the database, never by the application.");
+        }
+
+        if (ChangeTracker.Entries<WorkspaceDiscount>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Discounts are never deleted; revoke one instead.");
+        }
+
+        foreach (var entry in ChangeTracker.Entries<WorkspaceDiscount>().Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<DateTimeOffset?>(nameof(WorkspaceDiscount.RevokedAtUtc)) is not null ||
+                entry.Properties.Any(property =>
+                    property.IsModified &&
+                    property.Metadata.Name is not (nameof(WorkspaceDiscount.RevokedAtUtc)
+                        or nameof(WorkspaceDiscount.RevokedByUserId)
+                        or nameof(WorkspaceDiscount.UpdatedAtUtc)
+                        or nameof(WorkspaceDiscount.UpdatedByUserId))))
+            {
+                throw new InvalidOperationException("A discount is never edited; it can only be revoked, once.");
+            }
+        }
 
         if (ChangeTracker.Entries<BodyweightObservation>().Any(item => item.State == EntityState.Deleted))
         {

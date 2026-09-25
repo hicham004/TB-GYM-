@@ -14,6 +14,7 @@ using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Messaging;
 using TB.Gym.Modules.Notifications;
+using TB.Gym.Modules.PlatformBilling;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
@@ -40,6 +41,13 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddTbGymInfrastructure(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
+
+// `platform-admin grant|revoke|list` runs against this deployment's database and exits without
+// serving anything: the only way the global platform-admin role is ever granted (ADR 0028).
+if (PlatformAdminCommand.IsInvocation(args))
+{
+    return await PlatformAdminCommand.RunAsync(app.Services, args, Console.Out);
+}
 
 app.UseExceptionHandler();
 // Forwarded headers from the configured edge and from nobody else, or — when no edge is configured —
@@ -112,11 +120,13 @@ app.MapCheckInResponses();
 app.MapMediaModule();
 app.MapMessagingModule();
 app.MapNotificationsModule();
+app.MapPlatformBillingModule();
 app.MapTbGymChatHub();
 app.LogRealtimeTopology();
 
 await app.InitializeDatabaseAsync();
 await app.RunAsync();
+return 0;
 
 static Task WriteHealthResponseAsync(HttpContext context, HealthReport report)
 {

@@ -52,6 +52,9 @@
       after you leave a workspace or a workspace ends your access.
     </p>
     <p i18n>To join one again, ask your coach to send you a new invitation.</p>
+    @if (auth.user()?.roles?.includes('PlatformAdmin')) {
+      <p><a routerLink="/admin/billing" i18n>Open platform billing</a></p>
+    }
   </section>
 } @else {
   <section class="empty-state">

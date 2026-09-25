@@ -23,6 +23,7 @@ public sealed class ModuleDependencyTests
         typeof(TB.Gym.Modules.Messaging.MessagingModule).Assembly,
         typeof(TB.Gym.Modules.Notifications.NotificationsModule).Assembly,
         typeof(TB.Gym.Modules.Nutrition.NutritionModule).Assembly,
+        typeof(TB.Gym.Modules.PlatformBilling.PlatformBillingModule).Assembly,
         typeof(TB.Gym.Modules.Progress.ProgressModule).Assembly,
         typeof(TB.Gym.Modules.Strength.StrengthModule).Assembly,
         typeof(TB.Gym.Modules.Subscriptions.SubscriptionsModule).Assembly,

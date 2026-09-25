@@ -1,0 +1,164 @@
+// Settings / Billing (ADR 0028). The Team page's header and card patterns; no new visual language.
+:host {
+  display: block;
+}
+
+.page-header {
+  display: grid;
+  gap: var(--space-16);
+}
+
+.page-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-inline-size: 0;
+}
+
+.page-title h1 {
+  margin: 0;
+}
+
+.scope {
+  color: var(--color-text-secondary);
+  margin: 0;
+  max-inline-size: var(--content-width-720);
+}
+
+.page-error {
+  margin: 0;
+}
+
+.page-error:not(:empty) {
+  background-color: var(--color-danger-subtle);
+  border-radius: var(--radius-6);
+  color: var(--color-danger);
+  margin-block-start: var(--space-16);
+  padding: var(--space-8) var(--space-12);
+}
+
+.card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  margin-block-start: var(--space-24);
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.card-title {
+  margin: 0;
+  padding: var(--space-16) var(--space-24) var(--space-8);
+}
+
+.card-body {
+  display: grid;
+  gap: var(--space-12);
+  padding: 0 var(--space-24) var(--space-16);
+}
+
+.card-body p {
+  margin: 0;
+  max-inline-size: var(--content-width-720);
+}
+
+.card-help,
+.card-state {
+  color: var(--color-text-secondary);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  margin: 0;
+}
+
+.card-state {
+  padding: 0 var(--space-24) var(--space-16);
+}
+
+.unpaid {
+  display: flex;
+  gap: var(--space-8);
+}
+
+code,
+.whish {
+  font-family: var(--font-family-mono, monospace);
+  overflow-wrap: anywhere;
+}
+
+.pay-list,
+.invoices {
+  display: grid;
+  gap: var(--space-8);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pay-list li {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-6);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-16);
+  padding: var(--space-8) var(--space-12);
+}
+
+.due {
+  color: var(--color-text-secondary);
+}
+
+.invoices {
+  padding: 0 var(--space-24) var(--space-16);
+}
+
+.invoices li {
+  border-block-start: 1px solid var(--color-border-subtle);
+}
+
+summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+  padding-block: var(--space-12);
+}
+
+.invoice-month {
+  flex: 1 1 10rem;
+  font-weight: var(--font-weight-strong);
+}
+
+.lines {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-12);
+}
+
+.lines div {
+  display: flex;
+  gap: var(--space-16);
+  justify-content: space-between;
+}
+
+.lines dt {
+  color: var(--color-text-secondary);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.lines dd {
+  margin: 0;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.lines .total {
+  border-block-start: 1px solid var(--color-border-subtle);
+  font-weight: var(--font-weight-strong);
+  padding-block-start: var(--space-4);
+}
+
+.lines .total dt {
+  color: inherit;
+}

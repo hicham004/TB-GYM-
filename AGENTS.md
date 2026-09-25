@@ -97,9 +97,11 @@
   - Phase 2 manual receipts must match enrollment currency; partial receipts grant no access
     until the exact price is paid. Do not add FX, credit, refunds, waiver, or recurring billing
     behavior without an approved domain decision and ledger operation design.
-- Platform billing (TB Gym billing workspaces for seats and active clients, Step 2) is a separate
-  concern with its own ADR; it must still use exact money plus currency, append-only payment
-  history and server-side enforcement.
+- Platform billing (TB Gym billing workspaces, ADR 0028) is a separate module with exact money,
+  immutable price plans and invoices, and append-only voids and payments. Prices live only in the
+  published plan. An unpaid workspace is read-only for staff in the tenant authorization handler:
+  a new state-changing staff endpoint is blocked then unless it is a read or personal setting
+  marked `AllowedWhileWorkspaceReadOnly` (an integration test pins that list).
 - Workspace relationship block overrides feature access only in that tenant. It must never
   become a global Identity block.
 - Idempotency keys are bound to normalized command payloads. Identical concurrent retries
