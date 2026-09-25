@@ -1,0 +1,253 @@
+# TB Gym production: the whole application on one Linux server with Docker.
+#
+#   cp .env.production.example .env        # then fill in every value (docs/GO-LIVE.md)
+#   docker compose -f compose.production.yaml up -d --build
+#
+# Only the HTTPS edge publishes ports. The database, API, Worker, web server, scanner and backup job
+# talk on the private compose network. Migrations run once, as the `migrate` step, before the API and
+# the Worker start. Every secret comes from `.env`; a missing required value stops `docker compose`
+# before anything starts. Nothing here is specific to one hosting provider.
+#
+# Progress photos need the `photos` profile (ClamAV, about 4 GB of memory) and the R2 media bucket.
+# COMPOSE_PROFILES=photos in `.env` turns it on; the cheaper no-photos setup is described in the
+# template.
+name: tb-gym
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-database-connection: &database-connection
+  ConnectionStrings__Database: Host=postgres;Port=5432;Database=${POSTGRES_DB:-tbgym};Username=${POSTGRES_USER:-tbgym};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+# The same provider, sender, Reply-To and origin for both processes: the API enqueues mail and the
+# Worker sends it, and the Worker mints the links the API later redeems.
+x-mail-environment: &mail-environment
+  Notifications__Email__Enabled: ${TB_GYM_EMAIL_ENABLED:-true}
+  Notifications__Email__Adapter: Resend
+  Notifications__Email__Provider__ApiKey: ${TB_GYM_EMAIL_API_KEY:?Set TB_GYM_EMAIL_API_KEY in .env}
+  Notifications__Email__Provider__FromAddress: ${TB_GYM_EMAIL_FROM:?Set TB_GYM_EMAIL_FROM in .env}
+  Notifications__Email__Provider__ReplyToAddress: ${TB_GYM_EMAIL_REPLY_TO:-}
+  Notifications__Email__Provider__WebhookSigningSecret: ${TB_GYM_EMAIL_WEBHOOK_SECRET:?Set TB_GYM_EMAIL_WEBHOOK_SECRET in .env}
+  # The key id is written here rather than read from .env because compose never substitutes a
+  # variable inside a setting's name. To rotate, add a key-2 line beside key-1, point the id at it,
+  # and keep key-1 forever: suppressions written under it stop matching once it is gone.
+  Notifications__Email__Provider__FingerprintKeyId: key-1
+  Notifications__Email__Provider__FingerprintKeys__key-1: ${TB_GYM_EMAIL_FINGERPRINT_KEY:?Set TB_GYM_EMAIL_FINGERPRINT_KEY in .env}
+  Application__PublicBaseUrl: https://${TB_GYM_DOMAIN:?Set TB_GYM_DOMAIN in .env}
+  Application__PublicOriginAllowlist__0: https://${TB_GYM_DOMAIN}
+  PlatformBilling__WhishNumber: ${TB_GYM_BILLING_WHISH_NUMBER:-}
+  DataProtection__KeyPath: /home/app/.aspnet/DataProtection-Keys
+
+services:
+  # The HTTPS edge. Caddy gets and renews the certificate itself and routes /api and /hubs to the
+  # API and everything else to the web container. Its fixed address is the one proxy the API trusts.
+  edge:
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    restart: unless-stopped
+    environment:
+      TB_GYM_DOMAIN: ${TB_GYM_DOMAIN:?Set TB_GYM_DOMAIN in .env}
+      TB_GYM_ACME_EMAIL: ${TB_GYM_ACME_EMAIL:?Set TB_GYM_ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      default:
+        ipv4_address: 172.30.0.10
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+
+  postgres:
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tbgym}
+      POSTGRES_USER: ${POSTGRES_USER:-tbgym}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+  # One EF Core migration bundle per deployment. It exits when the schema is current; the API and the
+  # Worker wait for it to succeed and never migrate on their own.
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/migrate/Dockerfile
+    restart: "no"
+    environment:
+      <<: *database-connection
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
+
+  api:
+    build:
+      context: .
+      dockerfile: src/backend/TB.Gym.Api/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: [*database-connection, *mail-environment]
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+      Database__ApplyMigrationsOnStartup: "false"
+      Seed__Enabled: "false"
+      # Behind the edge, and only the edge: forwarded client addresses keep rate limits per browser.
+      ReverseProxy__Enabled: "true"
+      ReverseProxy__TrustedProxies__0: 172.30.0.10
+      Messaging__Realtime__ScaleOut: SingleProcess
+      Messaging__Realtime__ApiReplicaCount: 1
+      Messaging__Realtime__AllowedOrigins__0: https://${TB_GYM_DOMAIN}
+      # Media: R2 storage and the ClamAV scanner for progress photos, or None and None without them.
+      Media__StorageAdapter: ${TB_GYM_MEDIA_STORAGE_ADAPTER:-R2}
+      Media__R2__AccountId: ${TB_GYM_R2_ACCOUNT_ID:-}
+      Media__R2__BucketName: ${TB_GYM_R2_BUCKET:-}
+      Media__R2__AccessKeyId: ${TB_GYM_R2_ACCESS_KEY_ID:-}
+      Media__R2__SecretAccessKey: ${TB_GYM_R2_SECRET_ACCESS_KEY:-}
+      Media__ScannerAdapter: ${TB_GYM_MEDIA_SCANNER_ADAPTER:-ClamAv}
+      Media__ClamAv__Host: clamav
+      Media__ClamAv__Port: "3310"
+      Nutrition__UsdaFoodDataCentral__ApiKey: ${TB_GYM_USDA_API_KEY:-}
+    volumes:
+      - data-protection-keys:/home/app/.aspnet/DataProtection-Keys
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      clamav:
+        condition: service_started
+        required: false
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8080/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging: *logging
+
+  # Sends email, issues monthly platform invoices and runs notification schedules. No HTTP surface.
+  worker:
+    build:
+      context: .
+      dockerfile: src/backend/TB.Gym.Worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: [*database-connection, *mail-environment]
+      DOTNET_ENVIRONMENT: Production
+    volumes:
+      - data-protection-keys:/home/app/.aspnet/DataProtection-Keys
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    logging: *logging
+
+  web:
+    build:
+      context: .
+      dockerfile: src/web/Dockerfile
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+
+  # The upload scanner, as in compose.yaml: pinned, unprivileged, private, about 4 GB of memory.
+  clamav:
+    profiles: ["photos"]
+    image: clamav/clamav:1.5.4@sha256:1fdfd24c6f0a0fb60788481487459a6d4eda8a9b448641594e04db8410d34422
+    restart: unless-stopped
+    user: "clamav"
+    entrypoint: ["/init-unprivileged"]
+    environment:
+      FRESHCLAM_CHECKS: 2
+      CLAMD_STARTUP_TIMEOUT: 300
+    expose:
+      - "3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+      - ./docker/clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+    mem_limit: ${TB_GYM_CLAMAV_MEMORY:-4g}
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 360s
+    logging: *logging
+
+  # Nightly pg_dump, encrypted with the owner's age public key, uploaded to S3-compatible storage
+  # off this server, 30 days kept. docker/backup/restore.sh restores one.
+  backup:
+    build:
+      context: ./docker/backup
+    restart: unless-stopped
+    init: true
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB:-tbgym}
+      PGUSER: ${POSTGRES_USER:-tbgym}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      TB_GYM_BACKUP_AGE_RECIPIENT: ${TB_GYM_BACKUP_AGE_RECIPIENT:?Set TB_GYM_BACKUP_AGE_RECIPIENT in .env}
+      TB_GYM_BACKUP_BUCKET: ${TB_GYM_BACKUP_BUCKET:?Set TB_GYM_BACKUP_BUCKET in .env}
+      TB_GYM_BACKUP_KEEP_DAYS: ${TB_GYM_BACKUP_KEEP_DAYS:-30}
+      TB_GYM_BACKUP_HOUR_UTC: ${TB_GYM_BACKUP_HOUR_UTC:-0}
+      TB_GYM_BACKUP_HEARTBEAT_URL: ${TB_GYM_BACKUP_HEARTBEAT_URL:-}
+      RCLONE_CONFIG_OFFSITE_TYPE: s3
+      RCLONE_CONFIG_OFFSITE_PROVIDER: ${TB_GYM_BACKUP_S3_PROVIDER:-Cloudflare}
+      RCLONE_CONFIG_OFFSITE_ENDPOINT: ${TB_GYM_BACKUP_S3_ENDPOINT:?Set TB_GYM_BACKUP_S3_ENDPOINT in .env}
+      RCLONE_CONFIG_OFFSITE_REGION: ${TB_GYM_BACKUP_S3_REGION:-auto}
+      RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID: ${TB_GYM_BACKUP_S3_ACCESS_KEY_ID:?Set TB_GYM_BACKUP_S3_ACCESS_KEY_ID in .env}
+      RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY: ${TB_GYM_BACKUP_S3_SECRET_ACCESS_KEY:?Set TB_GYM_BACKUP_S3_SECRET_ACCESS_KEY in .env}
+      # The token is scoped to one bucket and cannot list or create buckets.
+      RCLONE_CONFIG_OFFSITE_NO_CHECK_BUCKET: "true"
+    volumes:
+      - backup-state:/var/lib/tb-gym-backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+    logging: *logging
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  postgres-data:
+  data-protection-keys:
+  caddy-data:
+  caddy-config:
+  clamav-data:
+  backup-state:

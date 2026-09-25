@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using TB.Gym.Infrastructure.Application;
 using TB.Gym.Infrastructure.Health;
+using TB.Gym.Infrastructure.Initialization;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Infrastructure.Security;
 using TB.Gym.Modules.CheckIns;
@@ -46,6 +47,11 @@ public static class DependencyInjection
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new InvalidOperationException("ConnectionStrings:Database must be configured.");
+        }
+
+        if (environment.IsProduction())
+        {
+            ProductionSettingsGuard.EnsureNoDevelopmentSettings(configuration);
         }
 
         services.AddHttpContextAccessor();

@@ -49,6 +49,12 @@ if (PlatformAdminCommand.IsInvocation(args))
     return await PlatformAdminCommand.RunAsync(app.Services, args, Console.Out);
 }
 
+// `send-test-email you@example.com` proves the configured provider accepts mail, then exits.
+if (SendTestEmailCommand.IsInvocation(args))
+{
+    return await SendTestEmailCommand.RunAsync(app.Services, args, Console.Out);
+}
+
 app.UseExceptionHandler();
 // Forwarded headers from the configured edge and from nobody else, or — when no edge is configured —
 // not at all. First in the pipeline, because everything after it that reads a client address or a

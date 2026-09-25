@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 !base44/.env.example
 appsettings.*.local.json
 

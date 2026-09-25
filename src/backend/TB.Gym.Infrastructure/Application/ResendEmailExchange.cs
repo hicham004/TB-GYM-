@@ -121,7 +121,8 @@ internal static class ResendEmailExchange
                     provider.FromAddress,
                     [message.RecipientAddress],
                     message.Subject,
-                    message.TextBody),
+                    message.TextBody,
+                    string.IsNullOrWhiteSpace(provider.ReplyToAddress) ? null : provider.ReplyToAddress.Trim()),
                 options: RequestJson),
         };
 
@@ -285,7 +286,8 @@ internal static class ResendEmailExchange
     /// The provider's own request shape, owned here and nowhere else.
     /// </summary>
     /// <remarks>
-    /// Kept to the four fields this repository actually sends. There is no <c>html</c>, no
+    /// Kept to the fields this repository actually sends, <c>reply_to</c> only when a support mailbox
+    /// is configured. There is no <c>html</c>, no
     /// <c>tags</c>, no tracking and no attachment: a field that is never set cannot later carry
     /// something that should not leave the building.
     /// </remarks>
@@ -293,7 +295,8 @@ internal static class ResendEmailExchange
         [property: JsonPropertyName("from")] string From,
         [property: JsonPropertyName("to")] IReadOnlyList<string> To,
         [property: JsonPropertyName("subject")] string Subject,
-        [property: JsonPropertyName("text")] string Text);
+        [property: JsonPropertyName("text")] string Text,
+        [property: JsonPropertyName("reply_to")] string? ReplyTo);
 }
 
 /// <summary>One outbound message, in memory only.</summary>

@@ -323,7 +323,8 @@ public sealed class Phase6B3BProviderStartupTests
             ["Notifications:Dispatch:PollIntervalSeconds"] = "300",
             ["Messaging:Realtime:Enabled"] = "false",
             ["Messaging:Realtime:ApiReplicaCount"] = "1",
-            ["Messaging:Realtime:AllowedOrigins:0"] = "http://localhost:4200",
+            ["Messaging:Realtime:AllowedOrigins:0"] =
+                environment == "Development" ? "http://localhost:4200" : "https://app.tbgym.test",
         };
 
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>

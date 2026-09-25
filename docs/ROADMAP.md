@@ -1070,7 +1070,12 @@ Work follows this order; anything outside it needs the user's approval first.
   with {coach} ended on {date}." with an "Ask to renew" button that tells the coach in-app, naming
   the client and linking to their page, at most once per client in any 7 days (a PostgreSQL
   exclusion constraint). See ADR 0029. Other redesign slices are parked.
-- Step 4, lean go-live with the founding coaches: not started.
+- Step 4, lean go-live with the founding coaches: prepared 2026-09-25, not deployed. One server
+  (`compose.production.yaml`): a Caddy HTTPS edge, a one-shot migrate step, nightly encrypted
+  off-server backups with a restore script, Production refusing development settings, an email
+  Reply-To and a `send-test-email` command, and the platform-admin grant pinned to the CLI. See
+  ADR 0030, `GO-LIVE.md` (the owner's runbook) and `LAUNCH-CHECKLIST.md` Part 1 (the gate). Proven
+  on a local copy of the production stack; buying, sign-ups and the deploy are the owner's steps.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
 

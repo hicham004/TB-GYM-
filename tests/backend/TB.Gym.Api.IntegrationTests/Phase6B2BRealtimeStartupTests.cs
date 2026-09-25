@@ -208,7 +208,8 @@ public sealed class Phase6B2BRealtimeStartupTests
             ["ConnectionStrings:Database"] = databaseConnection,
             ["Database:ApplyMigrationsOnStartup"] = "false",
             ["Seed:Enabled"] = "false",
-            ["Application:PublicBaseUrl"] = "http://localhost:4200",
+            ["Application:PublicBaseUrl"] =
+                environment == "Development" ? "http://localhost:4200" : "https://app.tbgym.test",
             ["Media:StorageRoot"] = Path.Combine(Path.GetTempPath(), databaseName!, "media"),
             ["Media:PurgeEnabled"] = "false",
             ["Notifications:Dispatch:PollIntervalSeconds"] = "300",
@@ -216,7 +217,8 @@ public sealed class Phase6B2BRealtimeStartupTests
         };
         if (includeDefaultOrigin)
         {
-            settings["Messaging:Realtime:AllowedOrigins:0"] = "http://localhost:4200";
+            settings["Messaging:Realtime:AllowedOrigins:0"] =
+                environment == "Development" ? "http://localhost:4200" : "https://app.tbgym.test";
         }
 
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>

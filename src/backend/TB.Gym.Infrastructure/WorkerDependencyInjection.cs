@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TB.Gym.Infrastructure.Application;
+using TB.Gym.Infrastructure.Initialization;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Infrastructure.Security;
 using TB.Gym.Modules.Identity;
@@ -46,6 +47,11 @@ public static class WorkerDependencyInjection
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new InvalidOperationException("ConnectionStrings:Database must be configured.");
+        }
+
+        if (isProduction)
+        {
+            ProductionSettingsGuard.EnsureNoDevelopmentSettings(configuration);
         }
 
         services.AddSingleton<IClock, SystemClock>();

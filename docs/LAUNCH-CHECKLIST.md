@@ -9,6 +9,64 @@ baseline verification catalogue for the authenticated SaaS. Record applicable re
 IDs, test evidence, accepted exceptions, owner, and expiry; do not claim certification merely
 because this checklist references ASVS.
 
+The list has two parts (commercial Step 4, 2026-09-25). **Part 1** is what must be true before the
+first 10 founding coaches are invited; `docs/GO-LIVE.md` is the runbook for it. **Part 2, After
+launch**, keeps every other item from the original list, grouped as before. No item was deleted;
+items only moved, and a few gained a status note in italics.
+
+# Part 1: Before the first 10 coaches
+
+## Server, domain, TLS and edge
+
+- [ ] Register the production domain and define API/web DNS ownership and renewal contacts.
+- [x] Enable gzip or Brotli for HTML, JavaScript and CSS in `src/web/nginx.conf` (or at the edge).
+  Without it a first visit downloads roughly twice the bytes. *Done 2026-09-25: gzip for static
+  files in `src/web/nginx.conf`; API JSON is deliberately left uncompressed (BREACH).*
+- [ ] Terminate TLS 1.2+ with automatic certificate renewal; redirect HTTP and test renewal.
+  *Prepared: the Caddy edge in `compose.production.yaml` obtains, renews and redirects. Tick after the
+  first deploy.*
+- [x] Serve SPA and API under the approved same-origin model so cookie/XSRF assumptions hold.
+  *`docker/caddy/Caddyfile` serves both on one host; proven on the local production stack
+  2026-09-25 (sign-in and an antiforgery-protected write through the edge).*
+- [ ] Configure trusted proxy networks before accepting forwarded headers. Set
+  `ReverseProxy:Enabled` to true only with a reverse proxy in front of the API, and name it with
+  `ReverseProxy:TrustedProxies` addresses, `ReverseProxy:TrustedNetworks` CIDR entries, or both;
+  startup refuses an enabled deployment that names neither. Prefer an exact `TrustedProxies` address
+  — for a beta behind one edge it is almost always knowable, and it is the narrowest thing that can
+  be trusted; reach for a network only when the edge's address is assigned rather than fixed. Leave
+  `Enabled` false for a directly reachable deployment. Evidence: the configured values, and a
+  request through the edge whose logged client address is the browser's rather than the proxy's.
+  Loopback (`::1`, `127.0.0.0/8`) stays trusted by framework default, so also confirm the API is
+  bound to a private interface and is not reachable directly. Note that `compose.yaml` wires one
+  address and one network, both at index 0; more than one is added to the api service's environment
+  in the deployment configuration, not in `.env`. *Prepared: `compose.production.yaml` trusts exactly
+  the edge's fixed address and publishes no API port. Tick after checking the evidence on the server.*
+- [x] Enable HSTS only after all production subdomains are HTTPS-ready. *The edge sends HSTS for
+  the app host only (no `includeSubDomains`, no preload), so no other subdomain is affected.*
+- [ ] Validate CSP, frame denial, `nosniff`, referrer policy, permissions policy, CORS, and
+  WebSocket headers at the real edge/CDN, not only in application tests. *GO-LIVE.md, Deploy step 4.*
+
+## Secrets and production configuration
+
+- [ ] Secrets live only in the server's `.env` (readable by root only) and in the owner's password
+  manager; the backup private key lives offline in two places and never on the server. *Added
+  2026-09-25 as the launch-sized version of the managed-secret-store item in Part 2.*
+- [x] Set `ASPNETCORE_ENVIRONMENT=Production`, explicit connection strings, public origin,
+  cookie/domain settings, and approved proxy settings through deployment configuration.
+  *`compose.production.yaml`, pinned by `GoLiveBoundaryTests`.*
+- [x] Keep `Seed__Enabled=false`. The API refuses seeding outside Development; retain a
+  production startup test for this guard. *`ApiSmokeTests` and `GoLiveReadinessTests`.*
+- [x] Never deploy local Compose configuration or seeded development accounts as production
+  configuration. Scan built artifacts and deployment manifests for local-only values. *Separate
+  `compose.production.yaml`; in Production the API and Worker refuse seeding, migrate-on-startup,
+  localhost origins, non-HTTPS hub origins and Npgsql error-detail or parameter logging
+  (`ProductionSettingsGuard`).*
+- [x] Disable production OpenAPI exposure unless deliberately authenticated/restricted. *Mapped in
+  Development only, and the edge answers 404 for `/openapi`.*
+- [x] Persist and protect ASP.NET Core Data Protection keys across replicas and deployments. *One
+  named volume shared by the API and the Worker. The keys sit unencrypted in that volume, readable
+  only by root on the server. Losing it only signs everyone out and voids unused email links.*
+
 ## Transactional email
 
 The provider, the adapter, event verification, bounce and complaint handling, suppression, retries
@@ -19,6 +77,8 @@ below is external setup and operations, none of which this repository automates.
       port. Resend, via an owned `HttpClient` adapter with no provider SDK. (Phase 6B-3B)
 - [x] Add provider event verification, bounce/complaint handling, durable suppression, retries,
       idempotency, template versioning and stable failure codes. (Phase 6B-3B)
+- [x] A support Reply-To on every message and a `send-test-email` command that proves the provider
+      accepts mail. (Step 4, `GoLiveReadinessTests`)
 - [ ] Verify sending domain ownership with the provider, on a dedicated subdomain such as
   `mail.example.com`, so transactional reputation is isolated from the root domain's other mail.
 - [ ] Publish SPF and DKIM for that subdomain, then DMARC starting at `p=none` with `rua` reporting;
@@ -31,80 +91,176 @@ below is external setup and operations, none of which this repository automates.
   `Notifications:Email:Provider:FingerprintKeyId` and the matching entry under `FingerprintKeys`, and
   record the rotation procedure: add a new key id, repoint the active id, and keep every retired key
   configured. Removing a retired key drops the suppressions written under it and resumes mail to
-  addresses that hard-bounced.
-- [ ] Confirm `Notifications:Dispatch:MaximumAttempts` still fits inside the provider's idempotency
-  retention window. Startup refuses a schedule that outruns it, so revisit whenever either changes.
+  addresses that hard-bounced. *`compose.production.yaml` fixes the id as `key-1` and documents
+  rotation beside it; only the key itself goes in `.env`.*
 - [x] Move account confirmation, password reset and invitation mail onto the tokenless design in
       ADR 0021, and remove action links from API responses outside Development. Development links now
       come from the captured adapter, which Production refuses; password recovery returns no link in
       any environment. (Phase 6B-3C)
-- [ ] Set `Application:PublicBaseUrl` to the production origin and list it in
+- [x] Set `Application:PublicBaseUrl` to the production origin and list it in
   `Application:PublicOriginAllowlist`. Both are validated at startup in the API **and** the Worker,
   and both refuse to start on anything that is not a bare HTTPS origin — a value carrying credentials,
   a query string, a fragment or a path is refused outright. No action link is ever built from a
-  request header, so this setting is the only thing that decides where a reset link points.
-- [ ] Point `DataProtection:KeyPath` at the **same** persisted key ring for the API and the Worker,
+  request header, so this setting is the only thing that decides where a reset link points. *Both
+  derive from `TB_GYM_DOMAIN` in `compose.production.yaml`.*
+- [x] Point `DataProtection:KeyPath` at the **same** persisted key ring for the API and the Worker,
   and confirm both are running with it. The Worker mints confirmation and reset tokens and the API
   unprotects them; two key rings make every link this system sends fail on click, with an error that
-  reads as "invalid token" and is really a deployment mistake.
+  reads as "invalid token" and is really a deployment mistake. *One shared volume in
+  `compose.production.yaml`.*
 - [ ] Confirm the Worker is deployed and sweeping. Action mail is materialized by the Worker, so a
   deployment without one queues confirmations and resets that nobody ever receives — and unlike a
   commercial notification, nobody can proceed without them.
+- [ ] Send a test email with `send-test-email`, then register a real account and receive its
+  confirmation mail. *Added 2026-09-25; GO-LIVE.md, Deploy step 2.*
+
+## PostgreSQL, backups, and migrations
+
+- [x] Nightly encrypted backups to storage off the server, 30 days kept, with a restore script.
+  *Added 2026-09-25: the `backup` service in `compose.production.yaml` and `docker/backup/`. This is
+  the launch-sized version of the point-in-time-recovery item in Part 2; up to a day of data can be
+  lost.*
+- [ ] Confirm the first nightly backup is in the bucket, and (optionally) that the heartbeat
+  check emails the owner when a night is missed.
+- [ ] Perform and document a restore into an isolated environment; verify row counts,
+  constraints, identity login, tenant isolation, and object references. *Proven on the local
+  production stack 2026-09-25 (see the Step 4 entry in `ROADMAP.md`). Repeat on the server against the
+  first real backup, using the offline key exactly as it is stored: GO-LIVE.md, Deploy step 5.*
+- [ ] Encrypt backups, restrict access, audit restores/downloads, and test retention expiry.
+  *Encryption to the owner's offline key, a bucket-scoped token and 30-day pruning are built; auditing
+  downloads and observing a real expiry are not done yet.*
+- [x] Run migrations as a separate deployment job under an advisory/exclusive lock. Do not
+  let every API replica migrate at startup in production. *The one-shot `migrate` service (EF
+  bundle; EF Core 10 takes the migrations lock); Production refuses migrate-on-startup.*
+
+## Security verification
+
+- [x] Per-address sign-in limits and account lockout are in place and survive the edge. *30
+  requests a minute per address on sign-in, confirmation and recovery; 5 failed passwords lock an
+  account for 15 minutes; the edge's forwarded address keeps the limit per browser.*
+- [x] The global platform-admin role can only be granted with the `platform-admin` CLI command.
+  *`GoLiveBoundaryTests` fails if any other code grants a role (ADR 0028).*
+
+## Privacy, legal, and health-adjacent data
+
+- [ ] Engage qualified counsel for Lebanese launch and every served jurisdiction. Approve
+  Terms, Privacy Policy, processor/subprocessor disclosures, and health/intake consent.
+  *Owner's decision how much of this precedes the founding coaches; TB Gym writes no legal wording.*
+- [ ] Publish reviewed, versioned documents with immutable content hashes. Never mark draft
+  placeholder wording as approved.
+- [ ] Publish support/privacy contact channels and response SLAs. *The support inbox is also the
+  email Reply-To.*
+
+## Media storage, scanning and inventory
+
+Progress photos are part of the launch (decision 2026-09-25). The storage seam, the R2 and ClamAV
+adapters, the API-proxied authorized delivery path and the read-only inventory reconciliation pass
+ship with Phase 6B-4A, 6B-4B and 6B-4C; see `ARCHITECTURE.md` section 9, `DOMAIN-RULES.md` MED-004
+through MED-012, and ADRs 0023, 0024 and 0025. That code is accepted. Everything below it is external
+setup that no part of this repository performs, verifies or can tick on its own, and a passing
+`scripts/check.ps1` is evidence for none of it. Until these are done, a non-Development deployment
+refuses every upload before accepting bytes and reports media as `Degraded` on `/health/ready` — the
+designed unconfigured state. Without photos, the `photos` profile stays off and this section waits.
+
+Two of these are agreements rather than settings. The code cannot detect either being broken, which
+is precisely why they are written down here.
+
+- [x] Compose object storage behind an owned provider-neutral port that is fail-closed outside
+      Development, with durable `(location, key)` locators, checksum-bound scan evidence and leased
+      purge. (Phase 6B-4A)
+- [x] Implement the production storage and scanning adapters, explicit loud selection, and readiness
+      that probes a composed provider rather than reading a flag. (Phase 6B-4B)
+- [x] Implement a bounded read-only reconciliation pass with tenant-owned findings, run evidence that
+      distinguishes a complete pass from a partial one, and no repair authority at all. (Phase 6B-4C)
+- [ ] Create the production bucket **private, in the EU jurisdiction**, in the account whose 32-hex id
+      is configured. A bucket created in another jurisdiction is not reachable on the EU endpoint, and
+      a bucket that is public defeats the whole delivery model — every read is meant to be
+      "the API authorized this request", never "the holder of this URL may read these bytes".
+      Evidence: the bucket's jurisdiction and public-access setting, read back from the provider after
+      creation, with the account id and the date.
+- [ ] Issue the runtime credential **scoped to that one bucket**, with Object Read and Write only, and
+      store it in the managed secret store as `Media:R2:AccessKeyId` and `Media:R2:SecretAccessKey`.
+      Object Read and Write already permits the listing reconciliation needs; it is never widened, and
+      in particular it must not be an Admin credential. Evidence: the token's scope and permissions as
+      the provider reports them, plus the rotation and revocation procedure from the secrets section
+      above, with a revocation actually tested.
+- [ ] Apply, by hand, **one** bucket lifecycle rule: abort incomplete multipart uploads after **1
+      day**. It needs an Admin Read & Write credential that the application never holds and no prefix,
+      because an abort rule touches incomplete uploads and never an object. The adapter aborts its
+      own interrupted uploads; what it cannot abort is an upload whose process died between the last
+      part and the abort, and only the bucket can reclaim those parts. Evidence: the applied rule as
+      the provider reports it, the date, and who applied it.
+- [ ] Record a signed agreement that **no object-expiration rule and no storage-class transition rule
+      is ever enabled on this bucket** without a new ADR and explicit approval. An expiration rule
+      deletes an object with no row change, no quota release, no tombstone, no attempt count and no
+      audit trail; the application would discover it at read time as a photograph a client still owns
+      that will not load. Every deletion in this system belongs to the tombstone lifecycle. Evidence:
+      the written agreement, its owner, and a periodic read-back of the bucket's lifecycle
+      configuration showing the abort rule and nothing else. *This is the media bucket only; the
+      separate backup bucket may expire old backups.*
+- [ ] Record the second agreement beside it: **`r2-eu-v1` is never repointed** at another account,
+      jurisdiction or bucket. That location name is written onto every stored object and is what a
+      later read or purge resolves, so a substitution makes every historical locator name bytes that
+      are not theirs, silently. Moving buckets is a migration with a new location name, never a
+      configuration edit. Evidence: the written agreement and its owner. A reconciliation run
+      reporting every object unowned and every row missing is a symptom of this, not a detector of it,
+      and must never be described as one.
+- [ ] Stand up the private `clamd`: reachable only on the private network at `Media:ClamAv:Host`, port
+      3310 published to no host interface — it authenticates nobody — with `StreamMaxLength` and
+      `MaxFileSize` at or above 512 MB and `MaxScanSize` above `MaxFileSize`, roughly 4 GiB of memory,
+      and outbound access for `freshclam`. Defaults of 25 MB would fail every video upload, and a
+      limit is never a clean result. `compose.yaml` and `docker/clamav/clamd.conf` are the reference
+      configuration. Evidence: the effective daemon configuration, a successful `PING`, the signature
+      database age, and confirmation that the port is not reachable from outside the private network.
+      *`compose.production.yaml` runs it under the `photos` profile with the same pinned image and
+      configuration.*
+- [ ] Prove both adapters end to end in staging against production-equivalent topology, then keep the
+      evidence: an upload stored and scanned clean and readable; the EICAR test file refused without
+      the signature name appearing in any response, log or persisted row; an oversized body refused at
+      the allowance rather than buffered past it; a scanner outage producing `503` with no asset
+      committed and no stored object left behind; and a range read serving exactly its range. Evidence:
+      dated run output plus the resulting rows, from a staging deployment carrying no development
+      credentials or seed data. *For launch there is no staging: do this on the production server
+      before the first invitation (GO-LIVE.md, Deploy step 4).*
+
+## Release gate
+
+- [ ] All .NET and Angular builds, tests, lint, formatting, dependency audits, migration drift,
+  container builds, health checks, and production smoke tests pass from the release commit.
+- [ ] Product owner approves unresolved domain decisions; security, legal, operations, and
+  payment owners sign off with dated evidence.
+- [ ] Rollout, rollback/forward-repair, feature-disable, support, and customer-communication
+  runbooks are rehearsed. *Deploy, update and restore are in GO-LIVE.md; the restore drill is the
+  rehearsal that matters most.*
+
+# Part 2: After launch
+
+## Domain, TLS, and edge (after launch)
+
+- [ ] Make `og:image` in `src/web/src/index.html` an absolute `https://` URL on the production
+  origin. It is relative until the domain exists, and WhatsApp shows no preview image for a
+  relative one. Check a shared link in WhatsApp and a link-preview debugger afterwards.
+
+## Secrets and production configuration (after launch)
+
+- [ ] Store database, email, payment, object-storage, signing, monitoring, and future AI
+  secrets in a managed secret store with least-privilege workload identity.
+- [ ] Define rotation and emergency revocation procedures; verify old credentials stop working.
+
+## Transactional email (after launch)
+
+- [ ] Confirm `Notifications:Dispatch:MaximumAttempts` still fits inside the provider's idempotency
+  retention window. Startup refuses a schedule that outruns it, so revisit whenever either changes.
 - [ ] Review `Application:ActionMail:MaximumAttempts` against the provider's idempotency retention.
   Startup refuses a schedule that outruns it. Keep it small: every durable attempt mints a fresh live
   credential, and a link nobody used inside the schedule is one the person has already asked for again.
 - [ ] Keep invitation/reset tokens, message bodies, and personal data out of logs.
 
-## Domain, TLS, and edge
-
-- [ ] Register the production domain and define API/web DNS ownership and renewal contacts.
-- [ ] Make `og:image` in `src/web/src/index.html` an absolute `https://` URL on the production
-  origin. It is relative until the domain exists, and WhatsApp shows no preview image for a
-  relative one. Check a shared link in WhatsApp and a link-preview debugger afterwards.
-- [ ] Enable gzip or Brotli for HTML, JavaScript and CSS in `src/web/nginx.conf` (or at the edge).
-  Without it a first visit downloads roughly twice the bytes.
-- [ ] Terminate TLS 1.2+ with automatic certificate renewal; redirect HTTP and test renewal.
-- [ ] Serve SPA and API under the approved same-origin model so cookie/XSRF assumptions hold.
-- [ ] Configure trusted proxy networks before accepting forwarded headers. Set
-  `ReverseProxy:Enabled` to true only with a reverse proxy in front of the API, and name it with
-  `ReverseProxy:TrustedProxies` addresses, `ReverseProxy:TrustedNetworks` CIDR entries, or both;
-  startup refuses an enabled deployment that names neither. Prefer an exact `TrustedProxies` address
-  — for a beta behind one edge it is almost always knowable, and it is the narrowest thing that can
-  be trusted; reach for a network only when the edge's address is assigned rather than fixed. Leave
-  `Enabled` false for a directly reachable deployment. Evidence: the configured values, and a
-  request through the edge whose logged client address is the browser's rather than the proxy's.
-  Loopback (`::1`, `127.0.0.0/8`) stays trusted by framework default, so also confirm the API is
-  bound to a private interface and is not reachable directly. Note that `compose.yaml` wires one
-  address and one network, both at index 0; more than one is added to the api service's environment
-  in the deployment configuration, not in `.env`.
-- [ ] Enable HSTS only after all production subdomains are HTTPS-ready.
-- [ ] Validate CSP, frame denial, `nosniff`, referrer policy, permissions policy, CORS, and
-  WebSocket headers at the real edge/CDN, not only in application tests.
-
-## Secrets and production configuration
-
-- [ ] Store database, email, payment, object-storage, signing, monitoring, and future AI
-  secrets in a managed secret store with least-privilege workload identity.
-- [ ] Define rotation and emergency revocation procedures; verify old credentials stop working.
-- [ ] Set `ASPNETCORE_ENVIRONMENT=Production`, explicit connection strings, public origin,
-  cookie/domain settings, and approved proxy settings through deployment configuration.
-- [ ] Keep `Seed__Enabled=false`. The API refuses seeding outside Development; retain a
-  production startup test for this guard.
-- [ ] Never deploy local Compose configuration or seeded development accounts as production
-  configuration. Scan built artifacts and deployment manifests for local-only values.
-- [ ] Disable production OpenAPI exposure unless deliberately authenticated/restricted.
-- [ ] Persist and protect ASP.NET Core Data Protection keys across replicas and deployments.
-
-## PostgreSQL, backups, and migrations
+## PostgreSQL, backups, and migrations (after launch)
 
 - [ ] Use managed PostgreSQL with encryption, private networking, least-privilege application
   and migration roles, connection limits, and supported version/patch policy.
 - [ ] Enable automated backups and point-in-time recovery with an approved RPO/RTO.
-- [ ] Perform and document a restore into an isolated environment; verify row counts,
-  constraints, identity login, tenant isolation, and object references.
-- [ ] Encrypt backups, restrict access, audit restores/downloads, and test retention expiry.
-- [ ] Run migrations as a separate deployment job under an advisory/exclusive lock. Do not
-  let every API replica migrate at startup in production.
 - [ ] Review each migration for locks, table rewrites, extension permissions, forward/backward
   compatibility, backup requirement, and a forward-repair plan before deployment.
 - [ ] Verify `btree_gist`, exclusion constraints, immutable-ledger triggers, and migration
@@ -123,7 +279,7 @@ below is external setup and operations, none of which this repository automates.
 - [ ] Establish SLOs and capacity/load tests before launch; rehearse database and provider
   outage behavior.
 
-## Security verification
+## Security verification (after launch)
 
 - [ ] Complete threat models for identity/session, invitation takeover, tenant isolation,
   broken object authorization, payments, legal consent, media upload, SignalR, and provider
@@ -141,19 +297,16 @@ below is external setup and operations, none of which this repository automates.
 - [ ] Review cookie flags, session lifetime/revocation, lockout, email confirmation, XSRF,
   content security policy, and account recovery against the production topology.
 
-## Privacy, legal, and health-adjacent data
+## Privacy, legal, and health-adjacent data (after launch)
 
-- [ ] Engage qualified counsel for Lebanese launch and every served jurisdiction. Approve
-  Terms, Privacy Policy, processor/subprocessor disclosures, and health/intake consent.
-- [ ] Publish reviewed, versioned documents with immutable content hashes. Never mark draft
-  placeholder wording as approved.
 - [ ] Decide lawful basis, data controller/processor roles, age policy, cross-border transfer,
   breach notification, and sensitive/health-adjacent handling obligations.
 - [ ] Build and test user/tenant data export, correction, deletion/anonymization, account
   closure, legal hold, and auditable request workflows before accepting production clients.
+  *Moved here for the founding cohort: a request from one of 10 coaches is handled by hand. The
+  owner should confirm this is acceptable.*
 - [ ] Approve a per-data-class retention schedule covering accounts, intake, measurements,
   programs, chat, media, payments, consent evidence, logs, backups, and provider records.
-- [ ] Publish support/privacy contact channels and response SLAs.
 - [ ] Review fitness/nutrition claims and disclaimers with qualified professionals. TB Gym
   must not present allergy warnings, calorie estimates, or programming as medical guarantees.
 
@@ -214,76 +367,12 @@ read that somebody asked to reset their password, and reusing the tenant dead-le
 exactly the cross-workspace visibility ADR 0021 refuses. Until that decision is made, these are
 database queries an operator runs deliberately.
 
-## Media storage, scanning and inventory
+## Media storage, scanning and inventory (after launch)
 
-The storage seam, the R2 and ClamAV adapters, the API-proxied authorized delivery path and the
-read-only inventory reconciliation pass ship with Phase 6B-4A, 6B-4B and 6B-4C; see
-`ARCHITECTURE.md` section 9, `DOMAIN-RULES.md` MED-004 through MED-012, and ADRs 0023, 0024 and 0025.
-That code is accepted. Everything below it is external setup that no part of this repository
-performs, verifies or can tick on its own, and a passing `scripts/check.ps1` is evidence for none of
-it. Until these are done, a non-Development deployment refuses every upload before accepting bytes
-and reports media as `Degraded` on `/health/ready` — the designed unconfigured state.
-
-Two of these are agreements rather than settings. The code cannot detect either being broken, which
-is precisely why they are written down here.
-
-- [x] Compose object storage behind an owned provider-neutral port that is fail-closed outside
-      Development, with durable `(location, key)` locators, checksum-bound scan evidence and leased
-      purge. (Phase 6B-4A)
-- [x] Implement the production storage and scanning adapters, explicit loud selection, and readiness
-      that probes a composed provider rather than reading a flag. (Phase 6B-4B)
-- [x] Implement a bounded read-only reconciliation pass with tenant-owned findings, run evidence that
-      distinguishes a complete pass from a partial one, and no repair authority at all. (Phase 6B-4C)
-- [ ] Create the production bucket **private, in the EU jurisdiction**, in the account whose 32-hex id
-      is configured. A bucket created in another jurisdiction is not reachable on the EU endpoint, and
-      a bucket that is public defeats the whole delivery model — every read is meant to be
-      "the API authorized this request", never "the holder of this URL may read these bytes".
-      Evidence: the bucket's jurisdiction and public-access setting, read back from the provider after
-      creation, with the account id and the date.
-- [ ] Issue the runtime credential **scoped to that one bucket**, with Object Read and Write only, and
-      store it in the managed secret store as `Media:R2:AccessKeyId` and `Media:R2:SecretAccessKey`.
-      Object Read and Write already permits the listing reconciliation needs; it is never widened, and
-      in particular it must not be an Admin credential. Evidence: the token's scope and permissions as
-      the provider reports them, plus the rotation and revocation procedure from the secrets section
-      above, with a revocation actually tested.
-- [ ] Apply, by hand, **one** bucket lifecycle rule: abort incomplete multipart uploads after **1
-      day**. It needs an Admin Read & Write credential that the application never holds and no prefix,
-      because an abort rule touches incomplete uploads and never an object. The adapter aborts its
-      own interrupted uploads; what it cannot abort is an upload whose process died between the last
-      part and the abort, and only the bucket can reclaim those parts. Evidence: the applied rule as
-      the provider reports it, the date, and who applied it.
-- [ ] Record a signed agreement that **no object-expiration rule and no storage-class transition rule
-      is ever enabled on this bucket** without a new ADR and explicit approval. An expiration rule
-      deletes an object with no row change, no quota release, no tombstone, no attempt count and no
-      audit trail; the application would discover it at read time as a photograph a client still owns
-      that will not load. Every deletion in this system belongs to the tombstone lifecycle. Evidence:
-      the written agreement, its owner, and a periodic read-back of the bucket's lifecycle
-      configuration showing the abort rule and nothing else.
-- [ ] Record the second agreement beside it: **`r2-eu-v1` is never repointed** at another account,
-      jurisdiction or bucket. That location name is written onto every stored object and is what a
-      later read or purge resolves, so a substitution makes every historical locator name bytes that
-      are not theirs, silently. Moving buckets is a migration with a new location name, never a
-      configuration edit. Evidence: the written agreement and its owner. A reconciliation run
-      reporting every object unowned and every row missing is a symptom of this, not a detector of it,
-      and must never be described as one.
-- [ ] Stand up the private `clamd`: reachable only on the private network at `Media:ClamAv:Host`, port
-      3310 published to no host interface — it authenticates nobody — with `StreamMaxLength` and
-      `MaxFileSize` at or above 512 MB and `MaxScanSize` above `MaxFileSize`, roughly 4 GiB of memory,
-      and outbound access for `freshclam`. Defaults of 25 MB would fail every video upload, and a
-      limit is never a clean result. `compose.yaml` and `docker/clamav/clamd.conf` are the reference
-      configuration. Evidence: the effective daemon configuration, a successful `PING`, the signature
-      database age, and confirmation that the port is not reachable from outside the private network.
 - [ ] Verify the daemon's signature feed keeps working after launch, not only at it. A `clamd` whose
       signatures have stopped updating still answers `OK`. Evidence: a monitored signature-database
       age with an alert threshold, and the recorded engine and signature version on recent scan
       evidence rows.
-- [ ] Prove both adapters end to end in staging against production-equivalent topology, then keep the
-      evidence: an upload stored and scanned clean and readable; the EICAR test file refused without
-      the signature name appearing in any response, log or persisted row; an oversized body refused at
-      the allowance rather than buffered past it; a scanner outage producing `503` with no asset
-      committed and no stored object left behind; and a range read serving exactly its range. Evidence:
-      dated run output plus the resulting rows, from a staging deployment carrying no development
-      credentials or seed data.
 - [ ] Prove one **complete** reconciliation run in staging — both passes finished, no outstanding page
       failure, the resolution phase finished — and keep the run row as the evidence. A partial run is
       not a clean bill of health, and an empty finding set only means something behind a completed
@@ -303,12 +392,6 @@ is precisely why they are written down here.
       out of logs, analytics, exceptions and notification payloads. A key identifies one workspace's
       private content, which is why a finding is a tenant-owned row rather than a log line.
 
-## Release gate
+## Release gate (after launch)
 
-- [ ] All .NET and Angular builds, tests, lint, formatting, dependency audits, migration drift,
-  container builds, health checks, and production smoke tests pass from the release commit.
 - [ ] Staging uses production-equivalent topology and no development credentials or seed data.
-- [ ] Product owner approves unresolved domain decisions; security, legal, operations, and
-  payment owners sign off with dated evidence.
-- [ ] Rollout, rollback/forward-repair, feature-disable, support, and customer-communication
-  runbooks are rehearsed.

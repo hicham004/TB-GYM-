@@ -1,0 +1,38 @@
+# The HTTPS edge of the single-server production stack (compose.production.yaml).
+#
+# Caddy obtains and renews the Let's Encrypt certificate for TB_GYM_DOMAIN by itself, redirects HTTP
+# to HTTPS, and is the only container that publishes ports. The API trusts forwarded headers from
+# this container's fixed address and from nobody else, so per-browser rate limits keep working.
+{
+	email {$TB_GYM_ACME_EMAIL}
+}
+
+{$TB_GYM_DOMAIN} {
+	header {
+		# One year, this host only. includeSubDomains and preload are left off until every
+		# subdomain (mail, future ones) is known to be HTTPS-only.
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# The largest upload the API accepts is a 500 MiB video; the API enforces the real limits.
+	request_body {
+		max_size 501MB
+	}
+
+	# Health and API descriptions are for the containers' own checks, not the internet. Uptime
+	# monitors use /api/system/status instead.
+	@internal path /health /health/* /openapi /openapi/*
+	handle @internal {
+		respond 404
+	}
+
+	@api path /api/* /hubs/*
+	handle @api {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+}

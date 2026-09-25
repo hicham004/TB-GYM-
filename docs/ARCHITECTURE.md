@@ -841,6 +841,19 @@ Docker persists local uploads and ASP.NET Core Data Protection keys in separate 
 volumes. Multiple API replicas must share an external key repository and object storage;
 container-local files are never a horizontal-scaling design.
 
+**Single-server production (commercial Step 4).** `compose.production.yaml` runs everything on one
+Linux host; `docs/GO-LIVE.md` is the owner's runbook. Only the Caddy edge publishes ports: it
+obtains the certificate, sets HSTS, answers 404 for `/health` and `/openapi`, and sends `/api` and
+`/hubs` straight to the API, so the API trusts exactly one proxy — the edge's fixed address — and the
+one-hop forward limit holds. A one-shot `migrate` container runs the EF bundle before the API and
+Worker start. In Production both processes refuse development settings no adapter owns
+(`ProductionSettingsGuard`): seeding, migrate-on-startup, a localhost public origin, non-HTTPS hub
+origins and Npgsql error-detail or parameter logging. The `backup` container dumps PostgreSQL nightly,
+encrypts it to the owner's age public key, uploads it to an S3-compatible bucket, keeps 30 days and
+pings an optional heartbeat; `restore.sh` restores into a new or empty database in one transaction.
+The data loss window is up to a day. Operators run `platform-admin` and `send-test-email` as
+`dotnet TB.Gym.Api.dll` subcommands inside the API container.
+
 Scale in this order:
 
 1. Tune queries, indexes, payloads, and object delivery.
@@ -1412,6 +1425,8 @@ None of this is automated and none of it mutates DNS. It is what an operator doe
 | Webhook endpoint | The public `/api/notifications/email/provider-events` URL registered with the provider | Nothing establishes recipient-server acceptance, bounce or complaint without it |
 | Webhook secret rotation | Add the new secret at the provider, deploy it, remove the old one | The signature scheme accepts a list, so both are live during the overlap and no event is lost |
 | Fingerprint key rotation | Add a new key id, repoint `FingerprintKeyId`, keep the retired key configured | Removing a retired key drops the suppressions written under it and resumes mail to addresses that hard-bounced |
+| Support Reply-To | Optional `Provider:ReplyToAddress`, one mailbox, sent as `reply_to` on every message | A reply otherwise goes to the sending address, which nobody reads. Changing it while a retry is pending changes that payload; the provider answers with its idempotency conflict and the delivery dead-letters rather than sending twice |
+| Proof it sends | `dotnet TB.Gym.Api.dll send-test-email you@example.com` | Sends one message straight to the provider (nothing queued or stored) and explains a refusal in words |
 
 | Ongoing check | What to watch | Why it matters |
 | --- | --- | --- |

@@ -146,6 +146,12 @@ public sealed class NotificationEmailProviderOptions
     /// <summary>The verified sending identity, such as <c>TB Gym &lt;notifications@mail.example.com&gt;</c>.</summary>
     public string FromAddress { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional. The support mailbox a recipient's reply goes to, such as <c>support@example.com</c>.
+    /// Without it a reply goes to the sending address, which nobody reads.
+    /// </summary>
+    public string ReplyToAddress { get; set; } = string.Empty;
+
     /// <summary>How long one provider call may take. Allowed 1 to 60 seconds.</summary>
     public int TimeoutSeconds { get; set; } = 15;
 
@@ -186,6 +192,7 @@ public sealed class NotificationEmailProviderOptions
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(ApiKey) ||
         !string.IsNullOrWhiteSpace(FromAddress) ||
+        !string.IsNullOrWhiteSpace(ReplyToAddress) ||
         !string.IsNullOrWhiteSpace(WebhookSigningSecret) ||
         !string.IsNullOrWhiteSpace(FingerprintKeyId) ||
         FingerprintKeys.Count > 0 ||
@@ -203,6 +210,12 @@ public sealed class NotificationEmailProviderOptions
         {
             return $"{NotificationEmailOptions.SectionName}:Provider:FromAddress must be the verified " +
                 "sending identity, at most 200 characters.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(ReplyToAddress) && !IsSingleMailbox(ReplyToAddress))
+        {
+            return $"{NotificationEmailOptions.SectionName}:Provider:ReplyToAddress must be one email " +
+                "address, at most 200 characters.";
         }
 
         if (NotificationEmailProviderEndpoints.Validate(Endpoint, isProduction) is { } endpointError)
@@ -299,6 +312,26 @@ public sealed class NotificationEmailProviderOptions
         }
 
         return null;
+    }
+
+    private static bool IsSingleMailbox(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length > 200 || trimmed.Contains(',', StringComparison.Ordinal) ||
+            trimmed.Contains(';', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            var parsed = new System.Net.Mail.MailAddress(trimmed);
+            return parsed.Host.Contains('.', StringComparison.Ordinal);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     private static bool TryDecodeKey(string encoded, out byte[] material)

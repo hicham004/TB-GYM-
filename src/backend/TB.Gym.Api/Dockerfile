@@ -13,8 +13,9 @@ WORKDIR /app
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 
+# curl serves the container health check in compose.production.yaml.
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends libgssapi-krb5-2 \
+    && apt-get install --yes --no-install-recommends libgssapi-krb5-2 curl \
     && rm --recursive --force /var/lib/apt/lists/* \
     && mkdir --parents /home/app/.aspnet/DataProtection-Keys /home/app/media \
     && chown --recursive $APP_UID:$APP_UID /home/app/.aspnet /home/app/media
