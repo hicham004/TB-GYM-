@@ -100,6 +100,9 @@ export async function mockSession(
       json(route, 200, { unread: options.unreadNotifications ?? 0 }),
     'GET /api/messaging/unread-count': (route) =>
       json(route, 200, { unread: options.unreadMessages ?? 0 }),
+    // The coach shell's billing banner asks on every page (ADR 0028). A paid workspace shows no banner.
+    'GET /api/billing/access': (route) =>
+      json(route, 200, { isReadOnly: false, hasOverdueInvoice: false, readOnlyFrom: null }),
     ...hubHandlers,
     ...(options.extra ?? {}),
   });
