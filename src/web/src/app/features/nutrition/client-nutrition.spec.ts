@@ -54,6 +54,7 @@ const ASSIGNMENT: ClientNutritionPlan = {
   startDate: '2026-09-01',
   endDateExclusive: '2026-09-08',
   calorieTarget: 2049,
+  status: 'Active',
 };
 
 /** An enrollment covering Nutrition, and one that does not, so the picker has to choose. */

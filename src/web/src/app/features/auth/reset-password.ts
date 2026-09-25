@@ -1,16 +1,30 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
+import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
+import { Button, ButtonLink } from '../../ui/button';
+import { Control, Field } from '../../ui/field';
 import { PasswordReveal } from '../../ui/password-reveal';
+import { AuthFrame } from './auth-frame';
+import { newPasswordReasons, requiredReason } from './auth-reasons';
 
 @Component({
   selector: 'app-reset-password',
-  imports: [PasswordReveal, ReactiveFormsModule, RouterLink],
+  imports: [
+    AuthFrame,
+    Button,
+    ButtonLink,
+    Control,
+    Field,
+    PasswordReveal,
+    ReactiveFormsModule,
+    RouterLink,
+  ],
   templateUrl: './reset-password.html',
   styleUrl: './auth.scss',
 })
@@ -20,6 +34,9 @@ export class ResetPassword implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly scrubber = inject(ActionTokenScrubber);
   private readonly formBuilder = inject(FormBuilder);
+  private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
+
+  protected readonly attempt = new FormAttempt();
 
   protected readonly submitting = signal(false);
   protected readonly complete = signal(false);
@@ -44,18 +61,37 @@ export class ResetPassword implements OnInit {
     }
   }
 
+  protected passwordReasons(): string[] {
+    return newPasswordReasons(this.form.controls.password);
+  }
+
+  protected confirmPasswordReasons(): string[] {
+    return requiredReason(
+      this.form.controls.confirmPassword,
+      $localize`Enter the same password again.`,
+    );
+  }
+
+  protected formReasons(): string[] {
+    return [...this.passwordReasons(), ...this.confirmPasswordReasons()];
+  }
+
   protected async submit(): Promise<void> {
     if (!this.validLink || this.form.invalid) {
       this.form.markAllAsTouched();
+      this.attempt.attempt();
+      this.summary()?.nativeElement.focus();
       return;
     }
 
     const value = this.form.getRawValue();
     if (value.password !== value.confirmPassword) {
       this.error.set($localize`Passwords do not match.`);
+      this.summary()?.nativeElement.focus();
       return;
     }
 
+    this.attempt.reset();
     this.submitting.set(true);
     this.error.set(null);
     try {

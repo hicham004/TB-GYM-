@@ -98,6 +98,7 @@ export interface ClientNutritionPlan {
   startDate: string;
   endDateExclusive: string;
   calorieTarget: number;
+  status: ContractClientNutritionPlanSummary['status'];
 }
 
 export interface NutritionChoice {

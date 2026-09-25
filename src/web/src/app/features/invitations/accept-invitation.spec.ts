@@ -171,6 +171,19 @@ describe('AcceptInvitation', () => {
     expect(navigate).toHaveBeenCalledWith('/');
   });
 
+  /** The new account's password is saved against the invited email, which is not a typed field. */
+  it('tells a password manager which account the new password belongs to', async () => {
+    const { host } = await render();
+
+    const username = query<HTMLInputElement>(host, 'input[autocomplete="username"]');
+    expect(username.value).toBe('rana@example.test');
+    expect(username.hidden).toBe(true);
+    expect(passwords(host).map((input) => input.getAttribute('autocomplete'))).toEqual([
+      'new-password',
+      'new-password',
+    ]);
+  });
+
   it('explains an invalid password instead of making the submit button appear broken', async () => {
     const { fixture, host, api } = await render();
 
@@ -203,6 +216,24 @@ describe('AcceptInvitation', () => {
     await settle(fixture);
 
     expect(api.acceptInvitation).toHaveBeenCalledWith(TOKEN, null, null);
+  });
+
+  /**
+   * A signed-in person already has the app's own shell around the page, so the signed-out frame
+   * drops its wordmark and photo instead of stacking a second header inside the first.
+   */
+  it('uses the slim frame inside the app shell when someone is signed in', async () => {
+    const signedIn = await render({ signedInAs: user('rana@example.test') });
+    expect(signedIn.host.querySelector('.auth--embedded')).not.toBeNull();
+    expect(signedIn.host.querySelector('.auth__header')).toBeNull();
+    expect(signedIn.host.querySelector('.auth__panel')).toBeNull();
+    TestBed.resetTestingModule();
+
+    const visitor = await render();
+    expect(visitor.host.querySelector('.auth--embedded')).toBeNull();
+    expect(visitor.host.querySelector('.auth__header a[href="/"]')?.textContent).toContain(
+      'TB Gym',
+    );
   });
 
   /**
@@ -239,7 +270,7 @@ describe('AcceptInvitation', () => {
 
     expect(host.textContent).toContain('An account already exists for this email');
     expect(host.querySelector('input[type="password"]')).toBeNull();
-    const signIn = query<HTMLAnchorElement>(host, 'a.primary-button');
+    const signIn = query<HTMLAnchorElement>(host, 'a.tb-button');
     // The link carries the invitation back, so signing in does not lose it.
     expect(signIn.getAttribute('href')).toContain('returnUrl');
     expect(signIn.getAttribute('href')).toContain(encodeURIComponent(TOKEN));

@@ -1,0 +1,106 @@
+<section class="checkins tb-theme" aria-labelledby="client-checkins-title">
+  <div class="checkins-header">
+    <div>
+      <h2 id="client-checkins-title" class="tb-text-body-strong" i18n>Check-ins</h2>
+      <p class="tb-text-metadata muted" i18n>
+        Newest due first. Answers are read and reviewed on the Client check-ins screen.
+      </p>
+    </div>
+    @if (!context.isFormer()) {
+      <a
+        appButton
+        variant="outlined"
+        routerLink="/checkins/clients"
+        [queryParams]="{ clientId: context.clientId() }"
+        i18n
+        >Assign a check-in</a
+      >
+    }
+  </div>
+
+  @if (context.isFormer()) {
+    <p class="tb-text-compact muted" i18n>
+      This is a former client. Their records are kept but are not shown here.
+    </p>
+  } @else if (loading() && items().length === 0) {
+    <p class="tb-text-compact muted" role="status" i18n>Loading check-ins…</p>
+  } @else if (denial(); as message) {
+    <p class="tb-text-compact" role="status">{{ message }}</p>
+  } @else if (error(); as message) {
+    <div class="load-error">
+      <p class="tb-text-compact" role="alert">{{ message }}</p>
+      <button appButton type="button" variant="outlined" (click)="load()" i18n>Retry</button>
+    </div>
+  } @else if (rows().length === 0) {
+    <p class="tb-text-compact muted" i18n>No check-ins assigned yet.</p>
+  } @else {
+    <table class="tb-table">
+      <caption class="tb-visually-hidden" i18n>
+        This client’s check-ins
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col" i18n>Check-in</th>
+          <th scope="col" i18n>Due</th>
+          <th scope="col" i18n>Status</th>
+          <th scope="col" i18n>Submitted</th>
+          <th scope="col"><span class="tb-visually-hidden" i18n>Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.item.assignment.id) {
+          <tr>
+            <td dir="auto">{{ row.item.assignment.formTitle }}</td>
+            <td>{{ row.item.assignment.dueDate | date: 'EEE d MMM y' }}</td>
+            <td>
+              <app-status-label
+                [label]="row.status.label"
+                [tone]="row.status.tone"
+                [marker]="row.status.marker"
+              />
+              @if (row.item.response?.isLate) {
+                <span class="late tb-text-metadata" i18n>Late</span>
+              }
+            </td>
+            <td>
+              @if (row.item.response?.submittedAtUtc; as submitted) {
+                {{ submitted | date: 'EEE d MMM, HH:mm' }}
+              } @else {
+                <span class="muted" i18n>Not submitted</span>
+              }
+            </td>
+            <td class="action">
+              @if (row.canOpen) {
+                <a
+                  appButton
+                  variant="text"
+                  routerLink="/checkins/clients"
+                  [queryParams]="{
+                    clientId: context.clientId(),
+                    assignmentId: row.item.assignment.id,
+                  }"
+                >
+                  @if (row.item.response?.status === 'Submitted') {
+                    <ng-container i18n>Review</ng-container>
+                  } @else {
+                    <ng-container i18n>Open</ng-container>
+                  }
+                  <span class="tb-visually-hidden" dir="auto"
+                    >{{ row.item.assignment.formTitle }},
+                    {{ row.item.assignment.dueDate | date: 'd MMM' }}</span
+                  >
+                </a>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    @if (total() > items().length) {
+      <p class="tb-text-metadata muted" i18n>
+        Showing the latest <bdi>{{ items().length }}</bdi> of <bdi>{{ total() }}</bdi
+        >. Older check-ins are on the Client check-ins screen.
+      </p>
+    }
+  }
+</section>

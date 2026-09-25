@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { IsActiveMatchOptions, RouterLink, RouterLinkActive } from '@angular/router';
 
 export interface SectionLink {
   readonly label: string;
@@ -24,7 +24,7 @@ export interface SectionLink {
             <a
               [routerLink]="item.link"
               routerLinkActive="current"
-              [routerLinkActiveOptions]="{ exact: true }"
+              [routerLinkActiveOptions]="matchOptions"
               ariaCurrentWhenActive="page"
               >{{ item.label }}</a
             >
@@ -86,6 +86,17 @@ export interface SectionLink {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SectionNav {
+  /**
+   * The page itself, whatever its query string: a link into a section with `?renew=…` or a filter
+   * still marks that section as the current page.
+   */
+  protected readonly matchOptions: IsActiveMatchOptions = {
+    paths: 'exact',
+    queryParams: 'ignored',
+    matrixParams: 'ignored',
+    fragment: 'ignored',
+  };
+
   /** Names the navigation region, for example "Training sections". */
   readonly label = input.required<string>();
   readonly links = input.required<readonly SectionLink[]>();

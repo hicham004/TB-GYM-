@@ -51,7 +51,7 @@ describe('ConfirmEmail', () => {
 
     expect(api.confirmEmail).toHaveBeenCalledWith('user-1', 'confirm-code-1');
     expect(host.textContent).toContain('Email confirmed');
-    expect(query<HTMLAnchorElement>(host, 'a.primary-button').getAttribute('href')).toBe(
+    expect(query<HTMLAnchorElement>(host, 'a.tb-button').getAttribute('href')).toBe(
       '/auth/sign-in',
     );
     expect(host.textContent).not.toContain('Confirming your email...');

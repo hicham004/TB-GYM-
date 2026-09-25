@@ -127,7 +127,7 @@ describe('App', () => {
   });
 
   it('creates the application shell', async () => {
-    const { fixture, host } = await render();
+    const { fixture, host } = await render({ signedIn: true, memberships: [] });
 
     expect(fixture.componentInstance).toBeTruthy();
     expect(host.querySelector('.brand')?.textContent).toContain('TB Gym');
@@ -143,7 +143,6 @@ describe('App', () => {
 
     expect(host.querySelector('app-coach-shell')).not.toBeNull();
     expect(host.querySelector('.client-tabs')).toBeNull();
-    expect(host.querySelector('.public-nav')).toBeNull();
     // The pre-existing member top bar and its workspace picker belong to the other shell.
     expect(host.querySelector('.authenticated-nav')).toBeNull();
     expect(host.querySelector('.workspace-picker')).toBeNull();
@@ -169,13 +168,17 @@ describe('App', () => {
     expect(host.querySelector('a[href*="nutrition"]')).toBeNull();
   });
 
+  /**
+   * Signed-out pages (the homepage, sign-in and the rest of /auth, invitations) draw their own
+   * header, so a visitor gets no app chrome at all: no coach sidebar, no member bar, no client tabs.
+   */
   it('keeps the signed-out shell separate from both', async () => {
     const { host } = await render();
 
     expect(host.querySelector('app-coach-shell')).toBeNull();
     expect(host.querySelector('.client-tabs')).toBeNull();
-    expect(host.querySelector('.public-nav a[href="/auth/sign-in"]')).not.toBeNull();
-    expect(host.querySelector('.public-nav a[href="/auth/register"]')).not.toBeNull();
+    expect(host.querySelector('header.topbar')).toBeNull();
+    expect(host.querySelector('main router-outlet')).not.toBeNull();
   });
 
   /**

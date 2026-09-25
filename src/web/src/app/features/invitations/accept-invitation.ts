@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -8,16 +8,31 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { PublicInvitation } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
+import { FormAttempt } from '../../core/forms/form-attempt';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { AuthFrame } from '../auth/auth-frame';
+import { newPasswordReasons, requiredReason } from '../auth/auth-reasons';
+import { Button, ButtonLink } from '../../ui/button';
+import { Control, Field } from '../../ui/field';
 import { PasswordReveal } from '../../ui/password-reveal';
 
 @Component({
   selector: 'app-accept-invitation',
-  imports: [DatePipe, PasswordReveal, ReactiveFormsModule, RouterLink],
+  imports: [
+    AuthFrame,
+    Button,
+    ButtonLink,
+    Control,
+    DatePipe,
+    Field,
+    PasswordReveal,
+    ReactiveFormsModule,
+    RouterLink,
+  ],
   templateUrl: './accept-invitation.html',
-  styleUrl: './accept-invitation.scss',
+  styleUrls: ['../auth/auth.scss', './accept-invitation.scss'],
 })
 export class AcceptInvitation implements OnInit {
   private readonly api = inject(ApiClient);
@@ -28,6 +43,9 @@ export class AcceptInvitation implements OnInit {
   private readonly router = inject(Router);
   private readonly scrubber = inject(ActionTokenScrubber);
   private readonly tenants = inject(TenantStore);
+  private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
+
+  protected readonly attempt = new FormAttempt();
 
   protected readonly invitation = signal<PublicInvitation | null>(null);
   protected readonly loading = signal(true);
@@ -110,6 +128,31 @@ export class AcceptInvitation implements OnInit {
     }
   }
 
+  protected displayNameReasons(): string[] {
+    const control = this.accountForm.controls.displayName;
+    if (control.hasError('required')) return [$localize`Enter your display name.`];
+    return control.hasError('maxlength') ? [$localize`Use 200 characters or fewer.`] : [];
+  }
+
+  protected passwordReasons(): string[] {
+    return newPasswordReasons(this.accountForm.controls.password);
+  }
+
+  protected confirmPasswordReasons(): string[] {
+    return requiredReason(
+      this.accountForm.controls.confirmPassword,
+      $localize`Enter the same password again.`,
+    );
+  }
+
+  protected formReasons(): string[] {
+    return [
+      ...this.displayNameReasons(),
+      ...this.passwordReasons(),
+      ...this.confirmPasswordReasons(),
+    ];
+  }
+
   protected async accept(): Promise<void> {
     const invitation = this.invitation();
     if (!invitation || invitation.status !== 'Pending') {
@@ -119,6 +162,8 @@ export class AcceptInvitation implements OnInit {
     const createsAccount = !invitation.requiresExistingAccountSignIn && !this.signedInUser();
     if (createsAccount && this.accountForm.invalid) {
       this.accountForm.markAllAsTouched();
+      this.attempt.attempt();
+      this.summary()?.nativeElement.focus();
       return;
     }
 
@@ -126,9 +171,12 @@ export class AcceptInvitation implements OnInit {
     if (createsAccount && value.password !== value.confirmPassword) {
       this.error.set($localize`Passwords do not match.`);
       this.clearCredentials();
+      this.attempt.reset();
+      this.summary()?.nativeElement.focus();
       return;
     }
 
+    this.attempt.reset();
     this.submitting.set(true);
     this.error.set(null);
     try {

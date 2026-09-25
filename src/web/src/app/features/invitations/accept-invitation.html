@@ -1,202 +1,214 @@
-<section class="accept-layout">
+<app-auth-frame [embedded]="!!signedInUser()">
   @if (loading()) {
-    <p class="loading-row" i18n>Checking invitation...</p>
+    <p class="auth-muted" role="status" i18n>Checking invitation...</p>
   } @else if (error() && !invitation()) {
-    <div class="accept-panel">
-      <p class="eyebrow" i18n>Client invitation</p>
-      <h1 i18n>Link unavailable</h1>
-      <p class="form-error" role="alert">{{ error() }}</p>
+    <p class="auth-eyebrow" i18n>Client invitation</p>
+    <h1 class="auth-title" i18n>Link <em>unavailable.</em></h1>
+    <div class="auth-stack">
+      <p class="auth-message auth-message--error" role="alert">{{ error() }}</p>
       @if (!spent() && token()) {
-        <button class="primary-button" type="button" [disabled]="loading()" (click)="load()" i18n>
+        <button
+          appButton
+          type="button"
+          size="touch"
+          class="auth-submit"
+          [loading]="loading()"
+          (click)="load()"
+          i18n
+        >
           Try again
         </button>
       }
-      <a routerLink="/auth/sign-in" i18n>Go to sign in</a>
+      <p><a class="auth-link" routerLink="/auth/sign-in" i18n>Go to sign in</a></p>
     </div>
   } @else if (invitation(); as invite) {
-    <div class="accept-panel">
-      <p class="eyebrow" i18n>Invitation from {{ invite.workspaceName }}</p>
-      @if (isCoachInvitation()) {
-        <h1 i18n>Join the coaching team</h1>
-      } @else {
-        <h1 i18n>Join your coaching workspace</h1>
-      }
-      <dl class="invitation-details">
-        <div>
-          @if (isCoachInvitation()) {
-            <dt i18n>Coach</dt>
-          } @else {
-            <dt i18n>Client</dt>
-          }
-          <dd>{{ invite.firstName }} {{ invite.lastName }}</dd>
-        </div>
-        <div>
-          <dt i18n>Email</dt>
-          <dd>{{ invite.email }}</dd>
-        </div>
-        <div>
-          <dt i18n>Expires</dt>
-          <dd>{{ invite.expiresAtUtc | date: 'medium' }}</dd>
-        </div>
-      </dl>
-
-      @if (invite.status === 'Accepted') {
-        <p class="form-success" i18n>This invitation has already been accepted.</p>
-        @if (signedInUser()) {
-          <a class="primary-button" routerLink="/" i18n>Open dashboard</a>
+    <p class="auth-eyebrow" i18n>Invitation from {{ invite.workspaceName }}</p>
+    @if (isCoachInvitation()) {
+      <h1 class="auth-title" i18n>Join the coaching <em>team.</em></h1>
+    } @else {
+      <h1 class="auth-title" i18n>Join your coaching <em>workspace.</em></h1>
+    }
+    <dl class="invitation-details">
+      <div>
+        @if (isCoachInvitation()) {
+          <dt i18n>Coach</dt>
         } @else {
-          <a class="primary-button" routerLink="/auth/sign-in" i18n>Sign in</a>
+          <dt i18n>Client</dt>
         }
-      } @else if (invite.status !== 'Pending') {
-        <p class="form-error" i18n>This invitation is no longer active.</p>
-      } @else if (signedInUser() && !signedInWithInvitedEmail()) {
-        <p class="notice" i18n>
+        <dd>{{ invite.firstName }} {{ invite.lastName }}</dd>
+      </div>
+      <div>
+        <dt i18n>Email</dt>
+        <dd>{{ invite.email }}</dd>
+      </div>
+      <div>
+        <dt i18n>Expires</dt>
+        <dd>{{ invite.expiresAtUtc | date: 'medium' }}</dd>
+      </div>
+    </dl>
+
+    @if (invite.status === 'Accepted') {
+      <div class="auth-stack">
+        <p class="auth-message auth-message--success" i18n>
+          This invitation has already been accepted.
+        </p>
+        @if (signedInUser()) {
+          <a appButton size="touch" class="auth-submit" routerLink="/" i18n>Open dashboard</a>
+        } @else {
+          <a appButton size="touch" class="auth-submit" routerLink="/auth/sign-in" i18n>Sign in</a>
+        }
+      </div>
+    } @else if (invite.status !== 'Pending') {
+      <p class="auth-message auth-message--error" i18n>This invitation is no longer active.</p>
+    } @else if (signedInUser() && !signedInWithInvitedEmail()) {
+      <div class="auth-stack">
+        <p class="auth-message auth-message--notice" i18n>
           You are signed in as {{ signedInUser()?.email }}, but this invitation belongs to
           {{ invite.email }}. Sign out here to continue as {{ invite.email }} — you will stay on
           this invitation.
         </p>
-        @if (error()) {
-          <p class="form-error" role="alert">{{ error() }}</p>
-        }
+        <p class="auth-summary" role="alert">
+          @if (error()) {
+            <span>{{ error() }}</span>
+          }
+        </p>
         <button
-          class="primary-button"
+          appButton
           type="button"
-          [disabled]="submitting() || loading()"
+          size="touch"
+          class="auth-submit"
+          [loading]="submitting() || loading()"
           (click)="signOut()"
           i18n
         >
           Sign out and continue
         </button>
-      } @else if (invite.requiresExistingAccountSignIn && !signedInUser()) {
-        <p class="notice" i18n>An account already exists for this email. Sign in to continue.</p>
+      </div>
+    } @else if (invite.requiresExistingAccountSignIn && !signedInUser()) {
+      <div class="auth-stack">
+        <p class="auth-message auth-message--notice" i18n>
+          An account already exists for this email. Sign in to continue.
+        </p>
         <a
-          class="primary-button"
+          appButton
+          size="touch"
+          class="auth-submit"
           routerLink="/auth/sign-in"
           [queryParams]="{ returnUrl: returnUrl() }"
           i18n
         >
           Sign in to accept
         </a>
-      } @else {
-        @if (!signedInUser()) {
-          <form [formGroup]="accountForm" (ngSubmit)="accept()" novalidate>
-            @if (isCoachInvitation()) {
-              <h2 i18n>Create your coach account</h2>
-            } @else {
-              <h2 i18n>Create your client account</h2>
-            }
-            <label>
-              <span i18n>Display name</span>
-              <input
-                type="text"
-                formControlName="displayName"
-                autocomplete="name"
-                [attr.aria-invalid]="
-                  accountForm.controls.displayName.touched &&
-                  accountForm.controls.displayName.invalid
-                    ? 'true'
-                    : null
-                "
-                [attr.aria-describedby]="
-                  accountForm.controls.displayName.touched &&
-                  accountForm.controls.displayName.invalid
-                    ? 'invitation-display-name-error'
-                    : null
-                "
-              />
-              @if (
-                accountForm.controls.displayName.touched && accountForm.controls.displayName.invalid
-              ) {
-                <small id="invitation-display-name-error" class="form-error" role="alert" i18n>
-                  Enter the client display name.
-                </small>
-              }
-            </label>
-            <div>
-              <label for="invitation-password"><span i18n>Password</span></label>
-              <app-password-reveal>
-                <input
-                  id="invitation-password"
-                  type="password"
-                  formControlName="password"
-                  autocomplete="new-password"
-                  [attr.aria-invalid]="
-                    accountForm.controls.password.touched && accountForm.controls.password.invalid
-                      ? 'true'
-                      : null
-                  "
-                  [attr.aria-describedby]="
-                    accountForm.controls.password.touched && accountForm.controls.password.invalid
-                      ? 'invitation-password-help invitation-password-error'
-                      : 'invitation-password-help'
-                  "
-                />
-              </app-password-reveal>
-              <small id="invitation-password-help" i18n>
-                At least 12 characters with upper, lower, number, and symbol.
-              </small>
-              @if (accountForm.controls.password.touched && accountForm.controls.password.invalid) {
-                <small id="invitation-password-error" class="form-error" role="alert" i18n>
-                  Use a password with at least 12 characters.
-                </small>
-              }
-            </div>
-            <div>
-              <label for="invitation-confirm-password"><span i18n>Confirm password</span></label>
-              <app-password-reveal>
-                <input
-                  id="invitation-confirm-password"
-                  type="password"
-                  formControlName="confirmPassword"
-                  autocomplete="new-password"
-                  [attr.aria-invalid]="
-                    accountForm.controls.confirmPassword.touched &&
-                    accountForm.controls.confirmPassword.invalid
-                      ? 'true'
-                      : null
-                  "
-                  [attr.aria-describedby]="
-                    accountForm.controls.confirmPassword.touched &&
-                    accountForm.controls.confirmPassword.invalid
-                      ? 'invitation-confirm-password-error'
-                      : null
-                  "
-                />
-              </app-password-reveal>
-              @if (
-                accountForm.controls.confirmPassword.touched &&
-                accountForm.controls.confirmPassword.invalid
-              ) {
-                <small id="invitation-confirm-password-error" class="form-error" role="alert" i18n>
-                  Confirm the password.
-                </small>
-              }
-            </div>
-            @if (error()) {
-              <p class="form-error" role="alert">{{ error() }}</p>
-            }
-            <button class="primary-button" type="submit" [disabled]="submitting()">
-              @if (submitting()) {
-                <span i18n>Joining...</span>
-              } @else {
-                <span i18n>Create account and join</span>
-              }
-            </button>
-          </form>
+      </div>
+    } @else if (!signedInUser()) {
+      <form class="auth-form" [formGroup]="accountForm" (ngSubmit)="accept()" novalidate>
+        @if (isCoachInvitation()) {
+          <h2 class="auth-subtitle" i18n>Create your coach account</h2>
         } @else {
-          <p i18n>Accept this invitation using {{ signedInUser()?.email }}.</p>
-          @if (error()) {
-            <p class="form-error" role="alert">{{ error() }}</p>
-          }
-          <button class="primary-button" type="button" [disabled]="submitting()" (click)="accept()">
-            @if (submitting()) {
-              <span i18n>Joining...</span>
-            } @else {
-              <span i18n>Accept invitation</span>
-            }
-          </button>
+          <h2 class="auth-subtitle" i18n>Create your client account</h2>
         }
-      }
-    </div>
+        <!-- Not a form control: it tells a password manager which account the new password is for. -->
+        <input type="email" autocomplete="username" [value]="invite.email" readonly hidden />
+        @let nameMessages = displayNameReasons();
+        <app-field
+          label="Display name"
+          i18n-label
+          [errors]="attempt.shows('displayName', nameMessages) ? nameMessages : null"
+        >
+          <input
+            appControl
+            type="text"
+            formControlName="displayName"
+            autocomplete="name"
+            (blur)="attempt.touch('displayName')"
+          />
+        </app-field>
+        @let passwordMessages = passwordReasons();
+        <app-field
+          label="Password"
+          i18n-label
+          help="At least 12 characters with upper, lower, number, and symbol."
+          i18n-help
+          [errors]="attempt.shows('password', passwordMessages) ? passwordMessages : null"
+        >
+          <app-password-reveal>
+            <input
+              appControl
+              id="invitation-password"
+              type="password"
+              formControlName="password"
+              autocomplete="new-password"
+              (blur)="attempt.touch('password')"
+            />
+          </app-password-reveal>
+        </app-field>
+        @let confirmMessages = confirmPasswordReasons();
+        <app-field
+          label="Confirm password"
+          i18n-label
+          [errors]="attempt.shows('confirmPassword', confirmMessages) ? confirmMessages : null"
+        >
+          <app-password-reveal>
+            <input
+              appControl
+              id="invitation-confirm-password"
+              type="password"
+              formControlName="confirmPassword"
+              autocomplete="new-password"
+              (blur)="attempt.touch('confirmPassword')"
+            />
+          </app-password-reveal>
+        </app-field>
+
+        <p id="invitation-summary" class="auth-summary" role="alert" tabindex="-1" #summary>
+          @if (attempt.wasTried() && formReasons().length > 0) {
+            <span i18n>Your account can't be created yet:</span>
+            @for (reason of formReasons(); track reason) {
+              <span>{{ reason }}</span>
+            }
+          } @else if (error()) {
+            <span>{{ error() }}</span>
+          }
+        </p>
+
+        <button
+          appButton
+          type="submit"
+          size="touch"
+          class="auth-submit"
+          [loading]="submitting()"
+          aria-describedby="invitation-summary"
+        >
+          @if (submitting()) {
+            <span i18n>Joining...</span>
+          } @else {
+            <span i18n>Create account and join</span>
+          }
+        </button>
+      </form>
+    } @else {
+      <div class="auth-stack">
+        <p i18n>Accept this invitation using {{ signedInUser()?.email }}.</p>
+        <p class="auth-summary" role="alert">
+          @if (error()) {
+            <span>{{ error() }}</span>
+          }
+        </p>
+        <button
+          appButton
+          type="button"
+          size="touch"
+          class="auth-submit"
+          [loading]="submitting()"
+          (click)="accept()"
+        >
+          @if (submitting()) {
+            <span i18n>Joining...</span>
+          } @else {
+            <span i18n>Accept invitation</span>
+          }
+        </button>
+      </div>
+    }
   }
-</section>
+</app-auth-frame>

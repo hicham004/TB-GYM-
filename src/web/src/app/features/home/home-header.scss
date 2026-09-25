@@ -53,27 +53,11 @@
 }
 
 .home-brand {
-  align-items: center;
-  display: inline-flex;
-  flex: none;
-  font-size: 1.12rem;
-  font-weight: 600;
-  gap: 11px;
-  letter-spacing: -0.045em;
-  text-decoration: none;
+  @include brand-link;
 }
 
 .home-brand__mark {
-  align-items: center;
-  background: var(--home-forest);
-  block-size: 38px;
-  border-radius: 50%;
-  color: white;
-  display: inline-flex;
-  font-size: 0.95rem;
-  inline-size: 38px;
-  justify-content: center;
-  letter-spacing: -0.08em;
+  @include brand-mark;
   transition: transform 400ms var(--home-ease);
 }
 

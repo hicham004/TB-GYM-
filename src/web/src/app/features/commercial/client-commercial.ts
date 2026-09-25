@@ -37,7 +37,15 @@ export class ClientCommercial {
   readonly client = input.required<CoachClientDetails>();
   /** A former client's history (ADR 0027): shown, with every action that would change it hidden. */
   readonly readOnly = input(false);
+  /**
+   * Opens the renewal form for this enrollment once the list has loaded: the client Overview's
+   * "Renew plan" link lands here. Presentation only; creating the renewal is still the coach's act.
+   */
+  readonly renewEnrollmentId = input<string | null>(null);
   readonly profileChanged = output<CoachClientDetails>();
+  /** Every fresh read of the plans, so a page header showing the current plan stays in step. */
+  readonly plansChanged = output<ClientCommercialOverview>();
+  private renewalRequestHandled = false;
 
   protected readonly catalog = signal<ProductCatalog | null>(null);
   protected readonly overview = signal<ClientCommercialOverview | null>(null);
@@ -181,6 +189,15 @@ export class ClientCommercial {
       offerId: enrollment.offerId,
       startDate: enrollment.endDateExclusive,
     });
+  }
+
+  private openRequestedRenewal(enrollments: readonly ClientEnrollment[]): void {
+    const requested = this.renewEnrollmentId();
+    if (this.renewalRequestHandled || requested === null || this.readOnly()) return;
+    const enrollment = enrollments.find((item) => item.id === requested);
+    if (!enrollment) return;
+    this.renewalRequestHandled = true;
+    this.openRenewal(enrollment);
   }
 
   protected async renew(enrollment: ClientEnrollment): Promise<void> {
@@ -354,6 +371,8 @@ export class ClientCommercial {
         );
         this.catalog.set(catalog);
         this.overview.set(overview);
+        this.plansChanged.emit(overview);
+        this.openRequestedRenewal(overview.enrollments);
         for (const control of [
           this.assignForm.controls.startDate,
           this.renewalForm.controls.startDate,
@@ -380,9 +399,11 @@ export class ClientCommercial {
 
   private async loadOverview(): Promise<void> {
     return this.scope.run('loadOverview', async (owner) => {
-      this.overview.set(
-        await owner.wait(firstValueFrom(this.api.getClientCommercialOverview(this.client().id))),
+      const overview = await owner.wait(
+        firstValueFrom(this.api.getClientCommercialOverview(this.client().id)),
       );
+      this.overview.set(overview);
+      this.plansChanged.emit(overview);
     });
   }
 

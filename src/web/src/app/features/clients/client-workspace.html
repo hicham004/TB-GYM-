@@ -1,0 +1,86 @@
+<div class="client-workspace">
+  <header class="client-header tb-theme">
+    <nav class="breadcrumb tb-text-metadata" aria-label="Breadcrumb" i18n-aria-label>
+      <ol>
+        <li><a routerLink="/clients" i18n>Clients</a></li>
+        <li aria-current="page">
+          <span class="current" dir="auto">{{ fullName() || clientLabel }}</span>
+        </li>
+      </ol>
+    </nav>
+
+    @if (profile(); as client) {
+      <div class="identity">
+        <app-avatar [initials]="initials()" presentation="client" />
+        <div class="identity-copy">
+          <div class="name-row">
+            <h1 class="tb-text-section-title" dir="auto">{{ fullName() }}</h1>
+            @if (planStatus(); as status) {
+              <app-status-label [label]="status.label" [tone]="status.tone" />
+            }
+          </div>
+          @if (!context.isFormer() && context.workspace(); as workspace) {
+            <p class="plan-line tb-text-metadata">
+              @if (enrollment(); as plan) {
+                <span dir="auto">{{ plan.productName }}</span>
+                <span class="separator" aria-hidden="true">·</span>
+                <span i18n
+                  >Enrolled {{ plan.startDate | date: 'd MMM' }} –
+                  {{ plan.lastActiveDate | date: 'd MMM y' }}</span
+                >
+              } @else if (context.plans()) {
+                <span i18n>No plan assigned yet</span>
+              }
+              <span class="separator" aria-hidden="true">·</span>
+              <span i18n
+                >Workspace calendar · <bdi>{{ workspace.timeZoneId }}</bdi></span
+              >
+            </p>
+          }
+        </div>
+        <div class="header-actions">
+          <a appButton variant="text" [routerLink]="['/clients', clientId, 'intake']">
+            @if (context.isFormer()) {
+              <ng-container i18n>View intake</ng-container>
+            } @else {
+              <ng-container i18n>Edit intake</ng-container>
+            }
+          </a>
+          @if (!context.isFormer()) {
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="startingConversation()"
+              (click)="messageClient()"
+            >
+              @if (startingConversation()) {
+                <ng-container i18n>Opening conversation…</ng-container>
+              } @else {
+                <span dir="auto" i18n>Message {{ client.firstName }}</span>
+              }
+            </button>
+          }
+        </div>
+      </div>
+
+      <app-section-nav class="sections" label="Client sections" i18n-label [links]="sections()" />
+    }
+
+    <p class="page-error tb-text-compact" role="alert">{{ context.error() }}</p>
+    <p class="page-notice tb-text-compact" role="status">{{ context.notice() }}</p>
+  </header>
+
+  @if (context.loading() && !profile()) {
+    <p class="loading-row tb-theme tb-text-compact" role="status" i18n>Loading client…</p>
+  } @else if (context.loadError(); as message) {
+    <div class="load-error tb-theme">
+      <p class="tb-text-compact" role="alert">{{ message }}</p>
+      <button appButton type="button" variant="outlined" (click)="retry()" i18n>Retry</button>
+    </div>
+  } @else if (profile()) {
+    <div class="section-content">
+      <router-outlet />
+    </div>
+  }
+</div>

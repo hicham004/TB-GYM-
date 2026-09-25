@@ -1,44 +1,17 @@
 // Shared homepage patterns. Every section stylesheet `@use`s this partial; the colours, fonts and
-// easing it refers to are custom properties set once on `.home` (home.scss) and inherited.
+// easing it refers to are custom properties set once on `.home` (home.scss) and inherited. The
+// palette, heading mixins and wordmark are forwarded from styles/_brand.scss, which the signed-out
+// screens share.
 //
 // Motion rule for the whole page: the base styles are the finished state. Movement is added only
 // under `prefers-reduced-motion: no-preference`, and scroll-linked movement only where the
 // browser supports scroll timelines, so a visitor without either sees a complete, still page.
 
+@forward '../../../styles/brand';
+
 $tablet: 1100px;
 $mobile: 760px;
 $small: 520px;
-
-@mixin eyebrow {
-  align-items: center;
-  display: flex;
-  font-size: 0.74rem;
-  font-weight: 600;
-  gap: 11px;
-  letter-spacing: 0.12em;
-  line-height: 1.4;
-  margin-block: 0 22px;
-  text-transform: uppercase;
-}
-
-@mixin display($size: clamp(2.6rem, 4.7vw, 5rem)) {
-  font-size: $size;
-  font-weight: 600;
-  letter-spacing: -0.055em;
-  line-height: 0.98;
-  margin: 0;
-  text-wrap: balance;
-}
-
-// The italic accent words in every heading. Instrument Serif runs small beside IBM Plex, so it is
-// set slightly larger to share the sans-serif's visual height.
-@mixin accent {
-  font-family: var(--home-serif);
-  font-size: 1.08em;
-  font-style: italic;
-  font-weight: 400;
-  letter-spacing: -0.015em;
-}
 
 @mixin button {
   align-items: center;

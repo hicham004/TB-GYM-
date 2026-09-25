@@ -3,11 +3,6 @@
   min-height: 100vh;
 }
 
-// The landing page supplies its own navigation. Other public routes retain the existing bar.
-:host:has(app-home) .topbar {
-  display: none;
-}
-
 // Coach shell: the sidebar spans both rows of the first column; the top bar and <main> share the
 // second. The shell component's host is `display: contents`, so its sidebar and top bar are grid
 // items here. In RTL the grid mirrors, so the sidebar sits at the inline end (right).
@@ -169,37 +164,8 @@ nav a.with-badge {
   padding: 8px;
 }
 
-.public-nav,
 .session-loading {
   margin-inline-start: auto;
-}
-
-// Enlarged text (200%) used to push "Coach registration" past the viewport on every signed-out
-// route: the button is `nowrap` and nothing in the bar could shrink. The bar now wraps, the nav may
-// shrink, and the button's label may break — none of which changes anything at the default size.
-.topbar.public {
-  flex-wrap: wrap;
-  gap: 8px 0;
-}
-
-.public-nav {
-  min-inline-size: 0;
-}
-
-.public-nav .primary-button {
-  text-align: center;
-  white-space: normal;
-}
-
-.public-nav .primary-button,
-.public-nav .primary-button:hover,
-.public-nav .primary-button.active {
-  background: var(--accent);
-  color: white;
-}
-
-.public-nav .primary-button:hover {
-  background: var(--accent-strong);
 }
 
 .app-main {
@@ -260,11 +226,6 @@ nav a.with-badge {
   }
 }
 
-@media (max-width: 520px) {
-  .public-nav a:first-child {
-    display: none;
-  }
-}
 :host .client-tabs {
   display: flex;
   justify-content: center;

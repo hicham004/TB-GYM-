@@ -1037,6 +1037,9 @@ unit economics are known and exercised.
   slices are parked. Screen migrations stay gated by the feature conditions in that document.
 - Public homepage (2026-09-24, explicitly requested): a visitor entry at `/` with coach registration
   and sign-in paths; the signed-in dashboard and client invitation rules are unchanged.
+- Signed-out screens (2026-09-25, explicitly requested): sign-in, registration, password recovery,
+  email confirmation and invitation acceptance restyled to match the homepage (FRONTEND-DESIGN-SYSTEM
+  §12); presentation only, the auth flow is unchanged. Social sign-in is not built.
 
 ## Commercial launch track (agreed 2026-09-22)
 
@@ -1057,8 +1060,12 @@ Work follows this order; anything outside it needs the user's approval first.
   invoices from seats and covered clients, owner Billing page, platform admin screen (payments,
   void and reissue, discounts, new plan versions), email notices, and read-only for staff when
   unpaid. See ADR 0028. Prices are placeholders until validated with founding coaches.
-- Step 3, redesign of Client Today and the coach client workspace: not started. Other redesign
-  slices are parked.
+- Step 3, redesign of Client Today and the coach client workspace: in progress. Part A, the coach's
+  client record (Figma 131:419), built 2026-09-25: one route per section, an Overview of this week,
+  a coach-only "This week isn't shared yet" line, and a renewal prompt 14 days before a plan ends.
+  Part B next: the client shell and Today, the coverage states ("This week's plan is on its way",
+  "Your next program starts …") and an "Ask to renew" button for an ended plan that notifies the
+  coach at most once per 7 days per client, enforced server-side. Other redesign slices are parked.
 - Step 4, lean go-live with the founding coaches: not started.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.

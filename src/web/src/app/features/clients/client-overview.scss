@@ -1,0 +1,338 @@
+// Coach desktop — Client overview (Figma 131:419): attention notices, the "This week" card with
+// its four metrics and four area rows, and the context rail (bodyweight trend, coach note).
+:host {
+  display: block;
+}
+
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  min-inline-size: 0;
+}
+
+.overview h2,
+.overview p {
+  margin: 0;
+}
+
+.muted {
+  color: var(--color-text-secondary);
+}
+
+.separator {
+  color: var(--color-text-secondary);
+}
+
+.card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  min-inline-size: 0;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Attention: a 4px rail, the reason, and one action at the inline end
+// ------------------------------------------------------------------------------------------------
+
+.attention {
+  align-items: center;
+  border: 1px solid var(--color-border-subtle);
+  border-inline-start: 4px solid var(--attention-rail);
+  border-radius: var(--radius-8);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-16) var(--space-24);
+  padding: var(--space-16) var(--space-24);
+}
+
+.attention.warning {
+  --attention-rail: var(--color-warning);
+  background-color: var(--color-warning-subtle);
+}
+
+// On the plain surface, not information-subtle: secondary text there falls below 4.5:1.
+.attention.information {
+  --attention-rail: var(--color-information);
+  background-color: var(--color-surface);
+}
+
+.attention-copy {
+  display: flex;
+  flex: 1 1 24rem;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-inline-size: 0;
+}
+
+.attention-meta {
+  align-items: center;
+  color: var(--color-text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-12);
+}
+
+.attention h2 {
+  overflow-wrap: anywhere;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Evidence region: the week card and the 328px context rail side by side, stacked when narrow
+// ------------------------------------------------------------------------------------------------
+
+.evidence-region {
+  align-items: start;
+  display: grid;
+  gap: var(--space-24);
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 20.5rem);
+}
+
+@media (max-width: 71.99em) {
+  .evidence-region {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.this-week {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.week-header {
+  border-block-end: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-16) var(--space-24);
+}
+
+// Four metrics in a row, divided by 1px rules; two by two, then one column, as width shrinks.
+.metrics {
+  border-block-end: 1px solid var(--color-border-subtle);
+  display: grid;
+  gap: 1px;
+  background-color: var(--color-border-subtle);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin: 0;
+}
+
+.metric {
+  background-color: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-16) var(--space-24);
+}
+
+.metric dt {
+  color: var(--color-text-secondary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.metric dd {
+  margin: 0;
+}
+
+.metric .value {
+  color: var(--color-text-primary);
+}
+
+.metric .meaning {
+  color: var(--color-text-secondary);
+}
+
+// Area rows: domain | statement + detail | status | action
+.evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.evidence-row {
+  align-items: center;
+  display: grid;
+  gap: var(--space-8) var(--space-16);
+  grid-template-columns: 5.5rem minmax(0, 1fr) 9rem auto;
+  padding: var(--space-12) var(--space-8) var(--space-12) var(--space-24);
+}
+
+.evidence-row + .evidence-row {
+  border-block-start: 1px solid var(--color-border-subtle);
+}
+
+.domain {
+  color: var(--color-text-secondary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.evidence-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-inline-size: 0;
+}
+
+.statement {
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.evidence-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 47.99em) {
+  .evidence-row {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline-end: var(--space-24);
+  }
+
+  .evidence-action {
+    justify-content: flex-start;
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Context rail
+// ------------------------------------------------------------------------------------------------
+
+.context-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  min-inline-size: 0;
+}
+
+.trend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+}
+
+.trend-heading,
+.trend-current {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
+  justify-content: space-between;
+}
+
+.trend-plot {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.y-axis {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  inline-size: 3.5rem;
+  justify-content: space-between;
+  text-align: end;
+}
+
+.plot {
+  block-size: 80px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: visible;
+}
+
+.plot polyline {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.plot circle {
+  fill: var(--color-accent);
+}
+
+.x-axis {
+  display: flex;
+  gap: var(--space-8);
+  justify-content: space-between;
+  padding-inline-start: calc(3.5rem + var(--space-8));
+}
+
+.note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) 0;
+}
+
+.note-label,
+.note-body,
+.note-form {
+  padding-inline: var(--space-16);
+}
+
+.note-label {
+  color: var(--color-text-secondary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.note-body {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+// Text-button row sits 8px in, so the button's 5px focus reach stays inside the card.
+.note-action {
+  padding-inline: var(--space-8);
+}
+
+.note-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+// Former client record
+.former {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-16) var(--space-24);
+}
+
+.former .reason {
+  margin-inline-start: var(--space-8);
+}
+
+@media (forced-colors: active) {
+  .attention {
+    border-inline-start-color: CanvasText;
+  }
+
+  .plot polyline {
+    stroke: CanvasText;
+  }
+
+  .plot circle {
+    fill: CanvasText;
+  }
+}

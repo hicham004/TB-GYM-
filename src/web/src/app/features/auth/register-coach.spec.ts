@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type { RegistrationResponse } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
-import { button, fill, press, query, settle } from '../../../testing/dom';
+import { button, field, fill, press, query, settle } from '../../../testing/dom';
 import { RegisterCoach } from './register-coach';
 
 const REGISTERED: RegistrationResponse = {
@@ -79,6 +79,37 @@ describe('RegisterCoach', () => {
       defaultCurrencyCode: 'USD',
       weekStartsOn: 'Monday',
     });
+  });
+
+  it('marks the fields for password managers and autofill', async () => {
+    const { host } = await render();
+
+    expect(field(host, 'Your name').getAttribute('autocomplete')).toBe('name');
+    expect(field(host, 'Workspace name').getAttribute('autocomplete')).toBe('organization');
+    expect(field(host, 'Email').getAttribute('autocomplete')).toBe('email');
+    expect(field(host, 'Password').getAttribute('autocomplete')).toBe('new-password');
+    expect(field(host, 'Confirm password').getAttribute('autocomplete')).toBe('new-password');
+  });
+
+  it('states the password rule under the field, and again when the password breaks it', async () => {
+    const { fixture, host, api } = await render();
+    const password = field(host, 'Password');
+    const rule = 'At least 12 characters with upper, lower, number, and symbol.';
+    expect(query(host, `#${password.getAttribute('aria-describedby')}`).textContent).toContain(
+      rule,
+    );
+
+    fillRegistration(host, { password: 'short' });
+    await settle(fixture);
+    press(host, 'Create coach account');
+    await settle(fixture);
+
+    expect(api.registerCoach).not.toHaveBeenCalled();
+    expect(password.getAttribute('aria-invalid')).toBe('true');
+    expect(query(host, `#${password.getAttribute('aria-describedby')}`).textContent).toContain(
+      'Use at least 12 characters with upper, lower, number, and symbol.',
+    );
+    expect(document.activeElement).toBe(query(host, '[role="alert"]'));
   });
 
   it('replaces the form with the confirmation notice once the account exists', async () => {

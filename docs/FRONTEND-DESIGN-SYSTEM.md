@@ -200,6 +200,9 @@ Rules the primitives encode:
 10. **Icon/Check** is drawn without the master's 14px clip frame, so its circle stroke is not trimmed.
 11. **Status marker `check`** reproduces Figma's check-circle; use it only for positive or completed
     states (Figma's swap default shows it for every tone).
+12. **Signed-out controls are 48px with 16px text** (`features/auth/auth.scss`), not Standard / 40 at
+    14px: a phone zooms the page into any focused field whose text is under 16px, and clients sign in
+    on phones. Only the signed-out forms do this.
 
 ## 6. UI lab and tests
 
@@ -231,11 +234,10 @@ every tab stop's 3px accent ring; unclipped rings at a scroll region's edges; lo
 buttons ignoring clicks, Enter and Space; Enter unable to resubmit a saving form; checkbox
 first-line alignment; wrapping labels and multi-line errors; 200% text and 320px reflow; reduced
 motion; forced colours. `e2e/existing-routes.e2e.ts` compares sign-in and coach registration against
-baselines captured at `c18903f` before any foundation code existed, as a guard against global-style
-regressions, and checks that both reflow at 200% text (the defect slice 2 fixed in the signed-out
-bar). `e2e/coach-shell.e2e.ts` covers the shell at 1440 and 390 px in both directions, Owner and
-Coach, the navigation dialog's keyboard behaviour, the sidebar's focus rings inside its scroll
-region, workspace switching and 200% text. `e2e/exercises.e2e.ts` covers the library's loading,
+baselines of the signed-out redesign (§12) and checks that both reflow at 200% text.
+`e2e/coach-shell.e2e.ts` covers the shell at 1440 and 390 px in both directions, Owner and Coach,
+the navigation dialog's keyboard behaviour, the sidebar's focus rings inside its scroll region,
+workspace switching and 200% text. `e2e/exercises.e2e.ts` covers the library's loading,
 populated, empty, error and capped-result states, its filters (Apply, Enter, and a select that does
 not apply on its own), the archive dialog and its focus return, and the stacked narrow layout. All
 API responses are test-only `page.route` mocks; the application's guards and interceptors run
@@ -390,6 +392,29 @@ viewport, so enlarged text scrolls the page instead of shrinking the region to n
 management appears with the legacy editor rather than on the default list, which is where Figma puts
 it (`292:1719`); every media call is unchanged.
 
+## 10a. Step 3A — the coach's client record (2026-09-25)
+
+Figma `131:419`. `/clients/:clientId` is now `ClientWorkspace` (header, section links, outlet) with
+one child route per section: Overview (`''`), `training`, `nutrition`, `checkins`, `progress`,
+`service` and `intake` (reached from "Edit intake", not a section link). `ClientWorkspaceContext`
+(provided by the record) holds the client, their plans and the workspace calendar, so the header and
+every section show the same version. Training, Nutrition, Progress, Service & access and the intake
+render the pre-existing screens unchanged; Check-ins is a short list that deep-links into
+`/checkins/clients?clientId=…&assignmentId=…`, which now opens that client and check-in.
+
+The Overview reads existing endpoints only. One progress-dashboard window, from seven weeks before
+this workspace week to its end, gives both this week's counts (its trailing seven days) and the
+eight weekly bodyweight means. "This week isn't shared yet" comes from the server's own
+`isVisible` on the week containing today. Rules live in `client-overview.models.ts` with fixed
+tests. Date-only values go through `DatePipe` without a time zone: Angular reads `YYYY-MM-DD` as a
+local calendar date, and `'UTC'` shifts it a day in Beirut.
+
+Deviations from `131:419`: the bodyweight change is neutral text, not success green (a change is
+not good or bad here); a renewal notice (business decision 2026-09-25: active plan within 14 days
+of its last day, nothing following it) links to `service?renew=<id>`, which opens that renewal; a
+feature outside the client's plan says so instead of showing empty figures; the quick search is
+still not rendered. Section links now ignore the query string when marking the current page.
+
 ## 11. Remaining work
 
 **Foundation follow-ups:** grid-cell error wiring; Linear progress; aligning the global focus rule
@@ -409,8 +434,22 @@ text only).
 - Paging: the backend supports paging; do not repeat the outdated "no paging endpoint" claim.
 - Today: the remaining coverage-state ambiguities need a contract decision.
 - Production shells must preserve workspace switching, account actions and role-aware routes. The
-  coach shell does (slice 2, §9); the client and signed-out shells are still the pre-existing ones
-  and are migrated in their own slices.
+  coach shell does (slice 2, §9) and the signed-out screens have their own frame (§12); the client
+  shell is still the pre-existing one and is migrated in its own slice.
 - Historical backend integration-test failures remain separate work: the messaging rate-limit test
   that failed only under full-suite load, and the media-purge test that reproduces locally (a
   Windows-related cause is a hypothesis, not a diagnosis).
+
+## 12. Signed-out screens (2026-09-25)
+
+No Figma frame exists for them, so they follow the public homepage and the primitives. Sign-in,
+coach registration, forgot and reset password, email confirmation and invitation acceptance share
+`app-auth-frame` (`features/auth/auth-frame.ts`): the homepage wordmark, cream page and serif accent
+from `styles/_brand.scss` (also used by the homepage), and from 64rem a photo panel loaded as a CSS
+background inside that media query, so a phone never downloads it. The forms use `app-field`,
+`appControl`, `app-checkbox` and `appButton` with `FormAttempt` and one `role="alert"` summary
+that takes focus on a refused submit. The app shell draws no top bar for a signed-out visitor; a
+signed-in person opening an invitation gets the frame's `embedded` mode inside their own shell.
+Behaviour, API calls and wording of server answers are unchanged. Checks: `e2e/auth.e2e.ts` (axe
+before and after an error on every screen, keyboard order and focus ring, photo not fetched on a
+phone, RTL, 200% text) and the sign-in and registration baselines in `existing-routes.e2e.ts`.

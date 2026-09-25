@@ -2,6 +2,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
@@ -40,8 +41,11 @@ export class CheckInClients {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly route = inject(ActivatedRoute);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
+  /** `?clientId=…&assignmentId=…` from a client's record is followed once, on the first load. */
+  private linkFollowed = false;
   private contextGeneration = 0;
   private selectionGeneration = 0;
   private listGeneration = 0;
@@ -396,12 +400,35 @@ export class CheckInClients {
         if (this.loadedTenantId === tenantId && this.contextGeneration === generation) {
           this.error.set(apiErrorMessage(error, $localize`Check-in data could not be loaded.`));
         }
+        return;
       } finally {
         if (owner.current) {
           this.endLoading(loading);
         }
       }
+      await owner.wait(this.followLink());
     });
+  }
+
+  /**
+   * Opens the client, and the check-in, that a client's record linked to. Only a client in this
+   * workspace's own list is selected, so a link from another workspace opens nothing.
+   */
+  private async followLink(): Promise<void> {
+    if (this.linkFollowed) return;
+    this.linkFollowed = true;
+    const params = this.route.snapshot.queryParamMap;
+    const clientId = params.get('clientId');
+    if (!clientId || !this.clients().some((client) => client.id === clientId)) return;
+    await this.selectClient(clientId);
+    const assignmentId = params.get('assignmentId');
+    if (
+      assignmentId &&
+      this.selectedClientId() === clientId &&
+      this.assignments().some((item) => item.assignment.id === assignmentId)
+    ) {
+      await this.openResponse(assignmentId);
+    }
   }
 
   /**

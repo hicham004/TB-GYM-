@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthStore } from '../../core/auth/auth.store';
-import { button, fill, press, query, settle, tick } from '../../../testing/dom';
+import { button, field, fill, press, query, settle, tick } from '../../../testing/dom';
 import { SignIn } from './sign-in';
 
 async function render(auth: Partial<AuthStore> = {}) {
@@ -48,13 +48,45 @@ describe('SignIn', () => {
     await settle(fixture);
 
     expect(button(host, 'Sign in').disabled).toBe(false);
-    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(query(host, '[role="alert"]').textContent?.trim()).toBe('');
 
     press(host, 'Sign in');
     await settle(fixture);
 
     expect(auth.login).toHaveBeenCalledWith('coach@example.test', 'correct-horse-battery', true);
     expect(navigate).toHaveBeenCalledWith('/');
+  });
+
+  /** Password managers and phone autofill find the account and its saved password by these. */
+  it('marks the fields for password managers and autofill', async () => {
+    const { host } = await render();
+
+    expect(field(host, 'Email').getAttribute('autocomplete')).toBe('username');
+    expect(field(host, 'Email').type).toBe('email');
+    expect(field(host, 'Password').getAttribute('autocomplete')).toBe('current-password');
+  });
+
+  /**
+   * A refused submit used to do nothing visible at all. Each missing field now says what it needs,
+   * tied to the field so a screen reader reads it with the field, and focus moves to the one summary
+   * so the refusal is announced where the person is.
+   */
+  it('explains a refused sign-in beside each field and in the summary', async () => {
+    const { fixture, host, auth } = await render();
+
+    press(host, 'Sign in');
+    await settle(fixture);
+
+    expect(auth.login).not.toHaveBeenCalled();
+    const email = field(host, 'Email');
+    expect(email.getAttribute('aria-invalid')).toBe('true');
+    expect(query(host, `#${email.getAttribute('aria-describedby')}`).textContent).toContain(
+      'Enter your email address.',
+    );
+    expect(field(host, 'Password').getAttribute('aria-invalid')).toBe('true');
+    const summary = query<HTMLElement>(host, '[role="alert"]');
+    expect(summary.textContent).toContain('Enter your password.');
+    expect(document.activeElement).toBe(summary);
   });
 
   it('leaves "keep me signed in" off unless it was ticked', async () => {

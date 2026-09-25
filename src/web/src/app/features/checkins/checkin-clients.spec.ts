@@ -1,6 +1,6 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -286,6 +286,8 @@ async function render(
   options: {
     selectedTenantId?: WritableSignal<string | null>;
     csrfRefresh?: () => Promise<void>;
+    /** Query parameters the page was opened with, as a client's record links to it. */
+    query?: Record<string, string>;
   } = {},
 ) {
   const selectedTenantId = options.selectedTenantId ?? signal<string | null>('tenant-1');
@@ -310,6 +312,14 @@ async function render(
         provide: CsrfService,
         useValue: { refresh: vi.fn(options.csrfRefresh ?? (() => Promise.resolve())) },
       },
+      ...(options.query
+        ? [
+            {
+              provide: ActivatedRoute,
+              useValue: { snapshot: { queryParamMap: convertToParamMap(options.query) } },
+            },
+          ]
+        : []),
     ],
   }).compileComponents();
 
@@ -326,6 +336,49 @@ async function render(
 describe('CheckInClients', () => {
   afterEach(() => {
     TestBed.resetTestingModule();
+  });
+
+  it('opens the client and the check-in a client record linked to', async () => {
+    const one = assignment('assignment-1', '2026-08-26');
+    const listAssignments = vi.fn(() => of(list(listItem(one, 'Submitted'))));
+    const getClientCheckInResponse = vi.fn(() => of(detail(one, 'Submitted')));
+    await render(
+      {
+        listClientCheckInAssignments: listAssignments as never,
+        getClientCheckInResponse: getClientCheckInResponse as never,
+      },
+      { query: { clientId: 'client-2', assignmentId: 'assignment-1' } },
+    );
+
+    expect(listAssignments).toHaveBeenCalledWith('client-2', 0, 50);
+    expect(getClientCheckInResponse).toHaveBeenCalledWith('client-2', 'assignment-1');
+  });
+
+  it('ignores a link to a client or check-in this workspace does not list', async () => {
+    const listAssignments = vi.fn(() => of(list()));
+    const getClientCheckInResponse = vi.fn();
+    const stranger = await render(
+      {
+        listClientCheckInAssignments: listAssignments as never,
+        getClientCheckInResponse: getClientCheckInResponse as never,
+      },
+      { query: { clientId: 'client-elsewhere', assignmentId: 'assignment-1' } },
+    );
+    expect(listAssignments).not.toHaveBeenCalled();
+    expect(stranger.host.textContent).toContain(
+      'Select a client to assign and review their check-ins.',
+    );
+
+    TestBed.resetTestingModule();
+    await render(
+      {
+        listClientCheckInAssignments: listAssignments as never,
+        getClientCheckInResponse: getClientCheckInResponse as never,
+      },
+      { query: { clientId: 'client-1', assignmentId: 'not-this-clients' } },
+    );
+    expect(listAssignments).toHaveBeenCalledWith('client-1', 0, 50);
+    expect(getClientCheckInResponse).not.toHaveBeenCalled();
   });
 
   it('shows a client list and asks for a selection first', async () => {

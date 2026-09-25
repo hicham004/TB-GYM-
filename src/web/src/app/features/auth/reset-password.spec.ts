@@ -118,6 +118,30 @@ describe('ResetPassword', () => {
     expect(host.textContent).not.toContain('Password updated');
     expect(passwords(host).map((input) => input.value)).toEqual(['', '']);
   });
+
+  /**
+   * The failed exchange empties both fields, which are required. A refused submit earlier in the
+   * visit must not make that emptiness outrank the server's answer in the one summary region.
+   */
+  it('keeps the server’s answer in view after an earlier refused submit', async () => {
+    const { fixture, host } = await render(VALID_LINK, {
+      resetPassword: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 400 }))),
+    });
+
+    press(host, 'Update password');
+    await settle(fixture);
+    expect(query(host, '[role="alert"]').textContent).toContain("can't be updated yet");
+
+    fill(host, 'New password', 'correct-horse-battery');
+    fill(host, 'Confirm new password', 'correct-horse-battery');
+    await settle(fixture);
+    press(host, 'Update password');
+    await settle(fixture);
+
+    const summary = query(host, '[role="alert"]').textContent;
+    expect(summary).toContain('The reset link is invalid or expired.');
+    expect(summary).not.toContain("can't be updated yet");
+  });
 });
 
 function passwords(host: HTMLElement): HTMLInputElement[] {

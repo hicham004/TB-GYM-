@@ -5,10 +5,12 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { CsrfService } from '../../core/security/csrf.service';
+import { ButtonLink } from '../../ui/button';
+import { AuthFrame } from './auth-frame';
 
 @Component({
   selector: 'app-confirm-email',
-  imports: [RouterLink],
+  imports: [AuthFrame, ButtonLink, RouterLink],
   templateUrl: './confirm-email.html',
   styleUrl: './auth.scss',
 })

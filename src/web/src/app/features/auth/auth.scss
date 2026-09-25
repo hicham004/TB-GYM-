@@ -1,152 +1,180 @@
+// Content inside <app-auth-frame>: shared by every signed-out screen, including the invitation page.
+// The frame sets the homepage palette (--home-*); the controls, buttons, focus ring and message
+// colours are the design system's.
+@use '../../../styles/brand' as *;
+
 :host {
   display: block;
 }
 
-.auth-layout {
-  align-items: start;
-  display: grid;
-  gap: clamp(36px, 8vw, 112px);
-  grid-template-columns: minmax(240px, 0.8fr) minmax(320px, 520px);
-  margin: 48px auto;
-  max-width: 1040px;
-  padding-inline: 18px;
-  width: 100%;
+.auth-eyebrow {
+  @include eyebrow;
+  color: var(--home-muted);
+  margin-block-end: var(--space-16);
 }
 
-.auth-layout > * {
-  min-width: 0;
+.auth-eyebrow::before {
+  background: var(--home-forest);
+  block-size: 1px;
+  content: '';
+  flex: none;
+  inline-size: 28px;
 }
 
-.auth-layout.wide {
-  grid-template-columns: minmax(220px, 0.6fr) minmax(440px, 680px);
+.auth-title {
+  @include display(clamp(2.4rem, 8vw, 3.5rem));
+  margin-block-end: var(--space-16);
+  overflow-wrap: anywhere;
 }
 
-.compact-layout {
-  max-width: 760px;
+.auth-title em {
+  @include accent;
+  -webkit-box-decoration-break: clone;
+  background: linear-gradient(var(--home-lime), var(--home-lime)) no-repeat 0 90% / 100% 32%;
+  box-decoration-break: clone;
+  color: var(--home-forest);
+  padding-inline: 0.05em;
 }
 
-.auth-copy {
-  padding-block-start: 24px;
+.auth-title em:dir(rtl) {
+  background-position: 100% 90%;
 }
 
-.auth-copy h1 {
-  font-size: 42px;
-  line-height: 1.1;
-  margin: 8px 0 18px;
+.auth-lead {
+  color: var(--home-muted);
+  font-size: 1.05rem;
+  line-height: 1.55;
+  margin-block: 0 var(--space-32);
 }
 
-.auth-copy p:last-child {
-  color: var(--muted-text);
-  font-size: 17px;
-  line-height: 1.65;
+.auth-subtitle {
+  font-size: var(--text-section-title-size);
+  font-weight: var(--font-weight-strong);
+  line-height: var(--text-section-title-line-height);
   margin: 0;
 }
 
-.auth-form {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 7px;
+.auth-form,
+.auth-stack {
   display: grid;
-  gap: 18px;
-  padding: 30px;
+  gap: var(--space-24);
 }
 
-.auth-form form {
-  display: grid;
-  gap: 18px;
-}
-
-.success-state h2,
-.auth-form h2 {
+.auth-stack > p {
   margin: 0;
 }
 
-fieldset {
+// Two fields side by side where they fit, one per row on a phone or at large text sizes.
+.auth-pair {
+  display: grid;
+  gap: var(--space-24) var(--space-16);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+
+.auth-fieldset {
   border: 0;
-  border-top: 1px solid var(--border);
-  margin: 4px 0 0;
-  padding: 20px 0 0;
-}
-
-legend {
-  font-size: 14px;
-  font-weight: 700;
-  padding-inline-end: 12px;
-}
-
-.two-column-fields,
-.three-column-fields {
+  border-block-start: 1px solid var(--home-line);
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-16);
+  margin: 0;
+  min-inline-size: 0;
+  padding: var(--space-24) 0 0;
 }
 
-.three-column-fields {
-  grid-template-columns: 1.3fr 1fr 0.65fr;
+.auth-fieldset legend {
+  float: inline-start;
+  font-size: var(--text-compact-size);
+  font-weight: var(--font-weight-strong);
+  inline-size: 100%;
+  line-height: var(--text-compact-line-height);
+  padding: 0;
 }
 
-.form-row {
+// Touch-sized controls: 48px, and 16px text so a phone does not zoom the page into a focused field.
+.auth-form .tb-control {
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+  min-block-size: var(--control-height-48);
+}
+
+.auth-row {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-}
-
-.between {
+  gap: var(--space-8) var(--space-16);
   justify-content: space-between;
 }
 
-.check-field {
-  align-items: center;
-  display: inline-flex;
-  gap: 8px;
+.auth-submit {
+  inline-size: 100%;
 }
 
-.check-field input[type='checkbox'] {
-  flex: 0 0 auto;
-  height: 16px;
-  margin: 0;
-  min-height: 0;
-  padding: 0;
-  width: 16px;
-}
-
-.check-field > span {
-  display: inline;
-  margin: 0;
-}
-
-.form-footer {
-  color: var(--muted-text);
+.auth-alt {
+  color: var(--home-muted);
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  justify-content: center;
-  margin: 2px 0 0;
+  gap: 0 0.3em;
+  margin: 0;
 }
 
-@media (max-width: 760px) {
-  .auth-layout,
-  .auth-layout.wide {
-    gap: 24px;
-    grid-template-columns: 1fr;
-    margin: 12px auto 36px;
-  }
+.auth-notes {
+  display: grid;
+  gap: var(--space-8);
+}
 
-  .auth-copy {
-    padding-block-start: 0;
-  }
+.auth-link {
+  border-radius: var(--radius-4);
+  color: var(--home-forest);
+  font-weight: var(--font-weight-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
 
-  .auth-copy h1 {
-    font-size: 34px;
-  }
+.auth-link:hover {
+  text-decoration-thickness: 2px;
+}
 
-  .auth-form {
-    padding: 22px;
-  }
+a:focus-visible,
+.auth-summary:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
+}
 
-  .two-column-fields,
-  .three-column-fields {
-    grid-template-columns: 1fr;
-  }
+// The form's one assertive region: empty until a refused submit or a server answer fills it.
+// Empty, it stays rendered (it has to take focus the moment a submit is refused) but gives back
+// the grid gap it would otherwise add.
+.auth-summary:empty {
+  margin-block-start: calc(-1 * var(--space-24));
+}
+
+.auth-summary:not(:empty),
+.auth-message {
+  border-radius: var(--radius-6);
+  display: grid;
+  font-size: var(--text-compact-size);
+  gap: var(--space-4);
+  line-height: var(--text-compact-line-height);
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: var(--space-12) var(--space-16);
+}
+
+.auth-summary:not(:empty),
+.auth-message--error {
+  background-color: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.auth-message--success {
+  background-color: var(--color-success-subtle);
+  color: var(--color-success);
+}
+
+.auth-message--notice {
+  background-color: var(--color-warning-subtle);
+  color: var(--color-warning);
+}
+
+.auth-muted {
+  color: var(--home-muted);
 }

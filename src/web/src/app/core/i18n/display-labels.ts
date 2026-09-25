@@ -200,6 +200,26 @@ export function trainingAccessReasonLabel(reason: string): string {
 }
 
 /**
+ * Why a client's figures for one feature are not shown to their coach, in a few words for a
+ * summary cell. The feature's own screen gives the full explanation.
+ */
+export function featureUnavailableLabel(reason: FeatureAccessReason): string {
+  const labels: Record<FeatureAccessReason, string> = {
+    Granted: $localize`Not available`,
+    MembershipInactive: $localize`Not an active member`,
+    RelationshipBlocked: $localize`Blocked in this workspace`,
+    NoEntitlement: $localize`Not in their plan`,
+    PaymentRequired: $localize`Plan awaiting payment`,
+    NotStarted: $localize`Plan not started`,
+    Expired: $localize`Plan ended`,
+    Paused: $localize`Plan paused`,
+    Cancelled: $localize`Plan cancelled`,
+    PlatformBlocked: $localize`Account blocked`,
+  };
+  return labels[reason];
+}
+
+/**
  * Why check-ins are closed, said to the client themselves. "Access is denied" and "there is
  * nothing here" are different facts, so a refused list must never fall through to an empty one.
  */

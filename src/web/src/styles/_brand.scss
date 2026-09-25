@@ -1,0 +1,86 @@
+// The public brand: the homepage (features/home) and the signed-out screens (features/auth, the
+// invitation page) share these, so arriving at sign-in from the homepage looks like one product.
+// Signed-in screens use the design-system tokens in _tokens.scss instead.
+
+// Loaded only by the stylesheets that include it; index.html preloads the file for the homepage.
+@mixin serif-face {
+  @font-face {
+    font-display: swap;
+    font-family: 'TB Home Serif';
+    font-style: italic;
+    font-weight: 400;
+    src: url('/fonts/instrument-serif/InstrumentSerif-Italic-latin.woff2') format('woff2');
+  }
+}
+
+@mixin palette {
+  --home-ink: #182d27;
+  --home-forest: #153d33;
+  --home-deep: #10302a;
+  --home-soft: #f5f3ea;
+  --home-cream: #fbfaf5;
+  --home-line: #d9dfd1;
+  --home-lime: #d9ed94;
+  --home-orange: #f2b994;
+  --home-muted: #4f6057;
+  --home-serif: 'TB Home Serif', Georgia, 'Times New Roman', serif;
+  --home-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@mixin eyebrow {
+  align-items: center;
+  display: flex;
+  font-size: 0.74rem;
+  font-weight: 600;
+  gap: 11px;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  margin-block: 0 22px;
+  text-transform: uppercase;
+}
+
+@mixin display($size: clamp(2.6rem, 4.7vw, 5rem)) {
+  font-size: $size;
+  font-weight: 600;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+  margin: 0;
+  text-wrap: balance;
+}
+
+// The italic accent words in every heading. Instrument Serif runs small beside IBM Plex, so it is
+// set slightly larger to share the sans-serif's visual height.
+@mixin accent {
+  font-family: var(--home-serif);
+  font-size: 1.08em;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+}
+
+// The "TB." wordmark: a forest disc with a lime full stop, beside the name.
+@mixin brand-link {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  font-size: 1.12rem;
+  font-weight: 600;
+  gap: 11px;
+  letter-spacing: -0.045em;
+  text-decoration: none;
+}
+
+@mixin brand-mark {
+  align-items: center;
+  background: var(--home-forest);
+  // 38px at the default text size, in rem so the letters still fit the disc when text is enlarged.
+  block-size: 2.375rem;
+  border-radius: 50%;
+  color: white;
+  display: inline-flex;
+  flex: none;
+  font-size: 0.95rem;
+  inline-size: 2.375rem;
+  justify-content: center;
+  letter-spacing: -0.08em;
+}

@@ -49,7 +49,9 @@ import { Icon } from './icon';
       position: relative;
     }
 
-    app-password-reveal > input {
+    /* Also outranks .tb-control's padding when the input is a design-system control. */
+    app-password-reveal > input,
+    app-password-reveal > input.tb-control {
       padding-inline-end: 48px;
     }
 
@@ -57,8 +59,8 @@ import { Icon } from './icon';
       align-items: center;
       background: none;
       border: 0;
-      border-radius: 5px;
-      color: var(--muted-text);
+      border-radius: var(--radius-6);
+      color: var(--color-text-secondary);
       cursor: pointer;
       display: flex;
       inline-size: 44px;
@@ -70,7 +72,13 @@ import { Icon } from './icon';
     }
 
     .password-reveal__toggle:hover {
-      color: var(--text);
+      color: var(--color-text-primary);
+    }
+
+    /* Inset, so the ring stays inside the field instead of overlapping its border. */
+    .password-reveal__toggle:focus-visible {
+      outline: var(--focus-ring-width) solid var(--color-accent);
+      outline-offset: calc(-1 * var(--focus-ring-width) - var(--focus-separation-gap));
     }
   `,
   encapsulation: ViewEncapsulation.None,

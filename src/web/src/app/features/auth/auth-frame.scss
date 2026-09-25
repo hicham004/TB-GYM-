@@ -1,0 +1,145 @@
+@use '../../../styles/brand' as *;
+
+@include serif-face;
+
+:host {
+  display: block;
+}
+
+.auth {
+  @include palette;
+  background: var(--home-soft);
+  color: var(--home-ink);
+  display: grid;
+  grid-template-areas:
+    'header'
+    'content';
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  min-block-size: 100dvh;
+}
+
+.auth--embedded {
+  background: transparent;
+  display: block;
+  min-block-size: 0;
+}
+
+.auth__header {
+  align-items: center;
+  display: flex;
+  grid-area: header;
+  min-block-size: 64px;
+  padding-inline: var(--page-padding-mobile);
+}
+
+.auth__brand {
+  @include brand-link;
+  border-radius: var(--radius-6);
+  color: inherit;
+  min-block-size: 44px;
+}
+
+.auth__brand:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-separation-gap);
+}
+
+.auth__mark {
+  @include brand-mark;
+}
+
+.auth__dot {
+  color: var(--home-lime);
+}
+
+// One column at the page's inline start on a phone; centred with a readable measure on wider screens.
+.auth__content {
+  box-sizing: border-box;
+  grid-area: content;
+  inline-size: 100%;
+  justify-self: center;
+  max-inline-size: calc(28rem + 2 * var(--page-padding-mobile));
+  padding: var(--space-16) var(--page-padding-mobile) var(--space-48);
+}
+
+.auth--wide .auth__content {
+  max-inline-size: calc(38rem + 2 * var(--page-padding-mobile));
+}
+
+.auth--embedded .auth__content {
+  padding-block: var(--space-24);
+}
+
+.auth__panel {
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .auth:not(.auth--embedded) {
+    grid-template-areas:
+      'header panel'
+      'content panel';
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .auth__header {
+    min-block-size: 80px;
+    padding-inline: clamp(32px, 4vw, 64px);
+  }
+
+  .auth__content {
+    align-self: center;
+    padding-block: var(--space-32) 72px;
+  }
+
+  // The panel runs the whole page height; the photo inside it sticks, so a long form scrolls past
+  // a scene that stays put.
+  .auth__panel {
+    background-color: var(--home-deep);
+    display: block;
+    grid-area: panel;
+  }
+
+  .auth__scene {
+    background-image:
+      linear-gradient(to top, rgb(8 26 21 / 90%), rgb(8 26 21 / 30%) 55%, rgb(8 26 21 / 5%)),
+      url('/images/coaching-hero.jpg');
+    background-image:
+      linear-gradient(to top, rgb(8 26 21 / 90%), rgb(8 26 21 / 30%) 55%, rgb(8 26 21 / 5%)),
+      image-set(
+        url('/images/coaching-hero-1024.webp') 1x,
+        url('/images/coaching-hero-1536.webp') 2x
+      );
+    background-position: 64% center;
+    background-size: cover;
+    block-size: 100dvh;
+    box-sizing: border-box;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    inset-block-start: 0;
+    justify-content: flex-end;
+    padding: clamp(40px, 5vw, 80px);
+    position: sticky;
+  }
+}
+
+.auth__tagline {
+  @include display(clamp(2.6rem, 4.4vw, 4.4rem));
+  margin-block-end: var(--space-16);
+  max-inline-size: 12ch;
+}
+
+.auth__tagline em {
+  @include accent;
+  color: var(--home-lime);
+}
+
+.auth__summary {
+  color: rgb(255 255 255 / 86%);
+  font-size: 1.1rem;
+  line-height: 1.55;
+  margin: 0;
+  max-inline-size: 26rem;
+}

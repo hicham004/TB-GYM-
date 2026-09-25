@@ -132,7 +132,12 @@ function overview(overrides: Partial<ClientCommercialOverview> = {}): ClientComm
 }
 
 async function render(
-  options: { client?: CoachClientDetails; api?: Partial<ApiClient>; readOnly?: boolean } = {},
+  options: {
+    client?: CoachClientDetails;
+    api?: Partial<ApiClient>;
+    readOnly?: boolean;
+    renewEnrollmentId?: string | null;
+  } = {},
 ) {
   await TestBed.configureTestingModule({
     imports: [ClientCommercial],
@@ -159,6 +164,7 @@ async function render(
   const fixture = TestBed.createComponent(ClientCommercial);
   fixture.componentRef.setInput('client', options.client ?? CLIENT);
   fixture.componentRef.setInput('readOnly', options.readOnly ?? false);
+  fixture.componentRef.setInput('renewEnrollmentId', options.renewEnrollmentId ?? null);
   await settle(fixture);
   return { fixture, host: fixture.nativeElement as HTMLElement, api: TestBed.inject(ApiClient) };
 }
@@ -179,6 +185,34 @@ describe('ClientCommercial', () => {
    * follows from it. The offer select carries the price, currency and duration the enrollment
    * snapshots, so a select that never reaches the model would assign the wrong service silently.
    */
+  it('opens the renewal the client Overview asked for, and only for a record it may change', async () => {
+    const api = {
+      getClientCommercialOverview: vi.fn(() => of(overview({ enrollments: [enrollment()] }))),
+    };
+    const { host } = await render({ api, renewEnrollmentId: enrollment().id });
+    expect(host.textContent).toContain('Create renewal');
+
+    TestBed.resetTestingModule();
+    const readOnly = await render({ api, renewEnrollmentId: enrollment().id, readOnly: true });
+    expect(readOnly.host.textContent).not.toContain('Create renewal');
+
+    TestBed.resetTestingModule();
+    const unknown = await render({ api, renewEnrollmentId: 'another-clients-enrollment' });
+    expect(unknown.host.textContent).not.toContain('Create renewal');
+  });
+
+  it('hands every fresh read of the plans to the page, so its header stays in step', async () => {
+    const { fixture } = await render();
+    const seen: ClientCommercialOverview[] = [];
+    fixture.componentInstance.plansChanged.subscribe((value) => seen.push(value));
+
+    await (
+      fixture.componentInstance as unknown as { loadOverview(): Promise<void> }
+    ).loadOverview();
+
+    expect(seen).toEqual([overview()]);
+  });
+
   it('assigns the offer the coach picked, with an idempotency key', async () => {
     const { fixture, host, api } = await render();
 

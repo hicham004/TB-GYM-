@@ -1,30 +1,13 @@
 @use 'home-shared' as *;
 
-// Loaded only when the homepage renders; index.html preloads it so the headline does not reflow.
-@font-face {
-  font-display: swap;
-  font-family: 'TB Home Serif';
-  font-style: italic;
-  font-weight: 400;
-  src: url('/fonts/instrument-serif/InstrumentSerif-Italic-latin.woff2') format('woff2');
-}
+@include serif-face;
 
 :host {
   display: block;
 }
 
 .home {
-  --home-ink: #182d27;
-  --home-forest: #153d33;
-  --home-deep: #10302a;
-  --home-soft: #f5f3ea;
-  --home-cream: #fbfaf5;
-  --home-line: #d9dfd1;
-  --home-lime: #d9ed94;
-  --home-orange: #f2b994;
-  --home-muted: #4f6057;
-  --home-serif: 'TB Home Serif', Georgia, 'Times New Roman', serif;
-  --home-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  @include palette;
   background: var(--home-soft);
   color: var(--home-ink);
   // Without the design system's Arabic fallback: symbols missing from Plex (✳, ✓) would otherwise

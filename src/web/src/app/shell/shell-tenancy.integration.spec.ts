@@ -165,8 +165,8 @@ describe('coach shell tenancy', () => {
 
     expect(notifications.unread()).toBe(0);
     expect(api.logout).toHaveBeenCalled();
-    // Signed out, the coach shell is gone and the public one is back.
+    // Signed out, the coach shell is gone and no app chrome is left for the sign-in page to sit in.
     expect(host.querySelector('app-coach-shell')).toBeNull();
-    expect(host.querySelector('.public-nav')).not.toBeNull();
+    expect(host.querySelector('header.topbar')).toBeNull();
   });
 });

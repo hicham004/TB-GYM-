@@ -3,9 +3,10 @@
        grid beside the one <main> below. Workspace and sign-out requests come back here, so both
        shells share one switching path and one sign-out sequence. -->
   <app-coach-shell (workspaceSelected)="switchWorkspace($event)" (signOut)="logout()" />
-} @else {
-  <!-- Clients, accounts without a workspace and signed-out visitors keep the existing top bar. -->
-  <header class="topbar" [class.public]="shell() === 'public'">
+} @else if (shell() !== 'public') {
+  <!-- Clients and accounts without a workspace keep the existing top bar. Signed-out pages (the
+       homepage, sign-in and the rest of /auth, invitations) draw their own header. -->
+  <header class="topbar">
     <a class="brand" routerLink="/" aria-label="TB Gym home" i18n-aria-label>
       <span class="brand-mark" aria-hidden="true">TB</span>
       <span>TB Gym</span>
@@ -82,11 +83,6 @@
           <button class="quiet-button" type="button" (click)="logout()" i18n>Sign out</button>
         </div>
       </div>
-    } @else if (shell() === 'public') {
-      <nav class="public-nav" aria-label="Account navigation" i18n-aria-label>
-        <a routerLink="/auth/sign-in" routerLinkActive="active" i18n>Sign in</a>
-        <a class="primary-button compact" routerLink="/auth/register" i18n>Coach registration</a>
-      </nav>
     } @else {
       <span class="session-loading" i18n>Checking session...</span>
     }
