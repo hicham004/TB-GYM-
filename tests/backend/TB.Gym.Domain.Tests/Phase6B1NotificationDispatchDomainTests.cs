@@ -556,9 +556,13 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             Assert.AreEqual("en", template.Culture);
             Assert.IsFalse(string.IsNullOrWhiteSpace(template.Title));
             Assert.IsFalse(string.IsNullOrWhiteSpace(template.Body));
-            // No format placeholder of any kind: the catalog renders fixed text, so nothing a coach
-            // types or a payload carries can reach the wording.
-            Assert.DoesNotContain("{", template.Title + template.Body);
+            // No format placeholder, except the one ADR 0029 allows: the client's name in the title
+            // of a renewal request. Everything else is fixed text, so nothing a coach types or a
+            // payload carries can reach the wording, and the body never names anyone.
+            var title = kind == CommercialNotificationKind.RenewalRequested
+                ? template.Title.Replace(NotificationTemplateCatalog.ClientNameToken, string.Empty, StringComparison.Ordinal)
+                : template.Title;
+            Assert.DoesNotContain("{", title + template.Body);
 
             foreach (var term in forbidden)
             {
@@ -574,6 +578,27 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             "en",
             out var renewal));
         Assert.DoesNotContain("active", renewal.Title + renewal.Body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [TestMethod]
+    public void ARenewalRequestTitleNamesTheClientAsPlainText()
+    {
+        Assert.IsTrue(NotificationTemplateCatalog.TryResolve(
+            CommercialNotificationKind.RenewalRequested,
+            "en",
+            out var template));
+
+        Assert.AreEqual(
+            "Maya Rahman asked to renew",
+            NotificationTemplateCatalog.NameClient(template, "  Maya Rahman ").Title);
+        // A name is data: a token or markup inside it is written out as typed, never expanded.
+        Assert.AreEqual(
+            "{client} <b>Maya</b> asked to renew",
+            NotificationTemplateCatalog.NameClient(template, "{client} <b>Maya</b>").Title);
+        Assert.AreEqual(
+            new string('M', 120) + " asked to renew",
+            NotificationTemplateCatalog.NameClient(template, new string('M', 300)).Title);
+        Assert.AreEqual(template.Body, NotificationTemplateCatalog.NameClient(template, "Maya Rahman").Body);
     }
 
     [TestMethod]

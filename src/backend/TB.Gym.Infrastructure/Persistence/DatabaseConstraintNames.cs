@@ -11,6 +11,13 @@ internal static class DatabaseConstraintNames
     public const string OneCheckInResponseEventPerType =
         "IX_CheckInResponseEvents_TenantId_ResponseId_EventType";
 
+    /// <summary>
+    /// At most one renewal request per client in any 7 days (ADR 0029). A request refused by it lost a
+    /// race to one that is already stored, and the loser answers with that one.
+    /// </summary>
+    public const string OneRenewalRequestPerWindow =
+        "EX_RenewalRequests_OnePerWindow";
+
     public const string OneProgressPhotoPerDateAndPose =
         "IX_ProgressPhotos_TenantId_ClientProfileId_PhotoDate_Pose";
 

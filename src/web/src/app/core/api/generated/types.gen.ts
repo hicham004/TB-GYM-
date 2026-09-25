@@ -852,7 +852,8 @@ export type CommercialNotificationKind =
   | 'EnrollmentRenewed'
   | 'CoachDeparted'
   | 'ClientLeft'
-  | 'CoachResigned';
+  | 'CoachResigned'
+  | 'RenewalRequested';
 
 export type CompleteClientOnboardingRequest = {
   intake: UpdateClientIntakeRequest;
@@ -1792,6 +1793,7 @@ export type NotificationView = {
   readAtUtc: null | string;
   isRead: boolean;
   version: number | string;
+  clientProfileId?: null | string;
 };
 
 export type NutritionCalculationView = {
@@ -2285,6 +2287,20 @@ export type RenameCheckInFormRequest = {
   title: string;
   description: null | string;
   version: number | string;
+};
+
+export type RenewalRequestView = {
+  id: string;
+  requestedOn: string;
+  askAgainFrom: string;
+};
+
+export type RenewalStatusView = {
+  planEnded: boolean;
+  endedOn: null | string;
+  coachName: null | string;
+  lastRequest: null | RenewalRequestView;
+  canAsk: boolean;
 };
 
 export type RenewEnrollmentRequest = {
@@ -4446,6 +4462,64 @@ export type CancelClientEnrollmentResponses = {
 
 export type CancelClientEnrollmentResponse =
   CancelClientEnrollmentResponses[keyof CancelClientEnrollmentResponses];
+
+export type GetOwnRenewalStatusData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/client-renewal/me';
+};
+
+export type GetOwnRenewalStatusErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetOwnRenewalStatusResponses = {
+  /**
+   * OK
+   */
+  200: RenewalStatusView;
+};
+
+export type GetOwnRenewalStatusResponse =
+  GetOwnRenewalStatusResponses[keyof GetOwnRenewalStatusResponses];
+
+export type RequestOwnRenewalData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/client-renewal/me/requests';
+};
+
+export type RequestOwnRenewalErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RequestOwnRenewalError = RequestOwnRenewalErrors[keyof RequestOwnRenewalErrors];
+
+export type RequestOwnRenewalResponses = {
+  /**
+   * OK
+   */
+  200: RenewalStatusView;
+  /**
+   * Created
+   */
+  201: RenewalStatusView;
+};
+
+export type RequestOwnRenewalResponse =
+  RequestOwnRenewalResponses[keyof RequestOwnRenewalResponses];
 
 export type SearchExercisesData = {
   body?: never;

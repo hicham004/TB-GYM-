@@ -26,12 +26,16 @@
   </header>
 
   @let current = card();
-  @if (loading() || error() || (current && current.kind !== 'hidden')) {
+  @if (planEnded() && !loading()) {
+    <app-today-renewal [status]="renewal()!" (statusChange)="renewal.set($event)" />
+  } @else if (trainingLoading() || error() || (current && current.kind !== 'hidden')) {
     <section
       class="today-card"
-      [attr.aria-labelledby]="!loading() && !error() && current ? 'today-training-heading' : null"
+      [attr.aria-labelledby]="
+        !trainingLoading() && !error() && current ? 'today-training-heading' : null
+      "
     >
-      @if (loading()) {
+      @if (trainingLoading()) {
         <div class="today-skeleton" role="status">
           <span class="tb-visually-hidden" i18n>Loading your workout…</span>
           <span class="bar bar-short" aria-hidden="true"></span>

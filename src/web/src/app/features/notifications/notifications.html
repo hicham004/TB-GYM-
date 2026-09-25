@@ -50,6 +50,16 @@
                 item.createdAtUtc | date: 'medium'
               }}</time>
             </p>
+            @if (item.clientProfileId) {
+              <!-- A renewal request: the client's plan page is where the coach renews (ADR 0029).
+                   The page itself decides whether this coach may open that client. -->
+              <p>
+                <a [routerLink]="['/clients', item.clientProfileId, 'service']"
+                  ><ng-container i18n>Open the client's page</ng-container
+                  ><span class="tb-visually-hidden">: {{ item.title }}</span></a
+                >
+              </p>
+            }
             @if (!item.isRead) {
               <button
                 type="button"

@@ -22,6 +22,12 @@ public sealed record NotificationTemplate(string Key, int Version, string Cultur
 /// notification does not.
 /// </para>
 /// <para>
+/// One exception, decided for ADR 0029: a renewal request tells a coach which client asked, since a
+/// coach with many clients could not act on "a client asked". Its title carries
+/// <see cref="ClientNameToken"/>, which the dispatcher replaces with the client's current name as
+/// plain text when the in-app row is written. It is in-app only, so the name never reaches email.
+/// </para>
+/// <para>
 /// Only culture <c>en</c> and template version 1 exist. Arabic and any other locale are deferred:
 /// the versioned key is here so a later wording change publishes version 2 and leaves every
 /// already-delivered snapshot exactly as it was read.
@@ -33,6 +39,12 @@ public static class NotificationTemplateCatalog
     public const string DefaultCulture = "en";
 
     public const int CurrentVersion = 1;
+
+    /// <summary>Where a named template takes the client's name. Only RenewalRequested has one.</summary>
+    public const string ClientNameToken = "{client}";
+
+    /// <summary>A client's name is cut to this many characters in a title.</summary>
+    private const int MaximumNameLength = 120;
 
     private static readonly Dictionary<CommercialNotificationKind, NotificationTemplate> EnglishV1 = new()
     {
@@ -88,7 +100,29 @@ public static class NotificationTemplateCatalog
             DefaultCulture,
             "A coach left your team",
             "A coach resigned from this workspace. Their clients and pending client invitations are now assigned to you, and you can reassign them from Clients."),
+        // To the client's coach, naming the client (ADR 0029); the inbox links to the client's page.
+        [CommercialNotificationKind.RenewalRequested] = new NotificationTemplate(
+            "workspace.renewal-requested",
+            CurrentVersion,
+            DefaultCulture,
+            $"{ClientNameToken} asked to renew",
+            "This client's coaching plan has ended. Open the client's page to set up a renewal."),
     };
+
+    /// <summary>
+    /// Puts a client's name into a named template's title. The name is data, inserted as plain text
+    /// and shortened, never interpreted; a template without the token is returned unchanged.
+    /// </summary>
+    public static NotificationTemplate NameClient(NotificationTemplate template, string clientName)
+    {
+        var name = clientName.Trim();
+        if (name.Length > MaximumNameLength)
+        {
+            name = name[..MaximumNameLength];
+        }
+
+        return template with { Title = template.Title.Replace(ClientNameToken, name, StringComparison.Ordinal) };
+    }
 
     /// <summary>
     /// Resolves the template for a kind and culture, or reports that none is published. A missing

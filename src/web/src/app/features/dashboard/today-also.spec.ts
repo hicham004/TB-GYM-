@@ -156,6 +156,49 @@ describe('TodayAlso', () => {
     expect(host.querySelector('[role="status"]')?.textContent?.trim()).toBe('');
   });
 
+  it('never asks for a feature outside the plan', async () => {
+    const { client } = await render(
+      {},
+      fakeClientAccess({ Nutrition: 'NoEntitlement', CheckIns: 'NoEntitlement' }),
+    );
+
+    expect(client.getMyNutritionDay).not.toHaveBeenCalled();
+    expect(client.listOwnCheckInAssignments).not.toHaveBeenCalled();
+  });
+
+  it('waits for the access answer before reading, then reads only what is in the plan', async () => {
+    const access = fakeClientAccess({}, 'loading');
+    const { fixture, client, row } = await render({}, access);
+    expect(client.getMyNutritionDay).not.toHaveBeenCalled();
+    expect(client.listOwnCheckInAssignments).not.toHaveBeenCalled();
+
+    access.set({ CheckIns: 'NoEntitlement' });
+    await settle(fixture);
+
+    expect(client.getMyNutritionDay).toHaveBeenCalledTimes(1);
+    expect(client.listOwnCheckInAssignments).not.toHaveBeenCalled();
+    expect(row('/nutrition/today')).toBe('Nutrition, 2 of 4 meals logged');
+  });
+
+  it('never asks for a feature the plan has closed, and says why instead', async () => {
+    const { client, row } = await render(
+      {},
+      fakeClientAccess({ Nutrition: 'Expired', CheckIns: 'Paused' }),
+    );
+
+    expect(client.getMyNutritionDay).not.toHaveBeenCalled();
+    expect(client.listOwnCheckInAssignments).not.toHaveBeenCalled();
+    expect(row('/nutrition/today')).toBe('Nutrition, Your coaching plan has ended');
+    expect(row('/checkins/me')).toBe('Check-ins, Your coaching plan is paused');
+  });
+
+  it('reads both rows when the access answer could not be read', async () => {
+    const { client } = await render({}, fakeClientAccess({}, 'failed'));
+
+    expect(client.getMyNutritionDay).toHaveBeenCalledTimes(1);
+    expect(client.listOwnCheckInAssignments).toHaveBeenCalledTimes(1);
+  });
+
   it('shows nothing when neither feature is in the plan', async () => {
     const { host } = await render(
       {

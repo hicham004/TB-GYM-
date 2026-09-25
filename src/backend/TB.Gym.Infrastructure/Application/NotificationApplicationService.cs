@@ -58,7 +58,13 @@ internal sealed class NotificationApplicationService(
                 item.CreatedAtUtc,
                 item.ReadAtUtc,
                 item.ReadAtUtc != null,
-                item.Version))
+                item.Version,
+                item.Kind == CommercialNotificationKind.RenewalRequested
+                    ? dbContext.NotificationOutboxItems
+                        .Where(outbox => outbox.Id == item.SourceOutboxItemId)
+                        .Select(outbox => (Guid?)outbox.AggregateId)
+                        .FirstOrDefault()
+                    : null))
             .ToListAsync(cancellationToken);
 
         return new NotificationPage(total, unread, items);
@@ -114,7 +120,13 @@ internal sealed class NotificationApplicationService(
             }
         }
 
-        return NotificationCommandResult.Success(ToView(notification));
+        var clientProfileId = notification.Kind == CommercialNotificationKind.RenewalRequested
+            ? await dbContext.NotificationOutboxItems.AsNoTracking()
+                .Where(outbox => outbox.Id == notification.SourceOutboxItemId)
+                .Select(outbox => (Guid?)outbox.AggregateId)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+        return NotificationCommandResult.Success(ToView(notification, clientProfileId));
     }
 
     public async Task<NotificationDeadLetterPage> ListDeadLettersAsync(
@@ -166,7 +178,7 @@ internal sealed class NotificationApplicationService(
         return tenantContext.HasTenant && recipientUserId != Guid.Empty;
     }
 
-    private static NotificationView ToView(Notification notification) => new(
+    private static NotificationView ToView(Notification notification, Guid? clientProfileId) => new(
         notification.Id,
         notification.Kind,
         notification.Title,
@@ -174,5 +186,6 @@ internal sealed class NotificationApplicationService(
         notification.CreatedAtUtc,
         notification.ReadAtUtc,
         notification.IsRead,
-        notification.Version);
+        notification.Version,
+        clientProfileId);
 }

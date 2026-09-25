@@ -6,6 +6,7 @@ import {
   mapUpcomingTraining,
   mapCoachWorkoutDetail,
 } from '../../features/training/training-read.models';
+import { mapRenewalStatus, type RenewalStatus } from '../../features/dashboard/renewal.models';
 import {
   mapAiDraft,
   mapCalculation,
@@ -335,6 +336,20 @@ export class ApiClient {
     return this.http
       .get<ContractFeatureAccessDecision[]>('/api/client-access/me')
       .pipe(map((decisions) => decisions.map(toFeatureAccess)));
+  }
+
+  /** Whether the signed-in client's whole plan has run out, and when they last asked to renew. */
+  getOwnRenewalStatus(): Observable<RenewalStatus> {
+    return this.http
+      .get<Phase3Contracts.RenewalStatusView>('/api/client-renewal/me')
+      .pipe(map(mapRenewalStatus));
+  }
+
+  /** Asks the client's coach to renew; asking again inside 7 days returns the first request. */
+  requestRenewal(): Observable<RenewalStatus> {
+    return this.http
+      .post<Phase3Contracts.RenewalStatusView>('/api/client-renewal/me/requests', null)
+      .pipe(map(mapRenewalStatus));
   }
 
   getClientCommercialOverview(clientId: string): Observable<ClientCommercialOverview> {

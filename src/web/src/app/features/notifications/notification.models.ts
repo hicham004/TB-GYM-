@@ -23,6 +23,8 @@ export interface NotificationItem {
   readonly createdAtUtc: string;
   readonly readAtUtc: string | null;
   readonly isRead: boolean;
+  /** The client a staff notice is about (a renewal request), for a link to their page. */
+  readonly clientProfileId: string | null;
 }
 
 export interface NotificationPage {
@@ -40,6 +42,7 @@ export function mapNotification(value: ContractNotificationView): NotificationIt
     createdAtUtc: value.createdAtUtc,
     readAtUtc: value.readAtUtc ?? null,
     isRead: value.isRead,
+    clientProfileId: value.clientProfileId ?? null,
   };
 }
 

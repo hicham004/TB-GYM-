@@ -8,6 +8,7 @@ import {
   inject,
   input,
   signal,
+  untracked,
   viewChild,
   type WritableSignal,
 } from '@angular/core';
@@ -70,18 +71,37 @@ export class TodayAlso {
       .join(' '),
   );
 
+  /** Rows already read (or deliberately not read) in this workspace. */
+  private readonly requested = new Set<Row>();
+
   constructor() {
     this.scope.onReset(() => {
+      this.requested.clear();
       this.nutritionRead.set({ kind: 'loading' });
       this.checkInRead.set({ kind: 'loading' });
     });
+    // Each row waits for the access answer, and a feature the answer calls closed (outside the
+    // plan, paused, ended…) is never asked for: its row is hidden or states that reason anyway, and
+    // the refused read would only put a 403 or 404 in the console. If the answer cannot be read, the
+    // rows read regardless and explain what they get back.
     effect(() => {
       this.scope.epoch();
-      if (this.tenants.selectedTenantId()) {
-        void this.load('nutrition');
-        void this.load('checkIns');
-      }
+      const tenant = this.tenants.selectedTenantId();
+      const status = this.access.status();
+      const nutritionClosed = this.access.decision('Nutrition')?.isAllowed === false;
+      const checkInsClosed = this.access.decision('CheckIns')?.isAllowed === false;
+      if (!tenant || status === 'idle' || status === 'loading') return;
+      untracked(() => {
+        this.readOnce('nutrition', nutritionClosed);
+        this.readOnce('checkIns', checkInsClosed);
+      });
     });
+  }
+
+  private readOnce(row: Row, closed: boolean): void {
+    if (this.requested.has(row)) return;
+    this.requested.add(row);
+    if (!closed) void this.load(row);
   }
 
   protected async retry(row: Row): Promise<void> {

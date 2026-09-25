@@ -26,8 +26,10 @@ import { Button, ButtonLink } from '../../ui/button';
 import { Icon } from '../../ui/icon';
 import { StatusLabel } from '../../ui/status-label';
 import { trainingReadAccessLabel, type UpcomingTraining } from '../training/training-read.models';
+import type { RenewalStatus } from './renewal.models';
 import { TodayAlso } from './today-also';
 import { TodayCoachMessage } from './today-coach-message';
+import { TodayRenewal } from './today-renewal';
 import { trainingCard } from './today.models';
 
 /**
@@ -48,6 +50,7 @@ import { trainingCard } from './today.models';
     StatusLabel,
     TodayAlso,
     TodayCoachMessage,
+    TodayRenewal,
   ],
   templateUrl: './client-today.html',
   styleUrls: ['./client-today.scss', './today-card.scss'],
@@ -68,6 +71,10 @@ export class ClientToday {
   protected readonly upcoming = signal<UpcomingTraining | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal(false);
+  /** Whether the whole plan has run out (ADR 0029); null until read, or if it could not be. */
+  protected readonly renewal = signal<RenewalStatus | null>(null);
+  private readonly renewalLoading = signal(true);
+  protected readonly planEnded = computed(() => this.renewal()?.planEnded === true);
   /** The workspace's date from `GET /api/workspace`, read only when the training read fails. */
   private readonly workspaceDate = signal<string | null>(null);
   protected readonly accessLabel = trainingReadAccessLabel;
@@ -88,6 +95,18 @@ export class ClientToday {
       return decision !== null && decision.reason !== 'NoEntitlement';
     });
     return trainingCard(day, upcoming, somethingElse);
+  });
+
+  /**
+   * Training is still being worked out: its own read, or, for a plan that ran out, the renewal read
+   * that decides between the ended-plan card and the plain "not available" one.
+   */
+  protected readonly trainingLoading = computed(() => {
+    const card = this.card();
+    return (
+      this.loading() ||
+      (this.renewalLoading() && card?.kind === 'access-closed' && card.reason === 'Expired')
+    );
   });
 
   /** "Message your coach" is offered only while messaging is open. */
@@ -116,7 +135,11 @@ export class ClientToday {
       this.day.set(null);
       this.upcoming.set(null);
       this.workspaceDate.set(null);
-      if (tenant) void this.load();
+      this.renewal.set(null);
+      if (tenant) {
+        void this.load();
+        void this.loadRenewal();
+      }
     });
     // The page heading takes focus on arrival, so a screen reader starts at "Today".
     afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
@@ -157,6 +180,20 @@ export class ClientToday {
     });
   }
 
+  /** A failure leaves `renewal` null, and Today shows the plain closed-access card instead. */
+  private async loadRenewal(): Promise<void> {
+    return this.scope.run('renewal', async (owner) => {
+      this.renewalLoading.set(true);
+      try {
+        this.renewal.set(await owner.wait(firstValueFrom(this.api.getOwnRenewalStatus())));
+      } catch {
+        if (owner.current) this.renewal.set(null);
+      } finally {
+        if (owner.current) this.renewalLoading.set(false);
+      }
+    });
+  }
+
   /** The heading's date when training could not be read. On failure there is simply no date. */
   private async loadWorkspaceDate(generation: number): Promise<void> {
     return this.scope.run('date', async (owner) => {
@@ -174,6 +211,8 @@ export class ClientToday {
     this.day.set(null);
     this.upcoming.set(null);
     this.workspaceDate.set(null);
+    this.renewal.set(null);
+    this.renewalLoading.set(false);
     this.loading.set(false);
     this.error.set(false);
   }

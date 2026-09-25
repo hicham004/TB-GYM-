@@ -94,6 +94,29 @@ internal static class WorkspaceRelationshipNotices
             $"coach-resigned:{coachMembershipId:N}:{now.UtcTicks}:v1",
             now);
 
+    /// <summary>
+    /// Tells a client's coach, in-app only, that the client asked to renew (ADR 0029). The payload
+    /// holds only the client's id; the dispatcher reads the name when it writes the inbox row.
+    /// </summary>
+    public static void RenewalRequested(
+        GymDbContext dbContext,
+        Guid tenantId,
+        string tenantTimeZoneId,
+        Guid coachUserId,
+        Guid clientProfileId,
+        Guid renewalRequestId,
+        DateTimeOffset now) =>
+        ScheduleInApp(
+            dbContext,
+            tenantId,
+            tenantTimeZoneId,
+            coachUserId,
+            clientProfileId,
+            CommercialNotificationKind.RenewalRequested,
+            Payload(new WorkspaceNotificationPayload(clientProfileId)),
+            $"renewal-requested:{renewalRequestId:N}:v1",
+            now);
+
     public static Task<string> TenantTimeZoneAsync(
         GymDbContext dbContext,
         Guid tenantId,

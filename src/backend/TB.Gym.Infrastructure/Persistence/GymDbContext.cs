@@ -97,6 +97,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<EnrollmentEntitlement> EnrollmentEntitlements => Set<EnrollmentEntitlement>();
 
+    public DbSet<RenewalRequest> RenewalRequests => Set<RenewalRequest>();
+
     public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
 
     public DbSet<NotificationOutboxItem> NotificationOutboxItems => Set<NotificationOutboxItem>();

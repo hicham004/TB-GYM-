@@ -126,16 +126,18 @@ public static class NotificationPurposeCatalog
         CommercialNotificationKind.CoachDeparted => NotificationPurpose.ServiceTransactional,
         CommercialNotificationKind.ClientLeft => NotificationPurpose.ServiceTransactional,
         CommercialNotificationKind.CoachResigned => NotificationPurpose.ServiceTransactional,
+        CommercialNotificationKind.RenewalRequested => NotificationPurpose.ServiceTransactional,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), "An unclassified notification kind cannot be planned."),
     };
 
     /// <summary>
-    /// The workspace-relationship kinds (ADR 0027): in-app only, because a coach departure is also
-    /// emailed through the workspace notice queue, and a client leaving or a coach resigning concerns
-    /// only staff.
+    /// The workspace-relationship kinds (ADR 0027, 0029): in-app only, because a coach departure is also
+    /// emailed through the workspace notice queue, and a client leaving, a coach resigning or a client
+    /// asking to renew concerns only staff.
     /// </summary>
     public static bool IsWorkspaceKind(CommercialNotificationKind kind) =>
         kind is CommercialNotificationKind.CoachDeparted
             or CommercialNotificationKind.ClientLeft
-            or CommercialNotificationKind.CoachResigned;
+            or CommercialNotificationKind.CoachResigned
+            or CommercialNotificationKind.RenewalRequested;
 }

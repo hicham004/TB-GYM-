@@ -192,5 +192,36 @@ public sealed partial class GymDbContext
             });
             ConfigureAuditable(entity);
         });
+
+        // ADR 0029. Append-only (trigger) and at most one request per client in any 7 days (the
+        // exclusion constraint added in the RenewalRequests migration, over [RequestedOn, AskAgainFrom)).
+        builder.Entity<RenewalRequest>(entity =>
+        {
+            entity.ToTable("RenewalRequests", "subscriptions");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.RequestedOn).HasColumnType("date");
+            entity.Property(item => item.AskAgainFrom).HasColumnType("date");
+            entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.RequestedOn });
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(client => new { client.TenantId, client.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ClientEnrollment>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.EndedEnrollmentId })
+                .HasPrincipalKey(enrollment => new { enrollment.TenantId, enrollment.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(item => item.CoachUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_RenewalRequests_Window",
+                $"\"AskAgainFrom\" = \"RequestedOn\" + {RenewalRequest.WindowDays}"));
+            ConfigureAuditable(entity);
+        });
     }
 }

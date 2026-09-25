@@ -132,6 +132,26 @@ const STATES = {
   },
 } as const;
 
+const planRunning = {
+  planEnded: false,
+  endedOn: null,
+  coachName: null,
+  lastRequest: null,
+  canAsk: false,
+};
+const planEnded = {
+  ...planRunning,
+  planEnded: true,
+  endedOn: '2026-10-04',
+  coachName: 'Hicham Haddad',
+  canAsk: true,
+};
+const renewalAsked = {
+  ...planEnded,
+  lastRequest: { id: 'request', requestedOn: '2026-10-05', askAgainFrom: '2026-10-12' },
+  canAsk: false,
+};
+
 const nutritionDay = {
   planId: 'plan',
   planDayId: 'plan-day',
@@ -227,9 +247,13 @@ async function openToday(
     reasons?: Record<string, string>;
     memberships?: (typeof CLIENT_MEMBERSHIP)[];
     path?: string;
+    /** The whole plan has run out (ADR 0029): Today shows the renewal card instead of training. */
+    ended?: boolean;
   } = {},
 ) {
-  const state = STATES[options.state ?? 'scheduled'];
+  const state = options.ended
+    ? { day: day([], false, 'Expired'), upcoming: upcoming(), heading: '' }
+    : STATES[options.state ?? 'scheduled'];
   await page.setViewportSize({ width: options.width ?? 390, height: options.height ?? 844 });
   const decisions = FEATURES.map((feature) => {
     const reason = options.reasons?.[feature] ?? 'Granted';
@@ -246,11 +270,17 @@ async function openToday(
       'GET /api/nutrition/me/day': (route: Route) => json(route, 200, nutritionDay),
       'GET /api/checkins/me/assignments': (route: Route) => json(route, 200, checkIns),
       'GET /api/messaging/conversations': (route: Route) => json(route, 200, conversations),
+      'GET /api/client-renewal/me': (route: Route) =>
+        json(route, 200, options.ended ? planEnded : planRunning),
+      'POST /api/client-renewal/me/requests': (route: Route) => json(route, 201, renewalAsked),
     },
   });
   await page.goto(options.path ?? '/');
   await expect(page.locator('app-client-tabs')).toBeVisible();
-  if ((options.path ?? '/') === '/') {
+  if (options.ended) {
+    await expect(page.locator('#today-renewal-heading')).toBeVisible();
+    await expect(page.locator('.row-skeleton')).toHaveCount(0);
+  } else if ((options.path ?? '/') === '/') {
     await expect(page.locator('#today-training-heading')).toHaveText(state.heading);
     await expect(page.locator('.row-skeleton')).toHaveCount(0);
   }
@@ -309,6 +339,34 @@ for (const state of Object.keys(STATES) as (keyof typeof STATES)[]) {
     );
   });
 }
+
+test('an ended plan names the coach, asks once for a renewal and says so', async ({ page }) => {
+  await openToday(page, { ended: true });
+
+  const card = page.locator('app-today-renewal .today-card');
+  await expect(page.locator('#today-renewal-heading')).toHaveText(
+    'Your coaching plan with Hicham Haddad ended on Sun 4 Oct.',
+  );
+  await expect(page.locator('.today-card a.today-action')).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+  await expect(card).toHaveScreenshot('client-today-card-plan-ended.png');
+
+  const asked = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' && request.url().endsWith('/api/client-renewal/me/requests'),
+  );
+  await page.getByRole('button', { name: 'Ask to renew' }).click();
+  await asked;
+  const sent = page.locator('app-today-renewal [role="status"]');
+  await expect(sent).toHaveText(
+    'Renewal request sent on Mon 5 Oct. You can ask again from Mon 12 Oct.',
+  );
+  await expect(sent).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Ask to renew' })).toHaveCount(0);
+  await expectNoAxeViolations(page);
+  await expect(card).toHaveScreenshot('client-today-card-plan-ended-asked.png');
+});
 
 test('keyboard order runs from the skip link through Today to the tabs', async ({ page }) => {
   await openToday(page);

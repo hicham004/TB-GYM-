@@ -172,6 +172,12 @@ public enum CommercialNotificationKind
 
     /// <summary>To the owner: a coach resigned, and their clients are now the owner's.</summary>
     CoachResigned = 8,
+
+    /// <summary>
+    /// To a client's coach: the client asked to renew a plan that has run out (ADR 0029). In-app only,
+    /// and the one notice whose title names someone: the client, resolved when it is delivered.
+    /// </summary>
+    RenewalRequested = 9,
 }
 
 /// <summary>

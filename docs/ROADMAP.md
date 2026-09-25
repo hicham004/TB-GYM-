@@ -1066,9 +1066,10 @@ Work follows this order; anything outside it needs the user's approval first.
   Part B1, built 2026-09-25: the client shell (bottom tabs, a tab hidden only for a feature outside
   the plan, workspace switching and sign-out on Me) and Today (Figma 339:2140) with the coverage
   states ("This week's plan is on its way", "Your next program starts …") from a new `todayCoverage`
-  on the upcoming read (TRN-018). Part B2 next: an "Ask to renew" button for an ended plan that
-  notifies the coach in-app, naming the client, at most once per 7 days per client, enforced
-  server-side. Other redesign slices are parked.
+  on the upcoming read (TRN-018). Part B2, built 2026-09-25: an ended plan says "Your coaching plan
+  with {coach} ended on {date}." with an "Ask to renew" button that tells the coach in-app, naming
+  the client and linking to their page, at most once per client in any 7 days (a PostgreSQL
+  exclusion constraint). See ADR 0029. Other redesign slices are parked.
 - Step 4, lean go-live with the founding coaches: not started.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.

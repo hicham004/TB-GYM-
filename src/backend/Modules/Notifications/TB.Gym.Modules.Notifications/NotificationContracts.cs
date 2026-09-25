@@ -47,6 +47,11 @@ public sealed record CoachNotificationPayload(
 }
 
 /// <summary>The signed-in recipient view of one of their own notifications.</summary>
+/// <remarks>
+/// <see cref="ClientProfileId"/> is set only for a notice about one client that staff act on from that
+/// client's page (a renewal request, ADR 0029). It is a link target, not an authorization: the page
+/// still decides whether this coach may open that client.
+/// </remarks>
 public sealed record NotificationView(
     Guid Id,
     CommercialNotificationKind Kind,
@@ -55,7 +60,8 @@ public sealed record NotificationView(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ReadAtUtc,
     bool IsRead,
-    uint Version);
+    uint Version,
+    Guid? ClientProfileId = null);
 
 /// <summary>One newest-first page of the caller's own inbox.</summary>
 public sealed record NotificationPage(long Total, long UnreadTotal, IReadOnlyList<NotificationView> Items);

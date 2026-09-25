@@ -52,6 +52,7 @@ function item(
     createdAtUtc,
     readAtUtc: isRead ? '2026-08-31T09:00:00.000Z' : null,
     isRead,
+    clientProfileId: null,
   };
 }
 
@@ -170,6 +171,24 @@ describe('Notifications', () => {
     expect(rowTitles(host)).toEqual(['Notification n3', 'Notification n2', 'Notification n1']);
     expect(host.querySelector('[role="status"]')?.textContent).toContain('Showing 3 of 5');
     expect(host.querySelector('[role="status"]')?.textContent).toContain('2 unread');
+  });
+
+  it('links a renewal request to the client it names, and nothing else to a client', async () => {
+    const renewal: NotificationItem = {
+      ...item('r1', '2026-10-05T12:00:00.000Z', false, 'Maya Rahman asked to renew'),
+      kind: 'RenewalRequested',
+      clientProfileId: 'client-maya',
+    };
+    const { host } = await render(({ list }) => {
+      list.mockReturnValue(of(page(2, 2, renewal, item('n1', '2026-10-05T11:00:00.000Z'))));
+    });
+
+    const links = [...host.querySelectorAll<HTMLAnchorElement>('.feed a')];
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute('href')).toBe('/clients/client-maya/service');
+    expect(links[0].textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      "Open the client's page: Maya Rahman asked to renew",
+    );
   });
 
   it('distinguishes read from unread without relying on colour', async () => {

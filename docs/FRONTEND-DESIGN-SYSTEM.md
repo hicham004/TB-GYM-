@@ -434,6 +434,14 @@ switched on the new `todayCoverage` (TRN-018); Also today (nutrition, then the c
 the coach's latest message. Each reads and retries on its own; row failures share one polite status.
 Route title "Today | TB Gym" through a title resolver on `/`.
 
+**Ended plan** (Step 3B2, ADR 0029, `today-renewal.ts`): when `GET /api/client-renewal/me` says the
+whole plan ran out, the renewal card replaces the training card: "Your coaching plan with {coach}
+ended on {date}." and a Filled **Ask to renew** that becomes "Renewal request sent on … You can ask
+again from …" (a polite status that takes focus). While that read is pending an expired plan shows
+the skeleton, never the old closed card; if it fails, the old card stays. Today reads a row only once
+the access answer says its feature is open, so a refused read never reaches the console. The
+coach's inbox links a renewal notice to `/clients/{id}/service`.
+
 Deviations from `339:2140`: the tabs are `position: sticky` at the end of the page column, not
 `fixed` with a reserved padding, so enlarged or translated labels can grow the bar without covering
 the last row; the business wording decided on 2026-09-25 replaces the annotation's "This week isn't
@@ -459,8 +467,8 @@ text only).
   address navigation and reload recovery before shipping that flow.
 - Programs search: backend query support is unresolved.
 - Paging: the backend supports paging; do not repeat the outdated "no paging endpoint" claim.
-- Today: coverage states decided and built (§10b). Still open: a server filter for the next open
-  check-in (the row reads the first 50), and the ended-plan wording and "Ask to renew" (Step 3B2).
+- Today: coverage states and the ended plan built (§10b). Still open: a server filter for the next
+  open check-in (the row reads the first 50), and showing open renewal requests on the coach's side.
 - Production shells must preserve workspace switching, account actions and role-aware routes. The
   coach shell does (slice 2, §9), the signed-out screens have their own frame (§12), and the client
   shell has its own (§10b); only an account with no workspace keeps the pre-existing top bar.

@@ -9,13 +9,34 @@ import { ApiClient } from '../../core/api/api-client';
 import type { ClientTrainingDayResult } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { NotificationStore } from '../../core/notifications/notification.store';
+import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import type { UpcomingTraining } from '../training/training-read.models';
+import type { RenewalStatus } from './renewal.models';
 import { press, settle } from '../../../testing/dom';
 import { day, fakeClientAccess, TODAY, upcoming, workout } from '../../../testing/today-fixtures';
 import { ClientToday } from './client-today';
 
 const notFound = () => throwError(() => new HttpErrorResponse({ status: 404 }));
+const running: RenewalStatus = {
+  planEnded: false,
+  endedOn: null,
+  coachName: null,
+  lastRequest: null,
+  canAsk: false,
+};
+const ended: RenewalStatus = {
+  planEnded: true,
+  endedOn: '2026-10-04',
+  coachName: 'Hicham Haddad',
+  lastRequest: null,
+  canAsk: true,
+};
+const asked: RenewalStatus = {
+  ...ended,
+  lastRequest: { id: 'request-1', requestedOn: '2026-10-05', askAgainFrom: '2026-10-12' },
+  canAsk: false,
+};
 
 async function render(
   options: {
@@ -41,6 +62,8 @@ async function render(
         nextBeforeConversationId: null,
       }),
     ),
+    getOwnRenewalStatus: vi.fn(() => of(running)),
+    requestRenewal: vi.fn(() => of(asked)),
     ...options.api,
   };
   await TestBed.configureTestingModule({
@@ -50,6 +73,7 @@ async function render(
       { provide: TenantStore, useValue: { selectedTenantId: tenant } },
       { provide: ApiClient, useValue: api },
       { provide: ClientAccessStore, useValue: options.access ?? fakeClientAccess() },
+      { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       {
         provide: AuthStore,
         useValue: {
@@ -302,5 +326,122 @@ describe('ClientToday', () => {
     expect(read()).toContain('Sunday 20 September');
     expect(api.getWorkspace).not.toHaveBeenCalled();
     expect(TODAY).toBe('2026-09-20');
+  });
+  describe('when the whole plan has run out', () => {
+    const expired = () => day([], false, 'Expired');
+    const statusText = (host: HTMLElement) =>
+      host
+        .querySelector('app-today-renewal [role="status"]')
+        ?.textContent?.replace(/\s+/g, ' ')
+        .trim();
+
+    it('names the coach and the last day, and offers to ask for a renewal', async () => {
+      const { host, read } = await render({
+        day: expired(),
+        api: { getOwnRenewalStatus: vi.fn(() => of(ended)) },
+      });
+
+      expect(
+        host.querySelector('#today-renewal-heading')?.textContent?.replace(/\s+/g, ' ').trim(),
+      ).toBe('Your coaching plan with Hicham Haddad ended on Sun 4 Oct.');
+      expect(read()).not.toContain('Training is not available');
+      expect(read()).not.toMatch(/\b(he|she|his|her|him)\b/i);
+      const ask = host.querySelector<HTMLButtonElement>('app-today-renewal button');
+      expect(ask?.textContent?.trim()).toBe('Ask to renew');
+      expect(ask?.classList).toContain('tb-button--filled');
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+    });
+
+    it('asks once and then says when it was sent and when the client can ask again', async () => {
+      const { fixture, host, api, read } = await render({
+        day: expired(),
+        api: { getOwnRenewalStatus: vi.fn(() => of(ended)) },
+      });
+
+      press(host, 'Ask to renew');
+      await settle(fixture);
+
+      expect(api.requestRenewal).toHaveBeenCalledTimes(1);
+      expect(TestBed.inject(CsrfService).refresh).toHaveBeenCalled();
+      expect(statusText(host)).toBe(
+        'Renewal request sent on Mon 5 Oct. You can ask again from Mon 12 Oct.',
+      );
+      expect(host.querySelector('app-today-renewal button')).toBeNull();
+      expect(read()).toContain('Your coaching plan with Hicham Haddad ended on Sun 4 Oct.');
+    });
+
+    it('shows a request already sent in this window, with no button', async () => {
+      const { host } = await render({
+        day: expired(),
+        api: { getOwnRenewalStatus: vi.fn(() => of(asked)) },
+      });
+
+      expect(host.querySelector('app-today-renewal button')).toBeNull();
+      expect(statusText(host)).toContain('You can ask again from Mon 12 Oct.');
+    });
+
+    it('shows the plan as it is when it turned out not to have ended', async () => {
+      const getOwnRenewalStatus = vi
+        .fn()
+        .mockReturnValueOnce(of(ended))
+        .mockReturnValue(of(running));
+      const { fixture, host, read } = await render({
+        day: expired(),
+        api: {
+          getOwnRenewalStatus,
+          requestRenewal: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 409 }))),
+        },
+      });
+
+      press(host, 'Ask to renew');
+      await settle(fixture);
+
+      expect(getOwnRenewalStatus).toHaveBeenCalledTimes(2);
+      expect(host.querySelector('app-today-renewal')).toBeNull();
+      expect(read()).toContain('Training is not available');
+    });
+
+    it('reports a failed request and keeps the button', async () => {
+      const { fixture, host } = await render({
+        day: expired(),
+        api: {
+          getOwnRenewalStatus: vi.fn(() => of(ended)),
+          requestRenewal: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
+        },
+      });
+
+      press(host, 'Ask to renew');
+      await settle(fixture);
+
+      expect(host.querySelector('app-today-renewal [role="alert"]')?.textContent).toContain(
+        'Couldn’t send your request. Try again.',
+      );
+      expect(host.querySelector('app-today-renewal button')).not.toBeNull();
+    });
+
+    it('never flashes the closed-access card while the renewal answer is on its way', async () => {
+      const pending = new Subject<RenewalStatus>();
+      const { fixture, host, read } = await render({
+        day: expired(),
+        api: { getOwnRenewalStatus: vi.fn(() => pending) },
+      });
+      expect(host.querySelector('[role="status"]')?.textContent).toContain('Loading your workout');
+      expect(read()).not.toContain('Training is not available');
+
+      pending.next(ended);
+      pending.complete();
+      await settle(fixture);
+      expect(host.querySelector('app-today-renewal')).not.toBeNull();
+    });
+
+    it('keeps the plain closed card when the renewal answer cannot be read', async () => {
+      const { read } = await render({
+        day: expired(),
+        api: { getOwnRenewalStatus: vi.fn(() => throwError(() => new Error())) },
+      });
+
+      expect(read()).toContain('Training is not available');
+      expect(read()).toContain('Your coaching plan has ended');
+    });
   });
 });

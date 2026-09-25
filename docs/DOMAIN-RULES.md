@@ -189,6 +189,13 @@ outbox items cannot be dispatched again.
 is reserved, but invoice schedules, automatic charging, retries, dunning, grace periods, and
 provider webhook behavior require a later approved design.
 
+**SUB-014** A client may ask to renew only when their whole plan has run out: every feature
+decision is `Expired` or `NoEntitlement`, with at least one `Expired` (ADR 0029). Cancelled, paused,
+partly running, awaiting payment, starting later or blocked plans cannot ask. Requests are
+append-only and at most one per client in any 7 workspace calendar days, enforced by the
+`EX_RenewalRequests_OnePerWindow` exclusion constraint; a repeated or concurrent request answers
+with the stored one. The request and the coach's in-app notice commit together.
+
 ### Platform billing (what TB Gym charges workspaces, ADR 0028)
 
 **PBL-001** Each workspace is billed monthly, in USD, for the previous UTC month
@@ -733,7 +740,9 @@ describes a state in which feature access is denied.
 price, currency, product or offer name, date, database identifier, health data or payload content,
 and no user-controlled format string. The rendered title and body are snapshotted onto the
 notification, so a later template version never rewrites what somebody was already told. A renewal
-notice must not imply paid or active access, because a renewal may still be awaiting payment.
+notice must not imply paid or active access, because a renewal may still be awaiting payment. One
+exception (ADR 0029): a client's renewal request names that client in the coach's in-app title,
+read when the row is written and never kept in the payload; that notice is never emailed.
 
 **NOT-007** A notification belongs to one recipient in one workspace. Only that recipient may list
 or mark it, and workspace membership alone — including the owner's — grants no access to another

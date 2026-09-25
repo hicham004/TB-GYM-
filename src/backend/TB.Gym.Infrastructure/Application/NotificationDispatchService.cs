@@ -645,6 +645,11 @@ internal sealed class NotificationDispatchService(
             return refusal;
         }
 
+        if (item.Kind == CommercialNotificationKind.RenewalRequested)
+        {
+            return await EvaluateRenewalRequestedAsync(context, item, delivery, payload, audience, cancellationToken);
+        }
+
         var recipientRole = audience.RecipientRole;
         var client = await context.ClientProfiles
             .AsNoTracking()
@@ -699,6 +704,54 @@ internal sealed class NotificationDispatchService(
         }
 
         return InAppOnly(item, delivery, audience.Culture);
+    }
+
+    /// <summary>
+    /// To the coach who was assigned the client when they asked to renew (ADR 0029), while they still
+    /// are and while the client has not left. The title names the client, read now rather than kept
+    /// in the payload, so a renamed client is named as they are today and the payload holds no name.
+    /// </summary>
+    private static async Task<Eligibility> EvaluateRenewalRequestedAsync(
+        GymDbContext context,
+        NotificationOutboxItem item,
+        NotificationChannelDelivery delivery,
+        WorkspaceNotificationPayload payload,
+        WorkspaceAudience audience,
+        CancellationToken cancellationToken)
+    {
+        if (item.AggregateId != payload.ClientProfileId)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
+        }
+
+        if (audience.RecipientRole is not (TenantRole.Owner or TenantRole.Coach))
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.MembershipInactive);
+        }
+
+        var client = await context.ClientProfiles
+            .AsNoTracking()
+            .Where(profile => profile.Id == payload.ClientProfileId)
+            .Select(profile => new { profile.FirstName, profile.LastName, profile.AssignedCoachUserId, profile.ReleasedAtUtc })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (client is null)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+        }
+
+        if (client.ReleasedAtUtc is not null || client.AssignedCoachUserId != item.RecipientUserId)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
+        }
+
+        if (delivery.Channel != NotificationChannel.InApp)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.EmailChannelUnavailable);
+        }
+
+        return NotificationTemplateCatalog.TryResolve(item.Kind, audience.Culture, out var template)
+            ? Eligibility.InApp(NotificationTemplateCatalog.NameClient(template, $"{client.FirstName} {client.LastName}"))
+            : Eligibility.Permanent(NotificationFailureCodes.TemplateMissing);
     }
 
     /// <summary>

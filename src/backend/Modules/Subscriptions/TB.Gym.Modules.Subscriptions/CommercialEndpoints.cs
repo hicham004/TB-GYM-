@@ -216,6 +216,50 @@ public static class CommercialEndpoints
         .Produces<FeatureAccessDecision[]>()
         .Produces(StatusCodes.Status404NotFound);
 
+        // A client asks their coach to renew a plan that has run out (ADR 0029).
+        var renewal = endpoints
+            .MapGroup("/api/client-renewal/me")
+            .RequireAuthorization(AuthorizationPolicies.TenantClient)
+            .WithTags(SubscriptionsModule.Name);
+
+        renewal.MapGet("", async (
+            IClientRenewalService service,
+            CancellationToken cancellationToken) =>
+        {
+            var status = await service.GetOwnStatusAsync(cancellationToken);
+            return status is null ? Results.NotFound() : Results.Ok(status);
+        })
+        .WithName("GetOwnRenewalStatus")
+        .Produces<RenewalStatusView>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        renewal.MapPost("/requests", async (
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IClientRenewalService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var result = await service.RequestAsync(cancellationToken);
+            return result.Status switch
+            {
+                RenewalRequestStatus.Created => Results.Created("/api/client-renewal/me", result.View),
+                RenewalRequestStatus.AlreadyRequested => Results.Ok(result.View),
+                RenewalRequestStatus.PlanNotEnded => Results.Conflict(new
+                {
+                    code = "plan_not_ended",
+                    message = "A renewal can be asked for only once the whole plan has run out.",
+                }),
+                _ => Results.NotFound(),
+            };
+        })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("RequestOwnRenewal")
+        .Produces<RenewalStatusView>(StatusCodes.Status201Created)
+        .Produces<RenewalStatusView>()
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status404NotFound);
+
         return endpoints;
     }
 

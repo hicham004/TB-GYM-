@@ -489,6 +489,12 @@ sign-out on `/me` through the same `SessionActions` the coach shell uses. Today 
 nutrition, check-ins and the latest conversation independently, each with its own retry and tenant
 scope. No schema, write contract or invariant changed.
 
+Step 3B2 (ADR 0029) adds `subscriptions."RenewalRequests"` (append-only, one per client in any 7
+days by exclusion constraint) and `IClientRenewalService` in the Subscriptions module, implemented in
+Infrastructure beside the commercial service. The coach's notice reuses the workspace-notice path
+(`WorkspaceRelationshipNotices`, in-app only); the dispatcher names the client when it writes the
+inbox row, and the inbox view carries `clientProfileId` for that kind as a link target only.
+
 Design-system foundation slice 1 (2026-09-22) adds the Figma tokens as CSS custom properties
 (`src/styles/_tokens.scss`), opt-in `.tb-*` primitive styles (`src/styles/_ui.scss`) and small
 primitives under `src/app/ui`: buttons and links, icon buttons, icons, status labels, avatars, and a
