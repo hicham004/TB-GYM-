@@ -1,0 +1,185 @@
+@use 'home-shared' as *;
+
+// Loaded only when the homepage renders; index.html preloads it so the headline does not reflow.
+@font-face {
+  font-display: swap;
+  font-family: 'TB Home Serif';
+  font-style: italic;
+  font-weight: 400;
+  src: url('/fonts/instrument-serif/InstrumentSerif-Italic-latin.woff2') format('woff2');
+}
+
+:host {
+  display: block;
+}
+
+.home {
+  --home-ink: #182d27;
+  --home-forest: #153d33;
+  --home-deep: #10302a;
+  --home-soft: #f5f3ea;
+  --home-cream: #fbfaf5;
+  --home-line: #d9dfd1;
+  --home-lime: #d9ed94;
+  --home-orange: #f2b994;
+  --home-muted: #4f6057;
+  --home-serif: 'TB Home Serif', Georgia, 'Times New Roman', serif;
+  --home-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  background: var(--home-soft);
+  color: var(--home-ink);
+  // Without the design system's Arabic fallback: symbols missing from Plex (✳, ✓) would otherwise
+  // make an English visitor download both Arabic faces just to look for them.
+  font-family:
+    'Notebook Plex',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  overflow: clip;
+}
+
+.home:lang(ar) {
+  font-family: var(--font-sans-arabic);
+}
+
+// Holds the space of the sections below the fold until they render.
+.home-later {
+  min-block-size: 100vh;
+}
+
+.home a {
+  color: inherit;
+}
+
+.skip-link {
+  background: var(--home-lime);
+  color: var(--home-ink);
+  font-weight: 600;
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  padding: 10px 16px;
+  position: fixed;
+  transform: translateY(-160%);
+  z-index: 60;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+#home-content > * {
+  scroll-margin-block-start: 76px;
+}
+
+// The ribbon slides sideways as the page scrolls past it. It moves only with the visitor's own
+// scrolling, never on a timer; without scroll timelines or with reduced motion it wraps, still.
+.home-ribbon {
+  background: var(--home-lime);
+  overflow: hidden;
+  padding: 18px clamp(20px, 5vw, 80px);
+}
+
+.home-ribbon__track {
+  --ribbon-shift: -28%;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: clamp(0.82rem, 1.3vw, 0.95rem);
+  font-weight: 600;
+  gap: 10px 0;
+  justify-content: center;
+  letter-spacing: 0.02em;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.home-ribbon__track li {
+  align-items: center;
+  display: flex;
+  white-space: nowrap;
+}
+
+.home-ribbon__track li::after {
+  content: '✳' / '';
+  font-size: 1.05em;
+  font-weight: 400;
+  margin-inline: 22px;
+}
+
+.home-ribbon__track .home-ribbon__repeat {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .home-ribbon {
+      padding-inline: 0;
+    }
+
+    .home-ribbon__track {
+      animation: ribbon-slide linear both;
+      animation-range: cover;
+      animation-timeline: view();
+      flex-wrap: nowrap;
+      inline-size: max-content;
+    }
+
+    .home-ribbon__track:dir(rtl) {
+      --ribbon-shift: 28%;
+    }
+
+    .home-ribbon__track .home-ribbon__repeat {
+      display: flex;
+    }
+  }
+}
+
+.home-footer {
+  align-items: center;
+  border-block-start: 1px solid var(--home-line);
+  display: grid;
+  gap: 20px;
+  grid-template-columns: auto 1fr auto;
+  margin-inline: auto;
+  max-inline-size: 1440px;
+  min-block-size: 120px;
+  padding: 24px clamp(20px, 5vw, 80px);
+}
+
+.home-footer p {
+  color: var(--home-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.home-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+}
+
+.home-footer nav a {
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.home-footer nav a:hover {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+
+@media (max-width: $mobile) {
+  .home-footer {
+    grid-template-columns: 1fr;
+  }
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes ribbon-slide {
+    to {
+      transform: translateX(var(--ribbon-shift));
+    }
+  }
+}

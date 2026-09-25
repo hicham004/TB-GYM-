@@ -3,10 +3,11 @@ import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthStore } from '../../core/auth/auth.store';
+import { PasswordReveal } from '../../ui/password-reveal';
 
 @Component({
   selector: 'app-sign-in',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [PasswordReveal, ReactiveFormsModule, RouterLink],
   templateUrl: './sign-in.html',
   styleUrl: './auth.scss',
 })

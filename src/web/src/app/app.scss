@@ -3,6 +3,11 @@
   min-height: 100vh;
 }
 
+// The landing page supplies its own navigation. Other public routes retain the existing bar.
+:host:has(app-home) .topbar {
+  display: none;
+}
+
 // Coach shell: the sidebar spans both rows of the first column; the top bar and <main> share the
 // second. The shell component's host is `display: contents`, so its sidebar and top bar are grid
 // items here. In RTL the grid mirrors, so the sidebar sits at the inline end (right).

@@ -1,0 +1,247 @@
+<div
+  class="loop"
+  [class.is-running]="autoplay.running()"
+  [class.is-paused]="autoplay.paused()"
+  role="group"
+  aria-labelledby="loop-title"
+  (pointerenter)="autoplay.hold('pointer', true)"
+  (pointerleave)="autoplay.hold('pointer', false)"
+  (focusin)="autoplay.hold('focus', true)"
+  (focusout)="autoplay.focusOut($event)"
+>
+  <p id="loop-title" class="tb-visually-hidden" i18n>Example: a week of coaching in TB Gym</p>
+
+  <div class="loop__stage" aria-hidden="true">
+    <div class="loop__canvas">
+      <div class="coach">
+        <div class="coach__bar">
+          <i></i><i></i><i></i><span i18n>Coach Rami · Clients · Maya Khoury</span>
+        </div>
+        @switch (step().id) {
+          @case ('plan') {
+            <div class="coach__panel">
+              <p class="coach__label" i18n>Program builder · Week 3 of 6</p>
+              <p class="coach__title" i18n>Lower body A</p>
+              <ul class="coach__rows">
+                <li><span i18n>Back squat</span><b>3 × 5</b><em>RPE 8</em></li>
+                <li><span i18n>Romanian deadlift</span><b>3 × 8</b><em>RPE 7</em></li>
+                <li><span i18n>Split squat</span><b>3 × 10</b><em>RIR 2</em></li>
+              </ul>
+              <div class="coach__actions">
+                <span class="coach__button" i18n>Assign to Maya</span>
+                <span class="coach__chip" i18n>Assigned</span>
+              </div>
+            </div>
+          }
+          @case ('train') {
+            <div class="coach__panel">
+              <p class="coach__label" i18n>Workout log · Today</p>
+              <p class="coach__title" i18n>Maya · Lower body A</p>
+              <ul class="coach__rows coach__rows--log">
+                <li>
+                  <span i18n>Back squat</span><b>100 kg × 5 · 5 · 5</b><em>RPE 7.5 · 8 · 8.5</em>
+                </li>
+                <li><span i18n>Romanian deadlift</span><b>80 kg × 8 · 8 · 8</b><em>RPE 7</em></li>
+                <li><span i18n>Split squat</span><b>24 kg × 10 · 10 · 10</b><em>RIR 2</em></li>
+              </ul>
+              <div class="coach__actions">
+                <span class="coach__planned" i18n>Planned 3 × 5 at RPE 8</span>
+                <span class="coach__chip" i18n>Completed</span>
+              </div>
+            </div>
+          }
+          @case ('checkin') {
+            <div class="coach__panel">
+              <p class="coach__label" i18n>Check-ins · This week</p>
+              <ul class="coach__feed">
+                <li class="coach__feed-new">
+                  <b>Maya Khoury</b><span i18n>Energy 4/5 · Sleep 7 h · 66.8 kg</span
+                  ><i i18n>New</i>
+                </li>
+                <li><b>Karim Saad</b><span i18n>Energy 3/5 · Sleep 6 h · 81.2 kg</span></li>
+                <li><b>Lea Haddad</b><span i18n>Energy 5/5 · Sleep 8 h · 58.4 kg</span></li>
+              </ul>
+            </div>
+          }
+          @case ('reply') {
+            <div class="coach__panel">
+              <p class="coach__label" i18n>Messages · Maya Khoury</p>
+              <div class="coach__thread">
+                <p class="coach__bubble" i18n>Knee felt great on squats this week.</p>
+                <p class="coach__bubble coach__bubble--mine" i18n>
+                  Great week. Adding 2.5 kg to squats next session.
+                </p>
+              </div>
+              <div class="coach__composer"><span i18n>Write a message…</span><b i18n>Send</b></div>
+            </div>
+          }
+          @case ('progress') {
+            <div class="coach__panel">
+              <p class="coach__label" i18n>Progress · Maya Khoury</p>
+              <div class="coach__stats">
+                <div><b>66.8 kg</b><span i18n>Trend · −1.6 kg</span></div>
+                <div><b>72 cm</b><span i18n>Waist · −3 cm</span></div>
+              </div>
+              <div class="coach__bars">
+                <i style="--h: 92%"></i><i style="--h: 86%"></i><i style="--h: 80%"></i
+                ><i style="--h: 71%"></i><i style="--h: 63%"></i><i style="--h: 55%"></i>
+              </div>
+              <p class="coach__next" i18n>
+                Next block · Back squat working max <b>100 → 102.5 kg</b>
+              </p>
+            </div>
+          }
+        }
+      </div>
+
+      <div class="phone">
+        <div class="phone__screen">
+          @switch (step().id) {
+            @case ('plan') {
+              <div class="screen">
+                <p class="screen__label" i18n>Tuesday</p>
+                <p class="screen__big" i18n>Today</p>
+                <div class="screen__toast">
+                  <span class="screen__app">TB</span>
+                  <p><b i18n>Rami · now</b><span i18n>New workout: Lower body A</span></p>
+                </div>
+                <div class="screen__card screen__card--dark">
+                  <p class="screen__label" i18n>Training · Week 3 of 6</p>
+                  <p class="screen__title" i18n>Lower body A</p>
+                  <p class="screen__meta" i18n>3 exercises · Back squat first</p>
+                  <span class="screen__button" i18n>Start workout</span>
+                </div>
+                <div class="screen__card">
+                  <p class="screen__label" i18n>Nutrition</p>
+                  <p class="screen__title" i18n>1,950 kcal target</p>
+                </div>
+              </div>
+            }
+            @case ('train') {
+              <div class="screen">
+                <p class="screen__label" i18n>Lower body A · 1 of 3</p>
+                <p class="screen__big" i18n>Back squat</p>
+                <p class="screen__meta" i18n>3 × 5 at RPE 8 · 100 kg</p>
+                <ol class="screen__sets">
+                  <li><i></i><span>1</span><b>100 kg × 5</b><em>RPE 7.5</em></li>
+                  <li><i></i><span>2</span><b>100 kg × 5</b><em>RPE 8</em></li>
+                  <li><i></i><span>3</span><b>100 kg × 5</b><em>RPE 8.5</em></li>
+                </ol>
+                <span class="screen__button" i18n>Next exercise</span>
+              </div>
+            }
+            @case ('checkin') {
+              <div class="screen">
+                <p class="screen__label" i18n>Weekly check-in</p>
+                <p class="screen__big" i18n>How was your week?</p>
+                <div class="screen__field">
+                  <span i18n>Energy</span>
+                  <span class="screen__scale"><i></i><i></i><i></i><i></i><i></i></span>
+                </div>
+                <div class="screen__field"><span i18n>Average sleep</span><b i18n>7 h</b></div>
+                <div class="screen__field"><span i18n>Bodyweight</span><b>66.8 kg</b></div>
+                <p class="screen__answer" i18n>Knee felt great on squats this week.</p>
+                <span class="screen__button screen__button--sent" i18n>Sent to Rami</span>
+              </div>
+            }
+            @case ('reply') {
+              <div class="screen">
+                <div class="screen__chat-head">
+                  <span class="screen__avatar">R</span>
+                  <p><b i18n>Rami</b><span i18n>Your coach</span></p>
+                </div>
+                <p class="screen__bubble screen__bubble--mine" i18n>
+                  Knee felt great on squats this week.
+                </p>
+                <p class="screen__bubble" i18n>Great week. Adding 2.5 kg to squats next session.</p>
+                <p class="screen__bubble screen__bubble--mine screen__bubble--late" i18n>
+                  Let's go!
+                </p>
+              </div>
+            }
+            @case ('progress') {
+              <div class="screen">
+                <p class="screen__label" i18n>Bodyweight</p>
+                <p class="screen__number">66.8 <small>kg</small></p>
+                <p class="screen__delta" i18n>−1.6 kg in 6 weeks</p>
+                <svg class="screen__chart" viewBox="0 0 200 90">
+                  <polyline
+                    class="screen__dots"
+                    points="4,18 18,26 32,20 46,34 60,30 74,40 88,36 102,50 116,46 130,58 144,54 158,66 172,62 186,74 196,72"
+                  />
+                  <path class="screen__trend" d="M4 20 C60 30, 120 52, 196 74" />
+                </svg>
+                <div class="screen__chips">
+                  <span i18n>Waist −3 cm</span><span i18n>Hips −1 cm</span>
+                </div>
+              </div>
+            }
+          }
+        </div>
+      </div>
+
+      @switch (step().id) {
+        @case ('plan') {
+          <p class="toast"><i></i><span i18n>Rami assigned Lower body A</span></p>
+        }
+        @case ('train') {
+          <p class="toast"><i></i><span i18n>Maya finished Lower body A</span></p>
+        }
+        @case ('checkin') {
+          <p class="toast"><i></i><span i18n>New check-in from Maya</span></p>
+        }
+        @case ('reply') {
+          <p class="toast"><i></i><span i18n>Rami replied to Maya</span></p>
+        }
+        @case ('progress') {
+          <p class="toast"><i></i><span i18n>Trend down 1.6 kg in 6 weeks</span></p>
+        }
+      }
+    </div>
+  </div>
+
+  <div class="loop__controls">
+    <ol class="loop__steps">
+      @for (item of steps; track item.id; let index = $index) {
+        <li>
+          <button
+            type="button"
+            class="loop__step"
+            [class.is-active]="autoplay.active() === index"
+            [class.is-done]="autoplay.active() > index"
+            [attr.aria-current]="autoplay.active() === index ? 'step' : null"
+            (click)="autoplay.select(index)"
+          >
+            <span class="loop__track" aria-hidden="true">
+              @if (autoplay.active() === index) {
+                <span class="loop__bar" (animationend)="autoplay.advance()"></span>
+              }
+            </span>
+            <span class="loop__label">{{ item.label }}</span>
+          </button>
+        </li>
+      }
+    </ol>
+    @if (!autoplay.reducedMotion) {
+      <button type="button" class="loop__pause" (click)="autoplay.togglePaused()">
+        <span
+          class="loop__pause-icon"
+          [class.is-play]="autoplay.paused()"
+          aria-hidden="true"
+        ></span>
+        <span class="tb-visually-hidden">
+          @if (autoplay.paused()) {
+            <ng-container i18n>Play the example</ng-container>
+          } @else {
+            <ng-container i18n>Pause the example</ng-container>
+          }
+        </span>
+      </button>
+    }
+  </div>
+  <!-- Keyed on the step so the caption is re-created, and its entrance replays, on every change. -->
+  @for (current of [step()]; track current.id) {
+    <p class="loop__caption">{{ current.caption }}</p>
+  }
+  <p class="loop__note" i18n>Illustration with a sample client.</p>
+</div>

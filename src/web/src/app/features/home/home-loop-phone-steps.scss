@@ -1,0 +1,198 @@
+@use 'home-phone' as phone;
+
+// Maya's phone: the check-in, reply and progress steps.
+
+.screen__field {
+  align-items: center;
+  border-block-end: 1px solid #e3e6dc;
+  display: flex;
+  font-size: 0.9em;
+  justify-content: space-between;
+  padding-block: 0.5em;
+}
+
+.screen__field b {
+  font-weight: 600;
+  @include phone.enter(screen-fill, 400ms, 900ms);
+}
+
+.screen__field:nth-of-type(3) b {
+  animation-delay: 1200ms;
+}
+
+.screen__scale {
+  display: flex;
+  gap: 0.3em;
+}
+
+.screen__scale i {
+  background: var(--home-forest);
+  block-size: 0.9em;
+  border-radius: 50%;
+  inline-size: 0.9em;
+  @include phone.enter(screen-fill, 300ms, 400ms);
+}
+
+@for $dot from 2 through 4 {
+  .screen__scale i:nth-child(#{$dot}) {
+    animation-delay: #{300 + $dot * 100}ms;
+  }
+}
+
+.screen__scale i:nth-child(5) {
+  animation: none;
+  background: #d5dacd;
+}
+
+.screen__answer {
+  @include phone.card;
+  font-size: 0.85em;
+  margin: 0.2em 0 0;
+  @include phone.enter(screen-rise, 500ms, 1500ms);
+}
+
+.screen__button--sent {
+  @include phone.enter(screen-pop, 500ms, 2200ms);
+}
+
+.screen__button--sent::before {
+  content: '✓ ' / '';
+}
+
+.screen__chat-head {
+  align-items: center;
+  border-block-end: 1px solid #e3e6dc;
+  display: flex;
+  gap: 0.6em;
+  padding-block-end: 0.7em;
+}
+
+.screen__avatar {
+  background: var(--home-lime);
+  block-size: 2.2em;
+  border-radius: 50%;
+  display: grid;
+  font-weight: 600;
+  inline-size: 2.2em;
+  place-items: center;
+}
+
+.screen__chat-head p {
+  display: grid;
+  font-size: 0.9em;
+  margin: 0;
+}
+
+.screen__chat-head span {
+  color: #647268;
+  font-size: 0.85em;
+}
+
+.screen__bubble {
+  align-self: flex-start;
+  background: white;
+  border: 1px solid #e3e6dc;
+  border-radius: 1em;
+  border-end-start-radius: 0.3em;
+  font-size: 0.88em;
+  margin: 0;
+  max-inline-size: 84%;
+  padding: 0.6em 0.85em;
+  @include phone.enter(screen-pop, 500ms, 900ms);
+}
+
+.screen__bubble--mine {
+  align-self: flex-end;
+  background: var(--home-forest);
+  border-color: var(--home-forest);
+  border-end-end-radius: 0.3em;
+  border-end-start-radius: 1em;
+  color: white;
+  @include phone.enter(screen-rise, 400ms, 100ms);
+}
+
+.screen__bubble--late {
+  animation-delay: 2000ms;
+}
+
+.screen__number {
+  font-size: 2.6em;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 0.1em 0 0;
+}
+
+.screen__number small {
+  color: #647268;
+  font-size: 0.42em;
+}
+
+.screen__delta {
+  @include phone.chip;
+  align-self: flex-start;
+  margin: 0;
+  @include phone.enter(screen-pop, 500ms, 1500ms);
+}
+
+.screen__chart {
+  aspect-ratio: 20 / 9;
+  inline-size: 100%;
+  overflow: visible;
+}
+
+.screen__dots {
+  fill: none;
+  stroke: #b7c2b3;
+  stroke-dasharray: 0.1 9;
+  stroke-linecap: round;
+  stroke-width: 5;
+}
+
+.screen__trend {
+  fill: none;
+  stroke: var(--home-forest);
+  stroke-dasharray: 240;
+  stroke-linecap: round;
+  stroke-width: 4;
+  @include phone.enter(screen-draw, 1500ms, 300ms);
+}
+
+.screen__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+
+.screen__chips span {
+  @include phone.chip(#eef3dc);
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes screen-fill {
+    from {
+      opacity: 0.15;
+    }
+  }
+
+  @keyframes screen-rise {
+    from {
+      opacity: 0;
+      transform: translateY(0.8em);
+    }
+  }
+
+  @keyframes screen-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.85);
+    }
+  }
+
+  @keyframes screen-draw {
+    from {
+      stroke-dashoffset: 240;
+    }
+  }
+}

@@ -58,6 +58,11 @@ below is external setup and operations, none of which this repository automates.
 ## Domain, TLS, and edge
 
 - [ ] Register the production domain and define API/web DNS ownership and renewal contacts.
+- [ ] Make `og:image` in `src/web/src/index.html` an absolute `https://` URL on the production
+  origin. It is relative until the domain exists, and WhatsApp shows no preview image for a
+  relative one. Check a shared link in WhatsApp and a link-preview debugger afterwards.
+- [ ] Enable gzip or Brotli for HTML, JavaScript and CSS in `src/web/nginx.conf` (or at the edge).
+  Without it a first visit downloads roughly twice the bytes.
 - [ ] Terminate TLS 1.2+ with automatic certificate renewal; redirect HTTP and test renewal.
 - [ ] Serve SPA and API under the approved same-origin model so cookie/XSRF assumptions hold.
 - [ ] Configure trusted proxy networks before accepting forwarded headers. Set

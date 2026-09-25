@@ -6,10 +6,11 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { RegistrationResponse } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
+import { PasswordReveal } from '../../ui/password-reveal';
 
 @Component({
   selector: 'app-register-coach',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [PasswordReveal, ReactiveFormsModule, RouterLink],
   templateUrl: './register-coach.html',
   styleUrl: './auth.scss',
 })

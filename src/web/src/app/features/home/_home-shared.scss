@@ -1,0 +1,124 @@
+// Shared homepage patterns. Every section stylesheet `@use`s this partial; the colours, fonts and
+// easing it refers to are custom properties set once on `.home` (home.scss) and inherited.
+//
+// Motion rule for the whole page: the base styles are the finished state. Movement is added only
+// under `prefers-reduced-motion: no-preference`, and scroll-linked movement only where the
+// browser supports scroll timelines, so a visitor without either sees a complete, still page.
+
+$tablet: 1100px;
+$mobile: 760px;
+$small: 520px;
+
+@mixin eyebrow {
+  align-items: center;
+  display: flex;
+  font-size: 0.74rem;
+  font-weight: 600;
+  gap: 11px;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  margin-block: 0 22px;
+  text-transform: uppercase;
+}
+
+@mixin display($size: clamp(2.6rem, 4.7vw, 5rem)) {
+  font-size: $size;
+  font-weight: 600;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+  margin: 0;
+  text-wrap: balance;
+}
+
+// The italic accent words in every heading. Instrument Serif runs small beside IBM Plex, so it is
+// set slightly larger to share the sans-serif's visual height.
+@mixin accent {
+  font-family: var(--home-serif);
+  font-size: 1.08em;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+}
+
+@mixin button {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.95rem;
+  font-weight: 600;
+  gap: 18px;
+  justify-content: space-between;
+  min-block-size: 54px;
+  padding: 12px 22px;
+  text-decoration: none;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    transform 250ms var(--home-ease);
+
+  > [aria-hidden] {
+    display: inline-block;
+    transition: transform 250ms var(--home-ease);
+  }
+
+  &:hover {
+    transform: translateY(-2px);
+
+    > [aria-hidden] {
+      transform: translate(3px, -3px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+
+    &:hover,
+    &:hover > [aria-hidden] {
+      transform: none;
+    }
+  }
+}
+
+// The global focus outline is near-black; on the forest-green sections it would vanish.
+@mixin dark-focus {
+  a:focus-visible,
+  button:focus-visible {
+    outline-color: var(--home-lime);
+  }
+}
+
+// Keyframes live inside an at-rule on purpose. Angular renames top-level `@keyframes` per component
+// but rewrites `animation` references only in top-level rules, and every animation on this page is
+// declared inside a reduced-motion or scroll-support query - so a top-level keyframe name would
+// never match its reference and nothing would move. Keyframes nested in `@media`/`@supports` keep
+// their written names, and those names are prefixed by section to stay unique.
+//
+// Content rises into place as it scrolls into view. A stylesheet that uses `reveal` includes
+// `reveal-keyframes` once at its root.
+@mixin reveal($range: entry 0% cover 28%) {
+  @media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+      animation: home-reveal linear both;
+      animation-range: $range;
+      animation-timeline: view();
+    }
+  }
+}
+
+@mixin reveal-keyframes {
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes home-reveal {
+      from {
+        opacity: 0;
+        transform: translateY(36px);
+      }
+    }
+  }
+}
+
+@mixin section-padding {
+  margin-inline: auto;
+  max-inline-size: 1440px;
+  padding: clamp(80px, 9vw, 136px) clamp(20px, 5vw, 80px);
+}

@@ -1,0 +1,98 @@
+// The phone frame and the small pieces of mock product UI drawn inside it. Everything inside the
+// screen is sized in `em` from a font size tied to the phone's own width (container query units),
+// so the whole picture scales as one piece at any size.
+
+@mixin phone {
+  aspect-ratio: 9 / 19;
+  background: #0d1f1a;
+  border-radius: 14% / 6.6%;
+  box-shadow:
+    0 30px 60px -24px rgb(4 20 15 / 60%),
+    inset 0 0 0 1.5px rgb(255 255 255 / 14%);
+  container-type: inline-size;
+  padding: 3.2%;
+  position: relative;
+}
+
+@mixin phone-screen {
+  background: #fbfaf5;
+  block-size: 100%;
+  border-radius: 11% / 5.2%;
+  color: var(--home-ink);
+  display: flex;
+  flex-direction: column;
+  font-size: 5.2cqi;
+  gap: 0.7em;
+  line-height: 1.3;
+  overflow: hidden;
+  padding: 2.6em 1em 1em;
+  position: relative;
+
+  // The camera island.
+  &::before {
+    background: #0d1f1a;
+    block-size: 1.35em;
+    border-radius: 1em;
+    content: '';
+    inline-size: 32%;
+    inset-block-start: 0.6em;
+    inset-inline-start: 34%;
+    position: absolute;
+  }
+}
+
+@mixin label {
+  color: #647268;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+@mixin card {
+  background: white;
+  border: 1px solid #e3e6dc;
+  border-radius: 0.9em;
+  padding: 0.8em 0.9em;
+}
+
+@mixin chip($background: var(--home-lime)) {
+  align-items: center;
+  background: $background;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.78em;
+  font-weight: 600;
+  gap: 0.35em;
+  padding: 0.3em 0.75em;
+  white-space: nowrap;
+}
+
+// A completed-set tick drawn in CSS, so no icon font or image is needed.
+@mixin tick($size: 1.25em) {
+  background: var(--home-forest);
+  block-size: $size;
+  border-radius: 50%;
+  flex: none;
+  inline-size: $size;
+  position: relative;
+
+  &::after {
+    border: solid var(--home-lime);
+    border-width: 0 0.14em 0.14em 0;
+    block-size: 45%;
+    content: '';
+    inline-size: 24%;
+    inset-block-start: 20%;
+    inset-inline-start: 38%;
+    position: absolute;
+    transform: rotate(45deg);
+  }
+}
+
+@mixin enter($name, $duration: 520ms, $delay: 0ms) {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: $name $duration var(--home-ease) $delay both;
+  }
+}

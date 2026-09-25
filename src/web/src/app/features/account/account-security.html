@@ -19,18 +19,39 @@
   </div>
   <form [formGroup]="form" (ngSubmit)="changePassword()" novalidate>
     <div class="form-grid">
-      <label class="span-full">
-        <span i18n>Current password</span>
-        <input type="password" formControlName="currentPassword" autocomplete="current-password" />
-      </label>
-      <label>
-        <span i18n>New password</span>
-        <input type="password" formControlName="newPassword" autocomplete="new-password" />
-      </label>
-      <label>
-        <span i18n>Confirm new password</span>
-        <input type="password" formControlName="confirmPassword" autocomplete="new-password" />
-      </label>
+      <div class="span-full">
+        <label for="account-current-password"><span i18n>Current password</span></label>
+        <app-password-reveal>
+          <input
+            id="account-current-password"
+            type="password"
+            formControlName="currentPassword"
+            autocomplete="current-password"
+          />
+        </app-password-reveal>
+      </div>
+      <div>
+        <label for="account-new-password"><span i18n>New password</span></label>
+        <app-password-reveal>
+          <input
+            id="account-new-password"
+            type="password"
+            formControlName="newPassword"
+            autocomplete="new-password"
+          />
+        </app-password-reveal>
+      </div>
+      <div>
+        <label for="account-confirm-password"><span i18n>Confirm new password</span></label>
+        <app-password-reveal>
+          <input
+            id="account-confirm-password"
+            type="password"
+            formControlName="confirmPassword"
+            autocomplete="new-password"
+          />
+        </app-password-reveal>
+      </div>
     </div>
     <div class="form-actions">
       <button class="primary-button" type="submit" [disabled]="busy()" i18n>Change password</button>

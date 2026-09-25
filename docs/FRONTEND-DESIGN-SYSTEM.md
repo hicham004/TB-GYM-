@@ -163,6 +163,11 @@ Rules the primitives encode:
 - **Focus.** Every primitive draws `outline: 3px var(--color-accent)` at a 2px offset on
   `:focus-visible`, reaching 5px beyond the control. Containers keep that margin; a scroll region
   scrolls on one axis, with padding and `scroll-padding` so its first and last rows stay unclipped.
+- **Motion.** Angular renames a component's top-level `@keyframes` but rewrites `animation`
+  references only in top-level rules, so an animation declared inside `@media` or `@supports` never
+  finds a top-level keyframe and silently does nothing. Nest the keyframes in the same at-rule (for
+  example `prefers-reduced-motion: no-preference`) and give them a component prefix, since nested
+  names stay global. The public homepage (`features/home/_home-shared.scss`) follows this.
 
 ## 5. Deliberate deviations from the Figma file
 

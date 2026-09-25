@@ -1,0 +1,201 @@
+@use 'home-phone' as phone;
+
+// The client's side of the example: Maya's phone, one screen per step.
+.phone {
+  @include phone.phone;
+  inline-size: 38%;
+  inset-block-start: 12%;
+  inset-inline-end: 4%;
+  position: absolute;
+  z-index: 2;
+}
+
+.phone__screen {
+  @include phone.phone-screen;
+  font-size: 5.8cqi;
+}
+
+@container loop (max-width: 520px) {
+  .phone {
+    inline-size: 60%;
+    inset-block-start: 12%;
+    inset-inline-end: 12%;
+  }
+}
+
+.screen {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.7em;
+  min-block-size: 0;
+  @include phone.enter(screen-in, 500ms);
+}
+
+.screen__label {
+  @include phone.label;
+}
+
+.screen__big {
+  font-size: 1.9em;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  margin: -0.15em 0 0.1em;
+}
+
+.screen__title {
+  font-size: 1.2em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.screen__meta {
+  color: #647268;
+  font-size: 0.85em;
+  margin: 0;
+}
+
+.screen__card {
+  @include phone.card;
+  display: grid;
+  gap: 0.3em;
+}
+
+.screen__card--dark {
+  background: var(--home-forest);
+  border-color: var(--home-forest);
+  color: white;
+}
+
+.screen__card--dark .screen__label,
+.screen__card--dark .screen__meta {
+  color: #c6d3c9;
+}
+
+.screen__button {
+  background: var(--home-lime);
+  border-radius: 999px;
+  color: var(--home-ink);
+  font-size: 0.85em;
+  font-weight: 600;
+  margin-block-start: 0.4em;
+  padding: 0.65em 1em;
+  text-align: center;
+}
+
+.screen > .screen__button {
+  background: var(--home-forest);
+  color: white;
+  margin-block-start: auto;
+}
+
+.screen__toast {
+  align-items: center;
+  background: white;
+  border-radius: 1em;
+  box-shadow: 0 0.8em 1.6em -0.6em rgb(0 0 0 / 35%);
+  display: flex;
+  font-size: 0.8em;
+  gap: 0.7em;
+  padding: 0.7em 0.8em;
+  @include phone.enter(screen-drop, 600ms, 500ms);
+}
+
+.screen__toast p {
+  display: grid;
+  margin: 0;
+}
+
+.screen__toast span {
+  color: #647268;
+}
+
+.screen__app {
+  background: var(--home-forest);
+  block-size: 2.4em;
+  border-radius: 0.6em;
+  color: var(--home-lime);
+  display: grid;
+  flex: none;
+  font-size: 0.85em;
+  font-weight: 600;
+  inline-size: 2.4em;
+  place-items: center;
+}
+
+.screen__sets {
+  display: grid;
+  gap: 0.45em;
+  list-style: none;
+  margin: 0.3em 0 0;
+  padding: 0;
+}
+
+.screen__sets li {
+  @include phone.card;
+  align-items: center;
+  background: #f4f8e6;
+  border-color: #dfe8c4;
+  display: grid;
+  font-size: 0.9em;
+  gap: 0.6em;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  padding: 0.6em 0.7em;
+  @include phone.enter(screen-done, 300ms, 600ms);
+}
+
+.screen__sets i {
+  @include phone.tick(1.4em);
+  @include phone.enter(screen-tick, 450ms, 600ms);
+}
+
+@for $set from 2 through 3 {
+  .screen__sets li:nth-child(#{$set}),
+  .screen__sets li:nth-child(#{$set}) i {
+    animation-delay: #{600 + ($set - 1) * 700}ms;
+  }
+}
+
+.screen__sets span,
+.screen__sets em {
+  color: #647268;
+  font-size: 0.85em;
+  font-style: normal;
+}
+
+.screen__sets b {
+  font-weight: 600;
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes screen-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.8em);
+    }
+  }
+
+  @keyframes screen-drop {
+    from {
+      opacity: 0;
+      transform: translateY(-60%) scale(0.92);
+    }
+  }
+
+  @keyframes screen-done {
+    from {
+      background: white;
+      border-color: #e3e6dc;
+    }
+  }
+
+  @keyframes screen-tick {
+    from {
+      opacity: 0;
+      transform: scale(0.3);
+    }
+  }
+}

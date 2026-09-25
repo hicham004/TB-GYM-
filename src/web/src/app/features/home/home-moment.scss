@@ -1,0 +1,191 @@
+@use 'home-shared' as *;
+
+:host {
+  display: block;
+}
+
+.moment {
+  align-items: end;
+  background: var(--home-deep);
+  block-size: clamp(560px, 60vw, 780px);
+  color: white;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  overflow: hidden;
+  padding: clamp(28px, 5vw, 80px);
+  position: relative;
+}
+
+// Out of the grid: as a grid child, even the empty <source> element would take a cell.
+.moment picture {
+  inset: 0;
+  position: absolute;
+}
+
+// Taller than its frame so it can drift against the scroll.
+.moment__image {
+  block-size: 116%;
+  inline-size: 100%;
+  inset-block-start: -8%;
+  inset-inline-start: 0;
+  object-fit: cover;
+  object-position: 64% center;
+  position: absolute;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .moment__image {
+      animation: moment-drift linear both;
+      animation-timeline: view();
+    }
+
+    .moment__chips li {
+      animation: moment-float linear both;
+      animation-timeline: view();
+    }
+  }
+}
+
+.moment::before {
+  background:
+    linear-gradient(to right, rgb(8 26 21 / 88%), rgb(8 26 21 / 40%) 45%, transparent 70%),
+    linear-gradient(to top, rgb(8 26 21 / 70%), transparent 45%);
+  content: '';
+  inset: 0;
+  position: absolute;
+  z-index: 1;
+}
+
+.moment:dir(rtl)::before {
+  background:
+    linear-gradient(to left, rgb(8 26 21 / 88%), rgb(8 26 21 / 40%) 45%, transparent 70%),
+    linear-gradient(to top, rgb(8 26 21 / 70%), transparent 45%);
+}
+
+.moment__copy {
+  grid-area: 1 / 1;
+  max-inline-size: 36rem;
+  position: relative;
+  z-index: 2;
+}
+
+.moment h2 {
+  @include display(clamp(2.8rem, 5.4vw, 5.6rem));
+  margin-block-end: 20px;
+}
+
+.moment h2 em {
+  @include accent;
+  color: var(--home-lime);
+}
+
+.moment__copy p {
+  color: #dbe5dd;
+  font-size: 1.08rem;
+  line-height: 1.6;
+  margin: 0;
+  max-inline-size: 28rem;
+}
+
+.moment__chips {
+  align-self: start;
+  grid-area: 1 / 2;
+  display: grid;
+  gap: 12px;
+  justify-items: end;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.moment__chips li {
+  --lift: 18px;
+  align-items: center;
+  backdrop-filter: blur(10px);
+  background: rgb(251 250 245 / 90%);
+  border-radius: 999px;
+  box-shadow: 0 16px 30px -18px rgb(0 0 0 / 70%);
+  color: var(--home-ink);
+  display: flex;
+  font-size: 0.88rem;
+  font-weight: 600;
+  gap: 10px;
+  padding: 10px 16px;
+}
+
+.moment__chips li:nth-child(2) {
+  --lift: 42px;
+  margin-inline-end: 36px;
+}
+
+.moment__chips li:nth-child(3) {
+  --lift: 28px;
+}
+
+.moment__chips i {
+  background: var(--home-forest);
+  block-size: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--home-lime);
+  inline-size: 10px;
+}
+
+@media (max-width: $mobile) {
+  .moment {
+    block-size: auto;
+    grid-template-columns: 1fr;
+    min-block-size: 620px;
+  }
+
+  .moment::before {
+    background: linear-gradient(to top, rgb(8 26 21 / 92%) 10%, rgb(8 26 21 / 20%) 70%);
+  }
+
+  .moment__image {
+    object-position: 70% center;
+  }
+
+  .moment__copy {
+    grid-area: 2 / 1;
+  }
+
+  .moment__chips {
+    grid-area: 1 / 1;
+    justify-items: start;
+    margin-block-end: auto;
+  }
+
+  .moment__chips li {
+    font-size: 0.8rem;
+  }
+
+  .moment__chips li:nth-child(2) {
+    margin-inline: 24px 0;
+  }
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes moment-drift {
+    from {
+      translate: 0 -6%;
+    }
+
+    to {
+      translate: 0 6%;
+    }
+  }
+
+  @keyframes moment-float {
+    from {
+      translate: 0 var(--lift);
+    }
+
+    to {
+      translate: 0 calc(var(--lift) * -1);
+    }
+  }
+}

@@ -1,0 +1,66 @@
+<div class="home tb-theme">
+  <a class="skip-link" href="#home-content" i18n>Skip to content</a>
+
+  <header class="home-header">
+    <div class="home-header__inner">
+      <a class="home-brand" routerLink="/">
+        <span class="home-brand__mark" aria-hidden="true"
+          >TB<span class="home-brand__dot">.</span></span
+        >
+        <span i18n>TB Gym</span>
+      </a>
+      <nav class="home-nav" aria-label="Homepage" i18n-aria-label>
+        <a class="home-nav__section" href="#tour" i18n>Product</a>
+        <a class="home-nav__section" href="#how-it-works" i18n>How it works</a>
+        <a class="home-nav__section" href="#who-its-for" i18n>Who it's for</a>
+        <a class="home-nav__sign-in" routerLink="/auth/sign-in" i18n>Sign in</a>
+        <a class="home-nav__start" routerLink="/auth/register">
+          <span i18n>Get started</span><span aria-hidden="true">↗</span>
+        </a>
+      </nav>
+    </div>
+    <span class="home-header__progress" aria-hidden="true"></span>
+  </header>
+
+  <div id="home-content">
+    <app-home-hero />
+
+    <div class="home-ribbon">
+      <ul class="home-ribbon__track" aria-label="What TB Gym covers" i18n-aria-label>
+        @for (item of ribbon; track item) {
+          <li>{{ item }}</li>
+        }
+        @for (item of ribbon; track item) {
+          <li class="home-ribbon__repeat" aria-hidden="true">{{ item }}</li>
+        }
+      </ul>
+    </div>
+
+    <!-- The hero paints alone; everything below the fold renders once the browser is idle. -->
+    @defer (on idle) {
+      <app-home-shift />
+      <app-home-tour />
+      <app-home-method />
+      <app-home-moment />
+      <app-home-closing />
+    } @placeholder {
+      <div class="home-later"></div>
+    }
+  </div>
+
+  <footer class="home-footer">
+    <a class="home-brand" routerLink="/">
+      <span class="home-brand__mark" aria-hidden="true"
+        >TB<span class="home-brand__dot">.</span></span
+      >
+      <span i18n>TB Gym</span>
+    </a>
+    <p i18n>The work behind every win.</p>
+    <nav aria-label="Footer" i18n-aria-label>
+      <a href="#tour" i18n>Product</a>
+      <a href="#how-it-works" i18n>How it works</a>
+      <a routerLink="/auth/sign-in" i18n>Sign in</a>
+      <a routerLink="/auth/register" i18n>Get started</a>
+    </nav>
+  </footer>
+</div>

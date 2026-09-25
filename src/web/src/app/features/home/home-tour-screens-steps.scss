@@ -1,0 +1,209 @@
+@use 'home-phone' as phone;
+
+// The tour's phone: the check-in, progress and message screens.
+
+.ts__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+
+.ts__choices span,
+.ts__scale span {
+  border: 1px solid #d5dacd;
+  border-radius: 999px;
+  font-size: 0.8em;
+  padding: 0.4em 0.7em;
+}
+
+.ts__choices .is-on,
+.ts__scale .is-on {
+  background: var(--home-forest);
+  border-color: var(--home-forest);
+  color: white;
+  @include phone.enter(ts-pop, 400ms, 600ms);
+}
+
+.ts__q {
+  font-size: 0.85em;
+  font-weight: 600;
+  margin: 0.3em 0 0;
+}
+
+.ts__scale {
+  display: flex;
+  justify-content: space-between;
+}
+
+.ts__scale span {
+  display: grid;
+  inline-size: 2.2em;
+  padding: 0.35em 0;
+  place-items: center;
+}
+
+.ts__text {
+  @include phone.card;
+  font-size: 0.85em;
+  margin: 0;
+}
+
+.ts__photos {
+  display: grid;
+  gap: 0.4em;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.ts__photos span {
+  align-items: end;
+  aspect-ratio: 3 / 4;
+  background: linear-gradient(160deg, #cfd9c4, #8fa596);
+  border-radius: 0.7em;
+  color: white;
+  display: flex;
+  font-size: 0.72em;
+  font-weight: 600;
+  padding: 0.5em;
+  @include phone.enter(ts-rise, 450ms, 150ms);
+}
+
+.ts__photos span:nth-child(2) {
+  animation-delay: 250ms;
+}
+
+.ts__photos span:nth-child(3) {
+  animation-delay: 350ms;
+}
+
+.ts__trend {
+  @include phone.card;
+}
+
+.ts__trend p {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.ts__trend b {
+  font-size: 1.4em;
+  letter-spacing: -0.03em;
+}
+
+.ts__trend span {
+  @include phone.chip;
+}
+
+.ts__trend svg {
+  inline-size: 100%;
+}
+
+.ts__trend path {
+  fill: none;
+  stroke: var(--home-forest);
+  stroke-dasharray: 210;
+  stroke-linecap: round;
+  stroke-width: 4;
+  @include phone.enter(ts-draw, 1300ms, 300ms);
+}
+
+.ts__measures li {
+  display: grid;
+  gap: 0.5em;
+  grid-template-columns: 1fr auto 2.2em;
+}
+
+.ts__measures em {
+  color: var(--home-forest);
+  font-style: normal;
+  font-weight: 600;
+  text-align: end;
+}
+
+.ts__head {
+  align-items: center;
+  border-block-end: 1px solid #e3e6dc;
+  display: flex;
+  gap: 0.6em;
+  padding-block-end: 0.7em;
+}
+
+.ts__avatar {
+  background: var(--home-lime);
+  block-size: 2.2em;
+  border-radius: 50%;
+  display: grid;
+  font-weight: 600;
+  inline-size: 2.2em;
+  place-items: center;
+}
+
+.ts__head p {
+  display: grid;
+  font-size: 0.9em;
+  margin: 0;
+}
+
+.ts__head span {
+  color: #647268;
+  font-size: 0.85em;
+}
+
+.ts__bubble {
+  align-self: flex-start;
+  background: white;
+  border: 1px solid #e3e6dc;
+  border-radius: 1em;
+  border-end-start-radius: 0.3em;
+  font-size: 0.88em;
+  margin: 0;
+  max-inline-size: 84%;
+  padding: 0.6em 0.85em;
+  @include phone.enter(ts-rise, 450ms, 300ms);
+}
+
+.ts__bubble--mine {
+  align-self: flex-end;
+  background: var(--home-forest);
+  border-color: var(--home-forest);
+  border-end-end-radius: 0.3em;
+  border-end-start-radius: 1em;
+  color: white;
+  animation-delay: 900ms;
+}
+
+.ts__bubble:nth-of-type(3) {
+  animation-delay: 1600ms;
+}
+
+.ts__compose {
+  background: white;
+  border: 1px solid #d5dacd;
+  color: #647268;
+  font-weight: 400;
+  margin: auto 0 0;
+  text-align: start;
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes ts-rise {
+    from {
+      opacity: 0;
+      transform: translateY(0.7em);
+    }
+  }
+
+  @keyframes ts-pop {
+    from {
+      transform: scale(0.8);
+    }
+  }
+
+  @keyframes ts-draw {
+    from {
+      stroke-dashoffset: 210;
+    }
+  }
+}

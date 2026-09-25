@@ -1,0 +1,194 @@
+@use 'home-shared' as *;
+
+// The header sticks to the top. Where scroll timelines exist it starts clear and firms up over the
+// first 140px of scroll, and a thin bar tracks reading progress; elsewhere it is simply solid.
+.home-header {
+  background: rgb(245 243 234 / 94%);
+  border-block-end: 1px solid var(--home-line);
+  inset-block-start: 0;
+  position: sticky;
+  z-index: 40;
+}
+
+.home-header__inner {
+  align-items: center;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-inline: auto;
+  max-inline-size: 1440px;
+  min-block-size: 72px;
+  padding-inline: clamp(20px, 5vw, 80px);
+}
+
+.home-header__progress {
+  background: var(--home-forest);
+  block-size: 3px;
+  display: none;
+  inset-block-end: -1px;
+  inset-inline: 0;
+  position: absolute;
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.home-header__progress:dir(rtl) {
+  transform-origin: right;
+}
+
+@supports (animation-timeline: scroll()) {
+  .home-header {
+    animation: header-firm linear both;
+    animation-range: 0 140px;
+    animation-timeline: scroll(root);
+    background: rgb(245 243 234 / 0%);
+    border-block-end-color: transparent;
+  }
+
+  .home-header__progress {
+    animation: header-progress linear both;
+    animation-timeline: scroll(root);
+    display: block;
+  }
+}
+
+.home-brand {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  font-size: 1.12rem;
+  font-weight: 600;
+  gap: 11px;
+  letter-spacing: -0.045em;
+  text-decoration: none;
+}
+
+.home-brand__mark {
+  align-items: center;
+  background: var(--home-forest);
+  block-size: 38px;
+  border-radius: 50%;
+  color: white;
+  display: inline-flex;
+  font-size: 0.95rem;
+  inline-size: 38px;
+  justify-content: center;
+  letter-spacing: -0.08em;
+  transition: transform 400ms var(--home-ease);
+}
+
+.home-brand:hover .home-brand__mark {
+  transform: rotate(-12deg) scale(1.06);
+}
+
+.home-brand__dot {
+  color: var(--home-lime);
+}
+
+.home-nav {
+  align-items: center;
+  display: flex;
+  gap: clamp(10px, 2.2vw, 34px);
+}
+
+.home-nav a {
+  align-items: center;
+  display: inline-flex;
+  font-size: 0.9rem;
+  font-weight: 600;
+  gap: 12px;
+  min-block-size: 44px;
+  text-decoration: none;
+}
+
+.home-nav__section,
+.home-nav__sign-in {
+  background: linear-gradient(currentColor, currentColor) no-repeat left bottom 10px / 0% 1.5px;
+  transition: background-size 300ms var(--home-ease);
+}
+
+.home-nav__section:dir(rtl),
+.home-nav__sign-in:dir(rtl) {
+  background-position: right bottom 10px;
+}
+
+.home-nav__section:hover,
+.home-nav__sign-in:hover {
+  background-size: 100% 1.5px;
+}
+
+.home-nav .home-nav__sign-in {
+  margin-inline-start: clamp(4px, 1.8vw, 28px);
+}
+
+.home-nav .home-nav__start {
+  @include button;
+  background: var(--home-forest);
+  color: white;
+  min-block-size: 46px;
+  padding: 10px 20px;
+}
+
+.home-nav .home-nav__start:hover {
+  background: #275b49;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-brand__mark,
+  .home-nav__section,
+  .home-nav__sign-in {
+    transition: none;
+  }
+}
+
+@media (max-width: $tablet) {
+  .home-nav .home-nav__section {
+    display: none;
+  }
+}
+
+@media (max-width: $mobile) {
+  .home-header__inner {
+    min-block-size: 64px;
+  }
+
+  .home-nav .home-nav__sign-in {
+    margin-inline-start: 0;
+  }
+}
+
+@media (max-width: $small) {
+  .home-brand {
+    font-size: 1rem;
+  }
+
+  .home-nav {
+    gap: 12px;
+  }
+
+  .home-nav a {
+    font-size: 0.85rem;
+  }
+
+  .home-nav .home-nav__start {
+    gap: 6px;
+    padding-inline: 14px;
+  }
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@supports (animation-timeline: scroll()) {
+  @keyframes header-firm {
+    to {
+      backdrop-filter: blur(14px);
+      background: rgb(245 243 234 / 86%);
+      border-block-end-color: var(--home-line);
+    }
+  }
+
+  @keyframes header-progress {
+    to {
+      transform: scaleX(1);
+    }
+  }
+}

@@ -4,6 +4,7 @@ import {
   clientGuard,
   coachGuard,
   ownerGuard,
+  publicHomeGuard,
   signedOutGuard,
 } from './core/auth/auth.guards';
 import { devRoutes } from './dev/dev-routes';
@@ -23,6 +24,14 @@ export const routes: Routes = [
   },
   {
     path: '',
+    pathMatch: 'full',
+    canMatch: [publicHomeGuard],
+    title: $localize`Coaching, connected | TB Gym`,
+    loadComponent: () => import('./features/home/home').then((module) => module.Home),
+  },
+  {
+    path: '',
+    pathMatch: 'full',
     canActivate: [authGuard],
     title: $localize`Dashboard | TB Gym`,
     loadComponent: () =>

@@ -1,0 +1,148 @@
+@use 'home-shared' as *;
+
+:host {
+  display: block;
+}
+
+@include reveal-keyframes;
+
+.audience {
+  @include section-padding;
+}
+
+.audience__heading {
+  margin-block-end: clamp(36px, 4vw, 52px);
+  @include reveal;
+}
+
+.audience__eyebrow {
+  @include eyebrow;
+}
+
+.audience h2 {
+  @include display;
+}
+
+.audience h2 em {
+  @include accent;
+  color: var(--home-forest);
+}
+
+.audience__grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+// The whole card is the link's target; a forest fill rises behind it on hover or focus.
+.audience__card {
+  border: 1px solid var(--home-line);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+  min-block-size: 320px;
+  overflow: hidden;
+  padding: clamp(24px, 2.6vw, 34px);
+  position: relative;
+  transition: color 350ms ease;
+}
+
+.audience__card::before {
+  background: var(--home-forest);
+  content: '';
+  inset: 0;
+  position: absolute;
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 450ms var(--home-ease);
+  z-index: -1;
+}
+
+.audience__card:hover,
+.audience__card:focus-within {
+  color: white;
+}
+
+.audience__card:hover::before,
+.audience__card:focus-within::before {
+  transform: scaleY(1);
+}
+
+@for $card from 1 through 3 {
+  .audience__card:nth-child(#{$card}) {
+    @include reveal(entry #{($card - 1) * 10%} cover #{24% + $card * 4%});
+  }
+}
+
+.audience__number {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.audience__card h3 {
+  font-size: clamp(1.45rem, 2vw, 1.9rem);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  margin-block: 56px 10px;
+}
+
+.audience__card p {
+  color: inherit;
+  line-height: 1.55;
+  margin-block: 0 26px;
+  max-inline-size: 20rem;
+  opacity: 0.82;
+}
+
+.audience__card a {
+  align-items: center;
+  color: inherit;
+  display: inline-flex;
+  font-weight: 600;
+  gap: 10px;
+  margin-block-start: auto;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+}
+
+.audience__card a::after {
+  content: '';
+  inset: 0;
+  position: absolute;
+}
+
+.audience__card a:focus-visible {
+  outline-color: var(--home-lime);
+}
+
+.audience__card a > [aria-hidden] {
+  transition: transform 300ms var(--home-ease);
+}
+
+.audience__card:hover a > [aria-hidden] {
+  transform: translate(4px, -4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audience__card,
+  .audience__card::before,
+  .audience__card a > [aria-hidden] {
+    transition: none;
+  }
+}
+
+@media (max-width: $mobile) {
+  .audience__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .audience__card {
+    min-block-size: 250px;
+  }
+
+  .audience__card h3 {
+    margin-block-start: 36px;
+  }
+}

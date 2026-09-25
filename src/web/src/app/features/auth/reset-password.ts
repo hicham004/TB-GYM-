@@ -6,10 +6,11 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { CsrfService } from '../../core/security/csrf.service';
+import { PasswordReveal } from '../../ui/password-reveal';
 
 @Component({
   selector: 'app-reset-password',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [PasswordReveal, ReactiveFormsModule, RouterLink],
   templateUrl: './reset-password.html',
   styleUrl: './auth.scss',
 })

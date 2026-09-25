@@ -1,0 +1,282 @@
+@use 'home-shared' as *;
+
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+.loop {
+  container: loop / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.loop__stage {
+  aspect-ratio: 20 / 19;
+  background:
+    radial-gradient(circle at 12% 94%, rgb(242 185 148 / 24%), transparent 38%), var(--home-forest);
+  border-radius: 14px;
+  border-start-end-radius: 120px;
+  container: stage / inline-size;
+  overflow: hidden;
+  position: relative;
+}
+
+// A faint dot grid, and a lime glow that drifts while the example plays.
+.loop__stage::before,
+.loop__stage::after {
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.loop__stage::before {
+  background-image: radial-gradient(rgb(255 255 255 / 10%) 1px, transparent 1.5px);
+  background-size: 22px 22px;
+}
+
+.loop__stage::after {
+  background: radial-gradient(circle at 78% 20%, rgb(217 237 148 / 30%), transparent 44%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .loop__stage::after {
+    animation: loop-glow 9s ease-in-out infinite alternate;
+    animation-play-state: paused;
+  }
+
+  .loop.is-running .loop__stage::after {
+    animation-play-state: running;
+  }
+}
+
+.loop__canvas {
+  font-size: clamp(7px, 2.2cqi, 14px);
+  inset: 0;
+  position: absolute;
+  z-index: 1;
+}
+
+// Pausing shows the current step complete rather than frozen half-way.
+.loop.is-paused .loop__canvas * {
+  animation: none;
+}
+
+.toast {
+  align-items: center;
+  background: white;
+  border-radius: 0.9em;
+  box-shadow: 0 1.4em 2.4em -1.2em rgb(0 0 0 / 50%);
+  color: var(--home-ink);
+  display: flex;
+  font-size: 0.95em;
+  font-weight: 600;
+  gap: 0.7em;
+  inset-block-end: 9%;
+  inset-inline-start: 6%;
+  line-height: 1.25;
+  margin: 0;
+  max-inline-size: 46%;
+  padding: 0.8em 1.1em;
+  position: absolute;
+  z-index: 3;
+}
+
+.toast i {
+  background: var(--home-lime);
+  block-size: 0.8em;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0.3em rgb(217 237 148 / 45%);
+  flex: none;
+  inline-size: 0.8em;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .toast {
+    animation: loop-toast 650ms var(--home-ease) 1000ms both;
+  }
+}
+
+@container loop (max-width: 520px) {
+  .loop__stage {
+    aspect-ratio: 1 / 1.2;
+    border-start-end-radius: 72px;
+  }
+
+  .loop__canvas {
+    font-size: 3.6cqi;
+  }
+
+  .toast {
+    font-size: 0.88em;
+    inset-block: 5% auto;
+    inset-inline-start: 5%;
+    max-inline-size: 58%;
+  }
+}
+
+.loop__controls {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.loop__steps {
+  display: grid;
+  flex: 1;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.loop__step {
+  background: none;
+  border: 0;
+  color: var(--home-muted);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.82rem;
+  font-weight: 600;
+  gap: 8px;
+  inline-size: 100%;
+  min-block-size: 44px;
+  padding: 10px 0 4px;
+  text-align: start;
+}
+
+.loop__step:hover,
+.loop__step.is-active {
+  color: var(--home-ink);
+}
+
+@container loop (max-width: 420px) {
+  .loop__steps {
+    gap: 6px;
+  }
+
+  .loop__step {
+    font-size: 0.74rem;
+    white-space: nowrap;
+  }
+}
+
+.loop__track {
+  background: var(--home-line);
+  block-size: 3px;
+  border-radius: 3px;
+  display: block;
+  overflow: hidden;
+}
+
+.loop__step.is-done .loop__track {
+  background: var(--home-forest);
+}
+
+.loop__bar {
+  background: var(--home-forest);
+  block-size: 100%;
+  display: block;
+  transform-origin: left;
+}
+
+.loop__bar:dir(rtl) {
+  transform-origin: right;
+}
+
+// The bar's own animation is the step timer: `animationend` advances the example.
+@media (prefers-reduced-motion: no-preference) {
+  .loop__bar {
+    animation: loop-progress 5200ms linear both;
+    animation-play-state: paused;
+  }
+
+  .loop.is-running .loop__bar {
+    animation-play-state: running;
+  }
+}
+
+.loop__pause {
+  align-items: center;
+  background: none;
+  block-size: 44px;
+  border: 1px solid #c3cbbd;
+  border-radius: 50%;
+  color: var(--home-ink);
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  inline-size: 44px;
+  justify-content: center;
+}
+
+.loop__pause:hover {
+  border-color: var(--home-forest);
+}
+
+.loop__pause-icon {
+  block-size: 12px;
+  border-inline: 3px solid currentColor;
+  inline-size: 10px;
+}
+
+.loop__pause-icon.is-play {
+  block-size: 0;
+  border-block: 7px solid transparent;
+  border-inline-end: 0;
+  border-inline-start: 11px solid currentColor;
+  inline-size: 0;
+  margin-inline-start: 3px;
+}
+
+.loop__caption {
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0;
+  min-block-size: 3em;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .loop__caption {
+    animation: loop-caption 500ms var(--home-ease) both;
+  }
+}
+
+.loop__note {
+  color: var(--home-muted);
+  font-size: 0.75rem;
+  margin: -8px 0 0;
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes loop-glow {
+    to {
+      transform: translate(-14%, 22%) scale(1.15);
+    }
+  }
+
+  @keyframes loop-toast {
+    from {
+      opacity: 0;
+      transform: translateY(1.2em) scale(0.94);
+    }
+  }
+
+  @keyframes loop-progress {
+    from {
+      transform: scaleX(0);
+    }
+  }
+
+  @keyframes loop-caption {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+}

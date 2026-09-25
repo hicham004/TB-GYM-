@@ -1,0 +1,115 @@
+@use 'home-shared' as *;
+
+:host {
+  display: block;
+}
+
+// The finale: the coaching loop's words slide past in outline as the panel scrolls by.
+.finale {
+  background: var(--home-forest);
+  border-radius: 18px;
+  color: white;
+  margin: 0 auto clamp(64px, 8vw, 110px);
+  max-inline-size: calc(1440px - 2 * clamp(20px, 5vw, 80px));
+  overflow: hidden;
+  padding: clamp(56px, 8vw, 120px) clamp(24px, 6vw, 96px);
+  position: relative;
+  inline-size: calc(100% - 2 * clamp(20px, 5vw, 80px));
+
+  @include dark-focus;
+}
+
+.finale__words {
+  display: flex;
+  font-size: clamp(4rem, 11vw, 10rem);
+  font-weight: 600;
+  gap: 0.35em;
+  inset-block-start: 50%;
+  inset-inline-start: 0;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin: 0;
+  opacity: 0.13;
+  position: absolute;
+  translate: 0 -50%;
+  white-space: nowrap;
+  --slide: -30%;
+}
+
+.finale__words:dir(rtl) {
+  --slide: 30%;
+}
+
+.finale__words span {
+  -webkit-text-stroke: 1.5px var(--home-lime);
+  color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .finale__words {
+      animation: finale-slide linear both;
+      animation-timeline: view();
+    }
+  }
+}
+
+.finale h2 {
+  @include display;
+}
+
+.finale__content {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  justify-content: space-between;
+  position: relative;
+}
+
+.finale h2 {
+  max-inline-size: 11em;
+}
+
+.finale h2 em {
+  @include accent;
+  color: var(--home-lime);
+}
+
+.finale__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.finale__primary {
+  @include button;
+  background: var(--home-lime);
+  color: var(--home-ink);
+}
+
+.finale__primary:hover {
+  background: white;
+}
+
+.finale__secondary {
+  color: inherit;
+  font-weight: 600;
+  min-block-size: 44px;
+  padding-block: 12px;
+  text-underline-offset: 5px;
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes finale-slide {
+    from {
+      transform: translateX(0);
+    }
+
+    to {
+      transform: translateX(var(--slide));
+    }
+  }
+}

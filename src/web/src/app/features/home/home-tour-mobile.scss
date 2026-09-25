@@ -1,0 +1,75 @@
+@use 'home-shared' as *;
+
+// The tour on a phone: tabs become a row of pills above the picture.
+@media (max-width: $mobile) {
+  .tour__body {
+    grid-template-columns: 1fr;
+  }
+
+  .tour__side {
+    gap: 16px;
+  }
+
+  // Tabs become a sideways row of pills above the phone.
+  .tour__tabs {
+    display: flex;
+    gap: 8px;
+    margin-inline: calc(-1 * clamp(20px, 5vw, 80px));
+    overflow-x: auto;
+    padding-inline: clamp(20px, 5vw, 80px);
+    scrollbar-width: none;
+  }
+
+  .tour__tab {
+    border: 1px solid #36574c;
+    border-radius: 999px;
+    display: flex;
+    flex: none;
+    min-block-size: 44px;
+    padding: 8px 16px;
+    position: relative;
+  }
+
+  .tour__tab[aria-selected='true'] {
+    background: var(--home-lime);
+    border-color: var(--home-lime);
+    color: var(--home-ink);
+  }
+
+  .tour__number {
+    display: none;
+  }
+
+  // Still rendered: the bar's animation is the tour's timer, and a hidden bar never ends.
+  .tour__track {
+    inset-block-end: 6px;
+    inset-inline: 16px;
+    margin: 0;
+    position: absolute;
+  }
+
+  .tour__bar {
+    background: var(--home-forest);
+  }
+
+  .tour__label {
+    font-size: 0.95rem;
+    letter-spacing: 0;
+  }
+
+  .tour__stage {
+    block-size: 440px;
+    border-start-start-radius: 64px;
+  }
+
+  .tour__phone {
+    inline-size: min(250px, 68%);
+  }
+
+  .tour__note {
+    font-size: 0.82rem;
+    inset-block-end: 16px;
+    inset-inline-start: 14px;
+    max-inline-size: 48%;
+  }
+}

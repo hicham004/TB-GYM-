@@ -1035,6 +1035,8 @@ unit economics are known and exercised.
   that document. Slices 1 and 2 changed no API, schema or domain rule.
 - Next: only the Client Today and coach client workspace redesign (commercial Step 3); other
   slices are parked. Screen migrations stay gated by the feature conditions in that document.
+- Public homepage (2026-09-24, explicitly requested): a visitor entry at `/` with coach registration
+  and sign-in paths; the signed-in dashboard and client invitation rules are unchanged.
 
 ## Commercial launch track (agreed 2026-09-22)
 

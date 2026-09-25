@@ -11,10 +11,11 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { PasswordReveal } from '../../ui/password-reveal';
 
 @Component({
   selector: 'app-accept-invitation',
-  imports: [DatePipe, ReactiveFormsModule, RouterLink],
+  imports: [DatePipe, PasswordReveal, ReactiveFormsModule, RouterLink],
   templateUrl: './accept-invitation.html',
   styleUrl: './accept-invitation.scss',
 })

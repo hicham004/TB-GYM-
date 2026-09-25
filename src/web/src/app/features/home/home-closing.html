@@ -1,0 +1,56 @@
+<section class="audience" id="who-its-for" aria-labelledby="audience-title">
+  <div class="audience__heading">
+    <p class="audience__eyebrow" i18n>Who it's for</p>
+    <h2 id="audience-title" i18n>Start where you are. <em>Grow on your terms.</em></h2>
+  </div>
+
+  <div class="audience__grid">
+    <article class="audience__card">
+      <span class="audience__number" aria-hidden="true">01</span>
+      <h3 i18n>Independent coaches</h3>
+      <p i18n>
+        Run your whole coaching practice from one workspace: programs, meal plans, check-ins and
+        messages.
+      </p>
+      <a routerLink="/auth/register">
+        <span i18n>Start your coach workspace</span><span aria-hidden="true">↗</span>
+      </a>
+    </article>
+    <article class="audience__card">
+      <span class="audience__number" aria-hidden="true">02</span>
+      <h3 i18n>Gyms and coaching teams</h3>
+      <p i18n>
+        Invite your coaches, give every client one coach, and keep the whole team in one workspace.
+      </p>
+      <a routerLink="/auth/register">
+        <span i18n>Start a team workspace</span><span aria-hidden="true">↗</span>
+      </a>
+    </article>
+    <article class="audience__card">
+      <span class="audience__number" aria-hidden="true">03</span>
+      <h3 i18n>Here as a client?</h3>
+      <p i18n>
+        Your coach sends you an invitation to join. Already have an account? Pick up where you left
+        off.
+      </p>
+      <a routerLink="/auth/sign-in"> <span i18n>Sign in</span><span aria-hidden="true">↗</span> </a>
+    </article>
+  </div>
+</section>
+
+<section class="finale" aria-labelledby="finale-title">
+  <p class="finale__words" aria-hidden="true">
+    @for (word of words; track $index) {
+      <span>{{ word }}</span>
+    }
+  </p>
+  <div class="finale__content">
+    <h2 id="finale-title" i18n>Give every client <em>your best coaching.</em></h2>
+    <div class="finale__actions">
+      <a class="finale__primary" routerLink="/auth/register">
+        <span i18n>Start your coach workspace</span><span aria-hidden="true">↗</span>
+      </a>
+      <a class="finale__secondary" routerLink="/auth/sign-in" i18n>Sign in</a>
+    </div>
+  </div>
+</section>

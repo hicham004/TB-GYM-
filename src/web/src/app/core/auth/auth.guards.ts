@@ -1,5 +1,5 @@
 import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
+import { CanActivateFn, CanMatchFn, Router } from '@angular/router';
 import { AuthStore } from './auth.store';
 import { TenantStore } from '../tenancy/tenant.store';
 
@@ -10,6 +10,12 @@ export const authGuard: CanActivateFn = async (_route, state) => {
   return auth.user()
     ? true
     : router.createUrlTree(['/auth/sign-in'], { queryParams: { returnUrl: state.url } });
+};
+
+export const publicHomeGuard: CanMatchFn = async () => {
+  const auth = inject(AuthStore);
+  await auth.initialize();
+  return !auth.user();
 };
 
 export const signedOutGuard: CanActivateFn = async () => {

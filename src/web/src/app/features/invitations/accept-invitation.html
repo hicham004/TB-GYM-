@@ -112,23 +112,26 @@
                 </small>
               }
             </label>
-            <label>
-              <span i18n>Password</span>
-              <input
-                type="password"
-                formControlName="password"
-                autocomplete="new-password"
-                [attr.aria-invalid]="
-                  accountForm.controls.password.touched && accountForm.controls.password.invalid
-                    ? 'true'
-                    : null
-                "
-                [attr.aria-describedby]="
-                  accountForm.controls.password.touched && accountForm.controls.password.invalid
-                    ? 'invitation-password-help invitation-password-error'
-                    : 'invitation-password-help'
-                "
-              />
+            <div>
+              <label for="invitation-password"><span i18n>Password</span></label>
+              <app-password-reveal>
+                <input
+                  id="invitation-password"
+                  type="password"
+                  formControlName="password"
+                  autocomplete="new-password"
+                  [attr.aria-invalid]="
+                    accountForm.controls.password.touched && accountForm.controls.password.invalid
+                      ? 'true'
+                      : null
+                  "
+                  [attr.aria-describedby]="
+                    accountForm.controls.password.touched && accountForm.controls.password.invalid
+                      ? 'invitation-password-help invitation-password-error'
+                      : 'invitation-password-help'
+                  "
+                />
+              </app-password-reveal>
               <small id="invitation-password-help" i18n>
                 At least 12 characters with upper, lower, number, and symbol.
               </small>
@@ -137,26 +140,29 @@
                   Use a password with at least 12 characters.
                 </small>
               }
-            </label>
-            <label>
-              <span i18n>Confirm password</span>
-              <input
-                type="password"
-                formControlName="confirmPassword"
-                autocomplete="new-password"
-                [attr.aria-invalid]="
-                  accountForm.controls.confirmPassword.touched &&
-                  accountForm.controls.confirmPassword.invalid
-                    ? 'true'
-                    : null
-                "
-                [attr.aria-describedby]="
-                  accountForm.controls.confirmPassword.touched &&
-                  accountForm.controls.confirmPassword.invalid
-                    ? 'invitation-confirm-password-error'
-                    : null
-                "
-              />
+            </div>
+            <div>
+              <label for="invitation-confirm-password"><span i18n>Confirm password</span></label>
+              <app-password-reveal>
+                <input
+                  id="invitation-confirm-password"
+                  type="password"
+                  formControlName="confirmPassword"
+                  autocomplete="new-password"
+                  [attr.aria-invalid]="
+                    accountForm.controls.confirmPassword.touched &&
+                    accountForm.controls.confirmPassword.invalid
+                      ? 'true'
+                      : null
+                  "
+                  [attr.aria-describedby]="
+                    accountForm.controls.confirmPassword.touched &&
+                    accountForm.controls.confirmPassword.invalid
+                      ? 'invitation-confirm-password-error'
+                      : null
+                  "
+                />
+              </app-password-reveal>
               @if (
                 accountForm.controls.confirmPassword.touched &&
                 accountForm.controls.confirmPassword.invalid
@@ -165,7 +171,7 @@
                   Confirm the password.
                 </small>
               }
-            </label>
+            </div>
             @if (error()) {
               <p class="form-error" role="alert">{{ error() }}</p>
             }

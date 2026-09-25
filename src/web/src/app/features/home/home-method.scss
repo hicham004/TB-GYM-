@@ -1,0 +1,171 @@
+@use 'home-shared' as *;
+
+:host {
+  display: block;
+}
+
+@include reveal-keyframes;
+
+.method {
+  @include section-padding;
+  display: grid;
+  gap: clamp(40px, 7vw, 120px);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+// The introduction stays in view while the steps scroll past it.
+.method__intro {
+  align-self: start;
+  inset-block-start: 112px;
+  position: sticky;
+}
+
+.method__eyebrow {
+  @include eyebrow;
+}
+
+.method h2 {
+  @include display;
+}
+
+.method h2 em {
+  @include accent;
+  color: var(--home-forest);
+}
+
+.method__lead {
+  color: var(--home-muted);
+  font-size: 1.06rem;
+  line-height: 1.6;
+  margin-block: 26px 32px;
+  max-inline-size: 24rem;
+}
+
+.method__action {
+  @include button;
+  background: var(--home-forest);
+  color: white;
+}
+
+.method__action:hover {
+  background: #275b49;
+}
+
+// A rail runs down the steps and fills as the list scrolls through the viewport.
+.method__steps {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.method__steps::before,
+.method__steps::after {
+  background: var(--home-line);
+  content: '';
+  inline-size: 2px;
+  inset-block: 34px 34px;
+  inset-inline-start: 27px;
+  position: absolute;
+}
+
+.method__steps::after {
+  background: var(--home-forest);
+  transform: scaleY(0);
+  transform-origin: top;
+}
+
+@supports not (animation-timeline: view()) {
+  .method__steps::after {
+    transform: none;
+  }
+}
+
+.method__steps li {
+  align-items: start;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 56px minmax(0, 1fr);
+  padding-block: 22px 30px;
+}
+
+.method__number {
+  align-items: center;
+  background: var(--home-forest);
+  block-size: 56px;
+  border: 1.5px solid var(--home-forest);
+  border-radius: 50%;
+  color: var(--home-lime);
+  display: flex;
+  font-size: 0.9rem;
+  font-weight: 600;
+  inline-size: 56px;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+.method__steps h3 {
+  font-size: clamp(1.4rem, 2.1vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  margin-block: 10px 8px;
+}
+
+.method__steps p {
+  color: var(--home-muted);
+  font-size: 1.02rem;
+  line-height: 1.6;
+  margin: 0;
+  max-inline-size: 30rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .method__steps::after {
+      animation: method-rail linear both;
+      animation-range: entry 30% exit 40%;
+      animation-timeline: view();
+    }
+
+    .method__steps li {
+      animation: home-reveal linear both;
+      animation-range: entry 0% cover 30%;
+      animation-timeline: view();
+    }
+
+    // Each number lights up as its step reaches the middle of the screen.
+    .method__number {
+      animation: method-light linear both;
+      animation-range: entry 70% cover 45%;
+      animation-timeline: view();
+    }
+  }
+}
+
+@media (max-width: $mobile) {
+  .method {
+    grid-template-columns: 1fr;
+  }
+
+  .method__intro {
+    position: static;
+  }
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes method-rail {
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  @keyframes method-light {
+    from {
+      background: var(--home-soft);
+      color: var(--home-forest);
+    }
+  }
+}

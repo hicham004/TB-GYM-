@@ -1,0 +1,200 @@
+@use 'home-phone' as phone;
+
+// The client's phone in the product tour, one screen per tab.
+.ts {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75em;
+  min-block-size: 0;
+  @include phone.enter(ts-in, 500ms);
+}
+
+.ts__label {
+  @include phone.label;
+}
+
+.ts__big {
+  font-size: 1.8em;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  margin: -0.2em 0 0.1em;
+}
+
+.ts__list,
+.ts__meals,
+.ts__measures {
+  display: grid;
+  gap: 0.5em;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ts__item {
+  @include phone.card;
+  @include phone.enter(ts-rise, 450ms, 150ms);
+}
+
+.ts__item:nth-child(2) {
+  animation-delay: 250ms;
+}
+
+.ts__item:nth-child(3) {
+  animation-delay: 350ms;
+}
+
+.ts__item p {
+  display: flex;
+  font-size: 0.9em;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.ts__item span,
+.ts__meals li,
+.ts__measures span {
+  color: #647268;
+}
+
+.ts__item--open {
+  border-color: var(--home-forest);
+  box-shadow: 0 0 0 1px var(--home-forest);
+}
+
+.ts__sets {
+  display: grid;
+  gap: 0.35em;
+  grid-template-columns: repeat(3, 1fr);
+  margin-block-start: 0.6em;
+}
+
+.ts__sets span {
+  background: #eef1e8;
+  border-radius: 0.6em;
+  font-size: 0.8em;
+  font-weight: 600;
+  padding: 0.5em 0;
+  text-align: center;
+}
+
+.ts__sets .is-done {
+  background: var(--home-lime);
+}
+
+.ts__sets .is-now {
+  box-shadow: inset 0 0 0 1.5px var(--home-forest);
+}
+
+.ts__button,
+.ts__compose {
+  background: var(--home-forest);
+  border-radius: 999px;
+  color: white;
+  font-size: 0.85em;
+  font-weight: 600;
+  margin-block-start: auto;
+  padding: 0.7em 1em;
+  text-align: center;
+}
+
+.ts__ring {
+  align-self: center;
+  display: grid;
+  inline-size: 52%;
+  place-items: center;
+  position: relative;
+}
+
+.ts__ring svg {
+  inline-size: 100%;
+  transform: rotate(-90deg);
+}
+
+.ts__ring circle {
+  fill: none;
+  stroke: #e7ebe0;
+  stroke-width: 9;
+}
+
+.ts__ring .ts__ring-fill {
+  stroke: var(--home-forest);
+  stroke-dasharray: 264;
+  stroke-dashoffset: 71;
+  stroke-linecap: round;
+  @include phone.enter(ts-ring, 1200ms, 200ms);
+}
+
+.ts__ring p {
+  display: grid;
+  inset: 0;
+  margin: 0;
+  place-content: center;
+  position: absolute;
+  text-align: center;
+}
+
+.ts__ring b {
+  font-size: 1.5em;
+  letter-spacing: -0.03em;
+}
+
+.ts__ring span {
+  color: #647268;
+  font-size: 0.72em;
+}
+
+.ts__macros p {
+  display: grid;
+  font-size: 0.8em;
+  grid-template-columns: 1fr auto;
+  margin: 0 0 0.45em;
+  row-gap: 0.25em;
+}
+
+.ts__macros i {
+  background: linear-gradient(90deg, var(--home-forest) var(--fill), #e7ebe0 var(--fill));
+  block-size: 0.4em;
+  border-radius: 1em;
+  grid-column: 1 / -1;
+}
+
+.ts__meals li,
+.ts__measures li {
+  @include phone.card;
+  font-size: 0.82em;
+  padding: 0.55em 0.8em;
+}
+
+.ts__meals .is-done {
+  color: var(--home-ink);
+}
+
+.ts__meals .is-done::before {
+  content: '✓ ' / '';
+  font-weight: 600;
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes ts-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.8em);
+    }
+  }
+
+  @keyframes ts-rise {
+    from {
+      opacity: 0;
+      transform: translateY(0.7em);
+    }
+  }
+
+  @keyframes ts-ring {
+    from {
+      stroke-dashoffset: 264;
+    }
+  }
+}

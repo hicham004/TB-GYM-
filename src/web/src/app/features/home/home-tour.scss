@@ -1,0 +1,237 @@
+@use 'home-shared' as *;
+@use 'home-phone' as phone;
+
+:host {
+  background: var(--home-deep);
+  color: white;
+  display: block;
+}
+
+@include reveal-keyframes;
+@include dark-focus;
+
+.tour__inner {
+  @include section-padding;
+}
+
+.tour__intro {
+  margin-block-end: clamp(40px, 5vw, 64px);
+  max-inline-size: 52rem;
+  @include reveal;
+}
+
+.tour__eyebrow {
+  @include eyebrow;
+  color: var(--home-lime);
+}
+
+.tour__intro h2 {
+  @include display;
+}
+
+.tour__intro em {
+  @include accent;
+  color: var(--home-lime);
+}
+
+.tour__body {
+  display: grid;
+  gap: clamp(32px, 5vw, 80px);
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+}
+
+.tour__side {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.tour__tabs {
+  display: grid;
+}
+
+.tour__tab {
+  align-items: baseline;
+  background: none;
+  border: 0;
+  border-block-start: 1px solid #36574c;
+  color: #9fb3a7;
+  cursor: pointer;
+  display: grid;
+  gap: 4px 18px;
+  grid-template-columns: 2.2em minmax(0, 1fr);
+  padding: 20px 0 16px;
+  text-align: start;
+  transition: color 250ms ease;
+}
+
+.tour__tab:hover,
+.tour__tab[aria-selected='true'] {
+  color: white;
+}
+
+.tour__number {
+  color: var(--home-lime);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.tour__label {
+  font-size: clamp(1.5rem, 2.4vw, 2.2rem);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.tour__track {
+  block-size: 2px;
+  grid-column: 2;
+  margin-block-start: 12px;
+  overflow: hidden;
+}
+
+.tour__bar {
+  background: var(--home-lime);
+  block-size: 100%;
+  display: block;
+  transform-origin: left;
+}
+
+.tour__bar:dir(rtl) {
+  transform-origin: right;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tour__bar {
+    animation: tour-progress 6500ms linear both;
+    animation-play-state: paused;
+  }
+
+  .tour__body.is-running .tour__bar {
+    animation-play-state: running;
+  }
+}
+
+.tour__pause {
+  align-items: center;
+  align-self: flex-start;
+  background: none;
+  border: 1px solid #36574c;
+  border-radius: 999px;
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.85rem;
+  font-weight: 600;
+  gap: 12px;
+  min-block-size: 44px;
+  padding: 8px 18px;
+}
+
+.tour__pause:hover {
+  border-color: var(--home-lime);
+}
+
+.tour__pause-icon {
+  block-size: 11px;
+  border-inline: 3px solid currentColor;
+  inline-size: 9px;
+}
+
+.tour__pause-icon.is-play {
+  block-size: 0;
+  border-block: 6px solid transparent;
+  border-inline-end: 0;
+  border-inline-start: 10px solid currentColor;
+  inline-size: 0;
+}
+
+.tour__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-inline-size: 0;
+}
+
+.tour__stage {
+  align-items: flex-start;
+  background:
+    radial-gradient(circle at 70% 18%, rgb(217 237 148 / 22%), transparent 45%),
+    radial-gradient(circle at 18% 90%, rgb(242 185 148 / 16%), transparent 40%), #1a463b;
+  block-size: clamp(460px, 44vw, 600px);
+  border-radius: 14px;
+  border-start-start-radius: 110px;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  padding-block-start: clamp(36px, 4vw, 56px);
+  position: relative;
+}
+
+.tour__phone {
+  @include phone.phone;
+  inline-size: min(300px, 62%);
+}
+
+.tour__screen {
+  @include phone.phone-screen;
+}
+
+.tour__note {
+  background: var(--home-lime);
+  border-radius: 12px;
+  box-shadow: 0 18px 36px -18px rgb(0 0 0 / 60%);
+  color: var(--home-ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  inset-block-end: 28px;
+  inset-inline-start: 24px;
+  line-height: 1.35;
+  margin: 0;
+  max-inline-size: min(240px, 44%);
+  padding: 14px 16px;
+  position: absolute;
+  @include phone.enter(tour-note, 600ms, 400ms);
+}
+
+.tour__copy {
+  @include phone.enter(tour-copy, 500ms);
+}
+
+.tour__copy h3 {
+  font-size: clamp(1.4rem, 2vw, 1.8rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  margin-block-end: 8px;
+}
+
+.tour__copy p {
+  color: #c6d3c9;
+  font-size: 1.02rem;
+  line-height: 1.6;
+  margin: 0;
+  max-inline-size: 38rem;
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes tour-progress {
+    from {
+      transform: scaleX(0);
+    }
+  }
+
+  @keyframes tour-note {
+    from {
+      opacity: 0;
+      transform: translateY(14px) rotate(-3deg);
+    }
+  }
+
+  @keyframes tour-copy {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+}

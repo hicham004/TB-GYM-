@@ -1,0 +1,184 @@
+<section class="tour" id="tour" aria-labelledby="tour-title">
+  <div class="tour__inner">
+    <div class="tour__intro">
+      <p class="tour__eyebrow" i18n>Take the tour</p>
+      <h2 id="tour-title" i18n>One app for the whole <em>coaching relationship.</em></h2>
+    </div>
+
+    <div
+      class="tour__body"
+      [class.is-running]="autoplay.running()"
+      (pointerenter)="autoplay.hold('pointer', true)"
+      (pointerleave)="autoplay.hold('pointer', false)"
+      (focusin)="autoplay.hold('focus', true)"
+      (focusout)="autoplay.focusOut($event)"
+    >
+      <div class="tour__side">
+        <div
+          class="tour__tabs"
+          role="tablist"
+          aria-label="TB Gym features"
+          i18n-aria-label
+          aria-orientation="vertical"
+        >
+          @for (item of tabs; track item.id; let index = $index) {
+            <button
+              #tabButton
+              type="button"
+              role="tab"
+              class="tour__tab"
+              [id]="'tour-tab-' + item.id"
+              [attr.aria-selected]="autoplay.active() === index"
+              aria-controls="tour-panel"
+              [tabIndex]="autoplay.active() === index ? 0 : -1"
+              (click)="autoplay.select(index)"
+              (keydown)="onKeydown($event, index)"
+            >
+              <span class="tour__number" aria-hidden="true">0{{ index + 1 }}</span>
+              <span class="tour__label">{{ item.label }}</span>
+              <span class="tour__track" aria-hidden="true">
+                @if (autoplay.active() === index) {
+                  <span class="tour__bar" (animationend)="autoplay.advance()"></span>
+                }
+              </span>
+            </button>
+          }
+        </div>
+        @if (!autoplay.reducedMotion) {
+          <button type="button" class="tour__pause" (click)="autoplay.togglePaused()">
+            <span
+              class="tour__pause-icon"
+              [class.is-play]="autoplay.paused()"
+              aria-hidden="true"
+            ></span>
+            @if (autoplay.paused()) {
+              <span i18n>Play the tour</span>
+            } @else {
+              <span i18n>Pause the tour</span>
+            }
+          </button>
+        }
+      </div>
+
+      <div
+        class="tour__panel"
+        id="tour-panel"
+        role="tabpanel"
+        [attr.aria-labelledby]="'tour-tab-' + tab().id"
+      >
+        <div class="tour__stage" aria-hidden="true">
+          <div class="tour__phone">
+            <div class="tour__screen">
+              @switch (tab().id) {
+                @case ('training') {
+                  <div class="ts">
+                    <p class="ts__label" i18n>Tuesday · Week 3 of 6</p>
+                    <p class="ts__big" i18n>Lower body A</p>
+                    <ul class="ts__list">
+                      <li class="ts__item ts__item--open">
+                        <p><b i18n>Back squat</b><span i18n>3 × 5 · RPE 8</span></p>
+                        <div class="ts__sets">
+                          <span class="is-done">100 × 5</span><span class="is-done">100 × 5</span
+                          ><span class="is-now">100 × 5</span>
+                        </div>
+                      </li>
+                      <li class="ts__item">
+                        <p><b i18n>Romanian deadlift</b><span i18n>3 × 8 · RPE 7</span></p>
+                      </li>
+                      <li class="ts__item">
+                        <p><b i18n>Split squat</b><span i18n>3 × 10 · RIR 2</span></p>
+                      </li>
+                    </ul>
+                    <span class="ts__button" i18n>Log set 3</span>
+                  </div>
+                }
+                @case ('nutrition') {
+                  <div class="ts">
+                    <p class="ts__label" i18n>Today's meals</p>
+                    <div class="ts__ring">
+                      <svg viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="42" />
+                        <circle class="ts__ring-fill" cx="50" cy="50" r="42" />
+                      </svg>
+                      <p><b>1,420</b><span i18n>of 1,950 kcal</span></p>
+                    </div>
+                    <div class="ts__macros">
+                      <p style="--fill: 74%"><span i18n>Protein</span><b>104 / 140 g</b><i></i></p>
+                      <p style="--fill: 71%">
+                        <span i18n>Carbohydrate</span><b>150 / 210 g</b><i></i>
+                      </p>
+                      <p style="--fill: 68%"><span i18n>Fat</span><b>41 / 60 g</b><i></i></p>
+                    </div>
+                    <ul class="ts__meals">
+                      <li class="is-done" i18n>Oats, whey and berries</li>
+                      <li class="is-done" i18n>Chicken, rice and salad</li>
+                      <li i18n>Salmon bowl or lentil stew</li>
+                    </ul>
+                  </div>
+                }
+                @case ('checkins') {
+                  <div class="ts">
+                    <p class="ts__label" i18n>Check-in · Week 3</p>
+                    <p class="ts__big" i18n>How did training feel?</p>
+                    <div class="ts__choices">
+                      <span i18n>Too easy</span><span class="is-on" i18n>Just right</span
+                      ><span i18n>Too hard</span>
+                    </div>
+                    <p class="ts__q" i18n>Energy this week</p>
+                    <div class="ts__scale">
+                      <span>1</span><span>2</span><span>3</span><span class="is-on">4</span
+                      ><span>5</span>
+                    </div>
+                    <p class="ts__q" i18n>Anything your coach should know?</p>
+                    <p class="ts__text" i18n>Knee felt great on squats.</p>
+                    <span class="ts__button" i18n>Send check-in</span>
+                  </div>
+                }
+                @case ('progress') {
+                  <div class="ts">
+                    <p class="ts__label" i18n>Progress · 6 weeks</p>
+                    <div class="ts__photos">
+                      <span i18n>Front</span><span i18n>Side</span><span i18n>Back</span>
+                    </div>
+                    <div class="ts__trend">
+                      <p><b>66.8 kg</b><span i18n>−1.6 kg</span></p>
+                      <svg viewBox="0 0 200 70">
+                        <path d="M4 14 C60 22, 120 44, 196 60" />
+                      </svg>
+                    </div>
+                    <ul class="ts__measures">
+                      <li><span i18n>Waist</span><b>72 cm</b><em>−3</em></li>
+                      <li><span i18n>Hips</span><b>96 cm</b><em>−1</em></li>
+                      <li><span i18n>Thigh</span><b>54 cm</b><em>−1</em></li>
+                    </ul>
+                  </div>
+                }
+                @case ('messages') {
+                  <div class="ts ts--chat">
+                    <div class="ts__head">
+                      <span class="ts__avatar">R</span>
+                      <p><b i18n>Rami</b><span i18n>Your coach</span></p>
+                    </div>
+                    <p class="ts__bubble" i18n>Saw your check-in. Great week!</p>
+                    <p class="ts__bubble ts__bubble--mine" i18n>Squats felt light today.</p>
+                    <p class="ts__bubble" i18n>Then we add 2.5 kg next session.</p>
+                    <p class="ts__compose" i18n>Message Rami</p>
+                  </div>
+                }
+              }
+            </div>
+          </div>
+          @for (current of [tab()]; track current.id) {
+            <p class="tour__note">{{ current.note }}</p>
+          }
+        </div>
+        @for (current of [tab()]; track current.id) {
+          <div class="tour__copy">
+            <h3>{{ current.title }}</h3>
+            <p>{{ current.body }}</p>
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+</section>

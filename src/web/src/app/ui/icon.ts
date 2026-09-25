@@ -25,6 +25,22 @@ const GLYPHS = {
   },
   // Icon/Chevron down 234:485 (the same stroke `.tb-select` draws as its background image)
   'chevron-down': { size: 20, path: 'M6 8L10 12L14 8' },
+  // Show/hide password. Drawn in code on the masters' 20px, 1.5px-stroke grid; not in Figma yet.
+  eye: {
+    size: 20,
+    path:
+      'M1.9 10C3.6 6.4 6.5 4.4 10 4.4C13.5 4.4 16.4 6.4 18.1 10C16.4 13.6 13.5 15.6 10 15.6C6.5' +
+      ' 15.6 3.6 13.6 1.9 10ZM12.5 10C12.5 11.381 11.381 12.5 10 12.5C8.619 12.5 7.5 11.381 7.5 10' +
+      'C7.5 8.619 8.619 7.5 10 7.5C11.381 7.5 12.5 8.619 12.5 10Z',
+  },
+  'eye-off': {
+    size: 20,
+    path:
+      'M3 3L17 17M8.3 4.6C8.85 4.47 9.42 4.4 10 4.4C13.5 4.4 16.4 6.4 18.1 10C17.6 11.07 16.97 12.01' +
+      ' 16.24 12.8M13.9 14.3C12.74 15.14 11.42 15.6 10 15.6C6.5 15.6 3.6 13.6 1.9 10C2.64 8.43 3.64' +
+      ' 7.13 4.84 6.2M8.25 8.25C7.8 8.7 7.5 9.32 7.5 10C7.5 11.381 8.619 12.5 10 12.5C10.68 12.5' +
+      ' 11.3 12.2 11.75 11.75',
+  },
   // The eight coach-sidebar glyphs (Desktop Navigation v1, 118:135), exported from their masters
   // with each master's subpaths joined into one path. Round caps and joins apply to all of them:
   // the masters leave caps and joins at the default only on closed curves and circles, where the
