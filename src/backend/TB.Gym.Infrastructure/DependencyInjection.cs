@@ -289,6 +289,16 @@ public static class DependencyInjection
                     ?? $"{ReverseProxyOptions.SectionName} is not a valid reverse proxy configuration.")
             .ValidateOnStart();
 
+        // 60 sensitive writes per user per window, and the window is a minute unless configured longer.
+        // It may only be lengthened, which makes the limit stricter: tests stretch it so a slow machine
+        // cannot outrun the minute and hide the limiter, and no setting can loosen production.
+        var sensitiveWriteWindowSeconds = configuration.GetValue("RateLimiting:SensitiveWriteWindowSeconds", 60);
+        if (sensitiveWriteWindowSeconds is < 60 or > 86400)
+        {
+            throw new InvalidOperationException(
+                "RateLimiting:SensitiveWriteWindowSeconds must be between 60 seconds and 24 hours.");
+        }
+
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -308,7 +318,7 @@ public static class DependencyInjection
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 60,
-                        Window = TimeSpan.FromMinutes(1),
+                        Window = TimeSpan.FromSeconds(sensitiveWriteWindowSeconds),
                         QueueLimit = 0,
                         AutoReplenishment = true,
                     }));

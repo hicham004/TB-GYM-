@@ -224,7 +224,9 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   does not count as a server fault.
 - Failed API authorization returns 401 or 403, never an HTML redirect.
 - Password lockout and unique email are enabled; production requires confirmed email.
-- Public authentication is rate-limited by source address. Sensitive authenticated writes and media
+- Public authentication is rate-limited by source address. Sensitive authenticated writes (60 a
+  minute; `RateLimiting:SensitiveWriteWindowSeconds` may lengthen the window, never shorten it, which
+  is how tests stay independent of machine speed) and media
   uploads are rate-limited by the **signed-in user id alone**, and authenticated API responses use
   `no-store`. The limiter runs after `UseAuthentication`, because a partition on `context.User` is
   meaningless before the cookie has been read: running it first left every authenticated write in a

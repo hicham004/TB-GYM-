@@ -86,6 +86,9 @@ public sealed partial class Phase6B2AMessagingTests
                 // assertion about what a request did.
                 ["Media:PurgeEnabled"] = "false",
                 ["Notifications:Dispatch:PollIntervalSeconds"] = "300",
+                // The real 60-write limit, over an hour instead of a minute, so the rate-limit test
+                // measures the limiter rather than how fast this machine is.
+                ["RateLimiting:SensitiveWriteWindowSeconds"] = "3600",
             };
             // UseSetting as well as the in-memory source: the minimal host reads its configuration
             // while building, before ConfigureAppConfiguration has been applied.

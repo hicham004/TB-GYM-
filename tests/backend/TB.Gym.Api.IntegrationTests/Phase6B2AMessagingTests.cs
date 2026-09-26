@@ -1299,7 +1299,8 @@ public sealed partial class Phase6B2AMessagingTests
         await RefreshCsrfAsync(workspace.Client);
 
         // Marking read is the cheapest sensitive write, so the limiter is measured rather than the
-        // database. The limit is 60 per minute per signed-in user.
+        // database. The limit is 60 per window per signed-in user; this class's host stretches the
+        // window from a minute to an hour, so a slow machine cannot let it replenish mid-loop.
         var accepted = 0;
         var limited = false;
         for (var attempt = 0; attempt < 70 && !limited; attempt++)

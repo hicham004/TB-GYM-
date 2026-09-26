@@ -124,6 +124,29 @@ public sealed class GoLiveReadinessTests
         Assert.Contains("Database:ApplyMigrationsOnStartup", failure.Message);
     }
 
+    /// <summary>
+    /// Tests may lengthen the sensitive-write window, which only makes the limit stricter. No setting
+    /// may shorten it below the production minute, which would loosen the limit.
+    /// </summary>
+    [TestMethod]
+    public void TheSensitiveWriteWindowCanOnlyBeLengthened()
+    {
+        foreach (var seconds in new[] { "59", "1", "0", "86401" })
+        {
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Development");
+                builder.UseSetting("ConnectionStrings:Database", UnusedDatabase);
+                builder.UseSetting("RateLimiting:SensitiveWriteWindowSeconds", seconds);
+            });
+
+            var failure = Assert.ThrowsExactly<InvalidOperationException>(
+                () => factory.CreateClient(),
+                $"A {seconds}-second window was accepted.");
+            Assert.Contains("RateLimiting:SensitiveWriteWindowSeconds", failure.Message);
+        }
+    }
+
     /// <summary>The Worker is a second composition root and refuses the same settings.</summary>
     [TestMethod]
     public void TheWorkerRefusesDevelopmentSettingsInProductionOnly()
