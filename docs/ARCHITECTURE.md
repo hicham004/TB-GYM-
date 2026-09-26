@@ -219,7 +219,9 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   stored in browser storage.
 - State-changing requests validate ASP.NET Core antiforgery tokens. The framework cookie
   (`tb-gym-antiforgery`) is HTTP-only; `/api/auth/csrf` publishes the paired request token
-  in the readable `XSRF-TOKEN` cookie, which Angular sends as `X-XSRF-TOKEN`.
+  in the readable `XSRF-TOKEN` cookie, which Angular sends as `X-XSRF-TOKEN`. A missing or invalid
+  token is answered 400 `antiforgery_token_invalid`, never a 500, so a stale tab or a forged request
+  does not count as a server fault.
 - Failed API authorization returns 401 or 403, never an HTML redirect.
 - Password lockout and unique email are enabled; production requires confirmed email.
 - Public authentication is rate-limited by source address. Sensitive authenticated writes and media

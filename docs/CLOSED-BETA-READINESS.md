@@ -365,8 +365,7 @@ receives, and unlike a commercial notification the person is blocked.
 | `TB_GYM_EMAIL_API_KEY` | `Notifications__Email__Provider__ApiKey` | from the secret store |
 | `TB_GYM_EMAIL_FROM` | `Notifications__Email__Provider__FromAddress` | the verified sending identity on the mail subdomain |
 | `TB_GYM_EMAIL_WEBHOOK_SECRET` | `Notifications__Email__Provider__WebhookSigningSecret` | the `whsec_`-prefixed secret from the provider's webhook page |
-| `TB_GYM_EMAIL_FINGERPRINT_KEY_ID` | `Notifications__Email__Provider__FingerprintKeyId` | the id new suppressions are written under |
-| `TB_GYM_EMAIL_FINGERPRINT_KEY` | the matching entry under `Notifications__Email__Provider__FingerprintKeys` | a fresh base64 key over at least 32 random bytes, generated straight into the secret store |
+| `TB_GYM_EMAIL_FINGERPRINT_KEY` | `Notifications__Email__Provider__FingerprintKeys__key-1`, with `FingerprintKeyId` set to `key-1` by the compose file | a fresh base64 key over at least 32 random bytes, generated straight into the secret store |
 | `TB_GYM_ACTION_MAIL_MAX_ATTEMPTS` | `Application__ActionMail__MaximumAttempts` | keep it small; every attempt mints a fresh live credential |
 | - | `Notifications__Dispatch__MaximumAttempts` | must fit inside the provider's idempotency retention window; startup refuses a schedule that outruns it |
 

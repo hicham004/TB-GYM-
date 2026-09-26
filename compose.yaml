@@ -139,8 +139,10 @@ services:
       Notifications__Email__Provider__ApiKey: ${TB_GYM_EMAIL_API_KEY:-}
       Notifications__Email__Provider__FromAddress: ${TB_GYM_EMAIL_FROM:-}
       Notifications__Email__Provider__WebhookSigningSecret: ${TB_GYM_EMAIL_WEBHOOK_SECRET:-}
-      Notifications__Email__Provider__FingerprintKeyId: ${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-}
-      Notifications__Email__Provider__FingerprintKeys__${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-unset}: ${TB_GYM_EMAIL_FINGERPRINT_KEY:-}
+      # The key id is fixed as key-1, as in compose.production.yaml, because compose never substitutes a
+      # variable inside a setting's name. It is set only when a key is supplied.
+      Notifications__Email__Provider__FingerprintKeyId: ${TB_GYM_EMAIL_FINGERPRINT_KEY:+key-1}
+      Notifications__Email__Provider__FingerprintKeys__key-1: ${TB_GYM_EMAIL_FINGERPRINT_KEY:-}
       # The one origin every confirmation, password-reset and invitation link is built from. It is
       # configuration and never a request header: a host-header injection would turn a reset mail into
       # a credential-harvesting mail that the victim's own account legitimately triggered. Outside
@@ -193,8 +195,8 @@ services:
       Notifications__Email__Provider__ApiKey: ${TB_GYM_EMAIL_API_KEY:-}
       Notifications__Email__Provider__FromAddress: ${TB_GYM_EMAIL_FROM:-}
       Notifications__Email__Provider__WebhookSigningSecret: ${TB_GYM_EMAIL_WEBHOOK_SECRET:-}
-      Notifications__Email__Provider__FingerprintKeyId: ${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-}
-      Notifications__Email__Provider__FingerprintKeys__${TB_GYM_EMAIL_FINGERPRINT_KEY_ID:-unset}: ${TB_GYM_EMAIL_FINGERPRINT_KEY:-}
+      Notifications__Email__Provider__FingerprintKeyId: ${TB_GYM_EMAIL_FINGERPRINT_KEY:+key-1}
+      Notifications__Email__Provider__FingerprintKeys__key-1: ${TB_GYM_EMAIL_FINGERPRINT_KEY:-}
       # Action mail. The worker is what actually drains these two queues, so it needs the same
       # validated public origin the API has - it has no request to take one from even if that were
       # allowed, which is what makes configuration the only possible source here.

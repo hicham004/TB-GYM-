@@ -168,6 +168,41 @@ public sealed class GoLiveReadinessTests
     }
 
     /// <summary>
+    /// A compose file passes an unset key through as an empty value. With email off that placeholder
+    /// is not a provider configuration; with the provider selected an empty key is still refused.
+    /// </summary>
+    [TestMethod]
+    public void AnEmptyFingerprintPlaceholderCountsOnlyWhenAProviderIsSelected()
+    {
+        var placeholder = new Dictionary<string, string?>
+        {
+            ["Notifications:Email:Provider:FingerprintKeyId"] = string.Empty,
+            ["Notifications:Email:Provider:FingerprintKeys:key-1"] = string.Empty,
+        };
+        using (var emailOff = Worker(placeholder))
+        {
+            Assert.IsFalse(emailOff.GetRequiredService<IOptions<NotificationEmailOptions>>().Value.Provider.IsConfigured);
+        }
+
+        var emptyKey = Provider("https://api.resend.com/emails");
+        emptyKey["Notifications:Email:Provider:FingerprintKeyId"] = "key-1";
+        emptyKey["Notifications:Email:Provider:FingerprintKeys:key-1"] = string.Empty;
+        using var providerOn = Worker(emptyKey);
+        Assert.Contains(
+            "not base64",
+            string.Join(" ", Assert.ThrowsExactly<OptionsValidationException>(
+                () => providerOn.GetRequiredService<IOptions<NotificationEmailOptions>>().Value).Failures));
+
+        // A real key beside an adapter that contacts nobody is still a contradiction.
+        using var realKeyEmailOff = Worker(new Dictionary<string, string?>
+        {
+            ["Notifications:Email:Provider:FingerprintKeys:key-1"] = FingerprintKey,
+        });
+        Assert.ThrowsExactly<OptionsValidationException>(
+            () => realKeyEmailOff.GetRequiredService<IOptions<NotificationEmailOptions>>().Value);
+    }
+
+    /// <summary>
     /// The test email reaches the provider with the configured key, sender and Reply-To, and the
     /// operator is told it was accepted.
     /// </summary>

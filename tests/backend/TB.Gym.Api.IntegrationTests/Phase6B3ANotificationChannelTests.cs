@@ -819,11 +819,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
             version = 0u,
         });
 
-        // The status is deliberately not pinned: this repository's endpoints all call
-        // ValidateRequestAsync directly and its AntiforgeryValidationException reaches the generic
-        // handler, so a missing token is reported as 500 rather than 400. That is pre-existing across
-        // every write endpoint and is recorded rather than changed here.
-        Assert.IsFalse(response.IsSuccessStatusCode, "A write without an antiforgery token must be refused.");
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.IsFalse((await PreferencesAsync(workspace.Client)).EmailServiceEnabled);
     }
 

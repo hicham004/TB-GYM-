@@ -188,14 +188,19 @@ public sealed class NotificationEmailProviderOptions
     /// </remarks>
     public Dictionary<string, string> FingerprintKeys { get; set; } = new(StringComparer.Ordinal);
 
-    /// <summary>Whether anything provider-shaped has been configured at all.</summary>
+    /// <summary>
+    /// Whether anything provider-shaped has been configured at all. An empty value counts as absent,
+    /// for a fingerprint key exactly as for every other field, because a compose file passes an unset
+    /// variable through as an empty one. Once a provider is selected, <see cref="Validate"/> still
+    /// refuses an empty key.
+    /// </summary>
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(ApiKey) ||
         !string.IsNullOrWhiteSpace(FromAddress) ||
         !string.IsNullOrWhiteSpace(ReplyToAddress) ||
         !string.IsNullOrWhiteSpace(WebhookSigningSecret) ||
         !string.IsNullOrWhiteSpace(FingerprintKeyId) ||
-        FingerprintKeys.Count > 0 ||
+        FingerprintKeys.Values.Any(key => !string.IsNullOrWhiteSpace(key)) ||
         !string.Equals(Endpoint, NotificationEmailProviderEndpoints.ResendSend, StringComparison.Ordinal);
 
     public string? Validate(bool isProduction)

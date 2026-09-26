@@ -145,6 +145,7 @@ public static class DependencyInjection
         services.AddPlatformBilling(configuration);
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, TenantAuthorizationResultHandler>();
         services.AddExceptionHandler<ClientReleasedExceptionHandler>();
+        services.AddExceptionHandler<AntiforgeryRejectedExceptionHandler>();
         services.AddScoped<CoachClientScope>();
         services.AddScoped<ITenantMembershipStore, TenantMembershipStore>();
         services.AddScoped<IWorkspaceApplicationService, WorkspaceApplicationService>();

@@ -90,8 +90,28 @@ public sealed partial class GoLiveBoundaryTests
         Assert.DoesNotContain("Adapter: Local", compose, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Compose substitutes variables in values only. A <c>${...}</c> inside a setting's name stays
+    /// literal, so the setting silently never reaches the application (it hid the dev fingerprint key).
+    /// </summary>
+    [TestMethod]
+    public void NoComposeSettingNameContainsAVariable()
+    {
+        foreach (var file in new[] { "compose.yaml", "compose.production.yaml" })
+        {
+            var offenders = File.ReadAllLines(Path.Combine(RepositoryRoot(), file))
+                .Where(line => VariableInKey().IsMatch(line))
+                .ToArray();
+
+            Assert.IsEmpty(offenders, $"{file} puts a variable in a setting name: {string.Join("; ", offenders)}");
+        }
+    }
+
     [GeneratedRegex(@"(AddToRoles?Async|IdentityUserRole|INSERT\s+INTO\s+[^;]*UserRoles)", RegexOptions.IgnoreCase)]
     private static partial Regex RoleGrant();
+
+    [GeneratedRegex(@"^\s*[^\s#:'""-][^\s#:'""]*\$\{[^}]*\}[^\s:]*:(\s|$)")]
+    private static partial Regex VariableInKey();
 
     /// <summary>
     /// The block of a compose service, from its key at the start of a line to the next key at the same

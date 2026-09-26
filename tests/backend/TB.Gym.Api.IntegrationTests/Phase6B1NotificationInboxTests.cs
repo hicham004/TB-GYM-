@@ -324,14 +324,11 @@ public sealed partial class Phase6B1NotificationDispatchTests
         await SweepAsync();
         var notificationId = (await InboxAsync(workspace.Client)).Items[0].Id;
 
-        // Without the paired request token the write is refused and nothing changes. The status is
-        // deliberately not pinned: this repository's endpoints all call ValidateRequestAsync directly
-        // and its AntiforgeryValidationException reaches the generic handler, so a missing token is
-        // reported as 500 rather than 400. That is pre-existing across every write endpoint and is
-        // recorded rather than changed here.
+        // Without the paired request token the write is refused with 400 and nothing changes.
         workspace.Client.DefaultRequestHeaders.Remove("X-XSRF-TOKEN");
-        var refused = await workspace.Client.PostAsync($"/api/notifications/{notificationId}/read", null);
-        Assert.IsFalse(refused.IsSuccessStatusCode, "A write without an antiforgery token must be refused.");
+        await AssertStatusAsync(
+            await workspace.Client.PostAsync($"/api/notifications/{notificationId}/read", null),
+            HttpStatusCode.BadRequest);
         Assert.IsFalse((await InboxAsync(workspace.Client)).Items[0].IsRead);
 
         using var anonymous = CreateClient();

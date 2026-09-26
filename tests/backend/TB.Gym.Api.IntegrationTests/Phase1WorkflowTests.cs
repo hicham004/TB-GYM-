@@ -157,6 +157,68 @@ public sealed class Phase1WorkflowTests
         Assert.AreNotEqual(completedProfile.Id, clientsB[0].Id);
     }
 
+    /// <summary>
+    /// A write without a valid antiforgery token is the caller's mistake: 400 with a stable code,
+    /// never a 500, and nothing changes. A missing token, a forged one and a signed-in write.
+    /// </summary>
+    [TestMethod]
+    public async Task AWriteWithoutAValidAntiforgeryTokenIsRefusedWith400AndChangesNothing()
+    {
+        var registration = new
+        {
+            displayName = "No Token",
+            email = "no-token@example.test",
+            password = Password,
+            workspaceName = "No Token Workspace",
+        };
+
+        using var anonymous = CreateClient();
+        await AssertAntiforgeryRefusedAsync(
+            await anonymous.PostAsJsonAsync("/api/auth/register/coach", registration));
+
+        await RefreshCsrfAsync(anonymous);
+        anonymous.DefaultRequestHeaders.Remove("X-XSRF-TOKEN");
+        anonymous.DefaultRequestHeaders.Add("X-XSRF-TOKEN", "forged-token");
+        await AssertAntiforgeryRefusedAsync(
+            await anonymous.PostAsJsonAsync("/api/auth/register/coach", registration));
+        Assert.AreEqual(0L, await CountUsersAsync("no-token@example.test"));
+
+        using var coach = CreateClient();
+        await RegisterConfirmAndLoginCoachAsync(coach, "coach@example.test", "Coach", "Original Name");
+        var workspace = await coach.GetFromJsonAsync<Workspace>("/api/workspace");
+        Assert.IsNotNull(workspace);
+        coach.DefaultRequestHeaders.Remove("X-XSRF-TOKEN");
+        await AssertAntiforgeryRefusedAsync(await coach.PutAsJsonAsync(
+            "/api/workspace",
+            new
+            {
+                name = "Renamed",
+                timeZoneId = "Asia/Beirut",
+                defaultCulture = "en-LB",
+                defaultCurrencyCode = "USD",
+                weekStartsOn = "Monday",
+                version = workspace.Version,
+            }));
+        Assert.AreEqual("Original Name", (await coach.GetFromJsonAsync<Workspace>("/api/workspace"))?.Name);
+    }
+
+    private static async Task AssertAntiforgeryRefusedAsync(HttpResponseMessage response)
+    {
+        await AssertStatusAsync(response, HttpStatusCode.BadRequest);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.AreEqual("antiforgery_token_invalid", body.RootElement.GetProperty("code").GetString());
+    }
+
+    private async Task<long> CountUsersAsync(string email)
+    {
+        await using var connection = new NpgsqlConnection(RequiredDatabaseConnection);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM identity.\"Users\" WHERE \"Email\" = @email";
+        command.Parameters.AddWithValue("email", email);
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
     private HttpClient CreateClient() =>
         RequiredFactory.CreateClient(new WebApplicationFactoryClientOptions
         {
@@ -324,6 +386,8 @@ public sealed class Phase1WorkflowTests
         databaseConnection ?? throw new InvalidOperationException("The test database is not initialized.");
 
     private sealed record Csrf(string Token);
+
+    private sealed record Workspace(string Name, uint Version);
 
     private sealed record Registration(string Email, string? DevelopmentConfirmationUrl);
 

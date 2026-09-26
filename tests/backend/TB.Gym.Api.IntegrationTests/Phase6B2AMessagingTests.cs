@@ -1282,15 +1282,12 @@ public sealed partial class Phase6B2AMessagingTests
             await noTenant.GetAsync("/api/messaging/conversations"),
             HttpStatusCode.Forbidden);
 
-        // Without the paired request token the write is refused and nothing changes. The status is
-        // deliberately not pinned: this repository's endpoints call ValidateRequestAsync directly and
-        // its AntiforgeryValidationException reaches the generic handler, so a missing token is
-        // reported as 500 rather than 400. That is pre-existing across every write endpoint.
+        // Without the paired request token the write is refused with 400 and nothing changes.
         workspace.Coach.DefaultRequestHeaders.Remove("X-XSRF-TOKEN");
         var refused = await workspace.Coach.PostAsJsonAsync(
             $"/api/messaging/conversations/{conversation.Conversation.Id}/messages",
             new { body = "no token", idempotencyKey = Guid.NewGuid() });
-        Assert.IsFalse(refused.IsSuccessStatusCode, "A write without an antiforgery token must be refused.");
+        Assert.AreEqual(HttpStatusCode.BadRequest, refused.StatusCode);
         Assert.AreEqual(0L, await MessageCountAsync(conversation.Conversation.Id));
     }
 
