@@ -55,6 +55,7 @@ internal sealed class UsdaFoodDataCentralProvider(
         var nutrients = payload.TryGetProperty("foodNutrients", out var array) && array.ValueKind == JsonValueKind.Array
             ? array.EnumerateArray().ToArray()
             : throw new NutritionProviderUnavailableException("usda_schema_changed", "USDA FoodData Central returned no structured nutrient array. No data was imported.");
+        var unreported = new List<UnreportedNutrient>();
 
         return new ProviderFoodRecord(
             ReadNumberAsString(payload, "fdcId"),
@@ -66,12 +67,13 @@ internal sealed class UsdaFoodDataCentralProvider(
             RequireNutrient(nutrients, ["Protein"], "G"),
             RequireNutrient(nutrients, ["Carbohydrate, by difference", "Carbohydrate, by summation"], "G"),
             RequireNutrient(nutrients, ["Total lipid (fat)"], "G"),
-            RequireNutrient(nutrients, ["Fiber, total dietary"], "G"),
-            RequireNutrient(nutrients, ["Sugar alcohols", "Polyols, total"], "G"),
-            RequireNutrient(nutrients, ["Alcohol, ethyl"], "G"),
+            OptionalNutrient(nutrients, ["Fiber, total dietary"], "G", UnreportedNutrient.Fibre, unreported),
+            OptionalNutrient(nutrients, ["Sugar alcohols", "Polyols, total"], "G", UnreportedNutrient.Polyols, unreported),
+            OptionalNutrient(nutrients, ["Alcohol, ethyl"], "G", UnreportedNutrient.Ethanol, unreported),
             [],
             ProviderKey,
-            clock.UtcNow);
+            clock.UtcNow,
+            unreported);
     }
 
     private void EnsureConfigured()
@@ -128,7 +130,25 @@ internal sealed class UsdaFoodDataCentralProvider(
         FindNutrient(nutrients, acceptedNames, expectedUnit)
         ?? throw new NutritionProviderUnavailableException(
             "usda_nutrient_incomplete",
-            $"USDA FoodData Central did not report {acceptedNames[0]} in {expectedUnit}. No zero was inferred and no data was imported.");
+            $"USDA FoodData Central did not report {acceptedNames[0]} for this food, so it was not imported. Choose another result or add the food yourself.");
+
+    // USDA rarely reports fibre, polyols or ethanol. A missing one is stored as zero and recorded as
+    // unreported, so the coach can see the zero was not stated by USDA and correct it.
+    private static decimal OptionalNutrient(
+        IReadOnlyList<JsonElement> nutrients,
+        IReadOnlyList<string> acceptedNames,
+        string expectedUnit,
+        UnreportedNutrient nutrient,
+        List<UnreportedNutrient> unreported)
+    {
+        var value = FindNutrient(nutrients, acceptedNames, expectedUnit);
+        if (value is null)
+        {
+            unreported.Add(nutrient);
+        }
+
+        return value ?? 0m;
+    }
 
     private static string ReadNumberAsString(JsonElement element, string property)
     {

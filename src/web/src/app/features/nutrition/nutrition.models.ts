@@ -1,5 +1,6 @@
 import type {
   AiMealDraftView as ContractAiMealDraftView,
+  AllergenCode,
   ClientNutritionDayView as ContractClientNutritionDayView,
   ClientNutritionPlanSummary as ContractClientNutritionPlanSummary,
   FoodItemPage as ContractFoodItemPage,
@@ -20,10 +21,60 @@ export interface NutritionSettings {
   version: number;
 }
 
+/** A nutrient USDA left out of a food, which was saved as 0. */
+export type UnreportedNutrient = 'Fibre' | 'Polyols' | 'Ethanol';
+
+/** The order allergens are offered in, and the names a coach reads for each stored code. */
+export const ALLERGEN_LABELS: readonly { code: AllergenCode; label: string }[] = [
+  { code: 'GlutenCereals', label: $localize`Gluten` },
+  { code: 'Crustaceans', label: $localize`Crustaceans (shrimp, crab)` },
+  { code: 'Eggs', label: $localize`Eggs` },
+  { code: 'Fish', label: $localize`Fish` },
+  { code: 'Peanuts', label: $localize`Peanuts` },
+  { code: 'Soybeans', label: $localize`Soy` },
+  { code: 'Milk', label: $localize`Milk` },
+  { code: 'TreeNuts', label: $localize`Tree nuts` },
+  { code: 'Celery', label: $localize`Celery` },
+  { code: 'Mustard', label: $localize`Mustard` },
+  { code: 'Sesame', label: $localize`Sesame` },
+  { code: 'SulphurDioxideAndSulphites', label: $localize`Sulphites` },
+  { code: 'Lupin', label: $localize`Lupin` },
+  { code: 'Molluscs', label: $localize`Molluscs (mussels, squid)` },
+];
+
+const UNIT_LABELS: Record<FoodItem['basisUnit'], string> = {
+  Gram: $localize`g`,
+  Millilitre: $localize`ml`,
+  Serving: $localize`serving`,
+};
+
+const PREPARATION_LABELS: Record<FoodItem['preparationBasis'], string> = {
+  Raw: $localize`raw`,
+  Cooked: $localize`cooked`,
+  AsSold: $localize`as sold`,
+  Prepared: $localize`prepared`,
+};
+
+const SOURCE_LABELS: Record<FoodItem['provenance'], string> = {
+  UsdaFdc: $localize`USDA`,
+  CoachAuthored: $localize`Your food`,
+  LabelTranscribed: $localize`From a label`,
+};
+
+export const unitLabel = (unit: FoodItem['basisUnit']): string => UNIT_LABELS[unit];
+
+export const preparationLabel = (basis: FoodItem['preparationBasis']): string =>
+  PREPARATION_LABELS[basis];
+
+export const sourceLabel = (provenance: FoodItem['provenance']): string =>
+  SOURCE_LABELS[provenance];
+
 export interface FoodItem {
   id: string;
   name: string;
   provenance: 'UsdaFdc' | 'CoachAuthored' | 'LabelTranscribed';
+  /** The provider's id, such as a USDA FDC id, when the food was imported. */
+  externalId: string | null;
   currentRevision: number;
   versionId: string;
   basisQuantity: number;
@@ -35,6 +86,7 @@ export interface FoodItem {
   protein: number;
   carbohydrate: number;
   fat: number;
+  unreportedNutrients: UnreportedNutrient[];
 }
 
 export interface FoodPage {
@@ -175,6 +227,7 @@ export function mapFoodPage(value: ContractFoodItemPage): FoodPage {
       id: item.id,
       name: item.name,
       provenance: item.provenance,
+      externalId: item.externalId ?? null,
       currentRevision: numeric(item.currentRevision),
       versionId: item.currentVersion.id,
       basisQuantity: numeric(item.currentVersion.basisQuantity),
@@ -186,6 +239,7 @@ export function mapFoodPage(value: ContractFoodItemPage): FoodPage {
       protein: numeric(item.currentVersion.proteinGrams),
       carbohydrate: numeric(item.currentVersion.carbohydrateGrams),
       fat: numeric(item.currentVersion.fatGrams),
+      unreportedNutrients: [...item.currentVersion.unreportedNutrients],
     })),
   };
 }

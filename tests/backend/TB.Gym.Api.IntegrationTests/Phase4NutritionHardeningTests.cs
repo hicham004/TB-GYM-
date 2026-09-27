@@ -11,6 +11,7 @@ public sealed partial class Phase3TrainingWorkflowTests
 {
     private static readonly string[] MilkAllergen = ["Milk"];
     private static readonly string[] NoAllergens = [];
+    private static readonly string[] ChickenUnreportedNutrients = ["Fibre", "Polyols", "Ethanol"];
 
     [TestMethod]
     public async Task Phase4AssignmentSnapshotsLibraryAndLoggingKeepsPrescriptionSeparate()
@@ -310,6 +311,89 @@ public sealed partial class Phase3TrainingWorkflowTests
     }
 
     [TestMethod]
+    public async Task Phase4RealUsdaProviderImportsUnreportedNutrientsAsNamedZeros()
+    {
+        using var coach = CreateClient();
+        await RegisterCoachAsync(coach, "p4-usda-real-coach@example.test", "Nutrition Coach", "Nutrition Usda Real");
+
+        await RefreshCsrfAsync(coach);
+        var imported = await coach.PostAsJsonAsync("/api/nutrition/providers/usda/import", new
+        {
+            fdcId = UsdaFoodDataCentralFake.ChickenFdcId,
+        });
+        await AssertStatusAsync(imported, HttpStatusCode.OK);
+
+        // USDA reports protein, fat and carbohydrate for this food but not fibre, polyols or ethanol.
+        // Each is stored as zero and named, so a coach can tell USDA's silence from a stated zero.
+        var version = (await RequiredJsonAsync<Phase4UsdaFood>(imported)).CurrentVersion;
+        Assert.AreEqual(22.525m, version.ProteinGrams);
+        Assert.AreEqual(1.934m, version.FatGrams);
+        Assert.AreEqual(0m, version.FibreGrams);
+        Assert.AreEqual(0m, version.PolyolGrams);
+        Assert.AreEqual(0m, version.EthanolGrams);
+        CollectionAssert.AreEqual(ChickenUnreportedNutrients, version.UnreportedNutrients);
+        // Atwater, the workspace default: 22.525 * 4 + 0 * 4 + 1.934 * 9.
+        Assert.AreEqual(107.506m, version.ComputedCalories);
+
+        await using var connection = new NpgsqlConnection(RequiredDatabaseConnection);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT \"UnreportedNutrients\" FROM nutrition.\"FoodItemVersions\" WHERE \"Id\" = @id";
+        command.Parameters.AddWithValue("id", version.Id);
+        CollectionAssert.AreEqual(ChickenUnreportedNutrients, (string[])(await command.ExecuteScalarAsync())!);
+    }
+
+    [TestMethod]
+    public async Task Phase4RealUsdaProviderRefusesFoodWithoutProteinAndSaysWhy()
+    {
+        using var coach = CreateClient();
+        await RegisterCoachAsync(coach, "p4-usda-noprotein-coach@example.test", "Nutrition Coach", "Nutrition Usda Protein");
+
+        await RefreshCsrfAsync(coach);
+        var refused = await coach.PostAsJsonAsync("/api/nutrition/providers/usda/import", new
+        {
+            fdcId = UsdaFoodDataCentralFake.NoProteinFdcId,
+        });
+
+        Assert.AreEqual(HttpStatusCode.ServiceUnavailable, refused.StatusCode);
+        var problem = await RequiredJsonAsync<Phase4ProviderProblem>(refused);
+        Assert.AreEqual("usda_nutrient_incomplete", problem.Code);
+        Assert.Contains("did not report Protein", problem.Message);
+        var foods = await coach.GetFromJsonAsync<Phase4FoodPage>("/api/nutrition/foods")
+            ?? throw new AssertFailedException("Food page was empty.");
+        Assert.AreEqual(0, foods.Total);
+    }
+
+    [TestMethod]
+    public async Task Phase4DatabaseRefusesAnUnreportedNutrientThatCarriesAValue()
+    {
+        using var coach = CreateClient();
+        await RegisterCoachAsync(coach, "p4-usda-constraint-coach@example.test", "Nutrition Coach", "Nutrition Usda Constraint");
+        await RefreshCsrfAsync(coach);
+        var imported = await coach.PostAsJsonAsync("/api/nutrition/providers/usda/import", new
+        {
+            fdcId = FibreRichTestNutritionDataProvider.LentilFdcId,
+        });
+        await AssertStatusAsync(imported, HttpStatusCode.OK);
+        var lentils = await RequiredJsonAsync<Phase4ImportedFood>(imported);
+
+        // A copy of the lentil version, which reports 7.9 g of fibre, claiming fibre was unreported.
+        await using var connection = new NpgsqlConnection(RequiredDatabaseConnection);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            CREATE TEMP TABLE forged AS SELECT * FROM nutrition."FoodItemVersions" WHERE "Id" = @id;
+            UPDATE forged SET "Id" = gen_random_uuid(), "Revision" = "Revision" + 1, "UnreportedNutrients" = ARRAY['Fibre'];
+            INSERT INTO nutrition."FoodItemVersions" SELECT * FROM forged;
+            """;
+        command.Parameters.AddWithValue("id", lentils.CurrentVersion.Id);
+
+        var rejected = await Assert.ThrowsAsync<PostgresException>(async () => await command.ExecuteNonQueryAsync());
+        Assert.AreEqual(PostgresErrorCodes.CheckViolation, rejected.SqlState);
+        Assert.AreEqual("CK_FoodItemVersions_UnreportedNutrients", rejected.ConstraintName);
+    }
+
+    [TestMethod]
     public async Task Phase4CancelledPlanReleasesDatesAndKeepsHistory()
     {
         using var coach = CreateClient();
@@ -547,6 +631,10 @@ public sealed partial class Phase3TrainingWorkflowTests
     private sealed record Phase4ImportedFood(Guid Id, Phase4ImportedFoodVersion CurrentVersion);
     private sealed record Phase4ImportedFoodVersion(Guid Id, decimal ComputedCalories);
     private sealed record Phase4Settings(string EnergyPolicyKey, decimal ProviderCalorieTolerance, uint Version);
+    private sealed record Phase4UsdaFood(Guid Id, Phase4UsdaFoodVersion CurrentVersion);
+    private sealed record Phase4UsdaFoodVersion(Guid Id, decimal ProteinGrams, decimal FatGrams, decimal FibreGrams, decimal PolyolGrams, decimal EthanolGrams, decimal ComputedCalories, string[] UnreportedNutrients);
+    private sealed record Phase4ProviderProblem(string Code, string Message);
+    private sealed record Phase4FoodPage(int Total);
     private sealed record Phase4ClientDetails(string FirstName, string LastName, string? PhoneNumber, DateOnly? BirthDate, decimal? HeightEnteredValue, string? HeightEnteredUnit, string? WorkType, int? AverageDailySteps, string? TrainingBackground, string? FoodPreferences, string? FoodAversions, string? Goals, string? PreviousInjuries, uint Version);
 }
 
@@ -589,6 +677,55 @@ internal sealed class FibreRichTestNutritionDataProvider : INutritionDataProvide
                 ProviderKey,
                 new DateTimeOffset(2026, 8, 22, 10, 0, 0, TimeSpan.Zero))
             : null);
+}
+
+/// <summary>
+/// USDA FoodData Central's socket. Responses are trimmed from real ones, so the composed provider
+/// parses what USDA actually sends, including the nutrients it leaves out.
+/// </summary>
+internal sealed class UsdaFoodDataCentralFake : HttpMessageHandler
+{
+    public const string ApiKey = "test-usda-key";
+
+    // FDC 2646170, Foundation: chicken, breast, boneless, skinless, raw. No fibre, polyol, ethanol
+    // or plain "Energy" entry is reported.
+    public const string ChickenFdcId = "2646170";
+
+    public const string NoProteinFdcId = "9999001";
+
+    private const string ChickenJson = """
+        {"fdcId":2646170,"description":"Chicken, breast, boneless, skinless, raw","dataType":"Foundation","foodNutrients":[
+        {"type":"FoodNutrient","id":33295225,"nutrient":{"id":1051,"number":"255","name":"Water","rank":100,"unitName":"g"},"amount":74.78},
+        {"type":"FoodNutrient","id":33295327,"nutrient":{"id":2047,"number":"957","name":"Energy (Atwater General Factors)","rank":280,"unitName":"kcal"},"amount":106.034},
+        {"type":"FoodNutrient","id":33295325,"nutrient":{"id":1003,"number":"203","name":"Protein","rank":600,"unitName":"g"},"amount":22.525},
+        {"type":"FoodNutrient","id":33295220,"nutrient":{"id":1004,"number":"204","name":"Total lipid (fat)","rank":800,"unitName":"g"},"amount":1.934},
+        {"type":"FoodNutrient","id":33295326,"nutrient":{"id":1005,"number":"205","name":"Carbohydrate, by difference","rank":1110,"unitName":"g"},"amount":0}]}
+        """;
+
+    private const string NoProteinJson = """
+        {"fdcId":9999001,"description":"Incomplete record","dataType":"Branded","foodNutrients":[
+        {"type":"FoodNutrient","id":1,"nutrient":{"id":1004,"number":"204","name":"Total lipid (fat)","rank":800,"unitName":"g"},"amount":1},
+        {"type":"FoodNutrient","id":2,"nutrient":{"id":1005,"number":"205","name":"Carbohydrate, by difference","rank":1110,"unitName":"g"},"amount":2}]}
+        """;
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var uri = request.RequestUri ?? throw new InvalidOperationException("USDA request had no URI.");
+        if (!uri.Query.Contains($"api_key={ApiKey}", StringComparison.Ordinal))
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+        }
+
+        var body = uri.AbsolutePath switch
+        {
+            "/fdc/v1/food/" + ChickenFdcId => ChickenJson,
+            "/fdc/v1/food/" + NoProteinFdcId => NoProteinJson,
+            _ => null,
+        };
+        return Task.FromResult(body is null
+            ? new HttpResponseMessage(HttpStatusCode.NotFound)
+            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") });
+    }
 }
 
 internal sealed class SensitiveLogCapture : ILoggerProvider

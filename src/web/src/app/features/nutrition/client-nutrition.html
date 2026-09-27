@@ -166,13 +166,13 @@
           These declarations warn the coach. Missing declarations never prove that a recipe is safe.
         </p>
         <div class="allergens">
-          @for (code of allergenCodes; track code) {
+          @for (allergen of allergens; track allergen.code) {
             <label class="check"
               ><input
                 type="checkbox"
-                [checked]="selectedAllergens().has(code)"
-                (change)="toggleAllergen(code, $any($event.target).checked)"
-              /><span>{{ code }}</span></label
+                [checked]="selectedAllergens().has(allergen.code)"
+                (change)="toggleAllergen(allergen.code, $any($event.target).checked)"
+              /><span>{{ allergen.label }}</span></label
             >
           }
         </div>

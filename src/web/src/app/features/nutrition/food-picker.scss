@@ -1,0 +1,63 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+.picker {
+  position: relative;
+}
+.picker input {
+  padding-inline-end: 2rem;
+}
+.chevron {
+  position: absolute;
+  inset-inline-end: 0.75rem;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  color: var(--muted-text);
+  pointer-events: none;
+}
+.popup {
+  position: absolute;
+  z-index: 20;
+  inset-inline: 0;
+  inset-block-start: calc(100% + 0.25rem);
+  min-inline-size: min(22rem, 90vw);
+  max-block-size: 18rem;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+ul {
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+}
+li {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+li.active {
+  background: var(--surface-subtle);
+}
+li[aria-selected='true'] .name {
+  font-weight: 700;
+}
+.name {
+  overflow-wrap: anywhere;
+}
+.detail {
+  color: var(--muted-text);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+.empty {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  color: var(--muted-text);
+  font-size: 0.9rem;
+}

@@ -192,7 +192,8 @@ internal sealed class NutritionApplicationService(
                 settings.ProviderCalorieTolerance,
                 "USDA FoodData Central (CC0 1.0)",
                 $"{providerFood.DataType}:{providerFood.RetrievedAtUtc:O}",
-                providerFood.DeclaredAllergens));
+                providerFood.DeclaredAllergens,
+                providerFood.UnreportedNutrients));
             dbContext.FoodItems.Add(food);
             await dbContext.SaveChangesAsync(cancellationToken);
             return new NutritionCommandResult(NutritionCommandStatus.Success, Food: ToFoodView(food));
@@ -1102,7 +1103,7 @@ internal sealed class NutritionApplicationService(
     }
 
     private static FoodVersionView ToFoodVersionView(FoodItemVersion item) =>
-        new(item.Id, item.Revision, item.BasisQuantity, item.BasisUnit, item.PreparationBasis, item.ComputedCalories, item.ProviderCalories, item.HasCalorieDiscrepancy, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams, item.FibreGrams, item.PolyolGrams, item.EthanolGrams, item.EnergyPolicyKey, item.EnergyPolicyVersion, item.SourceAttribution, item.SourceRecordVersion, item.Allergens.Select(allergen => allergen.Code).Order().ToArray());
+        new(item.Id, item.Revision, item.BasisQuantity, item.BasisUnit, item.PreparationBasis, item.ComputedCalories, item.ProviderCalories, item.HasCalorieDiscrepancy, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams, item.FibreGrams, item.PolyolGrams, item.EthanolGrams, item.EnergyPolicyKey, item.EnergyPolicyVersion, item.SourceAttribution, item.SourceRecordVersion, item.Allergens.Select(allergen => allergen.Code).Order().ToArray(), item.UnreportedNutrients);
 
     private static CookingFactorView ToCookingFactorView(CookingFactorRecord item) =>
         new(item.Id, Enum.Parse<CookingFactorKind>(item.Kind), item.SourceKey, item.SourceVersion, item.FromBasis, item.ToBasis, item.Factor);

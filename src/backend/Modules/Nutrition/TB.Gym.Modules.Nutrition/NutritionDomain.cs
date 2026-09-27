@@ -9,6 +9,17 @@ public enum FoodProvenance
     LabelTranscribed = 3,
 }
 
+/// <summary>
+/// A nutrient a provider record may leave out. Only these may be imported as zero, and the version
+/// keeps which ones were missing; protein, carbohydrate and fat are always required.
+/// </summary>
+public enum UnreportedNutrient
+{
+    Fibre = 1,
+    Polyols = 2,
+    Ethanol = 3,
+}
+
 public enum FoodQuantityUnit
 {
     Gram = 1,
@@ -191,7 +202,8 @@ public sealed record FoodVersionInput(
     decimal CalorieTolerance,
     string SourceAttribution,
     string SourceRecordVersion,
-    IReadOnlyList<AllergenCode> DeclaredAllergens);
+    IReadOnlyList<AllergenCode> DeclaredAllergens,
+    IReadOnlyList<UnreportedNutrient>? UnreportedNutrients = null);
 
 public sealed class FoodItemVersion : TenantEntity
 {
@@ -218,6 +230,7 @@ public sealed class FoodItemVersion : TenantEntity
         ProviderCalories = input.ProviderCalories is null ? null : NutritionRules.NonNegative(input.ProviderCalories.Value, nameof(input.ProviderCalories));
         SourceAttribution = NutritionRules.RequiredText(input.SourceAttribution, 500, nameof(input.SourceAttribution));
         SourceRecordVersion = NutritionRules.RequiredText(input.SourceRecordVersion, 100, nameof(input.SourceRecordVersion));
+        UnreportedNutrients = ValidateUnreported(provenance, input.UnreportedNutrients ?? []);
 
         IEnergyFactorPolicy policy = input.EnergyPolicyKey switch
         {
@@ -290,10 +303,44 @@ public sealed class FoodItemVersion : TenantEntity
 
     public string SourceRecordVersion { get; private set; } = string.Empty;
 
+    /// <summary>Nutrients the provider did not report; each is stored as zero.</summary>
+    public UnreportedNutrient[] UnreportedNutrients { get; private set; } = [];
+
     public IReadOnlyCollection<FoodItemAllergen> Allergens => allergens;
 
     internal static FoodItemVersion Create(Guid tenantId, Guid foodItemId, int revision, FoodProvenance provenance, FoodVersionInput input) =>
         new(tenantId, foodItemId, revision, provenance, input);
+
+    private UnreportedNutrient[] ValidateUnreported(FoodProvenance provenance, IReadOnlyList<UnreportedNutrient> unreported)
+    {
+        if (unreported.Count == 0)
+        {
+            return [];
+        }
+
+        // A coach or a label states every value, so only a provider record can leave one out.
+        if (provenance != FoodProvenance.UsdaFdc)
+        {
+            throw new ArgumentException("Only a provider-imported food can have unreported nutrients.", nameof(unreported));
+        }
+
+        foreach (var nutrient in unreported)
+        {
+            var grams = nutrient switch
+            {
+                UnreportedNutrient.Fibre => FibreGrams,
+                UnreportedNutrient.Polyols => PolyolGrams,
+                UnreportedNutrient.Ethanol => EthanolGrams,
+                _ => throw new ArgumentException("Unreported nutrients must use supported codes.", nameof(unreported)),
+            };
+            if (grams != 0m)
+            {
+                throw new ArgumentException("An unreported nutrient is stored as zero.", nameof(unreported));
+            }
+        }
+
+        return unreported.Distinct().Order().ToArray();
+    }
 }
 
 public sealed class FoodItemAllergen : TenantEntity

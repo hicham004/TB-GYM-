@@ -93,7 +93,8 @@ public sealed record FoodVersionView(
     string EnergyPolicyVersion,
     string SourceAttribution,
     string SourceRecordVersion,
-    IReadOnlyList<AllergenCode> DeclaredAllergens);
+    IReadOnlyList<AllergenCode> DeclaredAllergens,
+    IReadOnlyList<UnreportedNutrient> UnreportedNutrients);
 
 public sealed record FoodItemPage(int Total, int Skip, int Take, IReadOnlyList<FoodItemView> Items);
 

@@ -366,7 +366,9 @@ diverge from its ingredients; an override is explicit, versioned, and attributab
 **NUT-003** Direct recipe import uses a licensed/authorized nutrition or recipe provider,
 structured data, or user-supplied URL where terms permit. Generic Google scraping is not a
 reliable or legally safe data source. Imported data keeps provenance and requires review,
-especially preparation basis and serving yield.
+especially preparation basis and serving yield. A provider food without protein, fat or
+carbohydrate is refused; a missing fibre, polyol or ethanol value is stored as zero and named as
+unreported on that version, so it is never mistaken for a stated zero.
 
 **NUT-004** AI-generated meals are drafts, never trusted nutrition facts. Output must match a
 schema, identify uncertain ingredients/units, pass domain validation, and be approved by the

@@ -62,12 +62,16 @@ public sealed partial class GymDbContext
             entity.Property(item => item.FibreGrams).HasPrecision(18, 6);
             entity.Property(item => item.PolyolGrams).HasPrecision(18, 6);
             entity.Property(item => item.EthanolGrams).HasPrecision(18, 6);
+            entity.PrimitiveCollection(item => item.UnreportedNutrients).HasDefaultValueSql("'{}'::text[]").ElementType().HasConversion<string>();
             entity.Property(item => item.ComputedCalories).HasPrecision(18, 6);
             entity.Property(item => item.ProviderCalories).HasPrecision(18, 6);
             entity.Property(item => item.CalorieTolerance).HasPrecision(9, 3);
             entity.HasIndex(item => new { item.TenantId, item.FoodItemId, item.Revision }).IsUnique();
             entity.HasMany(item => item.Allergens).WithOne().HasForeignKey(item => new { item.TenantId, item.FoodItemVersionId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint("CK_FoodItemVersions_NonNegative", "\"BasisQuantity\" > 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0 AND \"FibreGrams\" >= 0 AND \"PolyolGrams\" >= 0 AND \"EthanolGrams\" >= 0 AND \"ComputedCalories\" >= 0 AND (\"ProviderCalories\" IS NULL OR \"ProviderCalories\" >= 0)"));
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_FoodItemVersions_UnreportedNutrients",
+                "\"UnreportedNutrients\" <@ ARRAY['Fibre', 'Polyols', 'Ethanol']::text[] AND (NOT ('Fibre' = ANY(\"UnreportedNutrients\")) OR \"FibreGrams\" = 0) AND (NOT ('Polyols' = ANY(\"UnreportedNutrients\")) OR \"PolyolGrams\" = 0) AND (NOT ('Ethanol' = ANY(\"UnreportedNutrients\")) OR \"EthanolGrams\" = 0)"));
             ConfigureTenantEntity(entity);
         });
 

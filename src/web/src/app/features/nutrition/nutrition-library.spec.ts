@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, fill, press, query, settle, tick } from '../../../testing/dom';
+import { button, field, fill, press, query, settle, tick } from '../../../testing/dom';
 import { NutritionLibrary } from './nutrition-library';
 import type {
   FoodItem,
@@ -19,6 +19,7 @@ const FOOD: FoodItem = {
   id: 'food-1',
   name: 'Rolled oats',
   provenance: 'CoachAuthored',
+  externalId: null,
   currentRevision: 1,
   versionId: 'food-version-1',
   basisQuantity: 100,
@@ -30,6 +31,42 @@ const FOOD: FoodItem = {
   protein: 13.2,
   carbohydrate: 67.7,
   fat: 6.5,
+  unreportedNutrients: [],
+};
+
+// FDC 2646170: USDA reports protein, fat and carbohydrate but not fibre or polyols.
+const USDA_CHICKEN: FoodItem = {
+  ...FOOD,
+  id: 'food-2',
+  versionId: 'food-version-2',
+  name: 'Chicken, breast, boneless, skinless, raw',
+  provenance: 'UsdaFdc',
+  externalId: '2646170',
+  preparationBasis: 'AsSold',
+  calories: 107.506,
+  protein: 22.525,
+  carbohydrate: 0,
+  fat: 1.934,
+  unreportedNutrients: ['Fibre', 'Polyols'],
+};
+
+// Two foods with the same name, as USDA returns them: canned beans and dry beans.
+const CANNED_BEANS: FoodItem = {
+  ...FOOD,
+  id: 'food-3',
+  versionId: 'food-version-3',
+  name: 'BLACK BEANS',
+  provenance: 'UsdaFdc',
+  externalId: '2287095',
+  calories: 70.8,
+};
+
+const DRY_BEANS: FoodItem = {
+  ...CANNED_BEANS,
+  id: 'food-4',
+  versionId: 'food-version-4',
+  externalId: '2404277',
+  calories: 342.9,
 };
 
 const PUBLISHED_RECIPE: RecipeSummary = {
@@ -289,17 +326,149 @@ describe('NutritionLibrary', () => {
     expect(options).toEqual(['recipe-version-1']);
   });
 
-  it('adds no meal slot at all when no recipe has been published', async () => {
-    const { fixture, host, api } = await render({
+  /** A button that silently did nothing left the coach guessing; it now says what is missing. */
+  it('explains that a recipe must be published before it can go into a meal plan', async () => {
+    const { host, api } = await render({
       listRecipes: vi.fn(() => of({ total: 1, items: [DRAFT_RECIPE] })),
     });
 
-    press(host, 'Add meal slot');
-    await settle(fixture);
-
+    expect(button(host, 'Add meal slot').disabled).toBe(true);
+    expect(planPanel(host).textContent).toContain('Publish a recipe first.');
     expect(planPanel(host).querySelector('.line-editor')).toBeNull();
     expect(button(host, 'Create plan draft').disabled).toBe(true);
     expect(api.createMealPlan).not.toHaveBeenCalled();
+  });
+
+  it('explains that a food is needed before a recipe can use one', async () => {
+    const { host } = await render({ listFoods: vi.fn(() => of({ total: 0, items: [] })) });
+
+    expect(button(host, 'Add ingredient').disabled).toBe(true);
+    expect(recipePanel(host).textContent).toContain('Add or import a food above first');
+  });
+
+  /** Days are shown from 1, the way a coach counts them, and stored from 0. */
+  it('counts a meal’s day from 1 and saves it from 0', async () => {
+    const { fixture, host, api } = await render();
+
+    const plan = planPanel(host);
+    fill(plan, 'Plan name', 'Week');
+    fill(plan, 'Days', '7');
+    press(host, 'Add meal slot');
+    await settle(fixture);
+
+    const day = field(planPanel(host), 'Day');
+    expect(day.value).toBe('1');
+    fill(planPanel(host), 'Day', '3');
+    await settle(fixture);
+    press(host, 'Create plan draft');
+    await settle(fixture);
+
+    expect(api.createMealPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ slots: [expect.objectContaining({ dayOffset: 2 })] }),
+    );
+  });
+
+  /**
+   * The server refuses a recipe without instructions with a developer message, so the page stops
+   * the save itself, says what is missing in plain words and marks the empty box.
+   */
+  it('refuses a recipe without instructions and marks the empty box', async () => {
+    const { fixture, host, api } = await render();
+
+    fill(recipePanel(host), 'Recipe name', 'Overnight oats');
+    press(host, 'Add ingredient');
+    await settle(fixture);
+    press(host, 'Create recipe draft');
+    await settle(fixture);
+
+    expect(api.createRecipe).not.toHaveBeenCalled();
+    expect(query(host, '[role="alert"]').textContent).toContain(
+      'Add a few words on how to make it.',
+    );
+    expect(field(recipePanel(host), 'Instructions').getAttribute('aria-invalid')).toBe('true');
+    expect(field(recipePanel(host), 'Recipe name').getAttribute('aria-invalid')).not.toBe('true');
+  });
+
+  it('refuses a food without a name', async () => {
+    const { fixture, host, api } = await render();
+
+    press(host, 'Save canonical food');
+    await settle(fixture);
+
+    expect(api.createFood).not.toHaveBeenCalled();
+    expect(query(host, '[role="alert"]').textContent).toContain('Give the food a name');
+    expect(field(foodPanel(host), 'Name').getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('names allergens in words and stores their codes', async () => {
+    const { fixture, host, api } = await render();
+
+    const food = foodPanel(host);
+    expect(food.textContent).toContain('Tree nuts');
+    expect(food.textContent).not.toContain('SulphurDioxideAndSulphites');
+    fill(food, 'Name', 'Almond butter');
+    tick(food, 'Tree nuts');
+    tick(food, 'Sulphites');
+    await settle(fixture);
+    press(host, 'Save canonical food');
+    await settle(fixture);
+
+    expect(api.createFood).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: expect.objectContaining({
+          declaredAllergens: ['TreeNuts', 'SulphurDioxideAndSulphites'],
+        }),
+      }),
+    );
+  });
+
+  /** The search box is a real search form, so Enter searches as well as the button does. */
+  it('searches USDA when the search form is submitted with Enter', async () => {
+    const searchUsdaFoods = vi.fn(() => of({ items: [], failureCode: null, message: null }));
+    const { fixture, host } = await render({ searchUsdaFoods });
+
+    fill(host, 'Search USDA foods', 'chicken breast raw');
+    query(host, 'form[role="search"]').dispatchEvent(new Event('submit'));
+    await settle(fixture);
+
+    expect(searchUsdaFoods).toHaveBeenCalledWith('chicken breast raw');
+    expect(host.textContent).toContain('No USDA foods match that search.');
+  });
+
+  it('marks a search result that is already in the library as added', async () => {
+    const { fixture, host } = await render({
+      listFoods: vi.fn(() => of({ total: 1, items: [USDA_CHICKEN] })),
+      searchUsdaFoods: vi.fn(() =>
+        of({
+          items: [
+            { externalId: '2646170', name: USDA_CHICKEN.name, dataType: 'Foundation' },
+            { externalId: '171077', name: 'Chicken, broilers, breast, raw', dataType: 'SR Legacy' },
+          ],
+          failureCode: null,
+          message: null,
+        }),
+      ),
+    });
+
+    fill(host, 'Search USDA foods', 'chicken breast');
+    press(host, 'Search');
+    await settle(fixture);
+
+    const rows = Array.from(host.querySelectorAll('.results .list-row'));
+    expect(rows[0].textContent).toContain('Added ✓');
+    expect(rows[0].querySelector('button')).toBeNull();
+    expect(rows[1].querySelector('button')?.textContent?.trim()).toBe('Import');
+  });
+
+  it('lets the coach dismiss a message', async () => {
+    const { fixture, host } = await render();
+
+    press(host, 'Save canonical food');
+    await settle(fixture);
+    query<HTMLButtonElement>(host, 'button[aria-label="Dismiss message"]').click();
+    await settle(fixture);
+
+    expect(host.querySelector('[role="alert"]')).toBeNull();
   });
 
   it('publishes a draft meal plan and locks it', async () => {
@@ -343,6 +512,174 @@ describe('NutritionLibrary', () => {
       'That recipe version is already published.',
     );
     expect(host.textContent).not.toContain('Recipe version published and locked.');
+  });
+
+  /**
+   * A 0 that USDA never stated must not look like a measured 0, or a coach would trust a fibre or
+   * sugar-alcohol figure nobody gave.
+   */
+  it('says which values USDA did not report on an imported food', async () => {
+    const { host } = await render({
+      listFoods: vi.fn(() => of({ total: 2, items: [FOOD, USDA_CHICKEN] })),
+    });
+
+    const flags = Array.from(host.querySelectorAll('[data-unreported]'));
+    expect(flags).toHaveLength(1);
+    expect(flags[0].closest('article')?.textContent).toContain(USDA_CHICKEN.name);
+    expect(flags[0].textContent).toContain(
+      'Not reported by USDA, saved as 0: fibre, sugar alcohols',
+    );
+  });
+
+  it('explains a refused USDA import in words instead of a code', async () => {
+    const { fixture, host } = await render({
+      searchUsdaFoods: vi.fn(() =>
+        of({
+          items: [{ externalId: '9999001', name: 'Incomplete record', dataType: 'Branded' }],
+          failureCode: null,
+          message: null,
+        }),
+      ),
+      importUsdaFood: vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 503,
+              error: {
+                title: 'usda_nutrient_incomplete',
+                code: 'usda_nutrient_incomplete',
+                message:
+                  'USDA FoodData Central did not report Protein for this food, so it was not imported. Choose another result or add the food yourself.',
+              },
+            }),
+        ),
+      ),
+    });
+
+    fill(host, 'Search USDA foods', 'incomplete');
+    press(host, 'Search');
+    await settle(fixture);
+    press(host, 'Import');
+    await settle(fixture);
+
+    const alert = query(host, '[role="alert"]').textContent ?? '';
+    expect(alert).toContain('did not report Protein for this food');
+    expect(alert).not.toContain('usda_nutrient_incomplete');
+  });
+
+  describe('food search box in a recipe', () => {
+    async function withIngredientLine() {
+      const rendered = await render({
+        listFoods: vi.fn(() =>
+          of({ total: 4, items: [FOOD, USDA_CHICKEN, CANNED_BEANS, DRY_BEANS] }),
+        ),
+      });
+      press(rendered.host, 'Add ingredient');
+      await settle(rendered.fixture);
+      const box = field(recipePanel(rendered.host), 'Food');
+      return { ...rendered, box };
+    }
+
+    const typeInto = (box: HTMLInputElement, text: string) => {
+      box.value = text;
+      box.dispatchEvent(new Event('input'));
+    };
+    const key = (box: HTMLInputElement, name: string) => {
+      const event = new KeyboardEvent('keydown', { key: name, cancelable: true });
+      box.dispatchEvent(event);
+      return event;
+    };
+    const options = (host: HTMLElement) => Array.from(host.querySelectorAll('[role="option"]'));
+
+    /** Typing narrows the list, and each option says enough to tell same-named foods apart. */
+    it('narrows the foods as the coach types', async () => {
+      const { fixture, host, box } = await withIngredientLine();
+
+      typeInto(box, 'black');
+      await settle(fixture);
+
+      const shown = options(host).map((option) => option.textContent ?? '');
+      expect(shown).toHaveLength(2);
+      expect(shown[0]).toContain('BLACK BEANS');
+      expect(shown[0]).toContain('USDA · as sold · 71 kcal per 100 g');
+      expect(shown[1]).toContain('343 kcal per 100 g');
+      expect(box.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('matches every typed word in any order', async () => {
+      const { fixture, host, box } = await withIngredientLine();
+
+      typeInto(box, 'raw chicken');
+      await settle(fixture);
+
+      expect(options(host).map((option) => option.querySelector('.name')?.textContent)).toEqual([
+        USDA_CHICKEN.name,
+      ]);
+    });
+
+    it('picks a food with the arrow keys and Enter, and the recipe uses it', async () => {
+      const { fixture, host, box, api } = await withIngredientLine();
+
+      typeInto(box, 'black');
+      await settle(fixture);
+      key(box, 'ArrowDown');
+      await settle(fixture);
+      const enter = key(box, 'Enter');
+      await settle(fixture);
+
+      // Enter chose the food; it did not submit the recipe form around the box.
+      expect(enter.defaultPrevented).toBe(true);
+      expect(api.createRecipe).not.toHaveBeenCalled();
+      expect(box.value).toBe('BLACK BEANS');
+      expect(host.querySelector('[role="listbox"]')).toBeNull();
+
+      fill(recipePanel(host), 'Recipe name', 'Bean bowl');
+      fill(recipePanel(host), 'Instructions', 'Soak and cook.');
+      await settle(fixture);
+      press(host, 'Create recipe draft');
+      await settle(fixture);
+
+      expect(api.createRecipe).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ingredients: [expect.objectContaining({ foodItemVersionId: 'food-version-4' })],
+        }),
+      );
+    });
+
+    it('picks a food with the mouse', async () => {
+      const { fixture, host, box } = await withIngredientLine();
+
+      box.dispatchEvent(new MouseEvent('click'));
+      await settle(fixture);
+      const chicken = options(host).find((option) => option.textContent?.includes('raw'));
+      chicken?.dispatchEvent(new MouseEvent('mousedown', { cancelable: true }));
+      await settle(fixture);
+
+      expect(box.value).toBe(USDA_CHICKEN.name);
+      expect(box.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('keeps the chosen food when the coach presses Escape', async () => {
+      const { fixture, host, box } = await withIngredientLine();
+
+      typeInto(box, 'chick');
+      await settle(fixture);
+      key(box, 'Escape');
+      await settle(fixture);
+
+      expect(box.value).toBe(FOOD.name);
+      expect(host.querySelector('[role="listbox"]')).toBeNull();
+    });
+
+    it('says when nothing matches', async () => {
+      const { fixture, host, box } = await withIngredientLine();
+
+      typeInto(box, 'kibbeh');
+      await settle(fixture);
+
+      expect(options(host)).toHaveLength(0);
+      expect(recipePanel(host).textContent).toContain('No food matches "kibbeh".');
+    });
   });
 
   it('reports a failed load rather than an empty library', async () => {

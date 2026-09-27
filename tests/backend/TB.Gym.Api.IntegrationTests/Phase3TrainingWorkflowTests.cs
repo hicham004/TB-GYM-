@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
@@ -89,6 +90,12 @@ public sealed partial class Phase3TrainingWorkflowTests
                 builder.UseSetting(key, value);
             }
 
+            var realUsdaProvider = TestContext.TestName?.Contains("RealUsdaProvider", StringComparison.Ordinal) == true;
+            if (realUsdaProvider)
+            {
+                builder.UseSetting("Nutrition:UsdaFoodDataCentral:ApiKey", UsdaFoodDataCentralFake.ApiKey);
+            }
+
             builder.ConfigureAppConfiguration((_, configuration) =>
                 // The provider harness, when one is running, has the last word on the media
                 // settings: it is what selects R2 and clamd instead of the local defaults.
@@ -137,10 +144,20 @@ public sealed partial class Phase3TrainingWorkflowTests
             {
                 services.RemoveAll<IClock>();
                 services.RemoveAll<IAiMealDraftProvider>();
-                services.RemoveAll<INutritionDataProvider>();
                 services.AddSingleton<IClock>(clock);
                 services.AddSingleton<IAiMealDraftProvider, InvalidSchemaAiMealDraftProvider>();
-                services.AddSingleton<INutritionDataProvider, FibreRichTestNutritionDataProvider>();
+                if (realUsdaProvider)
+                {
+                    // Only USDA's socket is replaced: the composed provider parses real FoodData
+                    // Central responses, which is where a missing nutrient has to be handled.
+                    services.Configure<HttpClientFactoryOptions>(nameof(INutritionDataProvider), options =>
+                        options.HttpMessageHandlerBuilderActions.Add(handler => handler.PrimaryHandler = new UsdaFoodDataCentralFake()));
+                }
+                else
+                {
+                    services.RemoveAll<INutritionDataProvider>();
+                    services.AddSingleton<INutritionDataProvider, FibreRichTestNutritionDataProvider>();
+                }
                 services.AddSingleton<ILoggerProvider>(logCapture);
                 services.AddTransient<IStartupFilter, TestRemoteAddressStartupFilter>();
                 services.AddSingleton<TodayQueryCounter>();

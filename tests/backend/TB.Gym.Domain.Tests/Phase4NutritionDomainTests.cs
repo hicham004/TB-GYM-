@@ -268,4 +268,43 @@ public sealed class Phase4NutritionDomainTests
         Assert.ThrowsExactly<ArgumentException>(() =>
             template.AddDraft(2, 2_000m, 150m, 220m, 60m, [new MealSlotInput(0, 0, "Day one", [choice])]));
     }
+
+    [TestMethod]
+    public void ProviderFoodKeepsUnreportedNutrientsAsNamedZeros()
+    {
+        var food = FoodItem.Create(Guid.NewGuid(), "Chicken breast, raw", FoodProvenance.UsdaFdc, "2646170", "Foundation");
+
+        var version = food.AddVersion(ChickenInput(
+            fibreGrams: 0m,
+            unreported: [UnreportedNutrient.Ethanol, UnreportedNutrient.Fibre, UnreportedNutrient.Polyols, UnreportedNutrient.Fibre]));
+
+        CollectionAssert.AreEqual(
+            new[] { UnreportedNutrient.Fibre, UnreportedNutrient.Polyols, UnreportedNutrient.Ethanol },
+            version.UnreportedNutrients);
+        Assert.AreEqual(0m, version.FibreGrams);
+        Assert.AreEqual(107.506m, version.ComputedCalories);
+    }
+
+    [TestMethod]
+    public void UnreportedNutrientCannotCarryAValue()
+    {
+        var food = FoodItem.Create(Guid.NewGuid(), "Chicken breast, raw", FoodProvenance.UsdaFdc, "2646170", "Foundation");
+
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            food.AddVersion(ChickenInput(fibreGrams: 1.5m, unreported: [UnreportedNutrient.Fibre])));
+    }
+
+    [TestMethod]
+    public void OnlyAProviderFoodCanLeaveANutrientUnreported()
+    {
+        var food = FoodItem.Create(Guid.NewGuid(), "Coach chicken", FoodProvenance.CoachAuthored);
+
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            food.AddVersion(ChickenInput(fibreGrams: 0m, unreported: [UnreportedNutrient.Fibre])));
+        Assert.IsEmpty(food.AddVersion(ChickenInput(fibreGrams: 0m, unreported: null)).UnreportedNutrients);
+    }
+
+    // FDC 2646170 per 100 g. Atwater: 22.525 * 4 + 0 * 4 + 1.934 * 9 = 107.506 kcal.
+    private static FoodVersionInput ChickenInput(decimal fibreGrams, IReadOnlyList<UnreportedNutrient>? unreported) =>
+        new(100m, FoodQuantityUnit.Gram, PreparationBasis.Raw, 22.525m, 0m, 1.934m, fibreGrams, 0m, 0m, null, AtwaterEnergyPolicy.Key, 10m, "USDA FoodData Central (CC0 1.0)", "Foundation:2026-09-27T00:00:00.0000000+00:00", [], unreported);
 }

@@ -1407,6 +1407,7 @@ export type FoodVersionView = {
   sourceAttribution: string;
   sourceRecordVersion: string;
   declaredAllergens: Array<AllergenCode>;
+  unreportedNutrients: Array<UnreportedNutrient>;
 };
 
 export type ForgotPasswordRequest = {
@@ -2582,6 +2583,8 @@ export type TrainingWeekView = {
   unlockDate: null | string;
   sessions: Array<TrainingSessionView>;
 };
+
+export type UnreportedNutrient = 'Fibre' | 'Polyols' | 'Ethanol';
 
 export type UpcomingTrainingSessionView = {
   sessionId: string;

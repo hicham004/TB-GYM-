@@ -1,0 +1,43 @@
+<div class="picker">
+  <input
+    type="text"
+    role="combobox"
+    autocomplete="off"
+    aria-autocomplete="list"
+    [id]="inputId()"
+    [value]="text()"
+    [attr.aria-expanded]="open()"
+    [attr.aria-controls]="listId()"
+    [attr.aria-activedescendant]="activeId()"
+    placeholder="Type to search your foods"
+    i18n-placeholder
+    (input)="typed($any($event.target).value)"
+    (keydown)="keydown($event)"
+    (click)="showList()"
+    (focus)="$any($event.target).select()"
+    (blur)="close()"
+  />
+  <span class="chevron" aria-hidden="true">▾</span>
+  @if (open()) {
+    <div class="popup">
+      <ul role="listbox" [id]="listId()" aria-label="Foods" i18n-aria-label>
+        @for (food of matches(); track food.versionId; let index = $index) {
+          <li
+            role="option"
+            [id]="optionId(index)"
+            [attr.aria-selected]="food.versionId === value()"
+            [class.active]="index === active()"
+            (mousedown)="$event.preventDefault(); choose(food)"
+            (mouseenter)="active.set(index)"
+          >
+            <span class="name">{{ food.name }}</span>
+            <span class="detail">{{ detail(food) }}</span>
+          </li>
+        }
+      </ul>
+      @if (!matches().length) {
+        <p class="empty" i18n>No food matches "{{ query() }}".</p>
+      }
+    </div>
+  }
+</div>

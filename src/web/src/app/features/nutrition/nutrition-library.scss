@@ -5,18 +5,26 @@
 .wide {
   grid-column: 1 / -1;
 }
+// Side-by-side panels keep their own height. Stretching them to match made a long search result
+// list inflate every box and the Save button on the other side.
 .columns,
 .field-row {
   display: grid;
   gap: 0.75rem;
+  align-items: start;
 }
 .editor {
   display: grid;
   gap: 0.7rem;
+  align-content: start;
 }
 .editor label {
   display: grid;
   gap: 0.3rem;
+}
+.editor [aria-invalid='true'] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
 }
 .inline {
   display: flex;
@@ -24,15 +32,54 @@
   gap: 0.5rem;
   align-items: center;
 }
+.hint {
+  margin: 0;
+  color: var(--muted-text);
+  font-size: 0.9rem;
+}
+.search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: end;
+}
+.search label {
+  flex: 1 1 14rem;
+}
+.results {
+  display: grid;
+  gap: 0.5rem;
+  max-block-size: 28rem;
+  overflow-y: auto;
+  padding-inline-end: 0.25rem;
+}
+.added {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
 .checks {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.3rem;
-  margin-block-start: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin-block-start: 0.75rem;
 }
-.checks label {
+// The global control style gives every input full width and a 42px height, which drew each
+// checkbox as a large empty rectangle.
+.editor .check {
   display: flex;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+.check input {
+  flex: none;
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
 }
 .cards {
   display: grid;
@@ -44,23 +91,54 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
+  align-items: center;
   gap: 0.5rem 1rem;
   padding: 0.7rem;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 0.75rem;
+  background: var(--surface);
 }
 .cards article span,
-.list-row span {
+.list-row > span {
   display: grid;
 }
 .cards em {
-  color: #b45309;
+  color: var(--warning, #b45309);
+}
+// Every food reads in the same three columns, so names, sources and macros line up down the list.
+.food-cards article {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1.6fr);
+  align-items: baseline;
+  gap: 0.2rem 1rem;
+}
+.food-cards .meta {
+  color: var(--muted-text);
+}
+.food-cards .macros {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+.food-cards em {
+  grid-column: 1 / -1;
+  font-size: 0.88rem;
 }
 .line-editor {
   display: grid;
-  grid-template-columns: minmax(8rem, 2fr) minmax(5rem, 0.7fr) minmax(7rem, 1fr) auto;
+  grid-template-columns: minmax(8rem, 2fr) minmax(7rem, 1fr) auto;
   gap: 0.5rem;
-  align-items: center;
+  align-items: end;
+}
+.slot-editor {
+  grid-template-columns: 4.5rem minmax(0, 1fr) minmax(0, 1.5fr) 5.5rem auto;
+}
+.line-editor label span {
+  font-size: 0.85rem;
+}
+.picker-field {
+  display: grid;
+  gap: 0.3rem;
+  min-inline-size: 0;
 }
 .result {
   display: grid;
@@ -71,7 +149,39 @@ pre {
   overflow: auto;
   max-block-size: 18rem;
   padding: 0.7rem;
-  background: var(--surface-soft);
+  background: var(--surface-subtle);
+}
+// Messages appear where the coach is looking, not at the top of a long page.
+.toast {
+  position: fixed;
+  z-index: 50;
+  inset-inline-end: 1.5rem;
+  inset-block-end: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  max-inline-size: min(28rem, calc(100vw - 2rem));
+  filter: drop-shadow(0 6px 18px rgb(0 0 0 / 0.14));
+}
+.toast p {
+  flex: 1 1 auto;
+  margin: 0;
+  padding-inline-end: 2.25rem;
+}
+.toast-close {
+  position: absolute;
+  inset-block-start: 0.35rem;
+  inset-inline-end: 0.35rem;
+  min-block-size: 2rem;
+  min-inline-size: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
 }
 @media (min-width: 58rem) {
   .library-grid {
@@ -85,7 +195,16 @@ pre {
   }
 }
 @media (max-width: 40rem) {
-  .line-editor {
+  .line-editor,
+  .slot-editor,
+  .food-cards article {
     grid-template-columns: 1fr;
+  }
+  .food-cards .macros {
+    text-align: start;
+  }
+  .toast {
+    inset-inline: 1rem;
+    max-inline-size: none;
   }
 }

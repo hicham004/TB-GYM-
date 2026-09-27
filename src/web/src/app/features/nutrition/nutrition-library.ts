@@ -1,7 +1,7 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DecimalPipe } from '@angular/common';
-import { Component, effect, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Component, computed, effect, inject, signal } from '@angular/core';
+import { FormsModule, NgForm } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
@@ -13,14 +13,26 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { FoodPicker } from './food-picker';
 import {
   AiMealDraft,
+  ALLERGEN_LABELS,
   FoodItem,
   MealPlanSummary,
   NutritionSettings,
   ProviderFoodSearch,
+  preparationLabel,
   RecipeSummary,
+  sourceLabel,
+  unitLabel,
+  UnreportedNutrient,
 } from './nutrition.models';
+
+const UNREPORTED_NUTRIENT_NAMES: Record<UnreportedNutrient, string> = {
+  Fibre: $localize`fibre`,
+  Polyols: $localize`sugar alcohols`,
+  Ethanol: $localize`alcohol`,
+};
 
 interface RecipeLineEditor {
   foodVersionId: string;
@@ -39,7 +51,7 @@ interface MealSlotEditor {
 
 @Component({
   selector: 'app-nutrition-library',
-  imports: [DecimalPipe, FormsModule],
+  imports: [DecimalPipe, FoodPicker, FormsModule],
   templateUrl: './nutrition-library.html',
   styleUrl: './nutrition-library.scss',
 })
@@ -63,6 +75,22 @@ export class NutritionLibrary {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
+  /** USDA ids already in the library, so a search result can say it was added. */
+  protected readonly importedFdcIds = computed(
+    () =>
+      new Set(
+        this.foods()
+          .filter((food) => food.provenance === 'UsdaFdc' && food.externalId)
+          .map((food) => food.externalId),
+      ),
+  );
+  /** Only a published recipe may go into a meal plan. */
+  protected readonly hasPublishedRecipe = computed(() =>
+    this.recipes().some((recipe) => recipe.status === 'Published'),
+  );
+  protected readonly unitLabel = unitLabel;
+  protected readonly preparationLabel = preparationLabel;
+  protected readonly sourceLabel = sourceLabel;
 
   protected foodName = '';
   protected foodBasisQuantity = 100;
@@ -91,22 +119,7 @@ export class NutritionLibrary {
   protected aiServings = 1;
   protected aiMappings: AiIngredientMappingRequest[] = [];
 
-  protected readonly allergenCodes: AllergenCode[] = [
-    'GlutenCereals',
-    'Crustaceans',
-    'Eggs',
-    'Fish',
-    'Peanuts',
-    'Soybeans',
-    'Milk',
-    'TreeNuts',
-    'Celery',
-    'Mustard',
-    'Sesame',
-    'SulphurDioxideAndSulphites',
-    'Lupin',
-    'Molluscs',
-  ];
+  protected readonly allergens = ALLERGEN_LABELS;
 
   constructor() {
     this.scope.onReset(() => this.resetTenantState());
@@ -130,7 +143,23 @@ export class NutritionLibrary {
     this.foodAllergens.set(next);
   }
 
-  protected async createFood(): Promise<void> {
+  /** Clears the message the coach has read. */
+  protected dismissMessage(): void {
+    this.error.set(null);
+    this.notice.set(null);
+  }
+
+  /** The day a coach reads counts from 1; the plan stores it counted from 0. */
+  protected setSlotDay(slot: MealSlotEditor, day: number | null): void {
+    const wanted = Math.trunc(Number(day)) || 1;
+    slot.dayOffset = Math.min(Math.max(wanted, 1), Math.max(this.planDayCount, 1)) - 1;
+  }
+
+  protected async createFood(form: NgForm): Promise<void> {
+    if (!this.foodName.trim()) {
+      return this.refuse(form, $localize`Give the food a name before saving it.`);
+    }
+
     return this.scope.run('createFood', async (owner) => {
       await owner.wait(
         this.run(
@@ -171,6 +200,12 @@ export class NutritionLibrary {
   }
 
   protected async searchUsda(): Promise<void> {
+    if (!this.usdaQuery.trim()) {
+      this.notice.set(null);
+      this.error.set($localize`Type a food to search for, like "chicken breast raw".`);
+      return;
+    }
+
     return this.scope.run('searchUsda', async (owner) => {
       this.error.set(null);
       try {
@@ -186,6 +221,13 @@ export class NutritionLibrary {
     });
   }
 
+  /** Names the nutrients USDA left out of a food, each saved as 0, so the coach can check them. */
+  protected unreportedLabel(food: FoodItem): string {
+    return food.unreportedNutrients
+      .map((nutrient) => UNREPORTED_NUTRIENT_NAMES[nutrient])
+      .join(', ');
+  }
+
   protected async importUsda(fdcId: string): Promise<void> {
     return this.scope.run('importUsda', async (owner) => {
       await owner.wait(
@@ -194,7 +236,7 @@ export class NutritionLibrary {
             await owner.wait(firstValueFrom(this.api.importUsdaFood(fdcId)));
             await owner.wait(this.reloadFoods());
           },
-          $localize`USDA FoodData Central record cached locally with attribution.`,
+          $localize`Food imported from USDA.`,
         ),
       );
     });
@@ -218,7 +260,12 @@ export class NutritionLibrary {
     this.recipeLines.update((items) => items.filter((_, itemIndex) => itemIndex !== index));
   }
 
-  protected foodChanged(line: RecipeLineEditor): void {
+  protected chooseLineFood(line: RecipeLineEditor, foodVersionId: string): void {
+    line.foodVersionId = foodVersionId;
+    this.foodChanged(line);
+  }
+
+  private foodChanged(line: RecipeLineEditor): void {
     const food = this.foods().find((item) => item.versionId === line.foodVersionId);
     if (food) {
       line.quantity = food.basisQuantity;
@@ -227,7 +274,20 @@ export class NutritionLibrary {
     }
   }
 
-  protected async createRecipe(): Promise<void> {
+  protected async createRecipe(form: NgForm): Promise<void> {
+    const missingName = !this.recipeName.trim();
+    const missingInstructions = !this.recipeInstructions.trim();
+    if (missingName || missingInstructions) {
+      return this.refuse(
+        form,
+        missingName && missingInstructions
+          ? $localize`Give the recipe a name and a few words on how to make it.`
+          : missingName
+            ? $localize`Give the recipe a name.`
+            : $localize`Add a few words on how to make it.`,
+      );
+    }
+
     return this.scope.run('createRecipe', async (owner) => {
       await owner.wait(
         this.run(
@@ -291,7 +351,11 @@ export class NutritionLibrary {
     this.mealSlots.update((items) => items.filter((_, itemIndex) => itemIndex !== index));
   }
 
-  protected async createMealPlan(): Promise<void> {
+  protected async createMealPlan(form: NgForm): Promise<void> {
+    if (!this.planName.trim()) {
+      return this.refuse(form, $localize`Give the meal plan a name.`);
+    }
+
     return this.scope.run('createMealPlan', async (owner) => {
       await owner.wait(
         this.run(
@@ -523,6 +587,13 @@ export class NutritionLibrary {
     return this.scope.run('reloadPlans', async (owner) => {
       this.mealPlans.set((await owner.wait(firstValueFrom(this.api.listMealPlans()))).items);
     });
+  }
+
+  /** Stops a save the server would refuse, and highlights the empty boxes that caused it. */
+  private refuse(form: NgForm, message: string): void {
+    form.control.markAllAsTouched();
+    this.notice.set(null);
+    this.error.set(message);
   }
 
   private async run(action: () => Promise<void>, success: string): Promise<void> {

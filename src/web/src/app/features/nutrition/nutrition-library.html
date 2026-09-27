@@ -1,15 +1,28 @@
 <section class="page-heading">
   <div>
-    <p class="eyebrow" i18n>Phase 4</p>
     <h1 i18n>Nutrition library</h1>
-    <p i18n>Canonical food versions feed immutable recipes and reusable meal-plan versions.</p>
+    <p i18n>
+      Build foods, turn them into recipes, and combine recipes into meal plans you can reuse.
+    </p>
   </div>
 </section>
-@if (error()) {
-  <p class="form-error" role="alert">{{ error() }}</p>
-}
-@if (notice()) {
-  <p class="form-success" role="status">{{ notice() }}</p>
+@if (error() || notice()) {
+  <div class="toast">
+    @if (error()) {
+      <p class="form-error" role="alert">{{ error() }}</p>
+    } @else {
+      <p class="form-success" role="status">{{ notice() }}</p>
+    }
+    <button
+      type="button"
+      class="toast-close"
+      (click)="dismissMessage()"
+      aria-label="Dismiss message"
+      i18n-aria-label
+    >
+      ×
+    </button>
+  </div>
 }
 @if (loading()) {
   <p i18n>Loading nutrition library...</p>
@@ -18,18 +31,21 @@
     <section class="surface-section wide">
       <div class="section-heading">
         <div>
-          <h2 i18n>Foods and provenance</h2>
-          <p class="muted" i18n>
-            Coach-authored foods are first-class. USDA FoodData Central is the only Phase 4 external
-            food provider.
-          </p>
+          <h2 i18n>Foods</h2>
+          <p class="muted" i18n>Add your own foods, or import them from the USDA food database.</p>
         </div>
       </div>
       <div class="columns">
-        <form class="editor" (ngSubmit)="createFood()">
+        <form class="editor" #foodForm="ngForm" (ngSubmit)="createFood(foodForm)">
           <h3 i18n>Coach-authored food</h3>
           <label
-            ><span i18n>Name</span><input [(ngModel)]="foodName" name="foodName" required
+            ><span i18n>Name</span
+            ><input
+              [(ngModel)]="foodName"
+              #foodNameControl="ngModel"
+              name="foodName"
+              required
+              [attr.aria-invalid]="foodNameControl.invalid && foodNameControl.touched"
           /></label>
           <div class="field-row">
             <label
@@ -109,13 +125,13 @@
           <details>
             <summary i18n>Declared allergens</summary>
             <div class="checks">
-              @for (code of allergenCodes; track code) {
-                <label
+              @for (allergen of allergens; track allergen.code) {
+                <label class="check"
                   ><input
                     type="checkbox"
-                    [checked]="foodAllergens().has(code)"
-                    (change)="toggleFoodAllergen(code, $any($event.target).checked)"
-                  />{{ code }}</label
+                    [checked]="foodAllergens().has(allergen.code)"
+                    (change)="toggleFoodAllergen(allergen.code, $any($event.target).checked)"
+                  /><span>{{ allergen.label }}</span></label
                 >
               }
             </div>
@@ -124,61 +140,103 @@
         </form>
         <div class="editor">
           <h3 i18n>USDA FoodData Central</h3>
-          <div class="inline">
-            <input
-              [(ngModel)]="usdaQuery"
-              [ngModelOptions]="{ standalone: true }"
-              placeholder="Search FDC"
-              i18n-placeholder
-            /><button class="secondary-button" type="button" (click)="searchUsda()" i18n>
-              Search
-            </button>
-          </div>
+          <form class="search" role="search" (ngSubmit)="searchUsda()">
+            <label
+              ><span i18n>Search USDA foods</span
+              ><input
+                type="search"
+                [(ngModel)]="usdaQuery"
+                name="usdaQuery"
+                placeholder="e.g. chicken breast raw"
+                i18n-placeholder
+            /></label>
+            <button class="secondary-button" type="submit" [disabled]="busy()" i18n>Search</button>
+          </form>
           @if (usda(); as result) {
-            @for (item of result.items; track item.externalId) {
-              <div class="list-row">
-                <span
-                  ><strong>{{ item.name }}</strong
-                  ><small>{{ item.dataType }} · FDC {{ item.externalId }}</small></span
-                ><button type="button" (click)="importUsda(item.externalId)" i18n>
-                  Import and cache
-                </button>
+            @if (result.items.length) {
+              <div class="results">
+                @for (item of result.items; track item.externalId) {
+                  <div class="list-row">
+                    <span
+                      ><strong>{{ item.name }}</strong
+                      ><small>{{ item.dataType }} · FDC {{ item.externalId }}</small></span
+                    >
+                    @if (importedFdcIds().has(item.externalId)) {
+                      <span class="added" i18n>Added ✓</span>
+                    } @else {
+                      <button
+                        type="button"
+                        class="secondary-button"
+                        [disabled]="busy()"
+                        (click)="importUsda(item.externalId)"
+                        i18n
+                      >
+                        Import
+                      </button>
+                    }
+                  </div>
+                }
               </div>
+            } @else if (!result.message) {
+              <p class="hint" i18n>No USDA foods match that search. Try fewer or simpler words.</p>
             }
           }
         </div>
       </div>
-      <div class="cards">
-        @for (food of foods(); track food.id) {
-          <article>
-            <strong>{{ food.name }}</strong
-            ><span
-              >{{ food.provenance }} · {{ food.preparationBasis }} · {{ food.basisQuantity }}
-              {{ food.basisUnit }}</span
-            ><span
-              >{{ food.calories | number: '1.0-1' }} kcal · P {{ food.protein | number: '1.0-1' }} ·
-              C {{ food.carbohydrate | number: '1.0-1' }} · F {{ food.fat | number: '1.0-1' }}</span
-            >
-            @if (food.discrepancy) {
-              <em i18n>Provider/computed calorie discrepancy</em>
-            }
-          </article>
-        }
-      </div>
+      @if (foods().length) {
+        <div class="cards food-cards">
+          @for (food of foods(); track food.id) {
+            <article>
+              <strong>{{ food.name }}</strong>
+              <span class="meta" i18n
+                >{{ sourceLabel(food.provenance) }} ·
+                {{ preparationLabel(food.preparationBasis) }} · per {{ food.basisQuantity }}
+                {{ unitLabel(food.basisUnit) }}</span
+              >
+              <span class="macros"
+                >{{ food.calories | number: '1.0-1' }} kcal · P
+                {{ food.protein | number: '1.0-1' }} · C {{ food.carbohydrate | number: '1.0-1' }} ·
+                F {{ food.fat | number: '1.0-1' }}</span
+              >
+              @if (food.discrepancy) {
+                <em i18n>Provider/computed calorie discrepancy</em>
+              }
+              @if (food.unreportedNutrients.length > 0) {
+                <em data-unreported i18n
+                  >Not reported by USDA, saved as 0: {{ unreportedLabel(food) }}</em
+                >
+              }
+            </article>
+          }
+        </div>
+      } @else {
+        <p class="hint" i18n>
+          No foods yet. Add your own on the left, or search USDA on the right.
+        </p>
+      }
     </section>
 
     <section class="surface-section">
       <h2 i18n>Recipe versions</h2>
-      <form class="editor" (ngSubmit)="createRecipe()">
+      <form class="editor" #recipeForm="ngForm" (ngSubmit)="createRecipe(recipeForm)">
         <label
           ><span i18n>Recipe name</span
-          ><input [(ngModel)]="recipeName" name="recipeName" required /></label
+          ><input
+            [(ngModel)]="recipeName"
+            #recipeNameControl="ngModel"
+            name="recipeName"
+            required
+            [attr.aria-invalid]="recipeNameControl.invalid && recipeNameControl.touched" /></label
         ><label
           ><span i18n>Instructions</span
           ><textarea
             [(ngModel)]="recipeInstructions"
+            #recipeInstructionsControl="ngModel"
             name="instructions"
             required
+            [attr.aria-invalid]="
+              recipeInstructionsControl.invalid && recipeInstructionsControl.touched
+            "
           ></textarea></label
         ><label
           ><span i18n>Recipe yield (servings)</span
@@ -191,31 +249,47 @@
         /></label>
         @for (line of recipeLines(); track $index) {
           <div class="line-editor">
-            <select
-              [(ngModel)]="line.foodVersionId"
-              [name]="'food' + $index"
-              (ngModelChange)="foodChanged(line)"
-            >
-              @for (food of foods(); track food.versionId) {
-                <option [value]="food.versionId">{{ food.name }}</option>
-              }</select
-            ><input
-              type="number"
-              min="0.001"
-              step="0.001"
-              [(ngModel)]="line.quantity"
-              [name]="'qty' + $index"
-            /><span>{{ line.unit }} · {{ line.basis }}</span
-            ><button type="button" (click)="removeRecipeLine($index)" i18n>Remove</button>
+            <div class="picker-field">
+              <label [for]="'ingredient-food-' + $index"><span i18n>Food</span></label>
+              <app-food-picker
+                [inputId]="'ingredient-food-' + $index"
+                [foods]="foods()"
+                [value]="line.foodVersionId"
+                (valueChange)="chooseLineFood(line, $event)"
+              />
+            </div>
+            <label
+              ><span i18n
+                >Amount ({{ unitLabel(line.unit) }}, {{ preparationLabel(line.basis) }})</span
+              ><input
+                type="number"
+                min="0.001"
+                step="0.001"
+                [(ngModel)]="line.quantity"
+                [name]="'qty' + $index" /></label
+            ><button type="button" class="secondary-button" (click)="removeRecipeLine($index)" i18n>
+              Remove
+            </button>
           </div>
         }
         <div class="inline">
-          <button type="button" class="secondary-button" (click)="addRecipeLine()" i18n>
+          <button
+            type="button"
+            class="secondary-button"
+            [disabled]="!foods().length"
+            (click)="addRecipeLine()"
+            i18n
+          >
             Add ingredient</button
           ><button class="primary-button" [disabled]="busy() || !recipeLines().length" i18n>
             Create recipe draft
           </button>
         </div>
+        @if (!foods().length) {
+          <p class="hint" i18n>Add or import a food above first, then use it here.</p>
+        } @else if (!recipeLines().length) {
+          <p class="hint" i18n>Add at least one ingredient to create a recipe.</p>
+        }
       </form>
       <div class="cards">
         @for (recipe of recipes(); track recipe.versionId) {
@@ -225,7 +299,12 @@
               >{{ recipe.calories | number: '1.0-0' }} kcal · {{ recipe.servings }} servings</span
             ><span>{{ recipe.status }}</span>
             @if (recipe.status === 'Draft') {
-              <button type="button" (click)="publishRecipe(recipe.versionId)" i18n>
+              <button
+                type="button"
+                class="secondary-button"
+                (click)="publishRecipe(recipe.versionId)"
+                i18n
+              >
                 Publish and lock
               </button>
             }
@@ -236,9 +315,15 @@
 
     <section class="surface-section">
       <h2 i18n>Meal-plan versions</h2>
-      <form class="editor" (ngSubmit)="createMealPlan()">
+      <form class="editor" #planForm="ngForm" (ngSubmit)="createMealPlan(planForm)">
         <label
-          ><span i18n>Plan name</span><input [(ngModel)]="planName" name="planName" required
+          ><span i18n>Plan name</span
+          ><input
+            [(ngModel)]="planName"
+            #planNameControl="ngModel"
+            name="planName"
+            required
+            [attr.aria-invalid]="planNameControl.invalid && planNameControl.touched"
         /></label>
         <div class="field-row">
           <label
@@ -267,38 +352,61 @@
           /></label>
         </div>
         @for (slot of mealSlots(); track $index) {
-          <div class="line-editor">
-            <input
-              type="number"
-              min="0"
-              [max]="planDayCount - 1"
-              [(ngModel)]="slot.dayOffset"
-              [name]="'day' + $index"
-            /><input [(ngModel)]="slot.name" [name]="'slotName' + $index" /><select
-              [(ngModel)]="slot.recipeVersionId"
-              [name]="'recipe' + $index"
-            >
-              @for (recipe of recipes(); track recipe.versionId) {
-                @if (recipe.status === 'Published') {
-                  <option [value]="recipe.versionId">{{ recipe.name }}</option>
+          <div class="line-editor slot-editor">
+            <label
+              ><span i18n>Day</span
+              ><input
+                type="number"
+                min="1"
+                [max]="planDayCount"
+                [ngModel]="slot.dayOffset + 1"
+                (ngModelChange)="setSlotDay(slot, $event)"
+                [name]="'day' + $index" /></label
+            ><label
+              ><span i18n>Meal name</span
+              ><input [(ngModel)]="slot.name" [name]="'slotName' + $index" /></label
+            ><label
+              ><span i18n>Recipe</span
+              ><select [(ngModel)]="slot.recipeVersionId" [name]="'recipe' + $index">
+                @for (recipe of recipes(); track recipe.versionId) {
+                  @if (recipe.status === 'Published') {
+                    <option [value]="recipe.versionId">{{ recipe.name }}</option>
+                  }
                 }
-              }</select
-            ><input
-              type="number"
-              min="0.01"
-              step="0.01"
-              [(ngModel)]="slot.servings"
-              [name]="'servings' + $index"
-            /><button type="button" (click)="removeMealSlot($index)" i18n>Remove</button>
+              </select></label
+            ><label
+              ><span i18n>Servings</span
+              ><input
+                type="number"
+                min="0.01"
+                step="0.01"
+                [(ngModel)]="slot.servings"
+                [name]="'servings' + $index" /></label
+            ><button type="button" class="secondary-button" (click)="removeMealSlot($index)" i18n>
+              Remove
+            </button>
           </div>
         }
         <div class="inline">
-          <button type="button" class="secondary-button" (click)="addMealSlot()" i18n>
+          <button
+            type="button"
+            class="secondary-button"
+            [disabled]="!hasPublishedRecipe()"
+            (click)="addMealSlot()"
+            i18n
+          >
             Add meal slot</button
           ><button class="primary-button" [disabled]="busy() || !mealSlots().length" i18n>
             Create plan draft
           </button>
         </div>
+        @if (!hasPublishedRecipe()) {
+          <p class="hint" i18n>
+            Publish a recipe first. Only published recipes can go into a meal plan.
+          </p>
+        } @else if (!mealSlots().length) {
+          <p class="hint" i18n>Add at least one meal to create a plan.</p>
+        }
       </form>
       <div class="cards">
         @for (plan of mealPlans(); track plan.versionId) {
@@ -309,7 +417,12 @@
               {{ plan.targetCalories | number: '1.0-0' }} kcal target</span
             ><span>{{ plan.status }}</span>
             @if (plan.status === 'Draft') {
-              <button type="button" (click)="publishPlan(plan.versionId)" i18n>
+              <button
+                type="button"
+                class="secondary-button"
+                (click)="publishPlan(plan.versionId)"
+                i18n
+              >
                 Publish and lock
               </button>
             }

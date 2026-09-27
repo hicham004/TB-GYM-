@@ -41,7 +41,8 @@ public sealed record ProviderFoodRecord(
     decimal EthanolGrams,
     IReadOnlyList<AllergenCode> DeclaredAllergens,
     string Provider,
-    DateTimeOffset RetrievedAtUtc);
+    DateTimeOffset RetrievedAtUtc,
+    IReadOnlyList<UnreportedNutrient>? UnreportedNutrients = null);
 
 public interface IAiMealDraftProvider
 {

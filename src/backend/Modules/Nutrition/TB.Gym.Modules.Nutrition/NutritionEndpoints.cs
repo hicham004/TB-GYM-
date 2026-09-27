@@ -166,7 +166,11 @@ public static class NutritionEndpoints
         NutritionCommandStatus.NotFound => Results.NotFound(),
         NutritionCommandStatus.Forbidden => Results.Forbid(),
         NutritionCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),
-        NutritionCommandStatus.ProviderUnavailable => Results.Problem(result.Message, statusCode: StatusCodes.Status503ServiceUnavailable, title: result.Code ?? "nutrition_provider_unavailable"),
+        NutritionCommandStatus.ProviderUnavailable => Results.Problem(
+            result.Message,
+            statusCode: StatusCodes.Status503ServiceUnavailable,
+            title: result.Code ?? "nutrition_provider_unavailable",
+            extensions: new Dictionary<string, object?> { ["code"] = result.Code ?? "nutrition_provider_unavailable", ["message"] = result.Message }),
         _ => Results.Conflict(new { code = result.Code ?? "nutrition_conflict", message = result.Message ?? "Nutrition state changed or conflicts with another request." }),
     };
 

@@ -1215,6 +1215,7 @@ export type {
   UnblockClientRelationshipErrors,
   UnblockClientRelationshipResponse,
   UnblockClientRelationshipResponses,
+  UnreportedNutrient,
   UpcomingTrainingSessionView,
   UpdateClientCoachNotesData,
   UpdateClientCoachNotesError,

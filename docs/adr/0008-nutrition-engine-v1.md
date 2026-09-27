@@ -28,8 +28,12 @@ an actual. PostgreSQL triggers backstop publication, append-only, and completed-
 
 USDA FoodData Central is the only Phase 4 external source because its CC0 1.0 data can be
 retained in immutable history. Canonical imports are cached locally and attributed with FDC id,
-data type, retrieval/source version, and provider calories. A missing nutrient is rejected and
-is not fabricated as zero. The API key is server configuration only.
+data type, retrieval/source version, and provider calories. A record missing protein, fat or
+carbohydrate is rejected. Amended 2026-09-27: USDA almost never reports polyols and often omits
+fibre and ethanol, which made nearly every import fail, so a missing one of those three is stored
+as zero and the version records it in `UnreportedNutrients`; the screen says "not reported by
+USDA" and a database check keeps each named nutrient at zero. The API key is server configuration
+only.
 
 Coach-authored and label-transcribed foods are first-class provenance types. Labels require a
 media reference. No invented Lebanese-food seed values are included. Edamam, Nutritionix, and
@@ -121,8 +125,8 @@ in SQL before loading its bounded slot/log graph.
 ## Consequences and deferred work
 
 The nutrition history is explainable and compatible with live-database additive migration.
-Provider records that omit required nutrients are visibly rejected rather than imported with
-false precision. Estimates are not clinical facts.
+Provider records that omit protein, fat or carbohydrate are visibly rejected rather than imported
+with false precision; omitted fibre, polyols or ethanol are imported as named zeros. Estimates are not clinical facts.
 
 Deferred: qualified clinical/legal approval; Lebanese/FAO/INFOODS seed licensing and curation;
 additional external food providers; AI provider selection and SDK adapter; diet-completion

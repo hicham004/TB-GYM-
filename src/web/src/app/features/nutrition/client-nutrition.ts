@@ -13,7 +13,12 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { ClientNutritionPlan, MealPlanSummary, NutritionCalculation } from './nutrition.models';
+import {
+  ALLERGEN_LABELS,
+  ClientNutritionPlan,
+  MealPlanSummary,
+  NutritionCalculation,
+} from './nutrition.models';
 
 @Component({
   selector: 'app-client-nutrition',
@@ -56,22 +61,7 @@ export class ClientNutrition {
   protected enrollmentId = '';
   protected startDate = '';
 
-  protected readonly allergenCodes: AllergenCode[] = [
-    'GlutenCereals',
-    'Crustaceans',
-    'Eggs',
-    'Fish',
-    'Peanuts',
-    'Soybeans',
-    'Milk',
-    'TreeNuts',
-    'Celery',
-    'Mustard',
-    'Sesame',
-    'SulphurDioxideAndSulphites',
-    'Lupin',
-    'Molluscs',
-  ];
+  protected readonly allergens = ALLERGEN_LABELS;
 
   constructor() {
     this.scope.onReset(() => this.resetTenantState());
