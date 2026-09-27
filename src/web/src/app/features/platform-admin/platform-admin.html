@@ -78,7 +78,13 @@
 
   @if (detail(); as detail) {
     <section class="card" aria-labelledby="admin-detail-title" data-workspace-detail>
-      <h2 id="admin-detail-title" class="card-title tb-text-body-strong" dir="auto">
+      <h2
+        #detailTitle
+        id="admin-detail-title"
+        class="card-title tb-text-body-strong"
+        tabindex="-1"
+        dir="auto"
+      >
         {{ detail.summary.name }}
       </h2>
       <div class="card-body">

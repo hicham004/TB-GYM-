@@ -1,4 +1,15 @@
-import { Component, computed, inject, LOCALE_ID, OnInit, signal } from '@angular/core';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  Injector,
+  LOCALE_ID,
+  OnInit,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom, Observable } from 'rxjs';
 import { apiErrorMessage } from '../../core/api/api-error';
@@ -44,6 +55,8 @@ export class PlatformAdmin implements OnInit {
   private readonly csrf = inject(CsrfService);
   private readonly locale = inject(LOCALE_ID);
   private readonly formBuilder = inject(FormBuilder);
+  private readonly injector = inject(Injector);
+  private readonly detailTitle = viewChild<ElementRef<HTMLElement>>('detailTitle');
 
   protected readonly workspaces = signal<AdminWorkspace[]>([]);
   protected readonly detail = signal<AdminWorkspaceDetail | null>(null);
@@ -122,6 +135,18 @@ export class PlatformAdmin implements OnInit {
     this.error.set(null);
     this.notice.set(null);
     await this.loadDetail(workspace.tenantId);
+    if (this.detail()?.summary.tenantId === workspace.tenantId) {
+      afterNextRender(() => this.revealDetail(), { injector: this.injector });
+    }
+  }
+
+  /** The detail renders below the whole list, so bring it into view and move focus to its title. */
+  private revealDetail(): void {
+    const title = this.detailTitle()?.nativeElement;
+    if (!title) return;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    title.scrollIntoView?.({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    title.focus({ preventScroll: true });
   }
 
   protected startAction(kind: InvoiceAction['kind'], invoice: BillingInvoice): void {

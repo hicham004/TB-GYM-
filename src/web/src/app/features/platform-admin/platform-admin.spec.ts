@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
 import { button, fill, press, settle, text } from '../../../testing/dom';
 import type {
@@ -151,6 +151,22 @@ describe('PlatformAdmin', () => {
     expect(row).toContain('Overdue');
     expect(row).toContain('$15.00');
     expect(host.querySelector('[data-current-plan]')?.textContent).toContain('Version 1');
+  });
+
+  it('brings the opened workspace into view and moves focus to it', async () => {
+    const scrollIntoView = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    onTestFinished(() => {
+      HTMLElement.prototype.scrollIntoView = original;
+    });
+    const { fixture, host } = await render();
+    await openWorkspace(host, fixture);
+
+    const title = host.querySelector<HTMLElement>('#admin-detail-title');
+    expect(title?.textContent).toContain('Cedar Gym');
+    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'start' }));
+    expect(document.activeElement).toBe(title);
   });
 
   it('records a payment for the exact total with its Whish reference', async () => {
