@@ -26,6 +26,10 @@
 - Before changing an area, read its ADR(s) in `docs/adr/`.
 - Current work follows the commercial plan in `docs/ROADMAP.md`; do not start a roadmap phase
   or feature outside it without the user's approval.
+- Any screen, style or UX work follows `docs/UI-REDESIGN-PLAN.md`, the only UI/UX plan. It overrides
+  older frontend docs and the retired Figma file. Screens may be restructured freely; backend rules
+  here still apply to any data they touch. "Do the next step" means the first unfinished row of its
+  §0 status table; stop at 🚦 gates, and update that row when the step is built.
 - `base44/` is a preserved legacy reference, not the new architecture. Do not edit, delete,
   or copy its generic CRUD/security model unless the user explicitly requests legacy work.
 - The backend/database is the source of truth. Never implement an invariant only in Angular;

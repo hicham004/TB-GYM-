@@ -1025,21 +1025,12 @@ Dependencies: validated core product.
 Exit: production SLOs, recovery objectives, compliance obligations, support process, and
 unit economics are known and exercised.
 
-## Frontend redesign track (cross-cutting; opens no domain phase)
+## Frontend redesign track
 
-- Foundation slice 1 (2026-09-22): Figma tokens as CSS custom properties, opt-in primitives in
-  `src/web/src/app/ui`, a development-only UI lab, and Playwright/axe browser checks. Additive — no
-  route is migrated yet. See `docs/FRONTEND-DESIGN-SYSTEM.md`.
-- Slice 2 (2026-09-22): the coach shell, preserving workspace switching, account actions and
-  role-aware routes, and the Exercises library as the first migrated route. See sections 9-10 of
-  that document. Slices 1 and 2 changed no API, schema or domain rule.
-- Next: only the Client Today and coach client workspace redesign (commercial Step 3); other
-  slices are parked. Screen migrations stay gated by the feature conditions in that document.
-- Public homepage (2026-09-24, explicitly requested): a visitor entry at `/` with coach registration
-  and sign-in paths; the signed-in dashboard and client invitation rules are unchanged.
-- Signed-out screens (2026-09-25, explicitly requested): sign-in, registration, password recovery,
-  email confirmation and invitation acceptance restyled to match the homepage (FRONTEND-DESIGN-SYSTEM
-  §12); presentation only, the auth flow is unchanged. Social sign-in is not built.
+Replaced on 2026-09-28 by [UI-REDESIGN-PLAN.md](UI-REDESIGN-PLAN.md), the only UI/UX plan (phases
+R0-R6). History up to then: the design-system foundation and coach shell (2026-09-22), the public
+homepage (2026-09-24), the signed-out screens and the Step 3 screens (2026-09-25). None of it
+changed an API, schema or domain rule. The Figma file is retired as a source of truth.
 
 ## Commercial launch track (agreed 2026-09-22)
 
@@ -1069,13 +1060,17 @@ Work follows this order; anything outside it needs the user's approval first.
   on the upcoming read (TRN-018). Part B2, built 2026-09-25: an ended plan says "Your coaching plan
   with {coach} ended on {date}." with an "Ask to renew" button that tells the coach in-app, naming
   the client and linking to their page, at most once per client in any 7 days (a PostgreSQL
-  exclusion constraint). See ADR 0029. Other redesign slices are parked.
+  exclusion constraint). See ADR 0029. Further screens follow UI-REDESIGN-PLAN.md.
 - Step 4, lean go-live with the founding coaches: prepared 2026-09-25, not deployed. One server
   (`compose.production.yaml`): a Caddy HTTPS edge, a one-shot migrate step, nightly encrypted
   off-server backups with a restore script, Production refusing development settings, an email
   Reply-To and a `send-test-email` command, and the platform-admin grant pinned to the CLI. See
   ADR 0030, `GO-LIVE.md` (the owner's runbook) and `LAUNCH-CHECKLIST.md` Part 1 (the gate). Proven
   on a local copy of the production stack; buying, sign-ups and the deploy are the owner's steps.
+- Step 4b, UI/UX redesign before showing the founding coaches (adopted 2026-09-28): phases R0-R3 of
+  [UI-REDESIGN-PLAN.md](UI-REDESIGN-PLAN.md) (demo workspace, brand v2 and component kit, the approved
+  hero screens, the client app, the coach core). Founding coaches see the product after R3; R4-R6
+  follow during the founding period. The Step 4 infrastructure stays ready and unchanged.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
 

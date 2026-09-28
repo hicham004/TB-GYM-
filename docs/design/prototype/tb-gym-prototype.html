@@ -1,0 +1,1005 @@
+<title>TB Gym Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=Instrument+Serif:ital@1&display=swap">
+<style>
+:root {
+  --page-bg: #ebeae2; --page-text: #1b2521; --page-muted: #56615b; --page-line: #d3d3c8;
+  --page-panel: #f7f6f0; --page-on: #1b2521; --page-on-text: #f4f6f0;
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --cond: 'IBM Plex Sans Condensed', 'IBM Plex Sans', 'Arial Narrow', system-ui, sans-serif;
+  --serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page-bg: #0d1110; --page-text: #e4eae6; --page-muted: #95a19b; --page-line: #26302c;
+    --page-panel: #151b19; --page-on: #e4eae6; --page-on-text: #0d1110;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page-bg: #0d1110; --page-text: #e4eae6; --page-muted: #95a19b; --page-line: #26302c;
+  --page-panel: #151b19; --page-on: #e4eae6; --page-on-text: #0d1110;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--page-bg); color: var(--page-text); font-family: var(--sans); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+.page { max-width: 1320px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: flex; flex-direction: column; gap: 16px; }
+
+/* ---------- Page chrome ---------- */
+.chrome { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.chrome h1 { font-size: 24px; font-weight: 600; letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+.chrome h1 em { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 1.15em; }
+.chrome p { margin: 4px 0 0; color: var(--page-muted); max-width: 62ch; }
+.steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--page-muted); }
+.steps li { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--page-line); border-radius: 999px; background: var(--page-panel); }
+.steps b { font-family: var(--cond); color: var(--page-text); }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; padding: 10px 12px; border: 1px solid var(--page-line); border-radius: 16px; background: var(--page-panel); }
+.group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.label { font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--page-muted); font-weight: 600; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--page-bg); }
+.seg button { border: 0; background: transparent; padding: 7px 13px; border-radius: 8px; font-weight: 600; font-size: 13.5px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--page-on); color: var(--page-on-text); }
+.swatch { width: 32px; height: 32px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background: linear-gradient(135deg, var(--b) 0 50%, var(--a) 50% 100%); box-shadow: 0 0 0 1px var(--page-line); position: relative; }
+.swatch[aria-pressed="true"], .swatch[data-on="true"] { box-shadow: 0 0 0 2px var(--page-panel), 0 0 0 4px var(--page-text); }
+.swatch.custom { background: conic-gradient(#ff8a4c, #f3d34a, #9be15d, #3ec5c9, #6f7cf6, #d46be3, #ff8a4c); overflow: hidden; }
+.swatch.custom input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; border: 0; padding: 0; }
+.brandname { font-weight: 600; font-size: 13.5px; min-width: 9.5em; }
+.page button:focus-visible, .page input:focus-visible { outline: 2px solid var(--page-text); outline-offset: 2px; }
+.stage { display: flex; justify-content: center; }
+.foot { color: var(--page-muted); font-size: 13px; text-align: center; margin: 0; }
+
+/* ---------- Shared device tokens ---------- */
+.device {
+  --brand: #153d33; --accent: #d9ed94; --on-accent: #11201b;
+  --bg: #fbfaf5; --surface: #ffffff; --surface-2: #f3f1e7; --text: #182d27; --muted: #5a6a61; --line: #e3e5da;
+  --accent-ink: var(--brand);
+  --night: color-mix(in srgb, var(--brand) 42%, #050807);
+  --accent-soft: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text); font-variant-numeric: tabular-nums;
+}
+.device[data-mode="dark"] { --bg: #0f1513; --surface: #161e1b; --surface-2: #1d2724; --text: #e8eee9; --muted: #9aa8a1; --line: #28322e; --accent-ink: var(--accent); }
+.device, .device * { transition: background-color .45s ease, color .45s ease, border-color .45s ease, fill .45s ease, stroke .45s ease; }
+.device button { cursor: pointer; }
+.device button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.serif { font-family: var(--serif); font-style: italic; font-weight: 400; }
+.num { font-family: var(--cond); font-weight: 700; letter-spacing: -.01em; }
+.eyebrow { font-size: 11px; letter-spacing: .13em; text-transform: uppercase; font-weight: 600; color: var(--muted); }
+.av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 12.5px; flex: none; }
+.a1 { background: #e2eecb; color: #23402f; } .a2 { background: #f6dccb; color: #6b3a1d; } .a3 { background: #d9e7e2; color: #1f4a40; }
+.a4 { background: #ece0f0; color: #4d2f5a; } .a5 { background: #dfe6f6; color: #2c4478; } .a6 { background: #f3eac2; color: #5c4a10; }
+.pr { display: inline-block; background: var(--accent); color: var(--on-accent); font-family: var(--cond); font-weight: 700; font-size: 10.5px; letter-spacing: .05em; padding: 2px 6px; border-radius: 6px; vertical-align: 2px; }
+.toast { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 60; background: #0f1714; color: #eef3ef; font-size: 13px; font-weight: 500; padding: 10px 14px; border-radius: 12px; box-shadow: 0 12px 30px -12px rgba(0,0,0,.6); max-width: 86%; text-align: center; pointer-events: none; }
+
+/* ---------- Phone ---------- */
+.phone { width: 390px; height: 820px; flex: none; border-radius: 50px; padding: 10px; background: #0a0e0d; box-shadow: 0 40px 90px -40px rgba(8,20,14,.55), inset 0 0 0 1px rgba(255,255,255,.07); }
+.screen { position: relative; width: 100%; height: 100%; border-radius: 40px; overflow: hidden; background: var(--bg); isolation: isolate; }
+.statusbar { position: absolute; top: 0; left: 0; right: 0; height: 46px; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 4px 28px 0; font-weight: 600; font-size: 14.5px; color: var(--text); pointer-events: none; }
+.statusbar.on-dark { color: #fff; }
+.statusbar .icons { display: flex; gap: 6px; align-items: center; }
+.today { position: absolute; inset: 0; overflow-y: auto; padding: 54px 18px 108px; scrollbar-width: none; display: flex; flex-direction: column; gap: 16px; }
+.today::-webkit-scrollbar { display: none; }
+.today > * { flex-shrink: 0; }
+.hello { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.hello h2 { margin: 6px 0 0; font-size: 31px; font-weight: 600; letter-spacing: -.02em; line-height: 1.05; }
+.hello h2 .serif { font-size: 1.16em; }
+.coachchip { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 12px; font-weight: 600; max-width: 150px; }
+.coachchip span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logo { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--brand); color: var(--accent); font-family: var(--cond); font-weight: 700; font-size: 11.5px; letter-spacing: .02em; }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; color: var(--muted); }
+.week div { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.week .on { color: var(--text); font-weight: 600; }
+.week svg circle { transition: none; }
+.hero { position: relative; overflow: hidden; border-radius: 26px; padding: 20px; color: #fff; background: linear-gradient(165deg, color-mix(in srgb, var(--brand) 86%, #ffffff 14%), var(--brand) 55%, color-mix(in srgb, var(--brand) 80%, #000 20%)); isolation: isolate; }
+.hero .glow { position: absolute; width: 340px; height: 340px; top: -160px; right: -130px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--accent) 60%, transparent), transparent 66%); opacity: .55; z-index: -1; pointer-events: none; }
+.hero .dots { position: absolute; inset: 0; z-index: -1; background-image: radial-gradient(color-mix(in srgb, var(--accent) 30%, transparent) 1px, transparent 1.4px); background-size: 14px 14px; -webkit-mask-image: linear-gradient(205deg, #000 5%, transparent 55%); mask-image: linear-gradient(205deg, #000 5%, transparent 55%); pointer-events: none; }
+.hero .eyebrow { color: var(--accent); }
+.hero h3 { margin: 8px 0 8px; font-size: 25px; line-height: 1.12; font-weight: 600; letter-spacing: -.01em; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.11); color: #eef4ef; }
+.note { display: flex; gap: 10px; margin: 16px 0 18px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,.09); font-size: 13.5px; line-height: 1.4; color: #eef4ef; }
+.note .av { width: 28px; height: 28px; font-size: 11px; }
+.cta { width: 100%; border: 0; border-radius: 16px; padding: 15px; font-weight: 600; font-size: 16px; background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform .15s ease, background-color .45s ease, color .45s ease; }
+.cta:active { transform: scale(.98); }
+.cta.ghost { background: rgba(255,255,255,.1); color: #fff; }
+.h-sec { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 2px -4px; }
+.h-sec h4 { margin: 0; font-size: 15px; font-weight: 600; }
+.h-sec span { font-size: 12.5px; color: var(--muted); }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 14px 16px; }
+.row { display: flex; align-items: center; gap: 14px; }
+.tile b { font-weight: 600; }
+.tile .sub { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.trend { display: grid; grid-template-columns: 1fr 132px; gap: 10px; align-items: end; }
+.trend .big { font-size: 34px; line-height: 1; margin-top: 8px; }
+.delta { display: inline-flex; margin-top: 8px; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--text); }
+.macros { display: flex; gap: 6px; margin-top: 9px; }
+.macros i { position: relative; flex: 1; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.macros i b { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+.mini { margin-top: 10px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 7px 12px; font-size: 13px; font-weight: 600; color: var(--text); transition: transform .15s, background-color .45s, color .45s; }
+.mini:active { transform: scale(.97); }
+.mini[disabled] { opacity: .75; cursor: default; }
+.pill { font-size: 12.5px; font-weight: 600; padding: 6px 12px; border-radius: 999px; background: var(--accent); color: var(--on-accent); border: 0; }
+.msg p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.45; }
+.tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 82px; z-index: 10; display: grid; grid-template-columns: repeat(5, 1fr); padding: 9px 6px 0; background: color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-top: 1px solid var(--line); }
+.tab { border: 0; background: transparent; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.tab .ico { width: 50px; height: 28px; border-radius: 10px; display: grid; place-items: center; }
+.tab.on { color: var(--text); font-weight: 600; }
+.tab.on .ico { background: var(--accent); color: var(--on-accent); }
+
+/* ---------- Workout player ---------- */
+.player, .summary { position: absolute; inset: 0; z-index: 20; background: var(--night); color: #e9efea; }
+.player { display: flex; flex-direction: column; padding: 54px 18px 16px; }
+.p-top { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 10px; }
+.round { width: 38px; height: 38px; border-radius: 50%; border: 0; background: rgba(255,255,255,.09); color: #fff; display: grid; place-items: center; }
+.p-title { font-size: 13.5px; font-weight: 600; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clock { font-size: 17px; color: var(--accent); }
+.segs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 16px 0 18px; }
+.segs i { height: 4px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; position: relative; }
+.segs i b { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); border-radius: 2px; }
+.p-body { flex: 1; overflow-y: auto; scrollbar-width: none; padding-bottom: 8px; }
+.p-body::-webkit-scrollbar { display: none; }
+.player.resting .p-body { padding-bottom: 104px; }
+.ex { display: flex; gap: 14px; align-items: center; }
+.thumb { width: 68px; height: 68px; flex: none; border-radius: 18px; display: grid; place-items: center; background: linear-gradient(145deg, color-mix(in srgb, var(--brand) 72%, #ffffff 10%), var(--brand)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); color: var(--accent); }
+.ex h3 { margin: 3px 0 0; font-size: 22px; line-height: 1.15; font-weight: 600; }
+.ex .rx { display: block; margin-top: 4px; font-size: 13px; color: #a6b8ae; }
+.last { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.055); font-size: 13px; color: #b7c8be; }
+.last b { color: #fff; font-weight: 600; }
+.sh, .set { display: grid; grid-template-columns: 34px 1fr 1fr 1fr 46px; align-items: center; }
+.sh { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: #7e978a; padding: 0 12px 6px; }
+.sets { display: grid; gap: 8px; }
+.set { padding: 10px 12px; border-radius: 16px; background: rgba(255,255,255,.055); font-family: var(--cond); font-weight: 700; font-size: 18px; }
+.set .n { font-family: var(--sans); font-size: 14px; color: #9fb3a8; font-weight: 600; }
+.set .prev { font-family: var(--sans); font-weight: 400; font-size: 13.5px; color: #7e978a; }
+.set .dim { color: #62786d; }
+.set .ok { width: 38px; height: 38px; justify-self: end; border-radius: 12px; display: grid; place-items: center; background: rgba(255,255,255,.08); border: 0; color: inherit; }
+.set.done { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.set.done .ok { background: var(--accent); color: var(--on-accent); }
+.set.active { grid-template-columns: 30px 1fr 1fr 50px; gap: 8px; background: #f7f8f2; color: #13201b; padding: 12px 10px; box-shadow: 0 0 0 2px var(--accent), 0 16px 30px -18px rgba(0,0,0,.7); }
+.set.active .n { color: #53645b; display: flex; flex-direction: column; line-height: 1.1; }
+.set.active .n small { font-weight: 400; font-size: 10.5px; margin-top: 3px; color: #7a8a81; white-space: nowrap; }
+.step { display: flex; align-items: center; justify-content: space-between; gap: 2px; padding: 4px; border-radius: 12px; background: #ebede4; }
+.step button { width: 30px; height: 30px; border: 0; border-radius: 9px; background: #fff; color: #153d33; font-size: 18px; line-height: 1; font-family: var(--sans); font-weight: 600; box-shadow: 0 1px 0 rgba(0,0,0,.06); }
+.step span { text-align: center; line-height: 1; }
+.step small { display: block; font-family: var(--sans); font-size: 9.5px; letter-spacing: .1em; font-weight: 600; color: #6c7c73; margin-top: 3px; }
+.set.active .ok { width: 46px; height: 46px; border-radius: 15px; background: var(--brand); color: #fff; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.tools button { border: 0; border-radius: 999px; padding: 8px 12px; font-size: 13px; font-weight: 600; background: rgba(255,255,255,.08); color: #e9efea; display: inline-flex; gap: 6px; align-items: center; }
+.nextline { margin-top: 14px; font-size: 13px; color: #9fb3a8; }
+.nextline b { color: #e9efea; }
+.p-foot { padding-top: 10px; }
+.rest { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 5; display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 24px; background: color-mix(in srgb, var(--brand) 72%, #0b120f); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); box-shadow: 0 -10px 40px -10px rgba(0,0,0,.5); }
+.rest .t { font-size: 32px; line-height: 1; color: #fff; }
+.rest small { display: block; font-size: 12px; color: #a6b8ae; }
+.rest .ctl { margin-inline-start: auto; display: flex; gap: 8px; }
+.rest .ctl button { border: 0; border-radius: 12px; padding: 9px 12px; font-size: 13px; font-weight: 600; background: rgba(255,255,255,.1); color: #fff; }
+.burst { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); pointer-events: none; z-index: 70; }
+
+/* ---------- Summary ---------- */
+.summary { overflow-y: auto; padding: 56px 20px 26px; scrollbar-width: none; }
+.summary::-webkit-scrollbar { display: none; }
+.summary h3 { margin: 10px 0 4px; font-size: 36px; line-height: 1.02; font-weight: 600; letter-spacing: -.02em; }
+.summary h3 .serif { font-size: 1.15em; color: var(--accent); }
+.summary .meta { color: #a6b8ae; font-size: 13.5px; }
+.stats4 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.stats4 div { padding: 14px; border-radius: 18px; background: rgba(255,255,255,.06); }
+.stats4 .num { display: block; font-size: 32px; line-height: 1; color: #fff; }
+.stats4 small { display: block; margin-top: 6px; font-size: 12.5px; color: #a6b8ae; }
+.prlist { margin-top: 12px; display: grid; gap: 8px; }
+.prlist div { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 14%, transparent); font-size: 14px; }
+.share { margin-top: 18px; padding: 18px; border-radius: 26px; background: var(--accent); color: var(--on-accent); transform: rotate(-2deg); box-shadow: 0 30px 40px -24px rgba(0,0,0,.7); }
+.share .top { display: flex; justify-content: space-between; align-items: center; }
+.share .logo { background: var(--brand); color: var(--accent); }
+.share .big { margin: 14px 0 2px; font-family: var(--serif); font-style: italic; font-size: 44px; line-height: 1; }
+.share p { margin: 0; font-weight: 600; }
+.share .by { margin-top: 14px; font-size: 12px; opacity: .8; }
+.s-actions { display: grid; gap: 10px; margin-top: 20px; }
+.fine { font-size: 12px; color: #93a79c; text-align: center; margin: 2px 0 0; }
+
+/* ---------- Coach desk ---------- */
+.desk { width: min(1200px, 100%); border-radius: 18px; overflow: hidden; border: 1px solid var(--page-line); background: var(--bg); box-shadow: 0 40px 90px -50px rgba(8,20,14,.6); }
+.bar { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+.bar .url { margin-inline: auto; padding: 4px 14px; border-radius: 8px; background: var(--surface); font-size: 12.5px; color: var(--muted); }
+.coach { display: grid; grid-template-columns: 236px 1fr; min-height: 760px; }
+.cside { background: var(--brand); color: color-mix(in srgb, #ffffff 82%, var(--brand)); padding: 20px 14px; display: flex; flex-direction: column; gap: 3px; }
+.cbrand { display: flex; align-items: center; gap: 10px; padding: 0 8px 22px; }
+.cbrand .logo { width: 34px; height: 34px; font-size: 13px; background: var(--accent); color: var(--brand); }
+.cbrand b { color: #fff; font-size: 15px; line-height: 1.2; }
+.cbrand small { display: block; font-size: 11.5px; opacity: .7; }
+.cnav { display: flex; flex-direction: column; gap: 2px; }
+.cnav a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 11px; font-size: 14.5px; color: inherit; text-decoration: none; }
+.cnav a.on { background: color-mix(in srgb, var(--accent) 17%, transparent); color: #fff; font-weight: 600; }
+.cnav a.on svg { color: var(--accent); }
+.cnav .count { margin-inline-start: auto; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
+.cnav .sep { font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; opacity: .6; padding: 16px 12px 6px; }
+.cme { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 13px; background: rgba(255,255,255,.07); font-size: 13.5px; }
+.cme small { display: block; opacity: .7; font-size: 12px; }
+.cmain { padding: 26px 32px 30px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.ctop { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 14px; }
+.ctop h2 { margin: 6px 0 0; font-size: 38px; line-height: 1.05; font-weight: 600; letter-spacing: -.02em; text-wrap: balance; }
+.ctop h2 .serif { font-size: 1.14em; }
+.ctop p { margin: 8px 0 0; color: var(--muted); }
+.ctop p b { color: var(--text); }
+.cbtn { border: 0; border-radius: 11px; padding: 10px 15px; font-weight: 600; font-size: 14px; background: var(--brand); color: #fff; }
+.cbtn.line { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
+.search { display: flex; align-items: center; gap: 8px; min-width: 220px; padding: 9px 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 14px; }
+.stats3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; }
+.stat { padding: 18px 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+.stat .v { display: block; font-size: 40px; line-height: 1; margin-top: 10px; }
+.stat .d { display: block; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.up { color: #2f7f4f; font-weight: 600; }
+.device[data-mode="dark"] .up { color: #8fd3a6; }
+.stack { display: flex; }
+.stack .av { width: 30px; height: 30px; font-size: 10.5px; margin-inline-start: -8px; box-shadow: 0 0 0 2px var(--surface); }
+.atstake { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: #fbe6d4; color: #7f4318; white-space: nowrap; }
+.cols { display: grid; grid-template-columns: 1.45fr 1fr; gap: 18px; align-items: start; }
+.card header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px 12px; }
+.card header h3 { margin: 0; font-size: 16px; font-weight: 600; display: flex; gap: 10px; align-items: center; }
+.card header a { font-size: 13px; font-weight: 600; color: var(--accent-ink); text-decoration: none; }
+.badge { font-family: var(--cond); font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--accent); color: var(--on-accent); }
+.q { display: grid; grid-template-columns: 38px 1fr auto auto; align-items: center; gap: 14px; padding: 12px 20px; border-top: 1px solid var(--line); overflow: hidden; }
+.q b { font-weight: 600; font-size: 14.5px; }
+.q .sub { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.tag { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.t-review { background: #fff0d6; color: #7e5300; } .t-renew { background: var(--accent-soft); color: var(--text); }
+.t-share { background: #e2eeea; color: #1d4a3e; } .t-miss { background: #fbe2da; color: #9b3a23; } .t-new { background: #e1e7f6; color: #2d4a86; }
+.q .cbtn { padding: 8px 12px; font-size: 13px; }
+.allgood { padding: 28px 20px 30px; border-top: 1px solid var(--line); text-align: center; }
+.allgood p { margin: 8px 0 0; font-size: 22px; font-weight: 600; }
+.allgood span { color: var(--muted); font-size: 13.5px; }
+.feed { max-height: 452px; overflow: hidden; }
+.f { display: flex; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.45; }
+.f em { display: block; font-style: normal; font-size: 12.5px; color: var(--muted); }
+.f.fresh { background: var(--accent-soft); }
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: #3fb36b; box-shadow: 0 0 0 0 rgba(63,179,107,.6); animation: pulse 2s infinite; }
+@keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(63,179,107,0); } 100% { box-shadow: 0 0 0 0 rgba(63,179,107,0); } }
+.weekcard { padding: 18px 20px; display: grid; grid-template-columns: 210px 1fr; gap: 24px; align-items: end; }
+.weekcard .v { font-size: 30px; margin-top: 8px; display: block; }
+.bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 14px; align-items: end; height: 110px; }
+.bars div { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); height: 100%; justify-content: flex-end; }
+.bars i { width: 100%; border-radius: 7px 7px 3px 3px; background: var(--brand); transform-origin: bottom; }
+.device[data-mode="dark"] .bars i { background: color-mix(in srgb, var(--accent) 70%, var(--brand)); }
+.bars i.plan { background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--line) 6px 12px); }
+.bars .today i { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.desk .toast { position: absolute; bottom: 24px; }
+.desk-inner { position: relative; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 980px) {
+  .coach { grid-template-columns: 1fr; min-height: 0; }
+  .cside { flex-direction: row; align-items: center; padding: 12px 16px; }
+  .cbrand { padding: 0; }
+  .cnav, .cme { display: none; }
+  .cmain { padding: 20px 16px 24px; }
+  .stats3, .cols { grid-template-columns: 1fr; }
+  .weekcard { grid-template-columns: 1fr; }
+  .ctop h2 { font-size: 30px; }
+}
+@media (max-width: 560px) {
+  .phone { width: 100%; height: min(780px, calc(100dvh - 150px)); min-height: 620px; padding: 0; border-radius: 26px; background: none; box-shadow: 0 24px 60px -34px rgba(0,0,0,.5); }
+  .screen { border-radius: 26px; }
+  .q { grid-template-columns: 36px 1fr auto; gap: 10px; padding: 12px 14px; }
+  .q .tag { display: none; }
+  .search { display: none; }
+  .steps { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live i { animation: none; }
+}
+</style>
+
+<div class="page">
+  <header class="chrome">
+    <div>
+      <h1>TB Gym, <em>redesigned.</em></h1>
+      <p>A working prototype of the new client and coach apps. Everything below is clickable. The coach picks the brand; each person picks light or dark. Sample data only.</p>
+    </div>
+    <ol class="steps" aria-label="Try it">
+      <li><b>1</b> Start the workout</li>
+      <li><b>2</b> Tap ✓ to log sets</li>
+      <li><b>3</b> Finish and see the summary</li>
+      <li><b>4</b> Open the coach app</li>
+      <li><b>5</b> Change the brand</li>
+    </ol>
+  </header>
+
+  <div class="controls" role="group" aria-label="Prototype controls">
+    <div class="group">
+      <span class="label" id="lbl-view">App</span>
+      <div class="seg" aria-labelledby="lbl-view">
+        <button type="button" id="view-client" data-view="client" aria-pressed="true">Client app</button>
+        <button type="button" id="view-coach" data-view="coach" aria-pressed="false">Coach app</button>
+      </div>
+    </div>
+    <div class="group">
+      <span class="label" id="lbl-brand">Coach brand</span>
+      <div class="group" aria-labelledby="lbl-brand">
+        <button type="button" class="swatch" id="sw-atlas" data-preset="atlas" style="--b:#153d33;--a:#d9ed94" aria-pressed="true" aria-label="Atlas Performance: forest and lime"></button>
+        <button type="button" class="swatch" id="sw-cedar" data-preset="cedar" style="--b:#15233f;--a:#ffb48c" aria-pressed="false" aria-label="Cedar Strength: navy and coral"></button>
+        <button type="button" class="swatch" id="sw-ember" data-preset="ember" style="--b:#221b18;--a:#ff8a4c" aria-pressed="false" aria-label="Ember Athletics: charcoal and orange"></button>
+        <button type="button" class="swatch" id="sw-orchid" data-preset="orchid" style="--b:#36203a;--a:#f3b4d1" aria-pressed="false" aria-label="Orchid Studio: plum and pink"></button>
+        <label class="swatch custom" id="sw-custom" data-on="false" title="Pick any colour"><input type="color" id="accent-picker" value="#62d2c4" aria-label="Pick a custom brand colour"></label>
+        <span class="brandname" data-brand-name>Atlas Performance</span>
+      </div>
+    </div>
+    <div class="group">
+      <span class="label" id="lbl-mode">Mode</span>
+      <div class="seg" aria-labelledby="lbl-mode">
+        <button type="button" id="mode-light" data-mode="light" aria-pressed="true">Light</button>
+        <button type="button" id="mode-dark" data-mode="dark" aria-pressed="false">Dark</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="stage">
+    <!-- ================= CLIENT PHONE ================= -->
+    <div class="phone device" id="phone" data-mode="light">
+      <div class="screen" id="screen">
+        <div class="statusbar" id="statusbar"><span>9:41</span><span class="icons" aria-hidden="true"><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2" width="3" height="10" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor"><path d="M8 2.5c2.4 0 4.6.9 6.2 2.5l1.3-1.4A10.6 10.6 0 0 0 8 .5C5.1.5 2.4 1.6.5 3.6L1.8 5A8.6 8.6 0 0 1 8 2.5Zm0 4c1.3 0 2.5.5 3.4 1.3l1.4-1.4A6.8 6.8 0 0 0 8 4.5c-1.9 0-3.6.7-4.8 1.9l1.4 1.4c.9-.8 2.1-1.3 3.4-1.3Zm0 2.2c-.6 0-1.2.3-1.6.7L8 11l1.6-1.6c-.4-.4-1-.7-1.6-.7Z"/></svg><svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x=".5" y=".5" width="22" height="11" rx="3.5" stroke="currentColor" opacity=".5"/><rect x="2" y="2" width="17" height="8" rx="2" fill="currentColor"/><rect x="24" y="4" width="2" height="4" rx="1" fill="currentColor" opacity=".5"/></svg></span></div>
+
+        <!-- Today -->
+        <section class="today" id="today" aria-label="Client Today">
+          <div class="hello" data-in>
+            <div>
+              <div class="eyebrow">Thursday 1 October</div>
+              <h2>Morning, <span class="serif">Maya.</span></h2>
+            </div>
+            <div class="coachchip"><span class="logo" data-brand-logo>AP</span><span data-brand-name>Atlas Performance</span></div>
+          </div>
+
+          <div class="week" id="week" data-in aria-label="This week: 2 of 4 sessions done">
+            <div>M<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="none" stroke="var(--line)" stroke-width="2.5"/><circle class="wr" cx="17" cy="17" r="7" fill="none" stroke="var(--accent)" stroke-width="14" transform="rotate(-90 17 17)"/><path d="m11.5 17 3.8 3.8 7.2-7.3" stroke="var(--on-accent)" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div>T<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="3 4"/></svg></div>
+            <div>W<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="none" stroke="var(--line)" stroke-width="2.5"/><circle class="wr" cx="17" cy="17" r="7" fill="none" stroke="var(--accent)" stroke-width="14" transform="rotate(-90 17 17)"/><path d="m11.5 17 3.8 3.8 7.2-7.3" stroke="var(--on-accent)" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="on">Today<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="var(--surface)" stroke="var(--accent-ink)" stroke-width="2.6"/><circle id="today-fill" cx="17" cy="17" r="7" fill="none" stroke="var(--accent)" stroke-width="14" transform="rotate(-90 17 17)" style="stroke-dasharray:43.98;stroke-dashoffset:43.98"/><circle id="today-dot" cx="17" cy="17" r="4" fill="var(--accent-ink)"/><path id="today-check" d="m11.5 17 3.8 3.8 7.2-7.3" stroke="var(--on-accent)" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0"/></svg></div>
+            <div>F<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="none" stroke="var(--line)" stroke-width="2.5"/></svg></div>
+            <div>S<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="3 4"/></svg></div>
+            <div>S<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="none" stroke="var(--line)" stroke-width="2.5"/></svg></div>
+          </div>
+
+          <article class="hero" id="hero" data-in>
+            <div class="glow" id="glow"></div><div class="dots"></div>
+            <div class="eyebrow" id="hero-eyebrow">Week 3 of 8 · Today</div>
+            <h3>Upper Body: Strength B</h3>
+            <div class="chips" id="hero-chips"><span class="chip">55 min</span><span class="chip">3 exercises</span><span class="chip">10 sets</span></div>
+            <div class="note"><span class="av a1">HH</span><span id="hero-note">“Top set first. Stop the back-offs if bar speed drops. Warm up the shoulder with face pulls.”</span></div>
+            <button type="button" class="cta" id="start-btn"><span id="start-label">Start workout</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          </article>
+
+          <div class="h-sec" data-in><h4>Also today</h4><span>3 things</span></div>
+
+          <div class="tile" data-in>
+            <div class="row">
+              <svg width="54" height="54" viewBox="0 0 54 54" aria-hidden="true"><circle cx="27" cy="27" r="22" fill="none" stroke="var(--surface-2)" stroke-width="6.5"/><circle id="kcal-ring" cx="27" cy="27" r="22" fill="none" stroke="var(--accent-ink)" stroke-width="6.5" stroke-linecap="round" transform="rotate(-90 27 27)"/></svg>
+              <div style="flex:1;min-width:0">
+                <b><span class="num" id="kcal" style="font-size:19px">1,240</span> <span style="color:var(--muted);font-weight:400;font-size:13.5px">/ 1,950 kcal</span></b>
+                <span class="sub" id="meals">2 of 4 meals logged</span>
+                <div class="macros" aria-hidden="true"><i><b id="m-p" style="width:62%;background:var(--accent-ink)"></b></i><i><b id="m-c" style="width:58%;background:color-mix(in srgb,var(--accent) 85%,#000 15%)"></b></i><i><b id="m-f" style="width:50%;background:#f2b994"></b></i></div>
+                <button type="button" class="mini" id="meal-btn">Log lunch as planned</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="tile" data-in>
+            <div class="row">
+              <span class="av a6" style="border-radius:13px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg></span>
+              <div style="flex:1"><b>Weekly check-in</b><span class="sub">Due today · about 3 minutes</span></div>
+              <button type="button" class="pill" id="checkin-btn">Start</button>
+            </div>
+          </div>
+
+          <div class="tile" data-in>
+            <div class="trend">
+              <div>
+                <div class="eyebrow">Weight trend</div>
+                <div class="big num"><span id="weight">71.2</span> <span style="font-size:18px;color:var(--muted)">kg</span></div>
+                <span class="delta">↓ 0.7 kg in 4 weeks</span>
+              </div>
+              <svg width="132" height="64" viewBox="0 0 132 64" aria-label="Weekly averages from 71.9 to 71.2 kg">
+                <path d="M4 14 L30 20 L56 18 L82 30 L108 36 L128 44 L128 64 L4 64 Z" fill="var(--accent-soft)" stroke="none"/>
+                <path id="spark" d="M4 14 L30 20 L56 18 L82 30 L108 36 L128 44" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="128" cy="44" r="4.5" fill="var(--accent-ink)"/>
+              </svg>
+            </div>
+          </div>
+
+          <div class="tile msg" data-in>
+            <div class="row" style="align-items:flex-start">
+              <span class="av a1">HH</span>
+              <div><b>Coach Hicham</b> <span style="color:var(--muted);font-size:12px">· 11:20</span>
+                <p>Great week, Maya. Your squat looked strong. Let's push the bench top set to 62.5 kg today.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <nav class="tabbar" id="tabbar" aria-label="Client navigation">
+          <button type="button" class="tab on" aria-current="page"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 7 4-14 3 7h4"/></svg></span>Today</button>
+          <button type="button" class="tab" data-soon="Training"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/></svg></span>Training</button>
+          <button type="button" class="tab" data-soon="Nutrition"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8a3 3 0 0 0 6 0V3M10 11v10M17 3c-1.7 1.5-2.5 3.8-2.5 7H18V3zM18 10v11"/></svg></span>Nutrition</button>
+          <button type="button" class="tab" data-soon="Progress"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16M6 15l4-4 3 3 5-6"/></svg></span>Progress</button>
+          <button type="button" class="tab" data-soon="Messages"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5h16v11H9l-5 4z"/></svg></span>Messages</button>
+        </nav>
+
+        <!-- Workout player -->
+        <section class="player" id="player" hidden aria-label="Workout player">
+          <div class="p-top">
+            <button type="button" class="round" id="close-player" aria-label="Back to Today"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+            <div class="p-title">Upper Body: Strength B</div>
+            <div class="clock num" id="clock" aria-label="Workout time">0:00</div>
+          </div>
+          <div class="segs" id="segs" aria-hidden="true"><i><b></b></i><i><b></b></i><i><b></b></i></div>
+          <div class="p-body" id="p-body">
+            <div id="ex-panel">
+              <div class="ex">
+                <div class="thumb" id="ex-thumb" aria-hidden="true"></div>
+                <div><div class="eyebrow" style="color:#9fb3a8" id="ex-count">Exercise 1 of 3</div><h3 id="ex-name">Barbell bench press</h3><span class="rx" id="ex-rx"></span></div>
+              </div>
+              <div class="last"><span id="ex-last-date">Last time</span><b id="ex-last"></b></div>
+              <div class="sh" aria-hidden="true"><span>Set</span><span>Previous</span><span>kg</span><span>Reps</span><span></span></div>
+              <div class="sets" id="sets"></div>
+              <div class="tools">
+                <button type="button" data-tool="The exercise demo video plays here."><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>Watch demo</button>
+                <button type="button" data-tool="Notes go straight to Coach Hicham with this set."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Note for coach</button>
+                <button type="button" data-tool="Only alternatives your coach approved appear here."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 8h14l-3-3M20 16H6l3 3"/></svg>Swap</button>
+              </div>
+              <div class="nextline" id="nextline"></div>
+            </div>
+          </div>
+          <div class="p-foot"><button type="button" class="cta" id="next-btn" hidden>Next exercise</button></div>
+          <div class="rest" id="rest" hidden role="timer" aria-label="Rest timer">
+            <svg width="60" height="60" viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="30" r="25" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="6"/><circle id="rest-ring" cx="30" cy="30" r="25" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round" transform="rotate(-90 30 30)" style="stroke-dasharray:157.08;stroke-dashoffset:0;transition:none"/></svg>
+            <div><small>Rest</small><div class="t num" id="rest-time">1:30</div></div>
+            <div class="ctl"><button type="button" id="rest-add">+15 s</button><button type="button" id="rest-skip">Skip</button></div>
+          </div>
+        </section>
+
+        <!-- Summary -->
+        <section class="summary" id="summary" hidden aria-label="Workout summary">
+          <div class="eyebrow" style="color:#9fb3a8">Thursday 1 October</div>
+          <h3>Workout <span class="serif">done.</span></h3>
+          <div class="meta">Upper Body: Strength B · Coach Hicham sees this in his feed</div>
+          <div class="stats4">
+            <div><span class="num" id="s-time">0</span><small>minutes</small></div>
+            <div><span class="num" id="s-vol">0</span><small>kg lifted</small></div>
+            <div><span class="num" id="s-sets">0</span><small>sets done</small></div>
+            <div><span class="num" id="s-prs">0</span><small>personal records</small></div>
+          </div>
+          <div class="prlist" id="prlist"></div>
+          <div class="share" id="share">
+            <div class="top"><span class="eyebrow" style="color:inherit;opacity:.75" id="share-kicker">New personal record</span><span class="logo" data-brand-logo>AP</span></div>
+            <div class="big" id="share-big">62.5 kg × 6</div>
+            <p id="share-what">Barbell bench press</p>
+            <div class="by">Maya · coached by <span data-brand-name>Atlas Performance</span></div>
+          </div>
+          <div class="s-actions">
+            <button type="button" class="cta ghost" id="share-btn">Share to my story</button>
+            <button type="button" class="cta" id="back-today">Back to Today</button>
+            <p class="fine">Only Maya can share this. Her coach never posts for her.</p>
+          </div>
+        </section>
+
+        <div class="toast" id="toast-phone" role="status" aria-live="polite" hidden></div>
+      </div>
+    </div>
+
+    <!-- ================= COACH DESK ================= -->
+    <div class="desk device" id="desk" data-mode="light" hidden>
+      <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span class="url">app.tbgym.com/today</span></div>
+      <div class="desk-inner">
+        <div class="coach">
+          <aside class="cside">
+            <div class="cbrand"><span class="logo" data-brand-logo>AP</span><div><b data-brand-name>Atlas Performance</b><small>on TB Gym</small></div></div>
+            <nav class="cnav" aria-label="Coach navigation">
+              <a href="#" class="on" onclick="return false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 7 4-14 3 7h4"/></svg>Today<span class="count" data-needs>5</span></a>
+              <a href="#" onclick="return false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5c2 .6 3.2 2.4 3.6 5.5"/></svg>Clients</a>
+              <a href="#" onclick="return false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/></svg>Programs</a>
+              <a href="#" onclick="return false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8a3 3 0 0 0 6 0V3M10 11v10M17 3c-1.7 1.5-2.5 3.8-2.5 7H18V3zM18 10v11"/></svg>Nutrition</a>
+              <a href="#" onclick="return false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Check-ins<span class="count">2</span></a>
+              <a href="#" onclick="return false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5h16v11H9l-5 4z"/></svg>Messages<span class="count">3</span></a>
+              <div class="sep">Business</div>
+              <a href="#" onclick="return false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/></svg>Plans you sell</a>
+              <a href="#" onclick="return false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Brand &amp; settings</a>
+            </nav>
+            <div class="cme"><span class="av a1">HH</span><div><b style="color:#fff">Hicham Haddad</b><small>Owner</small></div></div>
+          </aside>
+
+          <section class="cmain" aria-label="Coach Today">
+            <div class="ctop" data-cin>
+              <div>
+                <div class="eyebrow">Thursday 1 October</div>
+                <h2>Good afternoon, <span class="serif">Hicham.</span></h2>
+                <p id="needs-line"><b><span data-needs>5</span> clients need you</b> today. Everyone else is on track.</p>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search clients</div>
+                <button type="button" class="cbtn" data-toast="The invite link goes out by email or WhatsApp.">+ Invite client</button>
+              </div>
+            </div>
+
+            <div class="stats3" data-cin>
+              <div class="card stat">
+                <div><div class="eyebrow">Active clients</div><span class="v num" data-count="24">24</span><span class="d"><span class="up">+3</span> this month</span></div>
+                <div class="stack" aria-hidden="true"><span class="av a2">MR</span><span class="av a3">RK</span><span class="av a4">LS</span><span class="av a5">+21</span></div>
+              </div>
+              <div class="card stat">
+                <div><div class="eyebrow">Sessions done this week</div><span class="v num"><span data-count="92">92</span>%</span><span class="d"><span class="up">↑ 6%</span> vs this point last week</span></div>
+                <svg width="120" height="48" viewBox="0 0 120 48" aria-hidden="true"><path d="M2 38 L20 33 L38 35 L56 24 L74 26 L92 15 L116 9 L116 48 L2 48Z" fill="var(--accent-soft)"/><path id="cspark" d="M2 38 L20 33 L38 35 L56 24 L74 26 L92 15 L116 9" fill="none" stroke="var(--accent-ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="116" cy="9" r="4" fill="var(--accent-ink)"/></svg>
+              </div>
+              <div class="card stat">
+                <div><div class="eyebrow">Plans ending in 14 days</div><span class="v num" data-count="3">3</span><span class="d">1 client already asked to renew</span></div>
+                <span class="atstake">$240 at stake</span>
+              </div>
+            </div>
+
+            <div class="cols">
+              <section class="card" data-cin aria-label="Needs you">
+                <header><h3>Needs you <span class="badge" data-needs>5</span></h3><a href="#" onclick="return false">See all</a></header>
+                <div id="queue">
+                  <div class="q" data-done="Maya's check-in is marked reviewed. She'll see your reply."><span class="av a2">MR</span><div><b>Maya Rahman sent her weekly check-in</b><span class="sub">Weight ↓ 0.4 kg · shoulder feels better · 2 h ago</span></div><span class="tag t-review">Check-in</span><button type="button" class="cbtn">Review</button></div>
+                  <div class="q" data-done="Renewal started. Rami gets his new plan and payment details."><span class="av a3">RK</span><div><b>Rami Khoury asked to renew</b><span class="sub">Strength &amp; Body Composition ended Mon 28 Sep</span></div><span class="tag t-renew">Renewal</span><button type="button" class="cbtn line">Renew plan</button></div>
+                  <div class="q" data-done="Week 3 is shared. Sara sees it on her Today screen now."><span class="av a6">SH</span><div><b>Sara Haddad's week 3 isn't shared yet</b><span class="sub">Her next session is tomorrow morning</span></div><span class="tag t-share">Program</span><button type="button" class="cbtn line">Share week</button></div>
+                  <div class="q" data-done="Message sent to Omar."><span class="av a4">ON</span><div><b>Omar Nasser missed 2 sessions</b><span class="sub">Last trained Fri 25 Sep · usually Mon, Wed, Fri</span></div><span class="tag t-miss">Missed</span><button type="button" class="cbtn line">Message</button></div>
+                  <div class="q" data-done="Hypertrophy Base is assigned to Nour, starting Monday."><span class="av a5">NF</span><div><b>Nour Fares joined, no program yet</b><span class="sub">Goal: fat loss · 3 days a week · joined yesterday</span></div><span class="tag t-new">New</span><button type="button" class="cbtn line">Assign program</button></div>
+                </div>
+                <div class="allgood" id="allgood" hidden><svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><circle cx="23" cy="23" r="21" fill="var(--accent)"/><path d="m14 23.5 6 6 12-12.5" stroke="var(--on-accent)" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><p>All caught up. <span class="serif" style="font-size:1.2em">Nice.</span></p><span>New check-ins and messages will appear here.</span></div>
+              </section>
+
+              <section class="card feed" data-cin aria-label="Activity">
+                <header><h3>Activity</h3><span class="live"><i></i>Live</span></header>
+                <div id="feed">
+                  <div class="f"><span class="av a1">KA</span><div><b>Karim</b> finished Lower Body A in 58 min. Back squat 140 kg × 3 <span class="pr">PR</span><em>35 min ago</em></div></div>
+                  <div class="f"><span class="av a4">LS</span><div><b>Lina</b> completed Mobility Flow, her 12th session in a row.<em>1 h ago</em></div></div>
+                  <div class="f"><span class="av a6">HT</span><div><b>Hana</b> logged every meal today: 1,950 kcal and 142 g protein.<em>2 h ago</em></div></div>
+                  <div class="f"><span class="av a5">ZM</span><div><b>Ziad</b>'s weekly average is 82.4 kg, down 0.6 kg.<em>3 h ago</em></div></div>
+                  <div class="f"><span class="av a2">MR</span><div><b>Maya</b> replied: “Thanks coach, I'll film the top set.”<em>4 h ago</em></div></div>
+                </div>
+              </section>
+            </div>
+
+            <section class="card weekcard" data-cin aria-label="This week">
+              <div><div class="eyebrow">This week</div><span class="v num"><span data-count="26">26</span> of 49</span><span class="d" style="color:var(--muted);font-size:13px">sessions done so far</span></div>
+              <div class="bars" id="bars" aria-hidden="true">
+                <div><i style="height:78%"></i>Mon</div><div><i style="height:70%"></i>Tue</div><div><i style="height:86%"></i>Wed</div><div class="today"><i style="height:30%"></i>Thu</div><div><i class="plan" style="height:72%"></i>Fri</div><div><i class="plan" style="height:40%"></i>Sat</div><div><i class="plan" style="height:26%"></i>Sun</div>
+              </div>
+            </section>
+          </section>
+        </div>
+        <div class="toast" id="toast-desk" role="status" aria-live="polite" hidden></div>
+      </div>
+    </div>
+  </main>
+
+  <p class="foot">Prototype with sample data. Motion uses GSAP here; the real app uses Angular's built-in animations for everyday screens and GSAP for big moments like a PR or a finished workout.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(() => {
+  const G = window.gsap;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const motion = !!G && !reduce;
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const phone = $('#phone'), desk = $('#desk'), screen = $('#screen');
+  const fmt = (v, d = 0) => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const kg = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+  const mmss = (s) => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  const vibrate = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+
+  function out(el, vars, done) {
+    if (motion) G.to(el, Object.assign({}, vars, { onComplete: () => { done && done(); G.set(el, { clearProps: 'transform,opacity' }); } }));
+    else done && done();
+  }
+  function countUp(el, to, d = 0, dur = 1.1) {
+    if (!motion) { el.textContent = fmt(to, d); return; }
+    const o = { v: 0 };
+    G.to(o, { v: to, duration: dur, ease: 'power2.out', onUpdate: () => { el.textContent = fmt(o.v, d); } });
+  }
+  function ring(circle, pct, animate = true) {
+    const c = 2 * Math.PI * parseFloat(circle.getAttribute('r'));
+    circle.style.strokeDasharray = c;
+    const target = c * (1 - pct);
+    if (motion && animate) G.to(circle, { strokeDashoffset: target, duration: 1.1, ease: 'power3.out' });
+    else circle.style.strokeDashoffset = target;
+  }
+  function draw(path, delay = 0) {
+    const len = path.getTotalLength();
+    path.style.strokeDasharray = len;
+    if (motion) G.fromTo(path, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: 1.4, delay, ease: 'power2.inOut' });
+    else path.style.strokeDashoffset = 0;
+  }
+  const toastTimers = {};
+  function toast(id, text) {
+    const t = $(id);
+    t.textContent = text; t.hidden = false;
+    if (motion) G.fromTo(t, { y: 12, opacity: 0, xPercent: -50, x: 0 }, { y: 0, opacity: 1, duration: .3, ease: 'power2.out' });
+    clearTimeout(toastTimers[id]);
+    toastTimers[id] = setTimeout(() => out(t, { y: 8, opacity: 0, duration: .25 }, () => { t.hidden = true; }), 2600);
+  }
+
+  /* ---------- Theme ---------- */
+  const presets = {
+    atlas: { brand: '#153d33', accent: '#d9ed94', name: 'Atlas Performance', logo: 'AP' },
+    cedar: { brand: '#15233f', accent: '#ffb48c', name: 'Cedar Strength', logo: 'CS' },
+    ember: { brand: '#221b18', accent: '#ff8a4c', name: 'Ember Athletics', logo: 'EA' },
+    orchid: { brand: '#36203a', accent: '#f3b4d1', name: 'Orchid Studio', logo: 'OS' },
+  };
+  const state = { preset: 'atlas', custom: null, mode: 'light', view: 'client' };
+  const hexToRgb = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const rgbToHex = (r) => '#' + r.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+  const mix = (a, b, t) => { const A = hexToRgb(a), B = hexToRgb(b); return rgbToHex(A.map((v, i) => v + (B[i] - v) * t)); };
+  const lum = (h) => { const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }; const [r, g, b] = hexToRgb(h); return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  function applyTheme() {
+    let p = presets[state.preset];
+    if (state.custom) {
+      let accent = state.custom;
+      if (lum(accent) < 0.12) accent = mix(accent, '#ffffff', 0.45);
+      p = { brand: mix(accent, '#0a100e', 0.8), accent, name: 'Your Studio', logo: 'YS' };
+    }
+    const onAccent = lum(p.accent) > 0.36 ? '#11201b' : '#ffffff';
+    [phone, desk].forEach((d) => {
+      d.style.setProperty('--brand', p.brand);
+      d.style.setProperty('--accent', p.accent);
+      d.style.setProperty('--on-accent', onAccent);
+      d.dataset.mode = state.mode;
+    });
+    $$('[data-brand-name]').forEach((e) => { e.textContent = p.name; });
+    $$('[data-brand-logo]').forEach((e) => { e.textContent = p.logo; });
+    $$('[data-preset]').forEach((b) => b.setAttribute('aria-pressed', String(!state.custom && b.dataset.preset === state.preset)));
+    $('#sw-custom').dataset.on = String(!!state.custom);
+    $$('[data-mode]').forEach((b) => { if (b.tagName === 'BUTTON') b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode)); });
+    statusColor();
+  }
+  $$('[data-preset]').forEach((b) => b.addEventListener('click', () => {
+    state.preset = b.dataset.preset; state.custom = null; applyTheme();
+    if (motion) G.fromTo('.logo', { scale: .6 }, { scale: 1, duration: .5, ease: 'back.out(3)', stagger: .03 });
+  }));
+  $('#accent-picker').addEventListener('input', (e) => { state.custom = e.target.value; applyTheme(); });
+  $$('button[data-mode]').forEach((b) => b.addEventListener('click', () => { state.mode = b.dataset.mode; applyTheme(); }));
+
+  /* ---------- Views ---------- */
+  let coachSeen = false;
+  $$('[data-view]').forEach((b) => b.addEventListener('click', () => {
+    if (state.view === b.dataset.view) return;
+    state.view = b.dataset.view;
+    $$('[data-view]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    phone.hidden = state.view !== 'client';
+    desk.hidden = state.view !== 'coach';
+    const shown = state.view === 'client' ? phone : desk;
+    if (motion) G.from(shown, { y: 18, opacity: 0, duration: .5, ease: 'power3.out' });
+    if (state.view === 'coach') { coachIntro(); flushFeed(); }
+  }));
+
+  /* ---------- Client Today ---------- */
+  function todayIntro() {
+    $$('.wr').forEach((c) => { c.style.strokeDasharray = 43.98; c.style.strokeDashoffset = 0; });
+    ring($('#kcal-ring'), 1240 / 1950, false);
+    if (!motion) return;
+    G.from('[data-in]', { y: 18, opacity: 0, duration: .6, ease: 'power3.out', stagger: .07, delay: .1 });
+    G.fromTo('.wr', { strokeDashoffset: 43.98 }, { strokeDashoffset: 0, duration: .7, ease: 'power2.out', stagger: .15, delay: .5 });
+    G.fromTo('#kcal-ring', { strokeDashoffset: 2 * Math.PI * 22 }, { strokeDashoffset: 2 * Math.PI * 22 * (1 - 1240 / 1950), duration: 1.2, ease: 'power3.out', delay: .8 });
+    countUp($('#kcal'), 1240, 0, 1.2);
+    draw($('#spark'), .9);
+    G.to('#glow', { x: -70, y: 50, duration: 7, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+  }
+  let meals = 2;
+  $('#meal-btn').addEventListener('click', (e) => {
+    if (meals > 2) return;
+    meals = 3;
+    ring($('#kcal-ring'), 1865 / 1950);
+    const o = { v: 1240 };
+    if (motion) G.to(o, { v: 1865, duration: 1, ease: 'power2.out', onUpdate: () => { $('#kcal').textContent = fmt(o.v); } });
+    else $('#kcal').textContent = '1,865';
+    $('#meals').textContent = '3 of 4 meals logged';
+    [['#m-p', '88%'], ['#m-c', '90%'], ['#m-f', '84%']].forEach(([s, w]) => { if (motion) G.to(s, { width: w, duration: 1, ease: 'power3.out' }); else $(s).style.width = w; });
+    e.currentTarget.textContent = 'Lunch logged ✓';
+    e.currentTarget.disabled = true;
+    toast('#toast-phone', 'Lunch logged as planned: chicken, rice and salad.');
+  });
+  $('#checkin-btn').addEventListener('click', () => toast('#toast-phone', 'The check-in opens here: one question per screen, then photos.'));
+  $$('[data-soon]').forEach((b) => b.addEventListener('click', () => toast('#toast-phone', b.dataset.soon + ' is part of the full build. This prototype shows Today and the workout.')));
+
+  /* ---------- Workout ---------- */
+  const icons = {
+    bench: '<svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 24h36M10 17v14M14 13v22M34 13v22M38 17v14"/></svg>',
+    press: '<svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 10v8M8 14h8M36 10v8M32 14h8M14 18l4 12M34 18l-4 12M16 38h16M24 30v8"/></svg>',
+    row: '<svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 34l14-10 8 4 10-12M10 22h8M14 18v8M34 12h8M38 8v8"/></svg>',
+  };
+  const workout = [
+    { name: 'Barbell bench press', icon: 'bench', rx: '4 sets · 5–8 reps · RPE 8 · rest 1:30', rest: 90, lastDate: 'Last time · Mon 28 Sep', last: '60 kg × 6, 6, 6, 5', best: { kg: 60, reps: 6 },
+      sets: [{ prev: '60 × 6', kg: 62.5, reps: 6 }, { prev: '60 × 6', kg: 62.5, reps: 6 }, { prev: '60 × 6', kg: 62.5, reps: 6 }, { prev: '60 × 5', kg: 62.5, reps: 5 }] },
+    { name: 'Seated dumbbell press', icon: 'press', rx: '3 sets · 8–10 reps · RPE 8 · rest 1:15', rest: 75, lastDate: 'Last time · Mon 28 Sep', last: '20 kg × 10, 10, 9', best: { kg: 20, reps: 10 },
+      sets: [{ prev: '20 × 10', kg: 22, reps: 10 }, { prev: '20 × 10', kg: 22, reps: 9 }, { prev: '20 × 9', kg: 22, reps: 8 }] },
+    { name: 'Chest-supported row', icon: 'row', rx: '3 sets · 10–12 reps · rest 1:00', rest: 60, lastDate: 'Last time · Mon 28 Sep', last: '30 kg × 12, 12, 11', best: { kg: 30, reps: 12 },
+      sets: [{ prev: '30 × 12', kg: 32.5, reps: 10 }, { prev: '30 × 12', kg: 32.5, reps: 10 }, { prev: '30 × 11', kg: 32.5, reps: 10 }] },
+  ];
+  const totalSets = workout.reduce((n, e) => n + e.sets.length, 0);
+  const W = { ex: 0, start: 0, clock: null, prs: [], done: false, raf: 0, restEnd: 0, restTotal: 0, minutes: 0 };
+  const player = $('#player'), summary = $('#summary'), rest = $('#rest'), setsEl = $('#sets');
+  const check = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></svg>';
+  const doneCount = () => workout.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
+
+  function statusColor() {
+    const dark = !player.hidden || !summary.hidden;
+    $('#statusbar').classList.toggle('on-dark', dark);
+  }
+  function heroRectInset() {
+    const r = $('#hero').getBoundingClientRect(), s = screen.getBoundingClientRect();
+    return `inset(${Math.max(0, r.top - s.top)}px ${Math.max(0, s.right - r.right)}px ${Math.max(0, s.bottom - r.bottom)}px ${Math.max(0, r.left - s.left)}px round 26px)`;
+  }
+  function updateHero() {
+    const n = doneCount();
+    const label = $('#start-label');
+    if (W.done) {
+      $('#hero-eyebrow').textContent = 'Completed today';
+      $('#hero-chips').innerHTML = `<span class="chip">${W.minutes} min</span><span class="chip">${n} sets</span><span class="chip">${W.prs.length} PR${W.prs.length === 1 ? '' : 's'}</span>`;
+      label.textContent = 'View summary';
+      $('#hero-note').textContent = 'Coach Hicham has your summary. Rest well, next session is Saturday.';
+    } else if (n > 0) {
+      $('#hero-eyebrow').textContent = `In progress · ${n} of ${totalSets} sets`;
+      label.textContent = 'Continue workout';
+    }
+  }
+
+  $('#start-btn').addEventListener('click', () => { if (W.done) openSummary(false); else openPlayer(); });
+
+  function openPlayer() {
+    player.hidden = false; statusColor();
+    if (!W.start) W.start = Date.now();
+    clearInterval(W.clock);
+    const tick = () => { $('#clock').textContent = mmss(Math.floor((Date.now() - W.start) / 1000)); };
+    tick(); W.clock = setInterval(tick, 1000);
+    renderExercise();
+    if (motion) {
+      G.fromTo(player, { clipPath: heroRectInset() }, { clipPath: 'inset(0px 0px 0px 0px round 0px)', duration: .7, ease: 'power3.inOut', onComplete: () => G.set(player, { clearProps: 'clipPath' }) });
+      G.from('#player .p-top, #player .segs, #ex-panel > *', { y: 14, opacity: 0, duration: .45, ease: 'power2.out', stagger: .04, delay: .35 });
+    }
+  }
+  $('#close-player').addEventListener('click', () => {
+    hideRest(); updateHero();
+    const finish = () => { player.hidden = true; statusColor(); };
+    if (motion) G.to(player, { clipPath: heroRectInset(), duration: .55, ease: 'power3.inOut', onComplete: () => { finish(); G.set(player, { clearProps: 'clipPath' }); } });
+    else finish();
+  });
+
+  function renderExercise() {
+    const e = workout[W.ex];
+    $('#ex-thumb').innerHTML = icons[e.icon];
+    $('#ex-count').textContent = `Exercise ${W.ex + 1} of ${workout.length}`;
+    $('#ex-name').textContent = e.name;
+    $('#ex-rx').textContent = e.rx;
+    $('#ex-last-date').textContent = e.lastDate;
+    $('#ex-last').textContent = e.last;
+    $('#nextline').innerHTML = W.ex < workout.length - 1 ? `Next: <b>${workout[W.ex + 1].name}</b> · ${workout[W.ex + 1].sets.length} sets` : 'Last exercise. Finish strong.';
+    renderSets();
+    updateSegs();
+    updateFoot();
+  }
+  function renderSets() {
+    const e = workout[W.ex];
+    const active = e.sets.findIndex((s) => !s.done);
+    setsEl.innerHTML = e.sets.map((s, i) => {
+      if (s.done) return `<div class="set done" data-i="${i}"><span class="n">${i + 1}</span><span class="prev">${s.prev}</span><span>${kg(s.kg)}</span><span>${s.reps}${s.pr ? ' <b class="pr">PR</b>' : ''}</span><span class="ok" aria-label="Logged">${check}</span></div>`;
+      if (i === active) return `<div class="set active" data-i="${i}"><span class="n">${i + 1}<small>was ${s.prev}</small></span>
+        <div class="step"><button type="button" data-step="kg" data-d="-2.5" aria-label="Less weight">−</button><span><b data-v="kg">${kg(s.kg)}</b><small>KG</small></span><button type="button" data-step="kg" data-d="2.5" aria-label="More weight">+</button></div>
+        <div class="step"><button type="button" data-step="reps" data-d="-1" aria-label="One rep less">−</button><span><b data-v="reps">${s.reps}</b><small>REPS</small></span><button type="button" data-step="reps" data-d="1" aria-label="One rep more">+</button></div>
+        <button type="button" class="ok" data-log aria-label="Log set ${i + 1}: ${kg(s.kg)} kg for ${s.reps} reps">${check}</button></div>`;
+      return `<div class="set"><span class="n">${i + 1}</span><span class="prev">${s.prev}</span><span class="dim">${kg(s.kg)}</span><span class="dim">${s.reps}</span><span class="ok" aria-hidden="true"></span></div>`;
+    }).join('');
+  }
+  function updateSegs() {
+    $$('#segs b').forEach((b, i) => {
+      const e = workout[i];
+      const pct = (e.sets.filter((s) => s.done).length / e.sets.length) * 100;
+      if (motion) G.to(b, { width: pct + '%', duration: .5, ease: 'power2.out' }); else b.style.width = pct + '%';
+    });
+  }
+  function updateFoot() {
+    const e = workout[W.ex];
+    const btn = $('#next-btn');
+    const complete = e.sets.every((s) => s.done);
+    if (!complete) { btn.hidden = true; return; }
+    btn.textContent = W.ex < workout.length - 1 ? `Next: ${workout[W.ex + 1].name} →` : 'Finish workout';
+    if (btn.hidden) { btn.hidden = false; if (motion) G.from(btn, { y: 20, opacity: 0, duration: .45, ease: 'back.out(1.6)' }); }
+  }
+
+  setsEl.addEventListener('click', (ev) => {
+    const step = ev.target.closest('[data-step]');
+    const e = workout[W.ex];
+    const i = e.sets.findIndex((s) => !s.done);
+    if (step && i >= 0) {
+      const s = e.sets[i];
+      const d = parseFloat(step.dataset.d);
+      if (step.dataset.step === 'kg') s.kg = Math.max(0, Math.round((s.kg + d) * 10) / 10);
+      else s.reps = Math.max(1, s.reps + d);
+      const v = setsEl.querySelector(`[data-v="${step.dataset.step}"]`);
+      v.textContent = step.dataset.step === 'kg' ? kg(s.kg) : s.reps;
+      setsEl.querySelector('[data-log]').setAttribute('aria-label', `Log set ${i + 1}: ${kg(s.kg)} kg for ${s.reps} reps`);
+      if (motion) G.fromTo(v, { scale: 1.25 }, { scale: 1, duration: .3, ease: 'back.out(3)' });
+      return;
+    }
+    if (ev.target.closest('[data-log]')) logSet();
+  });
+
+  function logSet() {
+    const e = workout[W.ex];
+    const i = e.sets.findIndex((s) => !s.done);
+    if (i < 0) return;
+    const s = e.sets[i];
+    s.done = true;
+    const pr = (s.kg > e.best.kg && s.reps >= e.best.reps) || (s.kg >= e.best.kg && s.reps > e.best.reps);
+    if (pr) { s.pr = true; e.best = { kg: s.kg, reps: s.reps }; W.prs.push({ name: e.name, kg: s.kg, reps: s.reps }); }
+    vibrate(pr ? [30, 50, 80] : 25);
+    renderSets(); updateSegs();
+    const row = setsEl.querySelector(`[data-i="${i}"]`);
+    if (motion) {
+      G.fromTo(row, { scale: .96 }, { scale: 1, duration: .45, ease: 'back.out(2.5)' });
+      G.fromTo(row.querySelector('.ok'), { scale: .4, rotate: -30 }, { scale: 1, rotate: 0, duration: .5, ease: 'back.out(3)' });
+      const nextActive = setsEl.querySelector('.set.active');
+      if (nextActive) G.from(nextActive, { opacity: 0, y: 10, duration: .4, delay: .1, ease: 'power2.out' });
+    }
+    if (pr) {
+      const badge = row.querySelector('.pr');
+      if (motion && badge) { G.fromTo(badge, { scale: 0 }, { scale: 1, duration: .55, ease: 'back.out(4)' }); burst(badge); }
+      toast('#toast-phone', `New PR! ${kg(s.kg)} kg × ${s.reps} on ${e.name.toLowerCase()}.`);
+    }
+    if (e.sets.some((x) => !x.done)) showRest(e.rest); else { hideRest(); }
+    updateFoot();
+  }
+
+  function burst(anchor) {
+    const a = anchor.getBoundingClientRect(), s = screen.getBoundingClientRect();
+    const cx = a.left - s.left + a.width / 2, cy = a.top - s.top + a.height / 2;
+    for (let k = 0; k < 16; k++) {
+      const d = document.createElement('span');
+      d.className = 'burst';
+      d.style.left = cx - 4 + 'px'; d.style.top = cy - 4 + 'px';
+      if (k % 3 === 0) d.style.background = '#ffffff';
+      screen.appendChild(d);
+      const ang = (Math.PI * 2 * k) / 16 + Math.random() * .3;
+      const dist = 34 + Math.random() * 34;
+      G.to(d, { x: Math.cos(ang) * dist, y: Math.sin(ang) * dist, scale: .3, opacity: 0, duration: .8 + Math.random() * .3, ease: 'power2.out', onComplete: () => d.remove() });
+    }
+  }
+
+  const restRing = $('#rest-ring'), RC = 2 * Math.PI * 25;
+  function showRest(sec) {
+    W.restTotal = sec; W.restEnd = performance.now() + sec * 1000;
+    player.classList.add('resting');
+    if (rest.hidden) { rest.hidden = false; if (motion) G.fromTo(rest, { y: 140, opacity: 0 }, { y: 0, opacity: 1, duration: .5, ease: 'power3.out' }); }
+    cancelAnimationFrame(W.raf); tickRest();
+  }
+  function tickRest() {
+    const left = Math.max(0, W.restEnd - performance.now());
+    $('#rest-time').textContent = mmss(Math.ceil(left / 1000));
+    restRing.style.strokeDashoffset = RC * (1 - left / (W.restTotal * 1000));
+    if (left <= 0) { hideRest(); vibrate([60, 60, 60]); toast('#toast-phone', 'Rest is over. Next set when you are ready.'); return; }
+    W.raf = requestAnimationFrame(tickRest);
+  }
+  function hideRest() {
+    cancelAnimationFrame(W.raf);
+    player.classList.remove('resting');
+    if (rest.hidden) return;
+    out(rest, { y: 140, opacity: 0, duration: .35, ease: 'power2.in' }, () => { rest.hidden = true; });
+  }
+  $('#rest-add').addEventListener('click', () => { W.restEnd += 15000; W.restTotal += 15; });
+  $('#rest-skip').addEventListener('click', hideRest);
+  $$('[data-tool]').forEach((b) => b.addEventListener('click', () => toast('#toast-phone', b.dataset.tool)));
+
+  $('#next-btn').addEventListener('click', () => {
+    if (W.ex < workout.length - 1) {
+      const go = () => { W.ex++; renderExercise(); $('#p-body').scrollTop = 0; if (motion) G.fromTo('#ex-panel', { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: .45, ease: 'power3.out' }); };
+      if (motion) G.to('#ex-panel', { x: -60, opacity: 0, duration: .3, ease: 'power2.in', onComplete: go }); else go();
+    } else finishWorkout();
+  });
+
+  const feedQueue = [];
+  function finishWorkout() {
+    W.done = true; clearInterval(W.clock); hideRest();
+    W.minutes = Math.max(1, Math.round((Date.now() - W.start) / 60000));
+    feedQueue.unshift({ i: 'MR', c: 'a2', h: `<b>Maya</b> finished Upper Body: Strength B in ${W.minutes} min${W.prs.length ? ` with ${W.prs.length} PR${W.prs.length === 1 ? '' : 's'} <span class="pr">PR</span>` : '.'}`, fresh: true });
+    openSummary(true);
+  }
+  function openSummary(first) {
+    const vol = workout.reduce((n, e) => n + e.sets.filter((s) => s.done).reduce((m, s) => m + s.kg * s.reps, 0), 0);
+    $('#prlist').innerHTML = W.prs.map((p) => `<div><span>${p.name}</span><b>${kg(p.kg)} kg × ${p.reps} <span class="pr">PR</span></b></div>`).join('');
+    const best = W.prs[W.prs.length - 1];
+    $('#share-kicker').textContent = best ? 'New personal record' : 'Workout complete';
+    $('#share-big').textContent = best ? `${kg(best.kg)} kg × ${best.reps}` : `${doneCount()} sets`;
+    $('#share-what').textContent = best ? best.name : 'Upper Body: Strength B';
+    summary.hidden = false; summary.scrollTop = 0; statusColor();
+    if (motion) {
+      G.fromTo(summary, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: .5, ease: 'power3.out' });
+      G.from('#summary > *', { y: 18, opacity: 0, duration: .5, ease: 'power3.out', stagger: .06, delay: .15 });
+      G.fromTo('#share', { rotate: -10, y: 40 }, { rotate: -2, y: 0, duration: .9, ease: 'elastic.out(1, .6)', delay: .5 });
+    }
+    countUp($('#s-time'), W.minutes, 0, .9);
+    countUp($('#s-vol'), Math.round(vol), 0, 1.3);
+    countUp($('#s-sets'), doneCount(), 0, .9);
+    countUp($('#s-prs'), W.prs.length, 0, .9);
+    if (first) { player.hidden = true; }
+  }
+  $('#back-today').addEventListener('click', () => {
+    updateHero();
+    const fin = () => { summary.hidden = true; statusColor(); celebrateToday(); };
+    out(summary, { opacity: 0, y: 30, duration: .35, ease: 'power2.in' }, fin);
+  });
+  $('#share-btn').addEventListener('click', () => toast('#toast-phone', 'Opens the share sheet with this card. Nothing is posted without Maya.'));
+  let celebrated = false;
+  function celebrateToday() {
+    if (celebrated) return; celebrated = true;
+    $('#today-dot').setAttribute('opacity', '0');
+    const fill = $('#today-fill');
+    if (motion) {
+      G.to(fill, { strokeDashoffset: 0, duration: .8, ease: 'power2.out', delay: .2 });
+      G.to('#today-check', { attr: { opacity: 1 }, duration: .3, delay: .8 });
+      G.fromTo('#hero', { scale: .97 }, { scale: 1, duration: .6, ease: 'back.out(2)', delay: .1 });
+    } else { fill.style.strokeDashoffset = 0; $('#today-check').setAttribute('opacity', '1'); }
+    $('#week').setAttribute('aria-label', 'This week: 3 of 4 sessions done');
+  }
+
+  /* ---------- Coach ---------- */
+  function coachIntro() {
+    if (coachSeen) return; coachSeen = true;
+    $$('[data-count]').forEach((el) => countUp(el, parseFloat(el.dataset.count), 0, 1.2));
+    draw($('#cspark'), .3);
+    if (!motion) return;
+    G.from('[data-cin]', { y: 18, opacity: 0, duration: .55, ease: 'power3.out', stagger: .07 });
+    G.from('#bars i', { scaleY: 0, duration: .8, ease: 'power3.out', stagger: .06, delay: .4 });
+  }
+  function setNeeds(n) {
+    $$('[data-needs]').forEach((e) => { e.textContent = n; });
+    $('#needs-line').innerHTML = n ? `<b><span data-needs>${n}</span> client${n === 1 ? ' needs' : 's need'} you</b> today. Everyone else is on track.` : '<b>Everyone is on track today.</b> Nothing needs you right now.';
+  }
+  $('#queue').addEventListener('click', (ev) => {
+    const btn = ev.target.closest('button'); if (!btn) return;
+    const row = btn.closest('.q');
+    toast('#toast-desk', row.dataset.done);
+    const remove = () => {
+      row.remove();
+      const n = $$('#queue .q').length; setNeeds(n);
+      if (!n) { const a = $('#allgood'); a.hidden = false; if (motion) G.from(a, { scale: .9, opacity: 0, duration: .5, ease: 'back.out(2)' }); }
+    };
+    if (motion) G.to(row, { x: 30, opacity: 0, duration: .25, ease: 'power2.in', onComplete: () => G.to(row, { height: 0, paddingTop: 0, paddingBottom: 0, borderTopWidth: 0, duration: .25, ease: 'power2.inOut', onComplete: remove }) });
+    else remove();
+  });
+  $$('[data-toast]').forEach((b) => b.addEventListener('click', () => toast('#toast-desk', b.dataset.toast)));
+
+  const upcoming = [
+    { i: 'LS', c: 'a4', h: '<b>Lina</b> logged her weight: 63.1 kg, down 0.4 kg this week.' },
+    { i: 'KA', c: 'a1', h: '<b>Karim</b> finished Upper Body A. Bench press 100 kg × 5 <span class="pr">PR</span>' },
+    { i: 'SH', c: 'a6', h: '<b>Sara</b> submitted her weekly check-in.' },
+    { i: 'ON', c: 'a4', h: '<b>Omar</b> started Lower Body B. Good sign after a slow week.' },
+    { i: 'HT', c: 'a6', h: '<b>Hana</b> hit her protein target 5 days in a row.' },
+  ];
+  let up = 0;
+  function pushFeed(item) {
+    const feed = $('#feed');
+    const el = document.createElement('div');
+    el.className = 'f' + (item.fresh ? ' fresh' : '');
+    el.innerHTML = `<span class="av ${item.c}">${item.i}</span><div>${item.h}<em>Just now</em></div>`;
+    feed.prepend(el);
+    if (motion) {
+      const h = el.offsetHeight;
+      G.fromTo(el, { height: 0, opacity: 0 }, { height: h, opacity: 1, duration: .5, ease: 'power3.out', onComplete: () => G.set(el, { clearProps: 'height' }) });
+    }
+    while (feed.children.length > 7) feed.lastElementChild.remove();
+  }
+  function flushFeed() {
+    if (!feedQueue.length) return;
+    setTimeout(() => { while (feedQueue.length) pushFeed(feedQueue.pop()); }, 500);
+  }
+  setInterval(() => {
+    if (state.view !== 'coach' || document.hidden) return;
+    pushFeed(upcoming[up % upcoming.length]); up++;
+  }, 8000);
+
+  applyTheme();
+  todayIntro();
+})();
+</script>

@@ -499,7 +499,7 @@ Infrastructure beside the commercial service. The coach's notice reuses the work
 (`WorkspaceRelationshipNotices`, in-app only); the dispatcher names the client when it writes the
 inbox row, and the inbox view carries `clientProfileId` for that kind as a link target only.
 
-Design-system foundation slice 1 (2026-09-22) adds the Figma tokens as CSS custom properties
+Design-system foundation slice 1 (2026-09-22) adds the v1 design tokens as CSS custom properties
 (`src/styles/_tokens.scss`), opt-in `.tb-*` primitive styles (`src/styles/_ui.scss`) and small
 primitives under `src/app/ui`: buttons and links, icon buttons, icons, status labels, avatars, and a
 field wrapper with a control directive over native inputs, selects, textareas and checkboxes. The
@@ -507,8 +507,9 @@ primitives add no value accessors and change neither the validation convention a
 (`FormAttempt`) nor any cookie, antiforgery, tenancy, route-guard or API behaviour. They are
 additive: an existing route is restyled only when it is migrated on purpose. The development-only UI
 lab exists only in the development build (`fileReplacements`), and Playwright/axe browser checks
-live in `src/web/e2e`. Mapping, usage, migration boundaries and open work are in
-[FRONTEND-DESIGN-SYSTEM.md](FRONTEND-DESIGN-SYSTEM.md).
+live in `src/web/e2e`. Where the code lives and how to run the lab and tests is in
+[FRONTEND-DESIGN-SYSTEM.md](FRONTEND-DESIGN-SYSTEM.md); the visual direction, component kit v2 and
+screen order are decided only by [UI-REDESIGN-PLAN.md](UI-REDESIGN-PLAN.md).
 
 Design-system slice 2 (2026-09-22) adds the coach shell (`src/app/shell/`) and migrates the exercise
 library's default list state. **Which shell renders is presentation, and only that**: `App` picks the
