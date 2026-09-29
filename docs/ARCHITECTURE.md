@@ -513,6 +513,9 @@ screen order are decided only by [UI-REDESIGN-PLAN.md](UI-REDESIGN-PLAN.md). R1.
 colour values with brand v2 light/dark roles while keeping aliases for unmigrated screens. A route
 marked `REDESIGNED` follows the selected mode; other routed content stays light during migration.
 The development build alone reads brand and mode preview query parameters.
+R1.2 puts the reusable display, chart and selection components in `src/app/ui`; `@angular/aria`
+owns tab interaction, and `@angular/cdk` owns dialog, sheet and toast overlays. The UI lab exercises
+the kit in light, dark and RTL before any redesigned screen adopts it.
 
 Design-system slice 2 (2026-09-22) adds the coach shell (`src/app/shell/`) and migrates the exercise
 library's default list state. **Which shell renders is presentation, and only that**: `App` picks the

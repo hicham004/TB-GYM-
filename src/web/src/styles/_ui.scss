@@ -171,6 +171,11 @@
   color: var(--color-on-accent);
 }
 
+.tb-button--accent {
+  background-color: var(--tb-accent);
+  color: var(--tb-on-accent);
+}
+
 .tb-button--outlined {
   border-color: var(--color-border-control);
 }
@@ -182,6 +187,10 @@
 @media (hover: hover) {
   .tb-button--filled:hover:not(:disabled, [aria-disabled='true']) {
     background-color: var(--color-accent-hover);
+  }
+
+  .tb-button--accent:hover:not(:disabled, [aria-disabled='true']) {
+    filter: brightness(0.95);
   }
 
   .tb-button--outlined:hover:not(:disabled, [aria-disabled='true']),
@@ -227,6 +236,12 @@
 .tb-button--filled[aria-disabled='true'] {
   background-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
   color: color-mix(in srgb, var(--color-on-accent) 45%, transparent);
+}
+
+.tb-button--accent:disabled,
+.tb-button--accent[aria-disabled='true'] {
+  background-color: color-mix(in srgb, var(--tb-accent) 45%, var(--tb-surface));
+  color: var(--tb-on-accent);
 }
 
 .tb-button--outlined:disabled,

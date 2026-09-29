@@ -72,6 +72,15 @@ pre {
   gap: var(--space-12);
 }
 
+.lab-modal-actions {
+  margin-block-start: var(--space-24);
+}
+
+.tb-button,
+.tb-icon-button {
+  border-radius: var(--tb-radius-control);
+}
+
 .lab-caption,
 .lab-log {
   color: var(--color-text-secondary);

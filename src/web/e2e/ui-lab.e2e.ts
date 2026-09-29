@@ -14,13 +14,96 @@ const WIDTHS = [390, 1024, 1440] as const;
 const DIRECTIONS = ['ltr', 'rtl'] as const;
 const PRIMITIVES = '.tb-button, .tb-icon-button, .tb-control, .tb-checkbox-input';
 
-async function openLab(page: Page, options: { width?: number; dir?: 'ltr' | 'rtl' } = {}) {
+async function openLab(
+  page: Page,
+  options: { width?: number; dir?: 'ltr' | 'rtl'; mode?: 'light' | 'dark' } = {},
+) {
   await page.setViewportSize({ width: options.width ?? 1440, height: 900 });
   await mockSignedOut(page);
-  await page.goto(`/dev/ui-lab${options.dir === 'rtl' ? '?dir=rtl' : ''}`);
+  const query = new URLSearchParams();
+  if (options.dir === 'rtl') query.set('dir', 'rtl');
+  if (options.mode) query.set('mode', options.mode);
+  await page.goto(`/dev/ui-lab${query.size ? `?${query}` : ''}`);
   await expect(page.getByRole('heading', { level: 1, name: 'UI lab' })).toBeVisible();
   await waitForFonts(page);
 }
+
+for (const [width, dir] of [
+  [390, 'rtl'],
+  [1440, 'ltr'],
+] as const) {
+  test(`kit v2 at ${width}px ${dir} dark: every primitive, axe and visual`, async ({ page }) => {
+    await openLab(page, { width, dir, mode: 'dark' });
+    const kit = page.locator('.kit-section');
+    for (const selector of [
+      'app-card',
+      'app-stat-tile',
+      'app-avatar-stack',
+      'app-status-pill',
+      'app-empty-state',
+      'app-skeleton',
+      'app-progress-ring',
+      'app-sparkline',
+      'app-segmented-control',
+      'app-tabs',
+    ]) {
+      expect(await kit.locator(selector).count(), selector).toBeGreaterThan(0);
+    }
+    await expectNoHorizontalOverflow(page);
+    const scan = await new AxeBuilder({ page })
+      .include('app-ui-lab')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+      .analyze();
+    expect(scan.violations.map((violation) => violation.id)).toEqual([]);
+    await expect(kit).toHaveScreenshot(`kit-${width}-${dir}-dark.png`);
+  });
+}
+
+test('segmented choice and tabs work with pointer and keyboard in RTL', async ({ page }) => {
+  await openLab(page, { width: 390, dir: 'rtl', mode: 'dark' });
+
+  await page.getByRole('radio', { name: 'This month' }).click();
+  await expect(page.getByRole('radio', { name: 'This month' })).toBeChecked();
+  await expect(page.getByText('Selected period: month')).toBeVisible();
+
+  const overview = page.getByRole('tab', { name: 'Overview' });
+  const activity = page.getByRole('tab', { name: 'Activity' });
+  await overview.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(activity).toBeFocused();
+  await expect(activity).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText('Activity tells the story behind the numbers.')).toBeVisible();
+});
+
+test('dialog, sheet and toast keep their focus and announcement contracts', async ({ page }) => {
+  await openLab(page, { width: 390, dir: 'rtl', mode: 'dark' });
+
+  await page.getByRole('button', { name: 'Show toast' }).click();
+  const toast = page.getByRole('status').filter({ hasText: 'Plan saved in this lab only.' });
+  await expect(toast).toBeVisible();
+  await expect(page.locator('.tb-toast')).toHaveScreenshot('toast-390-rtl-dark.png');
+  await page.getByRole('button', { name: 'Dismiss notification' }).click();
+  await expect(toast).toHaveCount(0);
+
+  const dialogTrigger = page.getByRole('button', { name: 'Open dialog' });
+  await dialogTrigger.click();
+  const dialog = page.getByRole('dialog', { name: 'Plan changes' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Plan changes' })).toBeFocused();
+  await expect(dialog).toHaveScreenshot('dialog-390-rtl-dark.png');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(dialogTrigger).toBeFocused();
+
+  const sheetTrigger = page.getByRole('button', { name: 'Open sheet' });
+  await sheetTrigger.click();
+  const sheet = page.getByRole('dialog', { name: 'Quick actions' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toHaveScreenshot('sheet-390-rtl-dark.png');
+  await sheet.getByRole('button', { name: 'Close sheet' }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(sheetTrigger).toBeFocused();
+});
 
 /** What the focused element looks like, for asserting a visible 3px accent ring at 2px. */
 function focusedRing(page: Page) {

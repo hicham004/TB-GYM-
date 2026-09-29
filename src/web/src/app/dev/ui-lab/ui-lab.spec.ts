@@ -59,6 +59,22 @@ describe('UiLab', () => {
     expect(state(host, 'Touched')).toBe('no');
   });
 
+  it('changes period and tab content through the rendered selection controls', async () => {
+    const { fixture, host } = await render();
+
+    const month = query<HTMLInputElement>(host, 'app-segmented-control input[value="month"]');
+    month.click();
+    await settle(fixture);
+    expect(month.checked).toBe(true);
+    expect(text(fixture)).toContain('Selected period: month');
+
+    const activity = query<HTMLButtonElement>(host, 'app-tabs button:nth-child(2)');
+    expect(activity.getAttribute('role')).toBe('tab');
+    activity.click();
+    await settle(fixture);
+    expect(text(fixture)).toContain('Activity tells the story behind the numbers.');
+  });
+
   it('shows a reason only for the field that was left', async () => {
     const { fixture, host } = await render();
 

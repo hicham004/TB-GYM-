@@ -1,8 +1,10 @@
 import { JsonPipe } from '@angular/common';
+import { Dir } from '@angular/cdk/bidi';
 import {
   Component,
   DestroyRef,
   ElementRef,
+  TemplateRef,
   computed,
   inject,
   signal,
@@ -24,11 +26,24 @@ import {
 import { map } from 'rxjs';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { Avatar } from '../../ui/avatar';
+import { AvatarStack } from '../../ui/avatar-stack';
 import { Button, ButtonLink, IconButton } from '../../ui/button';
+import { Card } from '../../ui/card';
 import { Checkbox } from '../../ui/checkbox';
+import { EmptyState } from '../../ui/empty-state';
 import { Control, Field } from '../../ui/field';
+import { UiDialog } from '../../ui/dialog';
 import { Icon } from '../../ui/icon';
+import { ProgressRing } from '../../ui/progress-ring';
+import { SegmentedControl } from '../../ui/segmented-control';
+import { UiSheet } from '../../ui/sheet';
+import { Skeleton } from '../../ui/skeleton';
+import { Sparkline } from '../../ui/sparkline';
+import { StatTile } from '../../ui/stat-tile';
 import { StatusLabel } from '../../ui/status-label';
+import { StatusPill } from '../../ui/status-pill';
+import { UiTabPane, UiTabs } from '../../ui/tabs';
+import { UiToast } from '../../ui/toast';
 import {
   ARABIC,
   AVATAR_SAMPLES,
@@ -51,27 +66,44 @@ export const LAB_SAVE_DELAY_MS = 1200;
   selector: 'app-ui-lab',
   imports: [
     Avatar,
+    AvatarStack,
     Button,
     ButtonLink,
+    Card,
     Checkbox,
     Control,
+    Dir,
+    EmptyState,
     Field,
     Icon,
     IconButton,
     JsonPipe,
+    ProgressRing,
     ReactiveFormsModule,
     RouterLink,
     RouterLinkActive,
+    SegmentedControl,
+    Skeleton,
+    Sparkline,
+    StatTile,
     StatusLabel,
+    StatusPill,
+    UiTabPane,
+    UiTabs,
   ],
   templateUrl: './ui-lab.html',
-  styleUrl: './ui-lab.scss',
+  styleUrls: ['./ui-lab.scss', './ui-lab-kit.scss'],
   host: { class: 'tb-theme' },
 })
 export class UiLab {
   private readonly formBuilder = inject(NonNullableFormBuilder);
+  private readonly dialog = inject(UiDialog);
+  private readonly sheet = inject(UiSheet);
+  private readonly toast = inject(UiToast);
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly summary = viewChild.required<ElementRef<HTMLElement>>('summary');
+  private readonly dialogContent = viewChild.required<TemplateRef<unknown>>('dialogContent');
+  private readonly sheetContent = viewChild.required<TemplateRef<unknown>>('sheetContent');
 
   protected readonly arabic = ARABIC;
   protected readonly avatars = AVATAR_SAMPLES;
@@ -80,6 +112,20 @@ export class UiLab {
   protected readonly equipment = EQUIPMENT_OPTIONS;
   protected readonly setTypes = SET_TYPE_OPTIONS;
   protected readonly statuses = STATUS_SAMPLES;
+  protected readonly demoPeople = [
+    { name: 'Maya Rahman', initials: 'MR' },
+    { name: 'Rami Khoury', initials: 'RK' },
+    { name: 'Lina Saleh', initials: 'LS' },
+    { name: 'Nour Fares', initials: 'NF' },
+    { name: 'Omar Nasser', initials: 'ON' },
+  ];
+  protected readonly periodOptions = [
+    { value: 'week', label: 'This week' },
+    { value: 'month', label: 'This month' },
+    { value: 'quarter', label: '3 months' },
+  ];
+  protected readonly selectedPeriod = signal('week');
+  protected readonly selectedKitTab = signal<string | undefined>('overview');
 
   /** The direction links are current only for their exact query string. */
   protected readonly exactLink: IsActiveMatchOptions = {
@@ -150,6 +196,22 @@ export class UiLab {
   protected press(name: string): void {
     this.lastPressed.set(name);
     this.presses.update((counts) => ({ ...counts, [name]: (counts[name] ?? 0) + 1 }));
+  }
+
+  protected openDemoDialog(): void {
+    this.dialog.open(this.dialogContent(), { title: 'Plan changes', direction: this.direction() });
+  }
+
+  protected openDemoSheet(): void {
+    this.sheet.open(this.sheetContent(), { title: 'Quick actions', direction: this.direction() });
+  }
+
+  protected showDemoToast(): void {
+    this.toast.show('Plan saved in this lab only.', {
+      tone: 'success',
+      durationMs: 8000,
+      direction: this.direction(),
+    });
   }
 
   protected startDemoSave(): void {

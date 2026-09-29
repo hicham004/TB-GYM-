@@ -1,7 +1,7 @@
 import { booleanAttribute, DestroyRef, Directive, ElementRef, inject, input } from '@angular/core';
 
 /** Action/Button emphasis. Filled is the one primary action in a region. */
-export type ButtonVariant = 'filled' | 'outlined' | 'text';
+export type ButtonVariant = 'filled' | 'accent' | 'outlined' | 'text';
 /** Pointer / 40 for desktop; Touch / 48 for touch-first client screens and primary mobile CTAs. */
 export type ButtonSize = 'pointer' | 'touch';
 export type ButtonType = 'button' | 'submit' | 'reset';
@@ -39,6 +39,7 @@ function blockActivationWhile(isBusy: () => boolean): void {
     class: 'tb-button',
     '[attr.type]': 'type()',
     '[class.tb-button--filled]': "variant() === 'filled'",
+    '[class.tb-button--accent]': "variant() === 'accent'",
     '[class.tb-button--outlined]': "variant() === 'outlined'",
     '[class.tb-button--text]': "variant() === 'text'",
     '[class.tb-button--touch]': "size() === 'touch'",
@@ -67,6 +68,7 @@ export class Button {
   host: {
     class: 'tb-button',
     '[class.tb-button--filled]': "variant() === 'filled'",
+    '[class.tb-button--accent]': "variant() === 'accent'",
     '[class.tb-button--outlined]': "variant() === 'outlined'",
     '[class.tb-button--text]': "variant() === 'text'",
     '[class.tb-button--touch]': "size() === 'touch'",

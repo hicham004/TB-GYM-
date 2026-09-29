@@ -1,4 +1,4 @@
-<div class="lab" [attr.dir]="direction()">
+<div class="lab" [dir]="direction()">
   <header class="lab-header">
     <p class="lab-eyebrow tb-text-metadata-strong">Development build only</p>
     <h1 class="tb-text-page-title">UI lab</h1>
@@ -29,6 +29,177 @@
       >
     </nav>
   </header>
+
+  <section class="lab-section kit-section" aria-labelledby="lab-kit-title">
+    <div class="kit-heading">
+      <div>
+        <p class="lab-eyebrow tb-text-metadata-strong" i18n>Component kit v2</p>
+        <h2 id="lab-kit-title" class="tb-text-section-title" i18n>Built for a coach's day</h2>
+      </div>
+      <p class="lab-caption" i18n>Reusable surfaces, clear status and context for every number.</p>
+    </div>
+
+    <div class="kit-hero-grid">
+      <app-card variant="brand" class="kit-hero">
+        <p class="kit-eyebrow" i18n>WEEK 3 OF 8 · TODAY</p>
+        <h3 i18n>Upper Body: Strength B</h3>
+        <p i18n>5 exercises · 16 sets · about 55 minutes</p>
+        <div class="kit-coach-note">
+          <app-avatar initials="HH" />
+          <span i18n>Top set first. Stop the back-offs if bar speed drops.</span>
+        </div>
+        <button
+          appButton
+          type="button"
+          variant="accent"
+          size="touch"
+          (click)="press('Start workout')"
+          i18n
+        >
+          Start workout
+        </button>
+      </app-card>
+      <app-card variant="soft" class="kit-side-card">
+        <p class="kit-eyebrow" i18n>TODAY'S PICTURE</p>
+        <app-progress-ring [value]="68" label="Meals logged" valueText="2 of 3" />
+        <strong i18n>1,240 / 1,950 kcal</strong>
+        <p i18n>Two meals logged. One more brings Maya close to today's target.</p>
+      </app-card>
+    </div>
+
+    <div class="kit-stat-grid">
+      <app-stat-tile label="Active clients" value="24" context="+3 this month">
+        <app-avatar-stack
+          stat-tile-accessory
+          [people]="demoPeople"
+          label="Active clients"
+          [maxVisible]="3"
+        />
+      </app-stat-tile>
+      <app-stat-tile
+        label="Sessions done this week"
+        value="92%"
+        context="Up 6% from this point last week"
+        [trend]="{ values: [58, 64, 61, 75, 73, 88, 92], summary: 'Completion rose this week' }"
+      />
+      <app-stat-tile label="Plans ending in 14 days" value="3" context="1 client asked to renew" />
+    </div>
+
+    <div class="kit-status-row" aria-label="Status pill examples" i18n-aria-label>
+      <app-status-pill label="Check-in" tone="warning" />
+      <app-status-pill label="Renewal" tone="success" />
+      <app-status-pill label="Plan ending" tone="warm" />
+      <app-status-pill label="Access paused" tone="danger" />
+      <app-status-pill label="New client" tone="info" />
+    </div>
+
+    <div class="kit-utility-grid">
+      <div class="kit-utility">
+        <h3 class="lab-group-title" i18n>Progress, with words to match</h3>
+        <div class="kit-progress-row">
+          <app-progress-ring
+            [value]="26"
+            [max]="49"
+            label="Sessions done this week"
+            valueText="26 of 49"
+          />
+          <div>
+            <strong i18n>Just over halfway</strong>
+            <p class="lab-caption" i18n>26 of 49 planned sessions finished so far.</p>
+            <app-sparkline
+              [values]="[7, 9, 8, 12, 14, 17, 20]"
+              summary="Completed sessions rose across the week"
+            />
+          </div>
+        </div>
+      </div>
+      <div class="kit-utility">
+        <h3 class="lab-group-title" i18n>Choose a view</h3>
+        <app-segmented-control
+          label="Period"
+          [options]="periodOptions"
+          [(selected)]="selectedPeriod"
+        />
+        <p class="lab-caption" i18n>Selected period: {{ selectedPeriod() }}</p>
+        <app-tabs [(selected)]="selectedKitTab">
+          <ng-template appTabPane value="overview" label="Overview">
+            <p class="lab-caption" i18n>Overview brings today's decisions together.</p>
+          </ng-template>
+          <ng-template appTabPane value="activity" label="Activity">
+            <p class="lab-caption" i18n>Activity tells the story behind the numbers.</p>
+          </ng-template>
+          <ng-template appTabPane value="history" label="History">
+            <p class="lab-caption" i18n>Past weeks stay here when you need them.</p>
+          </ng-template>
+        </app-tabs>
+      </div>
+    </div>
+
+    <div class="kit-utility-grid">
+      <app-card class="kit-empty-card">
+        <app-empty-state
+          heading="No check-ins to review"
+          description="When a client sends a check-in, it will appear here."
+        >
+          <button
+            empty-state-action
+            appButton
+            type="button"
+            variant="outlined"
+            (click)="press('View clients')"
+            i18n
+          >
+            View clients
+          </button>
+        </app-empty-state>
+      </app-card>
+      <app-card class="kit-loading-card">
+        <h3 class="lab-group-title" i18n>Loading people and activity</h3>
+        <app-skeleton label="Loading clients" [avatar]="true" [lines]="3" />
+        <app-skeleton label="Loading activity" [avatar]="true" [lines]="2" />
+      </app-card>
+    </div>
+  </section>
+
+  <section class="lab-section" aria-labelledby="lab-overlays-title">
+    <h2 id="lab-overlays-title" class="tb-text-section-title" i18n>Sheet, dialog and toast</h2>
+    <p class="lab-caption" i18n>
+      Open each surface to check focus, Escape, dismissal and right-to-left placement.
+    </p>
+    <div class="lab-row">
+      <button appButton type="button" variant="outlined" (click)="openDemoDialog()" i18n>
+        Open dialog
+      </button>
+      <button appButton type="button" variant="outlined" (click)="openDemoSheet()" i18n>
+        Open sheet
+      </button>
+      <button appButton type="button" variant="text" (click)="showDemoToast()" i18n>
+        Show toast
+      </button>
+    </div>
+    <ng-template #dialogContent let-modal>
+      <p i18n>Review the new price and dates before saving this plan.</p>
+      <div class="lab-row lab-modal-actions">
+        <button appButton type="button" variant="outlined" (click)="modal.close()" i18n>
+          Cancel
+        </button>
+        <button appButton type="button" (click)="modal.close(); showDemoToast()" i18n>
+          Save plan
+        </button>
+      </div>
+    </ng-template>
+    <ng-template #sheetContent let-modal>
+      <p i18n>Keep the next useful actions within thumb reach.</p>
+      <div class="lab-row lab-modal-actions">
+        <button appButton type="button" (click)="modal.close(); press('Review check-in')" i18n>
+          Review check-in
+        </button>
+        <button appButton type="button" variant="outlined" (click)="modal.close()" i18n>
+          Close sheet
+        </button>
+      </div>
+    </ng-template>
+  </section>
 
   <section class="lab-section" aria-labelledby="lab-buttons-title">
     <h2 id="lab-buttons-title" class="tb-text-section-title">Buttons</h2>
