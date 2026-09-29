@@ -40,6 +40,13 @@ builder.Services.ConfigureHttpJsonOptions(options =>
         new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)));
 builder.Services.AddTbGymInfrastructure(builder.Configuration, builder.Environment);
 
+// `demo-workspace` walks a clock through the past while it builds the demo, so that clock has to be
+// in place before the host is built. Development only; the command refuses anywhere else.
+if (DemoWorkspaceCommand.IsInvocation(args) && builder.Environment.IsDevelopment())
+{
+    builder.Services.AddDemoWorkspaceClock();
+}
+
 var app = builder.Build();
 
 // `platform-admin grant|revoke|list` runs against this deployment's database and exits without
@@ -53,6 +60,12 @@ if (PlatformAdminCommand.IsInvocation(args))
 if (SendTestEmailCommand.IsInvocation(args))
 {
     return await SendTestEmailCommand.RunAsync(app.Services, args, Console.Out);
+}
+
+// `demo-workspace` fills a development database with the Atlas Performance demo, then exits.
+if (DemoWorkspaceCommand.IsInvocation(args))
+{
+    return await DemoWorkspaceCommand.RunAsync(app.Services, args, Console.Out);
 }
 
 app.UseExceptionHandler();

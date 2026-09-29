@@ -45,8 +45,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 
 | Step | What (sections) | Done when | Status |
 | --- | --- | --- | --- |
-| R0.1 | **Demo workspace generator** (§7). Development-only CLI next to `platform-admin grant`. Running it on production for sales demos is a later owner decision | One command fills an empty dev database with "Atlas Performance". Coach Today, Clients and client Today look real in screenshots | Next |
-| R0.2 | **Words pass** (§6). Text only, on the existing screens | No system word from §6 is left in visible template text; tests are updated | To do |
+| R0.1 | **Demo workspace generator** (§7). Development-only CLI next to `platform-admin grant`. Running it on production for sales demos is a later owner decision | One command fills an empty dev database with "Atlas Performance". Coach Today, Clients and client Today look real in screenshots | Done · 2026-09-29 |
+| R0.2 | **Words pass** (§6). Text only, on the existing screens | No system word from §6 is left in visible template text; tests are updated | Next |
 | R1.1 | **Brand v2 tokens, theme-ready** (§3, §3.1). Brand, accent and light/dark as custom properties; legacy aliases kept for now | Lab and shells render in all 4 prototype brands, in light and dark, at AA contrast | To do |
 | R1.2 | **Component kit v2 core** (§4): Card, StatTile, Avatar/Stack, StatusPill, Buttons, Sheet, Dialog, Toast, EmptyState, Skeleton, ProgressRing, Sparkline, SegmentedControl, Tabs | All of them are in the UI lab, pass axe, and work in RTL and dark | To do |
 | R1.3 | **Three hero screens in the lab** on demo data: Coach Today, Client Today, Workout player, matching the prototype (GSAP moments included) | Side-by-side screenshots against the prototype at 390 and 1440 px | To do |
@@ -78,6 +78,16 @@ feedback is pending. Apply it to the prototype before R1.3.
 ### Follow-ups
 
 *(Sessions add items here instead of building them.)*
+
+- **Demo data gaps (from R0.1).** The demo has no meal plans (needed before R2.4), no progress photos
+  or coach/exercise media (needed for R1.3 avatars and workout covers: use licensed images, never
+  AI-made people), and no former client. Add each when the screen that shows it is built.
+- **Demo freshness.** Dates are relative to the day the command runs, so the data ages. Rebuild it
+  (drop the development database, run `.\scripts\demo-workspace.ps1`) before every screenshot review
+  or demo.
+- **Demo billing.** The demo workspace is backdated past its trial. If the Worker runs against the
+  demo database it will invoice Atlas, and the workspace turns read-only after the grace days unless
+  the platform admin records the payment.
 
 ---
 
@@ -495,6 +505,12 @@ history:
 
 It is used for development, every screenshot review and every sales demo. The rule is to never
 demo an empty workspace.
+
+Built in R0.1 as `.\scripts\demo-workspace.ps1` (`demo-workspace` on the API, Development only). It
+walks a clock through the past and does every step through the real application services, so the
+data obeys every business rule. Sign-ins are `karim@` (owner), `lea@` and `omar@` (coaches) at
+`atlas.example`, and clients as `first.last@mail.example`, all with the password `AtlasDemo-2026!`.
+Maya Fakhoury is the client with a workout waiting today.
 
 ---
 

@@ -177,6 +177,18 @@ captured adapter.
 To run against a local toolchain instead, set the PostgreSQL values in `.env`, start PostgreSQL, and
 run `.\scripts\run-api.ps1` and `.\scripts\run-web.ps1` in separate terminals.
 
+To see the product with data that looks real, fill the development database with the Atlas
+Performance demo: an owner, two coaches and twelve clients with about ten weeks of workouts, weigh-ins,
+check-ins, messages and plans, built through the application's own services.
+
+```powershell
+.\scripts\demo-workspace.ps1    # prints the sign-ins; every account uses AtlasDemo-2026!
+```
+
+It runs only in Development, takes about four minutes, and refuses if Atlas already exists. Dates are
+relative to the day it runs, so drop the development database and run it again before a demo. Stop a
+running API first, because it holds the build output.
+
 ### Verification
 
 ```powershell

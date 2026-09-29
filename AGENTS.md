@@ -10,9 +10,11 @@
   technical questions yourself.
 - **Build complete slices:** backend rule, API, screen and tests together, small enough to
   finish and commit in one session.
-- **Verify in proportion:** during work, run the tests for the area you changed. Run the full
-  suite once before reporting. Click through any new or changed screen in a real browser.
-  Security, tenant isolation and money correctness are always tested, never traded off.
+- **Verify in proportion:** during work, run the tests for the area you changed. Before reporting,
+  run the full backend suite (about an hour) only when backend code changed, and the web checks
+  only when web code changed; docs-only work needs neither. Click through any new or changed screen
+  in a real browser. Security, tenant isolation and money correctness are always tested, never
+  traded off.
 - **Keep docs light:** when a decision, boundary, invariant or phase changes, update the
   existing docs in a few lines. Write an ADR (one page at most) only for a business decision or
   a module boundary change. No new reports, audits or checklists unless the user asks.
@@ -137,8 +139,9 @@
   wrong-tenant, constraint, and concurrency cases.
 - Angular state/interaction change: add Vitest coverage.
 - PostgreSQL-specific behavior must be tested against PostgreSQL, not SQLite/in-memory EF.
-- Run `./scripts/check.ps1` before reporting; if Docker isn't running, run its steps directly.
-  Also run `git diff --check`.
+- Before reporting, run only the `./scripts/check.ps1` steps for the side you changed: the backend
+  build and `dotnet test` when backend code changed, the npm steps when web code changed. If Docker
+  isn't running, run those steps directly. Always run `git diff --check`.
 
 ## Commands
 
@@ -149,6 +152,9 @@
 # API and Angular in separate terminals (requires PostgreSQL for readiness/data)
 .\scripts\run-api.ps1
 .\scripts\run-web.ps1
+
+# Fill the dev database with the Atlas Performance demo (UI-REDESIGN-PLAN.md R0.1); stop the API first
+.\scripts\demo-workspace.ps1
 
 # Complete Docker development stack
 docker compose up --build
