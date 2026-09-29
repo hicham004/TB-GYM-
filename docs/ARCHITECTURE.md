@@ -509,7 +509,10 @@ additive: an existing route is restyled only when it is migrated on purpose. The
 lab exists only in the development build (`fileReplacements`), and Playwright/axe browser checks
 live in `src/web/e2e`. Where the code lives and how to run the lab and tests is in
 [FRONTEND-DESIGN-SYSTEM.md](FRONTEND-DESIGN-SYSTEM.md); the visual direction, component kit v2 and
-screen order are decided only by [UI-REDESIGN-PLAN.md](UI-REDESIGN-PLAN.md).
+screen order are decided only by [UI-REDESIGN-PLAN.md](UI-REDESIGN-PLAN.md). R1.1 replaces the v1
+colour values with brand v2 light/dark roles while keeping aliases for unmigrated screens. A route
+marked `REDESIGNED` follows the selected mode; other routed content stays light during migration.
+The development build alone reads brand and mode preview query parameters.
 
 Design-system slice 2 (2026-09-22) adds the coach shell (`src/app/shell/`) and migrates the exercise
 library's default list state. **Which shell renders is presentation, and only that**: `App` picks the

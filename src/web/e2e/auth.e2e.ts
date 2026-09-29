@@ -216,7 +216,7 @@ test('sign-in is keyboard operable with the design-system focus ring', async ({ 
       const style = getComputedStyle(element);
       return `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor}`;
     });
-    expect(ring).toBe('solid 3px rgb(15, 118, 110)');
+    expect(ring).toBe('solid 3px rgb(21, 61, 51)');
   }
 
   // The toggle reveals the password and says so; Enter on a field submits the form.

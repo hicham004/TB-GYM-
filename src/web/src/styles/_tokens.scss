@@ -1,61 +1,176 @@
-// Design tokens from the TB Gym Figma file (key 7N4K2BM3XFoYhBjUnsi4wa, page "01 - Foundations").
+// Brand v2 design tokens (docs/UI-REDESIGN-PLAN.md §3 and §3.1). Every colour a screen uses is a
+// `--tb-*` custom property from this file, in three layers:
 //
-// Custom-property names are the Figma variables' WEB code syntax, so Figma Dev Mode and this file
-// name every value the same way. Semantic colours keep their Figma aliases as var() references to
-// the primitives. Product code uses the semantic roles; primitives exist only as alias targets.
+// 1. Brand. The coach's brand and accent and every tone derived from them. The values here are
+//    TB Gym's own brand (forest and lime). ThemeStore writes the current brand over them on <html>,
+//    derived by core/theme/brand-theme.ts, which guarantees AA contrast for every pairing below.
+// 2. Mode. Light or dark surfaces, text and status colours. Light is the default. Any element with
+//    `data-mode` starts its own scope, which is how a screen not yet rebuilt stays light inside a
+//    dark shell (App puts `data-mode="light"` on <main> for those).
+// 3. Aliases. The v1 `--color-*` names and the pre-foundation names (--accent, --surface, ...)
+//    that unmigrated screens still use, pointing at the tokens above until R5.3 deletes them.
 //
-// Deliberate deduplication: the Figma collection "Button v1" repeats border-control as #7f8985 and
-// maps icon/foreground per mode. It is not exported. Buttons use --color-border-control (#7d8783,
-// the Color collection value, 3.71:1 on surface) and icons inherit currentColor, which is what the
-// On surface / On accent modes resolve to. See docs/FRONTEND-DESIGN-SYSTEM.md.
-//
-// These tokens are additive: nothing here restyles an existing route. The pre-foundation palette
-// (--accent, --surface, --border-strong, ...) in styles.scss stays until each route is migrated.
+// A custom property that refers to another resolves where it is declared, and descendants inherit
+// the result. So every token that refers to another (mode tokens that use the brand, and all the
+// aliases) is declared again in each mode scope; that is what lets a nested scope use its own
+// values. Contrast: brand-theme.spec.ts covers the derived brand tones, and e2e/theme.e2e.ts
+// measures every text pairing in all four prototype brands in light and dark.
+
+// Instrument Serif, for moments only (§3): greetings, summaries, empty-state headlines.
+$serif: 'TB Home Serif', Georgia, 'Times New Roman', serif;
+
+@function check-mark($stroke) {
+  @return url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 8l2.75 2.75L12 5.25' stroke='%23#{$stroke}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+@function chevron($stroke, $opacity: 1) {
+  @return url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%23#{$stroke}' stroke-opacity='#{$opacity}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+@mixin light {
+  color-scheme: light;
+  --tb-bg: #fbfaf5;
+  --tb-surface: #ffffff;
+  --tb-surface-2: #f3f1e7;
+  --tb-ink: #182d27;
+  --tb-muted: #4f6057;
+  --tb-line: #d9dfd1;
+  // Control borders: at least 3:1 on every surface (WCAG 1.4.11).
+  --tb-line-strong: #7b8a81;
+  // Accent as text, icons and focus rings on the page: the brand on light, the accent on dark.
+  --tb-accent-ink: var(--tb-brand);
+  --tb-on-accent-ink: var(--tb-on-brand);
+  --tb-accent-ink-strong: var(--tb-brand-strong);
+  --tb-accent-soft: color-mix(in srgb, var(--tb-accent) 30%, transparent);
+  --tb-focus: var(--tb-accent-ink);
+  // Status colours never follow the brand. Each reads at AA on every surface and on its own soft
+  // fill, and ink reads on every soft fill.
+  --tb-success: #2a6f45;
+  --tb-success-soft: #e3f1e6;
+  --tb-warning: #7e5300;
+  --tb-warning-soft: #fff0d6;
+  --tb-danger: #9b3a23;
+  --tb-danger-soft: #fbe2da;
+  --tb-info: #2d4a86;
+  --tb-info-soft: #e1e7f6;
+  // Warm (§3): the secondary accent for "ending soon". The fill carries no text of its own colour.
+  --tb-warm: #f2b994;
+  --tb-warm-ink: #7f4318;
+  --tb-warm-soft: #fbe6d4;
+  --tb-shadow-card: 0 1px 2px rgb(24 45 39 / 6%), 0 1px 1px rgb(24 45 39 / 4%);
+  --tb-shadow-overlay: 0 12px 32px -12px rgb(24 45 39 / 24%), 0 2px 6px rgb(24 45 39 / 6%);
+  --tb-check-mark: #{check-mark('fff')};
+  --tb-check-mark-disabled: #{check-mark('7b8a81')};
+  --tb-select-chevron: #{chevron('182d27')};
+  --tb-select-chevron-disabled: #{chevron('182d27', 0.45)};
+}
+
+@mixin dark {
+  color-scheme: dark;
+  // Keep these three in step with DARK_SURFACES in core/theme/brand-theme.ts.
+  --tb-bg: #0f1513;
+  --tb-surface: #161e1b;
+  --tb-surface-2: #1d2724;
+  --tb-ink: #e8eee9;
+  --tb-muted: #a5b2ab;
+  --tb-line: #28322e;
+  --tb-line-strong: #687871;
+  --tb-accent-ink: var(--tb-accent-bright);
+  --tb-on-accent-ink: var(--tb-on-accent);
+  --tb-accent-ink-strong: color-mix(in srgb, var(--tb-accent-bright) 82%, #ffffff);
+  // Weaker than on light, so muted text still reads on it.
+  --tb-accent-soft: color-mix(in srgb, var(--tb-accent) 14%, transparent);
+  --tb-focus: var(--tb-accent-ink);
+  --tb-success: #8fd3a6;
+  --tb-success-soft: #173a27;
+  --tb-warning: #f2c46b;
+  --tb-warning-soft: #3a2e12;
+  --tb-danger: #f4a38f;
+  --tb-danger-soft: #3d1f19;
+  --tb-info: #a9bff0;
+  --tb-info-soft: #1c2a44;
+  --tb-warm: #f2b994;
+  --tb-warm-ink: #f2b994;
+  --tb-warm-soft: #3a261a;
+  --tb-shadow-card: 0 1px 2px rgb(0 0 0 / 40%);
+  --tb-shadow-overlay: 0 16px 40px -12px rgb(0 0 0 / 70%), 0 2px 6px rgb(0 0 0 / 40%);
+  --tb-check-mark: #{check-mark('11201b')};
+  --tb-check-mark-disabled: #{check-mark('687871')};
+  --tb-select-chevron: #{chevron('e8eee9')};
+  --tb-select-chevron-disabled: #{chevron('e8eee9', 0.45)};
+}
+
+// v1 (Figma) and pre-foundation names, kept for unmigrated screens. R5.3 deletes them.
+@mixin aliases {
+  --color-background: var(--tb-bg);
+  --color-surface: var(--tb-surface);
+  --color-surface-subtle: var(--tb-surface-2);
+  --color-text-primary: var(--tb-ink);
+  --color-text-secondary: var(--tb-muted);
+  --color-border-subtle: var(--tb-line);
+  --color-border-control: var(--tb-line-strong);
+  --color-accent: var(--tb-accent-ink);
+  --color-accent-hover: var(--tb-accent-ink-strong);
+  --color-accent-subtle: var(--tb-accent-soft);
+  --color-on-accent: var(--tb-on-accent-ink);
+  --color-success: var(--tb-success);
+  --color-success-subtle: var(--tb-success-soft);
+  --color-warning: var(--tb-warning);
+  --color-warning-subtle: var(--tb-warning-soft);
+  --color-danger: var(--tb-danger);
+  --color-danger-subtle: var(--tb-danger-soft);
+  --color-information: var(--tb-info);
+  --color-information-subtle: var(--tb-info-soft);
+  --color-text-on-inverse-muted: var(--tb-on-brand-muted);
+  --elevation-overlay: var(--tb-shadow-overlay);
+
+  --accent: var(--tb-accent-ink);
+  --accent-strong: var(--tb-accent-ink-strong);
+  --background: var(--tb-bg);
+  --border: var(--tb-line);
+  --border-strong: var(--tb-line-strong);
+  --danger: var(--tb-danger);
+  --danger-soft: var(--tb-danger-soft);
+  --muted-text: var(--tb-muted);
+  --success: var(--tb-success);
+  --success-border: color-mix(in srgb, var(--tb-success) 35%, var(--tb-surface));
+  --success-soft: var(--tb-success-soft);
+  --surface: var(--tb-surface);
+  --surface-subtle: var(--tb-surface-2);
+  --text: var(--tb-ink);
+  --warning: var(--tb-warning);
+  --warning-soft: var(--tb-warning-soft);
+}
+
 :root {
-  // Primitives (Figma collection "Primitives", hidden from Figma pickers).
-  --primitive-neutral-background: #f7f7f3;
-  --primitive-neutral-surface: #ffffff;
-  --primitive-neutral-surface-subtle: #f1f3f2;
-  --primitive-neutral-text-primary: #161b1a;
-  --primitive-neutral-text-secondary: #66716e;
-  --primitive-neutral-border-subtle: #d7ddda;
-  --primitive-neutral-border-control: #7d8783;
-  --primitive-teal-accent: #0f766e;
-  --primitive-teal-accent-hover: #0b5f59;
-  --primitive-teal-accent-subtle: #e7f4f2;
-  --primitive-success-base: #237a57;
-  --primitive-success-subtle: #eaf6ef;
-  --primitive-warning-base: #a05a00;
-  --primitive-warning-subtle: #fff4df;
-  --primitive-danger-base: #b42318;
-  --primitive-danger-subtle: #fdecec;
-  --primitive-information-base: #2563eb;
-  --primitive-information-subtle: #eaf1ff;
+  // Brand: TB Gym's own, as brandTokens(TB_GYM_BRAND) derives it (brand-theme.spec.ts pins the
+  // same values). Never use these hex values directly; a coach's brand replaces them.
+  --tb-brand: #153d33;
+  --tb-brand-strong: #112d26;
+  --tb-on-brand: #ffffff;
+  --tb-on-brand-soft: #dae0de;
+  --tb-on-brand-muted: #abb9b6;
+  --tb-accent: #d9ed94;
+  --tb-on-accent: #11201b;
+  --tb-accent-bright: #d9ed94;
+  --tb-night: #0c1e19;
 
-  // Semantic colour roles (Figma collection "Color", mode Light).
-  --color-background: var(--primitive-neutral-background);
-  --color-surface: var(--primitive-neutral-surface);
-  --color-surface-subtle: var(--primitive-neutral-surface-subtle);
-  --color-text-primary: var(--primitive-neutral-text-primary);
-  --color-text-secondary: var(--primitive-neutral-text-secondary);
-  --color-border-subtle: var(--primitive-neutral-border-subtle);
-  --color-border-control: var(--primitive-neutral-border-control);
-  --color-accent: var(--primitive-teal-accent);
-  --color-accent-hover: var(--primitive-teal-accent-hover);
-  --color-accent-subtle: var(--primitive-teal-accent-subtle);
-  --color-on-accent: var(--primitive-neutral-surface);
-  --color-success: var(--primitive-success-base);
-  --color-success-subtle: var(--primitive-success-subtle);
-  --color-warning: var(--primitive-warning-base);
-  --color-warning-subtle: var(--primitive-warning-subtle);
-  --color-danger: var(--primitive-danger-base);
-  --color-danger-subtle: var(--primitive-danger-subtle);
-  --color-information: var(--primitive-information-base);
-  --color-information-subtle: var(--primitive-information-subtle);
-  // Inverse (dark sidebar) surfaces only: 6.0:1 on #161b1a, 2.7:1 on the app background.
-  --color-text-on-inverse-muted: #969898;
+  // Shape (§3): 10px controls, 12-16px cards.
+  --tb-radius-control: 10px;
+  --tb-radius-card-small: 12px;
+  --tb-radius-card: 16px;
 
-  // Layout (Figma collection "Layout").
+  // Motion (§3): three durations and the homepage easing.
+  --tb-duration-fast: 120ms;
+  --tb-duration: 200ms;
+  --tb-duration-slow: 320ms;
+  --tb-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --tb-font-serif: #{$serif};
+
+  // v1 layout and type tokens (Figma "Layout" and Typography/*), still used by the primitives.
+  // Sizes and line heights are rem at the default 16px root, so a larger browser font setting
+  // enlarges text; strong styles share their size and line height and change only the weight.
   --space-4: 4px;
   --space-8: 8px;
   --space-12: 12px;
@@ -78,10 +193,6 @@
   --page-padding-desktop: 32px;
   --focus-separation-gap: 2px;
   --focus-ring-width: 3px;
-
-  // Typography: the nine Figma text styles (Typography/*). Code-owned tokens: sizes and line
-  // heights are rem at the default 16px root, so a larger browser font setting enlarges text;
-  // strong styles share their size and line height and change only the weight.
   --font-sans:
     'Notebook Plex', 'Notebook Plex Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-sans-arabic: 'Notebook Plex Arabic', 'Notebook Plex', system-ui, sans-serif;
@@ -99,8 +210,23 @@
   --text-compact-line-height: 1.25rem;
   --text-metadata-size: 0.75rem; // 12 / 16
   --text-metadata-line-height: 1rem;
+}
 
-  // Elevation (Figma effect style Elevation/Overlay): menus, dialogs and sticky overlays only.
-  // Normal surfaces use borders.
-  --elevation-overlay: 0 8px 24px -8px rgb(22 27 26 / 14%);
+// Light is the default; `system` starts light and turns dark below when the device asks for it.
+:root,
+[data-mode='light'],
+[data-mode='system'] {
+  @include light;
+  @include aliases;
+}
+
+[data-mode='dark'] {
+  @include dark;
+  @include aliases;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-mode='system'] {
+    @include dark;
+  }
 }

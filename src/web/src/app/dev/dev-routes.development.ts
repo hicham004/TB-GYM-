@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { REDESIGNED } from '../core/theme/redesigned-route';
 
 /**
  * Development-only routes, swapped in for dev-routes.ts by the development build configuration.
@@ -9,6 +10,7 @@ export const devRoutes: Routes = [
   {
     path: 'dev/ui-lab',
     title: 'UI lab | TB Gym (development)',
+    data: REDESIGNED,
     loadComponent: () => import('./ui-lab/ui-lab').then((module) => module.UiLab),
   },
 ];

@@ -1,26 +1,14 @@
-// Design-system foundation: Figma tokens and opt-in `.tb-*` primitive styles. Additive only; see
-// docs/FRONTEND-DESIGN-SYSTEM.md before replacing any of the legacy rules below.
+// Brand v2 tokens and opt-in `.tb-*` primitive styles. The legacy rules below read the
+// pre-foundation colour names (--accent, --surface, ...), which _tokens.scss now points at brand v2;
+// see docs/FRONTEND-DESIGN-SYSTEM.md before replacing any of them.
+@use 'styles/brand';
 @use 'styles/tokens';
 @use 'styles/ui';
 
+// Instrument Serif for the app's moments (--tb-font-serif); the browser fetches it on first use.
+@include brand.serif-face;
+
 :root {
-  --accent: #0f766e;
-  --accent-strong: #0b625c;
-  --background: #f6f7f8;
-  --border: #e2e5e8;
-  --border-strong: #cbd1d6;
-  --danger: #b42318;
-  --danger-soft: #fff2f0;
-  --muted-text: #667078;
-  --success: #18794e;
-  --success-border: #a7d7c2;
-  --success-soft: #edf8f2;
-  --surface: #ffffff;
-  --surface-subtle: #f1f3f4;
-  --text: #182026;
-  --warning: #8a4b08;
-  --warning-soft: #fff7e8;
-  color-scheme: light;
   font-family:
     Inter,
     ui-sans-serif,
@@ -85,8 +73,8 @@ app-coach-workout {
 }
 
 html {
-  background: var(--background);
-  color: var(--text);
+  background: var(--tb-bg);
+  color: var(--tb-ink);
 }
 
 body {

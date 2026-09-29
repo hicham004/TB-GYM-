@@ -9,7 +9,7 @@ import { expect, expectNoHorizontalOverflow, mockSignedOut, test, waitForFonts }
  * enlargement and the automated accessibility scan. Screenshots use fixed fixtures and the bundled
  * fonts; the environment is recorded because baselines are only comparable on the same one.
  */
-const ACCENT = 'rgb(15, 118, 110)';
+const ACCENT = 'rgb(21, 61, 51)';
 const WIDTHS = [390, 1024, 1440] as const;
 const DIRECTIONS = ['ltr', 'rtl'] as const;
 const PRIMITIVES = '.tb-button, .tb-icon-button, .tb-control, .tb-checkbox-input';

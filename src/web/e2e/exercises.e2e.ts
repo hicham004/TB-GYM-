@@ -418,7 +418,7 @@ test('focus rings are visible and unclipped on the first and last rows', async (
         offset: style.outlineOffset,
       };
     });
-    expect(ring).toEqual({ outline: 'solid 3px rgb(15, 118, 110)', offset: '2px' });
+    expect(ring).toEqual({ outline: 'solid 3px rgb(21, 61, 51)', offset: '2px' });
 
     const box = (await target.boundingBox())!;
     const region = (await page.locator('.rows-scroll').boundingBox())!;

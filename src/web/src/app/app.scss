@@ -3,6 +3,13 @@
   min-height: 100vh;
 }
 
+// A page kept light inside a dark shell (App.contentMode) paints its own background and resets
+// the text colour, which it would otherwise inherit from the dark page around it.
+main[data-mode] {
+  background-color: var(--tb-bg);
+  color: var(--tb-ink);
+}
+
 // Coach shell: the sidebar spans both rows of the first column; the top bar and <main> share the
 // second. The shell component's host is `display: contents`, so its sidebar and top bar are grid
 // items here. In RTL the grid mirrors, so the sidebar sits at the inline end (right).

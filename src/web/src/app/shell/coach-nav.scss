@@ -18,7 +18,7 @@
 }
 
 .group-label {
-  color: var(--color-text-on-inverse-muted);
+  color: var(--tb-on-brand-muted);
   font-size: var(--text-metadata-size);
   font-weight: var(--font-weight-strong);
   letter-spacing: 0.6px;
@@ -48,7 +48,7 @@
   align-items: center;
   border-radius: var(--radius-6);
   box-sizing: border-box;
-  color: var(--color-on-accent);
+  color: var(--tb-on-brand);
   display: flex;
   gap: var(--space-12);
   min-block-size: var(--control-height-40);
@@ -60,7 +60,7 @@
 }
 
 .item:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-on-accent);
+  outline: var(--focus-ring-width) solid var(--tb-on-brand);
   outline-offset: var(--focus-separation-gap);
 }
 
@@ -77,10 +77,10 @@
 }
 
 .count {
-  background-color: var(--color-accent);
+  background-color: var(--tb-accent);
   border-radius: var(--radius-full);
   box-sizing: border-box;
-  color: var(--color-on-accent);
+  color: var(--tb-on-accent);
   flex: none;
   font-size: var(--text-metadata-size);
   font-variant-numeric: tabular-nums;
@@ -98,7 +98,7 @@
   }
 
   .item.selected:hover {
-    background-color: var(--color-accent-hover);
+    background-color: var(--tb-brand-strong);
   }
 }
 
@@ -107,17 +107,20 @@
 }
 
 .item.selected {
-  background-color: var(--color-accent);
+  background-color: color-mix(in srgb, var(--tb-accent) 17%, var(--tb-brand));
 }
 
-// Selected + Pressed: accent-hover darkened by an 18% text-primary overlay.
 .item.selected:active {
-  background-color: color-mix(in srgb, var(--color-accent-hover), var(--color-text-primary) 18%);
+  background-color: var(--tb-brand-strong);
+}
+
+.item.selected .tb-icon {
+  color: var(--tb-accent-bright);
 }
 
 .item.selected .count {
-  background-color: var(--color-surface);
-  color: var(--color-accent);
+  background-color: var(--tb-accent);
+  color: var(--tb-on-accent);
 }
 
 // Selection must survive forced colours, where fills are dropped: the system selection colours

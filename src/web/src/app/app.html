@@ -8,9 +8,10 @@
        workspace switching and sign-out. -->
   <a class="skip-link" href="#main-content" (click)="skipToContent($event)" i18n>Skip to content</a>
 } @else if (shell() !== 'public') {
-  <!-- An account with no workspace keeps the existing top bar. Signed-out pages (the homepage,
-       sign-in and the rest of /auth, invitations) draw their own header. -->
-  <header class="topbar">
+  <!-- An account with no workspace keeps the existing top bar, light like the pages it serves.
+       Signed-out pages (the homepage, sign-in and the rest of /auth, invitations) draw their own
+       header. -->
+  <header class="topbar" data-mode="light">
     <a class="brand" routerLink="/" aria-label="TB Gym home" i18n-aria-label>
       <span class="brand-mark" aria-hidden="true">TB</span>
       <span>TB Gym</span>
@@ -50,6 +51,7 @@
 <main
   #main
   id="main-content"
+  [attr.data-mode]="contentMode()"
   [attr.tabindex]="shell() === 'client' ? -1 : null"
   [class.app-main]="shell() !== 'coach' && auth.user()"
   [class.client-main]="shell() === 'client'"

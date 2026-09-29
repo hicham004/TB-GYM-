@@ -353,11 +353,11 @@
   resize: vertical;
 }
 
-// The chevron is a background image because <select> cannot hold children. Its colour is baked
-// into the data URI (text-primary #161b1a; 45% when disabled) since custom properties cannot reach
-// inside an image; it sits at the logical inline end in both directions.
+// The chevron is a background image because <select> cannot hold children. Custom properties
+// cannot reach inside an image, so each mode supplies its own (_tokens.scss: ink, 45% when
+// disabled); it sits at the logical inline end in both directions.
 .tb-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%23161b1a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--tb-select-chevron);
   background-position: right var(--space-8) center;
   background-repeat: no-repeat;
   background-size: 20px 20px;
@@ -381,7 +381,7 @@
 }
 
 .tb-select:disabled {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%23161b1a' stroke-opacity='.45' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--tb-select-chevron-disabled);
   cursor: not-allowed;
 }
 
@@ -499,9 +499,11 @@
   padding: 0;
 }
 
+// The tick is drawn in the text colour that sits on the fill: white on the brand in light mode,
+// dark ink on the accent in dark mode (_tokens.scss).
 .tb-checkbox-input:checked {
   background-color: var(--color-accent);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 8l2.75 2.75L12 5.25' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--tb-check-mark);
   border-color: var(--color-accent);
 }
 
@@ -518,7 +520,7 @@
 }
 
 .tb-checkbox-input:disabled:checked {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 8l2.75 2.75L12 5.25' stroke='%237d8783' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--tb-check-mark-disabled);
 }
 
 // Forced colours: hand the chevron and the box back to the platform, which draws them in system

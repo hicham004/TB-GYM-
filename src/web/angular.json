@@ -69,6 +69,10 @@
                 {
                   "replace": "src/app/dev/dev-routes.ts",
                   "with": "src/app/dev/dev-routes.development.ts"
+                },
+                {
+                  "replace": "src/app/dev/dev-providers.ts",
+                  "with": "src/app/dev/dev-providers.development.ts"
                 }
               ]
             }

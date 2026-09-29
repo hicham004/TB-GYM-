@@ -9,10 +9,13 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter, map } from 'rxjs';
 import { AuthStore } from './core/auth/auth.store';
 import { SessionActions } from './core/auth/session-actions';
 import { TenantStore } from './core/tenancy/tenant.store';
+import { isRedesignedRoute } from './core/theme/redesigned-route';
 import { BillingBanner } from './features/billing/billing-banner';
 import { ClientTabs } from './shell/client-tabs';
 import { CoachShell } from './shell/coach-shell';
@@ -44,6 +47,7 @@ export class App implements OnInit {
   private readonly document = inject(DOCUMENT);
   private readonly locale = inject(LOCALE_ID);
   private readonly session = inject(SessionActions);
+  private readonly router = inject(Router);
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
   protected readonly auth = inject(AuthStore);
   protected readonly tenants = inject(TenantStore);
@@ -61,6 +65,20 @@ export class App implements OnInit {
     if (this.tenants.canCoach()) return 'coach';
     return this.tenants.isClient() ? 'client' : 'member';
   });
+
+  private readonly redesigned = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => isRedesignedRoute(this.router.routerState.snapshot.root)),
+    ),
+    { initialValue: false },
+  );
+
+  /**
+   * The page keeps the light tokens whatever the person's mode until its screen is rebuilt on
+   * brand v2 (REDESIGNED); the shells around it follow the mode.
+   */
+  protected readonly contentMode = computed(() => (this.redesigned() ? null : 'light'));
 
   ngOnInit(): void {
     this.document.documentElement.lang = this.locale;
