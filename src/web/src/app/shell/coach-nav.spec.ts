@@ -78,7 +78,7 @@ describe('coach navigation', () => {
     ]);
     expect(
       Array.from(host.querySelectorAll('.group-label')).map((label) => label.textContent?.trim()),
-    ).toEqual(['Workspace', 'Operations', 'Business']);
+    ).toEqual(['Coaching', 'Operations', 'Business']);
     // Group labels are headings, never controls.
     for (const label of Array.from(host.querySelectorAll('.group-label'))) {
       expect(label.tagName).toBe('H2');

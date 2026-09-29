@@ -3,8 +3,8 @@
     <div class="page-title">
       <h1 class="tb-text-section-title" i18n>Platform billing</h1>
       <p class="scope tb-text-compact" i18n>
-        What each workspace owes TB Gym. The server calculates every amount; a payment must be the
-        exact invoice total, and nothing is ever deleted.
+        What each coaching space owes TB Gym. The server calculates every amount; a payment must be
+        the exact invoice total, and nothing is ever deleted.
       </p>
     </div>
     <button
@@ -24,17 +24,17 @@
   <p class="page-notice" role="status">{{ notice() }}</p>
 
   <section class="card tb-table-scope" aria-labelledby="admin-workspaces-title">
-    <h2 id="admin-workspaces-title" class="card-title tb-text-body-strong" i18n>Workspaces</h2>
+    <h2 id="admin-workspaces-title" class="card-title tb-text-body-strong" i18n>Coaching spaces</h2>
     @if (loading() && workspaces().length === 0) {
-      <p class="card-state" i18n>Loading workspaces…</p>
+      <p class="card-state" i18n>Loading coaching spaces…</p>
     } @else if (workspaces().length === 0) {
-      <p class="card-state" i18n>No workspaces yet.</p>
+      <p class="card-state" i18n>No coaching spaces yet.</p>
     } @else {
       <div class="table-wrap">
         <table class="tb-table">
           <thead>
             <tr>
-              <th scope="col" i18n>Workspace</th>
+              <th scope="col" i18n>Coaching space</th>
               <th scope="col" i18n>Status</th>
               <th scope="col" i18n>Seats this month</th>
               <th scope="col" i18n>Billable clients</th>

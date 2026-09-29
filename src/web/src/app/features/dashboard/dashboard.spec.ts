@@ -53,9 +53,9 @@ describe('Dashboard', () => {
     const { fixture, host } = await render([], null);
 
     expect(host.querySelector('[data-no-workspace]')).not.toBeNull();
-    expect(text(fixture)).toContain('You are not part of a workspace right now');
+    expect(text(fixture)).toContain('You are not part of a coaching space right now');
     expect(text(fixture)).toContain('ask your coach to send you a new invitation');
-    expect(text(fixture)).not.toContain('No active workspace role');
+    expect(text(fixture)).not.toContain('No role here yet');
   });
 
   it('still asks to pick a workspace when the account has some but none is selected', async () => {
@@ -67,6 +67,6 @@ describe('Dashboard', () => {
     const { fixture, host } = await render([membership], null);
 
     expect(host.querySelector('[data-no-workspace]')).toBeNull();
-    expect(text(fixture)).toContain('Select another workspace to continue.');
+    expect(text(fixture)).toContain('Choose another coaching space to continue.');
   });
 });

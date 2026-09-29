@@ -399,7 +399,7 @@ test('an archived row offers Restore and never Edit', async ({ page }) => {
 
   const archivedRow = table(page).locator('tbody tr').first();
   await expect(archivedRow).toContainText('Archived');
-  await expect(archivedRow).toContainText('Not in new templates');
+  await expect(archivedRow).toContainText('Not in new programs');
   await expect(archivedRow.getByRole('button')).toHaveText([/Restore/]);
 });
 

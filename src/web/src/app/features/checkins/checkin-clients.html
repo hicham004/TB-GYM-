@@ -172,7 +172,8 @@
                 <option value="" i18n>Choose…</option>
                 @for (entry of comparable(); track entry.response!.responseId) {
                   <option [value]="entry.response!.responseId">
-                    {{ entry.assignment.formTitle }} · {{ entry.assignment.dueDate }}
+                    {{ entry.assignment.formTitle }} ·
+                    {{ entry.assignment.dueDate | date: 'd MMM y' }}
                   </option>
                 }
               </select>
@@ -183,7 +184,8 @@
                 <option value="" i18n>Choose…</option>
                 @for (entry of comparable(); track entry.response!.responseId) {
                   <option [value]="entry.response!.responseId">
-                    {{ entry.assignment.formTitle }} · {{ entry.assignment.dueDate }}
+                    {{ entry.assignment.formTitle }} ·
+                    {{ entry.assignment.dueDate | date: 'd MMM y' }}
                   </option>
                 }
               </select>
@@ -282,11 +284,11 @@
               <th scope="col" i18n>Question</th>
               <th scope="col">
                 <ng-container i18n>Version {{ view.first.formVersionNumber }}</ng-container>
-                <span class="reworded">{{ view.first.submittedDate }}</span>
+                <span class="reworded">{{ view.first.submittedDate | date: 'd MMM y' }}</span>
               </th>
               <th scope="col">
                 <ng-container i18n>Version {{ view.second.formVersionNumber }}</ng-container>
-                <span class="reworded">{{ view.second.submittedDate }}</span>
+                <span class="reworded">{{ view.second.submittedDate | date: 'd MMM y' }}</span>
               </th>
             </tr>
           </thead>

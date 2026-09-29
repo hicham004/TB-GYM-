@@ -38,7 +38,7 @@ export function featureAccessReason(error: unknown): FeatureAccessReason | null 
 function knownCodeMessage(code: string): string | null {
   switch (code) {
     case 'MediaWorkspaceStorageExceeded':
-      return $localize`This workspace has used all of its media storage. Delete some media to free space, then try again.`;
+      return $localize`Your coaching space has used all of its media storage. Delete some media to free space, then try again.`;
     case 'ClientProgressPhotoStorageExceeded':
       return $localize`This client has used all of their progress-photo storage. Remove some older photos, then try again.`;
     case 'BodyweightDateAlreadyExists':
@@ -46,7 +46,7 @@ function knownCodeMessage(code: string): string | null {
     case 'BodyweightObservationVoided':
       return $localize`That entry was already replaced by a correction. Work from the replacement instead.`;
     case 'workspace_read_only':
-      return $localize`This workspace is read-only until its TB Gym bill is paid. You can still view everything.`;
+      return $localize`Your coaching space is read-only until its TB Gym bill is paid. You can still view everything.`;
     default:
       return null;
   }

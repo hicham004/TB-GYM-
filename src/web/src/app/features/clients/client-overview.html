@@ -6,17 +6,17 @@
         <h2 id="former-title" class="tb-text-body-strong" i18n>Former client</h2>
         @if (release.departureKind === 'LeftByClient') {
           <p class="tb-text-compact" i18n>
-            Left the workspace on {{ release.releasedAtUtc | date: 'mediumDate' }}.
+            Left on {{ release.releasedAtUtc | date: 'mediumDate' }}.
           </p>
         } @else {
           <p class="tb-text-compact" i18n>
-            Released on {{ release.releasedAtUtc | date: 'mediumDate' }} by
+            Coaching ended on {{ release.releasedAtUtc | date: 'mediumDate' }} by
             {{ release.releasedByName }}.
           </p>
         }
         <p class="tb-text-compact" i18n>
-          Their access to this workspace ended then, and their open plans and programs were closed.
-          This record is kept read-only. You can invite them back as a new client.
+          Their access ended then, and their open plans and programs were closed. This record is
+          kept read-only. You can invite them back as a new client.
         </p>
         <p class="tb-text-compact">
           <span class="muted" i18n>Reason</span>
@@ -647,7 +647,7 @@
                   label="Coach note"
                   i18n-label
                   hideLabel
-                  help="Only coaches in this workspace see this note. Up to 8,000 characters."
+                  help="Your client never sees this note. Up to 8,000 characters."
                   i18n-help
                   [errors]="noteErrors()"
                 >

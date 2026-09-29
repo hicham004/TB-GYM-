@@ -7,19 +7,17 @@
     <p class="eyebrow" i18n>Training</p>
     <h1 i18n>Program builder</h1>
     <p>
-      {{ templates().length }} / {{ templateTotal() }} templates &middot;
-      {{ exercises().length }} exercises
+      {{ templates().length }} / {{ templateTotal() }} <span i18n>programs</span> &middot;
+      {{ exercises().length }} <span i18n>exercises</span>
     </p>
   </div>
   <div class="button-group">
-    <button class="secondary-button" type="button" (click)="newTemplate()" i18n>
-      New template
-    </button>
+    <button class="secondary-button" type="button" (click)="newTemplate()" i18n>New program</button>
     <button class="primary-button" type="button" [disabled]="busy()" (click)="saveProgram()">
       @if (draft().templateId) {
-        <span i18n>Save new version</span>
+        <span i18n>Save changes</span>
       } @else {
-        <span i18n>Create template</span>
+        <span i18n>Create program</span>
       }
     </button>
   </div>
@@ -36,14 +34,14 @@
   <aside
     class="template-rail"
     [class.empty]="templates().length === 0"
-    aria-label="Program templates"
+    aria-label="Programs"
     i18n-aria-label
   >
-    <h2 i18n>Templates</h2>
+    <h2 i18n>Programs</h2>
     @if (loading()) {
       <p class="muted" i18n>Loading...</p>
     } @else if (templates().length === 0) {
-      <p class="muted" i18n>No templates yet.</p>
+      <p class="muted" i18n>No programs yet.</p>
     }
     @for (template of templates(); track template.id) {
       <div class="template-entry">
@@ -76,7 +74,7 @@
         (click)="loadMoreTemplates()"
         i18n
       >
-        Load more templates
+        Load more programs
       </button>
     }
   </aside>
@@ -93,7 +91,7 @@
       </label>
       <label class="check-field">
         <input type="checkbox" [(ngModel)]="draft().publish" />
-        <span i18n>Publish version</span>
+        <span i18n>Publish</span>
       </label>
     </div>
 
@@ -450,11 +448,7 @@
                           i18n-aria-label
                         />
                       </div>
-                      <select
-                        [(ngModel)]="set.loadStrategy"
-                        aria-label="Load strategy"
-                        i18n-aria-label
-                      >
+                      <select [(ngModel)]="set.loadStrategy" aria-label="Load type" i18n-aria-label>
                         @for (strategy of loadStrategies; track strategy) {
                           <option [value]="strategy">{{ loadStrategyLabel(strategy) }}</option>
                         }

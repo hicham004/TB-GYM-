@@ -1,8 +1,8 @@
 <button #releaseTrigger appButton variant="outlined" type="button" (click)="open()" i18n>
-  Release client
+  End coaching
 </button>
 
-<!-- Release is confirmed before anything is sent. Only "Release permanently" calls the API. -->
+<!-- Release is confirmed before anything is sent. Only "End coaching permanently" calls the API. -->
 <dialog
   #releaseDialog
   class="tb-dialog tb-theme"
@@ -10,19 +10,18 @@
   (cancel)="cancel($event)"
 >
   <h2 id="release-dialog-title" class="tb-text-section-title" dir="auto" i18n>
-    Release {{ client().firstName }} {{ client().lastName }}?
+    End coaching with {{ client().firstName }} {{ client().lastName }}?
   </h2>
   <p class="tb-text-compact" i18n>
-    They lose access to this workspace right away, and we email them that their access has ended.
-    Their open plans and programs are closed, with no refund. Nothing is deleted: you keep their
-    record, read-only, under Former clients. This cannot be undone, though you can invite them back
-    later as a new client.
+    They lose access right away, and we email them that their coaching has ended. Their open plans
+    and programs are closed, with no refund. Nothing is deleted: you keep their record, read-only,
+    under Former clients. You can't undo this, but you can invite them back later as a new client.
   </p>
   <form class="release-form" [formGroup]="form" (ngSubmit)="release()" novalidate>
     <app-field
       label="Reason"
       i18n-label
-      help="Kept in this workspace only; it is not included in the email. Up to 500 characters."
+      help="Only your team sees this. It is not included in the email. Up to 500 characters."
       i18n-help
     >
       <textarea appControl dir="auto" rows="3" formControlName="reason" required></textarea>
@@ -34,9 +33,9 @@
       </button>
       <button appButton type="submit" [loading]="saving()">
         @if (saving()) {
-          <ng-container i18n>Releasing…</ng-container>
+          <ng-container i18n>Ending…</ng-container>
         } @else {
-          <ng-container i18n>Release permanently</ng-container>
+          <ng-container i18n>End coaching permanently</ng-container>
         }
       </button>
     </div>

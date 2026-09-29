@@ -40,7 +40,7 @@ export class HomeTour {
       label: $localize`Training`,
       title: $localize`Programs that fit each client`,
       body: $localize`Build reusable programs and give every client their own copy. Prescribe sets, reps and effort with RPE or RIR. Clients log what they actually lifted, and your plan stays intact.`,
-      note: $localize`Edit the template, and Maya's copy stays hers.`,
+      note: $localize`Edit the program, and Maya's copy stays hers.`,
     },
     {
       id: 'nutrition',

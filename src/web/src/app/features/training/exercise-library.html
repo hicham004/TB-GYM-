@@ -21,8 +21,8 @@
     <div class="page-title">
       <h1 class="tb-text-section-title" i18n>Training</h1>
       <p class="scope tb-text-compact" i18n>
-        Reusable building blocks for this workspace’s program templates. Saved template versions,
-        assigned programs and logged workouts keep the exercise name they were saved with.
+        The exercises your programs are built from. Saved programs, assigned programs and logged
+        workouts keep the exercise name they were saved with.
       </p>
     </div>
 
@@ -424,7 +424,7 @@
                 <span class="cell-value status-cell">
                   @if (row.isArchived) {
                     <app-status-label label="Archived" i18n-label tone="neutral" marker="dot" />
-                    <span class="status-note" i18n>Not in new templates</span>
+                    <span class="status-note" i18n>Not in new programs</span>
                   } @else {
                     <app-status-label label="Active" i18n-label tone="success" marker="check" />
                   }
@@ -489,9 +489,9 @@
   @if (pendingArchive(); as target) {
     <h2 id="archive-dialog-title" class="tb-text-section-title" i18n>Archive {{ target.name }}?</h2>
     <p class="tb-text-compact" i18n>
-      It stops being offered when building a new template version or choosing an approved
-      alternative. Saved template versions, assigned programs and logged workouts keep it, with the
-      name and history they were saved with.
+      It stops being offered when you build or change a program, or choose an alternative. Saved
+      programs, assigned programs and logged workouts keep it, with the name and history they were
+      saved with.
     </p>
     <p class="tb-text-compact" i18n>You can restore it from this list at any time.</p>
     <div class="tb-dialog__actions">

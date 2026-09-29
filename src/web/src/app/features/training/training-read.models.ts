@@ -92,7 +92,7 @@ export function trainingReadAccessLabel(reason: string): string {
     case 'PlatformBlocked':
       return $localize`Your account is blocked. Contact support.`;
     case 'MembershipInactive':
-      return $localize`You do not have active access to this workspace.`;
+      return $localize`Your coaching has ended, so training is closed.`;
     default:
       return $localize`Training is not available. Contact your coach.`;
   }

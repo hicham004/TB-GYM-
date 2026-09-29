@@ -45,9 +45,9 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 
 | Step | What (sections) | Done when | Status |
 | --- | --- | --- | --- |
-| R0.1 | **Demo workspace generator** (§7). Development-only CLI next to `platform-admin grant`. Running it on production for sales demos is a later owner decision | One command fills an empty dev database with "Atlas Performance". Coach Today, Clients and client Today look real in screenshots | Done · 2026-09-29 |
-| R0.2 | **Words pass** (§6). Text only, on the existing screens | No system word from §6 is left in visible template text; tests are updated | Next |
-| R1.1 | **Brand v2 tokens, theme-ready** (§3, §3.1). Brand, accent and light/dark as custom properties; legacy aliases kept for now | Lab and shells render in all 4 prototype brands, in light and dark, at AA contrast | To do |
+| R0.1 | **Demo workspace generator** (§7). Development-only CLI next to `platform-admin grant`. Running it on production for sales demos is a later owner decision | One command fills an empty dev database with "Atlas Performance". Coach Today, Clients and client Today look real in screenshots | Done · 2026-09-29 · efbaaa0 |
+| R0.2 | **Words pass** (§6). Text only, on the existing screens | No system word from §6 is left in visible template text; tests are updated | Done · 2026-09-29 |
+| R1.1 | **Brand v2 tokens, theme-ready** (§3, §3.1). Brand, accent and light/dark as custom properties; legacy aliases kept for now | Lab and shells render in all 4 prototype brands, in light and dark, at AA contrast | Next |
 | R1.2 | **Component kit v2 core** (§4): Card, StatTile, Avatar/Stack, StatusPill, Buttons, Sheet, Dialog, Toast, EmptyState, Skeleton, ProgressRing, Sparkline, SegmentedControl, Tabs | All of them are in the UI lab, pass axe, and work in RTL and dark | To do |
 | R1.3 | **Three hero screens in the lab** on demo data: Coach Today, Client Today, Workout player, matching the prototype (GSAP moments included) | Side-by-side screenshots against the prototype at 390 and 1440 px | To do |
 | R1.4 | 🚦 **Owner and partner approve the look** | The owner says go | Gate |
@@ -88,6 +88,18 @@ feedback is pending. Apply it to the prototype before R1.3.
 - **Demo billing.** The demo workspace is backdated past its trial. If the Worker runs against the
   demo database it will invoice Atlas, and the workspace turns read-only after the grace days unless
   the platform admin records the payment.
+- **Backend words (from R0.2).** Text written by the API still uses system words: notification
+  titles and bodies ("Open your workspace…", `NotificationTemplates.cs`), stored history reasons
+  ("Assigned from a published program template."), emails and problem messages such as the
+  training-coverage refusal. They need a backend words pass with its own tests.
+- **Assign program lists every version (from R0.2).** The coach's program picker shows each
+  published version ("Full Body Reset · v1"), so "v2" is still visible there. Offer only each
+  program's latest version when C3's Actions drawer replaces the form (R3.4).
+- **Nutrition day refusals (from R0.2).** A day with no meal plan and a refused day share one
+  message ("There is no meal plan for this day…"). Map each access reason, as check-ins do, when
+  M4 is rebuilt (R2.4).
+- **Translations.** `src/web/src/locale/messages.xlf` has not been regenerated since Phase 5, and
+  R0.2 changed about 250 source strings. Run `npm run i18n:extract` before any translation work.
 
 ---
 
@@ -461,6 +473,13 @@ The engine keeps its precise names in code. Screens use the words on the right.
 | Authorized / entitlement errors | "Not in your plan. Ask your coach." |
 | Workspace | Your coaching space (owners), or the coach's name (clients) |
 | Release client | End coaching |
+| Published week (a mesocycle week) | Shared with client |
+| Bodyweight observation | Weigh-in |
+| BodyweightTrendEwma | Smoothed average *(coaches only)* |
+| Canonical food | Food |
+
+Built in R0.2 (2026-09-29): staff read "coaching space", clients read "your coach" where the
+coach's name is not on screen, and history keeps its versions (check-in forms, price plans).
 
 **Rules:**
 - Sentences are short, active, and use you/your.

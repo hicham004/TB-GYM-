@@ -1,9 +1,9 @@
 <section class="surface-section commercial-summary">
   <div class="section-heading relationship-heading">
     <div>
-      <p class="eyebrow" i18n>Commercial access</p>
+      <p class="eyebrow" i18n>Plans and payments</p>
       <h2 i18n>Service and access</h2>
-      <p class="muted" i18n>Payment, dates, entitlements, and relationship status resolve here.</p>
+      <p class="muted" i18n>What this client pays for, what's included, and when it runs.</p>
     </div>
     <div class="relationship-state">
       <!-- A former client's relationship has ended; the page heading already says so. -->
@@ -16,7 +16,7 @@
           @if (client().isCoachBlocked) {
             <span i18n>Blocked</span>
           } @else {
-            <span i18n>Relationship active</span>
+            <span i18n>Access on</span>
           }
         </span>
         <button
@@ -64,9 +64,9 @@
   }
 
   @if (loading()) {
-    <p class="loading-row" i18n>Resolving client access...</p>
+    <p class="loading-row" i18n>Loading access...</p>
   } @else if (overview(); as accessOverview) {
-    <div class="access-grid" aria-label="Feature access" i18n-aria-label>
+    <div class="access-grid" aria-label="What's included" i18n-aria-label>
       @for (decision of accessOverview.featureAccess; track decision.feature) {
         <div class="access-item" [class.allowed]="decision.isAllowed">
           <strong>{{ featureLabel(decision.feature) }}</strong>
@@ -81,20 +81,20 @@
   <section class="surface-section assignment-section">
     <div class="section-heading">
       <div>
-        <h2 i18n>Assign a service</h2>
-        <p class="muted" i18n>The offer fixes price, currency, duration, and included access.</p>
+        <h2 i18n>Start a plan</h2>
+        <p class="muted" i18n>The price option sets the price, the length and what's included.</p>
       </div>
     </div>
     @if (activeOffers().length === 0) {
-      <p class="notice" i18n>Create an active coaching product before assigning service.</p>
+      <p class="notice" i18n>Add a plan to sell under Products first.</p>
     } @else {
       <form class="assignment-form" [formGroup]="assignForm" (ngSubmit)="assign()">
         <label>
-          <span i18n>Product and offer</span>
+          <span i18n>Plan and price option</span>
           <select formControlName="offerId">
             @for (entry of activeOffers(); track entry.offer.id) {
               <option [value]="entry.offer.id">
-                {{ entry.product.name }} / {{ entry.offer.label }} / {{ entry.offer.priceAmount }}
+                {{ entry.product.name }} · {{ entry.offer.label }} · {{ entry.offer.priceAmount }}
                 {{ entry.offer.priceCurrency }}
               </option>
             }
@@ -104,9 +104,7 @@
           <span i18n>Start date</span>
           <input type="date" formControlName="startDate" />
         </label>
-        <button class="primary-button" type="submit" [disabled]="busy()" i18n>
-          Assign service
-        </button>
+        <button class="primary-button" type="submit" [disabled]="busy()" i18n>Start plan</button>
       </form>
     }
   </section>
@@ -115,17 +113,17 @@
 <section class="surface-section enrollment-section">
   <div class="section-heading">
     <div>
-      <h2 i18n>Enrollment history</h2>
-      <p class="muted" i18n>Renewals and payments remain separate historical records.</p>
+      <h2 i18n>Plan history</h2>
+      <p class="muted" i18n>Every renewal is a new plan, and each plan keeps its own payments.</p>
     </div>
   </div>
 
   @if (overview(); as commercial) {
     @if (commercial.enrollments.length === 0) {
       <div class="empty-state compact-empty">
-        <h2 i18n>No services assigned</h2>
+        <h2 i18n>No plan yet</h2>
         @if (!readOnly()) {
-          <p i18n>Choose an offer above to begin the client's commercial history.</p>
+          <p i18n>Start one above to give this client access.</p>
         }
       </div>
     } @else {
@@ -146,8 +144,8 @@
                   </span>
                 </div>
                 <p>
-                  {{ enrollment.offerLabel }} / {{ enrollment.startDate }} -
-                  {{ enrollment.lastActiveDate }}
+                  {{ enrollment.offerLabel }} · {{ enrollment.startDate | date: 'd MMM' }} –
+                  {{ enrollment.lastActiveDate | date: 'd MMM y' }}
                 </p>
               </div>
               <div class="price-summary">
@@ -228,7 +226,7 @@
                 (ngSubmit)="recordPayment(enrollment)"
               >
                 <div class="action-panel-heading">
-                  <h4 i18n>Record manual payment</h4>
+                  <h4 i18n>Record a payment</h4>
                   <button
                     class="quiet-button compact"
                     type="button"
@@ -272,7 +270,7 @@
             @if (renewalEnrollmentId() === enrollment.id) {
               <form class="action-panel" [formGroup]="renewalForm" (ngSubmit)="renew(enrollment)">
                 <div class="action-panel-heading">
-                  <h4 i18n>Create renewal</h4>
+                  <h4 i18n>Renew this plan</h4>
                   <button
                     class="quiet-button compact"
                     type="button"
@@ -284,12 +282,12 @@
                 </div>
                 <div class="action-grid renewal-grid">
                   <label>
-                    <span i18n>Offer</span>
+                    <span i18n>Price option</span>
                     <select formControlName="offerId">
                       @for (entry of activeOffers(); track entry.offer.id) {
                         @if (entry.product.id === enrollment.productId) {
                           <option [value]="entry.offer.id">
-                            {{ entry.offer.label }} / {{ entry.offer.priceAmount }}
+                            {{ entry.offer.label }} · {{ entry.offer.priceAmount }}
                             {{ entry.offer.priceCurrency }}
                           </option>
                         }
@@ -301,7 +299,7 @@
                   /></label>
                 </div>
                 <button class="primary-button compact" type="submit" [disabled]="busy()" i18n>
-                  Create renewal
+                  Renew plan
                 </button>
               </form>
             }
@@ -314,9 +312,9 @@
               >
                 <div class="action-panel-heading">
                   @if (statusAction() === 'pause') {
-                    <h4 i18n>Pause enrollment</h4>
+                    <h4 i18n>Pause plan</h4>
                   } @else {
-                    <h4 i18n>Cancel enrollment</h4>
+                    <h4 i18n>Cancel plan</h4>
                   }
                   <button
                     class="quiet-button compact"
@@ -352,7 +350,7 @@
                         <tr>
                           <td>{{ payment.receivedAtUtc | date: 'medium' }}</td>
                           <td>{{ payment.amount }} {{ payment.currencyCode }}</td>
-                          <td>{{ payment.method }}</td>
+                          <td>{{ paymentMethodLabel(payment.method) }}</td>
                           <td>{{ payment.reference || '-' }}</td>
                         </tr>
                       }

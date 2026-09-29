@@ -78,10 +78,10 @@ export class WorkspaceSettings {
         );
         this.patch(this.workspace);
         await owner.wait(this.tenants.load(this.workspace.id));
-        this.notice.set($localize`Workspace settings saved.`);
+        this.notice.set($localize`Settings saved.`);
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`Workspace settings could not be saved.`));
+        this.error.set(apiErrorMessage(error, $localize`Settings could not be saved.`));
       } finally {
         if (owner.current) {
           this.saving.set(false);
@@ -99,7 +99,7 @@ export class WorkspaceSettings {
         this.patch(this.workspace);
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`Workspace settings could not be loaded.`));
+        this.error.set(apiErrorMessage(error, $localize`Settings could not be loaded.`));
       } finally {
         if (owner.current) {
           this.loading.set(false);

@@ -189,7 +189,7 @@
         <app-field
           class="lab-span-all"
           label="Exercise name"
-          help="Required. Up to 160 characters and unique in this workspace, including archived exercises."
+          help="Required. Up to 160 characters and unique in your coaching space, including archived exercises."
           [errors]="attempt.shows('name', nameMessages) ? nameMessages : null"
         >
           <input
@@ -245,8 +245,8 @@
         </app-field>
 
         <app-field
-          label="Workspace"
-          help="Disabled: it belongs to the workspace, so it cannot change here and is skipped by Tab."
+          label="Coaching space"
+          help="Disabled: it belongs to the coaching space, so it cannot change here and is skipped by Tab."
         >
           <input appControl type="text" formControlName="workspace" />
         </app-field>
@@ -257,7 +257,7 @@
           >
             <input type="checkbox" appControl formControlName="mainLift" />
           </app-checkbox>
-          <app-checkbox label="Include in new templates">
+          <app-checkbox label="Include in new programs">
             <input type="checkbox" appControl formControlName="includeInTemplates" />
           </app-checkbox>
         </div>

@@ -78,7 +78,9 @@ const SCREENS: {
     },
     fail: async (page) => {
       await page.getByRole('button', { name: 'Create coach account' }).click();
-      await expect(page.getByRole('alert')).toContainText("Your workspace can't be created yet");
+      await expect(page.getByRole('alert')).toContainText(
+        "Your coaching space can't be created yet",
+      );
     },
   },
   {
@@ -205,7 +207,7 @@ test('sign-in is keyboard operable with the design-system focus ring', async ({ 
     page.getByLabel('Keep me signed in'),
     page.getByRole('link', { name: 'Forgot password?' }),
     page.getByRole('button', { name: 'Sign in' }),
-    page.getByRole('link', { name: 'Create your workspace' }),
+    page.getByRole('link', { name: 'Create your coaching space' }),
   ];
   for (const target of order) {
     await page.keyboard.press('Tab');

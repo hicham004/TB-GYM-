@@ -284,9 +284,9 @@ export function rowAccessLabel(reason: FeatureAccessReason): string {
     case 'NotStarted':
       return $localize`Your coaching plan has not started yet`;
     case 'NoEntitlement':
-      return $localize`Not part of your coaching plan`;
+      return $localize`Not in your plan. Ask your coach.`;
     case 'MembershipInactive':
-      return $localize`Not available in this workspace`;
+      return $localize`Your coaching has ended`;
     case 'PlatformBlocked':
       return $localize`Your account is blocked`;
     default:

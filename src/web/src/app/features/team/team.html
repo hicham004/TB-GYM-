@@ -3,8 +3,8 @@
     <div class="page-title">
       <h1 class="tb-text-section-title" i18n>Settings</h1>
       <p class="scope tb-text-compact" i18n>
-        Coaches in this workspace. Each client has one coach, and a coach sees only their own
-        clients. You see every client.
+        Your coaching team. Each client has one coach, and a coach sees only their own clients. You
+        see every client.
       </p>
     </div>
     <app-section-nav
@@ -80,7 +80,7 @@
   <section class="card" aria-labelledby="invite-coach-title">
     <h2 id="invite-coach-title" class="card-title tb-text-body-strong" i18n>Invite a coach</h2>
     <p class="card-help tb-text-compact" i18n>
-      They get an email link. Accepting adds them to this workspace as a coach with no clients yet.
+      They get an email link. Accepting adds them to your team as a coach with no clients yet.
     </p>
     <form class="invite-form" [formGroup]="inviteForm" (ngSubmit)="invite()" novalidate>
       <app-field label="Email" i18n-label [errors]="shownErrors('email')">
@@ -211,9 +211,9 @@
       Remove {{ member.displayName }}?
     </h2>
     <p class="tb-text-compact" i18n>
-      They lose access to this workspace right away. Their clients, {{ member.assignedClientCount }}
-      in total, move to you with all their history, and any client invitation they sent will land
-      with you. Nothing is deleted, and you can reassign each client afterwards.
+      They lose access right away. Their clients, {{ member.assignedClientCount }} in total, move to
+      you with all their history, and any client invitation they sent will land with you. Nothing is
+      deleted, and you can reassign each client afterwards.
     </p>
     <div class="tb-dialog__actions">
       <button

@@ -1,8 +1,8 @@
 <section class="page-heading">
   <div>
-    <p class="eyebrow" i18n>Commercial</p>
+    <p class="eyebrow" i18n>What you sell</p>
     <h1 i18n>Coaching products</h1>
-    <p i18n>Define what you sell once, then assign a dated offer to each client.</p>
+    <p i18n>Set up what you sell once, then start a plan for each client from their profile.</p>
   </div>
   <button class="primary-button" type="button" (click)="createOpen.set(!createOpen())" i18n>
     New product
@@ -21,7 +21,7 @@
     <div class="section-heading">
       <div>
         <h2 i18n>Create a coaching product</h2>
-        <p class="muted" i18n>The first fixed-duration offer is created with it.</p>
+        <p class="muted" i18n>Its first price option is created with it.</p>
       </div>
       <button class="quiet-button compact" type="button" (click)="createOpen.set(false)" i18n>
         Close
@@ -34,7 +34,7 @@
           <input formControlName="name" autocomplete="off" />
         </label>
         <label>
-          <span i18n>Offer label</span>
+          <span i18n>Price option name</span>
           <input formControlName="offerLabel" placeholder="8 weeks" i18n-placeholder />
         </label>
         <label class="span-full">
@@ -59,7 +59,7 @@
         </label>
       </div>
       <fieldset class="feature-picker">
-        <legend i18n>Included access</legend>
+        <legend i18n>What's included</legend>
         <label
           ><input type="checkbox" formControlName="training" /><span i18n>Training</span></label
         >
@@ -93,7 +93,7 @@
   @if (currentCatalog.products.length === 0) {
     <div class="empty-state">
       <h2 i18n>No products yet</h2>
-      <p i18n>Create your first service before assigning commercial access to a client.</p>
+      <p i18n>Create what you sell first. Then you can start a plan for each client.</p>
     </div>
   } @else {
     <section class="product-list" aria-label="Coaching products" i18n-aria-label>
@@ -122,7 +122,7 @@
                 (click)="openOffer(product)"
                 i18n
               >
-                Add offer
+                Add price option
               </button>
               <button class="quiet-button compact" type="button" (click)="toggleProduct(product)">
                 @if (product.isActive) {
@@ -171,7 +171,7 @@
           @if (offerProductId() === product.id) {
             <form class="inline-offer" [formGroup]="offerForm" (ngSubmit)="addOffer()">
               <div class="inline-offer-heading">
-                <h3 i18n>New offer</h3>
+                <h3 i18n>New price option</h3>
                 <button
                   class="quiet-button compact"
                   type="button"
@@ -182,7 +182,7 @@
                 </button>
               </div>
               <div class="form-grid">
-                <label><span i18n>Label</span><input formControlName="offerLabel" /></label>
+                <label><span i18n>Name</span><input formControlName="offerLabel" /></label>
                 <label>
                   <span i18n>Duration</span>
                   <div class="joined-fields">
@@ -201,7 +201,7 @@
                 </label>
               </div>
               <fieldset class="feature-picker compact-features">
-                <legend i18n>Included access</legend>
+                <legend i18n>What's included</legend>
                 <label
                   ><input type="checkbox" formControlName="training" /><span i18n
                     >Training</span
@@ -229,7 +229,7 @@
                 >
               </fieldset>
               <button class="primary-button compact" type="submit" [disabled]="busy()" i18n>
-                Save offer
+                Save price option
               </button>
             </form>
           }

@@ -314,7 +314,7 @@ export class PlatformAdmin implements OnInit {
     try {
       apply(await firstValueFrom(request));
     } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`That workspace could not be loaded.`));
+      this.error.set(apiErrorMessage(error, $localize`That coaching space could not be loaded.`));
     }
   }
 }

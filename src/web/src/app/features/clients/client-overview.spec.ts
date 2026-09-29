@@ -403,7 +403,7 @@ describe('ClientOverview', () => {
       } as CoachClientDetails,
     });
 
-    expect(host.textContent).toContain('Released on Sep 20, 2026 by Olivia Owner');
+    expect(host.textContent).toContain('Coaching ended on Sep 20, 2026 by Olivia Owner');
     expect(host.textContent).toContain('Followed her coach');
     expect(host.textContent).toContain('You can invite them back as a new client.');
     expect(host.textContent).not.toContain('This week');
@@ -424,7 +424,7 @@ describe('ClientOverview', () => {
       } as CoachClientDetails,
     });
 
-    expect(host.textContent).toContain('Left the workspace on Sep 21, 2026.');
-    expect(host.textContent).not.toContain('Released on');
+    expect(host.textContent).toContain('Left on Sep 21, 2026.');
+    expect(host.textContent).not.toContain('Coaching ended on');
   });
 });

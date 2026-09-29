@@ -55,10 +55,7 @@
     <article class="panel">
       @if (detail(); as view) {
         <h3>{{ view.assignment.formTitle }}</h3>
-        <p class="detail" i18n>
-          Due {{ view.assignment.dueDate | date: 'mediumDate' }} · version
-          {{ view.assignment.formVersionNumber }}
-        </p>
+        <p class="detail" i18n>Due {{ view.assignment.dueDate | date: 'mediumDate' }}</p>
 
         @if (view.response; as response) {
           <p class="detail badge-row">

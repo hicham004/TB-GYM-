@@ -582,8 +582,8 @@ describe('MyCheckIns', () => {
       listOwnCheckInAssignments: vi.fn(() => throwError(() => denied)),
     });
 
-    expect(host.textContent).toContain('Your enrollment was cancelled');
-    expect(host.textContent).toContain('including the ones you already sent');
+    expect(host.textContent).toContain('Your plan was cancelled');
+    expect(host.textContent).toContain('including the ones you sent');
     // Never the flat contradiction, and never the coach's phrasing about "this client".
     expect(host.textContent).not.toContain('You have no check-ins right now.');
     expect(host.textContent).not.toContain('not available for this client');
@@ -596,7 +596,7 @@ describe('MyCheckIns', () => {
     const expired = await render({
       listOwnCheckInAssignments: vi.fn(() => throwError(() => denied('Expired'))),
     });
-    expect(expired.host.textContent).toContain('Your enrollment has ended');
+    expect(expired.host.textContent).toContain('Your plan has ended');
     TestBed.resetTestingModule();
 
     const blocked = await render({

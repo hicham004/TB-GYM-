@@ -132,7 +132,7 @@ export const routes: Routes = [
   {
     path: 'workspace',
     canActivate: [authGuard, ownerGuard],
-    title: $localize`Workspace settings | TB Gym`,
+    title: $localize`Coaching space | TB Gym`,
     loadComponent: () =>
       import('./features/workspace/workspace-settings').then((module) => module.WorkspaceSettings),
   },

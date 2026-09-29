@@ -86,12 +86,12 @@ export class Billing {
         return $localize`Your free trial runs until ${this.day(billing.trialEndsAtUtc)}:date:. Nothing is charged for it.`;
       case 'Overdue':
         return billing.readOnlyFrom
-          ? $localize`An invoice is overdue. Pay it before ${this.day(billing.readOnlyFrom)}:date: to keep editing; after that the workspace becomes read-only for you and your coaches until it is paid.`
+          ? $localize`An invoice is overdue. Pay it before ${this.day(billing.readOnlyFrom)}:date: to keep editing. After that, your coaching space is read-only for you and your coaches until it is paid.`
           : $localize`An invoice is overdue.`;
       case 'ReadOnly':
-        return $localize`This workspace is read-only for you and your coaches until the overdue invoice is paid. Your clients keep full access, and nothing is deleted.`;
+        return $localize`Your coaching space is read-only for you and your coaches until the overdue invoice is paid. Your clients keep full access, and nothing is deleted.`;
       default:
-        return $localize`Your workspace is billed monthly, for the previous month.`;
+        return $localize`Your coaching space is billed monthly, for the previous month.`;
     }
   }
 

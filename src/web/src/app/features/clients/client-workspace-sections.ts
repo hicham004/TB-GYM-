@@ -102,9 +102,9 @@ export class ClientProgressSection {
         <section class="surface-section release-section">
           <div class="section-heading">
             <div>
-              <h2 i18n>End this client’s relationship</h2>
+              <h2 i18n>End coaching</h2>
               <p class="muted" i18n>
-                Only the owner can release a client. Their record is kept read-only.
+                Only the owner can end coaching. The client’s record is kept, read-only.
               </p>
             </div>
           </div>
@@ -124,7 +124,7 @@ export class ClientServiceSection {
     this.context.setProfile(profile);
     this.context.error.set(null);
     this.context.notice.set(
-      $localize`${profile.firstName}:name: was released. Their access has ended and they are being emailed.`,
+      $localize`Coaching with ${profile.firstName}:name: has ended. They no longer have access, and we are emailing them.`,
     );
   }
 }

@@ -36,9 +36,7 @@
           </p>
         }
         @if (view.bodyweight.trendIsAvailable && view.bodyweight.trendEstimate !== null) {
-          <p class="detail" i18n>
-            Trend estimate {{ view.bodyweight.trendEstimate | number: '1.0-2' }}
-          </p>
+          <p class="detail" i18n>Trend {{ view.bodyweight.trendEstimate | number: '1.0-2' }}</p>
         }
         <p class="detail" i18n>
           Weighed on {{ view.bodyweight.observedDayCount }} of {{ view.windowDayCount }} days
@@ -184,8 +182,8 @@
     </article>
 
     <p class="footnote" i18n>
-      These figures are recorded observations shown side by side. They are not combined, and no
-      relationship between them is implied.
+      These numbers are shown side by side, as recorded. They are not combined, and one does not
+      explain another.
     </p>
   }
 </section>

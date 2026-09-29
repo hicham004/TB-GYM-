@@ -41,8 +41,8 @@
         </p>
         @if (!emailChannelAvailable()) {
           <p class="detail warning" i18n>
-            Email delivery is not switched on for this workspace yet. You can choose your setting
-            now; nothing will be emailed until it is.
+            Email delivery is not switched on yet. You can choose your setting now, and nothing is
+            emailed until it is.
           </p>
         }
         <!-- Stated rather than hidden. Leaving the switch on beside a channel that has quietly
@@ -96,8 +96,8 @@
         <!-- The zone is stated rather than assumed: these are workspace-local times, and a member
              travelling or working from another country would otherwise read them as their own. -->
         <p id="quietHoursZone" class="detail" i18n>
-          Times are in this workspace's time zone, {{ timeZoneId() }}. A window may run past
-          midnight, and it ends at the "until" time rather than including it.
+          Times are in {{ timeZoneId() }} time. A window may run past midnight, and it ends at the
+          "until" time rather than including it.
         </p>
       </fieldset>
 

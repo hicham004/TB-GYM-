@@ -3,8 +3,7 @@
     <div>
       <h2 i18n>Nutrition and meal planning</h2>
       <p class="muted" i18n>
-        Calculate explainable estimates, review safety warnings, then assign an immutable client
-        snapshot.
+        Work out their calorie and macro targets, check allergens, then assign a meal plan.
       </p>
     </div>
   </div>
@@ -20,14 +19,14 @@
   } @else {
     <div class="nutrition-grid">
       <form (ngSubmit)="calculate()" class="panel">
-        <h3 i18n>Energy and macro estimate</h3>
+        <h3 i18n>Calorie and macro targets</h3>
         <p class="safety" i18n>BMR and TDEE are estimates, not clinically exact measurements.</p>
         <label
-          ><span i18n>BMR strategy</span
+          ><span i18n>BMR formula</span
           ><select [(ngModel)]="bmrMethodKey" name="bmr">
-            <option value="MifflinStJeor">Mifflin-St Jeor v1</option>
-            <option value="KatchMcArdle">Katch-McArdle v1</option>
-            <option value="HarrisBenedictRevised">Harris-Benedict Revised v1</option>
+            <option value="MifflinStJeor">Mifflin-St Jeor</option>
+            <option value="KatchMcArdle">Katch-McArdle</option>
+            <option value="HarrisBenedictRevised">Harris-Benedict (revised)</option>
           </select></label
         >
         <div class="field-row">
@@ -136,7 +135,7 @@
           ></label
         >
         <button class="primary-button" type="submit" [disabled]="busy()" i18n>
-          Calculate and snapshot
+          Calculate targets
         </button>
         @if (calculation(); as result) {
           <div class="result">
@@ -161,9 +160,10 @@
       </form>
 
       <div class="panel">
-        <h3 i18n>Structured allergen declarations</h3>
+        <h3 i18n>Allergens</h3>
         <p class="safety" i18n>
-          These declarations warn the coach. Missing declarations never prove that a recipe is safe.
+          These warn you about recipe conflicts. An allergen left unticked never proves a recipe is
+          safe.
         </p>
         <div class="allergens">
           @for (allergen of allergens; track allergen.code) {
@@ -183,27 +183,27 @@
           [disabled]="busy()"
           i18n
         >
-          Save declarations
+          Save allergens
         </button>
       </div>
 
       <form (ngSubmit)="assign()" class="panel">
-        <h3 i18n>Assign meal-plan snapshot</h3>
+        <h3 i18n>Assign a meal plan</h3>
         <label
-          ><span i18n>Published plan</span
+          ><span i18n>Meal plan</span
           ><select [(ngModel)]="mealPlanVersionId" name="mealPlan">
-            <option value="" i18n>Select a plan</option>
+            <option value="" i18n>Select a meal plan</option>
             @for (plan of mealPlans(); track plan.versionId) {
               <option [value]="plan.versionId">{{ plan.name }} · {{ plan.dayCount }} days</option>
             }
           </select></label
         >
         <label
-          ><span i18n>Nutrition enrollment</span
+          ><span i18n>Plan</span
           ><select [(ngModel)]="enrollmentId" name="enrollment">
-            <option value="" i18n>Select enrollment</option>
-            @for (id of enrollmentIds(); track id) {
-              <option [value]="id">{{ id }}</option>
+            <option value="" i18n>Select plan</option>
+            @for (option of enrollmentOptions(); track option.id) {
+              <option [value]="option.id">{{ option.label }}</option>
             }
           </select></label
         >
@@ -222,18 +222,22 @@
           ></label
         >
         <button class="primary-button" type="submit" [disabled]="busy()" i18n>
-          Assign immutable snapshot
+          Assign meal plan
         </button>
       </form>
     </div>
 
     @if (assignments().length) {
       <div class="assignment-list">
-        <h3 i18n>Assignment history</h3>
+        <h3 i18n>Meal plan history</h3>
         @for (plan of assignments(); track plan.id) {
           <p>
-            <strong>{{ plan.startDate }} – {{ plan.endDateExclusive }}</strong> ·
-            <span i18n>{{ plan.calorieTarget | number: '1.0-0' }} kcal target snapshot</span>
+            <strong
+              >{{ plan.startDate | date: 'd MMM' }} –
+              {{ lastDay(plan.endDateExclusive) | date: 'd MMM y' }}</strong
+            >
+            ·
+            <span i18n>{{ plan.calorieTarget | number: '1.0-0' }} kcal a day</span>
           </p>
         }
       </div>

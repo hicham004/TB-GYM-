@@ -289,13 +289,13 @@ describe('TodayNutrition', () => {
     expect(field(second, 'Actual servings').value).toBe('2');
   });
 
-  it('reports a date with no authorized plan instead of an empty day', async () => {
+  it('reports a date with no meal plan instead of an empty day', async () => {
     const { host } = await render({
       getMyNutritionDay: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 403 }))),
     });
 
     expect(query(host, '[role="alert"]').textContent).toContain(
-      'No authorized nutrition plan was found for this date.',
+      'There is no meal plan for this day. Ask your coach if you expected one.',
     );
     expect(host.querySelector('.meal-card')).toBeNull();
   });

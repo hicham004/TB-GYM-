@@ -84,10 +84,7 @@ export class LeaveWorkspace {
       await this.router.navigateByUrl('/');
     } catch (error) {
       this.error.set(
-        apiErrorMessage(
-          error,
-          $localize`You could not leave this workspace. Reload the page and try again.`,
-        ),
+        apiErrorMessage(error, $localize`You could not leave. Reload the page and try again.`),
       );
     } finally {
       this.saving.set(false);

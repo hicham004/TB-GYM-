@@ -19,14 +19,14 @@ import { BillingAccess, BillingAccessApi, formatBillingDay } from './billing-acc
         <div class="banner danger" role="status" data-billing-banner="read-only">
           @if (tenants.isOwner()) {
             <p i18n>
-              This workspace is read-only until the overdue TB Gym invoice is paid. You can still
-              view everything, and your clients keep full access.
+              Your coaching space is read-only until the overdue TB Gym invoice is paid. You can
+              still view everything, and your clients keep full access.
             </p>
             <a routerLink="/billing" i18n>Open Billing</a>
           } @else {
             <p i18n>
-              This workspace is read-only until its TB Gym bill is paid. You can still view
-              everything; the workspace owner can settle it.
+              Your coaching space is read-only until its TB Gym bill is paid. You can still view
+              everything, and the owner can settle it.
             </p>
           }
         </div>

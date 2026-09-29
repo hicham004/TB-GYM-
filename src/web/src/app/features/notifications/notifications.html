@@ -25,7 +25,7 @@
   </p>
 
   @if (isEmpty()) {
-    <p class="empty" i18n>You have no notifications in this workspace yet.</p>
+    <p class="empty" i18n>You have no notifications yet.</p>
   } @else {
     <ul class="feed">
       @for (item of items(); track item.id) {

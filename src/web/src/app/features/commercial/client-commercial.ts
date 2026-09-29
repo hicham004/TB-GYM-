@@ -132,7 +132,7 @@ export class ClientCommercial {
                 idempotencyKey: crypto.randomUUID(),
               }),
             ),
-          $localize`Service assigned. Access will follow payment and service dates.`,
+          $localize`Plan started. Access opens once it is paid and its start date arrives.`,
         ),
       );
     });
@@ -174,7 +174,7 @@ export class ClientCommercial {
                 idempotencyKey: crypto.randomUUID(),
               }),
             ),
-          $localize`Payment recorded in the immutable payment history.`,
+          $localize`Payment recorded.`,
         ),
       );
       this.paymentEnrollmentId.set(null);
@@ -216,7 +216,7 @@ export class ClientCommercial {
                 idempotencyKey: crypto.randomUUID(),
               }),
             ),
-          $localize`Renewal created as a new historical enrollment.`,
+          $localize`Plan renewed. The renewal is a new plan with its own dates.`,
         ),
       );
       this.renewalEnrollmentId.set(null);
@@ -248,7 +248,7 @@ export class ClientCommercial {
                 ? this.api.pauseEnrollment(enrollment.id, request)
                 : this.api.cancelEnrollment(enrollment.id, request),
             ),
-          action === 'pause' ? $localize`Enrollment paused.` : $localize`Enrollment cancelled.`,
+          action === 'pause' ? $localize`Plan paused.` : $localize`Plan cancelled.`,
         ),
       );
       this.statusEnrollmentId.set(null);
@@ -261,7 +261,7 @@ export class ClientCommercial {
       await owner.wait(
         this.run(
           () => firstValueFrom(this.api.resumeEnrollment(enrollment.id, enrollment.version)),
-          $localize`Enrollment resumed.`,
+          $localize`Plan resumed.`,
         ),
       );
     });
@@ -293,13 +293,13 @@ export class ClientCommercial {
         await owner.wait(this.loadOverview());
         this.notice.set(
           updated.isCoachBlocked
-            ? $localize`Client access blocked in this workspace only.`
-            : $localize`Workspace relationship restored.`,
+            ? $localize`Client blocked in your coaching space only.`
+            : $localize`Client unblocked.`,
         );
       } catch (error) {
         if (!owner.current) return;
         this.error.set(
-          apiErrorMessage(error, $localize`The relationship status could not be changed.`),
+          apiErrorMessage(error, $localize`The client's access could not be changed.`),
         );
       } finally {
         if (owner.current) {
@@ -320,6 +320,17 @@ export class ClientCommercial {
     return labels[feature];
   }
 
+  protected paymentMethodLabel(method: ManualPaymentMethod): string {
+    const labels: Record<ManualPaymentMethod, string> = {
+      Cash: $localize`Cash`,
+      BankTransfer: $localize`Bank transfer`,
+      Card: $localize`Card`,
+      MobileWallet: $localize`Mobile wallet`,
+      Other: $localize`Other`,
+    };
+    return labels[method] ?? method;
+  }
+
   protected statusLabel(status: EffectiveEnrollmentStatus): string {
     const labels: Record<EffectiveEnrollmentStatus, string> = {
       PendingPayment: $localize`Pending payment`,
@@ -336,14 +347,14 @@ export class ClientCommercial {
   protected reasonLabel(reason: FeatureAccessReason): string {
     const labels: Record<FeatureAccessReason, string> = {
       Granted: $localize`Available now`,
-      MembershipInactive: $localize`Membership inactive`,
+      MembershipInactive: $localize`No longer a client`,
       RelationshipBlocked: $localize`Blocked by coach`,
       NoEntitlement: $localize`Not included`,
       PaymentRequired: $localize`Payment required`,
       NotStarted: $localize`Starts later`,
-      Expired: $localize`Coverage expired`,
-      Paused: $localize`Enrollment paused`,
-      Cancelled: $localize`Enrollment cancelled`,
+      Expired: $localize`Plan ended`,
+      Paused: $localize`Plan paused`,
+      Cancelled: $localize`Plan cancelled`,
       PlatformBlocked: $localize`Account blocked`,
     };
     return labels[reason];
@@ -388,7 +399,7 @@ export class ClientCommercial {
         }
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`Commercial access could not be loaded.`));
+        this.error.set(apiErrorMessage(error, $localize`Plans and access could not be loaded.`));
       } finally {
         if (owner.current) {
           this.loading.set(false);
@@ -418,9 +429,7 @@ export class ClientCommercial {
         this.notice.set(message);
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(
-          apiErrorMessage(error, $localize`The commercial change could not be saved.`),
-        );
+        this.error.set(apiErrorMessage(error, $localize`The change could not be saved.`));
       } finally {
         if (owner.current) {
           this.busy.set(false);

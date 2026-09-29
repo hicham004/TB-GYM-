@@ -22,7 +22,7 @@
 
 <!-- A complementary landmark, so the brand and the signed-in identity beside the navigation are
      inside one too, rather than loose page content. -->
-<aside class="sidebar tb-theme" aria-label="Workspace" i18n-aria-label>
+<aside class="sidebar tb-theme" aria-label="Sidebar" i18n-aria-label>
   <ng-container [ngTemplateOutlet]="brand" />
   <!-- The only part that scrolls when the window is short; brand and identity stay put. -->
   <div class="sidebar-nav">
@@ -57,15 +57,15 @@
         [attr.aria-expanded]="openMenu() === 'workspace'"
         (click)="toggleMenu('workspace')"
       >
-        <span class="tb-visually-hidden" i18n>Switch workspace. Current workspace:</span>
+        <span class="tb-visually-hidden" i18n>Switch coaching space. Current:</span>
         <span class="workspace-name" dir="auto">{{ membership()?.tenantName }}</span>
         <span class="context-dot" aria-hidden="true"></span>
-        <span class="workspace-kind" i18n>Coach workspace</span>
+        <span class="workspace-kind" i18n>Coaching space</span>
         <app-icon name="chevron-down" />
       </button>
       @if (openMenu() === 'workspace') {
         <div id="workspace-menu" class="menu-panel workspace-panel">
-          <p class="menu-heading" id="workspace-menu-heading" i18n>Workspaces</p>
+          <p class="menu-heading" id="workspace-menu-heading" i18n>Coaching spaces</p>
           <ul class="menu-list" aria-labelledby="workspace-menu-heading">
             @for (option of tenants.memberships(); track option.tenantId) {
               @let current = option.tenantId === tenants.selectedTenantId();
@@ -94,7 +94,7 @@
       <p class="workspace-context">
         <span class="workspace-name" dir="auto">{{ membership()?.tenantName }}</span>
         <span class="context-dot" aria-hidden="true"></span>
-        <span class="workspace-kind" i18n>Coach workspace</span>
+        <span class="workspace-kind" i18n>Coaching space</span>
       </p>
     }
   </div>

@@ -224,7 +224,7 @@ test('wrapped checkbox labels keep the box on the first line; one-line rows stay
   expect(wrapped.rowHeight).toBeGreaterThan(40);
   expect(Math.abs(wrapped.boxCentre - (wrapped.rowTop + 16))).toBeLessThanOrEqual(1);
 
-  const single = await measure('Include in new templates');
+  const single = await measure('Include in new programs');
   expect(single.rowHeight).toBe(32);
   expect(Math.abs(single.boxCentre - (single.rowTop + single.rowHeight / 2))).toBeLessThanOrEqual(
     1,

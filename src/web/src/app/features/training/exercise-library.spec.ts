@@ -205,7 +205,7 @@ describe('ExerciseLibrary', () => {
     );
     expect(statuses[0]).toContain('Active');
     expect(statuses[1]).toContain('Archived');
-    expect(statuses[1]).toContain('Not in new templates');
+    expect(statuses[1]).toContain('Not in new programs');
   });
 
   it('keeps the full name in the title and in every action name', async () => {
@@ -359,7 +359,7 @@ describe('ExerciseLibrary', () => {
     const dialog = host.querySelector<HTMLDialogElement>('dialog')!;
     expect(dialog.open).toBe(true);
     expect(dialog.textContent).toContain('Archive Barbell back squat?');
-    expect(dialog.textContent).toContain('Saved template versions, assigned programs');
+    expect(dialog.textContent).toContain('Saved programs, assigned programs');
     expect(api.setExerciseArchived).not.toHaveBeenCalled();
   });
 

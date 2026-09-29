@@ -1,15 +1,15 @@
 <section class="page-heading">
   <div>
-    <p class="eyebrow" i18n>Coach workspace</p>
+    <p class="eyebrow" i18n>Coaching</p>
     @if (showingFormer) {
       <h1 i18n>Former clients</h1>
       <p i18n>
-        Clients you released and clients who left. Their records are kept, read-only; you can invite
-        any of them back as a new client.
+        Clients whose coaching ended, and clients who left. Their records are kept, read-only, and
+        you can invite any of them back as a new client.
       </p>
     } @else {
       <h1 i18n>Clients</h1>
-      <p i18n>Accepted client profiles in the active workspace.</p>
+      <p i18n>Everyone you coach right now.</p>
     }
   </div>
   <a class="primary-button" routerLink="/invitations" i18n>Invite client</a>
@@ -30,7 +30,7 @@
     @if (former().length === 0) {
       <div class="empty-state">
         <h2 i18n>No former clients</h2>
-        <p i18n>A client you release, or who leaves, is listed here.</p>
+        <p i18n>When coaching ends, or a client leaves, they are listed here.</p>
       </div>
     } @else {
       <div class="table-scroll">
@@ -56,7 +56,7 @@
                   @if (client.departureKind === 'LeftByClient') {
                     <ng-container i18n>Left by client</ng-container>
                   } @else {
-                    <ng-container i18n>Released by owner</ng-container>
+                    <ng-container i18n>Ended by owner</ng-container>
                   }
                 </td>
                 <td dir="auto">{{ client.reason }}</td>

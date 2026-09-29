@@ -98,7 +98,7 @@ function sectionNames(host: HTMLElement): string[] {
 describe('ClientWorkspace', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('heads the record with the client, their plan in the workspace calendar, and the sections', async () => {
+  it('heads the record with the client, their plan dates, and the sections', async () => {
     const { host } = await render();
 
     expect(host.querySelector('h1')?.textContent?.trim()).toBe('Maya Rahman');
@@ -106,8 +106,7 @@ describe('ClientWorkspace', () => {
     const text = host.textContent ?? '';
     expect(text).toContain('Active plan');
     expect(text).toContain('Strength & Body Composition');
-    expect(text).toContain('Enrolled 21 Jul – 14 Nov 2026');
-    expect(text).toContain('Workspace calendar · Asia/Beirut');
+    expect(text).toContain('Plan 21 Jul – 14 Nov 2026');
     expect(sectionNames(host)).toEqual([
       'Overview',
       'Training',

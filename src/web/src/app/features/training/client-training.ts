@@ -1,5 +1,6 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { DatePipe, formatDate } from '@angular/common';
+import { Component, computed, effect, inject, input, LOCALE_ID, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CoachWorkout } from './coach-workout';
 import { firstValueFrom } from 'rxjs';
@@ -24,6 +25,7 @@ import { mesocycleStatusLabel, strengthMaxKindLabel } from '../../core/i18n/disp
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
+import { addDays } from '../clients/client-overview.models';
 import { numeric, sessionFromSaved, toTrainingSessionRequest } from './training-builder.models';
 import { changeWorkingMaxUnit, IntentIdempotencyKey } from './training-assignment-state';
 
@@ -42,7 +44,7 @@ interface WorkingMaxInput {
 
 @Component({
   selector: 'app-client-training',
-  imports: [FormsModule, CoachWorkout],
+  imports: [DatePipe, FormsModule, CoachWorkout],
   templateUrl: './client-training.html',
   styleUrl: './client-training.scss',
 })
@@ -53,6 +55,7 @@ export class ClientTraining {
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly calendar = inject(WorkspaceCalendar);
+  private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
   private readonly assignmentIntent = new IntentIdempotencyKey();
@@ -100,7 +103,7 @@ export class ClientTraining {
   protected cancelReason = '';
   protected readonly maxKindLabel = strengthMaxKindLabel;
   protected readonly mesocycleStatusLabel = mesocycleStatusLabel;
-  protected readonly progressionCoverageFallback = $localize`This progression exceeds paid training coverage.`;
+  protected readonly progressionCoverageFallback = $localize`These weeks run past the end of the client's plan.`;
 
   protected readonly trainingEnrollments = computed(() =>
     (this.commercial()?.enrollments ?? []).filter(
@@ -211,7 +214,7 @@ export class ClientTraining {
         rows.some((item) => item.value === null || item.value <= 0)
       ) {
         this.error.set(
-          $localize`Enrollment, published program, date, and all working maxes are required.`,
+          $localize`Choose a plan, a published program and a start date, and fill in every training max.`,
         );
         return;
       }
@@ -244,7 +247,7 @@ export class ClientTraining {
           this.assignmentIntent.complete();
           await owner.wait(this.reloadMesocycles());
           this.setMesocycle(mesocycle);
-          this.notice.set($localize`Client-specific mesocycle snapshot assigned.`);
+          this.notice.set($localize`Program assigned.`);
         }),
       );
     });
@@ -258,7 +261,7 @@ export class ClientTraining {
         this.setMesocycle(await owner.wait(firstValueFrom(this.api.getTrainingMesocycle(id))));
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`The mesocycle could not be loaded.`));
+        this.error.set(apiErrorMessage(error, $localize`The program block could not be loaded.`));
       } finally {
         if (owner.current) {
           this.busy.set(false);
@@ -380,7 +383,7 @@ export class ClientTraining {
         return;
       }
       if (this.progression.iterations < 1 || this.progression.iterations > 12) {
-        this.error.set($localize`Progression iterations must be between 1 and 12.`);
+        this.error.set($localize`Add between 1 and 12 weeks.`);
         return;
       }
       if (
@@ -489,7 +492,7 @@ export class ClientTraining {
           this.maxHistoryTotal.set(numeric(page.total));
           this.maxForm.value = null;
           this.maxForm.note = '';
-          this.notice.set($localize`Strength max appended to history.`);
+          this.notice.set($localize`Strength max recorded.`);
         }),
       );
     });
@@ -568,7 +571,20 @@ export class ClientTraining {
   }
 
   protected enrollmentLabel(enrollment: ClientEnrollment): string {
-    return `${enrollment.productName} / ${enrollment.offerLabel} (${enrollment.startDate} - ${enrollment.lastActiveDate})`;
+    const start = formatDate(enrollment.startDate, 'd MMM', this.locale);
+    const last = formatDate(enrollment.lastActiveDate, 'd MMM y', this.locale);
+    return `${enrollment.productName} · ${enrollment.offerLabel} · ${start} – ${last}`;
+  }
+
+  /** Blocks end on a half-open date; people read the last day they train. */
+  protected lastDay(endDateExclusive: string): string {
+    return addDays(endDateExclusive, -1);
+  }
+
+  protected methodLabel(record: StrengthMaxView): string {
+    return record.methodKey === 'CoachEntry'
+      ? $localize`Entered by coach`
+      : `${record.methodKey} v${record.methodVersion}`;
   }
 
   protected displayNumber(value: null | number | string): string {
@@ -637,7 +653,7 @@ export class ClientTraining {
           const mesocycle = await owner.wait(firstValueFrom(command()));
           this.setMesocycle(mesocycle);
           await owner.wait(this.reloadMesocycles());
-          this.notice.set($localize`Mesocycle updated.`);
+          this.notice.set($localize`Program block updated.`);
         }),
       );
     });

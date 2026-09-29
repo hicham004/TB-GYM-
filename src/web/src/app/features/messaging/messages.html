@@ -22,10 +22,7 @@
     } @else if (threadLoading()) {
       <span i18n>Loading this conversation…</span>
     } @else if (conversations().length > 0) {
-      <span i18n
-        >{{ conversations().length }} conversations. {{ unread() }} unread messages in this
-        workspace.</span
-      >
+      <span i18n>{{ conversations().length }} conversations. {{ unread() }} unread messages.</span>
     }
   </p>
 
@@ -54,8 +51,7 @@
     <nav class="conversation-list" aria-label="Conversations" i18n-aria-label>
       @if (listIsEmpty()) {
         <p class="empty" i18n>
-          You have no conversations in this workspace yet. A coach starts a conversation with a
-          client.
+          You have no conversations yet. A coach starts each conversation with a client.
         </p>
       } @else {
         <ul>

@@ -182,7 +182,7 @@ describe('date defaults across a coach client page', () => {
       it('defaults the strength-max effective date to the workspace date', async () => {
         const { host } = await render(ClientTraining, { clientId: 'client-1' }, currentDate);
 
-        expect(field(host, 'Effective date').value).toBe(currentDate);
+        expect(field(host, 'Date').value).toBe(currentDate);
       });
 
       it('defaults the service start date to the workspace date', async () => {
@@ -230,6 +230,6 @@ describe('date defaults across a coach client page', () => {
     await settle(fixture);
 
     expect(field(host, 'Start date').value).toBe('2026-09-23');
-    expect(field(host, 'Effective date').value).toBe('2026-09-23');
+    expect(field(host, 'Date').value).toBe('2026-09-23');
   });
 });

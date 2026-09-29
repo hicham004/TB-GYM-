@@ -1,8 +1,8 @@
 <section class="page-heading">
   <div>
     <p class="eyebrow" i18n>Owner settings</p>
-    <h1 i18n>Workspace</h1>
-    <p i18n>Regional defaults belong to this coaching workspace.</p>
+    <h1 i18n>Coaching space</h1>
+    <p i18n>Your coaching space’s name and regional defaults.</p>
   </div>
 </section>
 
@@ -21,16 +21,16 @@
 }
 
 @if (loading()) {
-  <p class="loading-row" i18n>Loading workspace settings...</p>
+  <p class="loading-row" i18n>Loading settings...</p>
 } @else {
   <form class="surface-section settings-form" [formGroup]="form" (ngSubmit)="save()" novalidate>
     <div class="form-grid">
       <label>
-        <span i18n>Workspace name</span>
+        <span i18n>Name</span>
         <input type="text" formControlName="name" />
       </label>
       <label>
-        <span i18n>Workspace identifier</span>
+        <span i18n>Short name</span>
         <input type="text" formControlName="slug" readonly />
       </label>
       <label>

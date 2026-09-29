@@ -88,7 +88,7 @@ describe('Products', () => {
     expect(host.textContent).toContain('Create a coaching product');
 
     fill(host, 'Product name', 'Online coaching');
-    fill(host, 'Offer label', '12 weeks');
+    fill(host, 'Price option name', '12 weeks');
     fill(host, 'Description', 'Remote programming and weekly review.');
     fill(host, 'Duration', '12');
     fill(host, 'Price', '450');
@@ -129,7 +129,7 @@ describe('Products', () => {
     const { fixture, host, api } = await render();
 
     fill(host, 'Product name', 'Online coaching');
-    fill(host, 'Offer label', '12 weeks');
+    fill(host, 'Price option name', '12 weeks');
     fill(host, 'Duration', '12');
     fill(host, 'Price', '450');
     type(host, CURRENCY_BOX, 'usd');
@@ -148,7 +148,7 @@ describe('Products', () => {
     const { fixture, host, api } = await render();
 
     fill(host, 'Product name', 'Online coaching');
-    fill(host, 'Offer label', '12 weeks');
+    fill(host, 'Price option name', '12 weeks');
     fill(host, 'Duration', '12');
     fill(host, 'Price', '450');
     type(host, CURRENCY_BOX, 'USD');
@@ -160,14 +160,14 @@ describe('Products', () => {
 
     expect(api.createCoachingProduct).not.toHaveBeenCalled();
     expect(query(host, '[role="alert"]').textContent).toContain(
-      'Select at least one coaching feature.',
+      'Choose at least one thing to include.',
     );
   });
 
   it('does not create a product with no name', async () => {
     const { fixture, host, api } = await render();
 
-    fill(host, 'Offer label', '12 weeks');
+    fill(host, 'Price option name', '12 weeks');
     fill(host, 'Price', '450');
     type(host, CURRENCY_BOX, 'USD');
     await settle(fixture);
@@ -183,15 +183,15 @@ describe('Products', () => {
       getProductCatalog: vi.fn(() => of(catalog([product()]))),
     });
 
-    press(host, 'Add offer');
+    press(host, 'Add price option');
     await settle(fixture);
 
-    fill(host, 'Label', '24 weeks');
+    fill(host, 'Name', '24 weeks');
     fill(host, 'Duration', '24');
     fill(host, 'Price', '800');
     type(host, CURRENCY_BOX, 'USD');
     await settle(fixture);
-    press(host, 'Save offer');
+    press(host, 'Save price option');
     await settle(fixture);
 
     expect(api.addProductOffer).toHaveBeenCalledWith('product-1', {
@@ -206,7 +206,7 @@ describe('Products', () => {
       ],
     });
     expect(host.textContent).toContain(
-      'New offer added. Existing enrollments were left unchanged.',
+      'Price option added. Clients already on a plan keep theirs.',
     );
   });
 
@@ -236,7 +236,7 @@ describe('Products', () => {
     await settle(fixture);
 
     expect(api.setOfferAvailability).toHaveBeenCalledWith('offer-1', false, 1);
-    expect(host.textContent).toContain('Offer retired.');
+    expect(host.textContent).toContain('Price option retired.');
     // The offer is still listed, because past enrollments reference it.
     expect(host.textContent).toContain('12 weeks');
   });
@@ -251,7 +251,7 @@ describe('Products', () => {
     });
 
     fill(host, 'Product name', 'Online coaching');
-    fill(host, 'Offer label', '12 weeks');
+    fill(host, 'Price option name', '12 weeks');
     fill(host, 'Duration', '12');
     fill(host, 'Price', '450');
     type(host, CURRENCY_BOX, 'USD');

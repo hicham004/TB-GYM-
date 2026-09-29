@@ -68,24 +68,24 @@ describe('ClientRelease', () => {
   it('says what a release does before anything is sent', async () => {
     const { fixture, host, releaseClient } = await render();
 
-    press(host, 'Release client');
+    press(host, 'End coaching');
     await settle(fixture);
 
     expect(host.querySelector('dialog')?.open).toBe(true);
-    expect(text(fixture)).toContain('Release Sam Saad?');
-    expect(text(fixture)).toContain('They lose access to this workspace right away');
+    expect(text(fixture)).toContain('End coaching with Sam Saad?');
+    expect(text(fixture)).toContain('They lose access right away');
     expect(text(fixture)).toContain('with no refund');
-    expect(text(fixture)).toContain('This cannot be undone');
+    expect(text(fixture)).toContain("You can't undo this");
     expect(releaseClient).not.toHaveBeenCalled();
   });
 
   it('requires a reason', async () => {
     const { fixture, host, releaseClient } = await render();
 
-    press(host, 'Release client');
+    press(host, 'End coaching');
     await settle(fixture);
     fill(host, 'Reason', '   ');
-    press(host, 'Release permanently');
+    press(host, 'End coaching permanently');
     await settle(fixture);
 
     expect(releaseClient).not.toHaveBeenCalled();
@@ -95,10 +95,10 @@ describe('ClientRelease', () => {
   it('releases with the trimmed reason and the version it was shown, then hands back the record', async () => {
     const { fixture, host, releaseClient } = await render();
 
-    press(host, 'Release client');
+    press(host, 'End coaching');
     await settle(fixture);
     fill(host, 'Reason', '  Moved away  ');
-    press(host, 'Release permanently');
+    press(host, 'End coaching permanently');
     await settle(fixture);
 
     expect(releaseClient).toHaveBeenCalledWith('client-1', 'Moved away', 7);
@@ -118,10 +118,10 @@ describe('ClientRelease', () => {
     });
     const { fixture, host } = await render(vi.fn(() => throwError(() => refusal)));
 
-    press(host, 'Release client');
+    press(host, 'End coaching');
     await settle(fixture);
     fill(host, 'Reason', 'Moved away');
-    press(host, 'Release permanently');
+    press(host, 'End coaching permanently');
     await settle(fixture);
 
     expect(host.querySelector('dialog')?.open).toBe(true);

@@ -1,7 +1,7 @@
 @if (!tenants.isClient()) {
   <section class="page-heading">
     <div>
-      <p class="eyebrow" i18n>Active workspace</p>
+      <p class="eyebrow" i18n>Your coaching space</p>
       <h1>{{ tenants.selectedMembership()?.tenantName }}</h1>
       <p i18n>Hello, {{ auth.user()?.displayName }}.</p>
     </div>
@@ -14,11 +14,11 @@
 }
 
 @if (tenants.canCoach()) {
-  <section class="metric-grid" aria-label="Workspace summary" i18n-aria-label>
+  <section class="metric-grid" aria-label="At a glance" i18n-aria-label>
     <a class="metric" routerLink="/clients">
       <span i18n>Clients</span>
       <strong>{{ loading() ? '-' : clientCount() }}</strong>
-      <small i18n>Accepted client profiles</small>
+      <small i18n>Active clients</small>
     </a>
     <a class="metric" routerLink="/invitations">
       <span i18n>Pending invitations</span>
@@ -30,14 +30,14 @@
   <section class="next-action">
     <div>
       <h2 i18n>Build the next training block</h2>
-      <p i18n>Create a reusable template, then assign a client-specific snapshot.</p>
+      <p i18n>Build a program once, then assign it to each client.</p>
     </div>
     <a class="primary-button" routerLink="/training/programs" i18n>Open program builder</a>
   </section>
   <section class="next-action">
     <div>
       <h2 i18n>Build a nutrition plan</h2>
-      <p i18n>Version foods and recipes, then publish a reusable meal-plan snapshot.</p>
+      <p i18n>Add foods and recipes, then publish a meal plan you can reuse.</p>
     </div>
     <a class="primary-button" routerLink="/nutrition/library" i18n>Open nutrition library</a>
   </section>
@@ -46,10 +46,10 @@
 } @else if (tenants.memberships().length === 0) {
   <!-- An account that left, was released, or resigned from its last workspace still signs in. -->
   <section class="empty-state" data-no-workspace>
-    <h2 i18n>You are not part of a workspace right now</h2>
+    <h2 i18n>You are not part of a coaching space right now</h2>
     <p i18n>
-      Your TB Gym account still works, but it is not linked to any coaching workspace. This happens
-      after you leave a workspace or a workspace ends your access.
+      Your TB Gym account still works, but it is not linked to any coaching space. This happens
+      after you leave, or when your coaching ends.
     </p>
     <p i18n>To join one again, ask your coach to send you a new invitation.</p>
     @if (auth.user()?.roles?.includes('PlatformAdmin')) {
@@ -58,7 +58,7 @@
   </section>
 } @else {
   <section class="empty-state">
-    <h2 i18n>No active workspace role</h2>
-    <p i18n>Select another workspace to continue.</p>
+    <h2 i18n>No role here yet</h2>
+    <p i18n>Choose another coaching space to continue.</p>
   </section>
 }

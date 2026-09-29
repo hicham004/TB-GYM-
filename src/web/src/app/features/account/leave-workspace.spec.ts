@@ -71,7 +71,7 @@ describe('LeaveWorkspace', () => {
     const { fixture, host, api, load, navigate } = await render('Coach');
 
     expect(host.textContent).toContain('Leave Cedar Gym');
-    press(host, 'Leave workspace');
+    press(host, 'Leave Cedar Gym');
     await settle(fixture);
     expect(host.textContent).toContain('each client is told their coach has changed');
     expect(host.querySelector('textarea')).toBeNull();
@@ -87,7 +87,7 @@ describe('LeaveWorkspace', () => {
   it('lets a client leave with an optional reason and their current profile version', async () => {
     const { fixture, host, api } = await render('Client');
 
-    press(host, 'Leave workspace');
+    press(host, 'Leave Cedar Gym');
     await settle(fixture);
     expect(host.textContent).toContain('including your history there');
     fill(host, 'Reason (optional)', '  Moving abroad  ');
@@ -101,7 +101,7 @@ describe('LeaveWorkspace', () => {
   it('sends no reason when the client gives none', async () => {
     const { fixture, host, api } = await render('Client');
 
-    press(host, 'Leave workspace');
+    press(host, 'Leave Cedar Gym');
     await settle(fixture);
     press(host, 'Leave permanently');
     await settle(fixture);
@@ -118,7 +118,7 @@ describe('LeaveWorkspace', () => {
       leaveAsClient: vi.fn(() => throwError(() => refusal)),
     });
 
-    press(host, 'Leave workspace');
+    press(host, 'Leave Cedar Gym');
     await settle(fixture);
     press(host, 'Leave permanently');
     await settle(fixture);

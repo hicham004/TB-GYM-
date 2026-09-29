@@ -18,7 +18,7 @@ describe('apiErrorMessage', () => {
       fallback,
     );
 
-    expect(message).toContain('workspace has used all of its media storage');
+    expect(message).toContain('coaching space has used all of its media storage');
     // The generic upload failure would send the user looking for a problem with their photo.
     expect(message).not.toBe(fallback);
   });
@@ -31,7 +31,7 @@ describe('apiErrorMessage', () => {
     });
 
     expect(apiErrorMessage(refused, fallback)).toBe(
-      'This workspace is read-only until its TB Gym bill is paid. You can still view everything.',
+      'Your coaching space is read-only until its TB Gym bill is paid. You can still view everything.',
     );
   });
 
@@ -46,7 +46,7 @@ describe('apiErrorMessage', () => {
 
     // The two lead to different actions, so they must not collapse into one message.
     expect(message).toContain('progress-photo storage');
-    expect(message).not.toContain('workspace has used all');
+    expect(message).not.toContain('coaching space has used all');
   });
 
   it('falls back to the problem title so an unmapped conflict still says something real', () => {

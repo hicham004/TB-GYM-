@@ -65,7 +65,7 @@ test('the owner sidebar is the locked navigation, in order', async ({ page }) =>
   ]);
   // Uppercase is presentation: the text itself stays sentence case so translations can differ.
   await expect(page.locator('.sidebar .group-label')).toHaveText([
-    'Workspace',
+    'Coaching',
     'Operations',
     'Business',
   ]);

@@ -64,8 +64,20 @@ function commercialOverview() {
     isRelationshipBlocked: false,
     featureAccess: [],
     enrollments: [
-      { id: 'enrollment-1', features: ['Nutrition', 'Training'] },
-      { id: 'enrollment-2', features: ['Training'] },
+      {
+        id: 'enrollment-1',
+        productName: 'Online Coaching',
+        startDate: '2026-09-01',
+        lastActiveDate: '2026-11-23',
+        features: ['Nutrition', 'Training'],
+      },
+      {
+        id: 'enrollment-2',
+        productName: 'Strength Program',
+        startDate: '2026-09-01',
+        lastActiveDate: '2026-11-23',
+        features: ['Training'],
+      },
     ],
   };
 }
@@ -110,7 +122,7 @@ describe('ClientNutrition', () => {
   it('calculates targets from the values the coach entered', async () => {
     const { fixture, host, api } = await render();
 
-    fill(host, 'BMR strategy', 'MifflinStJeor');
+    fill(host, 'BMR formula', 'MifflinStJeor');
     fill(host, 'Weight (kg)', '72.4');
     fill(host, 'Height (cm)', '168');
     fill(host, 'Age', '29');
@@ -122,7 +134,7 @@ describe('ClientNutrition', () => {
     fill(host, 'Fat percentage (%)', '28');
     await settle(fixture);
 
-    press(host, 'Calculate and snapshot');
+    press(host, 'Calculate targets');
     await settle(fixture);
 
     expect(api.calculateNutritionTargets).toHaveBeenCalledWith('client-1', {
@@ -152,11 +164,11 @@ describe('ClientNutrition', () => {
 
     expect(() => field(host, 'Body fat (%)')).toThrow();
 
-    fill(host, 'BMR strategy', 'KatchMcArdle');
+    fill(host, 'BMR formula', 'KatchMcArdle');
     await settle(fixture);
     fill(host, 'Body fat (%)', '22.5');
     await settle(fixture);
-    press(host, 'Calculate and snapshot');
+    press(host, 'Calculate targets');
     await settle(fixture);
 
     expect(api.calculateNutritionTargets).toHaveBeenCalledWith(
@@ -178,11 +190,11 @@ describe('ClientNutrition', () => {
         .mockReturnValueOnce(of([ASSIGNMENT])),
     });
 
-    press(host, 'Calculate and snapshot');
+    press(host, 'Calculate targets');
     await settle(fixture);
 
-    fill(host, 'Published plan', 'plan-version-1');
-    fill(host, 'Nutrition enrollment', 'enrollment-1');
+    fill(host, 'Meal plan', 'plan-version-1');
+    fill(host, 'Plan', 'enrollment-1');
     fill(host, 'Start date', '2026-09-01');
     tick(
       host,
@@ -190,7 +202,7 @@ describe('ClientNutrition', () => {
     );
     await settle(fixture);
 
-    press(host, 'Assign immutable snapshot');
+    press(host, 'Assign meal plan');
     await settle(fixture);
 
     expect(api.assignNutritionPlan).toHaveBeenCalledWith('client-1', {
@@ -200,34 +212,34 @@ describe('ClientNutrition', () => {
       startDate: '2026-09-01',
       acknowledgeAllergenWarnings: true,
     });
-    expect(host.textContent).toContain('Client nutrition snapshot assigned.');
-    expect(host.textContent).toContain('2026-09-01');
+    expect(host.textContent).toContain('Meal plan assigned.');
+    expect(host.textContent?.replace(/\s+/g, ' ')).toContain('1 Sep – 7 Sep 2026');
   });
 
   /** Nothing may be assigned against a calculation that was never made. */
   it('refuses to assign before any calculation exists', async () => {
     const { fixture, host, api } = await render();
 
-    fill(host, 'Published plan', 'plan-version-1');
+    fill(host, 'Meal plan', 'plan-version-1');
     fill(host, 'Start date', '2026-09-01');
     await settle(fixture);
-    press(host, 'Assign immutable snapshot');
+    press(host, 'Assign meal plan');
     await settle(fixture);
 
     expect(api.assignNutritionPlan).not.toHaveBeenCalled();
     expect(query(host, '[role="alert"]').textContent).toContain(
-      'Choose a published plan, nutrition enrollment, start date, and calculation snapshot.',
+      'Calculate targets first, then choose a meal plan, a plan and a start date.',
     );
   });
 
   it('refuses to assign with no start date', async () => {
     const { fixture, host, api } = await render();
 
-    press(host, 'Calculate and snapshot');
+    press(host, 'Calculate targets');
     await settle(fixture);
-    fill(host, 'Published plan', 'plan-version-1');
+    fill(host, 'Meal plan', 'plan-version-1');
     await settle(fixture);
-    press(host, 'Assign immutable snapshot');
+    press(host, 'Assign meal plan');
     await settle(fixture);
 
     expect(api.assignNutritionPlan).not.toHaveBeenCalled();
@@ -237,7 +249,7 @@ describe('ClientNutrition', () => {
   it('offers only published meal plans', async () => {
     const { host } = await render();
 
-    const options = Array.from(field<HTMLSelectElement>(host, 'Published plan').options).map(
+    const options = Array.from(field<HTMLSelectElement>(host, 'Meal plan').options).map(
       (option) => option.value,
     );
     expect(options).toEqual(['', 'plan-version-1']);
@@ -247,10 +259,20 @@ describe('ClientNutrition', () => {
   it('offers only enrollments that cover nutrition', async () => {
     const { host } = await render();
 
-    const options = Array.from(field<HTMLSelectElement>(host, 'Nutrition enrollment').options).map(
+    const options = Array.from(field<HTMLSelectElement>(host, 'Plan').options).map(
       (option) => option.value,
     );
     expect(options).toEqual(['', 'enrollment-1']);
+  });
+
+  /** A coach picks a plan by what it is and when it runs, never by its identifier. */
+  it('names each plan by product and dates rather than by its id', async () => {
+    const { host } = await render();
+
+    const labels = Array.from(field<HTMLSelectElement>(host, 'Plan').options).map((option) =>
+      option.textContent?.trim(),
+    );
+    expect(labels).toEqual(['Select plan', 'Online Coaching · 1 Sep – 23 Nov 2026']);
   });
 
   it('saves the allergen declarations that were ticked', async () => {
@@ -259,11 +281,11 @@ describe('ClientNutrition', () => {
     tick(host, 'Peanuts');
     tick(host, 'Milk');
     await settle(fixture);
-    press(host, 'Save declarations');
+    press(host, 'Save allergens');
     await settle(fixture);
 
     expect(api.replaceClientAllergens).toHaveBeenCalledWith('client-1', ['Peanuts', 'Milk']);
-    expect(host.textContent).toContain('Structured allergen declarations saved.');
+    expect(host.textContent).toContain('Allergens saved.');
   });
 
   it('removes a declaration that was unticked rather than keeping it', async () => {
@@ -273,7 +295,7 @@ describe('ClientNutrition', () => {
     tick(host, 'Milk');
     tick(host, 'Peanuts', false);
     await settle(fixture);
-    press(host, 'Save declarations');
+    press(host, 'Save allergens');
     await settle(fixture);
 
     expect(api.replaceClientAllergens).toHaveBeenCalledWith('client-1', ['Milk']);
@@ -286,7 +308,7 @@ describe('ClientNutrition', () => {
       ),
     });
 
-    press(host, 'Calculate and snapshot');
+    press(host, 'Calculate targets');
     await settle(fixture);
 
     expect(host.textContent).toContain('Protein exceeds the deficit ceiling.');
@@ -301,19 +323,19 @@ describe('ClientNutrition', () => {
       assignNutritionPlan: vi.fn(() => throwError(() => refused)),
     });
 
-    press(host, 'Calculate and snapshot');
+    press(host, 'Calculate targets');
     await settle(fixture);
-    fill(host, 'Published plan', 'plan-version-1');
-    fill(host, 'Nutrition enrollment', 'enrollment-1');
+    fill(host, 'Meal plan', 'plan-version-1');
+    fill(host, 'Plan', 'enrollment-1');
     fill(host, 'Start date', '2026-09-01');
     await settle(fixture);
-    press(host, 'Assign immutable snapshot');
+    press(host, 'Assign meal plan');
     await settle(fixture);
 
     expect(query(host, '[role="alert"]').textContent).toContain(
       'That enrollment does not cover nutrition for this date.',
     );
-    expect(host.textContent).not.toContain('Client nutrition snapshot assigned.');
+    expect(host.textContent).not.toContain('Meal plan assigned.');
   });
 
   it('reports a failed load rather than an empty plan picker', async () => {

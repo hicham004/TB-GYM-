@@ -5,17 +5,17 @@
     </h2>
     @if (isClient()) {
       <p class="tb-text-compact" i18n>
-        Stop being a client of this workspace. Your TB Gym account and any other workspaces you
-        belong to are not affected.
+        Stop being a client of {{ membership()?.tenantName }}. Your TB Gym account and your other
+        coaches are not affected.
       </p>
     } @else {
       <p class="tb-text-compact" i18n>
-        Stop coaching in this workspace. Your clients move to the owner, who will assign them a new
-        coach.
+        Stop coaching at {{ membership()?.tenantName }}. Your clients move to the owner, who will
+        assign them a new coach.
       </p>
     }
     <button #leaveTrigger appButton variant="outlined" type="button" (click)="open()" i18n>
-      Leave workspace
+      Leave {{ membership()?.tenantName }}
     </button>
   </section>
 
@@ -31,15 +31,14 @@
     </h2>
     @if (isClient()) {
       <p class="tb-text-compact" i18n>
-        You lose access to this workspace right away, including your history there. Your open plans
-        and programs are closed, with no refund. The workspace keeps your record and can invite you
-        back later as a new client. This cannot be undone.
+        You lose access right away, including your history there. Your open plans and programs are
+        closed, with no refund. {{ membership()?.tenantName }} keeps your record and can invite you
+        back later as a new client. You can't undo this.
       </p>
     } @else {
       <p class="tb-text-compact" i18n>
-        You lose access to this workspace right away. Your clients and any client invitations you
-        sent move to the owner, and each client is told their coach has changed. The owner can
-        invite you back later.
+        You lose access right away. Your clients and any client invitations you sent move to the
+        owner, and each client is told their coach has changed. The owner can invite you back later.
       </p>
     }
     <form class="leave-form" [formGroup]="form" (ngSubmit)="leave()" novalidate>
@@ -47,7 +46,7 @@
         <app-field
           label="Reason (optional)"
           i18n-label
-          help="The workspace owner will see this. Up to 500 characters."
+          help="The owner will see this. Up to 500 characters."
           i18n-help
         >
           <textarea appControl dir="auto" rows="3" formControlName="reason"></textarea>

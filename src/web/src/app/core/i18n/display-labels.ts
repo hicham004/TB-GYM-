@@ -134,7 +134,7 @@ export function trainingLoadStrategyLabel(value: TrainingLoadStrategy): string {
   const labels: Record<TrainingLoadStrategy, string> = {
     None: $localize`No prescribed load`,
     Direct: $localize`Direct load`,
-    PercentageWorkingMax: $localize`% working max`,
+    PercentageWorkingMax: $localize`% training max`,
     RpeBasedEpley: $localize`RPE recommendation`,
   };
   return labels[value];
@@ -144,7 +144,7 @@ export function strengthMaxKindLabel(value: StrengthMaxKind): string {
   const labels: Record<StrengthMaxKind, string> = {
     TestedOneRepMax: $localize`Tested 1RM`,
     EstimatedOneRepMax: $localize`Estimated 1RM`,
-    CoachWorkingMax: $localize`Working max`,
+    CoachWorkingMax: $localize`Training max`,
   };
   return labels[value];
 }
@@ -186,14 +186,14 @@ export function mediaStatusLabel(value: MediaAssetStatus): string {
 export function trainingAccessReasonLabel(reason: string): string {
   const labels: Record<string, string> = {
     Granted: $localize`Training available`,
-    MembershipInactive: $localize`Workspace membership inactive`,
+    MembershipInactive: $localize`No longer a client`,
     RelationshipBlocked: $localize`Access blocked by coach`,
-    NoEntitlement: $localize`No active training service`,
+    NoEntitlement: $localize`Training is not in the plan`,
     PaymentRequired: $localize`Payment required`,
-    NotStarted: $localize`Training service has not started`,
-    Expired: $localize`Training service expired`,
-    Paused: $localize`Training service paused`,
-    Cancelled: $localize`Training service cancelled`,
+    NotStarted: $localize`Plan not started yet`,
+    Expired: $localize`Plan ended`,
+    Paused: $localize`Plan paused`,
+    Cancelled: $localize`Plan cancelled`,
     PlatformBlocked: $localize`Account access blocked`,
   };
   return labels[reason] ?? $localize`Training unavailable`;
@@ -206,8 +206,8 @@ export function trainingAccessReasonLabel(reason: string): string {
 export function featureUnavailableLabel(reason: FeatureAccessReason): string {
   const labels: Record<FeatureAccessReason, string> = {
     Granted: $localize`Not available`,
-    MembershipInactive: $localize`Not an active member`,
-    RelationshipBlocked: $localize`Blocked in this workspace`,
+    MembershipInactive: $localize`No longer a client`,
+    RelationshipBlocked: $localize`Blocked`,
     NoEntitlement: $localize`Not in their plan`,
     PaymentRequired: $localize`Plan awaiting payment`,
     NotStarted: $localize`Plan not started`,
@@ -225,15 +225,15 @@ export function featureUnavailableLabel(reason: FeatureAccessReason): string {
  */
 export function ownCheckInDenialMessage(reason: FeatureAccessReason): string {
   const labels: Record<FeatureAccessReason, string> = {
-    Granted: $localize`Check-ins are not available in this workspace right now.`,
-    MembershipInactive: $localize`You are no longer an active member of this workspace, so its check-ins are closed.`,
-    RelationshipBlocked: $localize`Your coach has paused your access to this workspace, so check-ins are closed.`,
-    NoEntitlement: $localize`Check-ins are not part of your current plan in this workspace.`,
-    PaymentRequired: $localize`Your enrollment is awaiting payment, so check-ins are closed for now.`,
-    NotStarted: $localize`Your enrollment has not started yet, so check-ins are not open yet.`,
-    Expired: $localize`Your enrollment has ended, so its check-ins — including the ones you already sent — are closed.`,
-    Paused: $localize`Your enrollment is paused, so check-ins are closed for now.`,
-    Cancelled: $localize`Your enrollment was cancelled, so its check-ins — including the ones you already sent — are closed.`,
+    Granted: $localize`Check-ins aren't available right now.`,
+    MembershipInactive: $localize`Your coaching has ended, so check-ins are closed.`,
+    RelationshipBlocked: $localize`Your coach has paused your access, so check-ins are closed.`,
+    NoEntitlement: $localize`Check-ins are not in your plan. Ask your coach.`,
+    PaymentRequired: $localize`Your plan is waiting for payment, so check-ins are closed for now.`,
+    NotStarted: $localize`Your plan hasn't started yet. Check-ins open when it does.`,
+    Expired: $localize`Your plan has ended, so its check-ins are closed, including the ones you sent.`,
+    Paused: $localize`Your plan is paused, so check-ins are closed for now.`,
+    Cancelled: $localize`Your plan was cancelled, so its check-ins are closed, including the ones you sent.`,
     PlatformBlocked: $localize`Your account access is blocked, so check-ins are closed.`,
   };
   return labels[reason];
@@ -243,14 +243,14 @@ export function ownCheckInDenialMessage(reason: FeatureAccessReason): string {
 export function clientCheckInDenialMessage(reason: FeatureAccessReason): string {
   const labels: Record<FeatureAccessReason, string> = {
     Granted: $localize`This client's check-ins are not available.`,
-    MembershipInactive: $localize`This client is no longer an active member of the workspace, so their check-ins cannot be read.`,
+    MembershipInactive: $localize`This client is no longer with you, so their check-ins cannot be read.`,
     RelationshipBlocked: $localize`You have blocked this client, so their check-ins cannot be read until you unblock them.`,
     NoEntitlement: $localize`Check-ins are not part of this client's current plan, so theirs cannot be read.`,
-    PaymentRequired: $localize`This client's enrollment is awaiting payment, so their check-ins cannot be read.`,
-    NotStarted: $localize`This client's enrollment has not started yet, so their check-ins cannot be read.`,
-    Expired: $localize`This client's enrollment has ended, so their check-ins can no longer be read.`,
-    Paused: $localize`This client's enrollment is paused, so their check-ins cannot be read.`,
-    Cancelled: $localize`This client's enrollment was cancelled, so their check-ins can no longer be read.`,
+    PaymentRequired: $localize`This client's plan is waiting for payment, so their check-ins cannot be read.`,
+    NotStarted: $localize`This client's plan has not started yet, so their check-ins cannot be read.`,
+    Expired: $localize`This client's plan has ended, so their check-ins can no longer be read.`,
+    Paused: $localize`This client's plan is paused, so their check-ins cannot be read.`,
+    Cancelled: $localize`This client's plan was cancelled, so their check-ins can no longer be read.`,
     PlatformBlocked: $localize`This client's account access is blocked, so their check-ins cannot be read.`,
   };
   return labels[reason];
@@ -262,15 +262,15 @@ export function clientCheckInDenialMessage(reason: FeatureAccessReason): string 
  */
 export function ownMessagingDenialMessage(reason: FeatureAccessReason): string {
   const labels: Record<FeatureAccessReason, string> = {
-    Granted: $localize`Messaging is not available in this workspace right now.`,
-    MembershipInactive: $localize`You are no longer an active member of this workspace, so its messages are closed.`,
-    RelationshipBlocked: $localize`Your coach has paused your access to this workspace, so messaging is closed.`,
-    NoEntitlement: $localize`Messaging is not part of your current plan in this workspace.`,
-    PaymentRequired: $localize`Your enrollment is awaiting payment, so messaging is closed for now.`,
-    NotStarted: $localize`Your enrollment has not started yet, so messaging is not open yet.`,
-    Expired: $localize`Your enrollment has ended, so this conversation is closed. Nothing has been deleted.`,
-    Paused: $localize`Your enrollment is paused, so messaging is closed for now.`,
-    Cancelled: $localize`Your enrollment was cancelled, so this conversation is closed. Nothing has been deleted.`,
+    Granted: $localize`Messaging isn't available right now.`,
+    MembershipInactive: $localize`Your coaching has ended, so messages are closed.`,
+    RelationshipBlocked: $localize`Your coach has paused your access, so messaging is closed.`,
+    NoEntitlement: $localize`Messaging is not in your plan. Ask your coach.`,
+    PaymentRequired: $localize`Your plan is waiting for payment, so messaging is closed for now.`,
+    NotStarted: $localize`Your plan hasn't started yet. Messaging opens when it does.`,
+    Expired: $localize`Your plan has ended, so this conversation is closed. Nothing has been deleted.`,
+    Paused: $localize`Your plan is paused, so messaging is closed for now.`,
+    Cancelled: $localize`Your plan was cancelled, so this conversation is closed. Nothing has been deleted.`,
     PlatformBlocked: $localize`Your account access is blocked, so messaging is closed.`,
   };
   return labels[reason];
@@ -280,14 +280,14 @@ export function ownMessagingDenialMessage(reason: FeatureAccessReason): string {
 export function clientMessagingDenialMessage(reason: FeatureAccessReason): string {
   const labels: Record<FeatureAccessReason, string> = {
     Granted: $localize`This conversation is not available.`,
-    MembershipInactive: $localize`This client is no longer an active member of the workspace, so this conversation is closed.`,
+    MembershipInactive: $localize`This client is no longer with you, so this conversation is closed.`,
     RelationshipBlocked: $localize`You have blocked this client, so this conversation is closed until you unblock them.`,
     NoEntitlement: $localize`Messaging is not part of this client's current plan, so this conversation is closed.`,
-    PaymentRequired: $localize`This client's enrollment is awaiting payment, so this conversation is closed.`,
-    NotStarted: $localize`This client's enrollment has not started yet, so this conversation is not open yet.`,
-    Expired: $localize`This client's enrollment has ended, so this conversation is closed. Nothing has been deleted.`,
-    Paused: $localize`This client's enrollment is paused, so this conversation is closed.`,
-    Cancelled: $localize`This client's enrollment was cancelled, so this conversation is closed. Nothing has been deleted.`,
+    PaymentRequired: $localize`This client's plan is waiting for payment, so this conversation is closed.`,
+    NotStarted: $localize`This client's plan has not started yet, so this conversation is not open yet.`,
+    Expired: $localize`This client's plan has ended, so this conversation is closed. Nothing has been deleted.`,
+    Paused: $localize`This client's plan is paused, so this conversation is closed.`,
+    Cancelled: $localize`This client's plan was cancelled, so this conversation is closed. Nothing has been deleted.`,
     PlatformBlocked: $localize`This client's account access is blocked, so this conversation is closed.`,
   };
   return labels[reason];

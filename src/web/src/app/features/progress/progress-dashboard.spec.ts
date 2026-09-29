@@ -285,7 +285,7 @@ describe('ProgressDashboardView states', () => {
     expect(text).toContain('This subscription has ended.');
     expect(host.querySelectorAll('img.thumbnail')).toHaveLength(1);
     expect(host.querySelector('.no-preview')?.textContent).toContain('Preview unavailable');
-    expect(text).toContain('no relationship between them is implied');
+    expect(text).toContain('one does not explain another');
   });
 
   it('renders an empty state when nothing readable was recorded', async () => {

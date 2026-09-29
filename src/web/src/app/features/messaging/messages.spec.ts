@@ -890,7 +890,7 @@ describe('Messages', () => {
     await open(harness);
 
     const denialText = query(harness.host, '.denied').textContent ?? '';
-    expect(denialText).toContain('enrollment has ended');
+    expect(denialText).toContain('plan has ended');
     expect(harness.host.querySelector('.feed li')).toBeNull();
     expect(harness.host.querySelector('.composer')).toBeNull();
     // A conversation the server already refused is not asked for again.

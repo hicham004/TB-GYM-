@@ -118,7 +118,7 @@ export class ProgramBuilder {
         this.selectedSessions.set(new Set());
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`The program version could not be loaded.`));
+        this.error.set(apiErrorMessage(error, $localize`This program could not be loaded.`));
       } finally {
         if (owner.current) {
           this.busy.set(false);
@@ -217,9 +217,7 @@ export class ProgramBuilder {
     return this.scope.run('saveSession', async (owner) => {
       const versionId = this.draft().sourceVersionId;
       if (!versionId || !session.sourceId) {
-        this.error.set(
-          $localize`Save the program version before adding this session to the library.`,
-        );
+        this.error.set($localize`Save the program before adding this session to the library.`);
         return;
       }
 
@@ -342,8 +340,8 @@ export class ProgramBuilder {
           await owner.wait(this.openVersion(saved.id));
           this.notice.set(
             draft.templateId
-              ? $localize`New immutable program version saved.`
-              : $localize`Program template created.`,
+              ? $localize`Saved as a new version. Clients already on this program keep theirs.`
+              : $localize`Program created.`,
           );
         }),
       );
@@ -423,9 +421,7 @@ export class ProgramBuilder {
         this.templates.update((items) => [...items, ...page.items]);
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(
-          apiErrorMessage(error, $localize`More program templates could not be loaded.`),
-        );
+        this.error.set(apiErrorMessage(error, $localize`More programs could not be loaded.`));
       } finally {
         if (owner.current) {
           this.busy.set(false);
@@ -551,7 +547,7 @@ export class ProgramBuilder {
                   ? set.exertionTarget
                   : 10 - set.exertionTarget;
               if (set.repetitionsMaximum + rir > 12) {
-                return $localize`Maximum repetitions plus RIR cannot exceed 12 for this recommendation strategy.`;
+                return $localize`For an RPE recommendation, maximum reps plus RIR cannot be more than 12.`;
               }
             }
           }

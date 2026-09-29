@@ -39,7 +39,7 @@ function fillRegistration(
 ) {
   const password = overrides.password ?? 'correct-horse-battery';
   fill(host, 'Your name', 'Tarek Bou');
-  fill(host, 'Workspace name', 'TB Gym');
+  fill(host, 'Coaching space name', 'TB Gym');
   fill(host, 'Email', 'coach@example.test');
   fill(host, 'Password', password);
   fill(host, 'Confirm password', overrides.confirmPassword ?? password);
@@ -85,7 +85,7 @@ describe('RegisterCoach', () => {
     const { host } = await render();
 
     expect(field(host, 'Your name').getAttribute('autocomplete')).toBe('name');
-    expect(field(host, 'Workspace name').getAttribute('autocomplete')).toBe('organization');
+    expect(field(host, 'Coaching space name').getAttribute('autocomplete')).toBe('organization');
     expect(field(host, 'Email').getAttribute('autocomplete')).toBe('email');
     expect(field(host, 'Password').getAttribute('autocomplete')).toBe('new-password');
     expect(field(host, 'Confirm password').getAttribute('autocomplete')).toBe('new-password');

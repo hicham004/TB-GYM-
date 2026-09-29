@@ -1,6 +1,6 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { Component, effect, inject, input, signal } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
+import { Component, effect, inject, input, LOCALE_ID, signal } from '@angular/core';
+import { DatePipe, DecimalPipe, formatDate } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -13,6 +13,7 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { addDays } from '../clients/client-overview.models';
 import {
   ALLERGEN_LABELS,
   ClientNutritionPlan,
@@ -22,7 +23,7 @@ import {
 
 @Component({
   selector: 'app-client-nutrition',
-  imports: [DecimalPipe, FormsModule],
+  imports: [DatePipe, DecimalPipe, FormsModule],
   templateUrl: './client-nutrition.html',
   styleUrl: './client-nutrition.scss',
 })
@@ -31,6 +32,7 @@ export class ClientNutrition {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
 
@@ -40,7 +42,7 @@ export class ClientNutrition {
   protected readonly notice = signal<string | null>(null);
   protected readonly mealPlans = signal<MealPlanSummary[]>([]);
   protected readonly assignments = signal<ClientNutritionPlan[]>([]);
-  protected readonly enrollmentIds = signal<string[]>([]);
+  protected readonly enrollmentOptions = signal<{ id: string; label: string }[]>([]);
   protected readonly calculation = signal<NutritionCalculation | null>(null);
   protected readonly selectedAllergens = signal<Set<AllergenCode>>(new Set());
   protected readonly acknowledgeAllergens = signal(false);
@@ -103,7 +105,7 @@ export class ClientNutrition {
               ),
             );
           },
-          $localize`Nutrition estimates calculated and snapshotted.`,
+          $localize`Targets calculated.`,
         ),
       );
     });
@@ -130,7 +132,7 @@ export class ClientNutrition {
               ),
             );
           },
-          $localize`Structured allergen declarations saved.`,
+          $localize`Allergens saved.`,
         ),
       );
     });
@@ -141,7 +143,7 @@ export class ClientNutrition {
       const calculation = this.calculation();
       if (!calculation || !this.mealPlanVersionId || !this.enrollmentId || !this.startDate) {
         this.error.set(
-          $localize`Choose a published plan, nutrition enrollment, start date, and calculation snapshot.`,
+          $localize`Calculate targets first, then choose a meal plan, a plan and a start date.`,
         );
         return;
       }
@@ -164,10 +166,15 @@ export class ClientNutrition {
               await owner.wait(firstValueFrom(this.api.listClientNutritionPlans(this.clientId()))),
             );
           },
-          $localize`Client nutrition snapshot assigned.`,
+          $localize`Meal plan assigned.`,
         ),
       );
     });
+  }
+
+  /** Meal plans end on a half-open date; people read the last day it covers. */
+  protected lastDay(endDateExclusive: string): string {
+    return addDays(endDateExclusive, -1);
   }
 
   private async load(): Promise<void> {
@@ -185,13 +192,16 @@ export class ClientNutrition {
         const published = plans.items.filter((item) => item.status === 'Published');
         this.mealPlans.set(published);
         this.assignments.set(assignments);
-        this.enrollmentIds.set(
+        this.enrollmentOptions.set(
           commercial.enrollments
             .filter((item) => item.features.includes('Nutrition'))
-            .map((item) => item.id),
+            .map((item) => ({
+              id: item.id,
+              label: `${item.productName} · ${formatDate(item.startDate, 'd MMM', this.locale)} – ${formatDate(item.lastActiveDate, 'd MMM y', this.locale)}`,
+            })),
         );
         this.mealPlanVersionId ||= published[0]?.versionId ?? '';
-        this.enrollmentId ||= this.enrollmentIds()[0] ?? '';
+        this.enrollmentId ||= this.enrollmentOptions()[0]?.id ?? '';
       } catch (error) {
         if (!owner.current) return;
         this.error.set(apiErrorMessage(error, $localize`Client nutrition could not be loaded.`));
@@ -231,7 +241,7 @@ export class ClientNutrition {
     this.notice.set(null);
     this.mealPlans.set([]);
     this.assignments.set([]);
-    this.enrollmentIds.set([]);
+    this.enrollmentOptions.set([]);
     this.calculation.set(null);
     this.selectedAllergens.set(new Set());
     this.acknowledgeAllergens.set(false);

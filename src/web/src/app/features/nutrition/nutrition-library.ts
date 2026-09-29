@@ -193,7 +193,7 @@ export class NutritionLibrary {
             this.foodName = '';
             await owner.wait(this.reloadFoods());
           },
-          $localize`Coach-authored food saved as a canonical version.`,
+          $localize`Food saved.`,
         ),
       );
     });
@@ -312,7 +312,7 @@ export class NutritionLibrary {
             this.recipeLines.set([]);
             await owner.wait(this.reloadRecipes());
           },
-          $localize`Recipe draft created from canonical food snapshots.`,
+          $localize`Recipe draft created.`,
         ),
       );
     });
@@ -326,7 +326,7 @@ export class NutritionLibrary {
             await owner.wait(firstValueFrom(this.api.publishRecipe(versionId)));
             await owner.wait(this.reloadRecipes());
           },
-          $localize`Recipe version published and locked.`,
+          $localize`Recipe published. It can no longer be edited.`,
         ),
       );
     });
@@ -395,7 +395,7 @@ export class NutritionLibrary {
             await owner.wait(firstValueFrom(this.api.publishMealPlan(versionId)));
             await owner.wait(this.reloadPlans());
           },
-          $localize`Meal-plan version published and locked.`,
+          $localize`Meal plan published. It can no longer be edited.`,
         ),
       );
     });
@@ -423,7 +423,7 @@ export class NutritionLibrary {
               ),
             );
           },
-          $localize`Nutrition workspace policy saved.`,
+          $localize`Calculation defaults saved.`,
         ),
       );
     });

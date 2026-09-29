@@ -23,7 +23,7 @@
 
   @if (tenants.memberships().length > 1) {
     <section class="me-section" aria-labelledby="me-workspaces">
-      <h2 id="me-workspaces" class="tb-text-section-title" i18n>Workspaces</h2>
+      <h2 id="me-workspaces" class="tb-text-section-title" i18n>Your coaches</h2>
       <ul class="me-list">
         @for (membership of tenants.memberships(); track membership.tenantId) {
           <li>

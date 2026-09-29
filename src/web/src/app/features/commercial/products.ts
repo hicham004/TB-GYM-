@@ -96,7 +96,7 @@ export class Products {
       const raw = this.createForm.getRawValue();
       const offer = this.toOfferRequest(raw);
       if (offer.features.length === 0) {
-        this.error.set($localize`Select at least one coaching feature.`);
+        this.error.set($localize`Choose at least one thing to include.`);
         return;
       }
 
@@ -160,7 +160,7 @@ export class Products {
 
       const offer = this.toOfferRequest(this.offerForm.getRawValue());
       if (offer.features.length === 0) {
-        this.error.set($localize`Select at least one coaching feature.`);
+        this.error.set($localize`Choose at least one thing to include.`);
         return;
       }
 
@@ -170,7 +170,7 @@ export class Products {
             await owner.wait(firstValueFrom(this.api.addProductOffer(productId, offer)));
             this.offerProductId.set(null);
           },
-          $localize`New offer added. Existing enrollments were left unchanged.`,
+          $localize`Price option added. Clients already on a plan keep theirs.`,
         ),
       );
     });
@@ -214,7 +214,7 @@ export class Products {
               ),
             );
           },
-          offer.isActive ? $localize`Offer retired.` : $localize`Offer restored.`,
+          offer.isActive ? $localize`Price option retired.` : $localize`Price option restored.`,
         ),
       );
     });
@@ -269,9 +269,7 @@ export class Products {
         this.notice.set(message);
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(
-          apiErrorMessage(error, $localize`The commercial change could not be saved.`),
-        );
+        this.error.set(apiErrorMessage(error, $localize`The change could not be saved.`));
       } finally {
         if (owner.current) {
           this.busy.set(false);

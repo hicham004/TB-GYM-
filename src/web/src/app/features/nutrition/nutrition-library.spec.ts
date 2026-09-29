@@ -179,7 +179,7 @@ describe('NutritionLibrary', () => {
     tick(food, 'Milk');
     await settle(fixture);
 
-    press(host, 'Save canonical food');
+    press(host, 'Save food');
     await settle(fixture);
 
     expect(api.createFood).toHaveBeenCalledWith(
@@ -195,7 +195,7 @@ describe('NutritionLibrary', () => {
         }),
       }),
     );
-    expect(host.textContent).toContain('Coach-authored food saved as a canonical version.');
+    expect(host.textContent).toContain('Food saved.');
   });
 
   /**
@@ -242,7 +242,7 @@ describe('NutritionLibrary', () => {
         },
       ],
     });
-    expect(host.textContent).toContain('Recipe draft created from canonical food snapshots.');
+    expect(host.textContent).toContain('Recipe draft created.');
   });
 
   /** An added ingredient starts from its own food's basis rather than a shared default. */
@@ -267,7 +267,7 @@ describe('NutritionLibrary', () => {
     await settle(fixture);
 
     expect(api.publishRecipe).toHaveBeenCalledWith('recipe-version-2');
-    expect(host.textContent).toContain('Recipe version published and locked.');
+    expect(host.textContent).toContain('Recipe published. It can no longer be edited.');
   });
 
   /**
@@ -392,7 +392,7 @@ describe('NutritionLibrary', () => {
   it('refuses a food without a name', async () => {
     const { fixture, host, api } = await render();
 
-    press(host, 'Save canonical food');
+    press(host, 'Save food');
     await settle(fixture);
 
     expect(api.createFood).not.toHaveBeenCalled();
@@ -410,7 +410,7 @@ describe('NutritionLibrary', () => {
     tick(food, 'Tree nuts');
     tick(food, 'Sulphites');
     await settle(fixture);
-    press(host, 'Save canonical food');
+    press(host, 'Save food');
     await settle(fixture);
 
     expect(api.createFood).toHaveBeenCalledWith(
@@ -463,7 +463,7 @@ describe('NutritionLibrary', () => {
   it('lets the coach dismiss a message', async () => {
     const { fixture, host } = await render();
 
-    press(host, 'Save canonical food');
+    press(host, 'Save food');
     await settle(fixture);
     query<HTMLButtonElement>(host, 'button[aria-label="Dismiss message"]').click();
     await settle(fixture);
@@ -478,7 +478,7 @@ describe('NutritionLibrary', () => {
     await settle(fixture);
 
     expect(api.publishMealPlan).toHaveBeenCalledWith('plan-version-1');
-    expect(host.textContent).toContain('Meal-plan version published and locked.');
+    expect(host.textContent).toContain('Meal plan published. It can no longer be edited.');
   });
 
   /** The policy carries a version, so a concurrent edit conflicts rather than being overwritten. */
@@ -493,7 +493,7 @@ describe('NutritionLibrary', () => {
     expect(api.updateNutritionSettings).toHaveBeenCalledWith(
       expect.objectContaining({ providerCalorieTolerance: 8, version: 3 }),
     );
-    expect(host.textContent).toContain('Nutrition workspace policy saved.');
+    expect(host.textContent).toContain('Calculation defaults saved.');
   });
 
   it('reports a refused publication instead of showing the version as locked', async () => {
@@ -511,7 +511,7 @@ describe('NutritionLibrary', () => {
     expect(query(host, '[role="alert"]').textContent).toContain(
       'That recipe version is already published.',
     );
-    expect(host.textContent).not.toContain('Recipe version published and locked.');
+    expect(host.textContent).not.toContain('Recipe published. It can no longer be edited.');
   });
 
   /**

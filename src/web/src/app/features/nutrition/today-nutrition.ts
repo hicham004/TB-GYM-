@@ -190,7 +190,10 @@ export class TodayNutrition {
         if (!owner.current || !this.ownsDate(dateOwner)) return;
         this.day.set(null);
         this.error.set(
-          apiErrorMessage(error, $localize`No authorized nutrition plan was found for this date.`),
+          apiErrorMessage(
+            error,
+            $localize`There is no meal plan for this day. Ask your coach if you expected one.`,
+          ),
         );
       } finally {
         if (owner.current && this.ownsDate(dateOwner)) {

@@ -58,7 +58,7 @@ export class RegisterCoach {
 
   protected workspaceNameReasons(): string[] {
     const control = this.form.controls.workspaceName;
-    if (control.hasError('required')) return [$localize`Enter a name for your workspace.`];
+    if (control.hasError('required')) return [$localize`Enter a name for your coaching space.`];
     return control.hasError('maxlength') ? [$localize`Use 200 characters or fewer.`] : [];
   }
 

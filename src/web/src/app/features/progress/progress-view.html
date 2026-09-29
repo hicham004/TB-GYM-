@@ -11,8 +11,8 @@
       <p class="eyebrow" i18n>Bodyweight progress</p>
       <h2 i18n>{{ coachMode() ? 'Client weight trend' : 'My weight trend' }}</h2>
       <p class="muted" i18n>
-        Weekly means use recorded days only. The trend is an estimate, not a statement about fat
-        loss or physiology.
+        Weekly averages use only the days with a weigh-in. The trend smooths out day-to-day swings;
+        it is not a measure of fat loss.
       </p>
     </div>
     <label class="unit-picker">
@@ -46,7 +46,7 @@
     <label>
       <span i18n>Measurement date</span>
       <input type="date" [(ngModel)]="entryDate" name="date" />
-      <small i18n>Leave blank for today in the workspace time zone.</small>
+      <small i18n>Leave blank for today.</small>
     </label>
     <button class="primary-button" type="submit" [disabled]="busy()" i18n>Record weight</button>
   </form>
@@ -56,7 +56,7 @@
   } @else if (progress(); as view) {
     <div class="trend-summary">
       <div>
-        <span i18n>Latest trend estimate</span>
+        <span i18n>Current trend</span>
         <strong>
           @if (view.trend.latestDisplayEstimate !== null) {
             {{ view.trend.latestDisplayEstimate | number: '1.1-3' }}
@@ -67,21 +67,34 @@
         </strong>
       </div>
       <div>
-        <span i18n>Recorded samples</span>
+        <span i18n>Weigh-ins</span>
         <strong>{{ view.trend.sampleCount }}</strong>
       </div>
-      <div>
-        <span i18n>Estimate strategy</span>
-        <strong>{{ view.trend.methodKey }} v{{ view.trend.methodVersion }}</strong>
-      </div>
-      <small i18n>
-        Window {{ view.trend.windowStart | date: 'mediumDate' }} to
-        {{ view.trend.windowEndExclusive | date: 'mediumDate' }} · time constant
-        {{ view.trend.timeConstantDays }} days · {{ view.trend.warmupDays }}-day warm-up
-        @if (view.trend.availability === 'NotEnoughData') {
-          · needs {{ view.trend.minimumSampleCount - view.trend.sampleCount }} more observations
-        }
-      </small>
+      <!-- How the trend is worked out is for the coach; clients never see method names (§6). -->
+      @if (coachMode()) {
+        <div>
+          <span i18n>Trend method</span>
+          <strong>
+            @if (view.trend.methodKey === 'BodyweightTrendEwma') {
+              <ng-container i18n>Smoothed average</ng-container>
+            } @else {
+              {{ view.trend.methodKey }}
+            }
+            v{{ view.trend.methodVersion }}
+          </strong>
+        </div>
+        <small i18n>
+          Window {{ view.trend.windowStart | date: 'mediumDate' }} to
+          {{ view.trend.windowEndExclusive | date: 'mediumDate' }} · time constant
+          {{ view.trend.timeConstantDays }} days · {{ view.trend.warmupDays }}-day warm-up
+        </small>
+      }
+      @if (view.trend.availability === 'NotEnoughData') {
+        <small i18n
+          >{{ view.trend.minimumSampleCount - view.trend.sampleCount }} more weigh-ins are needed
+          for a trend.</small
+        >
+      }
     </div>
 
     <div class="week-grid" aria-label="Weekly bodyweight averages" i18n-aria-label>
@@ -96,7 +109,10 @@
               —
             }
           </strong>
-          <small i18n>{{ week.observedDayCount }} observed days</small>
+          <small i18n>{week.observedDayCount, plural,
+            =1 {1 weigh-in}
+            other {{{ week.observedDayCount }} weigh-ins}
+          }</small>
         </article>
       }
     </div>
@@ -124,7 +140,7 @@
             </div>
             @if (day.trendEstimate !== null) {
               <div class="measurement trend">
-                <span i18n>Trend estimate</span>
+                <span i18n>Trend</span>
                 <strong>
                   {{ day.trendEstimate | number: '1.1-3' }}
                   {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}
@@ -201,7 +217,7 @@
               </form>
             }
           } @else {
-            <span class="missing-label" i18n>No observation</span>
+            <span class="missing-label" i18n>No weigh-in</span>
           }
         </article>
       }
@@ -309,7 +325,7 @@
       <label>
         <span i18n>Measurement date</span>
         <input type="date" [(ngModel)]="measurementDate" name="measurementDate" />
-        <small i18n>Leave blank for today in the workspace time zone.</small>
+        <small i18n>Leave blank for today.</small>
       </label>
       <button class="primary-button" type="submit" [disabled]="busy()" i18n>
         Record measurement

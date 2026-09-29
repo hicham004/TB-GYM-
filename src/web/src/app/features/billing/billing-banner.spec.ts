@@ -54,7 +54,7 @@ describe('BillingBanner', () => {
     );
 
     const banner = host.querySelector('[data-billing-banner="read-only"]');
-    expect(banner?.textContent).toContain('the workspace owner can settle it');
+    expect(banner?.textContent).toContain('the owner can settle it');
     expect(banner?.querySelector('a')).toBeNull();
   });
 

@@ -85,7 +85,7 @@ export class ClientRelease {
         this.error.set(
           apiErrorMessage(
             error,
-            $localize`The client could not be released. Reload the page and try again.`,
+            $localize`Coaching could not be ended. Reload the page and try again.`,
           ),
         );
       } finally {

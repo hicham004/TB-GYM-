@@ -18,7 +18,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole('heading', { level: 1, name: /Stop coaching from/ })).toBeVisible();
     await expect(page.locator('.topbar')).toBeHidden();
     await expect(
-      page.getByRole('link', { name: 'Start your coach workspace' }).first(),
+      page.getByRole('link', { name: 'Start your coaching space' }).first(),
     ).toHaveAttribute('href', '/auth/register');
     await expect(page.getByRole('link', { name: 'Sign in', exact: true }).first()).toHaveAttribute(
       'href',

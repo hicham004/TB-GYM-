@@ -38,7 +38,7 @@ export interface CoachNavigationGroup {
 
 export const COACH_NAVIGATION: readonly CoachNavigationGroup[] = [
   {
-    label: $localize`Workspace`,
+    label: $localize`Coaching`,
     destinations: [
       { key: 'overview', label: $localize`Overview`, icon: 'overview', link: '/', section: [] },
       {

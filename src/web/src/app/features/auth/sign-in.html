@@ -1,7 +1,7 @@
 <app-auth-frame>
   <p class="auth-eyebrow" i18n>Coach and client access</p>
   <h1 class="auth-title" i18n>Welcome <em>back.</em></h1>
-  <p class="auth-lead" i18n>Sign in to your coaching workspace.</p>
+  <p class="auth-lead" i18n>Sign in to your coaching space.</p>
 
   <form class="auth-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
     @let emailMessages = emailReasons();
@@ -75,7 +75,7 @@
     <div class="auth-notes">
       <p class="auth-alt">
         <span i18n>Independent coach?</span>
-        <a class="auth-link" routerLink="/auth/register" i18n>Create your workspace</a>
+        <a class="auth-link" routerLink="/auth/register" i18n>Create your coaching space</a>
       </p>
       <p class="auth-alt" i18n>Clients join by invitation from their coach.</p>
     </div>

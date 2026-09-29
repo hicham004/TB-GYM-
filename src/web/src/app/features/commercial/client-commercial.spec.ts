@@ -190,15 +190,15 @@ describe('ClientCommercial', () => {
       getClientCommercialOverview: vi.fn(() => of(overview({ enrollments: [enrollment()] }))),
     };
     const { host } = await render({ api, renewEnrollmentId: enrollment().id });
-    expect(host.textContent).toContain('Create renewal');
+    expect(host.textContent).toContain('Renew this plan');
 
     TestBed.resetTestingModule();
     const readOnly = await render({ api, renewEnrollmentId: enrollment().id, readOnly: true });
-    expect(readOnly.host.textContent).not.toContain('Create renewal');
+    expect(readOnly.host.textContent).not.toContain('Renew this plan');
 
     TestBed.resetTestingModule();
     const unknown = await render({ api, renewEnrollmentId: 'another-clients-enrollment' });
-    expect(unknown.host.textContent).not.toContain('Create renewal');
+    expect(unknown.host.textContent).not.toContain('Renew this plan');
   });
 
   it('hands every fresh read of the plans to the page, so its header stays in step', async () => {
@@ -216,12 +216,12 @@ describe('ClientCommercial', () => {
   it('assigns the offer the coach picked, with an idempotency key', async () => {
     const { fixture, host, api } = await render();
 
-    fill(host, 'Product and offer', 'offer-2');
+    fill(host, 'Plan and price option', 'offer-2');
     fill(host, 'Start date', '2026-09-01');
     await settle(fixture);
 
-    expect(button(host, 'Assign service').disabled).toBe(false);
-    press(host, 'Assign service');
+    expect(button(host, 'Start plan').disabled).toBe(false);
+    press(host, 'Start plan');
     await settle(fixture);
 
     expect(api.assignProduct).toHaveBeenCalledWith('client-1', {
@@ -229,7 +229,7 @@ describe('ClientCommercial', () => {
       startDate: '2026-09-01',
       idempotencyKey: '11111111-2222-3333-4444-555555555555',
     });
-    expect(host.textContent).toContain('Service assigned.');
+    expect(host.textContent).toContain('Plan started.');
   });
 
   /** ADR 0027: a former client's plans and payments stay visible, and nothing offers to change them. */
@@ -275,9 +275,7 @@ describe('ClientCommercial', () => {
       },
     });
 
-    expect(host.textContent).toContain(
-      'Create an active coaching product before assigning service',
-    );
+    expect(host.textContent).toContain('Add a plan to sell under Products first');
     expect(host.querySelector('.assignment-form')).toBeNull();
   });
 
@@ -319,7 +317,7 @@ describe('ClientCommercial', () => {
       note: null,
       idempotencyKey: '11111111-2222-3333-4444-555555555555',
     });
-    expect(host.textContent).toContain('Payment recorded in the immutable payment history.');
+    expect(host.textContent).toContain('Payment recorded.');
   });
 
   /**
@@ -401,7 +399,7 @@ describe('ClientCommercial', () => {
       'Payment overdue for two months.',
       3,
     );
-    expect(host.textContent).toContain('Client access blocked in this workspace only.');
+    expect(host.textContent).toContain('Client blocked in your coaching space only.');
   });
 
   it('unblocks a blocked relationship rather than blocking it again', async () => {
@@ -420,7 +418,7 @@ describe('ClientCommercial', () => {
 
     expect(api.unblockClientRelationship).toHaveBeenCalledWith('client-1', 'Balance settled.', 3);
     expect(api.blockClientRelationship).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('Workspace relationship restored.');
+    expect(host.textContent).toContain('Client unblocked.');
   });
 
   it('does not change the relationship without a reason', async () => {

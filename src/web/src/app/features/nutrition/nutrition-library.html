@@ -136,7 +136,7 @@
               }
             </div>
           </details>
-          <button class="primary-button" [disabled]="busy()" i18n>Save canonical food</button>
+          <button class="primary-button" [disabled]="busy()" i18n>Save food</button>
         </form>
         <div class="editor">
           <h3 i18n>USDA FoodData Central</h3>
@@ -217,7 +217,7 @@
     </section>
 
     <section class="surface-section">
-      <h2 i18n>Recipe versions</h2>
+      <h2 i18n>Recipes</h2>
       <form class="editor" #recipeForm="ngForm" (ngSubmit)="createRecipe(recipeForm)">
         <label
           ><span i18n>Recipe name</span
@@ -314,7 +314,7 @@
     </section>
 
     <section class="surface-section">
-      <h2 i18n>Meal-plan versions</h2>
+      <h2 i18n>Meal plans</h2>
       <form class="editor" #planForm="ngForm" (ngSubmit)="createMealPlan(planForm)">
         <label
           ><span i18n>Plan name</span
@@ -432,7 +432,7 @@
     </section>
 
     <section class="surface-section">
-      <h2 i18n>Workspace calculation policy</h2>
+      <h2 i18n>Calculation defaults</h2>
       @if (settings(); as policy) {
         <form class="editor" (ngSubmit)="saveSettings()">
           <label
@@ -478,8 +478,8 @@
     <section class="surface-section">
       <h2 i18n>AI meal draft review</h2>
       <p class="muted" i18n>
-        AI output is untrusted. Schema validation, canonical food mapping, and coach approval are
-        required before a recipe draft is created.
+        An AI suggestion is only a starting point. You match each ingredient to a food and approve
+        it before a recipe draft is created.
       </p>
       <form class="editor" (ngSubmit)="generateAi()">
         <label
@@ -512,7 +512,7 @@
               /></label>
               @for (mapping of aiMappings; track $index) {
                 <label
-                  ><span i18n>Canonical food for ingredient {{ $index + 1 }}</span
+                  ><span i18n>Food for ingredient {{ $index + 1 }}</span
                   ><select
                     [ngModel]="mapping.foodItemVersionId"
                     (ngModelChange)="updateAiMappingFood($index, $event)"

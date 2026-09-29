@@ -1,11 +1,11 @@
 <section class="surface-section assignment-section">
   <div class="section-heading">
     <div>
-      <h2 i18n>Training assignment</h2>
-      <p class="muted" i18n>Primary mesocycle</p>
+      <h2 i18n>Assign a program</h2>
+      <p class="muted" i18n>Pick a plan, a published program and a start date.</p>
     </div>
     <button class="primary-button" type="button" [disabled]="busy()" (click)="assign()" i18n>
-      Assign snapshot
+      Assign program
     </button>
   </div>
 
@@ -30,9 +30,9 @@
 
   <div class="assignment-grid">
     <label class="wide-field">
-      <span i18n>Training enrollment</span>
+      <span i18n>Plan</span>
       <select [(ngModel)]="assignment.enrollmentId">
-        <option value="" i18n>Select enrollment...</option>
+        <option value="" i18n>Select plan...</option>
         @for (enrollment of trainingEnrollments(); track enrollment.id) {
           <option [value]="enrollment.id">{{ enrollmentLabel(enrollment) }}</option>
         }
@@ -62,7 +62,7 @@
       </select>
     </label>
     <label>
-      <span i18n>Load increment</span>
+      <span i18n>Round loads to</span>
       <input type="number" min="0.01" step="0.25" [(ngModel)]="assignment.loadIncrement" />
     </label>
     <label>
@@ -77,7 +77,7 @@
 
   @if (workingMaxes().length > 0) {
     <div class="working-max-grid">
-      <span class="grid-label" i18n>Program working-max snapshots</span>
+      <span class="grid-label" i18n>Training maxes for this program</span>
       @for (max of workingMaxes(); track max.exerciseId; let index = $index) {
         <label>
           <span>{{ max.exerciseName }}</span>
@@ -120,7 +120,7 @@
     <label>
       <span i18n>Kind</span>
       <select [(ngModel)]="maxForm.kind">
-        <option value="CoachWorkingMax" i18n>Working max</option>
+        <option value="CoachWorkingMax" i18n>Training max</option>
         <option value="TestedOneRepMax" i18n>Tested 1RM</option>
         <option value="EstimatedOneRepMax" i18n>Estimated 1RM</option>
       </select>
@@ -137,7 +137,7 @@
       </select>
     </label>
     <label>
-      <span i18n>Effective date</span>
+      <span i18n>Date</span>
       <input type="date" [(ngModel)]="maxForm.effectiveDate" />
     </label>
     <label>
@@ -163,11 +163,11 @@
         <tbody>
           @for (record of maxHistory(); track record.id) {
             <tr>
-              <td>{{ record.effectiveDate }}</td>
+              <td>{{ record.effectiveDate | date: 'd MMM y' }}</td>
               <td>{{ record.exerciseName }}</td>
               <td>{{ maxKindLabel(record.kind) }}</td>
               <td>{{ record.value }} {{ record.unit === 'Kilogram' ? 'kg' : 'lb' }}</td>
-              <td>{{ record.methodKey }} v{{ record.methodVersion }}</td>
+              <td>{{ methodLabel(record) }}</td>
             </tr>
           }
         </tbody>
@@ -189,11 +189,11 @@
 
 <section class="surface-section mesocycle-section">
   <div class="section-heading">
-    <h2 i18n>Client mesocycles</h2>
+    <h2 i18n>Program blocks</h2>
     <span class="muted">{{ mesocycles().length }}</span>
   </div>
   @if (mesocycles().length === 0) {
-    <p class="inline-empty" i18n>No mesocycles assigned.</p>
+    <p class="inline-empty" i18n>No program yet. Assign one above.</p>
   } @else {
     <div class="mesocycle-tabs" role="tablist">
       @for (item of mesocycles(); track item.id) {
@@ -205,7 +205,10 @@
           (click)="openMesocycle(item.id)"
         >
           <strong>{{ item.name }}</strong>
-          <span>{{ item.startDate }} &middot; {{ mesocycleStatusLabel(item.status) }}</span>
+          <span
+            >{{ item.startDate | date: 'd MMM y' }} &middot;
+            {{ mesocycleStatusLabel(item.status) }}</span
+          >
         </button>
       }
     </div>
@@ -216,8 +219,8 @@
       <div>
         <strong>{{ mesocycle.name }}</strong>
         <span>
-          {{ mesocycle.startDate }} - {{ mesocycle.endDateExclusive }} &middot;
-          {{ mesocycle.timeZoneId }}
+          {{ mesocycle.startDate | date: 'EEE d MMM' }} –
+          {{ lastDay(mesocycle.endDateExclusive) | date: 'EEE d MMM y' }}
         </span>
         <span class="status-badge" [class.success]="mesocycle.status === 'Completed'">
           {{ mesocycleStatusLabel(mesocycle.status) }}
@@ -231,7 +234,7 @@
           (click)="toggleReveal()"
         >
           @if (mesocycle.revealAllWeeks) {
-            <span i18n>Use dated unlock</span>
+            <span i18n>Unlock week by week</span>
           } @else {
             <span i18n>Reveal all weeks</span>
           }
@@ -247,7 +250,7 @@
           (click)="reschedule()"
           i18n
         >
-          Reschedule future
+          Reschedule upcoming
         </button>
       </div>
     </div>
@@ -265,7 +268,7 @@
           (click)="cancelMesocycle()"
           i18n
         >
-          Cancel assignment
+          Cancel program
         </button>
         @if (mesocycle.status === 'Active') {
           <button
@@ -275,15 +278,15 @@
             (click)="completeMesocycle()"
             i18n
           >
-            Complete mesocycle
+            Mark block complete
           </button>
         }
       }
-      <div class="lifecycle-history" aria-label="Mesocycle lifecycle" i18n-aria-label>
+      <div class="lifecycle-history" aria-label="Program block history" i18n-aria-label>
         @for (event of mesocycle.lifecycle; track event.id) {
           <span>
             <strong>{{ event.eventType }}</strong>
-            {{ event.occurredAtUtc }} &middot; {{ event.reason }}
+            {{ event.occurredAtUtc | date: 'EEE d MMM, HH:mm' }} &middot; {{ event.reason }}
           </span>
         }
       </div>
@@ -302,7 +305,10 @@
               />
               <strong i18n>Week {{ week.weekNumber }}</strong>
             </label>
-            <span>{{ week.startsOn }} &middot; <span i18n>Unlock</span> {{ week.unlockDate }}</span>
+            <span
+              >{{ week.startsOn | date: 'EEE d MMM' }} &middot; <span i18n>Unlocks</span>
+              {{ week.unlockDate | date: 'EEE d MMM' }}</span
+            >
             <label class="publish-toggle">
               <input
                 type="checkbox"
@@ -310,7 +316,7 @@
                 [disabled]="busy() || isTerminal(mesocycle)"
                 (change)="togglePublished(week.id, $any($event.target).checked)"
               />
-              <span i18n>Published</span>
+              <span i18n>Shared with client</span>
             </label>
           </header>
           @for (session of week.sessions; track session.id) {
@@ -331,14 +337,15 @@
                   </details>
                 }
                 <span>
-                  {{ session.scheduledDate }} &middot; {{ session.exercises.length }}
+                  {{ session.scheduledDate | date: 'EEE d MMM' }} &middot;
+                  {{ session.exercises.length }}
                   <span i18n>exercises</span>
                 </span>
               </div>
               @if (!isTerminal(mesocycle) && !session.hasStarted && savedSessions().length > 0) {
                 <div class="replace-session">
                   <select [(ngModel)]="replacementSessionIds[session.id]">
-                    <option value="" i18n>Replace with saved...</option>
+                    <option value="" i18n>Swap for a saved session...</option>
                     @for (saved of savedSessions(); track saved.id) {
                       <option [value]="saved.id">{{ saved.name }}</option>
                     }
@@ -370,9 +377,9 @@
 
     <div class="progression-panel">
       <div class="progression-controls">
-        <strong i18n>Duplicate and transform</strong>
+        <strong i18n>Build next block</strong>
         <label>
-          <span i18n>Generated weeks</span>
+          <span i18n>Weeks to add</span>
           <input
             type="number"
             min="1"
@@ -383,7 +390,7 @@
           />
         </label>
         <label>
-          <span i18n>RPE per week</span>
+          <span i18n>RPE change per week</span>
           <input
             type="number"
             min="-2"
@@ -408,9 +415,9 @@
         <div class="preview">
           <div class="preview-heading">
             <span>
-              {{ preview.generatedWeeks.length }} <span i18n>generated weeks</span> &middot;
-              {{ preview.transformKey }} v{{ preview.transformVersion }} &middot;
-              <span i18n>ends</span> {{ preview.resultingEndDateExclusive }}
+              {{ preview.generatedWeeks.length }} <span i18n>new weeks</span> &middot;
+              <span i18n>ends</span>
+              {{ lastDay(preview.resultingEndDateExclusive) | date: 'EEE d MMM' }}
             </span>
             <button
               class="primary-button compact"
@@ -419,7 +426,7 @@
               (click)="applyProgression()"
               i18n
             >
-              Apply reviewed preview
+              Add these weeks
             </button>
           </div>
           @if (!preview.isInsideTrainingCoverage) {
@@ -488,7 +495,7 @@
         <tbody>
           @for (item of exerciseHistory(); track item.workoutExecutionId + item.date + $index) {
             <tr>
-              <td>{{ item.date }}</td>
+              <td>{{ item.date | date: 'd MMM y' }}</td>
               <td>
                 {{ displayNumber(item.load) }}
                 {{ item.loadUnit === 'Kilogram' ? 'kg' : item.loadUnit === 'Pound' ? 'lb' : '' }}

@@ -74,7 +74,8 @@ const progress: ProgressViewModel = {
   },
 };
 
-async function renderProgress(): Promise<HTMLElement> {
+/** The client's own page by default; a coach's view of one client when `clientId` is given. */
+async function renderProgress(clientId: string | null = null): Promise<HTMLElement> {
   await TestBed.configureTestingModule({
     imports: [ProgressView],
     providers: [
@@ -84,6 +85,9 @@ async function renderProgress(): Promise<HTMLElement> {
           getMyProgress: vi.fn(() => of(progress)),
           getMyBodyMeasurements: vi.fn(() => of(null)),
           getMyProgressPhotos: vi.fn(() => of(null)),
+          getClientProgress: vi.fn(() => of(progress)),
+          getClientBodyMeasurements: vi.fn(() => of(null)),
+          getClientProgressPhotos: vi.fn(() => of(null)),
         },
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
@@ -92,6 +96,7 @@ async function renderProgress(): Promise<HTMLElement> {
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ProgressView);
+  fixture.componentRef.setInput('clientId', clientId);
   fixture.detectChanges();
   await new Promise((resolve) => setTimeout(resolve));
   fixture.detectChanges();
@@ -131,7 +136,8 @@ describe('ProgressView day list dates', () => {
   });
 
   it('dates the weekly card and the trend window on the days they actually cover', async () => {
-    const element = await renderProgress();
+    // The trend window is a coach detail, so it is read from the coach's view of the client.
+    const element = await renderProgress('client-1');
 
     // These carried ': "UTC"' on a bare calendar date, which renders local midnight in UTC and so
     // moves the day back one for every zone east of UTC.
@@ -141,5 +147,23 @@ describe('ProgressView day list dates', () => {
     expect(element.querySelector('.trend-summary small')?.textContent).toContain(
       'Window Jun 29, 2026 to Jul 2, 2026',
     );
+  });
+
+  it('never shows the trend method or its window to the client', async () => {
+    const summary = (await renderProgress()).querySelector('.trend-summary')?.textContent ?? '';
+
+    // UI-REDESIGN-PLAN §6: estimation method names are for the coach only.
+    expect(summary).not.toContain('BodyweightTrendEwma');
+    expect(summary).not.toContain('Smoothed average');
+    expect(summary).not.toContain('Window');
+    expect(summary).toContain('Current trend');
+  });
+
+  it('names the trend method in words for the coach', async () => {
+    const summary =
+      (await renderProgress('client-1')).querySelector('.trend-summary')?.textContent ?? '';
+
+    expect(summary).toContain('Smoothed average');
+    expect(summary).not.toContain('BodyweightTrendEwma');
   });
 });

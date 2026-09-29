@@ -19,23 +19,19 @@
               <app-status-label [label]="status.label" [tone]="status.tone" />
             }
           </div>
-          @if (!context.isFormer() && context.workspace(); as workspace) {
-            <p class="plan-line tb-text-metadata">
-              @if (enrollment(); as plan) {
+          @if (!context.isFormer()) {
+            @if (enrollment(); as plan) {
+              <p class="plan-line tb-text-metadata">
                 <span dir="auto">{{ plan.productName }}</span>
                 <span class="separator" aria-hidden="true">·</span>
                 <span i18n
-                  >Enrolled {{ plan.startDate | date: 'd MMM' }} –
+                  >Plan {{ plan.startDate | date: 'd MMM' }} –
                   {{ plan.lastActiveDate | date: 'd MMM y' }}</span
                 >
-              } @else if (context.plans()) {
-                <span i18n>No plan assigned yet</span>
-              }
-              <span class="separator" aria-hidden="true">·</span>
-              <span i18n
-                >Workspace calendar · <bdi>{{ workspace.timeZoneId }}</bdi></span
-              >
-            </p>
+              </p>
+            } @else if (context.plans()) {
+              <p class="plan-line tb-text-metadata"><span i18n>No plan assigned yet</span></p>
+            }
           }
         </div>
         <div class="header-actions">

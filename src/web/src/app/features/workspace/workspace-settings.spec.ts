@@ -65,7 +65,7 @@ describe('WorkspaceSettings', () => {
   it('opens on the workspace as it is stored', async () => {
     const { host } = await render();
 
-    expect(field(host, 'Workspace name').value).toBe('TB Gym');
+    expect(field(host, 'Name').value).toBe('TB Gym');
     expect(field(host, 'Time zone').value).toBe('Asia/Beirut');
     expect(field(host, 'Default currency').value).toBe('USD');
     expect(field<HTMLSelectElement>(host, 'Week starts on').value).toBe('Monday');
@@ -79,7 +79,7 @@ describe('WorkspaceSettings', () => {
   it('saves every changed setting with the version it was loaded at', async () => {
     const { fixture, host, api, tenants } = await render();
 
-    fill(host, 'Workspace name', 'TB Strength');
+    fill(host, 'Name', 'TB Strength');
     fill(host, 'Time zone', 'Europe/Paris');
     fill(host, 'Default language and region', 'ar-LB');
     fill(host, 'Default currency', 'eur');
@@ -104,13 +104,13 @@ describe('WorkspaceSettings', () => {
     );
     // The workspace name is shown in the shell, so the membership list is refreshed with it.
     expect(tenants.load).toHaveBeenCalledWith('tenant-1');
-    expect(host.textContent).toContain('Workspace settings saved.');
+    expect(host.textContent).toContain('Settings saved.');
   });
 
   it('does not save a workspace with no name', async () => {
     const { fixture, host, api } = await render();
 
-    fill(host, 'Workspace name', '');
+    fill(host, 'Name', '');
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);
@@ -122,7 +122,7 @@ describe('WorkspaceSettings', () => {
   it('shows the workspace identifier without offering to change it', async () => {
     const { host } = await render();
 
-    const slug = field(host, 'Workspace identifier');
+    const slug = field(host, 'Short name');
     expect(slug.value).toBe('tb-gym');
     expect(slug.hasAttribute('readonly')).toBe(true);
     expect(slug.disabled).toBe(true);
@@ -137,7 +137,7 @@ describe('WorkspaceSettings', () => {
       updateWorkspace: vi.fn(() => throwError(() => conflict)),
     });
 
-    fill(host, 'Workspace name', 'TB Strength');
+    fill(host, 'Name', 'TB Strength');
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);
@@ -145,7 +145,7 @@ describe('WorkspaceSettings', () => {
     expect(query(host, '[role="alert"]').textContent).toContain(
       'The workspace was changed by someone else.',
     );
-    expect(host.textContent).not.toContain('Workspace settings saved.');
+    expect(host.textContent).not.toContain('Settings saved.');
   });
 
   it('reports a failed load rather than offering an empty form to save', async () => {
@@ -153,9 +153,7 @@ describe('WorkspaceSettings', () => {
       getWorkspace: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
     });
 
-    expect(query(host, '[role="alert"]').textContent).toContain(
-      'Workspace settings could not be loaded.',
-    );
+    expect(query(host, '[role="alert"]').textContent).toContain('Settings could not be loaded.');
     expect(api.updateWorkspace).not.toHaveBeenCalled();
   });
 
@@ -165,7 +163,7 @@ describe('WorkspaceSettings', () => {
       getWorkspace: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
     });
 
-    fill(host, 'Workspace name', 'TB Strength');
+    fill(host, 'Name', 'TB Strength');
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);
