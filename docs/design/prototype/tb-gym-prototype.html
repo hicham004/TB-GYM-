@@ -79,9 +79,9 @@ button { font: inherit; color: inherit; }
 .statusbar { position: absolute; top: 0; left: 0; right: 0; height: 46px; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 4px 28px 0; font-weight: 600; font-size: 14.5px; color: var(--text); pointer-events: none; }
 .statusbar.on-dark { color: #fff; }
 .statusbar .icons { display: flex; gap: 6px; align-items: center; }
-.today { position: absolute; inset: 0; overflow-y: auto; padding: 54px 18px 108px; scrollbar-width: none; display: flex; flex-direction: column; gap: 16px; }
-.today::-webkit-scrollbar { display: none; }
-.today > * { flex-shrink: 0; }
+.phone .today { position: absolute; inset: 0; overflow-y: auto; padding: 54px 18px 108px; scrollbar-width: none; display: flex; flex-direction: column; gap: 16px; }
+.phone .today::-webkit-scrollbar { display: none; }
+.phone .today > * { flex-shrink: 0; }
 .hello { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .hello h2 { margin: 6px 0 0; font-size: 31px; font-weight: 600; letter-spacing: -.02em; line-height: 1.05; }
 .hello h2 .serif { font-size: 1.16em; }
@@ -153,17 +153,17 @@ button { font: inherit; color: inherit; }
 .set { padding: 10px 12px; border-radius: 16px; background: rgba(255,255,255,.055); font-family: var(--cond); font-weight: 700; font-size: 18px; }
 .set .n { font-family: var(--sans); font-size: 14px; color: #9fb3a8; font-weight: 600; }
 .set .prev { font-family: var(--sans); font-weight: 400; font-size: 13.5px; color: #7e978a; }
-.set .dim { color: #62786d; }
+.set .dim { color: #9fb3a8; }
 .set .ok { width: 38px; height: 38px; justify-self: end; border-radius: 12px; display: grid; place-items: center; background: rgba(255,255,255,.08); border: 0; color: inherit; }
 .set.done { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .set.done .ok { background: var(--accent); color: var(--on-accent); }
 .set.active { grid-template-columns: 30px 1fr 1fr 50px; gap: 8px; background: #f7f8f2; color: #13201b; padding: 12px 10px; box-shadow: 0 0 0 2px var(--accent), 0 16px 30px -18px rgba(0,0,0,.7); }
 .set.active .n { color: #53645b; display: flex; flex-direction: column; line-height: 1.1; }
-.set.active .n small { font-weight: 400; font-size: 10.5px; margin-top: 3px; color: #7a8a81; white-space: nowrap; }
+.set.active .n small { font-weight: 400; font-size: 10.5px; margin-top: 3px; color: #53645b; white-space: nowrap; }
 .step { display: flex; align-items: center; justify-content: space-between; gap: 2px; padding: 4px; border-radius: 12px; background: #ebede4; }
 .step button { width: 30px; height: 30px; border: 0; border-radius: 9px; background: #fff; color: #153d33; font-size: 18px; line-height: 1; font-family: var(--sans); font-weight: 600; box-shadow: 0 1px 0 rgba(0,0,0,.06); }
 .step span { text-align: center; line-height: 1; }
-.step small { display: block; font-family: var(--sans); font-size: 9.5px; letter-spacing: .1em; font-weight: 600; color: #6c7c73; margin-top: 3px; }
+.step small { display: block; font-family: var(--sans); font-size: 9.5px; letter-spacing: .1em; font-weight: 600; color: #53645b; margin-top: 3px; }
 .set.active .ok { width: 46px; height: 46px; border-radius: 15px; background: var(--brand); color: #fff; }
 .tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .tools button { border: 0; border-radius: 999px; padding: 8px 12px; font-size: 13px; font-weight: 600; background: rgba(255,255,255,.08); color: #e9efea; display: inline-flex; gap: 6px; align-items: center; }
@@ -214,9 +214,9 @@ button { font: inherit; color: inherit; }
 .cnav a.on { background: color-mix(in srgb, var(--accent) 17%, transparent); color: #fff; font-weight: 600; }
 .cnav a.on svg { color: var(--accent); }
 .cnav .count { margin-inline-start: auto; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
-.cnav .sep { font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; opacity: .6; padding: 16px 12px 6px; }
+.cnav .sep { font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; opacity: .8; padding: 16px 12px 6px; }
 .cme { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 13px; background: rgba(255,255,255,.07); font-size: 13.5px; }
-.cme small { display: block; opacity: .7; font-size: 12px; }
+.cme small { display: block; opacity: .8; font-size: 12px; }
 .cmain { padding: 26px 32px 30px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .ctop { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 14px; }
 .ctop h2 { margin: 6px 0 0; font-size: 38px; line-height: 1.05; font-weight: 600; letter-spacing: -.02em; text-wrap: balance; }

@@ -8,6 +8,12 @@ import { REDESIGNED } from '../core/theme/redesigned-route';
  */
 export const devRoutes: Routes = [
   {
+    path: 'dev/ui-lab/hero',
+    title: 'Hero screens | TB Gym (development)',
+    data: REDESIGNED,
+    loadComponent: () => import('./hero-lab/hero-lab').then((module) => module.HeroLab),
+  },
+  {
     path: 'dev/ui-lab',
     title: 'UI lab | TB Gym (development)',
     data: REDESIGNED,

@@ -46,7 +46,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('UiLab', () => {
   it('is registered only as a development route', () => {
-    expect(devRoutes.map((route) => route.path)).toEqual(['dev/ui-lab']);
+    expect(devRoutes.map((route) => route.path)).toEqual(['dev/ui-lab/hero', 'dev/ui-lab']);
   });
 
   it('opens pristine: no reasons, no invalid controls and an empty summary', async () => {

@@ -16,7 +16,8 @@ of truth (plan §8); its token names remain as aliases until R5.3.
 | `src/web/src/styles.scss` | Global styles; legacy colour names now resolve through `_tokens.scss` |
 | `src/web/src/app/ui/` | Component kit v2: surfaces, metrics, people/status, charts, selection controls and overlays, alongside the existing form primitives |
 | `src/web/src/app/shell/` | The coach shell and the client tab bar |
-| `src/web/src/app/dev/` | Development-only routes and the UI lab (`/dev/ui-lab`) |
+| `src/web/src/app/dev/` | Development-only routes: component kit (`/dev/ui-lab`) and the three prototype hero screens (`/dev/ui-lab/hero`) |
+| `src/web/public/hero-lab.css` | Prototype-scoped hero preview styles; loaded only by the development hero route |
 | `src/web/e2e/` | Playwright + axe browser checks and their screenshot baselines |
 
 ## Lab and tests
@@ -37,6 +38,9 @@ npx playwright install chromium          # once per machine
 - **R1.2 dependencies.** `@angular/aria` supplies tab keyboard, focus and RTL behavior;
   `@angular/cdk` supplies dialog focus management and overlay positioning for dialogs, sheets and
   toasts. Their styles load with the overlay components, keeping them out of the initial bundle.
+- **R1.3 preview.** The hero lab uses local demo fixtures and does not save a workout or coach action.
+  GSAP is imported only when a preview motion plays. Compare its 390 px and 1440 px Playwright
+  captures with the saved prototype captures in `e2e/hero-lab.e2e.ts-snapshots/`.
 - **No console noise.** `e2e/support.ts` fails a test on any unexpected console error. It answers the
   messaging hub (SignalR negotiate plus a mocked WebSocket) and `GET /api/billing/access`. When a
   shell-level request is added, add its mock here, or every shell test fails.

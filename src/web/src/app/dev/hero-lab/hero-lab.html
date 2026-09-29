@@ -1,0 +1,1411 @@
+<link rel="stylesheet" href="/hero-lab.css" />
+<div class="page" [attr.data-theme]="mode()">
+  <header class="chrome">
+    <div>
+      <h1>TB Gym, <em>redesigned.</em></h1>
+      <p>
+        A working prototype of the new client and coach apps. Everything below is clickable. The
+        coach picks the brand; each person picks light or dark. Sample data only.
+      </p>
+    </div>
+    <ol class="steps" aria-label="Try it">
+      <li><b>1</b> Start the workout</li>
+      <li><b>2</b> Tap ✓ to log sets</li>
+      <li><b>3</b> Finish and see the summary</li>
+      <li><b>4</b> Open the coach app</li>
+      <li><b>5</b> Change the brand</li>
+    </ol>
+  </header>
+
+  <div class="controls" role="group" aria-label="Prototype controls">
+    <div class="group">
+      <span class="label" id="lbl-view">App</span>
+      <div class="seg" aria-labelledby="lbl-view">
+        <button
+          type="button"
+          id="view-client"
+          [attr.aria-pressed]="view() === 'client'"
+          (click)="showView('client')"
+        >
+          Client app
+        </button>
+        <button
+          type="button"
+          id="view-coach"
+          [attr.aria-pressed]="view() === 'coach'"
+          (click)="showView('coach')"
+        >
+          Coach app
+        </button>
+      </div>
+    </div>
+    <div class="group">
+      <span class="label" id="lbl-brand">Coach brand</span>
+      <div class="group" aria-labelledby="lbl-brand">
+        <button
+          type="button"
+          class="swatch"
+          id="sw-atlas"
+          data-preset="atlas"
+          style="--b: #153d33; --a: #d9ed94"
+          [attr.aria-pressed]="preset() === 'atlas'"
+          (click)="setBrand('atlas')"
+          aria-label="Atlas Performance: forest and lime"
+        ></button>
+        <button
+          type="button"
+          class="swatch"
+          id="sw-cedar"
+          data-preset="cedar"
+          style="--b: #15233f; --a: #ffb48c"
+          [attr.aria-pressed]="preset() === 'cedar'"
+          (click)="setBrand('cedar')"
+          aria-label="Cedar Strength: navy and coral"
+        ></button>
+        <button
+          type="button"
+          class="swatch"
+          id="sw-ember"
+          data-preset="ember"
+          style="--b: #221b18; --a: #ff8a4c"
+          [attr.aria-pressed]="preset() === 'ember'"
+          (click)="setBrand('ember')"
+          aria-label="Ember Athletics: charcoal and orange"
+        ></button>
+        <button
+          type="button"
+          class="swatch"
+          id="sw-orchid"
+          data-preset="orchid"
+          style="--b: #36203a; --a: #f3b4d1"
+          [attr.aria-pressed]="preset() === 'orchid'"
+          (click)="setBrand('orchid')"
+          aria-label="Orchid Studio: plum and pink"
+        ></button>
+        <label
+          class="swatch custom"
+          id="sw-custom"
+          [attr.data-on]="preset() === 'custom'"
+          title="Pick any colour"
+          ><input
+            type="color"
+            id="accent-picker"
+            value="#62d2c4"
+            (input)="setCustomColor($event)"
+            aria-label="Pick a custom brand colour"
+        /></label>
+        <span class="brandname" data-brand-name>{{ brand().name }}</span>
+      </div>
+    </div>
+    <div class="group">
+      <span class="label" id="lbl-mode">Mode</span>
+      <div class="seg" aria-labelledby="lbl-mode">
+        <button
+          type="button"
+          id="mode-light"
+          data-mode="light"
+          [attr.aria-pressed]="mode() === 'light'"
+          (click)="mode.set('light')"
+        >
+          Light
+        </button>
+        <button
+          type="button"
+          id="mode-dark"
+          data-mode="dark"
+          [attr.aria-pressed]="mode() === 'dark'"
+          (click)="mode.set('dark')"
+        >
+          Dark
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <main class="stage">
+    <!-- ================= CLIENT PHONE ================= -->
+    <div
+      class="phone device"
+      id="phone"
+      [hidden]="view() !== 'client'"
+      [attr.data-mode]="mode()"
+      [style.--brand]="brand().brand"
+      [style.--accent]="brand().accent"
+      [style.--on-accent]="brand().onAccent"
+    >
+      <div class="screen" id="screen">
+        <div class="statusbar" id="statusbar" [class.on-dark]="scene() !== 'today'">
+          <span>9:41</span
+          ><span class="icons" aria-hidden="true"
+            ><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor">
+              <rect x="0" y="8" width="3" height="4" rx="1" />
+              <rect x="5" y="5" width="3" height="7" rx="1" />
+              <rect x="10" y="2" width="3" height="10" rx="1" />
+              <rect x="15" y="0" width="3" height="12" rx="1" /></svg
+            ><svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor">
+              <path
+                d="M8 2.5c2.4 0 4.6.9 6.2 2.5l1.3-1.4A10.6 10.6 0 0 0 8 .5C5.1.5 2.4 1.6.5 3.6L1.8 5A8.6 8.6 0 0 1 8 2.5Zm0 4c1.3 0 2.5.5 3.4 1.3l1.4-1.4A6.8 6.8 0 0 0 8 4.5c-1.9 0-3.6.7-4.8 1.9l1.4 1.4c.9-.8 2.1-1.3 3.4-1.3Zm0 2.2c-.6 0-1.2.3-1.6.7L8 11l1.6-1.6c-.4-.4-1-.7-1.6-.7Z"
+              /></svg
+            ><svg width="26" height="12" viewBox="0 0 26 12" fill="none">
+              <rect
+                x=".5"
+                y=".5"
+                width="22"
+                height="11"
+                rx="3.5"
+                stroke="currentColor"
+                opacity=".5"
+              />
+              <rect x="2" y="2" width="17" height="8" rx="2" fill="currentColor" />
+              <rect
+                x="24"
+                y="4"
+                width="2"
+                height="4"
+                rx="1"
+                fill="currentColor"
+                opacity=".5"
+              /></svg
+          ></span>
+        </div>
+
+        <!-- Today -->
+        <section class="today" id="today" [hidden]="scene() !== 'today'" aria-label="Client Today">
+          <div class="hello" data-in>
+            <div>
+              <div class="eyebrow">Thursday 1 October</div>
+              <h2>Morning, <span class="serif">Maya.</span></h2>
+            </div>
+            <div class="coachchip">
+              <span class="logo" data-brand-logo>{{ brand().logo }}</span
+              ><span data-brand-name>{{ brand().name }}</span>
+            </div>
+          </div>
+
+          <div
+            class="week"
+            id="week"
+            data-in
+            [attr.aria-label]="
+              finished() ? 'This week: 3 of 4 sessions done' : 'This week: 2 of 4 sessions done'
+            "
+          >
+            <div>
+              M<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+                <circle
+                  cx="17"
+                  cy="17"
+                  r="14"
+                  fill="none"
+                  stroke="var(--line)"
+                  stroke-width="2.5"
+                />
+                <circle
+                  class="wr"
+                  cx="17"
+                  cy="17"
+                  r="7"
+                  fill="none"
+                  stroke="var(--accent)"
+                  stroke-width="14"
+                  transform="rotate(-90 17 17)"
+                />
+                <path
+                  d="m11.5 17 3.8 3.8 7.2-7.3"
+                  stroke="var(--on-accent)"
+                  stroke-width="2.4"
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
+            <div>
+              T<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+                <circle
+                  cx="17"
+                  cy="17"
+                  r="14"
+                  fill="none"
+                  stroke="var(--line)"
+                  stroke-width="2"
+                  stroke-dasharray="3 4"
+                />
+              </svg>
+            </div>
+            <div>
+              W<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+                <circle
+                  cx="17"
+                  cy="17"
+                  r="14"
+                  fill="none"
+                  stroke="var(--line)"
+                  stroke-width="2.5"
+                />
+                <circle
+                  class="wr"
+                  cx="17"
+                  cy="17"
+                  r="7"
+                  fill="none"
+                  stroke="var(--accent)"
+                  stroke-width="14"
+                  transform="rotate(-90 17 17)"
+                />
+                <path
+                  d="m11.5 17 3.8 3.8 7.2-7.3"
+                  stroke="var(--on-accent)"
+                  stroke-width="2.4"
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
+            <div class="on">
+              Today<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+                <circle
+                  cx="17"
+                  cy="17"
+                  r="14"
+                  fill="var(--surface)"
+                  stroke="var(--accent-ink)"
+                  stroke-width="2.6"
+                />
+                <circle
+                  id="today-fill"
+                  cx="17"
+                  cy="17"
+                  r="7"
+                  fill="none"
+                  stroke="var(--accent)"
+                  stroke-width="14"
+                  transform="rotate(-90 17 17)"
+                  style="stroke-dasharray: 43.98; stroke-dashoffset: 43.98"
+                />
+                <circle id="today-dot" cx="17" cy="17" r="4" fill="var(--accent-ink)" />
+                <path
+                  id="today-check"
+                  d="m11.5 17 3.8 3.8 7.2-7.3"
+                  stroke="var(--on-accent)"
+                  stroke-width="2.4"
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  opacity="0"
+                />
+              </svg>
+            </div>
+            <div>
+              F<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+                <circle
+                  cx="17"
+                  cy="17"
+                  r="14"
+                  fill="none"
+                  stroke="var(--line)"
+                  stroke-width="2.5"
+                />
+              </svg>
+            </div>
+            <div>
+              S<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+                <circle
+                  cx="17"
+                  cy="17"
+                  r="14"
+                  fill="none"
+                  stroke="var(--line)"
+                  stroke-width="2"
+                  stroke-dasharray="3 4"
+                />
+              </svg>
+            </div>
+            <div>
+              S<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+                <circle
+                  cx="17"
+                  cy="17"
+                  r="14"
+                  fill="none"
+                  stroke="var(--line)"
+                  stroke-width="2.5"
+                />
+              </svg>
+            </div>
+          </div>
+
+          <article class="hero" id="hero" data-in>
+            <div class="glow" id="glow"></div>
+            <div class="dots"></div>
+            <div class="eyebrow" id="hero-eyebrow">
+              {{
+                finished()
+                  ? 'Completed today'
+                  : doneCount()
+                    ? 'In progress · ' + doneCount() + ' of 10 sets'
+                    : 'Week 3 of 8 · Today'
+              }}
+            </div>
+            <h3>Upper Body: Strength B</h3>
+            <div class="chips" id="hero-chips">
+              <span class="chip">{{ finished() ? completedMinutes() + ' min' : '55 min' }}</span
+              ><span class="chip">{{ finished() ? doneCount() + ' sets' : '3 exercises' }}</span
+              ><span class="chip">{{
+                finished() ? personalRecords().length + ' PRs' : '10 sets'
+              }}</span>
+            </div>
+            <div class="note">
+              <span class="av a1">HH</span
+              ><span id="hero-note">{{
+                finished()
+                  ? 'Coach Hicham has your summary. Rest well, next session is Saturday.'
+                  : '“Top set first. Stop the back-offs if bar speed drops. Warm up the shoulder with face pulls.”'
+              }}</span>
+            </div>
+            <button type="button" class="cta" id="start-btn" (click)="openPlayer()">
+              <span id="start-label">{{
+                finished() ? 'View summary' : doneCount() ? 'Continue workout' : 'Start workout'
+              }}</span
+              ><svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </button>
+          </article>
+
+          <div class="h-sec" data-in>
+            <h4>Also today</h4>
+            <span>3 things</span>
+          </div>
+
+          <div class="tile" data-in>
+            <div class="row">
+              <svg width="54" height="54" viewBox="0 0 54 54" aria-hidden="true">
+                <circle
+                  cx="27"
+                  cy="27"
+                  r="22"
+                  fill="none"
+                  stroke="var(--surface-2)"
+                  stroke-width="6.5"
+                />
+                <circle
+                  id="kcal-ring"
+                  cx="27"
+                  cy="27"
+                  r="22"
+                  fill="none"
+                  stroke="var(--accent-ink)"
+                  stroke-width="6.5"
+                  stroke-linecap="round"
+                  transform="rotate(-90 27 27)"
+                  [attr.stroke-dasharray]="138.23"
+                  [attr.stroke-dashoffset]="138.23 * (1 - kcal() / 1950)"
+                />
+              </svg>
+              <div style="flex: 1; min-width: 0">
+                <b
+                  ><span class="num" id="kcal" style="font-size: 19px">{{
+                    kcal().toLocaleString()
+                  }}</span>
+                  <span style="color: var(--muted); font-weight: 400; font-size: 13.5px"
+                    >/ 1,950 kcal</span
+                  ></b
+                >
+                <span class="sub" id="meals">{{ meals() }} of 4 meals logged</span>
+                <div class="macros" aria-hidden="true">
+                  <i
+                    ><b
+                      id="m-p"
+                      [style.width]="meals() === 2 ? '62%' : '88%'"
+                      style="background: var(--accent-ink)"
+                    ></b></i
+                  ><i
+                    ><b
+                      id="m-c"
+                      [style.width]="meals() === 2 ? '58%' : '90%'"
+                      style="background: color-mix(in srgb, var(--accent) 85%, #000 15%)"
+                    ></b></i
+                  ><i
+                    ><b
+                      id="m-f"
+                      [style.width]="meals() === 2 ? '50%' : '84%'"
+                      style="background: #f2b994"
+                    ></b
+                  ></i>
+                </div>
+                <button
+                  type="button"
+                  class="mini"
+                  id="meal-btn"
+                  [disabled]="meals() > 2"
+                  (click)="logLunch()"
+                >
+                  {{ meals() > 2 ? 'Lunch logged ✓' : 'Log lunch as planned' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="tile" data-in>
+            <div class="row">
+              <span class="av a6" style="border-radius: 13px"
+                ><svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="4" y="3.5" width="16" height="17" rx="3" />
+                  <path d="m8.5 12 2.5 2.5 4.5-5" /></svg
+              ></span>
+              <div style="flex: 1">
+                <b>Weekly check-in</b><span class="sub">Due today · about 3 minutes</span>
+              </div>
+              <button
+                type="button"
+                class="pill"
+                id="checkin-btn"
+                (click)="
+                  showToast('The check-in opens here: one question per screen, then photos.')
+                "
+              >
+                Start
+              </button>
+            </div>
+          </div>
+
+          <div class="tile" data-in>
+            <div class="trend">
+              <div>
+                <div class="eyebrow">Weight trend</div>
+                <div class="big num">
+                  <span id="weight">71.2</span>
+                  <span style="font-size: 18px; color: var(--muted)">kg</span>
+                </div>
+                <span class="delta">↓ 0.7 kg in 4 weeks</span>
+              </div>
+              <svg
+                width="132"
+                height="64"
+                viewBox="0 0 132 64"
+                aria-label="Weekly averages from 71.9 to 71.2 kg"
+              >
+                <path
+                  d="M4 14 L30 20 L56 18 L82 30 L108 36 L128 44 L128 64 L4 64 Z"
+                  fill="var(--accent-soft)"
+                  stroke="none"
+                />
+                <path
+                  id="spark"
+                  d="M4 14 L30 20 L56 18 L82 30 L108 36 L128 44"
+                  fill="none"
+                  stroke="var(--accent-ink)"
+                  stroke-width="2.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <circle cx="128" cy="44" r="4.5" fill="var(--accent-ink)" />
+              </svg>
+            </div>
+          </div>
+
+          <div class="tile msg" data-in>
+            <div class="row" style="align-items: flex-start">
+              <span class="av a1">HH</span>
+              <div>
+                <b>Coach Hicham</b>
+                <span style="color: var(--muted); font-size: 12px">· 11:20</span>
+                <p>
+                  Great week, Maya. Your squat looked strong. Let's push the bench top set to 62.5
+                  kg today.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <nav class="tabbar" id="tabbar" aria-label="Client navigation">
+          <button type="button" class="tab on" aria-current="page">
+            <span class="ico"
+              ><svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 12h4l3 7 4-14 3 7h4" /></svg></span
+            ><span class="tab-label">Today</span>
+          </button>
+          <button
+            type="button"
+            class="tab"
+            data-soon="Training"
+            (click)="
+              showToast(
+                'Training is part of the full build. This preview shows Today and the workout.'
+              )
+            "
+          >
+            <span class="ico"
+              ><svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12" /></svg></span
+            ><span class="tab-label">Training</span>
+          </button>
+          <button
+            type="button"
+            class="tab"
+            data-soon="Nutrition"
+            (click)="
+              showToast(
+                'Nutrition is part of the full build. This preview shows Today and the workout.'
+              )
+            "
+          >
+            <span class="ico"
+              ><svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M7 3v8a3 3 0 0 0 6 0V3M10 11v10M17 3c-1.7 1.5-2.5 3.8-2.5 7H18V3zM18 10v11"
+                /></svg></span
+            ><span class="tab-label">Nutrition</span>
+          </button>
+          <button
+            type="button"
+            class="tab"
+            data-soon="Progress"
+            (click)="
+              showToast(
+                'Progress is part of the full build. This preview shows Today and the workout.'
+              )
+            "
+          >
+            <span class="ico"
+              ><svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M4 19h16M6 15l4-4 3 3 5-6" /></svg></span
+            ><span class="tab-label">Progress</span>
+          </button>
+          <button
+            type="button"
+            class="tab"
+            data-soon="Messages"
+            (click)="
+              showToast(
+                'Messages is part of the full build. This preview shows Today and the workout.'
+              )
+            "
+          >
+            <span class="ico"
+              ><svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M4 5.5h16v11H9l-5 4z" /></svg></span
+            ><span class="tab-label">Messages</span>
+          </button>
+        </nav>
+
+        <!-- Workout player -->
+        <section
+          class="player"
+          id="player"
+          [hidden]="scene() !== 'player'"
+          [class.resting]="restRemaining() > 0"
+          aria-label="Workout player"
+        >
+          <div class="p-top">
+            <button
+              type="button"
+              class="round"
+              id="close-player"
+              aria-label="Back to Today"
+              (click)="closePlayer()"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+            <div class="p-title">Upper Body: Strength B</div>
+            <div class="clock num" id="clock" aria-label="Workout time">
+              {{ formatTime(elapsed()) }}
+            </div>
+          </div>
+          <div class="segs" id="segs" aria-hidden="true">
+            <i><b [style.width.%]="completion(workout()[0])"></b></i
+            ><i><b [style.width.%]="completion(workout()[1])"></b></i
+            ><i><b [style.width.%]="completion(workout()[2])"></b></i>
+          </div>
+          <div class="p-body" id="p-body">
+            <div id="ex-panel">
+              <div class="ex">
+                <div class="thumb" id="ex-thumb" aria-hidden="true">
+                  @switch (exercise().icon) {
+                    @case ('bench') {
+                      <svg
+                        width="40"
+                        height="40"
+                        viewBox="0 0 48 48"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.4"
+                        stroke-linecap="round"
+                      >
+                        <path d="M6 24h36M10 17v14M14 13v22M34 13v22M38 17v14" />
+                      </svg>
+                    }
+                    @case ('press') {
+                      <svg
+                        width="40"
+                        height="40"
+                        viewBox="0 0 48 48"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.4"
+                        stroke-linecap="round"
+                      >
+                        <path
+                          d="M12 10v8M8 14h8M36 10v8M32 14h8M14 18l4 12M34 18l-4 12M16 38h16M24 30v8"
+                        />
+                      </svg>
+                    }
+                    @case ('row') {
+                      <svg
+                        width="40"
+                        height="40"
+                        viewBox="0 0 48 48"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.4"
+                        stroke-linecap="round"
+                      >
+                        <path d="M8 34l14-10 8 4 10-12M10 22h8M14 18v8M34 12h8M38 8v8" />
+                      </svg>
+                    }
+                  }
+                </div>
+                <div>
+                  <div class="eyebrow" style="color: #9fb3a8" id="ex-count">
+                    Exercise {{ exerciseIndex() + 1 }} of {{ workout().length }}
+                  </div>
+                  <h3 id="ex-name">{{ exercise().name }}</h3>
+                  <span class="rx" id="ex-rx">{{ exercise().rx }}</span>
+                </div>
+              </div>
+              <div class="last">
+                <span id="ex-last-date">Last time · Mon 28 Sep</span
+                ><b id="ex-last">{{ exercise().last }}</b>
+              </div>
+              <div class="sh" aria-hidden="true">
+                <span>Set</span><span>Previous</span><span>kg</span><span>Reps</span><span></span>
+              </div>
+              <div class="sets" id="sets">
+                @for (set of exercise().sets; track $index; let i = $index) {
+                  @if (set.done) {
+                    <div class="set done">
+                      <span class="n">{{ i + 1 }}</span
+                      ><span class="prev">{{ set.prev }}</span
+                      ><span>{{ formatNumber(set.kg) }}</span
+                      ><span
+                        >{{ set.reps }}
+                        @if (set.pr) {
+                          <b class="pr">PR</b>
+                        }</span
+                      ><span class="ok" aria-label="Logged">✓</span>
+                    </div>
+                  } @else if (i === activeSetIndex()) {
+                    <div class="set active">
+                      <span class="n"
+                        >{{ i + 1 }}<small>was {{ set.prev }}</small></span
+                      >
+                      <div class="step">
+                        <button
+                          type="button"
+                          aria-label="Less weight"
+                          (click)="stepSet('kg', -2.5)"
+                        >
+                          −</button
+                        ><span
+                          ><b>{{ formatNumber(set.kg) }}</b
+                          ><small>KG</small></span
+                        ><button
+                          type="button"
+                          aria-label="More weight"
+                          (click)="stepSet('kg', 2.5)"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <div class="step">
+                        <button
+                          type="button"
+                          aria-label="One rep less"
+                          (click)="stepSet('reps', -1)"
+                        >
+                          −</button
+                        ><span
+                          ><b>{{ set.reps }}</b
+                          ><small>REPS</small></span
+                        ><button
+                          type="button"
+                          aria-label="One rep more"
+                          (click)="stepSet('reps', 1)"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        class="ok"
+                        [attr.aria-label]="
+                          'Log set ' +
+                          (i + 1) +
+                          ': ' +
+                          formatNumber(set.kg) +
+                          ' kg for ' +
+                          set.reps +
+                          ' reps'
+                        "
+                        (click)="logSet()"
+                      >
+                        ✓
+                      </button>
+                    </div>
+                  } @else {
+                    <div class="set">
+                      <span class="n">{{ i + 1 }}</span
+                      ><span class="prev">{{ set.prev }}</span
+                      ><span class="dim">{{ formatNumber(set.kg) }}</span
+                      ><span class="dim">{{ set.reps }}</span
+                      ><span class="ok" aria-hidden="true"></span>
+                    </div>
+                  }
+                }
+              </div>
+              <div class="tools">
+                <button type="button" (click)="showToast('The exercise demo video plays here.')">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M7 4.5v15l13-7.5z" /></svg
+                  >Watch demo
+                </button>
+                <button
+                  type="button"
+                  (click)="showToast('Notes go straight to Coach Hicham with this set.')"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.2"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 20h4L19 9l-4-4L4 16z" /></svg
+                  >Note for coach
+                </button>
+                <button
+                  type="button"
+                  (click)="showToast('Only alternatives your coach approved appear here.')"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 8h14l-3-3M20 16H6l3 3" /></svg
+                  >Swap
+                </button>
+              </div>
+              <div class="nextline" id="nextline">
+                @if (exerciseIndex() < workout().length - 1) {
+                  Next: <b>{{ workout()[exerciseIndex() + 1].name }}</b> ·
+                  {{ workout()[exerciseIndex() + 1].sets.length }} sets
+                } @else {
+                  Last exercise. Finish strong.
+                }
+              </div>
+            </div>
+          </div>
+          <div class="p-foot">
+            <button
+              type="button"
+              class="cta"
+              id="next-btn"
+              [hidden]="!exerciseComplete()"
+              (click)="nextExercise()"
+            >
+              {{
+                exerciseIndex() < workout().length - 1
+                  ? 'Next: ' + workout()[exerciseIndex() + 1].name + ' →'
+                  : 'Finish workout'
+              }}
+            </button>
+          </div>
+          <div
+            class="rest"
+            id="rest"
+            [hidden]="restRemaining() === 0"
+            role="timer"
+            aria-label="Rest timer"
+          >
+            <svg width="60" height="60" viewBox="0 0 60 60" aria-hidden="true">
+              <circle
+                cx="30"
+                cy="30"
+                r="25"
+                fill="none"
+                stroke="rgba(255,255,255,.12)"
+                stroke-width="6"
+              />
+              <circle
+                id="rest-ring"
+                cx="30"
+                cy="30"
+                r="25"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="6"
+                stroke-linecap="round"
+                transform="rotate(-90 30 30)"
+                [attr.stroke-dasharray]="157.08"
+                [attr.stroke-dashoffset]="157.08 * (1 - restRemaining() / restTotal())"
+              />
+            </svg>
+            <div>
+              <small>Rest</small>
+              <div class="t num" id="rest-time">{{ formatTime(restRemaining()) }}</div>
+            </div>
+            <div class="ctl">
+              <button type="button" id="rest-add" (click)="addRest()">+15 s</button
+              ><button type="button" id="rest-skip" (click)="skipRest()">Skip</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Summary -->
+        <section
+          class="summary"
+          id="summary"
+          [hidden]="scene() !== 'summary'"
+          aria-label="Workout summary"
+        >
+          <div class="eyebrow" style="color: #9fb3a8">Thursday 1 October</div>
+          <h3>Workout <span class="serif">done.</span></h3>
+          <div class="meta">Upper Body: Strength B · Coach Hicham sees this in his feed</div>
+          <div class="stats4">
+            <div>
+              <span class="num" id="s-time">{{ completedMinutes() }}</span
+              ><small>minutes</small>
+            </div>
+            <div>
+              <span class="num" id="s-vol">{{ volume().toLocaleString() }}</span
+              ><small>kg lifted</small>
+            </div>
+            <div>
+              <span class="num" id="s-sets">{{ doneCount() }}</span
+              ><small>sets done</small>
+            </div>
+            <div>
+              <span class="num" id="s-prs">{{ personalRecords().length }}</span
+              ><small>personal records</small>
+            </div>
+          </div>
+          <div class="prlist" id="prlist">
+            @for (record of personalRecords(); track $index) {
+              <div>
+                <span>{{ record.name }}</span
+                ><b
+                  >{{ formatNumber(record.kg) }} kg × {{ record.reps }}
+                  <span class="pr">PR</span></b
+                >
+              </div>
+            }
+          </div>
+          <div class="share" id="share">
+            <div class="top">
+              <span class="eyebrow" style="color: inherit; opacity: 0.75" id="share-kicker">{{
+                personalRecords().length ? 'New personal record' : 'Workout complete'
+              }}</span
+              ><span class="logo" data-brand-logo>{{ brand().logo }}</span>
+            </div>
+            <div class="big" id="share-big">
+              {{
+                personalRecords().length
+                  ? formatNumber(personalRecords()[personalRecords().length - 1].kg) +
+                    ' kg × ' +
+                    personalRecords()[personalRecords().length - 1].reps
+                  : doneCount() + ' sets'
+              }}
+            </div>
+            <p id="share-what">
+              {{
+                personalRecords().length
+                  ? personalRecords()[personalRecords().length - 1].name
+                  : 'Upper Body: Strength B'
+              }}
+            </p>
+            <div class="by">
+              Maya · coached by <span data-brand-name>{{ brand().name }}</span>
+            </div>
+          </div>
+          <div class="s-actions">
+            <button
+              type="button"
+              class="cta ghost"
+              id="share-btn"
+              (click)="
+                showToast('Opens the share sheet with this card. Nothing is posted without Maya.')
+              "
+            >
+              Share to my story
+            </button>
+            <button type="button" class="cta" id="back-today" (click)="backToday()">
+              Back to Today
+            </button>
+            <p class="fine">Only Maya can share this. Her coach never posts for her.</p>
+          </div>
+        </section>
+
+        <div class="toast" id="toast-phone" role="status" aria-live="polite" [hidden]="!toast()">
+          {{ toast() }}
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= COACH DESK ================= -->
+    <div
+      class="desk device"
+      id="desk"
+      [hidden]="view() !== 'coach'"
+      [attr.data-mode]="mode()"
+      [style.--brand]="brand().brand"
+      [style.--accent]="brand().accent"
+      [style.--on-accent]="brand().onAccent"
+    >
+      <div class="bar" aria-hidden="true">
+        <i></i><i></i><i></i><span class="url">app.tbgym.com/today</span>
+      </div>
+      <div class="desk-inner">
+        <div class="coach">
+          <aside class="cside">
+            <div class="cbrand">
+              <span class="logo" data-brand-logo>{{ brand().logo }}</span>
+              <div>
+                <b data-brand-name>{{ brand().name }}</b
+                ><small>on TB Gym</small>
+              </div>
+            </div>
+            <nav class="cnav" aria-label="Coach navigation">
+              <a href="#" class="on"
+                ><svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 12h4l3 7 4-14 3 7h4" /></svg
+                >Today<span class="count" data-needs>5</span></a
+              >
+              <a href="#"
+                ><svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  aria-hidden="true"
+                >
+                  <circle cx="9" cy="8" r="3.5" />
+                  <path
+                    d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5c2 .6 3.2 2.4 3.6 5.5"
+                  /></svg
+                >Clients</a
+              >
+              <a href="#"
+                ><svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12" /></svg
+                >Programs</a
+              >
+              <a href="#"
+                ><svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M7 3v8a3 3 0 0 0 6 0V3M10 11v10M17 3c-1.7 1.5-2.5 3.8-2.5 7H18V3zM18 10v11"
+                  /></svg
+                >Nutrition</a
+              >
+              <a href="#"
+                ><svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="4" y="3.5" width="16" height="17" rx="3" />
+                  <path d="m8.5 12 2.5 2.5 4.5-5" /></svg
+                >Check-ins<span class="count">2</span></a
+              >
+              <a href="#"
+                ><svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 5.5h16v11H9l-5 4z" /></svg
+                >Messages<span class="count">3</span></a
+              >
+              <div class="sep">Business</div>
+              <a href="#"
+                ><svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 12V4h8l10 10-8 8z" />
+                  <circle cx="7.5" cy="8.5" r="1.3" /></svg
+                >Plans you sell</a
+              >
+              <a href="#"
+                ><svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="3" />
+                  <path
+                    d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"
+                  /></svg
+                >Brand &amp; settings</a
+              >
+            </nav>
+            <div class="cme">
+              <span class="av a1">HH</span>
+              <div><b style="color: #fff">Hicham Haddad</b><small>Owner</small></div>
+            </div>
+          </aside>
+
+          <section class="cmain" aria-label="Coach Today">
+            <div class="ctop" data-cin>
+              <div>
+                <div class="eyebrow">Thursday 1 October</div>
+                <h2>Good afternoon, <span class="serif">Hicham.</span></h2>
+                <p id="needs-line">
+                  @if (needs().length) {
+                    <b
+                      ><span data-needs>{{ needs().length }}</span> clients need you</b
+                    >
+                    today. Everyone else is on track.
+                  } @else {
+                    <b>Everyone is on track today.</b> Nothing needs you right now.
+                  }
+                </p>
+              </div>
+              <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+                <div class="search">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    aria-hidden="true"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-3.5-3.5" /></svg
+                  >Search clients
+                </div>
+                <button
+                  type="button"
+                  class="cbtn"
+                  (click)="showToast('The invite link goes out by email or WhatsApp.')"
+                >
+                  + Invite client
+                </button>
+              </div>
+            </div>
+
+            <div class="stats3" data-cin>
+              <div class="card stat">
+                <div>
+                  <div class="eyebrow">Active clients</div>
+                  <span class="v num" data-count="24">24</span
+                  ><span class="d"><span class="up">+3</span> this month</span>
+                </div>
+                <div class="stack" aria-hidden="true">
+                  <span class="av a2">MR</span><span class="av a3">RK</span
+                  ><span class="av a4">LS</span><span class="av a5">+21</span>
+                </div>
+              </div>
+              <div class="card stat">
+                <div>
+                  <div class="eyebrow">Sessions done this week</div>
+                  <span class="v num"><span data-count="92">92</span>%</span
+                  ><span class="d"><span class="up">↑ 6%</span> vs this point last week</span>
+                </div>
+                <svg width="120" height="48" viewBox="0 0 120 48" aria-hidden="true">
+                  <path
+                    d="M2 38 L20 33 L38 35 L56 24 L74 26 L92 15 L116 9 L116 48 L2 48Z"
+                    fill="var(--accent-soft)"
+                  />
+                  <path
+                    id="cspark"
+                    d="M2 38 L20 33 L38 35 L56 24 L74 26 L92 15 L116 9"
+                    fill="none"
+                    stroke="var(--accent-ink)"
+                    stroke-width="2.4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <circle cx="116" cy="9" r="4" fill="var(--accent-ink)" />
+                </svg>
+              </div>
+              <div class="card stat">
+                <div>
+                  <div class="eyebrow">Plans ending in 14 days</div>
+                  <span class="v num" data-count="3">3</span
+                  ><span class="d">1 client already asked to renew</span>
+                </div>
+                <span class="atstake">$240 at stake</span>
+              </div>
+            </div>
+
+            <div class="cols">
+              <section class="card" data-cin aria-label="Needs you">
+                <header>
+                  <h3>
+                    Needs you <span class="badge" data-needs>{{ needs().length }}</span>
+                  </h3>
+                  <a href="#">See all</a>
+                </header>
+                <div id="queue">
+                  @for (need of needs(); track need.initials) {
+                    <div class="q">
+                      <span class="av" [class]="'av ' + need.tint">{{ need.initials }}</span>
+                      <div>
+                        <b>{{ need.heading }}</b
+                        ><span class="sub">{{ need.detail }}</span>
+                      </div>
+                      <span class="tag" [class]="'tag ' + need.tone">{{ need.tag }}</span
+                      ><button
+                        type="button"
+                        class="cbtn"
+                        [class.line]="need.action !== 'Review'"
+                        (click)="resolveNeed(need)"
+                      >
+                        {{ need.action }}
+                      </button>
+                    </div>
+                  }
+                </div>
+                <div class="allgood" id="allgood" [hidden]="needs().length > 0">
+                  <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true">
+                    <circle cx="23" cy="23" r="21" fill="var(--accent)" />
+                    <path
+                      d="m14 23.5 6 6 12-12.5"
+                      stroke="var(--on-accent)"
+                      stroke-width="3.2"
+                      fill="none"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <p>All caught up. <span class="serif" style="font-size: 1.2em">Nice.</span></p>
+                  <span>New check-ins and messages will appear here.</span>
+                </div>
+              </section>
+
+              <section class="card feed" data-cin aria-label="Activity">
+                <header>
+                  <h3>Activity</h3>
+                  <span class="live"><i></i>Live</span>
+                </header>
+                <div id="feed">
+                  <div class="f">
+                    <span class="av a1">KA</span>
+                    <div>
+                      <b>Karim</b> finished Lower Body A in 58 min. Back squat 140 kg × 3
+                      <span class="pr">PR</span><em>35 min ago</em>
+                    </div>
+                  </div>
+                  <div class="f">
+                    <span class="av a4">LS</span>
+                    <div>
+                      <b>Lina</b> completed Mobility Flow, her 12th session in a row.<em
+                        >1 h ago</em
+                      >
+                    </div>
+                  </div>
+                  <div class="f">
+                    <span class="av a6">HT</span>
+                    <div>
+                      <b>Hana</b> logged every meal today: 1,950 kcal and 142 g protein.<em
+                        >2 h ago</em
+                      >
+                    </div>
+                  </div>
+                  <div class="f">
+                    <span class="av a5">ZM</span>
+                    <div><b>Ziad</b>'s weekly average is 82.4 kg, down 0.6 kg.<em>3 h ago</em></div>
+                  </div>
+                  <div class="f">
+                    <span class="av a2">MR</span>
+                    <div>
+                      <b>Maya</b> replied: “Thanks coach, I'll film the top set.”<em>4 h ago</em>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <section class="card weekcard" data-cin aria-label="This week">
+              <div>
+                <div class="eyebrow">This week</div>
+                <span class="v num"><span data-count="26">26</span> of 49</span
+                ><span class="d" style="color: var(--muted); font-size: 13px"
+                  >sessions done so far</span
+                >
+              </div>
+              <div class="bars" id="bars" aria-hidden="true">
+                <div><i style="height: 78%"></i>Mon</div>
+                <div><i style="height: 70%"></i>Tue</div>
+                <div><i style="height: 86%"></i>Wed</div>
+                <div class="today"><i style="height: 30%"></i>Thu</div>
+                <div><i class="plan" style="height: 72%"></i>Fri</div>
+                <div><i class="plan" style="height: 40%"></i>Sat</div>
+                <div><i class="plan" style="height: 26%"></i>Sun</div>
+              </div>
+            </section>
+          </section>
+        </div>
+        <div class="toast" id="toast-desk" role="status" aria-live="polite" [hidden]="!toast()">
+          {{ toast() }}
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <p class="foot">
+    Prototype with sample data. Motion uses GSAP here; the real app uses Angular's built-in
+    animations for everyday screens and GSAP for big moments like a PR or a finished workout.
+  </p>
+</div>
