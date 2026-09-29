@@ -49,7 +49,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R0.2 | **Words pass** (§6). Text only, on the existing screens | No system word from §6 is left in visible template text; tests are updated | Done · 2026-09-29 |
 | R1.1 | **Brand v2 tokens, theme-ready** (§3, §3.1). Brand, accent and light/dark as custom properties; legacy aliases kept for now | Lab and shells render in all 4 prototype brands, in light and dark, at AA contrast | Done · 2026-09-29 · a728fa8 |
 | R1.2 | **Component kit v2 core** (§4): Card, StatTile, Avatar/Stack, StatusPill, Buttons, Sheet, Dialog, Toast, EmptyState, Skeleton, ProgressRing, Sparkline, SegmentedControl, Tabs | All of them are in the UI lab, pass axe, and work in RTL and dark | Done · 2026-09-29 · 7668dd9 |
-| R1.3 | **Three hero screens in the lab** on demo data: Coach Today, Client Today, Workout player, matching the prototype (GSAP moments included) | Side-by-side screenshots against the prototype at 390 and 1440 px | To do |
+| R1.3 | **Three hero screens in the lab** on demo data: Coach Today, Client Today, Workout player, matching the prototype (GSAP moments included) | Side-by-side screenshots against the prototype at 390 and 1440 px | Done · 2026-09-29 · 6dfb5af |
 | R1.4 | 🚦 **Owner and partner approve the look** | The owner says go | Gate |
 | R2.1 | **Client Today** (M1) for real, plus the personal light/dark setting (§3.1) | §2 definition of done | To do |
 | R2.2 | **Workout player** (M2), with backend pre-fill from last time, the versioned PR rule and the finish summary | §2, plus backend tests | To do |
@@ -72,8 +72,9 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
 | R6.2 | **Homepage** pre-render, GSAP scroll story, Jitter hero video (the owner makes the assets) | §2 | Optional |
 
-**Feedback to apply:** the owner approved the prototype direction on 2026-09-28. The partner's
-feedback is pending. Apply it to the prototype before R1.3.
+**Design approval:** the owner approved the prototype direction on 2026-09-28. The partner saw
+and approved the saved artifact design, as the owner confirmed on 2026-09-29. R1.4 is the review
+of the implemented R1.3 screens before production rollout.
 
 ### Follow-ups
 
