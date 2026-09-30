@@ -187,6 +187,16 @@ export interface NutritionDay {
   selectedCarbohydrate: number;
   selectedFat: number;
   slots: NutritionSlot[];
+  customFoods: {
+    id: string;
+    name: string;
+    amount: number;
+    unit: 'Gram' | 'Millilitre' | 'Serving';
+    calories: number;
+    protein: number;
+    carbohydrate: number;
+    fat: number;
+  }[];
   safetyNotice: string;
   logVersion: number | null;
 }
@@ -329,6 +339,16 @@ export function mapNutritionDay(value: ContractClientNutritionDayView): Nutritio
         carbohydrate: numeric(choice.carbohydrateGrams),
         fat: numeric(choice.fatGrams),
       })),
+    })),
+    customFoods: (value.customFoods ?? []).map((food) => ({
+      id: food.id,
+      name: food.name,
+      amount: numeric(food.amount),
+      unit: food.unit,
+      calories: numeric(food.calories),
+      protein: numeric(food.proteinGrams),
+      carbohydrate: numeric(food.carbohydrateGrams),
+      fat: numeric(food.fatGrams),
     })),
     safetyNotice: value.safetyNotice,
     logVersion: value.dailyLogVersion === null ? null : numeric(value.dailyLogVersion),

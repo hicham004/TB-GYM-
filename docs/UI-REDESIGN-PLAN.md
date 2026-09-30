@@ -50,11 +50,13 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R1.1 | **Brand v2 tokens, theme-ready** (§3, §3.1). Brand, accent and light/dark as custom properties; legacy aliases kept for now | Lab and shells render in all 4 prototype brands, in light and dark, at AA contrast | Done · 2026-09-29 · a728fa8 |
 | R1.2 | **Component kit v2 core** (§4): Card, StatTile, Avatar/Stack, StatusPill, Buttons, Sheet, Dialog, Toast, EmptyState, Skeleton, ProgressRing, Sparkline, SegmentedControl, Tabs | All of them are in the UI lab, pass axe, and work in RTL and dark | Done · 2026-09-29 · 7668dd9 |
 | R1.3 | **Three hero screens in the lab** on demo data: Coach Today, Client Today, Workout player, matching the prototype (GSAP moments included) | Side-by-side screenshots against the prototype at 390 and 1440 px | Done · 2026-09-29 · 6dfb5af |
-| R1.4 | 🚦 **Owner and partner approve the look** | The owner says go | Built, not committed · owner and partner approved 2026-09-29 |
-| R2.1 | **Client Today** (M1) for real, plus the personal light/dark setting (§3.1) | §2 definition of done | Built, not committed · 2026-09-29 |
-| R2.2 | **Workout player** (M2), with backend pre-fill from last time, the versioned PR rule and the finish summary | §2, plus backend tests | Built, not committed · 2026-09-30 · full suites pending |
-| R2.3 | **Progress** (M5) and the chart components | §2 | Built, not committed · 2026-09-30 · full suites pending |
-| R2.4 | **Nutrition day** (M4) and **Check-in** (M6) | §2 | To do |
+| R1.4 | 🚦 **Owner and partner approve the look** | The owner says go | Done · approved 2026-09-29 · f3e3e96 |
+| R2.1 | **Client Today** (M1) for real, plus the personal light/dark setting (§3.1) | §2 definition of done | Done · 2026-09-30 · 3124581 |
+| R2.2 | **Workout player** (M2), with backend pre-fill from last time, the versioned PR rule and the finish summary | §2, plus backend tests | Done · 2026-09-30 · 3124581 |
+| R2.3 | **Progress** (M5) and the chart components | §2 | Done · 2026-09-30 · 3124581 |
+| R2.4a | **Nutrition day** (M4): day strip, macro rings, meal cards, planned and alternative logging, and client-entered extra food | Web/API and PostgreSQL tests, axe, reflow, 390/1440 screenshots | Done · 2026-09-30 |
+| R2.4b | **Nutrition demo data:** assigned meal plan for Atlas plus screenshot review on that workspace; correction for mistaken extra-food entries | §2 on the demo workspace | To do |
+| R2.4c | **Check-in** (M6) | §2 | To do |
 | R2.5 | **Messages** (M7, shared chat), **Training** (M3), **Me** (M8), installable app | §2 | To do |
 | R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | To do |
 | R3.2 | **Coach Today** (C1) | §2 | To do |
@@ -80,7 +82,7 @@ of the implemented R1.3 screens before production rollout.
 
 *(Sessions add items here instead of building them.)*
 
-- **Demo data gaps (from R0.1).** The demo has no meal plans (needed before R2.4), no progress photos
+- **Demo data gaps (from R0.1).** The demo has no meal plans (R2.4b), no progress photos
   or coach/exercise media (the real M1 uses coach initials until a profile photo source exists; use
   licensed images, never AI-made people), and no former client. Add each when its screen is built.
 - **Planned workout duration (from R2.1).** Training sessions do not store one, so the Today hero

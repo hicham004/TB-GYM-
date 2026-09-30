@@ -448,6 +448,11 @@ tolerance produces a discrepancy flag. Missing provider nutrient facts are never
 zero during import. Raw-to-cooked conversion requires compatible, sourced `Yield` and
 `Retention` factor records and applies yield before retention.
 
+**NUT-012** A client-entered extra food is a consumed-log entry with a name, amount, unit and
+calories/macros for that amount. It is not a coach-approved recipe or a change to the assigned
+meal snapshot. It contributes to consumed totals only. Its tenant-scoped entry is append-only and
+cannot be added after the day is completed (ADR 0032).
+
 ## 7. Bodyweight and progress
 
 **PRG-001** A client can have at most one daily bodyweight observation per tenant and local

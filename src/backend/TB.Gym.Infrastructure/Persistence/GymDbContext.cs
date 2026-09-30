@@ -242,6 +242,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<DailyNutritionLogEntry> DailyNutritionLogEntries => Set<DailyNutritionLogEntry>();
 
+    public DbSet<DailyNutritionCustomFood> DailyNutritionCustomFoods => Set<DailyNutritionCustomFood>();
+
     public DbSet<NutritionPlanLifecycleEvent> NutritionPlanLifecycleEvents => Set<NutritionPlanLifecycleEvent>();
 
     public DbSet<AllergenConflictRecord> AllergenConflictRecords => Set<AllergenConflictRecord>();

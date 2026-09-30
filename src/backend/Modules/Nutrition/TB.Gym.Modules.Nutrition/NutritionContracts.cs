@@ -27,6 +27,7 @@ public interface INutritionApplicationService
     Task<NutritionCommandResult> CancelPlanAsync(Guid clientProfileId, Guid planId, CancelNutritionPlanRequest request, CancellationToken cancellationToken);
     Task<ClientNutritionDayView?> GetOwnDayAsync(DateOnly? localDate, CancellationToken cancellationToken);
     Task<NutritionCommandResult> RecordOwnChoiceAsync(RecordNutritionChoiceRequest request, CancellationToken cancellationToken);
+    Task<NutritionCommandResult> AddOwnCustomFoodAsync(AddNutritionCustomFoodRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CompleteOwnLogAsync(Guid dailyLogId, CompleteNutritionLogRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> GenerateAiDraftAsync(GenerateAiMealDraftRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> ReviewAiDraftAsync(Guid operationId, ReviewAiMealDraftRequest request, CancellationToken cancellationToken);
@@ -199,6 +200,8 @@ public sealed record NutritionChoiceView(Guid Id, string RecipeName, decimal Ser
 
 public sealed record NutritionSlotView(Guid Id, string Name, int Order, IReadOnlyList<NutritionChoiceView> Choices, Guid? SelectedChoiceId, decimal? ActualServings);
 
+public sealed record NutritionCustomFoodView(Guid Id, string Name, decimal Amount, FoodQuantityUnit Unit, decimal Calories, decimal ProteinGrams, decimal CarbohydrateGrams, decimal FatGrams);
+
 public sealed record ClientNutritionDayView(
     Guid PlanId,
     Guid PlanDayId,
@@ -215,9 +218,12 @@ public sealed record ClientNutritionDayView(
     decimal SelectedCarbohydrateGrams,
     decimal SelectedFatGrams,
     IReadOnlyList<NutritionSlotView> Slots,
+    IReadOnlyList<NutritionCustomFoodView> CustomFoods,
     string SafetyNotice);
 
 public sealed record RecordNutritionChoiceRequest(Guid PlanDayId, Guid PlanSlotId, Guid ChoiceId, decimal ActualServings, uint? DailyLogVersion);
+
+public sealed record AddNutritionCustomFoodRequest(Guid PlanDayId, string Name, decimal Amount, FoodQuantityUnit Unit, decimal Calories, decimal ProteinGrams, decimal CarbohydrateGrams, decimal FatGrams, uint? DailyLogVersion);
 
 public sealed record CompleteNutritionLogRequest(uint Version);
 

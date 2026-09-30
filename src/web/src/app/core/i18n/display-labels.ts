@@ -239,6 +239,23 @@ export function ownCheckInDenialMessage(reason: FeatureAccessReason): string {
   return labels[reason];
 }
 
+/** A refused nutrition read is different from a day with no assigned meals. */
+export function ownNutritionDenialMessage(reason: FeatureAccessReason): string {
+  const labels: Record<FeatureAccessReason, string> = {
+    Granted: $localize`Your meals aren't available right now. Please try again.`,
+    MembershipInactive: $localize`Your coaching has ended, so meals are closed.`,
+    RelationshipBlocked: $localize`Your coach has paused your access to meals.`,
+    NoEntitlement: $localize`Nutrition is not in your plan. Ask your coach.`,
+    PaymentRequired: $localize`Your plan is waiting for payment, so meals are closed for now.`,
+    NotStarted: $localize`Your plan hasn't started yet. Meals open when it does.`,
+    Expired: $localize`Your plan has ended, so its meals are closed.`,
+    Paused: $localize`Your plan is paused, so meals are closed for now.`,
+    Cancelled: $localize`Your plan was cancelled, so its meals are closed.`,
+    PlatformBlocked: $localize`Your account access is blocked, so meals are closed.`,
+  };
+  return labels[reason];
+}
+
 /** The same decision as the coach reads it, about one named client. */
 export function clientCheckInDenialMessage(reason: FeatureAccessReason): string {
   const labels: Record<FeatureAccessReason, string> = {

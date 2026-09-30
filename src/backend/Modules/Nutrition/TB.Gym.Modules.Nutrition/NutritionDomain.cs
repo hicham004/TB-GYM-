@@ -1103,6 +1103,7 @@ public sealed class ClientNutritionPlanChoice : TenantEntity
 public sealed class DailyNutritionLog : TenantEntity
 {
     private readonly List<DailyNutritionLogEntry> entries = [];
+    private readonly List<DailyNutritionCustomFood> customFoods = [];
 
     private DailyNutritionLog()
     {
@@ -1124,10 +1125,11 @@ public sealed class DailyNutritionLog : TenantEntity
     public DailyNutritionLogStatus Status { get; private set; }
     public DateTimeOffset? CompletedAtUtc { get; private set; }
     public IReadOnlyCollection<DailyNutritionLogEntry> Entries => entries;
-    public decimal SelectedCalories => entries.Sum(item => item.Calories);
-    public decimal SelectedProteinGrams => entries.Sum(item => item.ProteinGrams);
-    public decimal SelectedCarbohydrateGrams => entries.Sum(item => item.CarbohydrateGrams);
-    public decimal SelectedFatGrams => entries.Sum(item => item.FatGrams);
+    public IReadOnlyCollection<DailyNutritionCustomFood> CustomFoods => customFoods;
+    public decimal SelectedCalories => entries.Sum(item => item.Calories) + customFoods.Sum(item => item.Calories);
+    public decimal SelectedProteinGrams => entries.Sum(item => item.ProteinGrams) + customFoods.Sum(item => item.ProteinGrams);
+    public decimal SelectedCarbohydrateGrams => entries.Sum(item => item.CarbohydrateGrams) + customFoods.Sum(item => item.CarbohydrateGrams);
+    public decimal SelectedFatGrams => entries.Sum(item => item.FatGrams) + customFoods.Sum(item => item.FatGrams);
 
     public static DailyNutritionLog Start(Guid tenantId, Guid clientProfileId, Guid clientNutritionPlanId, Guid clientNutritionPlanDayId, DateOnly date) =>
         new(tenantId, clientProfileId, clientNutritionPlanId, clientNutritionPlanDayId, date);
@@ -1150,9 +1152,26 @@ public sealed class DailyNutritionLog : TenantEntity
         return entry;
     }
 
+    public DailyNutritionCustomFood AddCustomFood(string name, decimal amount, FoodQuantityUnit unit, decimal calories, decimal protein, decimal carbohydrate, decimal fat)
+    {
+        if (Status == DailyNutritionLogStatus.Completed)
+        {
+            throw new InvalidOperationException("A completed daily nutrition log is immutable.");
+        }
+
+        if (customFoods.Count >= 50)
+        {
+            throw new ArgumentException("A day cannot hold more than 50 extra foods.", nameof(name));
+        }
+
+        var food = DailyNutritionCustomFood.Create(TenantId, Id, name, amount, unit, calories, protein, carbohydrate, fat);
+        customFoods.Add(food);
+        return food;
+    }
+
     public void Complete(DateTimeOffset now)
     {
-        if (Status == DailyNutritionLogStatus.Completed || entries.Count == 0)
+        if (Status == DailyNutritionLogStatus.Completed || (entries.Count == 0 && customFoods.Count == 0))
         {
             throw new InvalidOperationException("Only a non-empty in-progress log can be completed.");
         }
@@ -1160,6 +1179,39 @@ public sealed class DailyNutritionLog : TenantEntity
         Status = DailyNutritionLogStatus.Completed;
         CompletedAtUtc = now;
     }
+}
+
+public sealed class DailyNutritionCustomFood : TenantEntity
+{
+    private DailyNutritionCustomFood() { }
+
+    private DailyNutritionCustomFood(Guid tenantId, Guid dailyNutritionLogId, string name, decimal amount, FoodQuantityUnit unit, decimal calories, decimal protein, decimal carbohydrate, decimal fat) : base(tenantId)
+    {
+        DailyNutritionLogId = dailyNutritionLogId;
+        Name = NutritionRules.RequiredText(name, 200, nameof(name));
+        Amount = NutritionRules.Positive(amount, 100_000m, nameof(amount));
+        if (!Enum.IsDefined(unit)) throw new ArgumentException("Choose a valid unit.", nameof(unit));
+        Unit = unit;
+        Calories = Bounded(calories, 20_000m, nameof(calories));
+        ProteinGrams = Bounded(protein, 10_000m, nameof(protein));
+        CarbohydrateGrams = Bounded(carbohydrate, 10_000m, nameof(carbohydrate));
+        FatGrams = Bounded(fat, 10_000m, nameof(fat));
+    }
+
+    public Guid DailyNutritionLogId { get; private set; }
+    public string Name { get; private set; } = string.Empty;
+    public decimal Amount { get; private set; }
+    public FoodQuantityUnit Unit { get; private set; }
+    public decimal Calories { get; private set; }
+    public decimal ProteinGrams { get; private set; }
+    public decimal CarbohydrateGrams { get; private set; }
+    public decimal FatGrams { get; private set; }
+
+    internal static DailyNutritionCustomFood Create(Guid tenantId, Guid logId, string name, decimal amount, FoodQuantityUnit unit, decimal calories, decimal protein, decimal carbohydrate, decimal fat) =>
+        new(tenantId, logId, name, amount, unit, calories, protein, carbohydrate, fat);
+
+    private static decimal Bounded(decimal value, decimal max, string field) =>
+        value >= 0m && value <= max ? value : throw new ArgumentOutOfRangeException(field);
 }
 
 public sealed class DailyNutritionLogEntry : TenantEntity

@@ -349,6 +349,21 @@ public sealed partial class GymDbContext
             entity.HasOne<ClientNutritionPlan>().WithMany().HasForeignKey(item => new { item.TenantId, item.ClientNutritionPlanId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ClientNutritionPlanDay>().WithMany().HasForeignKey(item => new { item.TenantId, item.ClientNutritionPlanDayId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(item => item.Entries).WithOne().HasForeignKey(item => new { item.TenantId, item.DailyNutritionLogId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(item => item.CustomFoods).WithOne().HasForeignKey(item => new { item.TenantId, item.DailyNutritionLogId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
+            ConfigureTenantEntity(entity);
+        });
+
+        builder.Entity<DailyNutritionCustomFood>(entity =>
+        {
+            entity.ToTable("DailyNutritionCustomFoods", "nutrition");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Amount).HasPrecision(12, 4);
+            entity.Property(item => item.Unit).HasConversion<string>().HasMaxLength(20);
+            ConfigureMacroPrecision(entity);
+            entity.Property(item => item.Calories).HasPrecision(18, 6);
+            entity.HasIndex(item => new { item.TenantId, item.DailyNutritionLogId, item.CreatedAtUtc });
+            entity.ToTable(table => table.HasCheckConstraint("CK_DailyNutritionCustomFoods_Values", "\"Amount\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0"));
             ConfigureTenantEntity(entity);
         });
 

@@ -19,6 +19,7 @@ function day(selectedA: string | null = null, servingsA: number | null = null): 
     selectedFat: 0,
     logVersion: selectedA ? 2 : null,
     safetyNotice: 'No safety claim.',
+    customFoods: [],
     slots: [
       {
         id: 'slot-a',

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Nutrition;
@@ -20,6 +21,13 @@ internal sealed class NutritionApplicationService(
 {
     private const string AiSchemaVersion = "meal-draft-v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private static bool IsDailyLogStartRace(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: "IX_DailyNutritionLogs_TenantId_ClientProfileId_Date",
+        };
 
     public async Task<NutritionWorkspaceSettingsView> GetSettingsAsync(CancellationToken cancellationToken)
     {
@@ -704,7 +712,7 @@ internal sealed class NutritionApplicationService(
         var slots = await dbContext.ClientNutritionPlanSlots.AsNoTracking().Where(item => item.ClientNutritionPlanDayId == row.DayId)
             .Include(item => item.Choices).OrderBy(item => item.Order).AsSplitQuery().ToListAsync(cancellationToken);
         var log = await dbContext.DailyNutritionLogs.AsNoTracking().Where(item => item.ClientNutritionPlanDayId == row.DayId)
-            .Include(item => item.Entries).SingleOrDefaultAsync(cancellationToken);
+            .Include(item => item.Entries).Include(item => item.CustomFoods).AsSplitQuery().SingleOrDefaultAsync(cancellationToken);
         return ToDayView(row, slots, log);
     }
 
@@ -732,7 +740,7 @@ internal sealed class NutritionApplicationService(
             return Invalid("choice", "The selected choice is not available to this client/day or servings are invalid.");
         }
 
-        var log = await dbContext.DailyNutritionLogs.Include(item => item.Entries).SingleOrDefaultAsync(item => item.ClientNutritionPlanDayId == day.Id, cancellationToken);
+        var log = await dbContext.DailyNutritionLogs.Include(item => item.Entries).Include(item => item.CustomFoods).AsSplitQuery().SingleOrDefaultAsync(item => item.ClientNutritionPlanDayId == day.Id, cancellationToken);
         if (log is null)
         {
             if (request.DailyLogVersion is not null)
@@ -756,6 +764,7 @@ internal sealed class NutritionApplicationService(
         {
             var multiplier = request.ActualServings / choice.Servings;
             log.Record(request.PlanSlotId, choice.Id, choice.RecipeName, request.ActualServings, choice.Calories * multiplier, choice.ProteinGrams * multiplier, choice.CarbohydrateGrams * multiplier, choice.FatGrams * multiplier);
+            log.StampUpdate(clock.UtcNow, currentUser.UserId);
             await dbContext.SaveChangesAsync(cancellationToken);
             var row = await LoadDayRowAsync(day.Id, cancellationToken);
             var slots = await dbContext.ClientNutritionPlanSlots.AsNoTracking().Where(item => item.ClientNutritionPlanDayId == day.Id).Include(item => item.Choices).OrderBy(item => item.Order).AsSplitQuery().ToListAsync(cancellationToken);
@@ -769,6 +778,70 @@ internal sealed class NutritionApplicationService(
         {
             return Conflict("nutrition_log_conflict", "The nutrition log changed while this choice was being saved.");
         }
+        catch (DbUpdateException exception) when (IsDailyLogStartRace(exception))
+        {
+            return Conflict("nutrition_log_conflict", "The nutrition log was started by another request. Refresh this day and try again.");
+        }
+    }
+
+    public async Task<NutritionCommandResult> AddOwnCustomFoodAsync(AddNutritionCustomFoodRequest request, CancellationToken cancellationToken)
+    {
+        var client = await FindSelfClientAsync(cancellationToken);
+        if (client is null || !(await GetNutritionAccessAsync(client.Id, cancellationToken)).IsAllowed)
+        {
+            return new NutritionCommandResult(NutritionCommandStatus.Forbidden);
+        }
+
+        var day = await (from item in dbContext.ClientNutritionPlanDays.AsNoTracking()
+                         join plan in dbContext.ClientNutritionPlans.AsNoTracking()
+                             on new { item.TenantId, Id = item.ClientNutritionPlanId } equals new { plan.TenantId, plan.Id }
+                         where item.Id == request.PlanDayId && plan.ClientProfileId == client.Id && plan.Status == ClientNutritionPlanStatus.Active
+                         select new { item.Id, item.ClientNutritionPlanId, item.Date }).SingleOrDefaultAsync(cancellationToken);
+        if (day is null) return NotFound();
+
+        var log = await dbContext.DailyNutritionLogs.Include(item => item.Entries).Include(item => item.CustomFoods).AsSplitQuery()
+            .SingleOrDefaultAsync(item => item.ClientNutritionPlanDayId == day.Id && item.ClientProfileId == client.Id, cancellationToken);
+        if (log is null)
+        {
+            if (request.DailyLogVersion is not null) return Conflict("nutrition_log_conflict", "The nutrition log changed before this food was added.");
+            log = DailyNutritionLog.Start(tenantContext.TenantId, client.Id, day.ClientNutritionPlanId, day.Id, day.Date);
+            dbContext.DailyNutritionLogs.Add(log);
+        }
+        else if (request.DailyLogVersion is null)
+        {
+            return Conflict("nutrition_log_version_required", "Refresh the nutrition log before adding food.");
+        }
+        else
+        {
+            dbContext.Entry(log).Property(item => item.Version).OriginalValue = request.DailyLogVersion.Value;
+        }
+
+        try
+        {
+            log.AddCustomFood(request.Name, request.Amount, request.Unit, request.Calories, request.ProteinGrams, request.CarbohydrateGrams, request.FatGrams);
+            log.StampUpdate(clock.UtcNow, currentUser.UserId);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            var row = await LoadDayRowAsync(day.Id, cancellationToken);
+            var slots = await dbContext.ClientNutritionPlanSlots.AsNoTracking().Where(item => item.ClientNutritionPlanDayId == day.Id)
+                .Include(item => item.Choices).OrderBy(item => item.Order).AsSplitQuery().ToListAsync(cancellationToken);
+            return new NutritionCommandResult(NutritionCommandStatus.Success, Day: ToDayView(row!, slots, log));
+        }
+        catch (ArgumentException exception)
+        {
+            return Invalid("food", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict("nutrition_log_completed", exception.Message);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict("nutrition_log_conflict", "The nutrition log changed while this food was being added.");
+        }
+        catch (DbUpdateException exception) when (IsDailyLogStartRace(exception))
+        {
+            return Conflict("nutrition_log_conflict", "The nutrition log was started by another request. Refresh this day and try again.");
+        }
     }
 
     public async Task<NutritionCommandResult> CompleteOwnLogAsync(Guid dailyLogId, CompleteNutritionLogRequest request, CancellationToken cancellationToken)
@@ -779,7 +852,7 @@ internal sealed class NutritionApplicationService(
             return new NutritionCommandResult(NutritionCommandStatus.Forbidden);
         }
 
-        var log = await dbContext.DailyNutritionLogs.Include(item => item.Entries).SingleOrDefaultAsync(item => item.Id == dailyLogId && item.ClientProfileId == client.Id, cancellationToken);
+        var log = await dbContext.DailyNutritionLogs.Include(item => item.Entries).Include(item => item.CustomFoods).AsSplitQuery().SingleOrDefaultAsync(item => item.Id == dailyLogId && item.ClientProfileId == client.Id, cancellationToken);
         if (log is null)
         {
             return NotFound();
@@ -1087,6 +1160,7 @@ internal sealed class NutritionApplicationService(
                 entries.TryGetValue(slot.Id, out var entry);
                 return new NutritionSlotView(slot.Id, slot.Name, slot.Order, slot.Choices.Select(choice => new NutritionChoiceView(choice.Id, choice.RecipeName, choice.Servings, choice.Calories, choice.ProteinGrams, choice.CarbohydrateGrams, choice.FatGrams)).ToArray(), entry?.SelectedClientNutritionPlanChoiceId, entry?.Servings);
             }).ToArray(),
+            log?.CustomFoods.OrderBy(item => item.CreatedAtUtc).Select(item => new NutritionCustomFoodView(item.Id, item.Name, item.Amount, item.Unit, item.Calories, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams)).ToArray() ?? [],
             "Allergen declarations may be incomplete. Absence of a declared conflict is not evidence of absence; TB Gym does not assert any meal is safe.");
     }
 

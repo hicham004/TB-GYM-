@@ -58,6 +58,7 @@ function day(overrides: Partial<NutritionDay> = {}): NutritionDay {
     selectedCarbohydrate: 0,
     selectedFat: 0,
     slots: [slot()],
+    customFoods: [],
     safetyNotice: 'This plan is guidance, not medical advice.',
     logVersion: 2,
     ...overrides,
@@ -95,6 +96,27 @@ async function render(
         useValue: {
           getMyNutritionDay: vi.fn(() => of(today)),
           recordMyNutritionChoice: vi.fn(() => of(afterSave())),
+          addMyNutritionCustomFood: vi.fn(() =>
+            of(
+              day({
+                selectedCalories: 80,
+                selectedCarbohydrate: 21,
+                logVersion: 3,
+                customFoods: [
+                  {
+                    id: 'extra-1',
+                    name: 'Apple',
+                    amount: 150,
+                    unit: 'Gram',
+                    calories: 80,
+                    protein: 0,
+                    carbohydrate: 21,
+                    fat: 0,
+                  },
+                ],
+              }),
+            ),
+          ),
           completeMyNutritionLog: vi.fn(() => of(day({ logStatus: 'Completed', logVersion: 4 }))),
           ...api,
         },
@@ -140,8 +162,7 @@ async function changeDate(
   fixture: ReturnType<typeof TestBed.createComponent<TodayNutrition>>,
   selectedDate: string,
 ): Promise<void> {
-  component['selectedDate'] = selectedDate;
-  await component['changeDate']();
+  await component['changeDate'](selectedDate);
   fixture.detectChanges();
 }
 
@@ -158,11 +179,13 @@ describe('TodayNutrition', () => {
   it('records the meal and servings the client chose', async () => {
     const { fixture, host, api } = await render();
 
-    // Nothing to save until something is chosen.
-    expect(button(host, 'Save meal').disabled).toBe(true);
+    // The planned choice is ready to log in one tap.
+    expect(button(host, 'Ate as planned').disabled).toBe(false);
 
     // The second choice, deliberately: the draft opens on the first one, so picking that would be
     // indistinguishable from a select whose change never reached the draft at all.
+    press(host, 'Swap or adjust');
+    await settle(fixture);
     fill(host, 'What did you eat?', 'choice-2');
     fill(host, 'Actual servings', '1.5');
     await settle(fixture);
@@ -179,14 +202,16 @@ describe('TodayNutrition', () => {
       // The log version the row was rendered at, so a stale write conflicts.
       dailyLogVersion: 2,
     });
-    expect(host.textContent).toContain('Meal saved.');
-    expect(host.textContent).toContain('Saved');
+    expect(host.textContent).toContain('Meal logged.');
+    expect(host.textContent).toContain('Logged');
   });
 
   /** Picking a meal offers its own prescribed servings rather than leaving the client to guess. */
   it('offers the chosen meal’s prescribed servings', async () => {
     const { fixture, host } = await render();
 
+    press(host, 'Swap or adjust');
+    await settle(fixture);
     fill(host, 'What did you eat?', 'choice-2');
     await settle(fixture);
 
@@ -196,6 +221,8 @@ describe('TodayNutrition', () => {
   it('refuses to record a meal with no servings', async () => {
     const { fixture, host, api } = await render();
 
+    press(host, 'Swap or adjust');
+    await settle(fixture);
     fill(host, 'What did you eat?', 'choice-2');
     fill(host, 'Actual servings', '0');
     await settle(fixture);
@@ -212,7 +239,7 @@ describe('TodayNutrition', () => {
   it('completes the nutrition day once every meal is saved', async () => {
     const { fixture, host, api } = await render();
 
-    press(host, 'Complete nutrition day');
+    press(host, 'Complete day');
     await settle(fixture);
 
     expect(api.completeMyNutritionLog).toHaveBeenCalledWith('log-1', { version: 2 });
@@ -224,23 +251,25 @@ describe('TodayNutrition', () => {
   it('refuses to complete the day while a meal is still unsaved', async () => {
     const { fixture, host, api } = await render();
 
+    press(host, 'Swap or adjust');
+    await settle(fixture);
     fill(host, 'What did you eat?', 'choice-2');
     await settle(fixture);
-    press(host, 'Complete nutrition day');
+    press(host, 'Complete day');
     await settle(fixture);
 
     expect(api.completeMyNutritionLog).not.toHaveBeenCalled();
     expect(query(host, '[role="alert"]').textContent).toContain(
-      'Save every edited meal before completing the day.',
+      'Save edited meals and extra food before completing the day.',
     );
   });
 
   it('renders a completed day read-only', async () => {
     const { host } = await render({}, day({ logStatus: 'Completed' }));
 
-    expect(field<HTMLSelectElement>(host, 'What did you eat?').disabled).toBe(true);
-    expect(field(host, 'Actual servings').disabled).toBe(true);
-    expect(() => button(host, 'Complete nutrition day')).toThrow();
+    expect(() => field<HTMLSelectElement>(host, 'What did you eat?')).toThrow();
+    expect(() => button(host, 'Ate as planned')).toThrow();
+    expect(() => button(host, 'Complete day')).toThrow();
     expect(host.textContent).toContain('Day completed');
   });
 
@@ -252,7 +281,7 @@ describe('TodayNutrition', () => {
     const { host } = await render({}, afterSave());
 
     expect(host.textContent).toContain('2,400 kcal');
-    expect(host.textContent).toContain('780 kcal');
+    expect(host.textContent).toContain('780 / 2,400 kcal');
     expect(host.textContent).toContain('This plan is guidance, not medical advice.');
   });
 
@@ -271,6 +300,10 @@ describe('TodayNutrition', () => {
     );
 
     const cards = host.querySelectorAll('.meal-card');
+    press(cards[0], 'Swap or adjust');
+    await settle(fixture);
+    press(cards[1], 'Swap or adjust');
+    await settle(fixture);
     fill(cards[0], 'What did you eat?', 'choice-2');
     fill(cards[1], 'What did you eat?', 'choice-2');
     fill(cards[1], 'Actual servings', '2');
@@ -289,27 +322,87 @@ describe('TodayNutrition', () => {
     expect(field(second, 'Actual servings').value).toBe('2');
   });
 
-  it('reports a date with no meal plan instead of an empty day', async () => {
+  it('explains a date with no meal plan instead of an empty day', async () => {
     const { host } = await render({
-      getMyNutritionDay: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 403 }))),
+      getMyNutritionDay: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 404 }))),
     });
 
-    expect(query(host, '[role="alert"]').textContent).toContain(
-      'There is no meal plan for this day. Ask your coach if you expected one.',
-    );
+    expect(host.textContent).toContain("Your coach hasn't set a meal plan for this day yet");
     expect(host.querySelector('.meal-card')).toBeNull();
+  });
+
+  it('states a refused access reason separately from an unplanned day', async () => {
+    const { host } = await render({
+      getMyNutritionDay: vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 403,
+              error: { accessReason: 'PaymentRequired' },
+            }),
+        ),
+      ),
+    });
+
+    expect(host.textContent).toContain('Your plan is waiting for payment');
+    expect(host.textContent).not.toContain("Your coach hasn't set a meal plan");
   });
 
   it('reloads the plan for a different date', async () => {
     const { fixture, host, api } = await render();
 
-    const date = query<HTMLInputElement>(host, 'input[type="date"]');
-    date.value = '2026-08-20';
-    date.dispatchEvent(new Event('input'));
-    date.dispatchEvent(new Event('change'));
+    query<HTMLButtonElement>(host, '[aria-label="Previous week"]').click();
+    await settle(fixture);
+    query<HTMLButtonElement>(host, '[aria-label="Thursday, August 20, 2026"]').click();
     await settle(fixture);
 
     expect(api.getMyNutritionDay).toHaveBeenLastCalledWith('2026-08-20');
+  });
+
+  it('logs the planned meal in one tap without opening the editor', async () => {
+    const { fixture, host, api } = await render();
+
+    press(host, 'Ate as planned');
+    await settle(fixture);
+
+    expect(api.recordMyNutritionChoice).toHaveBeenCalledWith({
+      planDayId: 'plan-day-1',
+      planSlotId: 'slot-1',
+      choiceId: 'choice-1',
+      actualServings: 1,
+      dailyLogVersion: 2,
+    });
+    expect(host.textContent).toContain('Meal logged.');
+  });
+
+  it('logs a client-entered food separately from the planned slot', async () => {
+    const { fixture, host, api } = await render();
+    press(host, 'Add food');
+    await settle(fixture);
+    fill(host, 'Food name', 'Apple');
+    fill(host, 'Amount eaten', '150');
+    fill(host, 'Calories (kcal)', '80');
+    fill(host, 'Protein (g)', '0');
+    fill(host, 'Carbs (g)', '21');
+    fill(host, 'Fat (g)', '0');
+    await settle(fixture);
+    press(host, 'Log extra food');
+    await settle(fixture);
+
+    expect(api.addMyNutritionCustomFood).toHaveBeenCalledWith({
+      planDayId: 'plan-day-1',
+      name: 'Apple',
+      amount: 150,
+      unit: 'Gram',
+      calories: 80,
+      proteinGrams: 0,
+      carbohydrateGrams: 21,
+      fatGrams: 0,
+      dailyLogVersion: 2,
+    });
+    expect(host.textContent).toContain('Apple');
+    expect(host.textContent).toContain('0 of 1 planned meals logged');
+    expect(host.textContent).toContain('80 / 2,400 kcal');
   });
 
   it('ignores a date-A save that resolves after date B is displayed', async () => {

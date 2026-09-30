@@ -928,6 +928,12 @@ export class ApiClient {
       .pipe(map(mapNutritionDay));
   }
 
+  addMyNutritionCustomFood(request: Phase3Contracts.AddNutritionCustomFoodRequest) {
+    return this.http
+      .post<Phase3Contracts.ClientNutritionDayView>('/api/nutrition/me/custom-foods', request)
+      .pipe(map(mapNutritionDay));
+  }
+
   completeMyNutritionLog(logId: string, request: Phase3Contracts.CompleteNutritionLogRequest) {
     return this.http
       .post<Phase3Contracts.ClientNutritionDayView>(

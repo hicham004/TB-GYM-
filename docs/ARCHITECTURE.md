@@ -498,6 +498,11 @@ Both use the current client profile and server-side access rules. The user's lig
 is stored on the Identity account and applied after session load; it is independent of the tenant
 brand and can be changed from the personal Appearance screen.
 
+R2.4a keeps client-entered extra food in a separate Nutrition log table, linked by tenant and log
+ID. The day read returns it beside planned slots and includes it in consumed totals; the assigned
+meal snapshot and targets remain unchanged. The add command checks the current client and server
+feature access, uses the daily log version, and freezes with the completed day (ADR 0032).
+
 Step 3B2 (ADR 0029) adds `subscriptions."RenewalRequests"` (append-only, one per client in any 7
 days by exclusion constraint) and `IClientRenewalService` in the Subscriptions module, implemented in
 Infrastructure beside the commercial service. The coach's notice reuses the workspace-notice path

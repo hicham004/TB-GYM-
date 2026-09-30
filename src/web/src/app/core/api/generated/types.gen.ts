@@ -52,6 +52,18 @@ export type AddMealPlanVersionRequest = {
   slots: Array<MealPlanSlotRequest>;
 };
 
+export type AddNutritionCustomFoodRequest = {
+  planDayId: string;
+  name: string;
+  amount: number | string;
+  unit: FoodQuantityUnit;
+  calories: number | string;
+  proteinGrams: number | string;
+  carbohydrateGrams: number | string;
+  fatGrams: number | string;
+  dailyLogVersion: null | number | string;
+};
+
 export type AddRecipeVersionRequest = {
   instructions: string;
   servings: number | string;
@@ -672,6 +684,7 @@ export type ClientNutritionDayView = {
   selectedCarbohydrateGrams: number | string;
   selectedFatGrams: number | string;
   slots: Array<NutritionSlotView>;
+  customFoods: Array<NutritionCustomFoodView>;
   safetyNotice: string;
 };
 
@@ -1860,6 +1873,17 @@ export type NutritionChoiceView = {
   id: string;
   recipeName: string;
   servings: number | string;
+  calories: number | string;
+  proteinGrams: number | string;
+  carbohydrateGrams: number | string;
+  fatGrams: number | string;
+};
+
+export type NutritionCustomFoodView = {
+  id: string;
+  name: string;
+  amount: number | string;
+  unit: FoodQuantityUnit;
   calories: number | string;
   proteinGrams: number | string;
   carbohydrateGrams: number | string;
@@ -6429,6 +6453,41 @@ export type RecordOwnNutritionChoiceResponses = {
 
 export type RecordOwnNutritionChoiceResponse =
   RecordOwnNutritionChoiceResponses[keyof RecordOwnNutritionChoiceResponses];
+
+export type AddOwnNutritionCustomFoodData = {
+  body: AddNutritionCustomFoodRequest;
+  path?: never;
+  query?: never;
+  url: '/api/nutrition/me/custom-foods';
+};
+
+export type AddOwnNutritionCustomFoodErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type AddOwnNutritionCustomFoodError =
+  AddOwnNutritionCustomFoodErrors[keyof AddOwnNutritionCustomFoodErrors];
+
+export type AddOwnNutritionCustomFoodResponses = {
+  /**
+   * OK
+   */
+  200: ClientNutritionDayView;
+};
+
+export type AddOwnNutritionCustomFoodResponse =
+  AddOwnNutritionCustomFoodResponses[keyof AddOwnNutritionCustomFoodResponses];
 
 export type CompleteOwnNutritionLogData = {
   body: CompleteNutritionLogRequest;

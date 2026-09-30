@@ -210,6 +210,22 @@ public sealed class Phase4NutritionDomainTests
     }
 
     [TestMethod]
+    public void ClientCustomFoodAddsConsumedValuesWithoutChangingPlannedChoice()
+    {
+        var log = DailyNutritionLog.Start(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 8, 22));
+        var choiceId = Guid.NewGuid();
+        log.Record(Guid.NewGuid(), choiceId, "Planned meal", 1m, 500m, 30m, 60m, 15m);
+        log.AddCustomFood("Apple", 150m, FoodQuantityUnit.Gram, 80m, 0m, 21m, 0m);
+
+        Assert.AreEqual(580m, log.SelectedCalories);
+        Assert.AreEqual(81m, log.SelectedCarbohydrateGrams);
+        Assert.AreEqual(choiceId, log.Entries.Single().SelectedClientNutritionPlanChoiceId);
+        Assert.AreEqual("Apple", log.CustomFoods.Single().Name);
+        log.Complete(DateTimeOffset.UtcNow);
+        Assert.Throws<InvalidOperationException>(() => log.AddCustomFood("Other", 1m, FoodQuantityUnit.Serving, 10m, 0m, 0m, 0m));
+    }
+
+    [TestMethod]
     public void EntitlementExpiryMidPlanIsRejected()
     {
         var clientId = Guid.NewGuid();

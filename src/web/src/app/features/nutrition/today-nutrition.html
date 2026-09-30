@@ -1,121 +1,379 @@
-<section class="page-heading">
-  <div>
-    <p class="eyebrow" i18n>Your meal plan</p>
-    <h1 i18n>Today's meals</h1>
-    <p i18n>For each meal, log the option you actually ate.</p>
-  </div>
-  <label class="date-picker"
-    ><span i18n>Date</span><input type="date" [(ngModel)]="selectedDate" (change)="changeDate()"
-  /></label>
-</section>
+<div class="nutrition-day tb-theme">
+  <header class="page-head">
+    <p class="eyebrow" i18n>YOUR DAILY PLAN</p>
+    <h1 i18n>Meals for the day</h1>
+    <p i18n>See what your coach planned, then log what you ate.</p>
+  </header>
 
-@if (error()) {
-  <p class="form-error" role="alert">{{ error() }}</p>
-}
-@if (notice()) {
-  <p class="form-success" role="status">{{ notice() }}</p>
-}
-
-@if (loading()) {
-  <p class="loading-row" i18n>Loading your meal plan...</p>
-} @else if (day(); as plan) {
-  <section class="target-card">
-    <div>
-      <span i18n>Daily target</span
-      ><strong>{{ plan.targetCalories | number: '1.0-0' }} kcal</strong>
-    </div>
-    <div>
-      <span i18n>Protein</span><strong>{{ plan.targetProtein | number: '1.0-1' }} g</strong>
-    </div>
-    <div>
-      <span i18n>Carbohydrate</span
-      ><strong>{{ plan.targetCarbohydrate | number: '1.0-1' }} g</strong>
-    </div>
-    <div>
-      <span i18n>Fat</span><strong>{{ plan.targetFat | number: '1.0-1' }} g</strong>
-    </div>
-  </section>
-
-  <p class="safety-notice" role="note">{{ plan.safetyNotice }}</p>
-
-  <section class="meal-list">
-    @for (slot of plan.slots; track slot.id) {
-      @if (draft(slot.id); as entry) {
-        <article class="meal-card" [class.saved]="!entry.dirty && slot.selectedChoiceId">
-          <header>
-            <div>
-              <span i18n>Meal {{ slot.order + 1 }}</span>
-              <h2>{{ slot.name }}</h2>
-            </div>
-            @if (!entry.dirty && slot.selectedChoiceId) {
-              <span class="status-badge success" i18n>Saved</span>
-            }
-          </header>
-          <label
-            ><span i18n>What did you eat?</span
-            ><select
-              [ngModel]="entry.choiceId"
-              (ngModelChange)="updateChoice(slot.id, $event)"
-              [disabled]="plan.logStatus === 'Completed' || entry.saving"
-            >
-              <option value="" i18n>Select a meal</option>
-              @for (choice of slot.choices; track choice.id) {
-                <option [value]="choice.id">
-                  {{ choice.recipeName }} · {{ choice.calories | number: '1.0-0' }} kcal
-                </option>
-              }
-            </select></label
-          >
-          <label
-            ><span i18n>Actual servings</span
-            ><input
-              type="number"
-              min="0.01"
-              step="0.01"
-              [ngModel]="entry.servings"
-              (ngModelChange)="updateServings(slot.id, $event)"
-              [disabled]="plan.logStatus === 'Completed' || entry.saving"
-          /></label>
-          @if (entry.error) {
-            <p class="form-error" role="alert">{{ entry.error }}</p>
-          }
-          <button
-            class="primary-button"
-            type="button"
-            (click)="save(slot)"
-            [disabled]="plan.logStatus === 'Completed' || !entry.dirty || entry.saving"
-          >
-            @if (entry.saving) {
-              Saving...
-            } @else {
-              Save meal
-            }
-          </button>
-        </article>
-      }
-    }
-  </section>
-
-  <section class="actual-card">
-    <h2 i18n>Concrete selected total</h2>
-    <strong>{{ plan.selectedCalories | number: '1.0-0' }} kcal</strong>
-    <span i18n
-      >Protein {{ plan.selectedProtein | number: '1.0-1' }} g · Carbohydrate
-      {{ plan.selectedCarbohydrate | number: '1.0-1' }} g · Fat
-      {{ plan.selectedFat | number: '1.0-1' }} g</span
+  <nav class="day-nav" aria-label="Choose a day" i18n-aria-label>
+    <button
+      type="button"
+      class="week-arrow"
+      (click)="shiftWeek(-7)"
+      aria-label="Previous week"
+      i18n-aria-label
     >
-    @if (plan.logStatus !== 'Completed') {
-      <button
-        class="primary-button"
-        type="button"
-        (click)="complete()"
-        [disabled]="completing()"
-        i18n
-      >
-        Complete nutrition day
-      </button>
+      ‹
+    </button>
+    <div class="day-strip">
+      @for (date of dates(); track $index) {
+        <button
+          type="button"
+          class="day"
+          [attr.aria-current]="activeDate() === date ? 'date' : null"
+          [attr.aria-label]="date | date: 'fullDate'"
+          (click)="changeDate(date)"
+        >
+          <span>{{ date | date: 'EEE' }}</span>
+          <strong>{{ date | date: 'd' }}</strong>
+        </button>
+      }
+    </div>
+    <button
+      type="button"
+      class="week-arrow"
+      (click)="shiftWeek(7)"
+      aria-label="Next week"
+      i18n-aria-label
+    >
+      ›
+    </button>
+  </nav>
+  <p class="selected-date">{{ activeDate() | date: 'fullDate' }}</p>
+
+  @if (notice(); as message) {
+    <p class="notice" role="status">{{ message }}</p>
+  }
+  @if (error(); as message) {
+    @if (day()) {
+      <p class="meal-error" role="alert">{{ message }}</p>
     } @else {
-      <span class="status-badge success" i18n>Day completed</span>
+      <div class="state-card" role="alert">
+        <h2 i18n>We couldn't load your meals</h2>
+        <p>{{ message }}</p>
+        <button type="button" class="secondary-action" (click)="retry()" i18n>Try again</button>
+      </div>
     }
-  </section>
-}
+  }
+
+  @if (loading()) {
+    <div class="skeleton" role="status" aria-label="Loading meals" i18n-aria-label>
+      <span></span><span></span><span></span>
+    </div>
+  } @else if (denial(); as reason) {
+    <section class="state-card" role="status">
+      <h2 i18n>Meals are closed for now</h2>
+      <p>{{ reason }}</p>
+    </section>
+  } @else if (missing()) {
+    <section class="state-card">
+      <h2 i18n>Your coach hasn't set a meal plan for this day yet</h2>
+      <p i18n>When they share one, your meals and targets will appear here.</p>
+    </section>
+  } @else if (day(); as plan) {
+    <section class="hero-card" aria-labelledby="daily-target">
+      <div class="hero-top">
+        <div>
+          <p class="eyebrow" i18n>THE DAILY PICTURE</p>
+          <h2 id="daily-target" i18n>Daily targets</h2>
+          <p i18n>{{ loggedCount() }} of {{ plan.slots.length }} planned meals logged</p>
+        </div>
+        @if (plan.logStatus === 'Completed') {
+          <span class="status" i18n>Day completed</span>
+        }
+      </div>
+      <div class="rings">
+        <app-progress-ring
+          [value]="plan.selectedCalories"
+          [max]="plan.targetCalories"
+          [label]="caloriesLabel"
+          [valueText]="
+            (plan.selectedCalories | number: '1.0-0') +
+            ' / ' +
+            (plan.targetCalories | number: '1.0-0') +
+            ' kcal'
+          "
+        />
+        <app-progress-ring
+          [value]="plan.selectedProtein"
+          [max]="plan.targetProtein"
+          [label]="proteinLabel"
+          [valueText]="
+            (plan.selectedProtein | number: '1.0-0') +
+            ' / ' +
+            (plan.targetProtein | number: '1.0-0') +
+            ' g'
+          "
+        />
+        <app-progress-ring
+          [value]="plan.selectedCarbohydrate"
+          [max]="plan.targetCarbohydrate"
+          [label]="carbsLabel"
+          [valueText]="
+            (plan.selectedCarbohydrate | number: '1.0-0') +
+            ' / ' +
+            (plan.targetCarbohydrate | number: '1.0-0') +
+            ' g'
+          "
+        />
+        <app-progress-ring
+          [value]="plan.selectedFat"
+          [max]="plan.targetFat"
+          [label]="fatLabel"
+          [valueText]="
+            (plan.selectedFat | number: '1.0-0') + ' / ' + (plan.targetFat | number: '1.0-0') + ' g'
+          "
+        />
+      </div>
+      <p class="hero-caption" i18n>
+        Logged amounts come from the meals and extra food you saved. Targets come from your coach's
+        plan.
+      </p>
+    </section>
+
+    <section class="meals" aria-labelledby="meals-heading">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow" i18n>ON YOUR PLATE</p>
+          <h2 id="meals-heading" i18n>Meals</h2>
+        </div>
+      </div>
+      @if (plan.slots.length === 0) {
+        <p class="state-card" i18n>Your coach hasn't added meals to this day yet.</p>
+      }
+      <div class="meal-list">
+        @for (slot of plan.slots; track slot.id) {
+          @if (draft(slot.id); as entry) {
+            <article class="meal-card" [class.saved]="!!slot.selectedChoiceId">
+              <div class="meal-head">
+                <span class="meal-number">{{ (slot.order + 1).toString().padStart(2, '0') }}</span>
+                <div>
+                  <p class="meal-kicker" i18n>MEAL {{ slot.order + 1 }}</p>
+                  <h3>{{ slot.name }}</h3>
+                </div>
+                @if (slot.selectedChoiceId) {
+                  <span class="status" i18n>Logged</span>
+                }
+              </div>
+              @if (displayChoice(slot); as choice) {
+                <div class="meal-body">
+                  <strong>{{ choice.recipeName }}</strong>
+                  <span i18n
+                    >{{
+                      slot.selectedChoiceId
+                        ? (slot.actualServings | number: '1.0-2')
+                        : (choice.servings | number: '1.0-2')
+                    }}
+                    servings · {{ choice.calories | number: '1.0-0' }} kcal planned</span
+                  >
+                </div>
+              } @else {
+                <p i18n>Your coach hasn't added an option for this meal yet.</p>
+              }
+
+              @if (entry.error) {
+                <p class="meal-error" role="alert">{{ entry.error }}</p>
+              }
+              @if (isEditing(slot.id)) {
+                <div class="meal-editor">
+                  <label
+                    ><span i18n>What did you eat?</span>
+                    <select
+                      [ngModel]="entry.choiceId"
+                      (ngModelChange)="updateChoice(slot.id, $event)"
+                      [disabled]="plan.logStatus === 'Completed' || entry.saving"
+                    >
+                      @for (choice of slot.choices; track choice.id) {
+                        <option [value]="choice.id">
+                          {{ choice.recipeName }} · {{ choice.calories | number: '1.0-0' }} kcal
+                        </option>
+                      }
+                    </select>
+                  </label>
+                  <label
+                    ><span i18n>Actual servings</span>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      [ngModel]="entry.servings"
+                      (ngModelChange)="updateServings(slot.id, $event)"
+                      [disabled]="plan.logStatus === 'Completed' || entry.saving"
+                    />
+                  </label>
+                  <div class="meal-actions">
+                    <button
+                      type="button"
+                      class="primary-action"
+                      (click)="save(slot)"
+                      [disabled]="entry.saving || !entry.dirty"
+                      i18n
+                    >
+                      Save meal
+                    </button>
+                    <button
+                      type="button"
+                      class="text-action"
+                      (click)="edit(slot.id)"
+                      [disabled]="entry.saving"
+                      i18n
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              } @else if (plan.logStatus !== 'Completed' && slot.choices.length) {
+                <div class="meal-actions">
+                  @if (!slot.selectedChoiceId) {
+                    <button
+                      type="button"
+                      class="primary-action"
+                      (click)="save(slot)"
+                      [disabled]="entry.saving"
+                      i18n
+                    >
+                      Ate as planned
+                    </button>
+                  }
+                  <button type="button" class="text-action" (click)="edit(slot.id)">
+                    @if (slot.selectedChoiceId) {
+                      <ng-container i18n>Change meal</ng-container>
+                    } @else {
+                      <ng-container i18n>Swap or adjust</ng-container>
+                    }
+                  </button>
+                </div>
+              }
+            </article>
+          }
+        }
+      </div>
+    </section>
+
+    <section class="extras" aria-labelledby="extras-heading">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow" i18n>OUTSIDE THE PLAN</p>
+          <h2 id="extras-heading" i18n>Extra food</h2>
+        </div>
+        @if (plan.logStatus !== 'Completed') {
+          <button
+            type="button"
+            class="secondary-action"
+            (click)="customOpen.set(!customOpen())"
+            i18n
+          >
+            Add food
+          </button>
+        }
+      </div>
+      @if (plan.customFoods.length) {
+        <ul class="extra-list">
+          @for (food of plan.customFoods; track food.id) {
+            <li>
+              <strong>{{ food.name }}</strong>
+              <span i18n
+                >{{ food.amount | number: '1.0-2' }}
+                {{ food.unit === 'Gram' ? 'g' : food.unit === 'Millilitre' ? 'ml' : 'servings' }} ·
+                {{ food.calories | number: '1.0-0' }} kcal logged</span
+              >
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="extra-empty" i18n>Food you log outside your coach's plan will appear here.</p>
+      }
+      @if (customOpen() && plan.logStatus !== 'Completed') {
+        <form class="custom-form" (ngSubmit)="addCustomFood()">
+          <p i18n>
+            Enter nutrition for the amount you ate. These are your own values, separate from your
+            coach's plan.
+          </p>
+          <label
+            ><span i18n>Food name</span
+            ><input type="text" name="foodName" [(ngModel)]="customName" maxlength="200" required
+          /></label>
+          <div class="custom-grid">
+            <label
+              ><span i18n>Amount eaten</span
+              ><input
+                type="number"
+                name="amount"
+                [(ngModel)]="customAmount"
+                min="0.0001"
+                step="any"
+                required
+            /></label>
+            <label
+              ><span i18n>Unit</span
+              ><select name="unit" [(ngModel)]="customUnit">
+                <option value="Gram" i18n>g</option>
+                <option value="Millilitre" i18n>ml</option>
+                <option value="Serving" i18n>servings</option>
+              </select></label
+            >
+            <label
+              ><span i18n>Calories (kcal)</span
+              ><input
+                type="number"
+                name="calories"
+                [(ngModel)]="customCalories"
+                min="0"
+                step="any"
+                required
+            /></label>
+            <label
+              ><span i18n>Protein (g)</span
+              ><input
+                type="number"
+                name="protein"
+                [(ngModel)]="customProtein"
+                min="0"
+                step="any"
+                required
+            /></label>
+            <label
+              ><span i18n>Carbs (g)</span
+              ><input
+                type="number"
+                name="carbohydrate"
+                [(ngModel)]="customCarbohydrate"
+                min="0"
+                step="any"
+                required
+            /></label>
+            <label
+              ><span i18n>Fat (g)</span
+              ><input type="number" name="fat" [(ngModel)]="customFat" min="0" step="any" required
+            /></label>
+          </div>
+          @if (customError(); as message) {
+            <p class="meal-error" role="alert">{{ message }}</p>
+          }
+          <button type="submit" class="primary-action" [disabled]="customBusy()" i18n>
+            Log extra food
+          </button>
+        </form>
+      }
+    </section>
+
+    @if ((plan.slots.length || plan.customFoods.length) && plan.logStatus !== 'Completed') {
+      <section class="finish-card">
+        <div>
+          <h2 i18n>Finished logging this day?</h2>
+          <p i18n>Save any changes before closing the day. You can't edit a completed day.</p>
+        </div>
+        <button
+          type="button"
+          class="secondary-action"
+          (click)="complete()"
+          [disabled]="completing()"
+          i18n
+        >
+          Complete day
+        </button>
+      </section>
+    }
+    <p class="safety-notice" role="note">{{ plan.safetyNotice }}</p>
+  }
+</div>

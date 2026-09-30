@@ -624,8 +624,9 @@ public sealed partial class Phase3TrainingWorkflowTests
     private sealed record Phase4Recipe(Guid Id, Guid VersionId);
     private sealed record Phase4MealPlan(Guid Id, Guid VersionId);
     private sealed record Phase4Calculation(Guid Id);
-    private sealed record Phase4Day(Guid PlanId, Guid PlanDayId, Guid? DailyLogId, uint? DailyLogVersion, string? LogStatus, decimal SelectedCalories, Phase4Slot[] Slots);
-    private sealed record Phase4Slot(Guid Id, Phase4Choice[] Choices);
+    private sealed record Phase4Day(Guid PlanId, Guid PlanDayId, Guid? DailyLogId, uint? DailyLogVersion, string? LogStatus, decimal SelectedCalories, Phase4Slot[] Slots, Phase4CustomFood[] CustomFoods);
+    private sealed record Phase4CustomFood(Guid Id, string Name, decimal Amount, string Unit, decimal Calories);
+    private sealed record Phase4Slot(Guid Id, Guid? SelectedChoiceId, Phase4Choice[] Choices);
     private sealed record Phase4Choice(Guid Id, decimal Calories);
     private sealed record Phase4PlanSummary(Guid Id, DateOnly StartDate, DateOnly EndDateExclusive, string Status, uint Version);
     private sealed record Phase4ImportedFood(Guid Id, Phase4ImportedFoodVersion CurrentVersion);
