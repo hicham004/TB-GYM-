@@ -244,6 +244,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<DailyNutritionCustomFood> DailyNutritionCustomFoods => Set<DailyNutritionCustomFood>();
 
+    public DbSet<DailyNutritionCustomFoodReversal> DailyNutritionCustomFoodReversals => Set<DailyNutritionCustomFoodReversal>();
+
     public DbSet<NutritionPlanLifecycleEvent> NutritionPlanLifecycleEvents => Set<NutritionPlanLifecycleEvent>();
 
     public DbSet<AllergenConflictRecord> AllergenConflictRecords => Set<AllergenConflictRecord>();
@@ -894,6 +896,8 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<CookingFactorRecord>("Cooking factors are versioned and immutable.");
         RejectAppendOnlyMutations<NutritionCalculationSnapshot>("Nutrition calculation snapshots are append-only.");
         RejectAppendOnlyMutations<MacroOverrideAudit>("Macro override audits are append-only.");
+        RejectAppendOnlyMutations<DailyNutritionCustomFood>("Custom food entries are append-only.");
+        RejectAppendOnlyMutations<DailyNutritionCustomFoodReversal>("Custom food reversals are append-only.");
         RejectAppendOnlyMutations<AllergenConflictRecord>("Allergen conflict records are append-only.");
         RejectAppendOnlyMutations<BodyweightCorrection>("Bodyweight correction history is append-only.");
         RejectAppendOnlyMutations<BodyweightObservationVoid>("Bodyweight void history is append-only.");

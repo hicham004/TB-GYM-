@@ -2,6 +2,7 @@ using TB.Gym.Modules.CheckIns;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Messaging;
+using TB.Gym.Modules.Nutrition;
 using TB.Gym.Modules.Progress;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Training;
@@ -35,6 +36,7 @@ internal sealed partial class DemoWorkspaceGenerator
         PlanMeasurements(state, random);
         PlanCheckIns(state, random);
         PlanMessages(state, random);
+        if (client.Key is "maya" or "sara") PlanNutrition(state);
 
         if (client.PausedDay is { } pausedDay)
         {

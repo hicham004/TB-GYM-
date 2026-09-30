@@ -55,7 +55,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R2.2 | **Workout player** (M2), with backend pre-fill from last time, the versioned PR rule and the finish summary | §2, plus backend tests | Done · 2026-09-30 · 3124581 |
 | R2.3 | **Progress** (M5) and the chart components | §2 | Done · 2026-09-30 · 3124581 |
 | R2.4a | **Nutrition day** (M4): day strip, macro rings, meal cards, planned and alternative logging, and client-entered extra food | Web/API and PostgreSQL tests, axe, reflow, 390/1440 screenshots | Done · 2026-09-30 |
-| R2.4b | **Nutrition demo data:** assigned meal plan for Atlas plus screenshot review on that workspace; correction for mistaken extra-food entries | §2 on the demo workspace | To do |
+| R2.4b | **Nutrition demo data:** assigned meal plan for Atlas plus screenshot review on that workspace; correction for mistaken extra-food entries | §2 on the demo workspace | Done · 2026-09-30 |
 | R2.4c | **Check-in** (M6) | §2 | To do |
 | R2.5 | **Messages** (M7, shared chat), **Training** (M3), **Me** (M8), installable app | §2 | To do |
 | R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | To do |
@@ -82,7 +82,7 @@ of the implemented R1.3 screens before production rollout.
 
 *(Sessions add items here instead of building them.)*
 
-- **Demo data gaps (from R0.1).** The demo has no meal plans (R2.4b), no progress photos
+- **Demo data gaps (from R0.1).** The demo has no progress photos
   or coach/exercise media (the real M1 uses coach initials until a profile photo source exists; use
   licensed images, never AI-made people), and no former client. Add each when its screen is built.
 - **Planned workout duration (from R2.1).** Training sessions do not store one, so the Today hero

@@ -156,6 +156,11 @@ public static class NutritionEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.AddOwnCustomFoodAsync(request, token));
         }).WithName("AddOwnNutritionCustomFood").Produces<ClientNutritionDayView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status409Conflict).Produces(StatusCodes.Status403Forbidden);
+        client.MapPost("/custom-foods/{foodId:guid}/reverse", async (Guid foodId, ReverseNutritionCustomFoodRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.ReverseOwnCustomFoodAsync(foodId, request, token));
+        }).WithName("ReverseOwnNutritionCustomFood").Produces<ClientNutritionDayView>().ProducesProblem(StatusCodes.Status409Conflict).Produces(StatusCodes.Status403Forbidden).Produces(StatusCodes.Status404NotFound);
         client.MapPost("/logs/{dailyLogId:guid}/complete", async (Guid dailyLogId, CompleteNutritionLogRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
             await antiforgery.ValidateRequestAsync(context);

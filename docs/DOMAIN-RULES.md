@@ -452,6 +452,8 @@ zero during import. Raw-to-cooked conversion requires compatible, sourced `Yield
 calories/macros for that amount. It is not a coach-approved recipe or a change to the assigned
 meal snapshot. It contributes to consumed totals only. Its tenant-scoped entry is append-only and
 cannot be added after the day is completed (ADR 0032).
+A mistaken extra-food entry can be reversed once before day completion. The original entry and its
+actor/time-stamped reversal remain in history; consumed totals exclude the reversed entry.
 
 ## 7. Bodyweight and progress
 

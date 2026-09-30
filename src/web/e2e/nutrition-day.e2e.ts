@@ -142,6 +142,12 @@ async function openNutrition(page: Page, width: number, height: number) {
         state.dailyLogVersion++;
         return json(route, 200, state);
       },
+      'POST /api/nutrition/me/custom-foods/extra-1/reverse': (route: Route) => {
+        state.selectedCalories -= state.customFoods[0].calories;
+        state.customFoods.splice(0, 1);
+        state.dailyLogVersion++;
+        return json(route, 200, state);
+      },
     },
   });
   await page.goto('/nutrition/today');
@@ -178,6 +184,9 @@ test('Nutrition day at 390px shows the plan and logs a meal in one tap', async (
   await page.getByLabel('Fat (g)').fill('0');
   await page.getByRole('button', { name: 'Log extra food' }).click();
   await expect(page.getByText('Apple')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove Apple' }).click();
+  await expect(page.getByText('Apple')).toHaveCount(0);
+  await expect(page.getByText("Extra food removed from today's totals.")).toBeVisible();
 });
 
 test('Nutrition day at 1440px reflows at 200% text', async ({ page }) => {

@@ -350,6 +350,7 @@ public sealed partial class GymDbContext
             entity.HasOne<ClientNutritionPlanDay>().WithMany().HasForeignKey(item => new { item.TenantId, item.ClientNutritionPlanDayId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(item => item.Entries).WithOne().HasForeignKey(item => new { item.TenantId, item.DailyNutritionLogId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(item => item.CustomFoods).WithOne().HasForeignKey(item => new { item.TenantId, item.DailyNutritionLogId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(item => item.CustomFoodReversals).WithOne().HasForeignKey(item => new { item.TenantId, item.DailyNutritionLogId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             ConfigureTenantEntity(entity);
         });
 
@@ -363,7 +364,20 @@ public sealed partial class GymDbContext
             ConfigureMacroPrecision(entity);
             entity.Property(item => item.Calories).HasPrecision(18, 6);
             entity.HasIndex(item => new { item.TenantId, item.DailyNutritionLogId, item.CreatedAtUtc });
+            entity.HasAlternateKey(item => new { item.TenantId, item.DailyNutritionLogId, item.Id });
             entity.ToTable(table => table.HasCheckConstraint("CK_DailyNutritionCustomFoods_Values", "\"Amount\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0"));
+            ConfigureTenantEntity(entity);
+        });
+
+        builder.Entity<DailyNutritionCustomFoodReversal>(entity =>
+        {
+            entity.ToTable("DailyNutritionCustomFoodReversals", "nutrition");
+            entity.HasKey(item => item.Id);
+            entity.HasIndex(item => new { item.TenantId, item.CustomFoodId }).IsUnique();
+            entity.HasOne<DailyNutritionCustomFood>().WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.DailyNutritionLogId, item.CustomFoodId })
+                .HasPrincipalKey(item => new { item.TenantId, item.DailyNutritionLogId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             ConfigureTenantEntity(entity);
         });
 

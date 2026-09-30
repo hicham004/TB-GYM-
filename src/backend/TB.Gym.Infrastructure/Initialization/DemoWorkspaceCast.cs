@@ -35,7 +35,7 @@ internal static class DemoWorkspaceCast
                 new(DemoOffer.Coaching12Weeks, "12 weeks", 12, 330m),
                 new(DemoOffer.Coaching4Weeks, "4 weeks", 4, 130m),
             ],
-            [CoachingFeature.Training, CoachingFeature.CheckIns, CoachingFeature.Messaging]),
+            [CoachingFeature.Training, CoachingFeature.Nutrition, CoachingFeature.CheckIns, CoachingFeature.Messaging]),
         new(
             "Strength Program",
             "Powerlifting-style programming with technique feedback on your lifts.",

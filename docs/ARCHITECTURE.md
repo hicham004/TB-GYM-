@@ -502,6 +502,8 @@ R2.4a keeps client-entered extra food in a separate Nutrition log table, linked 
 ID. The day read returns it beside planned slots and includes it in consumed totals; the assigned
 meal snapshot and targets remain unchanged. The add command checks the current client and server
 feature access, uses the daily log version, and freezes with the completed day (ADR 0032).
+R2.4b adds tenant-bound, append-only reversals for mistaken extra foods. The client day projection
+and totals omit reversed foods, while the original entry and actor/time-stamped reversal persist.
 
 Step 3B2 (ADR 0029) adds `subscriptions."RenewalRequests"` (append-only, one per client in any 7
 days by exclusion constraint) and `IClientRenewalService` in the Subscriptions module, implemented in

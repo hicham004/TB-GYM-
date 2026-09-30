@@ -5,6 +5,7 @@ using TB.Gym.Modules.CheckIns;
 using TB.Gym.Modules.ExerciseLibrary;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
+using TB.Gym.Modules.Nutrition;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Training;
@@ -44,6 +45,7 @@ internal sealed partial class DemoWorkspaceGenerator
     private readonly DemoWorkspaceTally tally = new();
     private Guid tenantId;
     private Guid checkInFormVersionId;
+    private Guid mealPlanVersionId;
 
     public DemoWorkspaceGenerator(
         IServiceProvider services,
@@ -85,6 +87,7 @@ internal sealed partial class DemoWorkspaceGenerator
         timeline.At(calendar.At(day, 10, 40), "create the products", CreateProductsAsync);
         timeline.At(calendar.At(day, 11, 0), "publish the check-in form", PublishCheckInFormAsync);
         timeline.At(calendar.At(day, 11, 30), "build the programs", BuildProgramsAsync);
+        timeline.At(calendar.At(day, 12, 0), "build the meal plan", BuildMealPlanAsync);
 
         var acceptances = new[] { calendar.At(day + 1, 18, 10), calendar.At(day + 2, 9, 30) };
         for (var index = 0; index < Coaches.Count; index++)

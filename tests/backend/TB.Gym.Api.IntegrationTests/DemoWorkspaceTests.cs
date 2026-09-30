@@ -12,6 +12,7 @@ using TB.Gym.Modules.CheckIns;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Messaging;
+using TB.Gym.Modules.Nutrition;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Training;
@@ -153,6 +154,10 @@ public sealed class DemoWorkspaceTests
                 .AnyAsync(item => !answered.Contains(item.Id)));
 
             Assert.IsGreaterThan(40, await db.Messages.IgnoreQueryFilters().CountAsync(item => item.TenantId == tenant.Id));
+            Assert.AreEqual(2, await db.ClientNutritionPlans.IgnoreQueryFilters()
+                .CountAsync(item => item.TenantId == tenant.Id && item.Status == ClientNutritionPlanStatus.Active));
+            Assert.AreEqual(2, await db.DailyNutritionLogs.IgnoreQueryFilters()
+                .CountAsync(item => item.TenantId == tenant.Id && item.Date == today));
         }
 
         // What people see, through the same services and scoping the API uses.
@@ -174,6 +179,15 @@ public sealed class DemoWorkspaceTests
         var workout = mayaToday.Workouts.Single();
         Assert.AreEqual("Lower A", workout.Name, "The hero client has a workout waiting today.");
         Assert.IsNull(workout.Status);
+
+        var mayaMeals = await requests.AsAsync<INutritionApplicationService, ClientNutritionDayView?>(
+            new DemoActor(people.MayaId, people.TenantId),
+            service => service.GetOwnDayAsync(today, CancellationToken.None));
+        Assert.IsNotNull(mayaMeals);
+        Assert.HasCount(4, mayaMeals.Slots);
+        Assert.AreEqual(1, mayaMeals.Slots.Count(item => item.SelectedChoiceId is not null));
+        Assert.AreEqual("Afternoon coffee", mayaMeals.CustomFoods.Single().Name);
+        Assert.IsGreaterThan(0m, mayaMeals.SelectedCalories);
 
         using var again = new StringWriter();
         Assert.AreEqual(2, await DemoWorkspaceCommand.RunAsync(

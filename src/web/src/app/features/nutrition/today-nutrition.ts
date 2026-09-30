@@ -48,6 +48,7 @@ export class TodayNutrition {
   protected readonly editingSlotIds = signal<Set<string>>(new Set());
   protected readonly customOpen = signal(false);
   protected readonly customBusy = signal(false);
+  protected readonly reversingFoodId = signal<string | null>(null);
   protected readonly customError = signal<string | null>(null);
   protected readonly selectedDate = signal('');
   protected readonly activeDate = computed(
@@ -137,6 +138,14 @@ export class TodayNutrition {
     return slot.choices.find((choice) => choice.id === slot.selectedChoiceId) ?? slot.choices[0];
   }
 
+  protected removeFoodLabel(name: string): string {
+    return $localize`Remove ${name}:foodName:`;
+  }
+
+  protected servingUnit(amount: number | null): string {
+    return amount === 1 ? $localize`serving` : $localize`servings`;
+  }
+
   protected async addCustomFood(): Promise<void> {
     if (this.customBusy()) return;
     return this.scope.run('customFood', async (owner) => {
@@ -186,6 +195,36 @@ export class TodayNutrition {
         this.customError.set(apiErrorMessage(error, $localize`This food could not be saved.`));
       } finally {
         if (owner.current && this.ownsDate(dateOwner)) this.customBusy.set(false);
+      }
+    });
+  }
+
+  protected async reverseCustomFood(foodId: string): Promise<void> {
+    if (this.reversingFoodId() || this.customBusy()) return;
+    return this.scope.run(`reverseFood:${foodId}`, async (owner) => {
+      const day = this.day();
+      if (!day || day.logStatus === 'Completed' || day.logVersion === null) return;
+      const dateOwner = this.captureDateOwner();
+      this.reversingFoodId.set(foodId);
+      this.error.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        if (!this.ownsDate(dateOwner)) return;
+        const updated = await owner.wait(
+          firstValueFrom(
+            this.api.reverseMyNutritionCustomFood(foodId, { dailyLogVersion: day.logVersion }),
+          ),
+        );
+        if (!this.ownsDate(dateOwner)) return;
+        this.day.set(updated);
+        this.drafts.reconcile(updated);
+        this.bumpDrafts();
+        this.notice.set($localize`Extra food removed from today's totals.`);
+      } catch (error) {
+        if (!owner.current || !this.ownsDate(dateOwner)) return;
+        this.error.set(apiErrorMessage(error, $localize`This food could not be removed.`));
+      } finally {
+        if (owner.current && this.ownsDate(dateOwner)) this.reversingFoodId.set(null);
       }
     });
   }
@@ -253,6 +292,7 @@ export class TodayNutrition {
         day.logVersion === null ||
         this.drafts.values().some((item) => item.dirty || item.saving) ||
         this.customBusy() ||
+        this.reversingFoodId() !== null ||
         (this.customOpen() && this.customName.trim().length > 0)
       ) {
         this.error.set($localize`Save edited meals and extra food before completing the day.`);
@@ -358,6 +398,7 @@ export class TodayNutrition {
     this.editingSlotIds.set(new Set());
     this.customOpen.set(false);
     this.customBusy.set(false);
+    this.reversingFoodId.set(null);
     this.customError.set(null);
     this.clearCustomFood();
     this.bumpDrafts();

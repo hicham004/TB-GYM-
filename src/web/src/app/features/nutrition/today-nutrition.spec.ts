@@ -117,6 +117,9 @@ async function render(
               }),
             ),
           ),
+          reverseMyNutritionCustomFood: vi.fn(() =>
+            of(day({ selectedCalories: 0, logVersion: 4, customFoods: [] })),
+          ),
           completeMyNutritionLog: vi.fn(() => of(day({ logStatus: 'Completed', logVersion: 4 }))),
           ...api,
         },
@@ -403,6 +406,35 @@ describe('TodayNutrition', () => {
     expect(host.textContent).toContain('Apple');
     expect(host.textContent).toContain('0 of 1 planned meals logged');
     expect(host.textContent).toContain('80 / 2,400 kcal');
+  });
+
+  it('removes a mistaken extra food from the visible day totals', async () => {
+    const withExtra = day({
+      selectedCalories: 80,
+      customFoods: [
+        {
+          id: 'extra-1',
+          name: 'Apple',
+          amount: 150,
+          unit: 'Gram',
+          calories: 80,
+          protein: 0,
+          carbohydrate: 21,
+          fat: 0,
+        },
+      ],
+    });
+    const { fixture, host, api } = await render({}, withExtra);
+
+    press(host, 'Remove');
+    await settle(fixture);
+
+    expect(api.reverseMyNutritionCustomFood).toHaveBeenCalledWith('extra-1', {
+      dailyLogVersion: 2,
+    });
+    expect(host.textContent).not.toContain('80 / 2,400 kcal');
+    expect(host.textContent).not.toContain('Apple');
+    expect(host.textContent).toContain('Extra food removed');
   });
 
   it('ignores a date-A save that resolves after date B is displayed', async () => {

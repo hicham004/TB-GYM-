@@ -226,6 +226,28 @@ public sealed class Phase4NutritionDomainTests
     }
 
     [TestMethod]
+    public void ReversingExtraFoodPreservesTheOriginalAndRemovesOnlyItsConsumedValues()
+    {
+        var log = DailyNutritionLog.Start(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 8, 22));
+        log.Record(Guid.NewGuid(), Guid.NewGuid(), "Planned meal", 1m, 500m, 30m, 60m, 15m);
+        var apple = log.AddCustomFood("Apple", 150m, FoodQuantityUnit.Gram, 80m, 0m, 21m, 0m);
+        var actor = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        var reversal = log.ReverseCustomFood(apple.Id, actor, now);
+
+        Assert.AreEqual(500m, log.SelectedCalories);
+        Assert.AreEqual(60m, log.SelectedCarbohydrateGrams);
+        Assert.AreEqual(apple.Id, log.CustomFoods.Single().Id);
+        Assert.AreEqual(apple.Id, reversal.CustomFoodId);
+        Assert.AreEqual(actor, reversal.ActorUserId);
+        Assert.Throws<InvalidOperationException>(() => log.ReverseCustomFood(apple.Id, actor, now));
+        Assert.Throws<ArgumentException>(() => log.ReverseCustomFood(Guid.NewGuid(), actor, now));
+        log.Complete(now);
+        Assert.Throws<InvalidOperationException>(() => log.ReverseCustomFood(apple.Id, actor, now));
+    }
+
+    [TestMethod]
     public void EntitlementExpiryMidPlanIsRejected()
     {
         var clientId = Guid.NewGuid();

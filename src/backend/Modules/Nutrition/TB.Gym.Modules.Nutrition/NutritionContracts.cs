@@ -28,6 +28,7 @@ public interface INutritionApplicationService
     Task<ClientNutritionDayView?> GetOwnDayAsync(DateOnly? localDate, CancellationToken cancellationToken);
     Task<NutritionCommandResult> RecordOwnChoiceAsync(RecordNutritionChoiceRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> AddOwnCustomFoodAsync(AddNutritionCustomFoodRequest request, CancellationToken cancellationToken);
+    Task<NutritionCommandResult> ReverseOwnCustomFoodAsync(Guid foodId, ReverseNutritionCustomFoodRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CompleteOwnLogAsync(Guid dailyLogId, CompleteNutritionLogRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> GenerateAiDraftAsync(GenerateAiMealDraftRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> ReviewAiDraftAsync(Guid operationId, ReviewAiMealDraftRequest request, CancellationToken cancellationToken);
@@ -224,6 +225,8 @@ public sealed record ClientNutritionDayView(
 public sealed record RecordNutritionChoiceRequest(Guid PlanDayId, Guid PlanSlotId, Guid ChoiceId, decimal ActualServings, uint? DailyLogVersion);
 
 public sealed record AddNutritionCustomFoodRequest(Guid PlanDayId, string Name, decimal Amount, FoodQuantityUnit Unit, decimal Calories, decimal ProteinGrams, decimal CarbohydrateGrams, decimal FatGrams, uint? DailyLogVersion);
+
+public sealed record ReverseNutritionCustomFoodRequest(uint DailyLogVersion);
 
 public sealed record CompleteNutritionLogRequest(uint Version);
 

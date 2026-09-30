@@ -1104,6 +1104,7 @@ public sealed class DailyNutritionLog : TenantEntity
 {
     private readonly List<DailyNutritionLogEntry> entries = [];
     private readonly List<DailyNutritionCustomFood> customFoods = [];
+    private readonly List<DailyNutritionCustomFoodReversal> customFoodReversals = [];
 
     private DailyNutritionLog()
     {
@@ -1126,10 +1127,12 @@ public sealed class DailyNutritionLog : TenantEntity
     public DateTimeOffset? CompletedAtUtc { get; private set; }
     public IReadOnlyCollection<DailyNutritionLogEntry> Entries => entries;
     public IReadOnlyCollection<DailyNutritionCustomFood> CustomFoods => customFoods;
-    public decimal SelectedCalories => entries.Sum(item => item.Calories) + customFoods.Sum(item => item.Calories);
-    public decimal SelectedProteinGrams => entries.Sum(item => item.ProteinGrams) + customFoods.Sum(item => item.ProteinGrams);
-    public decimal SelectedCarbohydrateGrams => entries.Sum(item => item.CarbohydrateGrams) + customFoods.Sum(item => item.CarbohydrateGrams);
-    public decimal SelectedFatGrams => entries.Sum(item => item.FatGrams) + customFoods.Sum(item => item.FatGrams);
+    public IReadOnlyCollection<DailyNutritionCustomFoodReversal> CustomFoodReversals => customFoodReversals;
+    private IEnumerable<DailyNutritionCustomFood> ActiveCustomFoods => customFoods.Where(food => customFoodReversals.All(reversal => reversal.CustomFoodId != food.Id));
+    public decimal SelectedCalories => entries.Sum(item => item.Calories) + ActiveCustomFoods.Sum(item => item.Calories);
+    public decimal SelectedProteinGrams => entries.Sum(item => item.ProteinGrams) + ActiveCustomFoods.Sum(item => item.ProteinGrams);
+    public decimal SelectedCarbohydrateGrams => entries.Sum(item => item.CarbohydrateGrams) + ActiveCustomFoods.Sum(item => item.CarbohydrateGrams);
+    public decimal SelectedFatGrams => entries.Sum(item => item.FatGrams) + ActiveCustomFoods.Sum(item => item.FatGrams);
 
     public static DailyNutritionLog Start(Guid tenantId, Guid clientProfileId, Guid clientNutritionPlanId, Guid clientNutritionPlanDayId, DateOnly date) =>
         new(tenantId, clientProfileId, clientNutritionPlanId, clientNutritionPlanDayId, date);
@@ -1169,9 +1172,23 @@ public sealed class DailyNutritionLog : TenantEntity
         return food;
     }
 
+    public DailyNutritionCustomFoodReversal ReverseCustomFood(Guid foodId, Guid actorUserId, DateTimeOffset now)
+    {
+        if (Status == DailyNutritionLogStatus.Completed)
+            throw new InvalidOperationException("A completed daily nutrition log is immutable.");
+        if (customFoods.All(food => food.Id != foodId))
+            throw new ArgumentException("The extra food was not found on this day.", nameof(foodId));
+        if (customFoodReversals.Any(reversal => reversal.CustomFoodId == foodId))
+            throw new InvalidOperationException("This extra food was already removed.");
+
+        var reversal = DailyNutritionCustomFoodReversal.Create(TenantId, Id, foodId, actorUserId, now);
+        customFoodReversals.Add(reversal);
+        return reversal;
+    }
+
     public void Complete(DateTimeOffset now)
     {
-        if (Status == DailyNutritionLogStatus.Completed || (entries.Count == 0 && customFoods.Count == 0))
+        if (Status == DailyNutritionLogStatus.Completed || (entries.Count == 0 && !ActiveCustomFoods.Any()))
         {
             throw new InvalidOperationException("Only a non-empty in-progress log can be completed.");
         }
@@ -1179,6 +1196,27 @@ public sealed class DailyNutritionLog : TenantEntity
         Status = DailyNutritionLogStatus.Completed;
         CompletedAtUtc = now;
     }
+}
+
+public sealed class DailyNutritionCustomFoodReversal : TenantEntity
+{
+    private DailyNutritionCustomFoodReversal() { }
+
+    private DailyNutritionCustomFoodReversal(Guid tenantId, Guid logId, Guid foodId, Guid actorUserId, DateTimeOffset occurredAtUtc) : base(tenantId)
+    {
+        DailyNutritionLogId = logId;
+        CustomFoodId = foodId;
+        ActorUserId = actorUserId;
+        OccurredAtUtc = occurredAtUtc;
+    }
+
+    public Guid DailyNutritionLogId { get; private set; }
+    public Guid CustomFoodId { get; private set; }
+    public Guid ActorUserId { get; private set; }
+    public DateTimeOffset OccurredAtUtc { get; private set; }
+
+    internal static DailyNutritionCustomFoodReversal Create(Guid tenantId, Guid logId, Guid foodId, Guid actorUserId, DateTimeOffset occurredAtUtc) =>
+        new(tenantId, logId, foodId, actorUserId, occurredAtUtc);
 }
 
 public sealed class DailyNutritionCustomFood : TenantEntity

@@ -297,6 +297,10 @@ select:focus-visible {
   color: var(--tb-muted);
   font-size: 0.85rem;
 }
+.extra-list button {
+  justify-self: start;
+  min-block-size: 2.75rem;
+}
 .custom-form {
   display: grid;
   gap: 0.9rem;

@@ -2420,6 +2420,10 @@ export type ResumeEnrollmentRequest = {
   version: number | string;
 };
 
+export type ReverseNutritionCustomFoodRequest = {
+  dailyLogVersion: number | string;
+};
+
 export type ReviewAiMealDraftRequest = {
   approved: boolean;
   reason: string;
@@ -6488,6 +6492,43 @@ export type AddOwnNutritionCustomFoodResponses = {
 
 export type AddOwnNutritionCustomFoodResponse =
   AddOwnNutritionCustomFoodResponses[keyof AddOwnNutritionCustomFoodResponses];
+
+export type ReverseOwnNutritionCustomFoodData = {
+  body: ReverseNutritionCustomFoodRequest;
+  path: {
+    foodId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/me/custom-foods/{foodId}/reverse';
+};
+
+export type ReverseOwnNutritionCustomFoodErrors = {
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ReverseOwnNutritionCustomFoodError =
+  ReverseOwnNutritionCustomFoodErrors[keyof ReverseOwnNutritionCustomFoodErrors];
+
+export type ReverseOwnNutritionCustomFoodResponses = {
+  /**
+   * OK
+   */
+  200: ClientNutritionDayView;
+};
+
+export type ReverseOwnNutritionCustomFoodResponse =
+  ReverseOwnNutritionCustomFoodResponses[keyof ReverseOwnNutritionCustomFoodResponses];
 
 export type CompleteOwnNutritionLogData = {
   body: CompleteNutritionLogRequest;

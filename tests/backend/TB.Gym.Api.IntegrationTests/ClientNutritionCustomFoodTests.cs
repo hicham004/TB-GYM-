@@ -58,8 +58,43 @@ public sealed partial class Phase3TrainingWorkflowTests
         await RefreshCsrfAsync(otherClient);
         Assert.AreEqual(HttpStatusCode.NotFound, (await otherClient.PostAsJsonAsync("/api/nutrition/me/custom-foods", command)).StatusCode);
 
+        var foodId = added.CustomFoods.Single().Id;
+        var reversePath = $"/api/nutrition/me/custom-foods/{foodId}/reverse";
+        var beforeReverse = await client.GetFromJsonAsync<Phase4Day>("/api/nutrition/me/day?localDate=2026-08-22")
+            ?? throw new AssertFailedException("Nutrition day was empty before reversal.");
+        Assert.AreEqual(added.DailyLogVersion, beforeReverse.DailyLogVersion);
+        await RefreshCsrfAsync(otherClient);
+        Assert.AreEqual(HttpStatusCode.NotFound,
+            (await otherClient.PostAsJsonAsync(reversePath, new { dailyLogVersion = added.DailyLogVersion })).StatusCode);
         await RefreshCsrfAsync(client);
-        await AssertStatusAsync(await client.PostAsJsonAsync($"/api/nutrition/me/logs/{added.DailyLogId}/complete", new { version = added.DailyLogVersion }), HttpStatusCode.OK);
+        var reversedResponse = await client.PostAsJsonAsync(reversePath, new { dailyLogVersion = added.DailyLogVersion });
+        await AssertStatusAsync(reversedResponse, HttpStatusCode.OK);
+        var reversed = await RequiredJsonAsync<Phase4Day>(reversedResponse);
+        Assert.AreEqual(0m, reversed.SelectedCalories);
+        Assert.IsEmpty(reversed.CustomFoods);
+        await RefreshCsrfAsync(client);
+        Assert.AreEqual(HttpStatusCode.Conflict,
+            (await client.PostAsJsonAsync(reversePath, new { dailyLogVersion = added.DailyLogVersion })).StatusCode);
+        await RefreshCsrfAsync(client);
+        Assert.AreEqual(HttpStatusCode.Conflict,
+            (await client.PostAsJsonAsync(reversePath, new { dailyLogVersion = reversed.DailyLogVersion })).StatusCode);
+
+        await RefreshCsrfAsync(client);
+        var replacementResponse = await client.PostAsJsonAsync("/api/nutrition/me/custom-foods", new
+        {
+            planDayId = day.PlanDayId, name = "Pear", amount = 1m, unit = "Serving",
+            calories = 90m, proteinGrams = 0m, carbohydrateGrams = 24m, fatGrams = 0m,
+            dailyLogVersion = reversed.DailyLogVersion,
+        });
+        await AssertStatusAsync(replacementResponse, HttpStatusCode.OK);
+        var replacement = await RequiredJsonAsync<Phase4Day>(replacementResponse);
+
+        await RefreshCsrfAsync(client);
+        await AssertStatusAsync(await client.PostAsJsonAsync($"/api/nutrition/me/logs/{replacement.DailyLogId}/complete", new { version = replacement.DailyLogVersion }), HttpStatusCode.OK);
+        await RefreshCsrfAsync(client);
+        Assert.AreEqual(HttpStatusCode.Conflict,
+            (await client.PostAsJsonAsync($"/api/nutrition/me/custom-foods/{replacement.CustomFoods.Single().Id}/reverse",
+                new { dailyLogVersion = replacement.DailyLogVersion })).StatusCode);
         await RefreshCsrfAsync(client);
         Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync("/api/nutrition/me/custom-foods", new
         {
@@ -71,7 +106,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         await using var connection = new NpgsqlConnection(RequiredDatabaseConnection);
         await connection.OpenAsync();
         await AssertDatabaseMutationRejectedAsync(connection,
-            "UPDATE nutrition.\"DailyNutritionCustomFoods\" SET \"Name\" = 'Tampered' WHERE \"Id\" = @id", added.CustomFoods.Single().Id);
+            "UPDATE nutrition.\"DailyNutritionCustomFoods\" SET \"Name\" = 'Tampered' WHERE \"Id\" = @id", foodId);
+        await AssertDatabaseMutationRejectedAsync(connection,
+            "DELETE FROM nutrition.\"DailyNutritionCustomFoodReversals\" WHERE \"CustomFoodId\" = @id", foodId);
     }
 
     [TestMethod]

@@ -18,6 +18,8 @@ refuses insertion into a completed log. No sensitive food values go into notific
 
 ## Consequences
 
-The first version adds entries only. Correcting a mistaken client-entered food needs a separate,
-audited reversal operation before the day is completed; that follow-up remains in the UI plan.
+R2.4b adds an append-only, one-per-entry reversal with actor and time. The original food stays in
+history, while day totals and the client day view exclude it. The client may reverse only their own
+entry on an active plan before completing the day. The log version and a database guard protect
+against concurrent completion; tenant-composite foreign keys bind the reversal to that food and day.
 No food library, provider import, coach prescription or clinical claim is created by this action.

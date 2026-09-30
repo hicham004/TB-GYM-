@@ -934,6 +934,18 @@ export class ApiClient {
       .pipe(map(mapNutritionDay));
   }
 
+  reverseMyNutritionCustomFood(
+    foodId: string,
+    request: Phase3Contracts.ReverseNutritionCustomFoodRequest,
+  ) {
+    return this.http
+      .post<Phase3Contracts.ClientNutritionDayView>(
+        `/api/nutrition/me/custom-foods/${foodId}/reverse`,
+        request,
+      )
+      .pipe(map(mapNutritionDay));
+  }
+
   completeMyNutritionLog(logId: string, request: Phase3Contracts.CompleteNutritionLogRequest) {
     return this.http
       .post<Phase3Contracts.ClientNutritionDayView>(

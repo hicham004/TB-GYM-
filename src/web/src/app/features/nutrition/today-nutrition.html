@@ -156,15 +156,12 @@
                 }
               </div>
               @if (displayChoice(slot); as choice) {
+                @let shownServings = slot.selectedChoiceId ? slot.actualServings : choice.servings;
                 <div class="meal-body">
                   <strong>{{ choice.recipeName }}</strong>
                   <span i18n
-                    >{{
-                      slot.selectedChoiceId
-                        ? (slot.actualServings | number: '1.0-2')
-                        : (choice.servings | number: '1.0-2')
-                    }}
-                    servings · {{ choice.calories | number: '1.0-0' }} kcal planned</span
+                    >{{ shownServings | number: '1.0-2' }} {{ servingUnit(shownServings) }} ·
+                    {{ choice.calories | number: '1.0-0' }} kcal planned</span
                   >
                 </div>
               } @else {
@@ -274,9 +271,27 @@
               <strong>{{ food.name }}</strong>
               <span i18n
                 >{{ food.amount | number: '1.0-2' }}
-                {{ food.unit === 'Gram' ? 'g' : food.unit === 'Millilitre' ? 'ml' : 'servings' }} ·
-                {{ food.calories | number: '1.0-0' }} kcal logged</span
+                {{
+                  food.unit === 'Gram'
+                    ? 'g'
+                    : food.unit === 'Millilitre'
+                      ? 'ml'
+                      : servingUnit(food.amount)
+                }}
+                · {{ food.calories | number: '1.0-0' }} kcal logged</span
               >
+              @if (plan.logStatus !== 'Completed') {
+                <button
+                  type="button"
+                  class="text-action"
+                  (click)="reverseCustomFood(food.id)"
+                  [disabled]="reversingFoodId() !== null || customBusy()"
+                  [attr.aria-label]="removeFoodLabel(food.name)"
+                  i18n
+                >
+                  Remove
+                </button>
+              }
             </li>
           }
         </ul>
