@@ -61,6 +61,32 @@ a.row:focus-visible {
   min-inline-size: 0;
 }
 
+.nutrition-ring {
+  flex: none;
+  display: block;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--tb-accent-ink) var(--nutrition-progress),
+    var(--color-surface-subtle) var(--nutrition-progress)
+  );
+  position: relative;
+}
+.nutrition-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0.4rem;
+  border-radius: 50%;
+  background: var(--color-surface);
+}
+.nutrition-total {
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
 .row-title {
   color: var(--color-text-primary);
   font-size: var(--text-compact-size);

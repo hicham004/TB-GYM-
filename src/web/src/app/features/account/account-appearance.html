@@ -1,0 +1,32 @@
+<section class="appearance">
+  <header>
+    <p class="eyebrow" i18n>Your account</p>
+    <h1 i18n>Appearance</h1>
+    <p i18n>Choose the view that feels right. Your choice follows you across coaching spaces.</p>
+  </header>
+  <fieldset [disabled]="saving()">
+    <legend i18n>Colour mode</legend>
+    @for (mode of modes; track mode.value) {
+      <label class="mode" [class.selected]="selected() === mode.value">
+        <input
+          #modeInput
+          type="radio"
+          name="mode"
+          [value]="mode.value"
+          [checked]="selected() === mode.value"
+          (change)="choose(mode.value)"
+        />
+        <span class="mode-copy"
+          ><strong>{{ mode.label }}</strong
+          ><small>{{ mode.description }}</small></span
+        >
+      </label>
+    }
+  </fieldset>
+  @if (saving()) {
+    <p role="status" i18n>Saving your choice…</p>
+  }
+  @if (error()) {
+    <p role="alert" i18n>Couldn’t save your choice. Try again.</p>
+  }
+</section>

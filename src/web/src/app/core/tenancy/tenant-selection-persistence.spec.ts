@@ -13,6 +13,7 @@ const coach: CurrentUser = {
   email: 'coach@example.test',
   displayName: 'Coach',
   preferredCulture: 'en-LB',
+  preferredThemeMode: 'system',
   emailConfirmed: true,
   roles: [],
 };

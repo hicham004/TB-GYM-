@@ -25,6 +25,15 @@ public static class ProgressEndpoints
             .RequireAuthorization(AuthorizationPolicies.TenantClient)
             .WithTags(ProgressModule.Name);
 
+        client.MapGet("/span", async (
+            IProgressApplicationService service,
+            CancellationToken token) =>
+        {
+            var span = await service.GetOwnBodyweightSpanAsync(token);
+            return span is null ? Results.NotFound() : Results.Ok(span);
+        }).WithName("GetOwnBodyweightSpan").Produces<BodyweightHistorySpanView>()
+            .Produces(StatusCodes.Status404NotFound);
+
         client.MapGet("", async (
             DateOnly? from,
             DateOnly? to,
@@ -230,6 +239,16 @@ public static class ProgressEndpoints
         var coach = endpoints.MapGroup("/api/progress/clients/{clientProfileId:guid}")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
             .WithTags(ProgressModule.Name);
+
+        coach.MapGet("/span", async (
+            Guid clientProfileId,
+            IProgressApplicationService service,
+            CancellationToken token) =>
+        {
+            var span = await service.GetClientBodyweightSpanAsync(clientProfileId, token);
+            return span is null ? Results.NotFound() : Results.Ok(span);
+        }).WithName("GetClientBodyweightSpan").Produces<BodyweightHistorySpanView>()
+            .Produces(StatusCodes.Status404NotFound);
 
         coach.MapGet("", async (
             Guid clientProfileId,

@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { type Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
@@ -7,6 +8,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { settle } from '../../../testing/dom';
 import { ProgressDashboardView } from './progress-dashboard';
+import { UiSheet } from '../../ui/sheet';
 import {
   mapProgressDashboard,
   previewAssetIds,
@@ -136,16 +138,47 @@ async function renderWith(result: Observable<ProgressDashboard>, api: Partial<Ap
   await TestBed.configureTestingModule({
     imports: [ProgressDashboardView],
     providers: [
+      provideRouter([]),
       {
         provide: ApiClient,
         useValue: {
           getMyProgressDashboard: vi.fn(() => result),
+          getMyProgress: vi.fn(() =>
+            of({
+              clientProfileId: 'client-1',
+              timeZoneId: 'Asia/Beirut',
+              weekStartsOn: 'Monday',
+              displayUnit: 'Kilogram',
+              from: '2026-06-01',
+              toExclusive: '2026-08-23',
+              days: [
+                {
+                  date: '2026-08-22',
+                  observation: { id: 'obs-1' },
+                  displayValue: 81.5,
+                  trendEstimate: 81.9,
+                },
+              ],
+              weeks: [
+                {
+                  weekStart: '2026-08-17',
+                  weekEndExclusive: '2026-08-24',
+                  displayMean: 82,
+                  observedDayCount: 2,
+                },
+              ],
+            } as never),
+          ),
+          getMyTrainingPersonalRecords: vi.fn(() =>
+            of({ isAllowed: false, accessReason: 'Expired', items: [] } as never),
+          ),
           createMediaAccessBatch,
           ...api,
         },
       },
       { provide: TenantStore, useValue: { selectedTenantId } },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: UiSheet, useValue: { open: vi.fn(() => ({ close: vi.fn() })) } },
     ],
   }).compileComponents();
 
@@ -279,27 +312,93 @@ describe('ProgressDashboardView states', () => {
     const host = await render(of(mapProgressDashboard(contract())));
     const text = host.textContent ?? '';
 
-    expect(text).toContain('Logged on 6 of the last 7 days');
-    expect(text).toContain('Weighed on 2 of 83 days');
+    expect(text).toContain('6 of 7');
+    expect(text).toContain('1 of 1 days recorded');
     // The unentitled training section is stated, not silently dropped.
     expect(text).toContain('This subscription has ended.');
-    expect(host.querySelectorAll('img.thumbnail')).toHaveLength(1);
-    expect(host.querySelector('.no-preview')?.textContent).toContain('Preview unavailable');
-    expect(text).toContain('one does not explain another');
+    expect(host.querySelectorAll('.photo-tile img')).toHaveLength(1);
+    expect(host.querySelector('.photo-tile > span')?.textContent).toContain('Preview unavailable');
+    expect(text).toContain('One does not explain another');
   });
 
   it('renders an empty state when nothing readable was recorded', async () => {
-    const host = await render(of(mapProgressDashboard(contract(emptySections))));
+    const host = await render(of(mapProgressDashboard(contract(emptySections))), {
+      getMyProgress: vi.fn(() =>
+        of({
+          clientProfileId: 'client-1',
+          timeZoneId: 'Asia/Beirut',
+          weekStartsOn: 'Monday',
+          displayUnit: 'Kilogram',
+          from: '2026-06-01',
+          toExclusive: '2026-08-23',
+          days: [],
+          weeks: [],
+        } as never),
+      ) as never,
+    });
 
-    expect(host.textContent).toContain('Nothing has been recorded in this period yet.');
-    expect(host.querySelectorAll('img.thumbnail')).toHaveLength(0);
+    expect(host.textContent).toContain('Your weight chart will appear after your first entry.');
+    expect(host.querySelectorAll('.photo-tile img')).toHaveLength(0);
   });
 
   it('surfaces a load failure instead of rendering a blank dashboard', async () => {
     const host = await render(throwError(() => new Error('offline')));
 
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
-    expect(host.textContent).not.toContain('Nothing has been recorded');
+    expect(host.textContent).not.toContain('Your weight chart');
+  });
+
+  it('loads older weight windows for All and leaves empty days out of the entry list', async () => {
+    const getMyProgress = vi.fn((_: string, from?: string) =>
+      of({
+        clientProfileId: 'client-1',
+        timeZoneId: 'Asia/Beirut',
+        weekStartsOn: 'Monday',
+        displayUnit: 'Kilogram',
+        from: from ?? '2026-06-01',
+        toExclusive: '2026-08-23',
+        days:
+          from === '2025-07-01'
+            ? [
+                {
+                  date: '2025-07-01',
+                  observation: { id: 'old' },
+                  displayValue: 84,
+                  trendEstimate: null,
+                },
+              ]
+            : [
+                {
+                  date: '2026-08-22',
+                  observation: { id: 'obs-1' },
+                  displayValue: 81.5,
+                  trendEstimate: null,
+                },
+                { date: '2026-08-21', observation: null, displayValue: null, trendEstimate: null },
+              ],
+        weeks: [],
+      } as never),
+    );
+    const { host, fixture } = await renderWith(of(mapProgressDashboard(contract())), {
+      getMyProgress: getMyProgress as never,
+      getMyBodyweightSpan: vi.fn(() =>
+        of({ firstDate: '2025-07-01', lastDate: '2026-08-22' }),
+      ) as never,
+    });
+
+    const all = [...host.querySelectorAll<HTMLButtonElement>('.range button')].find(
+      (button) => button.textContent?.trim() === 'All',
+    )!;
+    all.click();
+    await settle(fixture);
+    expect(
+      [...host.querySelectorAll<HTMLButtonElement>('.range button')]
+        .find((button) => button.textContent?.trim() === 'All')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(getMyProgress.mock.calls.length).toBeGreaterThan(2);
+    expect(host.textContent).toContain('Showing all recorded weight entries');
+    expect(host.querySelectorAll('.all-entries li')).toHaveLength(2);
   });
 });
 
@@ -319,14 +418,22 @@ describe('ProgressDashboardView media grants', () => {
     // One request, not one per tile, and only the photo that actually has a rendition.
     expect(createMediaAccessBatch).toHaveBeenCalledOnce();
     expect(createMediaAccessBatch).toHaveBeenCalledWith(['asset-1']);
-    expect(host.querySelectorAll('img.thumbnail')).toHaveLength(1);
+    expect(host.querySelectorAll('.photo-tile img')).toHaveLength(1);
   });
 
   it('binds every preview only when every exact asset grant is returned', async () => {
     const dashboard = twoPreviewDashboard();
-    const host = await render(of(dashboard));
+    const { host, fixture } = await renderWith(of(dashboard));
 
-    expect(host.querySelectorAll('img.thumbnail')).toHaveLength(2);
+    expect(host.querySelectorAll('.photo-tile img')).toHaveLength(2);
+    const slider = host.querySelector<HTMLInputElement>('app-photo-compare input[type="range"]')!;
+    expect(slider).not.toBeNull();
+    slider.value = '25';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle(fixture);
+    expect(host.querySelector<HTMLElement>('app-photo-compare .after')?.style.clipPath).toBe(
+      'inset(0 0 0 25%)',
+    );
   });
 
   it('binds only the asset ids present in a partial batch response', async () => {
@@ -335,10 +442,10 @@ describe('ProgressDashboardView media grants', () => {
       createMediaAccessBatch: vi.fn(() => of({ items: [{ assetId: 'asset-2' }] })) as never,
     });
 
-    const images = [...host.querySelectorAll<HTMLImageElement>('img.thumbnail')];
+    const images = [...host.querySelectorAll<HTMLImageElement>('.photo-tile img')];
     expect(images).toHaveLength(1);
     expect(images[0].getAttribute('src')).toContain('asset-2');
-    expect(host.querySelectorAll('.no-preview')).toHaveLength(1);
+    expect(host.querySelectorAll('.photo-tile > span')).toHaveLength(1);
   });
 
   it('binds no preview after an empty successful batch response', async () => {
@@ -346,8 +453,8 @@ describe('ProgressDashboardView media grants', () => {
       createMediaAccessBatch: vi.fn(() => of({ items: [] })) as never,
     });
 
-    expect(host.querySelectorAll('img.thumbnail')).toHaveLength(0);
-    expect(host.querySelectorAll('.no-preview')).toHaveLength(2);
+    expect(host.querySelectorAll('.photo-tile img')).toHaveLength(0);
+    expect(host.querySelectorAll('.photo-tile > span')).toHaveLength(2);
   });
 
   it('does not ask for grants when there is nothing to preview', async () => {
@@ -367,10 +474,10 @@ describe('ProgressDashboardView media grants', () => {
       createMediaAccessBatch: vi.fn(() => throwError(() => new Error('denied'))) as never,
     });
 
-    expect(host.querySelectorAll('img.thumbnail')).toHaveLength(0);
+    expect(host.querySelectorAll('.photo-tile img')).toHaveLength(0);
     expect(host.textContent).toContain('Preview unavailable');
     // The rest of the dashboard is unaffected: a missing preview is not a failed dashboard.
-    expect(host.textContent).toContain('Logged on 6 of the last 7 days');
+    expect(host.textContent).toContain('6 of 7');
   });
 
   it('ignores a grant response that resolves after the workspace has reloaded', async () => {
@@ -417,7 +524,7 @@ describe('ProgressDashboardView media grants', () => {
     oldGrant.complete();
     await settle(rendered.fixture);
 
-    const images = [...rendered.host.querySelectorAll<HTMLImageElement>('img.thumbnail')];
+    const images = [...rendered.host.querySelectorAll<HTMLImageElement>('.photo-tile img')];
     expect(images).toHaveLength(1);
     expect(images[0].getAttribute('src')).toContain('asset-current');
     expect(rendered.host.textContent).toContain('Side');
@@ -454,7 +561,7 @@ describe('ProgressDashboardView media grants', () => {
       ),
     );
 
-    expect(host.textContent).toContain('Showing the most recent 1 of 23 photos');
+    expect(host.textContent).toContain('Showing 1 of 23 photos');
   });
 
   it('names only the assets that carry a rendition', () => {

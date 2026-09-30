@@ -13,6 +13,7 @@ const ALPHA_USER: CurrentUser = {
   email: 'alpha@example.test',
   displayName: 'Alpha',
   preferredCulture: 'en-LB',
+  preferredThemeMode: 'system',
   emailConfirmed: true,
   roles: [],
 };

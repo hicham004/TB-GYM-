@@ -142,6 +142,9 @@
 - Before reporting, run only the `./scripts/check.ps1` steps for the side you changed: the backend
   build and `dotnet test` when backend code changed, the npm steps when web code changed. If Docker
   isn't running, run those steps directly. Always run `git diff --check`.
+- The full backend suite can take about an hour. Start it once with a log and an exit-code marker,
+  arrange a completion watcher, and do other useful work or wait for the notification instead of
+  repeatedly polling. Read the final result before reporting; do not mistake silence for a pass.
 
 ## Commands
 

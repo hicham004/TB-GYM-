@@ -16,6 +16,8 @@ import { TodayAlso } from './today-also';
 const meals = (logStatus: NutritionDay['logStatus'], selected: (string | null)[]) =>
   ({
     logStatus,
+    selectedCalories: selected.filter(Boolean).length * 400,
+    targetCalories: 1950,
     slots: selected.map((selectedChoiceId, order) => ({ id: `${order}`, selectedChoiceId })),
   }) as NutritionDay;
 const assignment = (dueDate: string, response: CheckInAssignmentListItem['response'] = null) =>
@@ -68,7 +70,8 @@ describe('TodayAlso', () => {
     const { host, row } = await render({});
 
     expect(host.querySelector('h2')?.textContent?.trim()).toBe('Also today');
-    expect(row('/nutrition/today')).toBe('Nutrition, 2 of 4 meals logged');
+    expect(row('/nutrition/today')).toBe('Nutrition, 800 of 1,950 kcal, 2 of 4 meals logged');
+    expect(host.querySelector('.nutrition-ring')).not.toBeNull();
     expect(row('/checkins/me')).toBe('Weekly check-in, Submitted today · awaiting coach review');
     const links = [...host.querySelectorAll('li a')].map((link) => link.getAttribute('href'));
     expect(links).toEqual(['/nutrition/today', '/checkins/me']);
@@ -76,13 +79,17 @@ describe('TodayAlso', () => {
 
   it('words every nutrition state, with plurals', async () => {
     const planned = await render({ getMyNutritionDay: vi.fn(() => of(meals(null, [null]))) });
-    expect(planned.row('/nutrition/today')).toBe('Nutrition, 1 meal planned · nothing logged yet');
+    expect(planned.row('/nutrition/today')).toBe(
+      'Nutrition, 0 of 1,950 kcal, 1 meal planned · nothing logged yet',
+    );
     TestBed.resetTestingModule();
 
     const done = await render({
       getMyNutritionDay: vi.fn(() => of(meals('Completed', ['a', 'b', 'c']))),
     });
-    expect(done.row('/nutrition/today')).toBe('Nutrition, Day completed · 3 of 3 meals');
+    expect(done.row('/nutrition/today')).toBe(
+      'Nutrition, 1,200 of 1,950 kcal, Day completed · 3 of 3 meals',
+    );
     TestBed.resetTestingModule();
 
     const none = await render({ getMyNutritionDay: vi.fn(() => status(404)) });
@@ -151,7 +158,7 @@ describe('TodayAlso', () => {
 
     press(host, 'Retry nutrition');
     await settle(fixture);
-    expect(row('/nutrition/today')).toBe('Nutrition, 1 of 2 meals logged');
+    expect(row('/nutrition/today')).toBe('Nutrition, 400 of 1,950 kcal, 1 of 2 meals logged');
     expect(client.listOwnCheckInAssignments).toHaveBeenCalledTimes(1);
     expect(host.querySelector('[role="status"]')?.textContent?.trim()).toBe('');
   });
@@ -177,7 +184,7 @@ describe('TodayAlso', () => {
 
     expect(client.getMyNutritionDay).toHaveBeenCalledTimes(1);
     expect(client.listOwnCheckInAssignments).not.toHaveBeenCalled();
-    expect(row('/nutrition/today')).toBe('Nutrition, 2 of 4 meals logged');
+    expect(row('/nutrition/today')).toBe('Nutrition, 800 of 1,950 kcal, 2 of 4 meals logged');
   });
 
   it('never asks for a feature the plan has closed, and says why instead', async () => {

@@ -50,6 +50,20 @@ async function render(
   const tenant = signal<string | null>('tenant-1');
   const api = {
     getMyTrainingToday: vi.fn(() => of(options.day ?? day([workout()]))),
+    getMyTrainingWeek: vi.fn(() =>
+      of({
+        isAllowed: true,
+        accessReason: 'Granted',
+        localDate: '2026-09-21',
+        weekStart: '2026-09-21',
+        days: [0, 1, 2, 3, 4, 5, 6].map((offset) => ({
+          date: `2026-09-${21 + offset}`,
+          scheduled: offset === 0 ? 1 : 0,
+          completed: 0,
+        })),
+      }),
+    ),
+    getOwnCoach: vi.fn(() => of({ name: 'Hicham Haddad' })),
     getMyUpcomingTraining: vi.fn(() => of(options.upcoming ?? upcoming())),
     getWorkspace: vi.fn(() => of({ currentDate: '2026-09-21' })),
     getMyNutritionDay: vi.fn(notFound),
@@ -99,7 +113,10 @@ describe('ClientToday', () => {
     const { host, read } = await render({ unread: 2 });
 
     expect(read()).toContain('Sunday 20 September');
-    expect(host.querySelector('h1')?.textContent?.trim()).toBe('Today');
+    expect(host.querySelector('h1')?.textContent?.trim()).toBe('Today, Maya.');
+    expect(host.querySelector('.today-coach')?.textContent).toContain('Hicham Haddad');
+    expect(host.querySelectorAll('.today-week-days li')).toHaveLength(7);
+    expect(read()).toContain('0 of 1 sessions done');
     expect(read()).not.toMatch(/Good (morning|afternoon|evening)/);
     const bell = host.querySelector('a[href="/notifications"]');
     expect(bell?.textContent).toContain('Notifications, 2 unread');
@@ -318,7 +335,7 @@ describe('ClientToday', () => {
     });
 
     expect(host.querySelector('.today-date')).toBeNull();
-    expect(host.querySelector('h1')?.textContent?.trim()).toBe('Today');
+    expect(host.querySelector('h1')?.textContent?.trim()).toBe('Today, Maya.');
   });
 
   it('keeps using the workspace date that came with the training read', async () => {

@@ -34,6 +34,17 @@ const MAYA = {
   displayName: 'Maya Rahman',
 };
 const TODAY = '2026-09-20';
+const trainingWeek = {
+  isAllowed: true,
+  accessReason: 'Granted',
+  localDate: TODAY,
+  weekStart: '2026-09-14',
+  days: ['14', '15', '16', '17', '18', '19', '20'].map((date, index) => ({
+    date: `2026-09-${date}`,
+    scheduled: index === 0 || index === 2 || index === 6 ? 1 : 0,
+    completed: index === 0 || index === 2 ? 1 : 0,
+  })),
+};
 const FEATURES = ['Training', 'Nutrition', 'CheckIns', 'Messaging', 'ResourceLibrary'];
 
 const sets = (count: number, done = 0) =>
@@ -267,6 +278,9 @@ async function openToday(
       'GET /api/client-access/me': (route: Route) => json(route, 200, decisions),
       'GET /api/training/me/today': (route: Route) => json(route, 200, state.day),
       'GET /api/training/me/upcoming': (route: Route) => json(route, 200, state.upcoming),
+      'GET /api/training/me/week': (route: Route) => json(route, 200, trainingWeek),
+      'GET /api/client-profile/me/coach': (route: Route) =>
+        json(route, 200, { name: 'Hicham Haddad' }),
       'GET /api/nutrition/me/day': (route: Route) => json(route, 200, nutritionDay),
       'GET /api/checkins/me/assignments': (route: Route) => json(route, 200, checkIns),
       'GET /api/messaging/conversations': (route: Route) => json(route, 200, conversations),
@@ -280,6 +294,7 @@ async function openToday(
   if (options.ended) {
     await expect(page.locator('#today-renewal-heading')).toBeVisible();
     await expect(page.locator('.row-skeleton')).toHaveCount(0);
+    await expect(page.locator('.today-week-skeleton')).toHaveCount(0);
   } else if ((options.path ?? '/') === '/') {
     await expect(page.locator('#today-training-heading')).toHaveText(state.heading);
     await expect(page.locator('.row-skeleton')).toHaveCount(0);
@@ -291,7 +306,12 @@ async function expectNoAxeViolations(page: Page) {
   const result = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
     .analyze();
-  expect(result.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
+  expect(
+    result.violations.map(
+      (violation) =>
+        `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`,
+    ),
+  ).toEqual([]);
 }
 
 test('at 390px Today is the approved screen, with the tabs at the bottom', async ({ page }) => {
@@ -304,7 +324,7 @@ test('at 390px Today is the approved screen, with the tabs at the bottom', async
   expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(844);
   await expectNoHorizontalOverflow(page);
   await expectNoAxeViolations(page);
-  await expect(page).toHaveScreenshot('client-today-390.png', { fullPage: true });
+  await expect(page).toHaveScreenshot('client-today-390.png');
 });
 
 test('at 1440px Today keeps one centred column and the tabs stay at the bottom', async ({
@@ -317,7 +337,7 @@ test('at 1440px Today keeps one centred column and the tabs stay at the bottom',
   expect(Math.abs((column?.x ?? 0) * 2 + (column?.width ?? 0) - 1440)).toBeLessThanOrEqual(2);
   await expectNoHorizontalOverflow(page);
   await expectNoAxeViolations(page);
-  await expect(page).toHaveScreenshot('client-today-1440.png', { fullPage: true });
+  await expect(page).toHaveScreenshot('client-today-1440.png');
 });
 
 for (const state of Object.keys(STATES) as (keyof typeof STATES)[]) {
@@ -436,6 +456,34 @@ test('the Me page switches workspace and signs out, and passes the scan', async 
   await expect(page.getByRole('heading', { level: 1, name: 'Me' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Switch to Beirut Barbell/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+});
+
+test('personal mode persists when the account screen reloads', async ({ page }) => {
+  let user = { ...MAYA };
+  await mockSession(page, {
+    memberships: [CLIENT_MEMBERSHIP],
+    user,
+    extra: {
+      'GET /api/client-access/me': (route: Route) =>
+        json(
+          route,
+          200,
+          FEATURES.map((feature) => ({ feature, isAllowed: true, reason: 'Granted' })),
+        ),
+      'GET /api/auth/me': (route: Route) => json(route, 200, user),
+      'PUT /api/auth/me/theme': (route: Route) => {
+        user = { ...user, preferredThemeMode: 'dark' };
+        return json(route, 200, user);
+      },
+    },
+  });
+  await page.goto('/account/appearance');
+  await page.getByRole('radio', { name: /Dark/ }).check();
+  await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
+  await page.reload();
+  await expect(page.getByRole('radio', { name: /Dark/ })).toBeChecked();
   await expectNoHorizontalOverflow(page);
   await expectNoAxeViolations(page);
 });

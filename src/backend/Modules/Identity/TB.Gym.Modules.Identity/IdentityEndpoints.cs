@@ -55,6 +55,12 @@ public static class IdentityEndpoints
             .WithName("GetCurrentUser")
             .Produces<CurrentUserResponse>()
             .Produces(StatusCodes.Status401Unauthorized);
+        group.MapPut("/me/theme", UpdateThemeModeAsync)
+            .RequireAuthorization()
+            .WithName("UpdateOwnThemeMode")
+            .Produces<CurrentUserResponse>()
+            .ProducesValidationProblem()
+            .Produces(StatusCodes.Status401Unauthorized);
         group.MapPost("/confirm-email", ConfirmEmailAsync)
             .AllowAnonymous()
             .RequireRateLimiting(RateLimitPolicies.PublicAuthentication)
@@ -147,6 +153,31 @@ public static class IdentityEndpoints
         return user is null || user.IsPlatformBlocked
             ? Results.Unauthorized()
             : Results.Ok(await ToResponseAsync(user, userManager));
+    }
+
+    private static async Task<IResult> UpdateThemeModeAsync(
+        ThemeModeRequest request,
+        ClaimsPrincipal principal,
+        HttpContext context,
+        IAntiforgery antiforgery,
+        UserManager<ApplicationUser> userManager)
+    {
+        await antiforgery.ValidateRequestAsync(context);
+        if (request.Mode is not ("light" or "dark" or "system"))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["mode"] = ["Choose light, dark, or system."],
+            });
+        }
+
+        var user = await userManager.GetUserAsync(principal);
+        if (user is null || user.IsPlatformBlocked) return Results.Unauthorized();
+        user.PreferredThemeMode = request.Mode;
+        var result = await userManager.UpdateAsync(user);
+        return result.Succeeded
+            ? Results.Ok(await ToResponseAsync(user, userManager))
+            : IdentityValidationProblem(result);
     }
 
     private static async Task<IResult> ConfirmEmailAsync(
@@ -319,7 +350,8 @@ public static class IdentityEndpoints
             user.DisplayName,
             user.PreferredCulture,
             user.EmailConfirmed,
-            roles.ToArray());
+            roles.ToArray(),
+            user.PreferredThemeMode);
     }
 
     private static IResult AuthenticationFailed() =>
@@ -368,6 +400,8 @@ public sealed record ResetPasswordRequest(Guid UserId, string Code, string NewPa
 
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
+public sealed record ThemeModeRequest(string Mode);
+
 public sealed record EmailActionResponse(string Message, string? DevelopmentActionUrl);
 
 public sealed record CurrentUserResponse(
@@ -376,4 +410,5 @@ public sealed record CurrentUserResponse(
     string DisplayName,
     string PreferredCulture,
     bool EmailConfirmed,
-    IReadOnlyList<string> Roles);
+    IReadOnlyList<string> Roles,
+    string PreferredThemeMode);

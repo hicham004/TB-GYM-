@@ -45,6 +45,7 @@ function user(email: string): CurrentUser {
     email,
     displayName: 'Rana Haddad',
     preferredCulture: 'en-LB',
+    preferredThemeMode: 'system',
     emailConfirmed: true,
     roles: [],
   };

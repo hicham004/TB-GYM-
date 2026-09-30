@@ -63,6 +63,7 @@ describe('ClientAccount', () => {
     expect(links).toEqual([
       '/profile',
       '/account/security',
+      '/account/appearance',
       '/notifications/settings',
       '/progress',
     ]);

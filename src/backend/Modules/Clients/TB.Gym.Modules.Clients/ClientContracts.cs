@@ -10,6 +10,8 @@ public interface IClientProfileApplicationService
 
     Task<ClientSelfProfile?> GetSelfAsync(CancellationToken cancellationToken);
 
+    Task<OwnCoachView?> GetOwnCoachAsync(CancellationToken cancellationToken);
+
     Task<ClientCommandResult> UpdateForCoachAsync(
         Guid clientId,
         UpdateClientIntakeRequest request,
@@ -135,6 +137,8 @@ public sealed record FormerClientSummary(
     DateTimeOffset ReleasedAtUtc,
     string Reason,
     ClientDepartureKind DepartureKind);
+
+public sealed record OwnCoachView(string Name);
 
 public sealed record ClientSelfProfile(
     Guid Id,

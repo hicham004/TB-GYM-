@@ -9,6 +9,125 @@ namespace TB.Gym.Infrastructure.Application;
 
 internal sealed partial class TrainingApplicationService
 {
+    public async Task<ClientPersonalRecordsResult> GetMyPersonalRecordsAsync(
+        CancellationToken cancellationToken)
+    {
+        var client = await FindSelfClientAsync(cancellationToken);
+        var access = client is null ? null : await GetTrainingAccessAsync(client.Id, cancellationToken);
+        if (client is null || access is not { IsAllowed: true })
+        {
+            return new ClientPersonalRecordsResult(false,
+                (access?.Reason ?? FeatureAccessReason.MembershipInactive).ToString(), []);
+        }
+
+        var performances =
+            from set in dbContext.WorkoutSetPerformances.AsNoTracking()
+            join exercise in dbContext.WorkoutExercisePerformances.AsNoTracking()
+                on new { set.TenantId, Id = set.WorkoutExercisePerformanceId }
+                equals new { exercise.TenantId, exercise.Id }
+            join workout in dbContext.WorkoutExecutions.AsNoTracking()
+                on new { exercise.TenantId, Id = exercise.WorkoutExecutionId }
+                equals new { workout.TenantId, workout.Id }
+            where workout.ClientProfileId == client.Id &&
+                  workout.Status == WorkoutExecutionStatus.Completed &&
+                  set.IsCompleted && set.ActualRepetitions != null &&
+                  set.ActualLoad > 0 && set.ActualLoadUnit != null
+            select new
+            {
+                ExerciseId = exercise.ActualExerciseId,
+                Reps = set.ActualRepetitions!.Value,
+                Load = set.ActualLoad!.Value,
+                Unit = set.ActualLoadUnit!.Value,
+                Date = workout.ScheduledDateSnapshot,
+            };
+        var best = from item in performances
+                   group item by new { item.ExerciseId, item.Reps, item.Unit } into grouped
+                   select new
+                   {
+                       grouped.Key.ExerciseId,
+                       grouped.Key.Reps,
+                       grouped.Key.Unit,
+                       Load = grouped.Max(item => item.Load),
+                   };
+        var recordRows =
+            from item in performances
+            join record in best on new { item.ExerciseId, item.Reps, item.Unit, item.Load }
+                equals new { record.ExerciseId, record.Reps, record.Unit, record.Load }
+            group item by new { item.ExerciseId, item.Reps, item.Unit, item.Load } into grouped
+            select new
+            {
+                grouped.Key.ExerciseId,
+                grouped.Key.Reps,
+                grouped.Key.Unit,
+                grouped.Key.Load,
+                Date = grouped.Max(item => item.Date),
+            };
+        var rows = await recordRows.OrderByDescending(item => item.Date)
+            .ThenBy(item => item.ExerciseId).Take(12).ToListAsync(cancellationToken);
+        var exerciseIds = rows.Select(item => item.ExerciseId).Distinct().ToArray();
+        var names = await dbContext.Exercises.AsNoTracking()
+            .Where(item => exerciseIds.Contains(item.Id))
+            .ToDictionaryAsync(item => item.Id, item => item.Name, cancellationToken);
+        var items = rows
+            .Select(item => new ClientPersonalRecordView(
+                item.ExerciseId, names.GetValueOrDefault(item.ExerciseId, "Exercise"),
+                item.Date, item.Reps, item.Load,
+                item.Unit, WorkoutPersonalRecordRule.Key, WorkoutPersonalRecordRule.Version))
+            .ToArray();
+        return new ClientPersonalRecordsResult(true, access.Reason.ToString(), items);
+    }
+
+    public async Task<ClientTrainingWeekView> GetMyWeekAsync(CancellationToken cancellationToken)
+    {
+        var today = await GetTenantTodayAsync(cancellationToken);
+        var weekStartsOn = await dbContext.Tenants.AsNoTracking()
+            .Where(item => item.Id == tenantContext.TenantId)
+            .Select(item => item.WeekStartsOn)
+            .SingleAsync(cancellationToken);
+        var start = today.AddDays(-((7 + (int)today.DayOfWeek - (int)weekStartsOn) % 7));
+        var end = start.AddDays(7);
+        var client = await FindSelfClientAsync(cancellationToken);
+        var access = client is null ? null : await GetTrainingAccessAsync(client.Id, cancellationToken);
+        if (client is null || access is not { IsAllowed: true })
+        {
+            return new(false, (access?.Reason ?? FeatureAccessReason.MembershipInactive).ToString(),
+                today, start, []);
+        }
+
+        var rows = await (
+            from session in dbContext.TrainingSessions.AsNoTracking()
+            join week in dbContext.MesocycleWeeks.AsNoTracking()
+                on new { session.TenantId, Id = session.MesocycleWeekId }
+                equals new { week.TenantId, week.Id }
+            join block in dbContext.TrainingMesocycles.AsNoTracking()
+                on new { week.TenantId, Id = week.MesocycleId }
+                equals new { block.TenantId, block.Id }
+            where block.ClientProfileId == client.Id && block.Status != MesocycleStatus.Cancelled &&
+                  session.ScheduledDate >= start && session.ScheduledDate < end && week.IsPublished
+            orderby session.ScheduledDate, session.Position
+            select new { session.Id, session.ScheduledDate, block.StartDate, week.WeekNumber,
+                block.TimeZoneId, block.RevealAllWeeks })
+            .Take(50).ToListAsync(cancellationToken);
+        var visible = rows.Where(row => TrainingCalendarPolicy.GetWeekAvailability(
+                row.StartDate, row.WeekNumber, row.TimeZoneId, clock.UtcNow,
+                row.RevealAllWeeks, true).IsVisible).ToArray();
+        var ids = visible.Select(row => row.Id).ToArray();
+        var completed = await dbContext.WorkoutExecutions.AsNoTracking()
+            .Where(item => ids.Contains(item.TrainingSessionId) &&
+                           item.Status == WorkoutExecutionStatus.Completed)
+            .Select(item => item.TrainingSessionId)
+            .ToListAsync(cancellationToken);
+        var completedIds = completed.ToHashSet();
+        var days = Enumerable.Range(0, 7).Select(offset =>
+        {
+            var date = start.AddDays(offset);
+            var sessions = visible.Where(row => row.ScheduledDate == date).ToArray();
+            return new ClientTrainingWeekDayView(date, sessions.Length,
+                sessions.Count(row => completedIds.Contains(row.Id)));
+        }).ToArray();
+        return new(true, access.Reason.ToString(), today, start, days);
+    }
+
     public async Task<ClientTrainingDayResult> GetTodayAsync(CancellationToken cancellationToken)
     {
         var client = await FindSelfClientAsync(cancellationToken);
@@ -213,7 +332,8 @@ internal sealed partial class TrainingApplicationService
             await dbContext.SaveChangesAsync(cancellationToken);
             var saved = execution.Exercises.SelectMany(item => item.Sets)
                 .Single(item => item.Id == setPerformanceId);
-            return SuccessSet(execution, saved);
+            var isRecord = await IsNewPersonalRecordAsync(execution, saved, cancellationToken);
+            return SuccessSet(execution, saved, isRecord);
         }
         catch (ArgumentException exception)
         {
@@ -316,7 +436,8 @@ internal sealed partial class TrainingApplicationService
                     clock.UtcNow));
             }
             await dbContext.SaveChangesAsync(cancellationToken);
-            return SuccessWorkout(execution);
+            var summary = await BuildFinishSummaryAsync(execution, cancellationToken);
+            return SuccessWorkout(execution, summary);
         }
         catch (InvalidOperationException exception)
         {
@@ -561,9 +682,18 @@ internal sealed partial class TrainingApplicationService
                 best.ActualLoadUnit,
                 best.ActualRepetitions,
                 best.ActualRpe,
+                Sets = item.Performance.Sets
+                    .Where(set => set.IsCompleted)
+                    .OrderBy(set => set.Position)
+                    .Select(set => new PreviousSetPerformanceView(
+                        set.Position, set.ActualRepetitions, set.ActualLoad,
+                        set.ActualLoadUnit, set.ActualRpe))
+                    .ToArray(),
             })
             .ToListAsync(cancellationToken);
-        return rows.GroupBy(item => item.ActualExerciseId)
+        var latestRows = rows.GroupBy(item => item.ActualExerciseId)
+            .Select(group => group.First()).ToArray();
+        return latestRows.GroupBy(item => item.ActualExerciseId)
             .ToDictionary(
                 group => group.Key,
                 group =>
@@ -574,8 +704,116 @@ internal sealed partial class TrainingApplicationService
                         item.ActualLoad,
                         item.ActualLoadUnit,
                         item.ActualRepetitions,
-                        item.ActualRpe);
+                        item.ActualRpe,
+                        item.Sets);
                 });
+    }
+
+    private async Task<WorkoutFinishSummaryView> BuildFinishSummaryAsync(
+        WorkoutExecution execution,
+        CancellationToken cancellationToken)
+    {
+        var completedSets = execution.Exercises
+            .SelectMany(exercise => exercise.Sets.Select(set => (exercise, set)))
+            .Where(item => item.set.IsCompleted)
+            .ToArray();
+        var exerciseIds = execution.Exercises.Select(item => item.ActualExerciseId).Distinct().ToArray();
+        var prior = await (
+            from set in dbContext.WorkoutSetPerformances.AsNoTracking()
+            join exercise in dbContext.WorkoutExercisePerformances.AsNoTracking()
+                on new { set.TenantId, Id = set.WorkoutExercisePerformanceId }
+                equals new { exercise.TenantId, exercise.Id }
+            join workout in dbContext.WorkoutExecutions.AsNoTracking()
+                on new { exercise.TenantId, Id = exercise.WorkoutExecutionId }
+                equals new { workout.TenantId, workout.Id }
+            where workout.ClientProfileId == execution.ClientProfileId &&
+                  workout.Id != execution.Id &&
+                  workout.Status == WorkoutExecutionStatus.Completed &&
+                  workout.CompletedAtUtc <= execution.StartedAtUtc &&
+                  exerciseIds.Contains(exercise.ActualExerciseId) &&
+                  set.IsCompleted && set.ActualRepetitions != null &&
+                  set.ActualLoad != null && set.ActualLoadUnit != null
+            select new
+            {
+                exercise.ActualExerciseId,
+                set.ActualRepetitions,
+                set.ActualLoad,
+                set.ActualLoadUnit,
+            }).ToListAsync(cancellationToken);
+        var priorBest = prior.GroupBy(item => (
+                item.ActualExerciseId, item.ActualRepetitions, item.ActualLoadUnit))
+            .ToDictionary(group => group.Key, group => group.Max(item => item.ActualLoad));
+        var records = new List<WorkoutPersonalRecordView>();
+        foreach (var (exercise, set) in completedSets.OrderBy(item => item.exercise.Position)
+                     .ThenBy(item => item.set.Position))
+        {
+            if (set.ActualRepetitions is not { } reps || set.ActualLoad is not { } load ||
+                set.ActualLoadUnit is not { } unit)
+            {
+                continue;
+            }
+
+            var key = (exercise.ActualExerciseId, (int?)reps, (TrainingLoadUnit?)unit);
+            priorBest.TryGetValue(key, out var best);
+            if (WorkoutPersonalRecordRule.IsRecord(true, reps, load, unit, best))
+            {
+                records.Add(new WorkoutPersonalRecordView(
+                    set.Id, exercise.ActualExerciseName, reps, load, unit,
+                    WorkoutPersonalRecordRule.Key, WorkoutPersonalRecordRule.Version));
+            }
+            priorBest[key] = best is null ? load : Math.Max(best.Value, load);
+        }
+
+        var volume = completedSets
+            .Where(item => item.set.ActualLoad is not null && item.set.ActualRepetitions is not null &&
+                           item.set.ActualLoadUnit is not null)
+            .GroupBy(item => item.set.ActualLoadUnit!.Value)
+            .Select(group => new WorkoutVolumeView(group.Key,
+                group.Sum(item => item.set.ActualLoad!.Value * item.set.ActualRepetitions!.Value)))
+            .ToArray();
+        var duration = (int)Math.Max(0, Math.Floor(
+            ((execution.CompletedAtUtc ?? clock.UtcNow) - execution.StartedAtUtc).TotalSeconds));
+        return new WorkoutFinishSummaryView(
+            duration, completedSets.Length, execution.Exercises.Sum(item => item.Sets.Count),
+            volume, records);
+    }
+
+    private async Task<bool> IsNewPersonalRecordAsync(
+        WorkoutExecution execution,
+        WorkoutSetPerformance saved,
+        CancellationToken cancellationToken)
+    {
+        if (!WorkoutPersonalRecordRule.IsRecord(saved.IsCompleted, saved.ActualRepetitions,
+                saved.ActualLoad, saved.ActualLoadUnit, null))
+        {
+            return false;
+        }
+
+        var exercise = execution.Exercises.Single(item => item.Sets.Any(set => set.Id == saved.Id));
+        var earlierInWorkout = exercise.Sets
+            .Where(set => set.Position < saved.Position && set.IsCompleted &&
+                          set.ActualRepetitions == saved.ActualRepetitions &&
+                          set.ActualLoadUnit == saved.ActualLoadUnit)
+            .Max(set => set.ActualLoad);
+        var historical = await (
+            from set in dbContext.WorkoutSetPerformances.AsNoTracking()
+            join performance in dbContext.WorkoutExercisePerformances.AsNoTracking()
+                on new { set.TenantId, Id = set.WorkoutExercisePerformanceId }
+                equals new { performance.TenantId, performance.Id }
+            join workout in dbContext.WorkoutExecutions.AsNoTracking()
+                on new { performance.TenantId, Id = performance.WorkoutExecutionId }
+                equals new { workout.TenantId, workout.Id }
+            where workout.ClientProfileId == execution.ClientProfileId &&
+                  workout.Status == WorkoutExecutionStatus.Completed &&
+                  workout.CompletedAtUtc <= execution.StartedAtUtc &&
+                  performance.ActualExerciseId == exercise.ActualExerciseId &&
+                  set.IsCompleted && set.ActualRepetitions == saved.ActualRepetitions &&
+                  set.ActualLoadUnit == saved.ActualLoadUnit
+            select set.ActualLoad).MaxAsync(cancellationToken);
+        var priorBest = earlierInWorkout is null ? historical
+            : historical is null ? earlierInWorkout : Math.Max(earlierInWorkout.Value, historical.Value);
+        return WorkoutPersonalRecordRule.IsRecord(saved.IsCompleted, saved.ActualRepetitions,
+            saved.ActualLoad, saved.ActualLoadUnit, priorBest);
     }
 
     private static ClientWorkoutView ToClientWorkout(
@@ -638,7 +876,8 @@ internal sealed partial class TrainingApplicationService
                 previous.GetValueOrDefault(exercise.ActualExerciseId),
                 exercise.Sets.OrderBy(item => item.Position).Select(ToClientSet).ToArray())).ToArray(),
             notes.Select(ToView).ToArray(),
-            execution.Version);
+            execution.Version,
+            execution.StartedAtUtc);
 
     private static ClientSetView ToClientSet(SetPrescription set) =>
         new(
@@ -705,7 +944,9 @@ internal sealed partial class TrainingApplicationService
             : rir is { } reserve ? TrainingExertion.RpeFromRir(reserve) : null;
     }
 
-    private static TrainingCommandResult SuccessWorkout(WorkoutExecution execution) =>
+    private static TrainingCommandResult SuccessWorkout(
+        WorkoutExecution execution,
+        WorkoutFinishSummaryView? summary = null) =>
         new(
             TrainingCommandStatus.Success,
             WorkoutExecution: new WorkoutExecutionView(
@@ -713,11 +954,13 @@ internal sealed partial class TrainingApplicationService
                 execution.Status,
                 execution.StartedAtUtc,
                 execution.CompletedAtUtc,
-                execution.Version));
+                execution.Version,
+                summary));
 
     private static TrainingCommandResult SuccessSet(
         WorkoutExecution execution,
-        WorkoutSetPerformance set) =>
+        WorkoutSetPerformance set,
+        bool isPersonalRecord) =>
         new(
             TrainingCommandStatus.Success,
             SetSave: new WorkoutSetSaveView(
@@ -730,7 +973,10 @@ internal sealed partial class TrainingApplicationService
                 set.ActualRpe,
                 set.ActualRpe is null ? null : TrainingExertion.RirFromRpe(set.ActualRpe.Value),
                 set.IsCompleted,
-                set.ClientNote));
+                set.ClientNote,
+                isPersonalRecord,
+                WorkoutPersonalRecordRule.Key,
+                WorkoutPersonalRecordRule.Version));
 
     private sealed record TodayScheduleRow(Guid MesocycleId, Guid SessionId);
 

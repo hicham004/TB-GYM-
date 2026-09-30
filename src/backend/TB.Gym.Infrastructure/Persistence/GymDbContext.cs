@@ -338,6 +338,7 @@ public sealed partial class GymDbContext(
             entity.ToTable("Users", "identity");
             entity.Property(user => user.DisplayName).HasMaxLength(200);
             entity.Property(user => user.PreferredCulture).HasMaxLength(20).HasDefaultValue("en-LB");
+            entity.Property(user => user.PreferredThemeMode).HasMaxLength(6).HasDefaultValue("system");
             entity.Property(user => user.CreatedAtUtc).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(user => user.UpdatedAtUtc).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });

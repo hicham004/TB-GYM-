@@ -30,10 +30,10 @@ import type { RenewalStatus } from './renewal.models';
 import { TodayAlso } from './today-also';
 import { TodayCoachMessage } from './today-coach-message';
 import { TodayRenewal } from './today-renewal';
-import { trainingCard } from './today.models';
+import { trainingCard, type TrainingWeek } from './today.models';
 
 /**
- * The client's Today (Figma 339:2140): the workspace date, the one training decision for the day,
+ * The client's Today: the workspace date, the one training decision for the day,
  * the other things due today and the coach's latest message. Each part reads and retries on its
  * own, so one failure never hides another, and a reply from a workspace the client has just left
  * is dropped. The date is always the workspace's, never the browser's.
@@ -68,6 +68,9 @@ export class ClientToday {
   private generation = 0;
 
   protected readonly day = signal<ClientTrainingDayResult | null>(null);
+  protected readonly week = signal<TrainingWeek | null>(null);
+  protected readonly coachName = signal<string | null>(null);
+  protected readonly weekFailed = signal(false);
   protected readonly upcoming = signal<UpcomingTraining | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal(false);
@@ -115,9 +118,18 @@ export class ClientToday {
   );
 
   protected readonly displayName = computed(() => this.auth.user()?.displayName ?? '');
+  protected readonly firstName = computed(() => this.displayName().trim().split(/\s+/)[0] ?? '');
+  protected readonly weekProgress = computed(() => {
+    const days = this.week()?.days ?? [];
+    return {
+      scheduled: days.reduce((total, day) => total + day.scheduled, 0),
+      completed: days.reduce((total, day) => total + day.completed, 0),
+    };
+  });
   protected readonly initials = computed(() =>
     initialsOf(this.displayName(), this.auth.user()?.email ?? ''),
   );
+  protected readonly initialsOf = initialsOf;
   protected readonly unread = computed(() =>
     this.notifications.isAvailable() ? this.notifications.unread() : 0,
   );
@@ -133,11 +145,16 @@ export class ClientToday {
       const tenant = this.tenants.selectedTenantId();
       ++this.generation;
       this.day.set(null);
+      this.week.set(null);
+      this.coachName.set(null);
+      this.weekFailed.set(false);
       this.upcoming.set(null);
       this.workspaceDate.set(null);
       this.renewal.set(null);
       if (tenant) {
         void this.load();
+        void this.loadWeek();
+        void this.loadCoach();
         void this.loadRenewal();
       }
     });
@@ -180,6 +197,29 @@ export class ClientToday {
     });
   }
 
+  protected async loadWeek(): Promise<void> {
+    return this.scope.run('week', async (owner) => {
+      this.weekFailed.set(false);
+      try {
+        const week = await owner.wait(firstValueFrom(this.api.getMyTrainingWeek()));
+        if (owner.current) this.week.set(week);
+      } catch {
+        if (owner.current) this.weekFailed.set(true);
+      }
+    });
+  }
+
+  private async loadCoach(): Promise<void> {
+    return this.scope.run('coach', async (owner) => {
+      try {
+        const coach = await owner.wait(firstValueFrom(this.api.getOwnCoach()));
+        if (owner.current) this.coachName.set(coach.name);
+      } catch {
+        if (owner.current) this.coachName.set(null);
+      }
+    });
+  }
+
   /** A failure leaves `renewal` null, and Today shows the plain closed-access card instead. */
   private async loadRenewal(): Promise<void> {
     return this.scope.run('renewal', async (owner) => {
@@ -209,6 +249,9 @@ export class ClientToday {
   private resetTenantState(): void {
     ++this.generation;
     this.day.set(null);
+    this.week.set(null);
+    this.coachName.set(null);
+    this.weekFailed.set(false);
     this.upcoming.set(null);
     this.workspaceDate.set(null);
     this.renewal.set(null);

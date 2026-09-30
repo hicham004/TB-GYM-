@@ -2,11 +2,69 @@
 .today-card {
   background-color: var(--color-surface);
   border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-8);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
-  padding: var(--space-16);
+  padding: clamp(1.25rem, 5vw, 2rem);
+}
+
+.today-card--hero {
+  background: linear-gradient(135deg, var(--tb-brand), var(--tb-brand-strong));
+  border-color: transparent;
+  box-shadow: 0 16px 32px -20px rgb(0 0 0 / 55%);
+  color: var(--tb-on-brand);
+  min-block-size: 17rem;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.today-card--hero::after {
+  content: '';
+  position: absolute;
+  inline-size: 15rem;
+  block-size: 15rem;
+  border: 1px solid color-mix(in srgb, var(--tb-on-brand) 18%, transparent);
+  border-radius: 50%;
+  inset-inline-end: -5rem;
+  inset-block-start: -6rem;
+  pointer-events: none;
+}
+
+.today-card--hero h2 {
+  font-family: 'TB Home Serif', Georgia, serif;
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 400;
+  line-height: 1.1;
+  max-inline-size: 25rem;
+}
+.today-card--hero .today-state,
+.today-card--hero .summary,
+.today-card--hero .note,
+.today-card--hero .hint {
+  color: var(--tb-on-brand);
+}
+.today-card--hero .summary {
+  opacity: 0.85;
+}
+.today-card--hero .note {
+  border-inline-start: 3px solid var(--tb-accent);
+  padding-inline-start: 0.75rem;
+  max-inline-size: 29rem;
+}
+.today-card--hero .today-action {
+  background: var(--tb-accent);
+  color: var(--tb-on-accent);
+  border-color: var(--tb-accent);
+  font-weight: 700;
+  z-index: 1;
+}
+.today-card--hero .today-action:hover {
+  background: var(--tb-accent-bright, var(--tb-accent));
+}
+.today-card--hero .text-link {
+  color: var(--tb-on-brand);
 }
 
 .today-card > * {

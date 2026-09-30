@@ -2,6 +2,8 @@ namespace TB.Gym.Modules.Progress;
 
 public interface IProgressApplicationService
 {
+    Task<BodyweightHistorySpanView?> GetOwnBodyweightSpanAsync(CancellationToken cancellationToken);
+    Task<BodyweightHistorySpanView?> GetClientBodyweightSpanAsync(Guid clientProfileId, CancellationToken cancellationToken);
     Task<ProgressView?> GetOwnAsync(DateOnly? from, DateOnly? endExclusive, RecordedMassUnit displayUnit, CancellationToken cancellationToken);
     Task<ProgressView?> GetClientAsync(Guid clientProfileId, DateOnly? from, DateOnly? endExclusive, RecordedMassUnit displayUnit, CancellationToken cancellationToken);
     Task<ProgressCommandResult> RecordOwnAsync(RecordBodyweightRequest request, CancellationToken cancellationToken);
@@ -29,6 +31,8 @@ public interface IProgressApplicationService
     Task<ProgressDashboardView?> GetOwnDashboardAsync(DateOnly? from, DateOnly? endExclusive, RecordedMassUnit displayUnit, MeasurementUnit measurementDisplayUnit, CancellationToken cancellationToken);
     Task<ProgressDashboardView?> GetClientDashboardAsync(Guid clientProfileId, DateOnly? from, DateOnly? endExclusive, RecordedMassUnit displayUnit, MeasurementUnit measurementDisplayUnit, CancellationToken cancellationToken);
 }
+
+public sealed record BodyweightHistorySpanView(DateOnly? FirstDate, DateOnly? LastDate);
 
 /// <summary>
 /// A streamed progress-photo upload. The stream is consumed once and never buffered whole.

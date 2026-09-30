@@ -88,6 +88,10 @@ public interface ITrainingApplicationService
 
     Task<ClientTrainingDayResult> GetTodayAsync(CancellationToken cancellationToken);
 
+    Task<ClientTrainingWeekView> GetMyWeekAsync(CancellationToken cancellationToken);
+
+    Task<ClientPersonalRecordsResult> GetMyPersonalRecordsAsync(CancellationToken cancellationToken);
+
     Task<ClientTrainingUpcomingView> GetUpcomingAsync(int skip, CancellationToken cancellationToken);
 
     Task<CoachWorkoutDetailResult?> GetCoachWorkoutAsync(
@@ -375,6 +379,15 @@ public sealed record ClientTrainingDayResult(
     DateOnly LocalDate,
     IReadOnlyList<ClientWorkoutView> Workouts);
 
+public sealed record ClientTrainingWeekView(
+    bool IsAllowed,
+    string AccessReason,
+    DateOnly LocalDate,
+    DateOnly WeekStart,
+    IReadOnlyList<ClientTrainingWeekDayView> Days);
+
+public sealed record ClientTrainingWeekDayView(DateOnly Date, int Scheduled, int Completed);
+
 public sealed record ClientTrainingUpcomingView(
     bool IsAllowed,
     string AccessReason,
@@ -420,7 +433,8 @@ public sealed record ClientWorkoutView(
     WorkoutExecutionStatus? Status,
     IReadOnlyList<ClientExerciseView> Exercises,
     IReadOnlyList<WorkoutNoteView> Notes,
-    uint? ExecutionVersion);
+    uint? ExecutionVersion,
+    DateTimeOffset? StartedAtUtc = null);
 
 public sealed record ClientExerciseView(
     Guid PrescriptionId,
@@ -465,14 +479,56 @@ public sealed record PreviousExercisePerformanceView(
     decimal? BestLoad,
     TrainingLoadUnit? Unit,
     int? Repetitions,
+    decimal? Rpe,
+    IReadOnlyList<PreviousSetPerformanceView>? Sets = null);
+
+public sealed record PreviousSetPerformanceView(
+    int Position,
+    int? Repetitions,
+    decimal? Load,
+    TrainingLoadUnit? LoadUnit,
     decimal? Rpe);
+
+public sealed record WorkoutPersonalRecordView(
+    Guid SetPerformanceId,
+    string ExerciseName,
+    int Repetitions,
+    decimal Load,
+    TrainingLoadUnit Unit,
+    string RuleKey,
+    int RuleVersion);
+
+public sealed record ClientPersonalRecordView(
+    Guid ExerciseId,
+    string ExerciseName,
+    DateOnly Date,
+    int Repetitions,
+    decimal Load,
+    TrainingLoadUnit Unit,
+    string RuleKey,
+    int RuleVersion);
+
+public sealed record ClientPersonalRecordsResult(
+    bool IsAllowed,
+    string AccessReason,
+    IReadOnlyList<ClientPersonalRecordView> Items);
+
+public sealed record WorkoutVolumeView(TrainingLoadUnit Unit, decimal LoadTimesRepetitions);
+
+public sealed record WorkoutFinishSummaryView(
+    int DurationSeconds,
+    int CompletedSetCount,
+    int TotalSetCount,
+    IReadOnlyList<WorkoutVolumeView> Volume,
+    IReadOnlyList<WorkoutPersonalRecordView> PersonalRecords);
 
 public sealed record WorkoutExecutionView(
     Guid Id,
     WorkoutExecutionStatus Status,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? CompletedAtUtc,
-    uint Version);
+    uint Version,
+    WorkoutFinishSummaryView? FinishSummary = null);
 
 public sealed record WorkoutSetSaveView(
     Guid WorkoutExecutionId,
@@ -484,7 +540,10 @@ public sealed record WorkoutSetSaveView(
     decimal? ActualRpe,
     decimal? ActualRir,
     bool IsCompleted,
-    string? ClientNote);
+    string? ClientNote,
+    bool IsPersonalRecord = false,
+    string PersonalRecordRuleKey = WorkoutPersonalRecordRule.Key,
+    int PersonalRecordRuleVersion = WorkoutPersonalRecordRule.Version);
 
 public sealed record RecordSetActualRequest(
     int? Repetitions,

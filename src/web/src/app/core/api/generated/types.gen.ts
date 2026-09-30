@@ -266,6 +266,11 @@ export type BodyweightHistoryItemView = {
   supersededAtUtc: string;
 };
 
+export type BodyweightHistorySpanView = {
+  firstDate: null | string;
+  lastDate: null | string;
+};
+
 export type BodyweightHistoryView = {
   current: BodyweightObservationView;
   previousValues: Array<BodyweightHistoryItemView>;
@@ -685,6 +690,23 @@ export type ClientNutritionPlanSummary = {
 
 export type ClientOnboardingStatus = 'NotStarted' | 'InProgress' | 'Completed';
 
+export type ClientPersonalRecordsResult = {
+  isAllowed: boolean;
+  accessReason: string;
+  items: Array<ClientPersonalRecordView>;
+};
+
+export type ClientPersonalRecordView = {
+  exerciseId: string;
+  exerciseName: string;
+  date: string;
+  repetitions: number | string;
+  load: number | string;
+  unit: TrainingLoadUnit;
+  ruleKey: string;
+  ruleVersion: number | string;
+};
+
 export type ClientReleaseView = {
   releasedAtUtc: string;
   reason: string;
@@ -773,6 +795,20 @@ export type ClientTrainingUpcomingView = {
   todayCoverage: null | TodayTrainingCoverageView;
 };
 
+export type ClientTrainingWeekDayView = {
+  date: string;
+  scheduled: number | string;
+  completed: number | string;
+};
+
+export type ClientTrainingWeekView = {
+  isAllowed: boolean;
+  accessReason: string;
+  localDate: string;
+  weekStart: string;
+  days: Array<ClientTrainingWeekDayView>;
+};
+
 export type ClientWorkoutView = {
   sessionId: string;
   mesocycleId: string;
@@ -783,6 +819,7 @@ export type ClientWorkoutView = {
   exercises: Array<ClientExerciseView>;
   notes: Array<WorkoutNoteView>;
   executionVersion: null | number | string;
+  startedAtUtc?: null | string;
 };
 
 export type CoachClientDetails = {
@@ -1088,6 +1125,7 @@ export type CurrentUserResponse = {
   preferredCulture: string;
   emailConfirmed: boolean;
   roles: Array<string>;
+  preferredThemeMode: string;
 };
 
 export type DailyNutritionLogStatus = 'InProgress' | 'Completed';
@@ -1871,6 +1909,10 @@ export type OneRepMaxEstimateView = {
   qualification: string;
 };
 
+export type OwnCoachView = {
+  name: string;
+};
+
 export type PaymentInstructionsView = {
   whishNumber: null | string;
 };
@@ -1941,6 +1983,15 @@ export type PreviousExercisePerformanceView = {
   bestLoad: null | number | string;
   unit: null | TrainingLoadUnit;
   repetitions: null | number | string;
+  rpe: null | number | string;
+  sets?: null | Array<PreviousSetPerformanceView>;
+};
+
+export type PreviousSetPerformanceView = {
+  position: number | string;
+  repetitions: null | number | string;
+  load: null | number | string;
+  loadUnit: null | TrainingLoadUnit;
   rpe: null | number | string;
 };
 
@@ -2512,6 +2563,10 @@ export type TenantMembershipSummary = {
 
 export type TenantRole = 'Owner' | 'Coach' | 'Client';
 
+export type ThemeModeRequest = {
+  mode: string;
+};
+
 export type TodayTrainingCoverageView = {
   activeBlock: null | ActiveTrainingBlockView;
   nextBlockStartDate: null | string;
@@ -2705,6 +2760,15 @@ export type WorkoutExecutionView = {
   startedAtUtc: string;
   completedAtUtc: null | string;
   version: number | string;
+  finishSummary?: null | WorkoutFinishSummaryView;
+};
+
+export type WorkoutFinishSummaryView = {
+  durationSeconds: number | string;
+  completedSetCount: number | string;
+  totalSetCount: number | string;
+  volume: Array<WorkoutVolumeView>;
+  personalRecords: Array<WorkoutPersonalRecordView>;
 };
 
 export type WorkoutNoteAuthorRole = 'Coach' | 'Client';
@@ -2718,6 +2782,16 @@ export type WorkoutNoteView = {
   createdAtUtc: string;
 };
 
+export type WorkoutPersonalRecordView = {
+  setPerformanceId: string;
+  exerciseName: string;
+  repetitions: number | string;
+  load: number | string;
+  unit: TrainingLoadUnit;
+  ruleKey: string;
+  ruleVersion: number | string;
+};
+
 export type WorkoutSetSaveView = {
   workoutExecutionId: string;
   executionVersion: number | string;
@@ -2729,6 +2803,14 @@ export type WorkoutSetSaveView = {
   actualRir: null | number | string;
   isCompleted: boolean;
   clientNote: null | string;
+  isPersonalRecord?: boolean;
+  personalRecordRuleKey?: string;
+  personalRecordRuleVersion?: number | string;
+};
+
+export type WorkoutVolumeView = {
+  unit: TrainingLoadUnit;
+  loadTimesRepetitions: number | string;
 };
 
 export type WorkspaceBillingAccessView = {
@@ -3233,6 +3315,36 @@ export type GetCurrentUserResponses = {
 };
 
 export type GetCurrentUserResponse = GetCurrentUserResponses[keyof GetCurrentUserResponses];
+
+export type UpdateOwnThemeModeData = {
+  body: ThemeModeRequest;
+  path?: never;
+  query?: never;
+  url: '/api/auth/me/theme';
+};
+
+export type UpdateOwnThemeModeErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Unauthorized
+   */
+  401: unknown;
+};
+
+export type UpdateOwnThemeModeError = UpdateOwnThemeModeErrors[keyof UpdateOwnThemeModeErrors];
+
+export type UpdateOwnThemeModeResponses = {
+  /**
+   * OK
+   */
+  200: CurrentUserResponse;
+};
+
+export type UpdateOwnThemeModeResponse =
+  UpdateOwnThemeModeResponses[keyof UpdateOwnThemeModeResponses];
 
 export type ConfirmEmailData = {
   body: ConfirmEmailRequest;
@@ -4006,6 +4118,29 @@ export type GetOwnClientProfileResponses = {
 
 export type GetOwnClientProfileResponse =
   GetOwnClientProfileResponses[keyof GetOwnClientProfileResponses];
+
+export type GetOwnCoachData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/client-profile/me/coach';
+};
+
+export type GetOwnCoachErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetOwnCoachResponses = {
+  /**
+   * OK
+   */
+  200: OwnCoachView;
+};
+
+export type GetOwnCoachResponse = GetOwnCoachResponses[keyof GetOwnCoachResponses];
 
 export type UpdateOwnClientIntakeData = {
   body: UpdateClientIntakeRequest;
@@ -5338,6 +5473,40 @@ export type GetMyTrainingTodayResponses = {
 export type GetMyTrainingTodayResponse =
   GetMyTrainingTodayResponses[keyof GetMyTrainingTodayResponses];
 
+export type GetMyTrainingWeekData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/training/me/week';
+};
+
+export type GetMyTrainingWeekResponses = {
+  /**
+   * OK
+   */
+  200: ClientTrainingWeekView;
+};
+
+export type GetMyTrainingWeekResponse =
+  GetMyTrainingWeekResponses[keyof GetMyTrainingWeekResponses];
+
+export type GetMyTrainingPersonalRecordsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/training/me/personal-records';
+};
+
+export type GetMyTrainingPersonalRecordsResponses = {
+  /**
+   * OK
+   */
+  200: ClientPersonalRecordsResult;
+};
+
+export type GetMyTrainingPersonalRecordsResponse =
+  GetMyTrainingPersonalRecordsResponses[keyof GetMyTrainingPersonalRecordsResponses];
+
 export type StartMyWorkoutData = {
   body?: never;
   path: {
@@ -6294,6 +6463,30 @@ export type CompleteOwnNutritionLogResponses = {
 export type CompleteOwnNutritionLogResponse =
   CompleteOwnNutritionLogResponses[keyof CompleteOwnNutritionLogResponses];
 
+export type GetOwnBodyweightSpanData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/progress/me/span';
+};
+
+export type GetOwnBodyweightSpanErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetOwnBodyweightSpanResponses = {
+  /**
+   * OK
+   */
+  200: BodyweightHistorySpanView;
+};
+
+export type GetOwnBodyweightSpanResponse =
+  GetOwnBodyweightSpanResponses[keyof GetOwnBodyweightSpanResponses];
+
 export type GetOwnProgressData = {
   body?: never;
   path?: never;
@@ -6736,6 +6929,32 @@ export type GetOwnProgressDashboardResponses = {
 
 export type GetOwnProgressDashboardResponse =
   GetOwnProgressDashboardResponses[keyof GetOwnProgressDashboardResponses];
+
+export type GetClientBodyweightSpanData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/progress/clients/{clientProfileId}/span';
+};
+
+export type GetClientBodyweightSpanErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetClientBodyweightSpanResponses = {
+  /**
+   * OK
+   */
+  200: BodyweightHistorySpanView;
+};
+
+export type GetClientBodyweightSpanResponse =
+  GetClientBodyweightSpanResponses[keyof GetClientBodyweightSpanResponses];
 
 export type GetClientProgressData = {
   body?: never;

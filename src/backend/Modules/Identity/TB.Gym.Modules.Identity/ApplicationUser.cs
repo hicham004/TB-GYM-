@@ -9,6 +9,8 @@ public sealed class ApplicationUser : IdentityUser<Guid>
 
     public string PreferredCulture { get; set; } = "en-LB";
 
+    public string PreferredThemeMode { get; set; } = "system";
+
     public bool IsPlatformBlocked { get; set; }
 
     public DateTimeOffset CreatedAtUtc { get; set; }

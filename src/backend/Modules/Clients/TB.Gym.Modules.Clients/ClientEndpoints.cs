@@ -191,6 +191,17 @@ public static class ClientEndpoints
         .Produces<ClientSelfProfile>()
         .Produces(StatusCodes.Status404NotFound);
 
+        selfGroup.MapGet("/me/coach", async (
+            IClientProfileApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var coach = await service.GetOwnCoachAsync(cancellationToken);
+            return coach is null ? Results.NotFound() : Results.Ok(coach);
+        })
+        .WithName("GetOwnCoach")
+        .Produces<OwnCoachView>()
+        .Produces(StatusCodes.Status404NotFound);
+
         selfGroup.MapPut("/me/intake", async (
             UpdateClientIntakeRequest request,
             HttpContext context,

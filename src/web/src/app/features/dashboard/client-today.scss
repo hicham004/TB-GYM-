@@ -1,13 +1,14 @@
-// Client Today (339:2140): one column, 24px between parts, capped at 720px on wide screens.
+// Client Today: one column, 24px between parts, capped at 720px on wide screens.
 :host {
   display: block;
 }
 
 .today {
   display: grid;
-  gap: var(--space-24);
+  gap: 1.5rem;
   margin-inline: auto;
-  max-inline-size: var(--content-width-720);
+  max-inline-size: 45rem;
+  padding-block: 0.5rem 2rem;
 }
 
 .today-header {
@@ -31,6 +32,11 @@
 
 h1 {
   margin: 0;
+  font-family: 'TB Home Serif', Georgia, serif;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
 }
 
 // Focused on arrival for screen readers; the heading is not a control, so no ring is drawn.
@@ -43,6 +49,29 @@ h1:focus {
   display: flex;
   flex: none;
   gap: var(--space-8);
+}
+
+.today-coach {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-inline-size: 12rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.25rem;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.today-coach span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .today-coach span:last-child {
+    display: none;
+  }
 }
 
 .today-bell {
@@ -77,6 +106,104 @@ h1:focus {
 .today-me:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-accent);
   outline-offset: var(--focus-separation-gap);
+}
+
+.today-week {
+  display: grid;
+  gap: 0.75rem;
+}
+.today-week-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+.today-week-top strong {
+  font-size: 0.95rem;
+}
+.today-week-top span {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.today-week-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.today-week-days li {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  padding: 0.5rem 0;
+  border-radius: 12px;
+}
+.today-week-days li.is-today {
+  background: var(--color-surface-subtle);
+}
+.today-week-name {
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.today-week-days .is-today .today-week-name {
+  color: var(--color-text-primary);
+}
+.today-week-ring {
+  display: grid;
+  place-items: center;
+  inline-size: min(2.25rem, 100%);
+  aspect-ratio: 1;
+  border: 2px dashed var(--color-border-control);
+  border-radius: 50%;
+}
+.today-week-ring.is-planned,
+.today-week-ring.is-done {
+  border: 0;
+  background: conic-gradient(
+    var(--tb-accent-ink) var(--progress),
+    var(--color-border-subtle) var(--progress)
+  );
+}
+.today-week-ring.is-planned::before {
+  content: '';
+  background: var(--color-background);
+  inline-size: calc(100% - 0.5rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+.today-week-ring.is-done {
+  background: var(--tb-accent);
+  color: var(--tb-on-accent);
+}
+.today-week-failed {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  color: var(--color-text-secondary);
+}
+.today-week-failed p {
+  margin: 0;
+}
+.today-week-skeleton {
+  block-size: 5rem;
+  border-radius: 12px;
+  background: var(--color-surface-subtle);
+}
+
+@media (max-width: 430px) {
+  .today {
+    gap: 1.25rem;
+  }
+  .today-week-ring {
+    inline-size: min(2rem, 100%);
+  }
 }
 
 @media (forced-colors: active) {

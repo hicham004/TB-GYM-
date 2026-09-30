@@ -1,189 +1,310 @@
-<section class="dashboard">
-  <h2 i18n>Progress dashboard</h2>
-
-  @if (error(); as message) {
-    <p class="error" role="alert">{{ message }}</p>
-  }
-
-  @if (loading()) {
-    <p i18n>Loading the progress dashboard…</p>
-  } @else if (dashboard(); as view) {
-    <p class="window">
-      <ng-container i18n
-        >{{ view.from | date: 'mediumDate' }} to {{ view.toExclusive | date: 'mediumDate' }},
-        {{ view.windowDayCount }} days ({{ view.timeZoneId }})</ng-container
-      >
-    </p>
-
-    @if (view.isEmpty) {
-      <p class="empty" i18n>Nothing has been recorded in this period yet.</p>
+<div class="progress-page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow" i18n>THE LONG VIEW</p>
+      <h1 i18n>Progress</h1>
+      <p i18n>Small entries add up. See what has changed.</p>
+    </div>
+    @if (!coachMode()) {
+      <button type="button" class="log-button" (click)="openWeightSheet()" i18n>
+        + Log weight
+      </button>
     }
-
-    <article class="panel">
-      <h3 i18n>Bodyweight</h3>
-      @if (view.bodyweight.latestDisplayValue === null) {
-        <p class="empty" i18n>No bodyweight recorded in this period.</p>
+  </header>
+  @if (weightNotice()) {
+    <p role="status" class="notice">{{ weightNotice() }}</p>
+  }
+  @if (error(); as message) {
+    <p role="alert" class="error">{{ message }}</p>
+  }
+  @if (loading()) {
+    <div class="skeleton" role="status" aria-label="Loading progress" i18n-aria-label>
+      <div></div>
+      <div></div>
+      <div></div>
+    </div>
+  } @else if (dashboard(); as view) {
+    <div class="range" role="group" aria-label="Chart range" i18n-aria-label>
+      <button type="button" [attr.aria-pressed]="range() === '4w'" (click)="changeRange('4w')" i18n>
+        4 w
+      </button>
+      <button
+        type="button"
+        [attr.aria-pressed]="range() === '12w'"
+        (click)="changeRange('12w')"
+        i18n
+      >
+        12 w
+      </button>
+      <button
+        type="button"
+        [attr.aria-pressed]="range() === 'all'"
+        (click)="changeRange('all')"
+        i18n
+      >
+        All
+      </button>
+    </div>
+    @if (range() === 'all') {
+      <p class="range-note" i18n>
+        Showing all recorded weight entries. The other sections show the latest 12 months.
+      </p>
+    }
+    <section class="hero-card" aria-labelledby="weight-heading">
+      <div class="section-top">
+        <div>
+          <p class="eyebrow" i18n>BODYWEIGHT</p>
+          <h2 id="weight-heading" i18n>Your weight trend</h2>
+        </div>
+        <span class="date-span"
+          >{{ progress()?.from ?? view.from | date: 'd MMM y' }} –
+          {{ view.toExclusive | date: 'd MMM y' }}</span
+        >
+      </div>
+      @if (entries().length) {
+        <div class="weight-figure">
+          <strong
+            >{{ entries()[0].displayValue | number: '1.0-2' }}
+            <small>{{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}</small></strong
+          >
+          @if (range() !== 'all' && view.bodyweight.change; as change) {
+            <span class="delta" [class.up]="change.delta > 0"
+              >{{ change.delta > 0 ? '↑' : change.delta < 0 ? '↓' : '→' }}
+              {{ abs(change.delta) | number: '1.0-2' }}
+              {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }} since
+              {{ change.fromDate | date: 'd MMM' }}</span
+            >
+          } @else {
+            <span class="delta" i18n
+              >Recorded from {{ entries()[entries().length - 1].date | date: 'd MMM y' }}</span
+            >
+          }
+        </div>
+        <p class="context" i18n>
+          Last weighed {{ entries()[0].date | date: 'd MMM' }} · {{ entries().length }} of
+          {{ progress()?.days?.length ?? view.windowDayCount }} days recorded
+        </p>
       } @else {
-        <p class="figure">
-          {{ view.bodyweight.latestDisplayValue | number: '1.0-2' }}
-          <span class="unit">{{ view.displayUnit }}</span>
-        </p>
-        <p class="detail" i18n>Latest on {{ view.bodyweight.latestDate | date: 'mediumDate' }}</p>
-        @if (view.bodyweight.change; as change) {
-          <p class="detail" i18n>
-            Change of {{ change.delta | number: '1.0-2' }} from
-            {{ change.fromDate | date: 'mediumDate' }} to {{ change.toDate | date: 'mediumDate' }}
-          </p>
-        }
-        @if (view.bodyweight.trendIsAvailable && view.bodyweight.trendEstimate !== null) {
-          <p class="detail" i18n>Trend {{ view.bodyweight.trendEstimate | number: '1.0-2' }}</p>
-        }
-        <p class="detail" i18n>
-          Weighed on {{ view.bodyweight.observedDayCount }} of {{ view.windowDayCount }} days
-        </p>
-        <ul class="weeks">
-          @for (week of view.bodyweight.weeks; track week.weekStart) {
-            @if (week.displayMean !== null) {
+        <p class="empty" i18n>Your weight chart will appear after your first entry.</p>
+      }
+      @if (progress()) {
+        <app-trend-chart
+          [points]="chartPoints()"
+          [weeks]="chartWeeks()"
+          [unit]="view.displayUnit === 'Kilogram' ? 'kg' : 'lb'"
+        />
+      }
+    </section>
+
+    <div class="two-up">
+      <section class="panel" aria-labelledby="measurements-heading">
+        <div class="section-top">
+          <div>
+            <p class="eyebrow" i18n>THE DETAILS</p>
+            <h2 id="measurements-heading" i18n>Measurements</h2>
+          </div>
+          <a routerLink="/progress" i18n>Manage</a>
+        </div>
+        @if (!view.measurements.length) {
+          <p class="empty" i18n>Measurements you log will show their changes here.</p>
+        } @else {
+          <ul class="measurement-list">
+            @for (measurement of view.measurements; track measurement.measurementType) {
               <li>
-                <span>{{ week.weekStart | date: 'mediumDate' }}</span>
-                <span>{{ week.displayMean | number: '1.0-2' }}</span>
-                <span class="detail" i18n>from {{ week.observedDayCount }} days</span>
+                <span>{{ measurementLabel(measurement.measurementType) }}</span>
+                <strong
+                  >{{ measurement.latestDisplayValue | number: '1.0-2' }}
+                  <small>{{
+                    measurement.displayUnit === 'Percent'
+                      ? '%'
+                      : measurement.displayUnit === 'Inch'
+                        ? 'in'
+                        : 'cm'
+                  }}</small></strong
+                >
+                @if (measurement.change; as change) {
+                  <small class="measurement-delta"
+                    >{{ change.delta > 0 ? '+' : '' }}{{ change.delta | number: '1.0-2' }} since
+                    {{ change.fromDate | date: 'd MMM' }}</small
+                  >
+                } @else {
+                  <small i18n>First entry</small>
+                }
               </li>
             }
-          }
-        </ul>
-      }
-    </article>
-
-    <article class="panel">
-      <h3 i18n>Body measurements</h3>
-      @if (view.measurements.length === 0) {
-        <p class="empty" i18n>No measurements recorded in this period.</p>
-      } @else {
-        <ul class="measurements">
-          @for (measurement of view.measurements; track measurement.measurementType) {
-            <li>
-              <span class="label">{{ measurement.measurementType }}</span>
-              <span class="figure"
-                >{{ measurement.latestDisplayValue | number: '1.0-2' }}
-                <span class="unit">{{ measurement.displayUnit }}</span></span
-              >
-              @if (measurement.change; as change) {
-                <span class="detail" i18n
-                  >change {{ change.delta | number: '1.0-2' }} over
-                  {{ measurement.observationCount }} entries</span
-                >
-              } @else {
-                <span class="detail" i18n>{{ measurement.observationCount }} entry</span>
-              }
-            </li>
-          }
-        </ul>
-      }
-    </article>
-
-    <article class="panel">
-      <h3 i18n>Photos</h3>
-      @if (view.photos.photoCount === 0) {
-        <p class="empty" i18n>No progress photos in this period.</p>
-      } @else {
-        @if (view.photos.missingThumbnailCount > 0) {
-          <p class="detail" i18n>
-            {{ view.photos.missingThumbnailCount }} of {{ view.photos.photoCount }} photos have no
-            preview and can only be opened from the progress page.
-          </p>
+          </ul>
         }
-        @if (view.photos.previewPhotoCount < view.photos.photoCount) {
-          <p class="detail" i18n>
-            Showing the most recent {{ view.photos.previewPhotoCount }} of
-            {{ view.photos.photoCount }} photos in this period. The rest are on the progress page.
+      </section>
+      <section class="panel" aria-labelledby="photos-heading">
+        <div class="section-top">
+          <div>
+            <p class="eyebrow" i18n>VISUAL HISTORY</p>
+            <h2 id="photos-heading" i18n>Photos</h2>
+          </div>
+          <a routerLink="/progress" i18n>View all</a>
+        </div>
+        @if (photoPair(); as pair) {
+          <app-photo-compare
+            [beforeSrc]="pair.before.thumbnailUrl!"
+            [afterSrc]="pair.after.thumbnailUrl!"
+            [beforeLabel]="pair.before.photoDate"
+            [afterLabel]="pair.after.photoDate"
+          />
+        } @else if (view.photos.photoCount > 0) {
+          <p class="empty" i18n>
+            Two photos in the same pose are needed for a comparison. Your photos are under View all.
           </p>
+        } @else {
+          <p class="empty" i18n>Log photos over time to compare them here.</p>
         }
-        @for (pose of view.photos.poses; track pose.pose) {
-          <div class="pose">
-            <h4>{{ pose.pose }}</h4>
-            <ul class="timeline">
+        @if (view.photos.photoCount > 0) {
+          <div class="photo-timeline">
+            @for (pose of view.photos.poses; track pose.pose) {
               @for (photo of pose.photos; track photo.id) {
-                <li>
-                  <!-- Two reasons a tile cannot show: the photo has no rendition at all, or the
-                       media grants this page needs were not issued. Either way the path is left
-                       unbound, because binding it would ask the browser for protected bytes it has
-                       no grant for and draw a broken image. The count above says how many photos
-                       are in the first case. -->
-                  @if (
-                    photo.thumbnailUrl === null || !grantedPreviewIds().has(photo.mediaAssetId)
-                  ) {
-                    <span class="no-preview" i18n>Preview unavailable</span>
-                  } @else {
+                <div class="photo-tile">
+                  @if (photo.thumbnailUrl && grantedPreviewIds().has(photo.mediaAssetId)) {
                     <img
-                      class="thumbnail"
                       [src]="photo.thumbnailUrl"
                       alt="Progress photo preview"
                       i18n-alt
                       loading="lazy"
                     />
+                  } @else {
+                    <span i18n>Preview unavailable</span>
                   }
-                  <span class="detail">{{ photo.photoDate | date: 'mediumDate' }}</span>
-                </li>
+                  <small>{{ photo.photoDate | date: 'd MMM' }} · {{ pose.pose }}</small>
+                </div>
               }
-            </ul>
+            }
           </div>
+          @if (view.photos.previewPhotoCount < view.photos.photoCount) {
+            <p class="context" i18n>
+              Showing {{ view.photos.previewPhotoCount }} of {{ view.photos.photoCount }} photos.
+              View all for the full history.
+            </p>
+          }
         }
-      }
-    </article>
+      </section>
+    </div>
 
-    <article class="panel">
-      <h3 i18n>Nutrition logging</h3>
+    <div class="two-up">
+      <section class="panel" aria-labelledby="records-heading">
+        <div class="section-top">
+          <div>
+            <p class="eyebrow" i18n>STRONGER</p>
+            <h2 id="records-heading" i18n>Personal records</h2>
+          </div>
+        </div>
+        @if (!view.training.available) {
+          <p class="empty">{{ unavailableReason(view.training.reason) }}</p>
+        } @else if (personalRecords()?.isAllowed && personalRecords()!.items.length) {
+          <ul class="record-list">
+            @for (
+              record of personalRecords()!.items;
+              track record.exerciseId + '-' + record.repetitions + '-' + record.unit
+            ) {
+              <li>
+                <span dir="auto"
+                  >{{ record.exerciseName }}<small>{{ record.date | date: 'd MMM y' }}</small></span
+                ><strong
+                  >{{ record.load }} {{ record.unit === 'Kilogram' ? 'kg' : 'lb' }} ×
+                  {{ record.repetitions }}</strong
+                >
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="empty" i18n>Your best completed lifts will appear here.</p>
+        }
+      </section>
+      <section class="panel" aria-labelledby="training-heading">
+        <div class="section-top">
+          <div>
+            <p class="eyebrow" i18n>SHOWING UP</p>
+            <h2 id="training-heading" i18n>Training</h2>
+          </div>
+        </div>
+        @if (!view.training.available) {
+          <p class="empty">{{ unavailableReason(view.training.reason) }}</p>
+        } @else if (view.training.context) {
+          <app-bar-chart
+            [bars]="trainingBars()"
+            label="Completed sessions compared with scheduled sessions"
+          />
+        }
+      </section>
+    </div>
+
+    <section class="panel nutrition-panel" aria-labelledby="nutrition-heading">
+      <div class="section-top">
+        <div>
+          <p class="eyebrow" i18n>DAILY RHYTHM</p>
+          <h2 id="nutrition-heading" i18n>Nutrition logging</h2>
+        </div>
+      </div>
       @if (!view.nutrition.available) {
-        <p class="unavailable">{{ unavailableReason(view.nutrition.reason) }}</p>
+        <p class="empty">{{ unavailableReason(view.nutrition.reason) }}</p>
       } @else if (view.nutrition.context; as nutrition) {
-        <p class="figure" i18n>
-          Logged on {{ nutrition.recentLoggedDayCount }} of the last
-          {{ nutrition.recentDayCount }} days
+        <strong>{{ nutrition.recentLoggedDayCount }} of {{ nutrition.recentDayCount }}</strong
+        ><span i18n> days logged recently</span>
+        <p class="context" i18n>
+          {{ nutrition.windowLoggedDayCount }} of {{ view.windowDayCount }} days logged in this
+          period
         </p>
-        <p class="detail" i18n>
-          {{ nutrition.recentCompletedDayCount }} of those days were completed
-        </p>
-        <p class="detail" i18n>
-          {{ nutrition.windowLoggedDayCount }} logged days in this period of
-          {{ view.windowDayCount }}
-        </p>
-        @if (nutrition.lastLoggedDate !== null) {
-          <p class="detail" i18n>Last logged {{ nutrition.lastLoggedDate | date: 'mediumDate' }}</p>
-        }
       }
-    </article>
+    </section>
 
-    <article class="panel">
-      <h3 i18n>Training</h3>
-      @if (!view.training.available) {
-        <p class="unavailable">{{ unavailableReason(view.training.reason) }}</p>
-      } @else if (view.training.context; as training) {
-        <p class="figure" i18n>
-          {{ training.recentCompletedWorkoutCount }} of
-          {{ training.recentScheduledSessionCount }} sessions completed in the last
-          {{ training.recentDayCount }} days
-        </p>
-        <p class="detail" i18n>
-          {{ training.windowCompletedWorkoutCount }} of
-          {{ training.windowScheduledSessionCount }} scheduled sessions completed in this period
-        </p>
-        @if (training.windowInProgressWorkoutCount > 0) {
-          <p class="detail" i18n>
-            {{ training.windowInProgressWorkoutCount }} workouts still in progress
-          </p>
-        }
-        @if (training.lastCompletedDate !== null) {
-          <p class="detail" i18n>
-            Last completed {{ training.lastCompletedDate | date: 'mediumDate' }}
-          </p>
-        }
+    <details class="all-entries">
+      <summary i18n>All entries</summary>
+      @if (!entries().length) {
+        <p class="empty" i18n>No weight entries in this period yet.</p>
+      } @else {
+        <ol>
+          @for (entry of entries(); track entry.date) {
+            <li>
+              <time>{{ entry.date | date: 'mediumDate' }}</time
+              ><strong
+                >{{ entry.displayValue | number: '1.0-2' }}
+                {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}</strong
+              >
+            </li>
+          }
+        </ol>
       }
-    </article>
-
+      <a routerLink="/progress" i18n>Open the full entry history and corrections</a>
+    </details>
     <p class="footnote" i18n>
-      These numbers are shown side by side, as recorded. They are not combined, and one does not
-      explain another.
+      These figures show recorded activity side by side. One does not explain another.
     </p>
   }
-</section>
+</div>
+
+<ng-template #weightTemplate>
+  <form class="weight-form" (submit)="$event.preventDefault(); saveWeight()">
+    <p i18n>Today's weight</p>
+    <label
+      ><span i18n>Weight</span
+      ><input
+        type="number"
+        min="1"
+        max="500"
+        step="0.1"
+        inputmode="decimal"
+        required
+        [ngModel]="weightValue()"
+        (ngModelChange)="weightValue.set($event)"
+        name="weight"
+    /></label>
+    <label
+      ><span i18n>Unit</span
+      ><select [ngModel]="weightUnit()" (ngModelChange)="weightUnit.set($event)" name="unit">
+        <option value="Kilogram">kg</option>
+        <option value="Pound">lb</option>
+      </select></label
+    >
+    @if (weightError()) {
+      <p role="alert" class="error">{{ weightError() }}</p>
+    }
+    <button type="submit" [disabled]="savingWeight()" i18n>Save weight</button>
+  </form>
+</ng-template>

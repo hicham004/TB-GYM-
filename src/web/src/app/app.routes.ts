@@ -9,6 +9,7 @@ import {
   signedOutGuard,
 } from './core/auth/auth.guards';
 import { TenantStore } from './core/tenancy/tenant.store';
+import { REDESIGNED } from './core/theme/redesigned-route';
 import { devRoutes } from './dev/dev-routes';
 import { platformAdminGuard } from './features/platform-admin/platform-admin.guard';
 
@@ -162,6 +163,14 @@ export const routes: Routes = [
     title: $localize`Account security | TB Gym`,
     loadComponent: () =>
       import('./features/account/account-security').then((module) => module.AccountSecurity),
+  },
+  {
+    path: 'account/appearance',
+    canActivate: [authGuard],
+    data: REDESIGNED,
+    title: $localize`Appearance | TB Gym`,
+    loadComponent: () =>
+      import('./features/account/account-appearance').then((module) => module.AccountAppearance),
   },
   // Empty in production; the development build swaps in the UI lab (see dev/dev-routes.ts).
   ...devRoutes,

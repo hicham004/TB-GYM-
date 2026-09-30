@@ -3,8 +3,28 @@ import type {
   CheckInAssignmentListItem,
   CheckInAssignmentListView,
   ClientTrainingDayResult,
+  ClientTrainingWeekView,
   ClientWorkoutView,
 } from '../../core/api/generated';
+
+export interface TrainingWeek {
+  isAllowed: boolean;
+  accessReason: string;
+  localDate: string;
+  weekStart: string;
+  days: { date: string; scheduled: number; completed: number }[];
+}
+
+export function mapTrainingWeek(value: ClientTrainingWeekView): TrainingWeek {
+  return {
+    ...value,
+    days: value.days.map((day) => ({
+      date: day.date,
+      scheduled: Number(day.scheduled),
+      completed: Number(day.completed),
+    })),
+  };
+}
 import type { Conversation } from '../messaging/messaging.models';
 import type { NutritionDay } from '../nutrition/nutrition.models';
 import type { UpcomingTraining } from '../training/training-read.models';

@@ -50,10 +50,10 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R1.1 | **Brand v2 tokens, theme-ready** (§3, §3.1). Brand, accent and light/dark as custom properties; legacy aliases kept for now | Lab and shells render in all 4 prototype brands, in light and dark, at AA contrast | Done · 2026-09-29 · a728fa8 |
 | R1.2 | **Component kit v2 core** (§4): Card, StatTile, Avatar/Stack, StatusPill, Buttons, Sheet, Dialog, Toast, EmptyState, Skeleton, ProgressRing, Sparkline, SegmentedControl, Tabs | All of them are in the UI lab, pass axe, and work in RTL and dark | Done · 2026-09-29 · 7668dd9 |
 | R1.3 | **Three hero screens in the lab** on demo data: Coach Today, Client Today, Workout player, matching the prototype (GSAP moments included) | Side-by-side screenshots against the prototype at 390 and 1440 px | Done · 2026-09-29 · 6dfb5af |
-| R1.4 | 🚦 **Owner and partner approve the look** | The owner says go | Gate |
-| R2.1 | **Client Today** (M1) for real, plus the personal light/dark setting (§3.1) | §2 definition of done | To do |
-| R2.2 | **Workout player** (M2), with backend pre-fill from last time, the versioned PR rule and the finish summary | §2, plus backend tests | To do |
-| R2.3 | **Progress** (M5) and the chart components | §2 | To do |
+| R1.4 | 🚦 **Owner and partner approve the look** | The owner says go | Built, not committed · owner and partner approved 2026-09-29 |
+| R2.1 | **Client Today** (M1) for real, plus the personal light/dark setting (§3.1) | §2 definition of done | Built, not committed · 2026-09-29 |
+| R2.2 | **Workout player** (M2), with backend pre-fill from last time, the versioned PR rule and the finish summary | §2, plus backend tests | Built, not committed · 2026-09-30 · full suites pending |
+| R2.3 | **Progress** (M5) and the chart components | §2 | Built, not committed · 2026-09-30 · full suites pending |
 | R2.4 | **Nutrition day** (M4) and **Check-in** (M6) | §2 | To do |
 | R2.5 | **Messages** (M7, shared chat), **Training** (M3), **Me** (M8), installable app | §2 | To do |
 | R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | To do |
@@ -81,11 +81,17 @@ of the implemented R1.3 screens before production rollout.
 *(Sessions add items here instead of building them.)*
 
 - **Demo data gaps (from R0.1).** The demo has no meal plans (needed before R2.4), no progress photos
-  or coach/exercise media (needed for R1.3 avatars and workout covers: use licensed images, never
-  AI-made people), and no former client. Add each when the screen that shows it is built.
+  or coach/exercise media (the real M1 uses coach initials until a profile photo source exists; use
+  licensed images, never AI-made people), and no former client. Add each when its screen is built.
+- **Planned workout duration (from R2.1).** Training sessions do not store one, so the Today hero
+  shows exercise and set counts. Add a real planned duration to the training contract before showing
+  an estimate; do not infer minutes from set count.
 - **Demo freshness.** Dates are relative to the day the command runs, so the data ages. Rebuild it
   (drop the development database, run `.\scripts\demo-workspace.ps1`) before every screenshot review
   or demo.
+- **Progress photo demo assets (R2.3).** The protected photo timeline and comparison work with
+  granted thumbnails; the Atlas demo still needs two consented, licensed photos of the same pose
+  before that section can be photographed with real demo data.
 - **Demo billing.** The demo workspace is backdated past its trial. If the Worker runs against the
   demo database it will invoice Atlas, and the workspace turns read-only after the grace days unless
   the platform admin records the payment.

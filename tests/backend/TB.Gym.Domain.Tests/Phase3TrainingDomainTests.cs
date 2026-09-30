@@ -8,6 +8,21 @@ namespace TB.Gym.Domain.Tests;
 [TestClass]
 public sealed class Phase3TrainingDomainTests
 {
+    [TestMethod]
+    public void ExactRepLoadPersonalRecordRuleIsVersionedAndUnitBoundByCaller()
+    {
+        Assert.IsTrue(WorkoutPersonalRecordRule.IsRecord(
+            true, 8, 72.5m, TrainingLoadUnit.Kilogram, 70m));
+        Assert.IsFalse(WorkoutPersonalRecordRule.IsRecord(
+            true, 8, 70m, TrainingLoadUnit.Kilogram, 70m));
+        Assert.IsFalse(WorkoutPersonalRecordRule.IsRecord(
+            false, 8, 72.5m, TrainingLoadUnit.Kilogram, 70m));
+        Assert.IsFalse(WorkoutPersonalRecordRule.IsRecord(
+            true, 8, 72.5m, null, 70m));
+        Assert.IsFalse(WorkoutPersonalRecordRule.IsRecord(
+            true, null, 72.5m, TrainingLoadUnit.Kilogram, 70m));
+    }
+
     private static readonly Guid TenantId = Guid.Parse("10000000-0000-0000-0000-000000000003");
     private static readonly Guid ClientId = Guid.Parse("20000000-0000-0000-0000-000000000003");
     private static readonly Guid ExerciseId = Guid.Parse("30000000-0000-0000-0000-000000000003");

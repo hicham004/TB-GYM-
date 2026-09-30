@@ -308,6 +308,10 @@ published; an unpublished week reads "This week's plan is on its way", and no co
 "Your next program starts …" or "Nothing assigned yet". Wording shown to the client never blames
 the coach.
 
+**TRN-019** Workout PR v1 is the highest positive load for one exercise, exact repetition count,
+and explicit unit among completed sets (ADR 0031). A tie is not a new PR. Set saves and workout
+completion evaluate the same named, versioned server rule; the UI does not convert units.
+
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated

@@ -1,6 +1,7 @@
 import type {
   ClientSetView,
   ClientTrainingDayResult,
+  PreviousSetPerformanceView,
   RecordSetActualRequest,
   WorkoutSetSaveView,
 } from '../../core/api/generated';
@@ -45,7 +46,12 @@ export function reconcileWorkoutSetDrafts(
         }
 
         const draft = current[set.performanceId];
-        next[set.performanceId] = draft?.dirty ? draft : draftFromSet(set, draft?.revision ?? 0);
+        const previous = exercise.previousPerformance?.sets?.find(
+          (item) => item.position === set.position,
+        );
+        next[set.performanceId] = draft?.dirty
+          ? draft
+          : draftFromSet(set, previous, draft?.revision ?? 0);
       }
     }
   }
@@ -183,11 +189,20 @@ export function applyWorkoutSetSaveToDay(
   };
 }
 
-function draftFromSet(set: ClientSetView, revision: number): WorkoutSetDraft {
+function draftFromSet(
+  set: ClientSetView,
+  previous: PreviousSetPerformanceView | undefined,
+  revision: number,
+): WorkoutSetDraft {
+  const matchingPrevious =
+    previous && (!set.prescribedLoadUnit || previous.loadUnit === set.prescribedLoadUnit)
+      ? previous
+      : null;
   return {
-    actualRepetitions: set.actualRepetitions,
-    actualLoad: set.actualLoad,
-    actualLoadUnit: set.actualLoadUnit ?? set.prescribedLoadUnit,
+    actualRepetitions:
+      set.actualRepetitions ?? matchingPrevious?.repetitions ?? set.prescribedRepetitionsMinimum,
+    actualLoad: set.actualLoad ?? matchingPrevious?.load ?? set.prescribedLoad,
+    actualLoadUnit: set.actualLoadUnit ?? matchingPrevious?.loadUnit ?? set.prescribedLoadUnit,
     actualRpe: set.actualRpe,
     actualRir: set.actualRir,
     isCompleted: set.isCompleted,

@@ -20,6 +20,39 @@ internal sealed partial class ProgressApplicationService(
     private const int DefaultWindowDays = 84;
     private const int MaximumWindowDays = 366;
 
+    public async Task<BodyweightHistorySpanView?> GetOwnBodyweightSpanAsync(
+        CancellationToken cancellationToken)
+    {
+        var client = await FindSelfAsync(cancellationToken);
+        return client is null ? null : await BodyweightSpanAsync(client.Id, cancellationToken);
+    }
+
+    public async Task<BodyweightHistorySpanView?> GetClientBodyweightSpanAsync(
+        Guid clientProfileId,
+        CancellationToken cancellationToken)
+    {
+        var relationship = await dbContext.ClientProfiles.AsNoTracking()
+            .Where(item => item.Id == clientProfileId)
+            .Select(item => new { item.IsCoachBlocked })
+            .SingleOrDefaultAsync(cancellationToken);
+        return relationship is { IsCoachBlocked: false }
+            ? await BodyweightSpanAsync(clientProfileId, cancellationToken)
+            : null;
+    }
+
+    private async Task<BodyweightHistorySpanView> BodyweightSpanAsync(
+        Guid clientProfileId,
+        CancellationToken cancellationToken)
+    {
+        var dates = dbContext.BodyweightObservations.AsNoTracking()
+            .Where(item => item.ClientProfileId == clientProfileId &&
+                           item.Status == BodyweightObservationStatus.Active)
+            .Select(item => (DateOnly?)item.MeasurementDate);
+        return new BodyweightHistorySpanView(
+            await dates.MinAsync(cancellationToken),
+            await dates.MaxAsync(cancellationToken));
+    }
+
     public async Task<ProgressView?> GetOwnAsync(
         DateOnly? from,
         DateOnly? to,

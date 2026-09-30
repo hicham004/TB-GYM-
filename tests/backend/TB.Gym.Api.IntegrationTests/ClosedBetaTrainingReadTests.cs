@@ -9,10 +9,111 @@ namespace TB.Gym.Api.IntegrationTests;
 
 public sealed partial class Phase3TrainingWorkflowTests
 {
+    [TestMethod]
+    public async Task PlayerPrefillsPriorSetsAndReturnsVersionedFinishRecords()
+    {
+        using var coach = CreateClient();
+        var tenant = await RegisterCoachAsync(coach, "player-prefill-coach@example.test", "Coach", "Player");
+        using var client = CreateClient();
+        var clientId = await InviteAndAcceptAsync(coach, client, "player-prefill-client@example.test", true);
+        SetTenant(client, tenant);
+        var resources = await CreateTrainingResourcesAsync(coach, clientId, 8, 2, TenantToday());
+        await AssignAsync(coach, clientId, resources, TenantToday());
+
+        var today = await ReadSliceAsync<ClientTrainingDayResult>(client, "/api/training/me/today");
+        var firstSession = today.Workouts.Single();
+        await RefreshCsrfAsync(client);
+        var start = await client.PostAsync($"/api/training/me/sessions/{firstSession.SessionId}/start", null);
+        await AssertStatusAsync(start, HttpStatusCode.OK);
+        var first = await ReadSlicePayloadAsync<WorkoutExecutionView>(start);
+        today = await ReadSliceAsync<ClientTrainingDayResult>(client, "/api/training/me/today");
+        var firstSet = today.Workouts.Single().Exercises.Single().Sets.Single();
+        await RefreshCsrfAsync(client);
+        var saved = await client.PutAsJsonAsync(
+            $"/api/training/me/workouts/{first.Id}/sets/{firstSet.PerformanceId}",
+            new { repetitions = 5, load = 80m, loadUnit = "Kilogram", rpe = 8m,
+                isCompleted = true, clientNote = (string?)null, version = first.Version });
+        await AssertStatusAsync(saved, HttpStatusCode.OK);
+        var savedSet = await ReadSlicePayloadAsync<WorkoutSetSaveView>(saved);
+        Assert.IsTrue(savedSet.IsPersonalRecord);
+        Assert.AreEqual(1, savedSet.PersonalRecordRuleVersion);
+        await RefreshCsrfAsync(client);
+        var complete = await client.PostAsJsonAsync($"/api/training/me/workouts/{first.Id}/complete",
+            new { version = savedSet.ExecutionVersion });
+        await AssertStatusAsync(complete, HttpStatusCode.OK);
+        var firstFinish = await ReadSlicePayloadAsync<WorkoutExecutionView>(complete);
+        Assert.IsNotNull(firstFinish.FinishSummary);
+        Assert.HasCount(1, firstFinish.FinishSummary.PersonalRecords);
+        Assert.AreEqual("ExactRepsLoad", firstFinish.FinishSummary.PersonalRecords[0].RuleKey);
+        Assert.AreEqual(1, firstFinish.FinishSummary.PersonalRecords[0].RuleVersion);
+        Assert.AreEqual(400m, firstFinish.FinishSummary.Volume.Single().LoadTimesRepetitions);
+
+        RequiredTestClock.Advance(TimeSpan.FromDays(7));
+        today = await ReadSliceAsync<ClientTrainingDayResult>(client, "/api/training/me/today");
+        var next = today.Workouts.Single();
+        var prior = next.Exercises.Single().PreviousPerformance;
+        Assert.IsNotNull(prior);
+        Assert.IsNotNull(prior.Sets);
+        Assert.AreEqual(80m, prior.Sets.Single().Load);
+        Assert.AreEqual(5, prior.Sets.Single().Repetitions);
+        Assert.AreEqual(TrainingLoadUnit.Kilogram, prior.Sets.Single().LoadUnit);
+
+        await RefreshCsrfAsync(client);
+        start = await client.PostAsync($"/api/training/me/sessions/{next.SessionId}/start", null);
+        await AssertStatusAsync(start, HttpStatusCode.OK);
+        var second = await ReadSlicePayloadAsync<WorkoutExecutionView>(start);
+        today = await ReadSliceAsync<ClientTrainingDayResult>(client, "/api/training/me/today");
+        var secondSet = today.Workouts.Single().Exercises.Single().Sets.Single();
+        await RefreshCsrfAsync(client);
+        saved = await client.PutAsJsonAsync(
+            $"/api/training/me/workouts/{second.Id}/sets/{secondSet.PerformanceId}",
+            new { repetitions = 5, load = 85m, loadUnit = "Kilogram", rpe = 8m,
+                isCompleted = true, clientNote = (string?)null, version = second.Version });
+        await AssertStatusAsync(saved, HttpStatusCode.OK);
+        savedSet = await ReadSlicePayloadAsync<WorkoutSetSaveView>(saved);
+        Assert.IsTrue(savedSet.IsPersonalRecord);
+        await RefreshCsrfAsync(client);
+        complete = await client.PostAsJsonAsync($"/api/training/me/workouts/{second.Id}/complete",
+            new { version = savedSet.ExecutionVersion });
+        await AssertStatusAsync(complete, HttpStatusCode.OK);
+        var finish = await ReadSlicePayloadAsync<WorkoutExecutionView>(complete);
+        Assert.IsNotNull(finish.FinishSummary);
+        Assert.AreEqual(1, finish.FinishSummary.CompletedSetCount);
+        Assert.AreEqual(1, finish.FinishSummary.TotalSetCount);
+        Assert.HasCount(1, finish.FinishSummary.PersonalRecords);
+        Assert.AreEqual(85m, finish.FinishSummary.PersonalRecords[0].Load);
+        var records = await ReadSliceAsync<ClientPersonalRecordsResult>(client,
+            "/api/training/me/personal-records");
+        Assert.IsTrue(records.IsAllowed);
+        Assert.HasCount(1, records.Items);
+        Assert.AreEqual(85m, records.Items[0].Load);
+        using var anonymous = CreateClient();
+        await AssertStatusAsync(await anonymous.GetAsync("/api/training/me/personal-records"),
+            HttpStatusCode.Unauthorized);
+        await AssertStatusAsync(await coach.GetAsync("/api/training/me/personal-records"),
+            HttpStatusCode.Forbidden);
+        using var foreignCoach = CreateClient();
+        var foreignTenant = await RegisterCoachAsync(foreignCoach,
+            "player-prefill-foreign@example.test", "Foreign", "Coach");
+        SetTenant(client, foreignTenant);
+        await AssertStatusAsync(await client.GetAsync("/api/training/me/personal-records"),
+            HttpStatusCode.Forbidden);
+        SetTenant(client, tenant);
+        RequiredTestClock.Advance(TimeSpan.FromDays(60));
+        records = await ReadSliceAsync<ClientPersonalRecordsResult>(client,
+            "/api/training/me/personal-records");
+        Assert.IsFalse(records.IsAllowed);
+        Assert.IsEmpty(records.Items);
+    }
+
     private static readonly JsonSerializerOptions SliceReadJson = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter() },
     };
+
+    private static async Task<T> ReadSlicePayloadAsync<T>(HttpResponseMessage response) =>
+        await response.Content.ReadFromJsonAsync<T>(SliceReadJson)
+            ?? throw new AssertFailedException("Training response was empty.");
 
     [TestMethod]
     public async Task Slice1UpcomingDistinguishesNoProgramHiddenWeeksAndNextSession()

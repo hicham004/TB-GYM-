@@ -465,6 +465,20 @@ internal sealed class ClientProfileApplicationService(
         return client is null ? null : ToSelfProfile(client);
     }
 
+    public async Task<OwnCoachView?> GetOwnCoachAsync(CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } userId) return null;
+        var coachId = await dbContext.ClientProfiles.AsNoTracking()
+            .CurrentFor(userId)
+            .Select(item => (Guid?)item.AssignedCoachUserId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (coachId is null) return null;
+        return await dbContext.Users.AsNoTracking()
+            .Where(item => item.Id == coachId)
+            .Select(item => new OwnCoachView(item.DisplayName))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public Task<ClientCommandResult> UpdateForCoachAsync(
         Guid clientId,
         UpdateClientIntakeRequest request,

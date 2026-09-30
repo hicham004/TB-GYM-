@@ -7,6 +7,7 @@ import {
   mapCoachWorkoutDetail,
 } from '../../features/training/training-read.models';
 import { mapRenewalStatus, type RenewalStatus } from '../../features/dashboard/renewal.models';
+import { mapTrainingWeek, type TrainingWeek } from '../../features/dashboard/today.models';
 import {
   mapAiDraft,
   mapCalculation,
@@ -130,6 +131,10 @@ export class ApiClient {
 
   getCurrentUser(): Observable<CurrentUser> {
     return this.http.get<CurrentUser>('/api/auth/me');
+  }
+
+  updateOwnThemeMode(mode: CurrentUser['preferredThemeMode']): Observable<CurrentUser> {
+    return this.http.put<CurrentUser>('/api/auth/me/theme', { mode });
   }
 
   confirmEmail(userId: string, code: string): Observable<void> {
@@ -429,6 +434,10 @@ export class ApiClient {
       .pipe(map(toSelfProfile));
   }
 
+  getOwnCoach(): Observable<Phase3Contracts.OwnCoachView> {
+    return this.http.get<Phase3Contracts.OwnCoachView>('/api/client-profile/me/coach');
+  }
+
   updateSelfIntake(request: UpdateClientIntakeRequest): Observable<ClientSelfProfile> {
     return this.http
       .put<ContractClientSelfProfile>('/api/client-profile/me/intake', request)
@@ -689,6 +698,12 @@ export class ApiClient {
     );
   }
 
+  getMyTrainingPersonalRecords(): Observable<Phase3Contracts.ClientPersonalRecordsResult> {
+    return this.http.get<Phase3Contracts.ClientPersonalRecordsResult>(
+      '/api/training/me/personal-records',
+    );
+  }
+
   listStrengthMaxes(
     clientId: string,
     exerciseId?: string,
@@ -719,6 +734,12 @@ export class ApiClient {
 
   getMyTrainingToday(): Observable<Phase3Contracts.ClientTrainingDayResult> {
     return this.http.get<Phase3Contracts.ClientTrainingDayResult>('/api/training/me/today');
+  }
+
+  getMyTrainingWeek(): Observable<TrainingWeek> {
+    return this.http
+      .get<Phase3Contracts.ClientTrainingWeekView>('/api/training/me/week')
+      .pipe(map(mapTrainingWeek));
   }
 
   getMyUpcomingTraining(skip = 0) {
@@ -931,16 +952,37 @@ export class ApiClient {
       .pipe(map(mapAiDraft));
   }
 
-  getMyProgress(displayUnit: Phase3Contracts.RecordedMassUnit) {
+  getMyProgress(
+    displayUnit: Phase3Contracts.RecordedMassUnit,
+    from: string | null = null,
+    to: string | null = null,
+  ) {
     return this.http
-      .get<Phase3Contracts.ProgressView>('/api/progress/me', { params: { displayUnit } })
+      .get<Phase3Contracts.ProgressView>('/api/progress/me', {
+        params: { displayUnit, ...progressWindowParams(from, to) },
+      })
       .pipe(map(mapProgress));
   }
 
-  getClientProgress(clientId: string, displayUnit: Phase3Contracts.RecordedMassUnit) {
+  getMyBodyweightSpan() {
+    return this.http.get<Phase3Contracts.BodyweightHistorySpanView>('/api/progress/me/span');
+  }
+
+  getClientBodyweightSpan(clientId: string) {
+    return this.http.get<Phase3Contracts.BodyweightHistorySpanView>(
+      `/api/progress/clients/${clientId}/span`,
+    );
+  }
+
+  getClientProgress(
+    clientId: string,
+    displayUnit: Phase3Contracts.RecordedMassUnit,
+    from: string | null = null,
+    to: string | null = null,
+  ) {
     return this.http
       .get<Phase3Contracts.ProgressView>(`/api/progress/clients/${clientId}`, {
-        params: { displayUnit },
+        params: { displayUnit, ...progressWindowParams(from, to) },
       })
       .pipe(map(mapProgress));
   }

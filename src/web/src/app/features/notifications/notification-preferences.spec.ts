@@ -17,6 +17,7 @@ const USER: CurrentUser = {
   email: 'client@example.test',
   displayName: 'Client One',
   preferredCulture: 'en-LB',
+  preferredThemeMode: 'system',
   emailConfirmed: true,
   roles: [],
 };

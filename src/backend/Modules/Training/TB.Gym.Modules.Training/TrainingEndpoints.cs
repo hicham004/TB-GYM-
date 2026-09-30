@@ -334,6 +334,20 @@ public static class TrainingEndpoints
             .WithName("GetMyTrainingToday")
             .Produces<ClientTrainingDayResult>();
 
+        client.MapGet("/week", async (
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetMyWeekAsync(cancellationToken)))
+            .WithName("GetMyTrainingWeek")
+             .Produces<ClientTrainingWeekView>();
+
+        client.MapGet("/personal-records", async (
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetMyPersonalRecordsAsync(cancellationToken)))
+            .WithName("GetMyTrainingPersonalRecords")
+            .Produces<ClientPersonalRecordsResult>();
+
         client.MapPost("/sessions/{sessionId:guid}/start", async (
             Guid sessionId,
             HttpContext context,

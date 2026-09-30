@@ -17,6 +17,7 @@ const USER: CurrentUser = {
   email: 'coach@example.test',
   displayName: 'Tarek Bou',
   preferredCulture: 'en-LB',
+  preferredThemeMode: 'system',
   emailConfirmed: true,
   roles: [],
 };

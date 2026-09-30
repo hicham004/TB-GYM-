@@ -178,8 +178,9 @@ describe('TodayTraining interactions', () => {
     fill(host, 'Actual load', '62.5');
     fill(host, 'Actual load unit', 'Kilogram');
     fill(host, 'Actual repetitions', '8');
+    query<HTMLElement>(host, '.set-note summary').click();
     fill(host, 'Actual RPE', '8.5');
-    fill(host, 'Set note', 'Felt heavy.');
+    fill(host, 'Note for your coach', 'Felt heavy.');
     await settle(fixture);
 
     expect(button(host, 'Log set').disabled).toBe(false);
@@ -295,10 +296,11 @@ describe('TodayTraining interactions', () => {
   it('adds a workout note and clears the box', async () => {
     const { fixture, host, api } = await render();
 
+    query<HTMLElement>(host, '.workout-footer summary').click();
     fill(host, 'Workout note', 'Knee felt fine today.');
     await settle(fixture);
 
-    press(host, 'Add note');
+    press(host, 'Send note');
     await settle(fixture);
 
     expect(api.addWorkoutNote).toHaveBeenCalledWith('execution-1', {
@@ -311,7 +313,8 @@ describe('TodayTraining interactions', () => {
   it('offers no note button until something has been typed', async () => {
     const { host } = await render();
 
-    expect(button(host, 'Add note').disabled).toBe(true);
+    query<HTMLElement>(host, '.workout-footer summary').click();
+    expect(button(host, 'Send note').disabled).toBe(true);
   });
 
   /** A swap is only offered where the coach captured alternatives and allowed the policy. */
@@ -574,7 +577,7 @@ describe('TodayTraining interactions', () => {
     });
     const { host } = await render({}, withDemo);
 
-    expect(button(host, 'Demo 1').disabled).toBe(false);
+    expect(button(host, 'Watch demo 1').disabled).toBe(false);
   });
 
   it('focuses the persistent error summary when finishing is refused', async () => {

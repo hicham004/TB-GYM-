@@ -5,6 +5,7 @@ import {
   afterNextRender,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -23,6 +24,8 @@ import type {
   ClientTrainingDayResult,
   ClientWorkoutView,
   MediaAccessView,
+  TrainingLoadUnit,
+  WorkoutFinishSummaryView,
 } from '../../core/api/generated';
 import { workoutStatusLabel } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -65,6 +68,11 @@ export class TodayTraining {
   private mediaTrigger: HTMLElement | null = null;
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly injector = inject(Injector);
+  private readonly destroyRef = inject(DestroyRef);
+  private timerHandle: ReturnType<typeof setInterval> | null = null;
+  private wakeLock: WakeLockSentinel | null = null;
+  private touchStartX: number | null = null;
+  private unitSessionId: string | null = null;
 
   protected readonly day = signal<ClientTrainingDayResult | null>(null);
   protected readonly loading = signal(false);
@@ -75,14 +83,29 @@ export class TodayTraining {
   protected readonly setErrors = signal<Readonly<Record<string, string>>>({});
   protected readonly editingSetIds = signal<ReadonlySet<string>>(new Set());
   protected readonly finishConfirmation = signal<string | null>(null);
+  protected readonly finishSummary = signal<WorkoutFinishSummaryView | null>(null);
+  protected readonly finishedWorkoutName = signal('');
+  protected readonly activeExerciseIndex = signal(0);
+  protected readonly workoutUnit = signal<TrainingLoadUnit | null>(null);
+  protected readonly prSetIds = signal<ReadonlySet<string>>(new Set());
+  protected readonly now = signal(Date.now());
+  protected readonly restUntil = signal<number | null>(null);
+  protected readonly restTotal = signal(0);
+  protected readonly restRemaining = computed(() =>
+    Math.max(0, Math.ceil(((this.restUntil() ?? 0) - this.now()) / 1000)),
+  );
   protected readonly selectedSession = signal(
     this.route?.snapshot.queryParamMap.get('sessionId') ?? null,
   );
   protected readonly shownWorkouts = computed(() => {
     const workouts = this.day()?.workouts ?? [];
     const selected = workouts.find((item) => item.sessionId === this.selectedSession());
-    return selected ? [selected] : workouts;
+    return selected ? [selected] : workouts.slice(0, 1);
   });
+  protected readonly activeWorkout = computed(() => this.shownWorkouts()[0] ?? null);
+  protected readonly activeExercise = computed(
+    () => this.activeWorkout()?.exercises[this.activeExerciseIndex()] ?? null,
+  );
   protected readonly activeMedia = signal<MediaAccessView | null>(null);
   protected readonly setDrafts = signal<WorkoutSetDrafts>({});
   protected readonly savingSetIds = signal<ReadonlySet<string>>(new Set());
@@ -96,6 +119,13 @@ export class TodayTraining {
   protected readonly noteTime = workoutNoteTime;
 
   constructor() {
+    this.timerHandle = setInterval(() => this.now.set(Date.now()), 1000);
+    this.destroyRef.onDestroy(() => {
+      if (this.timerHandle) clearInterval(this.timerHandle);
+      void this.wakeLock?.release();
+      document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    });
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
     this.scope.onReset(() => this.resetTenantState());
     effect(() => {
       this.scope.epoch();
@@ -130,6 +160,7 @@ export class TodayTraining {
           await owner.wait(this.load(false));
           if (this.ownsContext(generation)) {
             this.notice.set($localize`Workout started.`);
+            void this.keepScreenAwake();
           }
         }),
       );
@@ -203,7 +234,18 @@ export class TodayTraining {
             this.setDrafts.update((drafts) =>
               applyWorkoutSetSave(drafts, response, snapshot.revision),
             );
-            this.notice.set($localize`Set saved.`);
+            this.prSetIds.update((ids) => {
+              const next = new Set(ids);
+              if (response.isPersonalRecord) next.add(setId);
+              else next.delete(setId);
+              return next;
+            });
+            if (response.isPersonalRecord) {
+              this.notice.set($localize`New personal record!`);
+              if ('vibrate' in navigator) navigator.vibrate([80, 40, 80]);
+            } else {
+              this.notice.set($localize`Set saved.`);
+            }
             this.editingSetIds.update((ids) => new Set([...ids].filter((id) => id !== setId)));
             return true;
           } catch (error) {
@@ -279,6 +321,9 @@ export class TodayTraining {
       this.updateSetDraft(set, { isCompleted: true, actualRir: null });
       const saved = await owner.wait(this.saveSet(workout, set));
       if (saved && set.performanceId) {
+        if (set.restSeconds && Number(set.restSeconds) > 0) {
+          this.startRest(Number(set.restSeconds));
+        }
         this.restoreSetFocus(set.performanceId, 'edit', trigger, restoreFocus);
       }
     });
@@ -326,6 +371,108 @@ export class TodayTraining {
     return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
   }
 
+  protected clockLabel(seconds: number | string): string {
+    const safe = Math.max(0, Math.floor(Number(seconds)));
+    return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, '0')}`;
+  }
+
+  protected elapsed(workout: ClientWorkoutView): number {
+    return workout.startedAtUtc
+      ? Math.max(0, Math.floor((this.now() - Date.parse(workout.startedAtUtc)) / 1000))
+      : 0;
+  }
+
+  protected startRest(seconds: number): void {
+    this.restTotal.set(seconds);
+    this.restUntil.set(Date.now() + seconds * 1000);
+  }
+
+  protected addRest(): void {
+    this.restUntil.update((until) => (until ?? Date.now()) + 15_000);
+    this.restTotal.update((total) => total + 15);
+  }
+
+  protected skipRest(): void {
+    this.restUntil.set(null);
+  }
+
+  protected showExercise(index: number): void {
+    const workout = this.activeWorkout();
+    if (!workout || index < 0 || index >= workout.exercises.length) return;
+    this.activeExerciseIndex.set(index);
+    this.skipRest();
+  }
+
+  protected touchStart(event: TouchEvent): void {
+    this.touchStartX = event.changedTouches[0]?.clientX ?? null;
+  }
+
+  protected touchEnd(event: TouchEvent): void {
+    if (this.touchStartX === null) return;
+    const delta = (event.changedTouches[0]?.clientX ?? this.touchStartX) - this.touchStartX;
+    this.touchStartX = null;
+    if (Math.abs(delta) < 70) return;
+    this.showExercise(this.activeExerciseIndex() + (delta < 0 ? 1 : -1));
+  }
+
+  protected chooseUnit(unit: TrainingLoadUnit | null): void {
+    this.workoutUnit.set(unit);
+    const workout = this.activeWorkout();
+    if (!workout) return;
+    this.unitSessionId = workout.sessionId;
+    for (const set of workout.exercises.flatMap((exercise) => exercise.sets)) {
+      if (!set.performanceId || set.isCompleted) continue;
+      const draft = this.setDrafts()[set.performanceId];
+      if (!draft) continue;
+      this.updateSetDraft(set, {
+        actualLoadUnit: unit,
+        actualLoad: draft.actualLoadUnit === unit ? draft.actualLoad : null,
+      });
+    }
+  }
+
+  protected selectWorkout(sessionId: string): void {
+    this.selectedSession.set(sessionId);
+    this.activeExerciseIndex.set(0);
+    const workout = this.day()?.workouts.find((item) => item.sessionId === sessionId);
+    this.workoutUnit.set(
+      workout?.exercises.flatMap((exercise) => exercise.sets).find((set) => set.prescribedLoadUnit)
+        ?.prescribedLoadUnit ?? null,
+    );
+    this.unitSessionId = sessionId;
+  }
+
+  private readonly onVisibilityChange = (): void => {
+    if (document.visibilityState === 'visible' && this.activeWorkout()?.status === 'InProgress') {
+      void this.keepScreenAwake();
+    }
+  };
+
+  protected stepSet(set: ClientSetView, field: 'load' | 'reps', direction: number): void {
+    const draft = this.setDraft(set);
+    if (!draft) return;
+    if (field === 'load') {
+      const step = this.workoutUnit() === 'Pound' ? 5 : 2.5;
+      this.updateSetDraft(set, {
+        actualLoad: Math.max(0, Number(draft.actualLoad ?? 0) + step * direction),
+        actualLoadUnit: this.workoutUnit(),
+      });
+    } else {
+      this.updateSetDraft(set, {
+        actualRepetitions: Math.max(0, Number(draft.actualRepetitions ?? 0) + direction),
+      });
+    }
+  }
+
+  private async keepScreenAwake(): Promise<void> {
+    if (!('wakeLock' in navigator) || this.wakeLock) return;
+    try {
+      this.wakeLock = await navigator.wakeLock.request('screen');
+    } catch {
+      // The workout remains usable when the browser or device refuses Wake Lock.
+    }
+  }
+
   protected loggedSetCount(workout: ClientWorkoutView): number {
     return workout.exercises.flatMap((exercise) => exercise.sets).filter((set) => set.isCompleted)
       .length;
@@ -333,6 +480,12 @@ export class TodayTraining {
 
   protected totalSetCount(workout: ClientWorkoutView): number {
     return workout.exercises.reduce((total, exercise) => total + exercise.sets.length, 0);
+  }
+
+  protected exerciseCompletion(exercise: ClientExerciseView): number {
+    return exercise.sets.length
+      ? (100 * exercise.sets.filter((set) => set.isCompleted).length) / exercise.sets.length
+      : 0;
   }
 
   protected requestFinish(workout: ClientWorkoutView): void {
@@ -516,6 +669,14 @@ export class TodayTraining {
               : day,
           );
           this.finishConfirmation.set(null);
+          this.finishedWorkoutName.set(workout.name);
+          this.finishSummary.set(response.finishSummary ?? null);
+          this.skipRest();
+          void this.wakeLock?.release();
+          this.wakeLock = null;
+          if (response.finishSummary?.personalRecords.length && 'vibrate' in navigator) {
+            navigator.vibrate([80, 40, 80]);
+          }
           this.notice.set($localize`Workout completed.`);
         }),
       );
@@ -652,6 +813,17 @@ export class TodayTraining {
         };
         this.day.set(combined);
         this.setDrafts.update((drafts) => reconcileWorkoutSetDrafts(combined, drafts));
+        const active =
+          combined.workouts.find((item) => item.sessionId === this.selectedSession()) ??
+          combined.workouts[0];
+        if (active && this.unitSessionId !== active.sessionId) {
+          this.workoutUnit.set(
+            active.exercises
+              .flatMap((exercise) => exercise.sets)
+              .find((set) => set.prescribedLoadUnit)?.prescribedLoadUnit ?? null,
+          );
+          this.unitSessionId = active.sessionId;
+        }
       } catch (error) {
         if (!owner.current) return;
         if (this.ownsLoad(generation, request))
@@ -705,6 +877,15 @@ export class TodayTraining {
     this.savingWorkoutIds.set(new Set());
     this.workoutSaveQueues.clear();
     this.finishConfirmation.set(null);
+    this.finishSummary.set(null);
+    this.finishedWorkoutName.set('');
+    this.activeExerciseIndex.set(0);
+    this.workoutUnit.set(null);
+    this.unitSessionId = null;
+    this.prSetIds.set(new Set());
+    this.skipRest();
+    void this.wakeLock?.release();
+    this.wakeLock = null;
     this.activeMedia.set(null);
     this.mediaTrigger = null;
     this.upcomingSkip = 0;
@@ -816,6 +997,15 @@ export class TodayTraining {
     this.setErrors.set({});
     this.editingSetIds.set(new Set());
     this.finishConfirmation.set(null);
+    this.finishSummary.set(null);
+    this.finishedWorkoutName.set('');
+    this.activeExerciseIndex.set(0);
+    this.workoutUnit.set(null);
+    this.unitSessionId = null;
+    this.prSetIds.set(new Set());
+    this.skipRest();
+    void this.wakeLock?.release();
+    this.wakeLock = null;
     this.selectedSession.set(null);
     this.activeMedia.set(null);
     this.setDrafts.set({});

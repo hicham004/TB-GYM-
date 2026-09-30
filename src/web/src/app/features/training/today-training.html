@@ -1,441 +1,551 @@
-<section class="page-heading">
-  <div>
-    <a routerLink="/" i18n>Back to Today</a>
-    <h1 i18n>Your workout</h1>
-    @if (day(); as current) {
-      <p>{{ current.localDate | date: 'EEE d MMM' }}</p>
+<section
+  class="player"
+  aria-label="Workout player"
+  (touchstart)="touchStart($event)"
+  (touchend)="touchEnd($event)"
+>
+  <header class="player-top">
+    <a routerLink="/" class="round" aria-label="Back to Today" i18n-aria-label>×</a>
+    <div>
+      <p class="eyebrow" i18n>YOUR WORKOUT</p>
+      <h1 dir="auto">{{ activeWorkout()?.name ?? 'Your workout' }}</h1>
+    </div>
+    @if (activeWorkout()?.startedAtUtc) {
+      <span class="clock">{{ clockLabel(elapsed(activeWorkout()!)) }}</span>
     }
-  </div>
-</section>
-<p
-  #errorSummary
-  id="training-error-summary"
-  class="form-error runner-summary"
-  [class.runner-summary-empty]="!error()"
-  role="alert"
-  aria-atomic="true"
-  tabindex="-1"
->
-  {{ error() ?? '' }}
-</p>
-@if (error()) {
-  <button
-    class="quiet-button"
-    type="button"
-    [disabled]="busy() || loading()"
-    (click)="load(false)"
-    i18n
+  </header>
+  <p
+    #errorSummary
+    id="training-error-summary"
+    class="form-error runner-summary"
+    [class.runner-summary-empty]="!error()"
+    role="alert"
+    aria-atomic="true"
+    tabindex="-1"
   >
-    Refresh workout
-  </button>
-}
-<p
-  class="save-status"
-  [class.save-status-empty]="!notice()"
-  role="status"
-  aria-live="polite"
-  aria-atomic="true"
->
-  {{ notice() ?? '' }}
-</p>
-@if (loading()) {
-  <p class="loading-row" role="status" i18n>Loading your workout…</p>
-} @else if (day(); as currentDay) {
-  @if (!currentDay.isAllowed) {
-    <section class="access-state">
-      <h2 i18n>Training is not available</h2>
-      <p>{{ accessReasonLabel(currentDay.accessReason) }}</p>
-      @if (currentDay.workouts.length > 0) {
-        <p i18n>
-          Your entries are still on this page. Saving is unavailable while access is closed.
-        </p>
-      }
-    </section>
-  } @else if (currentDay.workouts.length === 0) {
-    <section class="empty-state">
-      @if (!upcoming()?.hasAssignedProgram) {
-        <h2 i18n>Nothing assigned yet</h2>
-        <p i18n>Your coach will put your program here.</p>
-      } @else if (!upcoming()?.hasVisibleSessions) {
-        <h2 i18n>No sessions shared yet</h2>
-        <p i18n>Your sessions will appear when your coach shares them.</p>
-      } @else {
-        <h2 i18n>Rest day</h2>
-        <p i18n>No workout is scheduled today.</p>
-      }
-      @if (upcoming()?.nextSession; as next) {
-        <p dir="auto">{{ next.date | date: 'EEE d MMM' }} · {{ next.name }}</p>
-      }
-    </section>
-  }
-  @if (currentDay.workouts.length > 1) {
-    <label class="workout-picker"
-      ><span i18n>Choose workout</span>
-      <select [ngModel]="selectedSession()" (ngModelChange)="selectedSession.set($event)">
-        <option [ngValue]="null" i18n>All available workouts</option>
-        @for (workout of currentDay.workouts; track workout.sessionId) {
-          <option [value]="workout.sessionId">{{ workout.name }}</option>
-        }
-      </select>
-    </label>
-  }
-  @for (workout of shownWorkouts(); track workout.sessionId) {
-    @let readOnly =
-      !currentDay.isAllowed || !workout.workoutExecutionId || workout.status === 'Completed';
-    <article class="workout" [attr.aria-label]="workout.name">
-      <header class="workout-heading">
+    {{ error() ?? '' }}
+  </p>
+  <p class="save-status" [class.save-status-empty]="!notice()" role="status" aria-live="polite">
+    {{ notice() ?? '' }}
+  </p>
+  @if (finishSummary(); as summary) {
+    <section class="finish-summary" aria-label="Workout summary" i18n-aria-label>
+      <p class="eyebrow" i18n>SESSION COMPLETE</p>
+      <h2 i18n>Workout <em>done.</em></h2>
+      <p dir="auto">{{ finishedWorkoutName() }}</p>
+      <div class="summary-stats">
         <div>
-          <h2 dir="auto">{{ workout.name }}</h2>
+          <strong>{{ clockLabel(summary.durationSeconds) }}</strong
+          ><span i18n>time</span>
+        </div>
+        <div>
+          <strong>{{ summary.completedSetCount }} / {{ summary.totalSetCount }}</strong
+          ><span i18n>sets logged</span>
+        </div>
+        <div>
+          <strong>{{ summary.personalRecords.length }}</strong
+          ><span i18n>personal records</span>
+        </div>
+        @for (volume of summary.volume; track volume.unit) {
+          <div>
+            <strong>{{ volume.loadTimesRepetitions }}</strong
+            ><span>{{ volume.unit === 'Kilogram' ? 'kg' : 'lb' }} × reps</span>
+          </div>
+        }
+      </div>
+      @if (summary.personalRecords.length) {
+        <h3 i18n>New personal records</h3>
+        <ul class="pr-list">
+          @for (record of summary.personalRecords; track record.setPerformanceId) {
+            <li>
+              <span dir="auto">{{ record.exerciseName }}</span
+              ><strong
+                >{{ record.load }} {{ record.unit === 'Kilogram' ? 'kg' : 'lb' }} ×
+                {{ record.repetitions }}</strong
+              >
+            </li>
+          }
+        </ul>
+      }
+      <a routerLink="/" class="finish-home" i18n>Back to Today</a>
+    </section>
+  } @else if (loading()) {
+    <div class="player-skeleton" role="status" aria-label="Loading your workout" i18n-aria-label>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+    </div>
+  } @else if (day(); as currentDay) {
+    @if (!currentDay.isAllowed) {
+      <section class="player-empty access-state">
+        <h2 i18n>Training is not available</h2>
+        <p>{{ accessReasonLabel(currentDay.accessReason) }}</p>
+      </section>
+    } @else if (!currentDay.workouts.length) {
+      <section class="player-empty empty-state">
+        @if (!upcoming()?.hasAssignedProgram) {
+          <h2 i18n>Nothing assigned yet</h2>
+          <p i18n>Your coach will put your program here.</p>
+        } @else if (!upcoming()?.hasVisibleSessions) {
+          <h2 i18n>No sessions shared yet</h2>
+          <p i18n>Your sessions will appear when your coach shares them.</p>
+        } @else {
+          <h2 i18n>Rest day</h2>
+          <p i18n>No workout is scheduled today.</p>
+        }
+        @if (upcoming()?.nextSession; as next) {
+          <p dir="auto">{{ next.date | date: 'EEE d MMM' }} · {{ next.name }}</p>
+        }
+      </section>
+    } @else {
+      @if (currentDay.workouts.length > 1) {
+        <label class="workout-picker"
+          ><span i18n>Choose workout</span
+          ><select [ngModel]="activeWorkout()?.sessionId" (ngModelChange)="selectWorkout($event)">
+            @for (workout of currentDay.workouts; track workout.sessionId) {
+              <option [value]="workout.sessionId">{{ workout.name }}</option>
+            }
+          </select></label
+        >
+      }
+      @for (workout of shownWorkouts(); track workout.sessionId) {
+        @let readOnly = !workout.workoutExecutionId || workout.status === 'Completed';
+        <article class="workout" [attr.aria-label]="workout.name">
+          <div class="segments" role="group" aria-label="Exercise completion" i18n-aria-label>
+            @for (exercise of workout.exercises; track exercise.prescriptionId) {
+              <span><b [style.width.%]="exerciseCompletion(exercise)"></b></span>
+            }
+          </div>
           @for (earlier of upcoming()?.unfinishedWorkouts ?? []; track earlier.workout.sessionId) {
             @if (earlier.workout.sessionId === workout.sessionId) {
-              <p i18n>Started for {{ earlier.date | date: 'EEE d MMM' }}</p>
+              <p class="started-date" i18n>Started for {{ earlier.date | date: 'EEE d MMM' }}</p>
             }
           }
-          @if (workout.coachNotes) {
-            <p dir="auto">{{ workout.coachNotes }}</p>
-          }
-        </div>
-        @if (!workout.workoutExecutionId && currentDay.isAllowed) {
-          <button
-            class="primary-button"
-            type="button"
-            [disabled]="busy()"
-            (click)="start(workout)"
-            i18n
-          >
-            Start workout
-          </button>
-        } @else if (workout.status !== 'Completed' && currentDay.isAllowed) {
-          <button
-            class="secondary-button"
-            type="button"
-            [disabled]="busy()"
-            (click)="requestFinish(workout)"
-            i18n
-          >
-            Finish workout
-          </button>
-        } @else if (workout.status === 'Completed') {
-          <p class="status-badge" i18n>Completed · read only</p>
-        }
-      </header>
-      @if (finishConfirmation() === workout.sessionId) {
-        <section
-          class="finish-confirmation"
-          role="region"
-          aria-label="Finish confirmation"
-          i18n-aria-label
-        >
-          <h3 i18n>Finish workout?</h3>
-          <p i18n>
-            {{ loggedSetCount(workout) }} of {{ totalSetCount(workout) }} sets logged. You can’t
-            change this workout afterwards.
-          </p>
-          <button
-            class="primary-button"
-            type="button"
-            [disabled]="busy()"
-            (click)="complete(workout)"
-            i18n
-          >
-            Confirm finish
-          </button>
-          <button class="quiet-button" type="button" (click)="finishConfirmation.set(null)" i18n>
-            Keep training
-          </button>
-        </section>
-      }
-      @if (!workout.workoutExecutionId) {
-        <p class="muted" i18n>
-          Preview your targets below. Start the workout to record what you do.
-        </p>
-      }
-      @for (
-        exercise of workout.exercises;
-        track exercise.prescriptionId;
-        let exerciseIndex = $index
-      ) {
-        <section class="workout-exercise">
-          <header class="exercise-heading">
-            <div>
-              <p class="eyebrow" i18n>
-                Exercise {{ exerciseIndex + 1 }} of {{ workout.exercises.length }}
-              </p>
-              <h3 dir="auto">{{ exercise.actualExerciseName }}</h3>
-              @if (exercise.wasSubstituted) {
-                <p dir="auto" i18n>Prescribed: {{ exercise.prescribedExerciseName }}</p>
-              }
-            </div>
-            <div class="exercise-actions">
-              @for (assetId of exercise.mediaAssetIds; track assetId; let mediaIndex = $index) {
-                <button
-                  class="quiet-button demo-button"
-                  type="button"
-                  [disabled]="busy() || isWorkoutSaving(workout) || !currentDay.isAllowed"
-                  (click)="showMedia(assetId, $event)"
-                  i18n
-                >
-                  Demo {{ mediaIndex + 1 }}
-                </button>
-              }
-              @if (
-                exercise.modificationPolicy === 'CoachApprovedSwap' &&
-                exercise.alternatives.length > 0 &&
-                !readOnly
-              ) {
-                <label
-                  ><span i18n>Swap exercise</span>
-                  <select
-                    class="swap-picker"
-                    aria-label="Approved exercise alternative"
-                    i18n-aria-label
-                    [disabled]="busy() || isWorkoutSaving(workout)"
-                    (change)="substitute(workout, exercise, $event)"
-                  >
-                    <option value="" i18n>Choose approved alternative</option>
-                    @for (alternative of exercise.alternatives; track alternative.exerciseId) {
-                      <option [value]="alternative.exerciseId">{{ alternative.name }}</option>
-                    }
-                  </select>
-                </label>
-              }
-            </div>
-          </header>
-          @if (exercise.coachNotes) {
-            <p class="coach-note" dir="auto">{{ exercise.coachNotes }}</p>
-          }
-          @if (exercise.previousPerformance; as previous) {
-            <p class="previous-performance">
-              <strong i18n>Last time</strong> {{ previous.date | date: 'd MMM' }} ·
-              {{ previous.bestLoad ?? '—' }}
-              {{ previous.unit === 'Kilogram' ? 'kg' : previous.unit === 'Pound' ? 'lb' : '' }} ×
-              {{ previous.repetitions ?? '—' }}
-              @if (previous.rpe !== null) {
-                · RPE {{ previous.rpe }}
-              }
-            </p>
-          }
-          @for (set of exercise.sets; track set.prescriptionId; let setIndex = $index) {
-            @let draft = setDraft(set);
-            <section class="set-card" [attr.aria-label]="'Set ' + (setIndex + 1)">
-              <h4>{{ setIndex + 1 }} · {{ setTypeLabel(set.setType) }}</h4>
-              <p class="prescription">
-                <span i18n>Target:</span> {{ prescribedReps(set) }} <span i18n>reps</span>
-                @if (set.prescribedLoad !== null) {
-                  · {{ set.prescribedLoad }}
-                  {{
-                    set.prescribedLoadUnit === 'Kilogram'
-                      ? 'kg'
-                      : set.prescribedLoadUnit === 'Pound'
-                        ? 'lb'
-                        : ''
-                  }}
-                }
-                @if (set.prescribedTargetRpe !== null) {
-                  · {{ prescribedEffort(set) }}
-                }
-                @if (set.restSeconds !== null) {
-                  · <span i18n>rest</span> {{ restLabel(set.restSeconds) }}
-                }
-                @if (set.tempo) {
-                  · <span i18n>tempo</span> {{ set.tempo }}
-                }
-              </p>
-              @if (collapsed(set) || workout.status === 'Completed') {
-                <p class="logged-set">
-                  @if (set.isCompleted) {
-                    <span i18n>Logged:</span>
-                  } @else {
-                    <span i18n>Not logged:</span>
-                  }
-                  {{ set.actualLoad ?? '—' }}
-                  {{
-                    set.actualLoadUnit === 'Kilogram'
-                      ? 'kg'
-                      : set.actualLoadUnit === 'Pound'
-                        ? 'lb'
-                        : ''
-                  }}
-                  × {{ set.actualRepetitions ?? '—' }}
-                  @if (set.actualRpe !== null) {
-                    · RPE {{ set.actualRpe }}
-                  }
-                </p>
-                @if (set.clientNote) {
-                  <p dir="auto">{{ set.clientNote }}</p>
-                }
-                @if (!readOnly) {
-                  <button
-                    class="quiet-button"
-                    type="button"
-                    data-set-focus="edit"
-                    [attr.data-set-id]="set.performanceId"
-                    (click)="editSet(set, $event)"
-                    i18n
-                  >
-                    Edit set
-                  </button>
-                }
-              } @else {
-                <div class="set-inputs">
-                  <label
-                    ><span i18n>Load</span
-                    ><input
-                      type="number"
-                      min="0"
-                      max="2000"
-                      step="0.25"
-                      inputmode="decimal"
-                      [ngModel]="draft ? draft.actualLoad : set.actualLoad"
-                      (ngModelChange)="updateSetDraft(set, { actualLoad: $event })"
-                      [disabled]="readOnly"
-                      data-set-focus="input"
-                      [attr.data-set-id]="set.performanceId"
-                      aria-label="Actual load"
-                      i18n-aria-label
-                  /></label>
-                  <label
-                    ><span i18n>Unit</span
-                    ><select
-                      [ngModel]="draft?.actualLoadUnit ?? set.actualLoadUnit"
-                      (ngModelChange)="updateSetDraft(set, { actualLoadUnit: $event })"
-                      [disabled]="readOnly"
-                      aria-label="Actual load unit"
-                      i18n-aria-label
-                    >
-                      <option [ngValue]="null" disabled i18n>Choose</option>
-                      <option value="Kilogram">kg</option>
-                      <option value="Pound">lb</option>
-                    </select></label
-                  >
-                  <label
-                    ><span i18n>Reps</span
-                    ><input
-                      type="number"
-                      min="0"
-                      max="200"
-                      step="1"
-                      inputmode="numeric"
-                      [ngModel]="draft ? draft.actualRepetitions : set.actualRepetitions"
-                      (ngModelChange)="updateSetDraft(set, { actualRepetitions: $event })"
-                      [disabled]="readOnly"
-                      aria-label="Actual repetitions"
-                      i18n-aria-label
-                  /></label>
-                  <label
-                    ><span i18n>RPE (optional)</span
-                    ><input
-                      type="number"
-                      min="5"
-                      max="10"
-                      step="0.5"
-                      inputmode="decimal"
-                      [ngModel]="draft ? draft.actualRpe : set.actualRpe"
-                      (ngModelChange)="updateSetDraft(set, { actualRpe: $event, actualRir: null })"
-                      [disabled]="readOnly"
-                      aria-label="Actual RPE"
-                      i18n-aria-label
-                  /></label>
-                </div>
-                <details class="set-note">
-                  <summary i18n>Note for your coach</summary>
-                  <label
-                    ><span i18n>Set note</span
-                    ><input
-                      dir="auto"
-                      [ngModel]="draft ? draft.clientNote : set.clientNote"
-                      (ngModelChange)="updateSetDraft(set, { clientNote: $event })"
-                      maxlength="1000"
-                      [disabled]="readOnly"
-                  /></label>
-                </details>
-                @if (!readOnly) {
-                  <button
-                    class="primary-button log-set"
-                    type="button"
-                    [disabled]="
-                      busy() || !set.performanceId || savingSetIds().has(set.performanceId)
-                    "
-                    (click)="logSet(workout, set, $event)"
-                  >
-                    @if (set.performanceId && savingSetIds().has(set.performanceId)) {
-                      <span i18n>Saving…</span>
-                    } @else {
-                      <span i18n>Log set</span>
-                    }
-                  </button>
-                }
-              }
-              @if (set.performanceId && setErrors()[set.performanceId]; as error) {
-                <p class="form-error">{{ error }}</p>
-                <button
-                  class="quiet-button"
-                  type="button"
-                  [disabled]="busy() || isWorkoutSaving(workout)"
-                  (click)="load(false)"
-                  i18n
-                >
-                  Refresh saved workout
-                </button>
-              }
-            </section>
-          }
-        </section>
-      }
-      @if (workout.workoutExecutionId) {
-        <footer class="workout-footer">
-          @if (!readOnly) {
-            <label
-              ><span i18n>Workout note</span
-              ><textarea
-                dir="auto"
-                [(ngModel)]="workoutNotes[workout.sessionId]"
-                maxlength="2000"
-                aria-label="Workout note"
-                i18n-aria-label
-              ></textarea>
-            </label>
+          @if (!workout.workoutExecutionId) {
+            <p class="workout-intro" i18n>See your targets, then start when you're ready.</p>
             <button
-              class="secondary-button"
+              class="start-button"
               type="button"
-              [disabled]="!workoutNotes[workout.sessionId] || busy()"
-              (click)="addNote(workout)"
+              [disabled]="busy()"
+              (click)="start(workout)"
               i18n
             >
-              Add note
+              Start workout
             </button>
-            <p class="muted" i18n>
-              Unsaved entries stay on this page only. Save before closing or refreshing.
-            </p>
           }
-          @for (note of workout.notes; track note.id) {
-            <p class="note-history">
-              <strong>{{ note.authorRole === 'Client' ? 'You' : 'Coach' }}</strong> ·
-              {{ noteTime(note.createdAtUtc, noteTimeZone(workout.sessionId)) }}
-              <span dir="auto">{{ note.text }}</span>
-            </p>
+          @if (workout.status === 'Completed') {
+            <p class="status-badge" i18n>Completed · read only</p>
           }
-          @for (earlier of upcoming()?.unfinishedWorkouts ?? []; track earlier.workout.sessionId) {
-            @if (earlier.workout.sessionId === workout.sessionId && earlier.hasMoreNotes) {
-              <p i18n>Showing the latest 50 workout notes.</p>
+          @if (workout.workoutExecutionId && workout.status !== 'Completed') {
+            <label class="unit-choice"
+              ><span i18n>Load unit for this workout</span
+              ><select
+                aria-label="Actual load unit"
+                i18n-aria-label
+                [ngModel]="workoutUnit()"
+                (ngModelChange)="chooseUnit($event)"
+              >
+                <option [ngValue]="null" i18n>Choose unit</option>
+                <option value="Kilogram">kg</option>
+                <option value="Pound">lb</option>
+              </select></label
+            >
+          }
+          <div class="player-body">
+            @for (
+              exercise of workout.exercises;
+              track exercise.prescriptionId;
+              let exerciseIndex = $index
+            ) {
+              @if (exerciseIndex === activeExerciseIndex()) {
+                <section class="workout-exercise" [attr.aria-label]="exercise.actualExerciseName">
+                  <header class="exercise-heading">
+                    <div class="exercise-thumb" aria-hidden="true">{{ exerciseIndex + 1 }}</div>
+                    <div>
+                      <p class="eyebrow" i18n>
+                        EXERCISE {{ exerciseIndex + 1 }} OF {{ workout.exercises.length }}
+                      </p>
+                      <h2 dir="auto">{{ exercise.actualExerciseName }}</h2>
+                      @if (exercise.wasSubstituted) {
+                        <p dir="auto" i18n>Prescribed: {{ exercise.prescribedExerciseName }}</p>
+                      }
+                    </div>
+                  </header>
+                  @if (exercise.coachNotes) {
+                    <p class="coach-note" dir="auto">{{ exercise.coachNotes }}</p>
+                  }
+                  @if (exercise.previousPerformance; as previous) {
+                    <p class="previous-performance">
+                      <span i18n>Last time · {{ previous.date | date: 'd MMM' }}</span
+                      ><strong
+                        >{{ previous.bestLoad ?? '—' }}
+                        {{
+                          previous.unit === 'Kilogram'
+                            ? 'kg'
+                            : previous.unit === 'Pound'
+                              ? 'lb'
+                              : ''
+                        }}
+                        × {{ previous.repetitions ?? '—' }}</strong
+                      >
+                    </p>
+                  }
+                  <div class="set-head" aria-hidden="true">
+                    <span i18n>Set</span><span i18n>Previous</span><span i18n>Load</span
+                    ><span i18n>Reps</span><span></span>
+                  </div>
+                  <div class="sets">
+                    @for (set of exercise.sets; track set.prescriptionId; let setIndex = $index) {
+                      @let draft = setDraft(set);
+                      @let priorSet = exercise.previousPerformance?.sets?.[setIndex];
+                      <section
+                        class="set-card"
+                        [class.done]="collapsed(set)"
+                        [attr.aria-label]="'Set ' + (setIndex + 1)"
+                      >
+                        <span class="set-number">{{ setIndex + 1 }}</span
+                        ><span class="set-previous"
+                          >{{ priorSet?.load ?? '—' }} × {{ priorSet?.repetitions ?? '—' }}</span
+                        >
+                        @if (collapsed(set) || workout.status === 'Completed') {
+                          <span class="logged-set"
+                            >{{ set.actualLoad ?? '—' }}
+                            {{
+                              set.actualLoadUnit === 'Kilogram'
+                                ? 'kg'
+                                : set.actualLoadUnit === 'Pound'
+                                  ? 'lb'
+                                  : ''
+                            }}
+                            × {{ set.actualRepetitions ?? '—' }}</span
+                          >
+                          @if (!readOnly) {
+                            <button
+                              type="button"
+                              class="edit-set"
+                              data-set-focus="edit"
+                              [attr.data-set-id]="set.performanceId"
+                              (click)="editSet(set, $event)"
+                              i18n
+                            >
+                              Edit set
+                            </button>
+                          }
+                          @if (set.isCompleted) {
+                            <span class="done-tick" aria-label="Logged" i18n-aria-label>✓</span>
+                          }
+                          @if (set.performanceId && prSetIds().has(set.performanceId)) {
+                            <strong class="pr-badge" i18n>PR</strong>
+                          }
+                        } @else {
+                          <div class="set-step">
+                            <button
+                              type="button"
+                              aria-label="Less weight"
+                              i18n-aria-label
+                              [disabled]="readOnly"
+                              (click)="stepSet(set, 'load', -1)"
+                            >
+                              −
+                            </button>
+                            <label
+                              ><span i18n>Load</span
+                              ><input
+                                type="number"
+                                min="0"
+                                max="2000"
+                                step="0.25"
+                                inputmode="decimal"
+                                aria-label="Actual load"
+                                i18n-aria-label
+                                [ngModel]="draft?.actualLoad ?? set.prescribedLoad"
+                                (ngModelChange)="
+                                  updateSetDraft(set, {
+                                    actualLoad: $event,
+                                    actualLoadUnit: workoutUnit(),
+                                  })
+                                "
+                                [disabled]="readOnly"
+                                data-set-focus="input"
+                                [attr.data-set-id]="set.performanceId"
+                            /></label>
+                            <button
+                              type="button"
+                              aria-label="More weight"
+                              i18n-aria-label
+                              [disabled]="readOnly"
+                              (click)="stepSet(set, 'load', 1)"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <div class="set-step">
+                            <button
+                              type="button"
+                              aria-label="One rep less"
+                              i18n-aria-label
+                              [disabled]="readOnly"
+                              (click)="stepSet(set, 'reps', -1)"
+                            >
+                              −
+                            </button>
+                            <label
+                              ><span i18n>Reps</span
+                              ><input
+                                type="number"
+                                min="0"
+                                max="200"
+                                step="1"
+                                inputmode="numeric"
+                                aria-label="Actual repetitions"
+                                i18n-aria-label
+                                [ngModel]="
+                                  draft?.actualRepetitions ?? set.prescribedRepetitionsMinimum
+                                "
+                                (ngModelChange)="updateSetDraft(set, { actualRepetitions: $event })"
+                                [disabled]="readOnly"
+                            /></label>
+                            <button
+                              type="button"
+                              aria-label="One rep more"
+                              i18n-aria-label
+                              [disabled]="readOnly"
+                              (click)="stepSet(set, 'reps', 1)"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            class="log-set"
+                            [disabled]="
+                              busy() ||
+                              readOnly ||
+                              !set.performanceId ||
+                              savingSetIds().has(set.performanceId)
+                            "
+                            (click)="logSet(workout, set, $event)"
+                            i18n
+                          >
+                            Log set
+                          </button>
+                        }
+                        <p class="prescription">
+                          <span i18n>Target:</span> {{ prescribedReps(set) }} <span i18n>reps</span>
+                          @if (set.prescribedLoad !== null) {
+                            · {{ set.prescribedLoad }}
+                            {{ set.prescribedLoadUnit === 'Kilogram' ? 'kg' : 'lb' }}
+                          }
+                          @if (set.prescribedTargetRpe !== null) {
+                            · {{ prescribedEffort(set) }}
+                          }
+                          @if (set.restSeconds !== null) {
+                            · <span i18n>rest</span> {{ restLabel(set.restSeconds) }}
+                          }
+                          @if (set.tempo) {
+                            · <span i18n>tempo</span> {{ set.tempo }}
+                          }
+                        </p>
+                        @if (!readOnly && !collapsed(set)) {
+                          <details class="set-note">
+                            <summary i18n>More options</summary>
+                            <label
+                              ><span i18n>RPE (optional)</span
+                              ><input
+                                type="number"
+                                min="5"
+                                max="10"
+                                step="0.5"
+                                inputmode="decimal"
+                                aria-label="Actual RPE"
+                                i18n-aria-label
+                                [ngModel]="draft?.actualRpe"
+                                (ngModelChange)="
+                                  updateSetDraft(set, { actualRpe: $event, actualRir: null })
+                                "
+                            /></label>
+                            <label
+                              ><span i18n>Note for your coach</span
+                              ><input
+                                dir="auto"
+                                maxlength="1000"
+                                [ngModel]="draft?.clientNote"
+                                (ngModelChange)="updateSetDraft(set, { clientNote: $event })"
+                            /></label>
+                          </details>
+                        }
+                        @if (set.performanceId && setErrors()[set.performanceId]; as setError) {
+                          <p class="form-error">{{ setError }}</p>
+                        }
+                      </section>
+                    }
+                  </div>
+                  <div class="exercise-actions">
+                    @for (
+                      assetId of exercise.mediaAssetIds;
+                      track assetId;
+                      let mediaIndex = $index
+                    ) {
+                      <button
+                        type="button"
+                        [disabled]="busy()"
+                        (click)="showMedia(assetId, $event)"
+                        i18n
+                      >
+                        Watch demo {{ mediaIndex + 1 }}
+                      </button>
+                    }
+                    @if (
+                      exercise.modificationPolicy === 'CoachApprovedSwap' &&
+                      exercise.alternatives.length > 0 &&
+                      !readOnly
+                    ) {
+                      <label
+                        ><span i18n>Swap exercise</span
+                        ><select
+                          class="swap-picker"
+                          aria-label="Approved exercise alternative"
+                          i18n-aria-label
+                          [disabled]="busy() || isWorkoutSaving(workout)"
+                          (change)="substitute(workout, exercise, $event)"
+                        >
+                          <option value="" i18n>Choose approved alternative</option>
+                          @for (
+                            alternative of exercise.alternatives;
+                            track alternative.exerciseId
+                          ) {
+                            <option [value]="alternative.exerciseId">{{ alternative.name }}</option>
+                          }
+                        </select></label
+                      >
+                    }
+                  </div>
+                  @if (exerciseIndex + 1 < workout.exercises.length) {
+                    <p class="nextline" i18n>
+                      Next: {{ workout.exercises[exerciseIndex + 1].actualExerciseName }}
+                    </p>
+                  }
+                </section>
+              }
             }
+          </div>
+          @if (workout.workoutExecutionId) {
+            <footer class="workout-footer">
+              @if (!readOnly) {
+                <details>
+                  <summary i18n>Note for your coach</summary>
+                  <label
+                    ><span i18n>Workout note</span
+                    ><textarea
+                      dir="auto"
+                      [(ngModel)]="workoutNotes[workout.sessionId]"
+                      maxlength="2000"
+                    ></textarea>
+                  </label>
+                  <button
+                    type="button"
+                    [disabled]="!workoutNotes[workout.sessionId] || busy()"
+                    (click)="addNote(workout)"
+                    i18n
+                  >
+                    Send note
+                  </button>
+                </details>
+                <p class="muted" i18n>Unsaved edits stay on this page. Save before leaving.</p>
+              }
+              @for (note of workout.notes; track note.id) {
+                <p class="note-history">
+                  <strong>{{ note.authorRole === 'Client' ? 'You' : 'Coach' }}</strong> ·
+                  {{ noteTime(note.createdAtUtc, noteTimeZone(workout.sessionId)) }}
+                  <span dir="auto">{{ note.text }}</span>
+                </p>
+              }
+            </footer>
           }
-        </footer>
+          <div class="player-actions">
+            @if (activeExerciseIndex() > 0) {
+              <button type="button" (click)="showExercise(activeExerciseIndex() - 1)" i18n>
+                Previous exercise
+              </button>
+            }
+            @if (activeExerciseIndex() < workout.exercises.length - 1) {
+              <button
+                type="button"
+                class="next-button"
+                (click)="showExercise(activeExerciseIndex() + 1)"
+                i18n
+              >
+                Next exercise →
+              </button>
+            }
+            @if (workout.workoutExecutionId && workout.status !== 'Completed') {
+              <button
+                type="button"
+                class="finish-button"
+                [disabled]="busy()"
+                (click)="requestFinish(workout)"
+                i18n
+              >
+                Finish workout
+              </button>
+            }
+          </div>
+          @if (finishConfirmation() === workout.sessionId) {
+            <section class="finish-confirmation" aria-label="Finish confirmation" i18n-aria-label>
+              <h3 i18n>Finish workout?</h3>
+              <p i18n>
+                {{ loggedSetCount(workout) }} of {{ totalSetCount(workout) }} sets logged. You can’t
+                change this workout afterwards.
+              </p>
+              <button type="button" [disabled]="busy()" (click)="complete(workout)" i18n>
+                Confirm finish
+              </button>
+              <button type="button" (click)="finishConfirmation.set(null)" i18n>
+                Keep training
+              </button>
+            </section>
+          }
+        </article>
       }
-    </article>
+      @if ((upcoming()?.nextSkip ?? null) !== null) {
+        <button
+          type="button"
+          class="more-workouts"
+          [disabled]="busy() || loading()"
+          (click)="moreUnfinished()"
+          i18n
+        >
+          More unfinished workouts
+        </button>
+      }
+    }
   }
-  @if ((upcoming()?.nextSkip ?? null) !== null) {
-    <button
-      class="secondary-button"
-      type="button"
-      [disabled]="busy() || loading()"
-      (click)="moreUnfinished()"
-      i18n
-    >
-      More unfinished workouts
-    </button>
+  @if (restRemaining() > 0) {
+    <aside class="rest-timer" role="timer" aria-label="Rest timer" i18n-aria-label>
+      <svg viewBox="0 0 60 60" width="60" height="60" aria-hidden="true">
+        <circle cx="30" cy="30" r="25" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="6" />
+        <circle
+          cx="30"
+          cy="30"
+          r="25"
+          fill="none"
+          stroke="var(--workout-accent, #d9ed94)"
+          stroke-width="6"
+          stroke-linecap="round"
+          transform="rotate(-90 30 30)"
+          stroke-dasharray="157"
+          [attr.stroke-dashoffset]="157 * (1 - restRemaining() / restTotal())"
+        />
+      </svg>
+      <div>
+        <small i18n>Rest</small><strong>{{ clockLabel(restRemaining()) }}</strong>
+      </div>
+      <button type="button" (click)="addRest()" i18n>+15 s</button
+      ><button type="button" (click)="skipRest()" i18n>Skip</button>
+    </aside>
   }
-}
+</section>
 @if (activeMedia(); as media) {
   <div
     #mediaDialog
@@ -447,8 +557,8 @@
     (keydown)="mediaDialogKeydown($event)"
   >
     <div class="media-toolbar">
-      <span id="exercise-media-title" i18n>Exercise demo</span>
-      <button
+      <span id="exercise-media-title" i18n>Exercise demo</span
+      ><button
         #mediaClose
         type="button"
         aria-label="Close media"

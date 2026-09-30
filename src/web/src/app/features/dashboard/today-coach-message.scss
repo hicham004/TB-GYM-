@@ -8,6 +8,8 @@
   color: var(--color-text-primary);
   display: grid;
   gap: var(--space-12);
+  min-block-size: 72px;
+  padding: var(--space-12);
   text-decoration: none;
 }
 

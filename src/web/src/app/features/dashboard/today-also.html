@@ -24,10 +24,25 @@
             </div>
           } @else {
             <a class="row" routerLink="/nutrition/today">
-              <app-icon name="nutrition" />
+              @if (nutritionData(); as plan) {
+                <span
+                  class="nutrition-ring"
+                  [style.--nutrition-progress]="nutritionProgress()"
+                  aria-hidden="true"
+                ></span>
+              } @else {
+                <app-icon name="nutrition" />
+              }
               <span class="row-copy">
                 <span class="row-title" i18n>Nutrition</span>
                 <span class="tb-visually-hidden">, </span>
+                @if (nutritionData(); as plan) {
+                  <span class="nutrition-total" i18n
+                    >{{ plan.selectedCalories | number: '1.0-0' }} of
+                    {{ plan.targetCalories | number: '1.0-0' }} kcal</span
+                  >
+                  <span class="tb-visually-hidden">, </span>
+                }
                 <span class="row-status">
                   @if (meals.kind === 'closed') {
                     {{ accessLabel(meals.reason) }}

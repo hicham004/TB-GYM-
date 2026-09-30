@@ -493,6 +493,11 @@ sign-out on `/me` through the same `SessionActions` the coach shell uses. Today 
 nutrition, check-ins and the latest conversation independently, each with its own retry and tenant
 scope. No schema, write contract or invariant changed.
 
+R2.1 adds a bounded, tenant-local client training week read and an own-coach name read for Today.
+Both use the current client profile and server-side access rules. The user's light/dark/system mode
+is stored on the Identity account and applied after session load; it is independent of the tenant
+brand and can be changed from the personal Appearance screen.
+
 Step 3B2 (ADR 0029) adds `subscriptions."RenewalRequests"` (append-only, one per client in any 7
 days by exclusion constraint) and `IClientRenewalService` in the Subscriptions module, implemented in
 Infrastructure beside the commercial service. The coach's notice reuses the workspace-notice path

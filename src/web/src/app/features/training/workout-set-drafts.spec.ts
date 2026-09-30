@@ -13,6 +13,37 @@ import {
 } from './workout-set-drafts';
 
 describe('workout set drafts', () => {
+  it('prefills the matching previous set while preserving actuals and explicit units', () => {
+    const day = trainingDay();
+    const exercise = day.workouts[0].exercises[0];
+    exercise.previousPerformance = {
+      date: '2026-08-19',
+      bestLoad: 105,
+      unit: 'Kilogram',
+      repetitions: 9,
+      rpe: 8,
+      sets: [
+        { position: 1, repetitions: 9, load: 105, loadUnit: 'Kilogram', rpe: 8 },
+        { position: 2, repetitions: 7, load: 230, loadUnit: 'Pound', rpe: 9 },
+      ],
+    };
+    exercise.sets[2].actualLoad = 110;
+
+    const drafts = reconcileWorkoutSetDrafts(day, {});
+    expect(drafts['set-1']).toMatchObject({
+      actualRepetitions: 9,
+      actualLoad: 105,
+      actualLoadUnit: 'Kilogram',
+    });
+    expect(drafts['set-2']).toMatchObject({
+      actualRepetitions: 8,
+      actualLoad: 100,
+      actualLoadUnit: 'Kilogram',
+    });
+    expect(drafts['set-3'].actualLoad).toBe(110);
+    expect(drafts['set-4'].actualLoad).toBe(100);
+  });
+
   it('applies an authoritative save only to the submitted set', () => {
     let drafts = reconcileWorkoutSetDrafts(trainingDay(), {});
     for (let index = 1; index <= 4; index += 1) {

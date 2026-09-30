@@ -2,11 +2,21 @@
   <header class="today-header">
     <div class="today-title">
       @if (localDate(); as date) {
-        <p class="today-date">{{ date | date: 'EEEE d MMMM' }}</p>
+        <p class="today-date">{{ date + 'T12:00:00' | date: 'EEEE d MMMM' }}</p>
       }
-      <h1 #heading tabindex="-1" class="tb-text-section-title" i18n>Today</h1>
+      <h1 #heading tabindex="-1" class="tb-text-section-title" i18n>
+        Today, <span dir="auto">{{ firstName() }}</span
+        >.
+      </h1>
     </div>
     <div class="today-actions">
+      @if (coachName(); as coach) {
+        <div class="today-coach">
+          <app-avatar [initials]="initialsOf(coach)" presentation="mobile-account" />
+          <span class="tb-visually-hidden" i18n>Coached by </span>
+          <span dir="auto">{{ coach }}</span>
+        </div>
+      }
       <a class="tb-icon-button tb-icon-button--touch today-bell" routerLink="/notifications">
         <app-icon name="bell" />
         <span class="tb-visually-hidden" i18n>{unread(), plural,
@@ -25,12 +35,66 @@
     </div>
   </header>
 
+  @if (week(); as currentWeek) {
+    @if (currentWeek.isAllowed) {
+      <section class="today-week" aria-label="This week's training" i18n-aria-label>
+        <div class="today-week-top">
+          <strong i18n>This week</strong>
+          <span i18n
+            >{{ weekProgress().completed }} of {{ weekProgress().scheduled }} sessions done</span
+          >
+        </div>
+        <ol class="today-week-days">
+          @for (item of currentWeek.days; track item.date) {
+            <li [class.is-today]="item.date === currentWeek.localDate">
+              <span class="today-week-name">{{ item.date + 'T12:00:00' | date: 'EEE' }}</span>
+              <span class="tb-visually-hidden">
+                @if (item.scheduled) {
+                  <ng-container i18n
+                    >{{ item.completed }} of {{ item.scheduled }} sessions done</ng-container
+                  >
+                } @else {
+                  <ng-container i18n>No session</ng-container>
+                }
+              </span>
+              <span
+                class="today-week-ring"
+                [class.is-done]="item.scheduled > 0 && item.completed === item.scheduled"
+                [class.is-planned]="item.scheduled > 0 && item.completed < item.scheduled"
+                [style.--progress]="
+                  item.scheduled ? (100 * item.completed) / item.scheduled + '%' : '0%'
+                "
+                aria-hidden="true"
+              >
+                @if (item.scheduled > 0 && item.completed === item.scheduled) {
+                  <app-icon name="check-circle" />
+                }
+              </span>
+            </li>
+          }
+        </ol>
+      </section>
+    }
+  } @else if (weekFailed()) {
+    <div class="today-week-failed">
+      <p i18n>Couldn’t load this week.</p>
+      <button appButton type="button" variant="text" (click)="loadWeek()" i18n>Retry week</button>
+    </div>
+  } @else {
+    <div class="today-week-skeleton" aria-hidden="true"></div>
+  }
+
   @let current = card();
   @if (planEnded() && !loading()) {
     <app-today-renewal [status]="renewal()!" (statusChange)="renewal.set($event)" />
   } @else if (trainingLoading() || error() || (current && current.kind !== 'hidden')) {
     <section
       class="today-card"
+      [class.today-card--hero]="
+        current?.kind === 'scheduled' ||
+        current?.kind === 'in-progress' ||
+        current?.kind === 'completed'
+      "
       [attr.aria-labelledby]="
         !trainingLoading() && !error() && current ? 'today-training-heading' : null
       "

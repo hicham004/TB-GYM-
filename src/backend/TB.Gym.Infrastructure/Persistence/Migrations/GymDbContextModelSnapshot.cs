@@ -1756,6 +1756,13 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("en-LB");
 
+                    b.Property<string>("PreferredThemeMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasDefaultValue("system");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 

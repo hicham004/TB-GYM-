@@ -77,6 +77,7 @@ export const SIGNED_IN_USER = {
   email: 'coach@example.test',
   displayName: 'Hicham Haddad',
   preferredCulture: 'en-LB',
+  preferredThemeMode: 'system',
   emailConfirmed: true,
   roles: [],
 };

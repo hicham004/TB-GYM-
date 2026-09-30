@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import {
   Component,
   computed,
@@ -27,13 +27,13 @@ import { checkInRow, nutritionRow, type ReadState, rowAccessLabel } from './toda
 type Row = 'nutrition' | 'checkIns';
 
 /**
- * "Also today" (339:2175): nutrition, then the check-in due first. Each row reads on its own and
+ * "Also today": nutrition, then the check-in due first. Each row reads on its own and
  * fails on its own; a failure never hides the other row or the training card. The coach reviews a
  * check-in and the client completes a nutrition day, so no shared "n of m done" is invented.
  */
 @Component({
   selector: 'app-today-also',
-  imports: [Button, DatePipe, Icon, RouterLink],
+  imports: [Button, DatePipe, DecimalPipe, Icon, RouterLink],
   templateUrl: './today-also.html',
   styleUrls: ['./today-rows.scss'],
 })
@@ -53,6 +53,16 @@ export class TodayAlso {
   protected readonly nutrition = computed(() =>
     nutritionRow(this.access.decision('Nutrition'), this.access.status(), this.nutritionRead()),
   );
+  protected readonly nutritionData = computed(() => {
+    const read = this.nutritionRead();
+    return read.kind === 'ok' ? read.value : null;
+  });
+  protected readonly nutritionProgress = computed(() => {
+    const day = this.nutritionData();
+    return day && day.targetCalories > 0
+      ? `${Math.min(100, Math.round((day.selectedCalories / day.targetCalories) * 100))}%`
+      : '0%';
+  });
   protected readonly checkIn = computed(() =>
     checkInRow(this.access.decision('CheckIns'), this.checkInRead(), this.today()),
   );
