@@ -54,9 +54,9 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R2.1 | **Client Today** (M1) for real, plus the personal light/dark setting (§3.1) | §2 definition of done | Done · 2026-09-30 · 3124581 |
 | R2.2 | **Workout player** (M2), with backend pre-fill from last time, the versioned PR rule and the finish summary | §2, plus backend tests | Done · 2026-09-30 · 3124581 |
 | R2.3 | **Progress** (M5) and the chart components | §2 | Done · 2026-09-30 · 3124581 |
-| R2.4a | **Nutrition day** (M4): day strip, macro rings, meal cards, planned and alternative logging, and client-entered extra food | Web/API and PostgreSQL tests, axe, reflow, 390/1440 screenshots | Done · 2026-09-30 |
-| R2.4b | **Nutrition demo data:** assigned meal plan for Atlas plus screenshot review on that workspace; correction for mistaken extra-food entries | §2 on the demo workspace | Done · 2026-09-30 |
-| R2.4c | **Check-in** (M6) | §2 | To do |
+| R2.4a | **Nutrition day** (M4): day strip, macro rings, meal cards, planned and alternative logging, and client-entered extra food | Web/API and PostgreSQL tests, axe, reflow, 390/1440 screenshots | Done · 2026-09-30 · 181df23 |
+| R2.4b | **Nutrition demo data:** assigned meal plan for Atlas plus screenshot review on that workspace; correction for mistaken extra-food entries | §2 on the demo workspace | Done · 2026-09-30 · 9634bc4 |
+| R2.4c | **Check-in** (M6): one question per screen, optional progress photos, review and a sent moment; Today opens the check-in due | §2 | Done · 2026-10-01 |
 | R2.5 | **Messages** (M7, shared chat), **Training** (M3), **Me** (M8), installable app | §2 | To do |
 | R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | To do |
 | R3.2 | **Coach Today** (C1) | §2 | To do |
@@ -109,6 +109,28 @@ of the implemented R1.3 screens before production rollout.
   M4 is rebuilt (R2.4).
 - **Translations.** `src/web/src/locale/messages.xlf` has not been regenerated since Phase 5, and
   R0.2 changed about 250 source strings. Run `npm run i18n:extract` before any translation work.
+- **Check-in photos (from R2.4c).** The check-in's photo step saves ordinary progress photos dated
+  today; nothing links them to the check-in record, because ADR 0016 defers check-in file uploads.
+  C5 review (R4.3) can show a client's photos by date. Attaching photos to a check-in, or letting a
+  coach turn the photo step off per form, needs an owner decision and backend work.
+- **Client "today" (from R2.4c).** The check-ins page shows plain due dates ("Due Sun 4 Oct"), not
+  "Due today" or "Overdue", because only the training API returns the workspace's date to a client.
+  A small own-workspace date read would allow relative wording without trusting the phone's clock.
+- **Client dark mode (seen in R2.4c).** Today, Nutrition, Progress and Check-in use brand tokens but
+  none is marked `REDESIGNED`, so all stay light in dark mode. Mark them together after one dark
+  screenshot pass.
+- **Scale answers in other languages (from R2.4c).** "8 out of 10" formats the number with plain
+  digits, as the coach's comparison view already did. Use locale number formatting with the
+  translation work.
+- **E2E writes into docs (seen in R2.4c).** `nutrition-day.e2e.ts` and `workout-progress.e2e.ts`
+  save their screenshots into `docs/design/`, so every full e2e run rewrites committed images. Point
+  them at `test-results/` as `checkin.e2e.ts` does.
+- **Angular router advisory (seen in R2.4c).** `npm audit --audit-level=high` fails on
+  `@angular/router` 22.0–22.1 (GHSA-ff3f-86qr-9cv3, a server-rendering denial of service). The app
+  renders in the browser today, but `check.ps1` stops at this step and R6.2 adds pre-rendering, so
+  bump Angular to 22.2 or later in its own step.
+- **Initial bundle budget.** The initial bundle is 530.8 kB against the 520 kB warning (530.1 kB
+  before R2.4c, which added only three icon glyphs).
 
 ---
 
@@ -444,6 +466,12 @@ limited to the coach's assigned clients.
 **M6. Check-in**
 - A step-by-step form (one question per screen, a progress bar), photo capture, and a
   confirmation.
+- Built in R2.4c: the check-ins page leads with the check-in due first (coach's face and note,
+  question count, Start or Continue) and keeps sent ones collapsed. The flow saves as it goes,
+  resumes where it was left, holds a required question until it is answered, and ends on a review
+  with Edit on every answer. The photo step is optional and saves progress photos (see follow-ups).
+  The review pins Back and Send above the tab bar with a count of answers (not on a short landscape
+  window), and Edit is a touch-size button (after the R2.5a audit).
 
 **M7. Messages**
 - The same chat components as C6.
@@ -489,6 +517,8 @@ The engine keeps its precise names in code. Screens use the words on the right.
 
 Built in R0.2 (2026-09-29): staff read "coaching space", clients read "your coach" where the
 coach's name is not on screen, and history keeps its versions (check-in forms, price plans).
+R2.4c: the client's check-in screens drop the form version ("v2"), because the due or sent date
+already tells two check-ins apart; the coach's check-in screens keep it.
 
 **Rules:**
 - Sentences are short, active, and use you/your.

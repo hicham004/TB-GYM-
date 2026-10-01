@@ -215,6 +215,8 @@ export function nutritionRow(
 export type CheckInRow =
   | {
       kind: 'due';
+      /** The row opens this check-in directly, at the question it was left on. */
+      assignmentId: string;
       title: string;
       dueDate: string;
       when: 'today' | 'later' | 'overdue';
@@ -249,6 +251,7 @@ export function checkInRow(
       kind: 'ready',
       value: {
         kind: 'due',
+        assignmentId: next.assignment.id,
         title: next.assignment.formTitle,
         dueDate: due,
         when,

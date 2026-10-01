@@ -1,0 +1,211 @@
+// Client check-in (M6): the answer controls and the photo step. Native radios, checkboxes and file
+// inputs stay in the page (keyboard, screen reader and form behaviour come free); only their look
+// moves to the label around them. The legacy global `input` and `label > span` rules are restated
+// here so they never leak in.
+
+// The real control, kept focusable and announced, drawn by its label instead.
+.choice-input,
+.pose-input {
+  block-size: 1px;
+  border: 0;
+  inline-size: 1px;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  margin: 0;
+  min-height: 0;
+  opacity: 0;
+  padding: 0;
+  position: absolute;
+}
+
+// Scale: tappable numbers in even rows on a phone (1–5, 6–10), one row where there is room.
+.scale {
+  display: grid;
+  gap: var(--space-8);
+  grid-template-columns: repeat(var(--scale-rows, 5), minmax(0, 1fr));
+}
+@media (min-width: 48rem) {
+  .scale {
+    grid-template-columns: repeat(var(--scale-count, 5), minmax(0, 1fr));
+  }
+}
+.scale-chip,
+.option,
+.pose {
+  cursor: pointer;
+  position: relative;
+}
+.scale-chip > span {
+  align-items: center;
+  background: var(--tb-surface-2);
+  border: 2px solid transparent;
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-ink);
+  display: flex;
+  font-size: 1.25rem;
+  font-weight: 700;
+  justify-content: center;
+  margin: 0;
+  min-block-size: 3.25rem;
+  transition: background var(--tb-duration-fast) var(--tb-ease);
+}
+.scale-chip:hover > span {
+  border-color: var(--tb-line-strong);
+}
+.scale-chip:has(:checked) > span {
+  background: var(--tb-brand);
+  color: var(--tb-on-brand);
+}
+.scale-chip:has(:focus-visible) > span,
+.option:has(:focus-visible),
+.pose:has(:focus-visible) {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+// Choices: one full-width card per option, radio or box mark first.
+.options {
+  display: grid;
+  gap: var(--space-8);
+}
+.option {
+  align-items: center;
+  background: var(--tb-surface-2);
+  border: 2px solid transparent;
+  border-radius: var(--tb-radius-control);
+  display: flex;
+  gap: var(--space-12);
+  min-block-size: 3.5rem;
+  padding: var(--space-12) var(--space-16);
+}
+.option:hover {
+  border-color: var(--tb-line-strong);
+}
+.option:has(:checked) {
+  background: var(--tb-accent-soft);
+  border-color: var(--tb-brand);
+}
+.option > span {
+  color: var(--tb-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+.option > .option-mark {
+  block-size: 1.375rem;
+  border: 2px solid var(--tb-line-strong);
+  border-radius: 50%;
+  display: block;
+  flex: none;
+  inline-size: 1.375rem;
+}
+.option > .option-mark.is-box {
+  border-radius: 6px;
+}
+.option:has(:checked) > .option-mark {
+  background: var(--tb-brand);
+  border-color: var(--tb-brand);
+  box-shadow: inset 0 0 0 3px var(--tb-accent-soft);
+}
+.option > .option-label {
+  overflow-wrap: anywhere;
+}
+
+// A long or decimal scale: minus, the value, plus.
+.stepper {
+  align-items: center;
+  display: flex;
+  gap: var(--space-8);
+}
+.stepper-input {
+  flex: 1;
+  font-size: 1.5rem;
+  font-weight: 700;
+  min-block-size: 3.25rem;
+  text-align: center;
+}
+.answer-input,
+.answer-text {
+  font-size: 1rem;
+  min-block-size: 3.25rem;
+}
+.answer-text {
+  min-block-size: 9rem;
+}
+.answer-input:focus-visible,
+.answer-text:focus-visible,
+.stepper-input:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+// Photos: three tiles, one per pose.
+.poses {
+  display: grid;
+  gap: var(--space-8);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pose {
+  align-content: center;
+  background: var(--tb-surface-2);
+  border: 2px dashed var(--tb-line-strong);
+  border-radius: var(--tb-radius-card-small);
+  display: grid;
+  gap: var(--space-4);
+  justify-items: center;
+  min-block-size: 8.5rem;
+  padding: var(--space-12);
+  text-align: center;
+}
+.pose:hover {
+  border-color: var(--tb-brand);
+}
+.pose.is-added {
+  background: var(--tb-success-soft);
+  border-style: solid;
+  border-color: transparent;
+  cursor: default;
+}
+.pose.is-saving {
+  cursor: progress;
+}
+.pose > span,
+.pose > strong {
+  color: var(--tb-ink);
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.pose > .pose-art {
+  align-items: center;
+  background: var(--tb-surface);
+  block-size: 2.75rem;
+  border-radius: 50%;
+  display: flex;
+  inline-size: 2.75rem;
+  justify-content: center;
+}
+.pose.is-added > .pose-art {
+  color: var(--tb-success);
+}
+.pose > .pose-state {
+  color: var(--tb-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.pose.is-added > .pose-state {
+  color: var(--tb-success);
+}
+.pose-message {
+  color: var(--tb-muted);
+  font-size: 0.8rem;
+  margin: var(--space-4) 0 0;
+}
+.pose-message.is-error {
+  color: var(--tb-danger);
+}

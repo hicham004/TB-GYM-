@@ -22,7 +22,7 @@ const meals = (logStatus: NutritionDay['logStatus'], selected: (string | null)[]
   }) as NutritionDay;
 const assignment = (dueDate: string, response: CheckInAssignmentListItem['response'] = null) =>
   ({
-    assignment: { formTitle: 'Weekly check-in', dueDate },
+    assignment: { id: 'a', formTitle: 'Weekly check-in', dueDate },
     response,
   }) as CheckInAssignmentListItem;
 const list = (...items: CheckInAssignmentListItem[]) =>
@@ -112,12 +112,16 @@ describe('TodayAlso', () => {
     expect(outside.host.querySelector('a[href="/checkins/me"]')).not.toBeNull();
   });
 
-  it('words every check-in state', async () => {
+  it('words every check-in state, and opens a due one straight into its questions', async () => {
     const draft = { status: 'Draft' } as CheckInAssignmentListItem['response'];
-    const cases: [CheckInAssignmentListItem[], string][] = [
-      [[assignment(TODAY)], 'Weekly check-in, Due today'],
-      [[assignment('2026-09-22', draft)], 'Weekly check-in, Due Tue 22 Sep · draft saved'],
-      [[assignment('2026-09-18')], 'Weekly check-in, Overdue since Fri 18 Sep'],
+    const cases: [CheckInAssignmentListItem[], string, string][] = [
+      [[assignment(TODAY)], '/checkins/me/a', 'Weekly check-in, Due today'],
+      [
+        [assignment('2026-09-22', draft)],
+        '/checkins/me/a',
+        'Weekly check-in, Due Tue 22 Sep · draft saved',
+      ],
+      [[assignment('2026-09-18')], '/checkins/me/a', 'Weekly check-in, Overdue since Fri 18 Sep'],
       [
         [
           assignment(TODAY, {
@@ -125,13 +129,14 @@ describe('TodayAlso', () => {
             submittedDate: TODAY,
           } as CheckInAssignmentListItem['response']),
         ],
+        '/checkins/me',
         'Weekly check-in, Reviewed by your coach',
       ],
-      [[], 'Check-ins, Nothing due'],
+      [[], '/checkins/me', 'Check-ins, Nothing due'],
     ];
-    for (const [items, expected] of cases) {
+    for (const [items, href, expected] of cases) {
       const { row } = await render({ listOwnCheckInAssignments: vi.fn(() => list(...items)) });
-      expect(row('/checkins/me')).toBe(expected);
+      expect(row(href)).toBe(expected);
       TestBed.resetTestingModule();
     }
   });

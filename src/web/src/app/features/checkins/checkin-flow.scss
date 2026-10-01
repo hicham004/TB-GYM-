@@ -1,0 +1,323 @@
+// Client check-in (M6): layout, header, progress, review, confirmation and read-only view.
+:host {
+  display: block;
+  color: var(--tb-ink);
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+.flow {
+  display: grid;
+  gap: var(--space-16);
+  margin-inline: auto;
+  max-inline-size: 44rem;
+}
+h1,
+h2,
+p {
+  margin: 0;
+}
+[tabindex='-1']:focus {
+  outline: none;
+}
+.kicker {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+// Header: close, the form's name as the page heading, and the save state in its place.
+.flow-head {
+  align-items: center;
+  display: flex;
+  gap: var(--space-12);
+}
+.flow-close {
+  color: var(--tb-ink);
+  flex: none;
+}
+.flow-title {
+  display: grid;
+  gap: 2px;
+}
+.flow-name {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.flow-save {
+  color: var(--tb-muted);
+  font-size: 0.8rem;
+}
+.flow-progress {
+  background: var(--tb-surface-2);
+  block-size: 6px;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.flow-progress span {
+  background: var(--tb-accent);
+  block-size: 100%;
+  display: block;
+  transform-origin: left center;
+  transition: transform var(--tb-duration) var(--tb-ease);
+}
+.flow-progress span:dir(rtl) {
+  transform-origin: right center;
+}
+
+// One step: a card with the question, its control, then Back and the one primary action.
+.step {
+  --step-pad: clamp(1.25rem, 5vw, 2rem);
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  display: grid;
+  gap: var(--space-16);
+  padding: var(--step-pad);
+}
+.step-title {
+  text-wrap: balance;
+  font-family: var(--tb-font-serif);
+  font-size: clamp(1.9rem, 6vw, 2.6rem);
+  font-weight: 400;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+.step-help {
+  color: var(--tb-muted);
+  line-height: 1.5;
+}
+.step-reason,
+.send-summary {
+  color: var(--tb-danger);
+  font-weight: 600;
+}
+.step-reason span {
+  display: block;
+}
+.step-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+  margin-block-start: var(--space-8);
+}
+.step-primary {
+  flex: 1 1 12rem;
+}
+// The review's actions: pinned above the client's tab bar while a long list of answers scrolls,
+// across the full width of the card, with what sending means beside them.
+.step-actions.pinned {
+  background: var(--tb-surface);
+  border-block-start: 1px solid var(--tb-line);
+  border-end-end-radius: var(--tb-radius-card);
+  border-end-start-radius: var(--tb-radius-card);
+  inset-block-end: var(--tb-client-tabs-block-size, 0px);
+  margin-block: var(--space-8) calc(-1 * var(--step-pad));
+  margin-inline: calc(-1 * var(--step-pad));
+  padding: var(--space-12) var(--step-pad);
+  position: sticky;
+  z-index: 4;
+}
+// A short window (a phone on its side) cannot spare the room, so the actions scroll with the answers.
+@media (max-height: 32rem) {
+  .step-actions.pinned {
+    position: static;
+  }
+}
+.send-meta {
+  color: var(--tb-muted);
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  gap: 0 var(--space-12);
+  justify-content: space-between;
+}
+.clear-answer {
+  justify-self: start;
+}
+
+// A save that failed while leaving: the client decides, nothing is dropped silently.
+.leave-card {
+  background: var(--tb-warm-soft);
+  border-radius: var(--tb-radius-card-small);
+  color: var(--tb-warm-ink);
+  display: grid;
+  gap: var(--space-12);
+  padding: var(--space-16);
+}
+.leave-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+// Answers, as the review and the sent view show them.
+.answers {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.answer-row {
+  align-items: center;
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  gap: var(--space-12);
+  justify-content: space-between;
+  padding-block: var(--space-16);
+}
+.answer-row:first-child {
+  border-block-start: 0;
+  padding-block-start: 0;
+}
+.answer-row.has-issue .answer-prompt {
+  color: var(--tb-danger);
+}
+.answer-copy {
+  display: grid;
+  flex: 1;
+  gap: var(--space-4);
+}
+.answer-prompt {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+.answer-value {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.answer-empty {
+  color: var(--tb-muted);
+  font-style: italic;
+}
+
+// Sent: the one delight moment on this screen — a check drawn once, still under reduced motion.
+.sent {
+  background: linear-gradient(135deg, var(--tb-brand), var(--tb-brand-strong));
+  border-radius: var(--tb-radius-card);
+  color: var(--tb-on-brand);
+  display: grid;
+  gap: var(--space-12);
+  justify-items: start;
+  padding: clamp(1.5rem, 6vw, 2.5rem);
+}
+.sent .kicker {
+  color: var(--tb-on-brand-soft);
+}
+.sent h1 {
+  text-wrap: balance;
+  font-family: var(--tb-font-serif);
+  font-size: clamp(2.2rem, 8vw, 3.2rem);
+  font-weight: 400;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.sent-copy {
+  max-inline-size: 30rem;
+  opacity: 0.9;
+}
+.sent-mark svg {
+  block-size: 4rem;
+  display: block;
+  inline-size: 4rem;
+}
+.sent-ring {
+  fill: var(--tb-accent);
+}
+.sent-tick {
+  animation: sent-draw 420ms var(--tb-ease) 120ms both;
+  fill: none;
+  stroke: var(--tb-on-accent);
+  stroke-dasharray: 40;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5;
+}
+@keyframes sent-draw {
+  from {
+    stroke-dashoffset: 40;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sent-tick {
+    animation: none;
+  }
+  .flow-progress span {
+    transition: none;
+  }
+}
+.sent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin-block-start: var(--space-12);
+}
+.sent-actions .tb-button--filled {
+  background: var(--tb-accent);
+  border-color: var(--tb-accent);
+  color: var(--tb-on-accent);
+}
+.sent-actions .tb-button--text {
+  color: var(--tb-on-brand);
+}
+
+// A sent check-in, read-only.
+.sent-view {
+  display: grid;
+  gap: var(--space-16);
+}
+.back-link {
+  align-items: center;
+  color: var(--tb-ink);
+  display: inline-flex;
+  font-weight: 600;
+  gap: var(--space-8);
+  justify-self: start;
+  min-block-size: 44px;
+  text-decoration: none;
+}
+.sent-head {
+  display: grid;
+  gap: var(--space-8);
+}
+.sent-head h1 {
+  font-family: var(--tb-font-serif);
+  font-size: clamp(2rem, 7vw, 2.8rem);
+  font-weight: 400;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+.sent-view .answers,
+.state-card {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  padding: clamp(1.1rem, 4vw, 1.6rem);
+}
+.state-card {
+  display: grid;
+  gap: var(--space-12);
+  justify-items: start;
+}
+.state-card h1 {
+  font-family: var(--tb-font-serif);
+  font-size: clamp(1.7rem, 5vw, 2.2rem);
+  font-weight: 400;
+}

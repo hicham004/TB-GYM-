@@ -8,6 +8,17 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 const GLYPHS = {
   // Icon/Plus 42:4
   plus: { size: 20, path: 'M10 4V16M4 10H16' },
+  // Minus, close and camera for the client check-in (R2.4c), drawn on the same 20px grid.
+  minus: { size: 20, path: 'M4 10H16' },
+  close: { size: 20, path: 'M5 5L15 15M15 5L5 15' },
+  camera: {
+    size: 20,
+    path:
+      'M4.5 6H7L8.2 4H11.8L13 6H15.5C16.466 6 17.25 6.784 17.25 7.75V14.5C17.25 15.466 16.466' +
+      ' 16.25 15.5 16.25H4.5C3.534 16.25 2.75 15.466 2.75 14.5V7.75C2.75 6.784 3.534 6 4.5 6Z' +
+      'M12.75 11C12.75 12.519 11.519 13.75 10 13.75C8.481 13.75 7.25 12.519 7.25 11C7.25 9.481' +
+      ' 8.481 8.25 10 8.25C11.519 8.25 12.75 9.481 12.75 11Z',
+  },
   // Icon/Notification 98:47 (Figma's float artifacts such as 16.1999 rounded to three decimals)
   bell: {
     size: 20,

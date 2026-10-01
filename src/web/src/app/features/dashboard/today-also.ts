@@ -66,6 +66,13 @@ export class TodayAlso {
   protected readonly checkIn = computed(() =>
     checkInRow(this.access.decision('CheckIns'), this.checkInRead(), this.today()),
   );
+  /** A check-in due opens straight into it; every other state opens the check-ins page. */
+  protected readonly checkInLink = computed(() => {
+    const row = this.checkIn();
+    return row.kind === 'ready' && row.value.kind === 'due'
+      ? ['/checkins/me', row.value.assignmentId]
+      : ['/checkins/me'];
+  });
   protected readonly visible = computed(
     () => this.nutrition().kind !== 'hidden' || this.checkIn().kind !== 'hidden',
   );

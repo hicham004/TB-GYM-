@@ -103,7 +103,7 @@
               </button>
             </div>
           } @else {
-            <a class="row" routerLink="/checkins/me">
+            <a class="row" [routerLink]="checkInLink()">
               <app-icon name="check-ins" />
               <span class="row-copy">
                 @if (checkin.kind === 'closed') {

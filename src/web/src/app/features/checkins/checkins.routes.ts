@@ -1,5 +1,13 @@
-import { Routes } from '@angular/router';
+import { CanDeactivateFn, Routes } from '@angular/router';
 import { clientGuard, coachGuard } from '../../core/auth/auth.guards';
+
+/**
+ * Leaving mid-check-in saves the last answer first, so nothing typed is lost to a tab tap. Typed
+ * structurally so this file does not pull the lazily loaded flow into the routes chunk.
+ */
+export const saveBeforeLeaving: CanDeactivateFn<{
+  canLeave(destination: string): Promise<boolean>;
+}> = (flow, _route, _state, next) => flow.canLeave(next.url);
 
 export const checkInRoutes: Routes = [
   {
@@ -17,8 +25,15 @@ export const checkInRoutes: Routes = [
   {
     path: 'me',
     canActivate: [clientGuard],
-    title: $localize`My check-ins | TB Gym`,
+    title: $localize`Check-ins | TB Gym`,
     loadComponent: () => import('./my-checkins').then((module) => module.MyCheckIns),
+  },
+  {
+    path: 'me/:assignmentId',
+    canActivate: [clientGuard],
+    canDeactivate: [saveBeforeLeaving],
+    title: $localize`Check-in | TB Gym`,
+    loadComponent: () => import('./checkin-flow').then((module) => module.CheckInFlow),
   },
   { path: '', redirectTo: 'forms', pathMatch: 'full' },
 ];

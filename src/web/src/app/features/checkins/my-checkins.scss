@@ -1,0 +1,220 @@
+// Client check-ins home (M6): the one due first as a hero card, then what is open and what was sent.
+:host {
+  display: block;
+  color: var(--tb-ink);
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+.checkins-home {
+  display: grid;
+  gap: var(--space-24);
+  margin-inline: auto;
+  max-inline-size: 44rem;
+}
+h1,
+h2,
+p {
+  margin: 0;
+}
+h1:focus {
+  outline: none;
+}
+.page-head {
+  display: grid;
+  gap: var(--space-8);
+}
+.kicker {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+h1 {
+  font-family: var(--tb-font-serif);
+  font-size: clamp(2.7rem, 9vw, 4.2rem);
+  font-weight: 400;
+  line-height: 1;
+}
+.page-lede {
+  color: var(--tb-muted);
+  max-inline-size: 36rem;
+}
+
+// The check-in due first: the page's one primary action, on the brand surface Today uses.
+.hero {
+  background: linear-gradient(135deg, var(--tb-brand), var(--tb-brand-strong));
+  border-radius: var(--tb-radius-card);
+  box-shadow: 0 16px 32px -20px rgb(0 0 0 / 55%);
+  color: var(--tb-on-brand);
+  display: grid;
+  gap: var(--space-12);
+  justify-items: start;
+  overflow: hidden;
+  padding: clamp(1.4rem, 6vw, 2.25rem);
+  position: relative;
+}
+.hero::after {
+  block-size: 15rem;
+  border: 1px solid color-mix(in srgb, var(--tb-on-brand) 18%, transparent);
+  border-radius: 50%;
+  content: '';
+  inline-size: 15rem;
+  inset-block-start: -6rem;
+  inset-inline-end: -5rem;
+  pointer-events: none;
+  position: absolute;
+}
+.hero-skeleton {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  box-shadow: none;
+}
+.hero-skeleton::after {
+  display: none;
+}
+.hero-from {
+  align-items: center;
+  display: flex;
+  font-weight: 600;
+  gap: var(--space-8);
+}
+.hero-kicker {
+  color: var(--tb-on-brand-soft);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hero h2 {
+  text-wrap: balance;
+  font-family: var(--tb-font-serif);
+  font-size: clamp(2.1rem, 7vw, 3rem);
+  font-weight: 400;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.hero-note {
+  border-inline-start: 3px solid var(--tb-accent);
+  max-inline-size: 29rem;
+  padding-inline-start: 0.75rem;
+}
+.hero-meta {
+  color: var(--tb-on-brand-soft);
+  font-weight: 600;
+}
+.hero-progress {
+  background: color-mix(in srgb, var(--tb-on-brand) 20%, transparent);
+  block-size: 6px;
+  border-radius: 99px;
+  inline-size: min(100%, 18rem);
+  overflow: hidden;
+}
+.hero-progress span {
+  background: var(--tb-accent);
+  block-size: 100%;
+  display: block;
+}
+.hero-action {
+  background: var(--tb-accent);
+  border-color: var(--tb-accent);
+  color: var(--tb-on-accent);
+  font-weight: 700;
+  margin-block-start: var(--space-8);
+  min-inline-size: min(100%, 16rem);
+  z-index: 1;
+}
+.hero-action:hover {
+  background: var(--tb-accent-bright, var(--tb-accent));
+}
+
+// Lists: whole-row links, title first, a chevron at the inline end.
+.list-section {
+  display: grid;
+  gap: var(--space-12);
+  justify-items: start;
+}
+.list-section h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.rows {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  inline-size: 100%;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rows li + li {
+  border-block-start: 1px solid var(--tb-line);
+}
+.row {
+  align-items: center;
+  color: var(--tb-ink);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-12);
+  min-block-size: 4rem;
+  padding: var(--space-12) var(--space-16);
+  text-decoration: none;
+}
+.row:hover .row-title {
+  text-decoration: underline;
+}
+.row:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: -3px;
+}
+.row-copy {
+  display: grid;
+  flex: 1 1 10rem;
+  gap: 2px;
+}
+.row-title {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.row-meta {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+.row-pill {
+  justify-self: start;
+  margin-block-start: var(--space-4);
+}
+.chevron {
+  color: var(--tb-muted);
+  transform: rotate(-90deg);
+}
+.chevron:dir(rtl) {
+  transform: rotate(90deg);
+}
+.more {
+  inline-size: 100%;
+}
+.list-error {
+  color: var(--tb-danger);
+}
+.state-card {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  display: grid;
+  gap: var(--space-12);
+  justify-items: start;
+  padding: clamp(1.1rem, 4vw, 1.6rem);
+}
+.state-card h2 {
+  font-family: var(--tb-font-serif);
+  font-size: clamp(1.6rem, 5vw, 2.1rem);
+  font-weight: 400;
+}
+.empty {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+}

@@ -1,0 +1,529 @@
+<div class="flow tb-theme">
+  @switch (phase()) {
+    @case ('loading') {
+      <app-skeleton class="flow-skeleton" label="Loading your check-in" i18n-label [lines]="5" />
+    }
+    @case ('denied') {
+      <section class="state-card" role="status">
+        <h1 #pageHeading tabindex="-1" i18n>Check-ins are closed</h1>
+        <p>{{ denial() }}</p>
+        <a appButton variant="outlined" routerLink="/" i18n>Back to Today</a>
+      </section>
+    }
+    @case ('missing') {
+      <section class="state-card">
+        <h1 #pageHeading tabindex="-1" i18n>This check-in isn't here any more</h1>
+        <p i18n>It may have come from another coach. Your check-ins are one tap away.</p>
+        <a appButton variant="outlined" routerLink="/checkins/me" i18n>See your check-ins</a>
+      </section>
+    }
+    @case ('failed') {
+      <section class="state-card" role="alert">
+        <h1 #pageHeading tabindex="-1" i18n>We couldn't open your check-in</h1>
+        <p>{{ loadError() }}</p>
+        <button appButton type="button" variant="outlined" (click)="retryLoad()" i18n>
+          Try again
+        </button>
+      </section>
+    }
+    @case ('sent') {
+      <section class="sent" aria-labelledby="sent-heading">
+        <div class="sent-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" focusable="false">
+            <circle class="sent-ring" cx="32" cy="32" r="28" />
+            <path class="sent-tick" d="M20 33.5L28.5 42L45 24" />
+          </svg>
+        </div>
+        <p class="kicker" i18n>Check-in sent</p>
+        <h1 id="sent-heading" #pageHeading tabindex="-1">
+          @if (coachName(); as coach) {
+            <ng-container i18n
+              >Sent to <span dir="auto">{{ coach }}</span></ng-container
+            >
+          } @else {
+            <ng-container i18n>Sent to your coach</ng-container>
+          }
+        </h1>
+        <p class="sent-copy" i18n>
+          Nice work. Your answers are with your coach now, and they stay exactly as you sent them.
+        </p>
+        <div class="sent-actions">
+          <a appButton size="touch" routerLink="/" i18n>Back to Today</a>
+          <button appButton type="button" variant="text" size="touch" (click)="showAnswers()" i18n>
+            See your answers
+          </button>
+        </div>
+      </section>
+    }
+    @default {
+      @if (detail(); as view) {
+        @if (editable()) {
+          <header class="flow-head">
+            <a class="tb-icon-button tb-icon-button--touch flow-close" routerLink="/checkins/me">
+              <app-icon name="close" />
+              <span class="tb-visually-hidden" i18n>Save and close</span>
+            </a>
+            <div class="flow-title">
+              <h1 class="flow-name" dir="auto">{{ view.assignment.formTitle }}</h1>
+              <p class="flow-save" role="status">
+                @switch (saveState()) {
+                  @case ('saving') {
+                    <ng-container i18n>Saving…</ng-container>
+                  }
+                  @case ('saved') {
+                    <ng-container i18n>Saved</ng-container>
+                  }
+                  @case ('failed') {
+                    <ng-container i18n>Not saved yet</ng-container>
+                  }
+                  @default {
+                    <ng-container i18n
+                      >Due
+                      {{ view.assignment.dueDate + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+                    >
+                  }
+                }
+              </p>
+            </div>
+          </header>
+          <div class="flow-progress" aria-hidden="true">
+            <span [style.transform]="'scaleX(' + progress() / 100 + ')'"></span>
+          </div>
+
+          @if (blockedLeave()) {
+            <div class="leave-card" role="alert">
+              <p i18n>Your last answer isn't saved yet, so you're still here.</p>
+              <div class="leave-actions">
+                <button appButton type="button" variant="filled" (click)="retryLeave()" i18n>
+                  Save and leave
+                </button>
+                <button appButton type="button" variant="text" (click)="leaveWithoutSaving()" i18n>
+                  Leave without saving
+                </button>
+              </div>
+            </div>
+          }
+
+          @if (step(); as current) {
+            <form class="step" (ngSubmit)="primary()" aria-labelledby="step-heading">
+              @switch (current.kind) {
+                @case ('question') {
+                  @let question = current.question;
+                  @let answer = answerFor(question.id);
+                  @let reasons = questionIssues(question);
+                  @let showsReasons = attempt.shows(field(question), reasons);
+                  @let describedBy = describedByFor(question, showsReasons);
+                  @let invalid = showsReasons ? 'true' : null;
+
+                  <p class="kicker">
+                    <ng-container i18n
+                      >Question {{ current.number }} of {{ questions().length }}</ng-container
+                    >
+                    @if (!question.isRequired) {
+                      <span aria-hidden="true"> · </span>
+                      <span class="tb-visually-hidden">, </span>
+                      <ng-container i18n>Optional</ng-container>
+                    }
+                  </p>
+                  <h2 id="step-heading" class="step-title" tabindex="-1" #stepHeading dir="auto">
+                    {{ question.prompt }}
+                  </h2>
+                  @if (question.helpText) {
+                    <p class="step-help" id="step-help" dir="auto">{{ question.helpText }}</p>
+                  }
+
+                  @switch (question.questionType) {
+                    @case ('NumericScale') {
+                      @if (scaleChips(question); as positions) {
+                        <div
+                          class="scale"
+                          [style.--scale-count]="positions.length"
+                          [style.--scale-rows]="scaleRowLength(positions.length)"
+                          role="radiogroup"
+                          aria-labelledby="step-heading"
+                          [attr.aria-describedby]="describedBy"
+                          [attr.aria-invalid]="invalid"
+                        >
+                          @for (value of positions; track value) {
+                            <label class="scale-chip">
+                              <input
+                                type="radio"
+                                class="choice-input"
+                                name="scale"
+                                [value]="value"
+                                [checked]="answer?.numericValue === value"
+                                (change)="setNumber(question.id, value)"
+                              />
+                              <span class="tb-numeric">{{ value }}</span>
+                            </label>
+                          }
+                        </div>
+                      } @else {
+                        <div class="stepper">
+                          <button
+                            appIconButton
+                            type="button"
+                            size="touch"
+                            label="Lower"
+                            i18n-label
+                            (click)="stepNumber(question, -1)"
+                          >
+                            <app-icon name="minus" />
+                          </button>
+                          <input
+                            class="tb-control stepper-input tb-numeric"
+                            autocomplete="off"
+                            type="number"
+                            inputmode="decimal"
+                            name="scale-value"
+                            aria-labelledby="step-heading"
+                            [attr.aria-describedby]="describedBy"
+                            [attr.aria-invalid]="invalid"
+                            [min]="question.scaleMinimum"
+                            [max]="question.scaleMaximum"
+                            [step]="question.scaleStep"
+                            [ngModel]="answer?.numericValue"
+                            (ngModelChange)="setNumberText(question.id, $event)"
+                          />
+                          <button
+                            appIconButton
+                            type="button"
+                            size="touch"
+                            label="Higher"
+                            i18n-label
+                            (click)="stepNumber(question, 1)"
+                          >
+                            <app-icon name="plus" />
+                          </button>
+                        </div>
+                        <p class="step-help" i18n>
+                          From {{ question.scaleMinimum }} to {{ question.scaleMaximum }}, in steps
+                          of {{ question.scaleStep }}.
+                        </p>
+                      }
+                    }
+                    @case ('ShortText') {
+                      <input
+                        class="tb-control answer-input"
+                        autocomplete="off"
+                        type="text"
+                        name="answer-text"
+                        dir="auto"
+                        aria-labelledby="step-heading"
+                        [attr.aria-describedby]="describedBy"
+                        [attr.aria-invalid]="invalid"
+                        [maxlength]="limits.shortTextLength"
+                        [ngModel]="answer?.textValue ?? ''"
+                        (ngModelChange)="setText(question.id, $event)"
+                      />
+                    }
+                    @case ('LongText') {
+                      <textarea
+                        class="tb-control tb-textarea answer-text"
+                        autocomplete="off"
+                        name="answer-text"
+                        rows="6"
+                        dir="auto"
+                        aria-labelledby="step-heading"
+                        [attr.aria-describedby]="describedBy"
+                        [attr.aria-invalid]="invalid"
+                        [maxlength]="limits.longTextLength"
+                        [ngModel]="answer?.textValue ?? ''"
+                        (ngModelChange)="setText(question.id, $event)"
+                      ></textarea>
+                    }
+                    @default {
+                      @let single = question.questionType === 'SingleChoice';
+                      <div
+                        class="options"
+                        [attr.role]="single ? 'radiogroup' : 'group'"
+                        aria-labelledby="step-heading"
+                        [attr.aria-describedby]="describedBy"
+                        [attr.aria-invalid]="invalid"
+                      >
+                        @for (option of question.options; track option.id) {
+                          <label class="option">
+                            <input
+                              class="choice-input"
+                              [type]="single ? 'radio' : 'checkbox'"
+                              [name]="'q-' + question.id"
+                              [value]="option.id"
+                              [checked]="isSelected(question.id, option.id)"
+                              (change)="toggleOption(question.id, option.id)"
+                            />
+                            <span
+                              class="option-mark"
+                              [class.is-box]="!single"
+                              aria-hidden="true"
+                            ></span>
+                            <span class="option-label" dir="auto">{{ option.label }}</span>
+                          </label>
+                        }
+                      </div>
+                      @if (!single) {
+                        <p class="step-help" i18n>Choose all that apply.</p>
+                      }
+                    }
+                  }
+
+                  @if (showsReasons) {
+                    <p class="step-reason" id="step-reason">
+                      @for (reason of reasons; track reason) {
+                        <span>{{ reason }}</span>
+                      }
+                    </p>
+                  }
+                  @if (!question.isRequired && answerOf(question) !== null) {
+                    <button
+                      appButton
+                      type="button"
+                      variant="text"
+                      class="clear-answer"
+                      (click)="clearAnswer(question)"
+                      i18n
+                    >
+                      Clear answer
+                    </button>
+                  }
+                }
+                @case ('photos') {
+                  <p class="kicker" i18n>Photos · Optional</p>
+                  <h2 id="step-heading" class="step-title" tabindex="-1" #stepHeading i18n>
+                    Add this week's photos
+                  </h2>
+                  <p class="step-help" i18n>
+                    They go straight to your progress photos. Only you and your coach can see them.
+                  </p>
+                  <ul class="poses">
+                    @for (pose of poses; track pose) {
+                      @let slot = photos()[pose];
+                      <li>
+                        <label
+                          class="pose"
+                          [class.is-added]="slot.state === 'added'"
+                          [class.is-saving]="slot.state === 'saving'"
+                        >
+                          <input
+                            class="pose-input"
+                            type="file"
+                            accept="image/*"
+                            [disabled]="slot.state === 'saving' || slot.state === 'added'"
+                            (change)="addPhoto(pose, $event)"
+                          />
+                          <span class="pose-art" aria-hidden="true">
+                            <app-icon [name]="slot.state === 'added' ? 'check-circle' : 'camera'" />
+                          </span>
+                          <strong>{{ poseLabel(pose) }}</strong>
+                          <span class="pose-state">
+                            @switch (slot.state) {
+                              @case ('saving') {
+                                <ng-container i18n>Saving…</ng-container>
+                              }
+                              @case ('added') {
+                                <ng-container i18n>Added today</ng-container>
+                              }
+                              @default {
+                                <ng-container i18n>Add a photo</ng-container>
+                              }
+                            }
+                          </span>
+                        </label>
+                        @if (slot.message) {
+                          <p class="pose-message" [class.is-error]="slot.state === 'failed'">
+                            {{ slot.message }}
+                          </p>
+                        }
+                      </li>
+                    }
+                  </ul>
+                  <p class="tb-visually-hidden" role="status">{{ photoNotice() }}</p>
+                }
+                @case ('review') {
+                  <p class="kicker" i18n>Ready to send</p>
+                  <h2 id="step-heading" class="step-title" tabindex="-1" #stepHeading i18n>
+                    Check your answers
+                  </h2>
+                  <ol class="answers">
+                    @for (question of questions(); track question.id) {
+                      @let text = answerOf(question);
+                      @let reasons = reviewIssues()[question.questionKey] ?? [];
+                      <li class="answer-row" [class.has-issue]="reasons.length > 0">
+                        <div class="answer-copy">
+                          <p class="answer-prompt" dir="auto">{{ question.prompt }}</p>
+                          @if (text !== null) {
+                            <p class="answer-value" dir="auto">{{ text }}</p>
+                          } @else {
+                            <p class="answer-empty" i18n>No answer</p>
+                          }
+                          @for (reason of reasons; track reason) {
+                            <p class="step-reason">{{ reason }}</p>
+                          }
+                        </div>
+                        <button
+                          appButton
+                          type="button"
+                          variant="outlined"
+                          size="touch"
+                          (click)="edit(question.questionKey)"
+                        >
+                          <ng-container i18n>Edit</ng-container
+                          ><span class="tb-visually-hidden" dir="auto"
+                            >: {{ question.prompt }}</span
+                          >
+                        </button>
+                      </li>
+                    }
+                    @if (offerPhotos()) {
+                      <li class="answer-row">
+                        <div class="answer-copy">
+                          <p class="answer-prompt" i18n>Progress photos</p>
+                          <p class="answer-value" i18n>
+                            {photosAdded(), plural,
+                              =0 {None added today}
+                              =1 {1 photo added today}
+                              other {{{ photosAdded() }} photos added today}
+                            }
+                          </p>
+                        </div>
+                        <button
+                          appButton
+                          type="button"
+                          variant="outlined"
+                          size="touch"
+                          (click)="editPhotos()"
+                        >
+                          <ng-container i18n>Edit</ng-container
+                          ><span class="tb-visually-hidden" i18n>: progress photos</span>
+                        </button>
+                      </li>
+                    }
+                  </ol>
+                  <!-- Present from the start so the live region is registered; empty until a send
+                       is refused. tabindex -1 lets the refusal take focus without a tab stop. -->
+                  <p
+                    class="send-summary"
+                    [class.tb-visually-hidden]="!sendError()"
+                    id="send-summary"
+                    role="alert"
+                    tabindex="-1"
+                    #summary
+                  >
+                    {{ sendError() }}
+                  </p>
+                }
+              }
+
+              <!-- On the review the actions stay pinned above the tab bar while the answers scroll,
+                   with what sending means beside them. -->
+              <div class="step-actions" [class.pinned]="current.kind === 'review'">
+                @if (current.kind === 'review') {
+                  <p class="send-meta" id="send-meta">
+                    <span i18n>{{ answeredCount() }} of {{ questions().length }} answered</span>
+                    <span i18n>Answers can't be changed once sent.</span>
+                  </p>
+                }
+                @if (stepIndex() > 0) {
+                  <button
+                    appButton
+                    type="button"
+                    variant="outlined"
+                    size="touch"
+                    (click)="back()"
+                    i18n
+                  >
+                    Back
+                  </button>
+                }
+                <button
+                  appButton
+                  type="submit"
+                  size="touch"
+                  class="step-primary"
+                  [loading]="sending()"
+                  [attr.aria-describedby]="
+                    current.kind === 'review' ? 'send-summary send-meta' : null
+                  "
+                >
+                  @switch (current.kind) {
+                    @case ('review') {
+                      @if (sending()) {
+                        <ng-container i18n>Sending…</ng-container>
+                      } @else {
+                        <ng-container i18n>Send check-in</ng-container>
+                      }
+                    }
+                    @case ('photos') {
+                      @if (returnToReview()) {
+                        <ng-container i18n>Back to review</ng-container>
+                      } @else if (photosAdded() === 0) {
+                        <ng-container i18n>Skip photos</ng-container>
+                      } @else {
+                        <ng-container i18n>Next</ng-container>
+                      }
+                    }
+                    @default {
+                      @if (returnToReview()) {
+                        <ng-container i18n>Back to review</ng-container>
+                      } @else if (
+                        current.kind === 'question' &&
+                        !current.question.isRequired &&
+                        answerOf(current.question) === null
+                      ) {
+                        <ng-container i18n>Skip</ng-container>
+                      } @else {
+                        <ng-container i18n>Next</ng-container>
+                      }
+                    }
+                  }
+                </button>
+              </div>
+            </form>
+          }
+        } @else {
+          @let response = view.response!;
+          <div class="sent-view">
+            <a class="back-link" routerLink="/checkins/me">
+              <span aria-hidden="true">‹</span>
+              <ng-container i18n>Check-ins</ng-container>
+            </a>
+            <header class="sent-head">
+              @if (response.submittedDate) {
+                <p class="kicker" i18n>
+                  Sent {{ response.submittedDate + 'T12:00:00' | date: 'EEE d MMM y' }}
+                </p>
+              }
+              <h1 id="checkin-heading" #pageHeading tabindex="-1" dir="auto">
+                {{ view.assignment.formTitle }}
+              </h1>
+              <div class="pills">
+                @if (response.status === 'Reviewed') {
+                  <app-status-pill label="Reviewed by your coach" i18n-label tone="success" />
+                } @else {
+                  <app-status-pill label="Waiting for your coach" i18n-label tone="info" />
+                }
+                @if (response.isLate) {
+                  <app-status-pill label="After the due date" i18n-label tone="warm" />
+                }
+              </div>
+            </header>
+            <ol class="answers">
+              @for (question of questions(); track question.id) {
+                @let text = answerOf(question);
+                <li class="answer-row">
+                  <div class="answer-copy">
+                    <p class="answer-prompt" dir="auto">{{ question.prompt }}</p>
+                    @if (text !== null) {
+                      <p class="answer-value" dir="auto">{{ text }}</p>
+                    } @else {
+                      <p class="answer-empty" i18n>No answer</p>
+                    }
+                  </div>
+                </li>
+              }
+            </ol>
+          </div>
+        }
+      }
+    }
+  }
+</div>

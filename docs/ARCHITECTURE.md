@@ -504,6 +504,12 @@ meal snapshot and targets remain unchanged. The add command checks the current c
 feature access, uses the daily log version, and freezes with the completed day (ADR 0032).
 R2.4b adds tenant-bound, append-only reversals for mistaken extra foods. The client day projection
 and totals omit reversed foods, while the original entry and actor/time-stamped reversal persist.
+R2.4c rebuilds the client check-in (`/checkins/me` and `/checkins/me/:assignmentId`) on the existing
+6A contracts; no API, schema or rule changed. The flow saves the lenient draft on every step and
+after a pause in typing, one save at a time carrying the version the previous save returned, and a
+`CanDeactivate` guard saves before leaving and holds the client if that save fails. Its optional
+photo step records ordinary progress photos (ADR 0011), dated by the server in the workspace
+calendar; they are not attached to the check-in, whose file uploads stay deferred (ADR 0016).
 
 Step 3B2 (ADR 0029) adds `subscriptions."RenewalRequests"` (append-only, one per client in any 7
 days by exclusion constraint) and `IClientRenewalService` in the Subscriptions module, implemented in

@@ -1,233 +1,188 @@
-<section class="checkins">
-  <h2 i18n>My check-ins</h2>
+<div class="checkins-home tb-theme">
+  <header class="page-head">
+    <p class="kicker" i18n>Your week</p>
+    <h1 #heading tabindex="-1" i18n>Check-ins</h1>
+    <p class="page-lede" i18n>
+      Your coach's questions, one at a time. Your answers save as you go.
+    </p>
+  </header>
 
-  @if (error(); as message) {
-    <p class="error" role="alert">{{ message }}</p>
-  }
-  @if (notice(); as message) {
-    <p class="notice" role="status">{{ message }}</p>
-  }
+  @if (loading()) {
+    <div class="hero hero-skeleton">
+      <app-skeleton label="Loading your check-ins" i18n-label [lines]="3" />
+    </div>
+  } @else if (denial(); as message) {
+    <section class="state-card" role="status">
+      <h2 i18n>Check-ins are closed</h2>
+      <p>{{ message }}</p>
+    </section>
+  } @else if (error() && items().length === 0) {
+    <section class="state-card" role="alert">
+      <h2 i18n>We couldn't load your check-ins</h2>
+      <p>{{ error() }}</p>
+      <button appButton type="button" variant="outlined" (click)="retry()" i18n>Try again</button>
+    </section>
+  } @else {
+    @if (next(); as item) {
+      <section class="hero" aria-labelledby="next-heading">
+        @if (coachName(); as coach) {
+          <p class="hero-from">
+            <app-avatar [initials]="initialsOf(coach)" presentation="coach-account" />
+            <span i18n
+              >From <span dir="auto">{{ coach }}</span></span
+            >
+          </p>
+        }
+        <p class="hero-kicker">
+          @if (item.response) {
+            <ng-container i18n
+              >Started · due
+              {{ item.assignment.dueDate + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+            >
+          } @else {
+            <ng-container i18n
+              >Due {{ item.assignment.dueDate + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+            >
+          }
+        </p>
+        <h2 id="next-heading" dir="auto">{{ item.assignment.formTitle }}</h2>
+        @if (nextSize(); as size) {
+          @if (size.note) {
+            <p class="hero-note" dir="auto">{{ size.note }}</p>
+          }
+          <p class="hero-meta">
+            <ng-container i18n>{size.total, plural,
+              =1 {1 question}
+              other {{{ size.total }} questions}
+            }</ng-container>
+            @if (size.answered > 0) {
+              <span aria-hidden="true"> · </span>
+              <span class="tb-visually-hidden">, </span>
+              <ng-container i18n>{{ size.answered }} answered</ng-container>
+            }
+          </p>
+          @if (size.answered > 0) {
+            <div class="hero-progress" aria-hidden="true">
+              <span [style.inline-size.%]="size.percent"></span>
+            </div>
+          }
+        }
+        <a
+          appButton
+          size="touch"
+          class="hero-action"
+          [routerLink]="['/checkins/me', item.assignment.id]"
+        >
+          @if (item.response) {
+            <ng-container i18n>Continue check-in</ng-container>
+          } @else {
+            <ng-container i18n>Start check-in</ng-container>
+          }
+        </a>
+      </section>
+    } @else {
+      <app-empty-state
+        class="empty"
+        heading="You're all caught up"
+        i18n-heading
+        description="When your coach sends you a check-in, it will be waiting here."
+        i18n-description
+      >
+        <a empty-state-action appButton variant="outlined" routerLink="/" i18n>Back to Today</a>
+      </app-empty-state>
+    }
 
-  <div class="split">
-    <article class="panel">
-      <h3 i18n>Assigned</h3>
-      @if (denial(); as message) {
-        <p class="notice" role="status">{{ message }}</p>
-      } @else if (loading() && assignments().length === 0) {
-        <p i18n>Loading your check-ins…</p>
-      } @else if (assignments().length === 0) {
-        <p class="empty" i18n>You have no check-ins right now.</p>
-      } @else {
-        <ul class="assignments">
-          @for (item of assignments(); track item.assignment.id) {
+    @if (alsoOpen().length > 0) {
+      <section class="list-section" aria-labelledby="open-heading">
+        <h2 id="open-heading" i18n>Also waiting for you</h2>
+        <ul class="rows">
+          @for (item of alsoOpen(); track item.assignment.id) {
             <li>
-              <!-- The version number is part of the client's own record: the coach's list shows
-                   it, and two check-ins with the same title can ask different questions. -->
-              <button type="button" class="link" (click)="open(item.assignment.id)">
-                {{ item.assignment.formTitle }} (v{{ item.assignment.formVersionNumber }})
-              </button>
-              <span class="detail" i18n
-                >Due {{ item.assignment.dueDate | date: 'mediumDate' }}</span
-              >
-              @if (item.response; as response) {
-                <span class="badge">{{ response.status }}</span>
-              }
+              <a class="row" [routerLink]="['/checkins/me', item.assignment.id]">
+                <span class="row-copy">
+                  <span class="row-title" dir="auto">{{ item.assignment.formTitle }}</span>
+                  <span class="tb-visually-hidden">, </span>
+                  <span class="row-meta" i18n
+                    >Due {{ item.assignment.dueDate + 'T12:00:00' | date: 'EEE d MMM' }}</span
+                  >
+                </span>
+                <app-icon name="chevron-down" class="chevron" />
+              </a>
             </li>
           }
         </ul>
-        <p class="detail" i18n>
-          Showing {{ assignments().length }} of {{ assignmentTotal() }} check-ins, newest first.
-        </p>
-        @if (assignmentTotal() > assignments().length) {
+      </section>
+    }
+
+    @if (lists().sent.length > 0) {
+      <section class="list-section" aria-labelledby="sent-heading">
+        <h2 id="sent-heading" i18n>Sent</h2>
+        <ul class="rows">
+          @for (item of sentShown(); track item.assignment.id) {
+            @let response = item.response!;
+            <li>
+              <a class="row" [routerLink]="['/checkins/me', item.assignment.id]">
+                <span class="row-copy">
+                  <span class="row-title" dir="auto">{{ item.assignment.formTitle }}</span>
+                  <span class="tb-visually-hidden">, </span>
+                  <span class="row-meta">
+                    @if (response.submittedDate) {
+                      <ng-container i18n
+                        >Sent
+                        {{ response.submittedDate + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+                      >
+                    }
+                    @if (response.isLate) {
+                      <span aria-hidden="true"> · </span>
+                      <span class="tb-visually-hidden">, </span>
+                      <ng-container i18n>after the due date</ng-container>
+                    }
+                  </span>
+                  <span class="tb-visually-hidden">, </span>
+                  @if (response.status === 'Reviewed') {
+                    <app-status-pill class="row-pill" label="Reviewed" i18n-label tone="success" />
+                  } @else {
+                    <app-status-pill
+                      class="row-pill"
+                      label="Waiting for your coach"
+                      i18n-label
+                      tone="info"
+                    />
+                  }
+                </span>
+                <app-icon name="chevron-down" class="chevron" />
+              </a>
+            </li>
+          }
+        </ul>
+        @if (!showAllSent() && hiddenSent() > 0) {
           <button
+            appButton
             type="button"
-            class="link"
-            [disabled]="loading()"
-            (click)="loadMoreAssignments()"
+            variant="outlined"
+            class="more"
+            (click)="showAllSent.set(true)"
             i18n
           >
-            Load more check-ins
+            Show {hiddenSent(), plural, =1 {1 more} other {{{ hiddenSent() }} more}}
+          </button>
+        } @else if (showAllSent() && total() > items().length) {
+          <button
+            appButton
+            type="button"
+            variant="outlined"
+            class="more"
+            [loading]="loadingMore()"
+            (click)="loadMore()"
+            i18n
+          >
+            Show older check-ins
           </button>
         }
-      }
-    </article>
-
-    <article class="panel">
-      @if (detail(); as view) {
-        <h3>{{ view.assignment.formTitle }}</h3>
-        <p class="detail" i18n>Due {{ view.assignment.dueDate | date: 'mediumDate' }}</p>
-
-        @if (view.response; as response) {
-          <p class="detail badge-row">
-            <span class="badge">{{ response.status }}</span>
-            @if (response.submittedDate) {
-              <!-- An explicit separator, as elsewhere in this template. Angular removes the
-                   newline between the badge and this text, so the two ran together as
-                   "SubmittedSubmitted 26 Aug 2026". -->
-              <span aria-hidden="true">·</span>
-              <ng-container i18n
-                >Submitted {{ response.submittedDate | date: 'mediumDate' }}</ng-container
-              >
-            }
-            @if (response.isLate) {
-              <span class="badge late" i18n>After the due date</span>
-            }
-          </p>
+        @if (error(); as message) {
+          <p class="list-error" role="alert">{{ message }}</p>
         }
-
-        @if (!editable()) {
-          <p class="hint" i18n>This check-in has been submitted and can no longer be changed.</p>
-        }
-
-        <form class="answer-form" (ngSubmit)="submit()">
-          <ol class="questions">
-            @for (question of view.version.questions; track question.id) {
-              <li class="question">
-                <p class="prompt">
-                  {{ question.prompt }}
-                  @if (question.isRequired) {
-                    <span aria-hidden="true">*</span>
-                  }
-                </p>
-                @if (question.helpText) {
-                  <p class="detail">{{ question.helpText }}</p>
-                }
-
-                @let answer = answerFor(question.id);
-                @let reasons = questionIssues(question.questionKey);
-                @let showsReasons = attempt.shows(questionField(question.questionKey), reasons);
-                @let reasonId = showsReasons ? 'q-' + question.id + '-reason' : null;
-                @let invalid = showsReasons ? 'true' : null;
-                @let field = questionField(question.questionKey);
-
-                @switch (question.questionType) {
-                  @case ('ShortText') {
-                    <input
-                      type="text"
-                      [id]="'q-' + question.id"
-                      [name]="'q-' + question.id"
-                      [ngModel]="answer?.textValue ?? ''"
-                      (ngModelChange)="setText(question.id, $event)"
-                      (blur)="attempt.touch(field)"
-                      [disabled]="!editable()"
-                      [attr.aria-invalid]="invalid"
-                      [attr.aria-describedby]="reasonId"
-                    />
-                  }
-                  @case ('LongText') {
-                    <textarea
-                      rows="3"
-                      [id]="'q-' + question.id"
-                      [name]="'q-' + question.id"
-                      [ngModel]="answer?.textValue ?? ''"
-                      (ngModelChange)="setText(question.id, $event)"
-                      (blur)="attempt.touch(field)"
-                      [disabled]="!editable()"
-                      [attr.aria-invalid]="invalid"
-                      [attr.aria-describedby]="reasonId"
-                    ></textarea>
-                  }
-                  @case ('NumericScale') {
-                    <input
-                      type="number"
-                      [id]="'q-' + question.id"
-                      [name]="'q-' + question.id"
-                      [ngModel]="answer?.numericValue"
-                      (ngModelChange)="setNumber(question.id, $event)"
-                      (blur)="attempt.touch(field)"
-                      [min]="question.scaleMinimum"
-                      [max]="question.scaleMaximum"
-                      [step]="question.scaleStep"
-                      [disabled]="!editable()"
-                      [attr.aria-invalid]="invalid"
-                      [attr.aria-describedby]="reasonId"
-                    />
-                    <span class="detail" i18n
-                      >{{ question.scaleMinimum }} to {{ question.scaleMaximum }} in steps of
-                      {{ question.scaleStep }}</span
-                    >
-                  }
-                  @default {
-                    <!-- A choice group is one control to the user, so the whole group carries the
-                         invalid state and the description, not each radio separately. -->
-                    <div
-                      class="choices"
-                      role="group"
-                      [attr.aria-invalid]="invalid"
-                      [attr.aria-describedby]="reasonId"
-                    >
-                      @for (option of question.options; track option.id) {
-                        <label class="inline">
-                          <input
-                            [type]="question.questionType === 'SingleChoice' ? 'radio' : 'checkbox'"
-                            [name]="'q-' + question.id"
-                            [value]="option.id"
-                            [checked]="isSelected(question.id, option.id)"
-                            (change)="toggleOption(question.id, option.id)"
-                            (blur)="attempt.touch(field)"
-                            [disabled]="!editable()"
-                          />
-                          <span>{{ option.label }}</span>
-                        </label>
-                      }
-                    </div>
-                  }
-                }
-
-                <!-- Plain text: already on screen when read, so no assertive region. -->
-                @if (showsReasons) {
-                  <p class="field-reason" [id]="'q-' + question.id + '-reason'">
-                    @for (issue of reasons; track issue) {
-                      <span>{{ issue }}</span>
-                    }
-                  </p>
-                }
-              </li>
-            }
-          </ol>
-
-          @if (editable()) {
-            <!-- The one assertive region on this form: present from the start so the live region is
-                 registered, empty until a send is actually refused. `tabindex="-1"` so the refusal
-                 can take focus without entering the tab order. -->
-            <p class="error summary" id="answer-summary" role="alert" tabindex="-1" #summary>
-              @if (attempt.wasTried() && outstanding().length > 0) {
-                <ng-container i18n>This check-in cannot be sent yet:</ng-container>
-                @for (item of outstanding(); track $index) {
-                  <span>{{ item.prompt }} — {{ item.message }}</span>
-                }
-              }
-            </p>
-
-            <div class="actions">
-              <button type="button" class="link" [disabled]="saving()" (click)="saveDraft()" i18n>
-                Save draft
-              </button>
-              <!-- Disabled only while the request is in flight; see checkin-clients.html. -->
-              <button
-                type="submit"
-                class="primary-button"
-                aria-describedby="answer-summary"
-                [disabled]="saving()"
-                i18n
-              >
-                Submit check-in
-              </button>
-            </div>
-            <!-- Reassurance about drafts, which nothing else says. It no longer restates the
-                 required-answer rule: the summary names what is outstanding once a send is refused,
-                 and each question carries its own reason, so saying it here as well told someone
-                 they had missed something before they had answered anything. -->
-            <p class="hint" i18n>
-              Saving a draft keeps what you have written, even when it is not finished.
-            </p>
-          }
-        </form>
-      } @else if (denial()) {
-        <p class="empty" i18n>There is nothing to open while check-ins are closed.</p>
-      } @else {
-        <p class="empty" i18n>Choose a check-in to answer it.</p>
-      }
-    </article>
-  </div>
-</section>
+      </section>
+    }
+  }
+</div>

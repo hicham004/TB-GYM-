@@ -192,7 +192,11 @@ describe('Today check-in row', () => {
     dueDate: string,
     response: CheckInAssignmentListItem['response'] = null,
     title = 'Weekly check-in',
-  ) => ({ assignment: { formTitle: title, dueDate }, response }) as CheckInAssignmentListItem;
+  ) =>
+    ({
+      assignment: { id: title, formTitle: title, dueDate },
+      response,
+    }) as CheckInAssignmentListItem;
   const list = (...items: CheckInAssignmentListItem[]) =>
     ({ kind: 'ok', value: { clientProfileId: 'c', total: items.length, items } }) as const;
   const allowed = decision('CheckIns');
@@ -200,7 +204,7 @@ describe('Today check-in row', () => {
   it('picks the open assignment due first and says when it is due', () => {
     const rows = list(item('2026-09-27', null, 'Later'), item('2026-09-20', null, 'Now'));
     expect(checkInRow(allowed, rows, TODAY)).toMatchObject({
-      value: { kind: 'due', title: 'Now', when: 'today' },
+      value: { kind: 'due', assignmentId: 'Now', title: 'Now', when: 'today' },
     });
     expect(checkInRow(allowed, list(item('2026-09-22')), TODAY)).toMatchObject({
       value: { when: 'later' },

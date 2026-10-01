@@ -1,495 +1,203 @@
-import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
-import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { HttpErrorResponse } from '@angular/common/http';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
-import { ownCheckInDenialMessage } from '../../core/i18n/display-labels';
 import type { CheckInAssignmentListItem, CheckInResponseDetail } from '../../core/api/generated';
-import { FormAttempt } from '../../core/forms/form-attempt';
-import { CsrfService } from '../../core/security/csrf.service';
+import { ownCheckInDenialMessage } from '../../core/i18n/display-labels';
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { isChoice } from './checkin-builder.models';
-import {
-  issuesByQuestion,
-  issuesFromServer,
-  isEditable,
-  responseDraftFromDetail,
-  submitGuard,
-  toSaveRequest,
-  withSelection,
-  type AnswerDraft,
-  type ResponseDraft,
-  type ServerSubmissionFailure,
-  type SubmissionIssue,
-} from './checkin-response.models';
+import { initialsOf } from '../../shell/initials';
+import { Avatar } from '../../ui/avatar';
+import { Button, ButtonLink } from '../../ui/button';
+import { EmptyState } from '../../ui/empty-state';
+import { Icon } from '../../ui/icon';
+import { Skeleton } from '../../ui/skeleton';
+import { StatusPill } from '../../ui/status-pill';
+import { answeredCount, homeLists } from './checkin-flow.models';
+import { responseDraftFromDetail } from './checkin-response.models';
+
+/** Sent check-ins shown before "Show all": history is collapsed by default (§2 rule 7). */
+const SENT_PREVIEW = 3;
 
 /**
- * The client's own check-ins. A draft is saved as-is, however incomplete, because losing what
- * someone typed is worse than storing something not yet valid; submission is where the whole
- * response is measured, and every refusal is shown at once rather than one at a time.
+ * The client's check-ins (M6): the one due first as the page's single action, anything else still
+ * open, and the ones already sent. Answering happens in `CheckInFlow`, one question per screen.
  */
 @Component({
   selector: 'app-my-checkins',
-  imports: [DatePipe, FormsModule],
+  imports: [
+    DatePipe,
+    RouterLink,
+    Avatar,
+    Button,
+    ButtonLink,
+    EmptyState,
+    Icon,
+    Skeleton,
+    StatusPill,
+  ],
   templateUrl: './my-checkins.html',
-  styleUrl: './checkins.scss',
+  styleUrl: './my-checkins.scss',
 })
 export class MyCheckIns {
   private readonly api = inject(ApiClient);
-  private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private loadedTenantId: string | null = null;
-  private contextGeneration = 0;
-  private listGeneration = 0;
-  private openGeneration = 0;
-  private mutationGeneration = 0;
-  private loadingGeneration = 0;
 
-  protected readonly assignments = signal<CheckInAssignmentListItem[]>([]);
-  protected readonly assignmentTotal = signal(0);
-  protected readonly assignmentPageSize = 50;
-  protected readonly detail = signal<CheckInResponseDetail | null>(null);
-  protected readonly draft = signal<ResponseDraft | null>(null);
-  protected readonly serverIssues = signal<SubmissionIssue[]>([]);
-  protected readonly loading = signal(false);
-  protected readonly saving = signal(false);
+  protected readonly pageSize = 50;
+  protected readonly items = signal<CheckInAssignmentListItem[]>([]);
+  protected readonly total = signal(0);
+  protected readonly loading = signal(true);
+  protected readonly loadingMore = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly notice = signal<string | null>(null);
   /**
-   * Set when the server closed check-ins for this workspace and said why. It replaces the list
-   * rather than sitting above it: "you may not read these" must never be shown as "you have none".
+   * Set when the server closed check-ins and said why. It replaces the lists rather than sitting
+   * above them: "you may not read these" must never be shown as "you have none" (CHK-011).
    */
   protected readonly denial = signal<string | null>(null);
+  protected readonly nextDetail = signal<CheckInResponseDetail | null>(null);
+  /** The check-in comes from a person: their name and face sit on the card. */
+  protected readonly coachName = signal<string | null>(null);
+  protected readonly initialsOf = initialsOf;
+  protected readonly showAllSent = signal(false);
 
-  protected readonly editable = computed(() => isEditable(this.detail()?.response ?? null));
+  protected readonly lists = computed(() => homeLists(this.items()));
+  protected readonly next = computed(() => this.lists().open[0] ?? null);
+  protected readonly alsoOpen = computed(() => this.lists().open.slice(1));
+  protected readonly sentShown = computed(() =>
+    this.showAllSent() ? this.lists().sent : this.lists().sent.slice(0, SENT_PREVIEW),
+  );
+  protected readonly hiddenSent = computed(() =>
+    Math.max(0, this.lists().sent.length - SENT_PREVIEW),
+  );
 
-  protected readonly guard = computed(() => {
-    const detail = this.detail();
-    const draft = this.draft();
-    return detail && draft
-      ? submitGuard(detail.version.questions, draft)
-      : { canSubmit: false, issues: [] };
-  });
+  /** Question count and progress for the card, once the check-in due first has been read. */
+  protected readonly nextSize = computed(() => {
+    const detail = this.nextDetail();
+    const next = this.next();
+    if (detail === null || next === null || detail.assignment.id !== next.assignment.id) {
+      return null;
+    }
 
-  /**
-   * Local refusals while editing; once the server has spoken, its answer is shown instead, because
-   * it may know something the form could not predict.
-   */
-  protected readonly issues = computed(() => {
-    const fromServer = this.serverIssues();
-    return issuesByQuestion(fromServer.length > 0 ? fromServer : this.guard().issues);
+    const total = detail.version.questions.length;
+    const answered = detail.response === null ? 0 : answeredCount(responseDraftFromDetail(detail));
+    return {
+      total,
+      answered,
+      percent: total === 0 ? 0 : Math.round((answered / total) * 100),
+      note: detail.version.formDescription,
+    };
   });
 
   constructor() {
-    this.scope.onReset(() => this.resetTenantState());
+    // A new workspace or session starts from nothing, and the effect below reloads it.
+    this.scope.onReset(() => {
+      this.loadedTenantId = null;
+      this.reset();
+    });
     effect(() => {
       this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
-      if (tenantId === this.loadedTenantId) {
-        return;
-      }
-
+      if (tenantId === this.loadedTenantId) return;
       this.loadedTenantId = tenantId;
-      const generation = ++this.contextGeneration;
-      this.resetForWorkspace();
-      if (tenantId !== null) {
-        void this.loadAssignments(tenantId, generation, true);
+      untracked(() => {
+        this.reset();
+        if (tenantId !== null) void this.load();
+      });
+    });
+    // The page heading takes focus on arrival, so a screen reader starts at "Check-ins".
+    afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
+  }
+
+  protected retry(): void {
+    void this.load();
+  }
+
+  protected async loadMore(): Promise<void> {
+    if (this.items().length >= this.total() || this.loadingMore()) return;
+    return this.scope.run('more', async (owner) => {
+      this.loadingMore.set(true);
+      try {
+        const page = await owner.wait(
+          firstValueFrom(this.api.listOwnCheckInAssignments(this.items().length, this.pageSize)),
+        );
+        this.items.set(appendUnique(this.items(), page.items));
+        this.total.set(Number(page.total));
+      } catch (error) {
+        if (owner.current) {
+          this.error.set(apiErrorMessage(error, $localize`Older check-ins could not be loaded.`));
+        }
+      } finally {
+        if (owner.current) this.loadingMore.set(false);
       }
     });
   }
 
-  protected isChoice = isChoice;
-
-  /** Decides when each question's reason is due on screen. See `FormAttempt` for the rule. */
-  protected readonly attempt = new FormAttempt();
-
-  private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
-
-  /**
-   * Every outstanding reason paired with the question it belongs to. The summary names the question
-   * as well as the rule, because "this question has to be answered" does not say which one when two
-   * of them are outstanding.
-   */
-  protected readonly outstanding = computed(() => {
-    const detail = this.detail();
-    if (detail === null) {
-      return [];
-    }
-
-    const prompts = new Map(
-      detail.version.questions.map((question) => [question.questionKey, question.prompt]),
-    );
-    const fromServer = this.serverIssues();
-    const source = fromServer.length > 0 ? fromServer : this.guard().issues;
-    return source.map((issue) => ({
-      questionKey: issue.questionKey,
-      prompt: prompts.get(issue.questionKey) ?? '',
-      message: issue.message,
-    }));
-  });
-
-  protected questionIssues(questionKey: string): string[] {
-    return this.issues()[questionKey] ?? [];
-  }
-
-  /** One touched-state key per question, matching the key its reasons are grouped under. */
-  protected questionField(questionKey: string): string {
-    return `question:${questionKey}`;
-  }
-
-  protected answerFor(questionId: string): AnswerDraft | null {
-    return this.draft()?.answers.find((answer) => answer.questionId === questionId) ?? null;
-  }
-
-  protected isSelected(questionId: string, optionId: string): boolean {
-    return this.answerFor(questionId)?.selectedOptionIds.includes(optionId) ?? false;
-  }
-
-  protected async open(assignmentId: string): Promise<void> {
-    return this.scope.run('open', async (owner) => {
-      const tenantId = this.loadedTenantId;
-      const contextGeneration = this.contextGeneration;
-      const request = ++this.openGeneration;
-      ++this.mutationGeneration;
-      this.saving.set(false);
-      const loading = this.beginLoading();
-      this.clearMessages();
+  private async load(): Promise<void> {
+    return this.scope.run('load', async (owner) => {
+      this.loading.set(true);
+      this.error.set(null);
+      this.denial.set(null);
       try {
-        const detail = await owner.wait(
-          firstValueFrom(this.api.getOwnCheckInResponse(assignmentId)),
+        const page = await owner.wait(
+          firstValueFrom(this.api.listOwnCheckInAssignments(0, this.pageSize)),
         );
-        if (!this.ownsOpen(request, tenantId, contextGeneration)) {
-          return;
-        }
-
-        this.detail.set(detail);
-        this.draft.set(responseDraftFromDetail(detail));
-        // A newly opened check-in is pristine, whatever the last one had earned.
-        this.attempt.reset();
+        this.items.set(page.items);
+        this.total.set(Number(page.total));
+        this.loading.set(false);
       } catch (error) {
         if (!owner.current) return;
-        if (!this.ownsOpen(request, tenantId, contextGeneration)) {
-          return;
-        }
-
-        this.detail.set(null);
-        this.draft.set(null);
+        this.items.set([]);
+        this.total.set(0);
         const reason = featureAccessReason(error);
         if (reason === null) {
-          this.error.set(apiErrorMessage(error, $localize`This check-in could not be opened.`));
-        } else {
-          this.denial.set(ownCheckInDenialMessage(reason));
-        }
-      } finally {
-        if (owner.current) {
-          this.endLoading(loading);
-        }
-      }
-    });
-  }
-
-  protected async loadMoreAssignments(): Promise<void> {
-    return this.scope.run('loadMoreAssignments', async (owner) => {
-      if (this.assignments().length >= this.assignmentTotal()) {
-        return;
-      }
-
-      const tenantId = this.loadedTenantId;
-      if (tenantId !== null) {
-        await owner.wait(this.loadAssignments(tenantId, this.contextGeneration, false));
-      }
-    });
-  }
-
-  protected setText(questionId: string, value: string): void {
-    this.updateAnswer(questionId, (answer) => ({ ...answer, textValue: value }));
-  }
-
-  protected setNumber(questionId: string, value: string): void {
-    const parsed = value === '' ? null : Number(value);
-    this.updateAnswer(questionId, (answer) => ({
-      ...answer,
-      numericValue: parsed !== null && Number.isFinite(parsed) ? parsed : null,
-    }));
-  }
-
-  protected toggleOption(questionId: string, optionId: string): void {
-    this.updateAnswer(questionId, (answer) => withSelection(answer, optionId));
-  }
-
-  protected async saveDraft(): Promise<void> {
-    return this.scope.run('saveDraft', async (owner) => {
-      const draft = this.draft();
-      if (!draft || !this.editable()) {
-        return;
-      }
-
-      const tenantId = this.loadedTenantId;
-      const contextGeneration = this.contextGeneration;
-      const operation = ++this.mutationGeneration;
-      ++this.openGeneration;
-      this.saving.set(true);
-      this.clearMessages();
-      try {
-        await owner.wait(this.csrf.refresh());
-        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
-          return;
-        }
-
-        const saved = await owner.wait(
-          firstValueFrom(
-            this.api.saveOwnCheckInDraftResponse(draft.assignmentId, toSaveRequest(draft)),
-          ),
-        );
-        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
-          return;
-        }
-
-        this.detail.set(saved);
-        this.draft.set(responseDraftFromDetail(saved));
-        this.notice.set($localize`Draft saved. You can come back and finish it later.`);
-      } catch (error) {
-        if (!owner.current) return;
-        if (this.ownsMutation(operation, tenantId, contextGeneration)) {
-          this.error.set(apiErrorMessage(error, $localize`This draft could not be saved.`));
-        }
-      } finally {
-        if (owner.current) {
-          if (this.mutationGeneration === operation) {
-            this.saving.set(false);
-          }
-        }
-      }
-    });
-  }
-
-  /**
-   * Saves first so the submitted record matches what is on screen, then submits. A refusal keeps
-   * the draft exactly as it was and lists every reason.
-   */
-  protected async submit(): Promise<void> {
-    return this.scope.run('submit', async (owner) => {
-      // Recorded before the guards: trying to send an incomplete check-in is exactly the moment every
-      // outstanding reason becomes due, whether or not the attempt gets as far as the server.
-      this.attempt.attempt();
-      const draft = this.draft();
-      if (!draft || !this.editable() || !this.guard().canSubmit) {
-        // A refused send saves nothing and submits nothing, and the refusal takes focus. The button
-        // stays operable while the check-in is incomplete — see `assign` in `checkin-clients`.
-        this.summary()?.nativeElement.focus();
-        return;
-      }
-
-      const tenantId = this.loadedTenantId;
-      const contextGeneration = this.contextGeneration;
-      const operation = ++this.mutationGeneration;
-      ++this.openGeneration;
-      this.saving.set(true);
-      this.clearMessages();
-      try {
-        await owner.wait(this.csrf.refresh());
-        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
-          return;
-        }
-
-        const saved = await owner.wait(
-          firstValueFrom(
-            this.api.saveOwnCheckInDraftResponse(draft.assignmentId, toSaveRequest(draft)),
-          ),
-        );
-        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
-          return;
-        }
-
-        this.detail.set(saved);
-        this.draft.set(responseDraftFromDetail(saved));
-
-        const version = saved.response === null ? null : Number(saved.response.version);
-        if (version === null) {
-          this.error.set($localize`There is nothing to submit yet.`);
-          return;
-        }
-
-        const submitted = await owner.wait(
-          firstValueFrom(this.api.submitOwnCheckInResponse(draft.assignmentId, version)),
-        );
-        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
-          return;
-        }
-
-        this.detail.set(submitted);
-        this.draft.set(responseDraftFromDetail(submitted));
-        this.attempt.reset();
-        this.notice.set($localize`Check-in submitted. It can no longer be changed.`);
-      } catch (error) {
-        if (!owner.current) return;
-        if (!this.ownsMutation(operation, tenantId, contextGeneration)) {
-          return;
-        }
-
-        const failures = submissionFailures(error);
-        if (failures.length > 0) {
-          this.serverIssues.set(issuesFromServer(failures));
-          this.error.set($localize`This check-in is not complete yet.`);
-        } else {
-          this.error.set(apiErrorMessage(error, $localize`This check-in could not be submitted.`));
-        }
-      } finally {
-        if (owner.current) {
-          if (this.mutationGeneration === operation) {
-            this.saving.set(false);
-          }
-        }
-      }
-    });
-  }
-
-  private updateAnswer(questionId: string, change: (answer: AnswerDraft) => AnswerDraft): void {
-    // A local edit invalidates the server's last verdict, so stale messages are cleared.
-    this.serverIssues.set([]);
-    this.draft.update((current) =>
-      current === null
-        ? current
-        : {
-            ...current,
-            answers: current.answers.map((answer) =>
-              answer.questionId === questionId ? change(answer) : answer,
-            ),
-          },
-    );
-  }
-
-  private async loadAssignments(
-    tenantId: string,
-    contextGeneration: number,
-    reset: boolean,
-  ): Promise<void> {
-    return this.scope.run('loadAssignments', async (owner) => {
-      const request = ++this.listGeneration;
-      const loading = this.beginLoading();
-      if (reset) {
-        this.clearMessages();
-      }
-
-      const skip = reset ? 0 : this.assignments().length;
-      try {
-        const list = await owner.wait(
-          firstValueFrom(this.api.listOwnCheckInAssignments(skip, this.assignmentPageSize)),
-        );
-        if (!this.ownsList(request, tenantId, contextGeneration)) {
-          return;
-        }
-
-        this.assignments.set(reset ? list.items : appendUnique(this.assignments(), list.items));
-        this.assignmentTotal.set(Number(list.total));
-      } catch (error) {
-        if (!owner.current) return;
-        if (!this.ownsList(request, tenantId, contextGeneration)) {
-          return;
-        }
-
-        const reason = featureAccessReason(error);
-        if (reason === null) {
-          if (reset) {
-            this.assignments.set([]);
-            this.assignmentTotal.set(0);
-          }
           this.error.set(apiErrorMessage(error, $localize`Your check-ins could not be loaded.`));
         } else {
-          this.assignments.set([]);
-          this.assignmentTotal.set(0);
           this.denial.set(ownCheckInDenialMessage(reason));
         }
-      } finally {
-        if (owner.current) {
-          this.endLoading(loading);
-        }
+        this.loading.set(false);
+        return;
       }
+
+      // The card's coach and question count are niceties: if either cannot be read, the card
+      // simply goes without it.
+      const next = this.next();
+      if (next === null) return;
+      const [detail, coach] = await owner.wait(
+        Promise.allSettled([
+          firstValueFrom(this.api.getOwnCheckInResponse(next.assignment.id)),
+          firstValueFrom(this.api.getOwnCoach()),
+        ]),
+      );
+      this.nextDetail.set(detail.status === 'fulfilled' ? detail.value : null);
+      this.coachName.set(coach.status === 'fulfilled' ? coach.value.name : null);
     });
   }
 
-  private resetForWorkspace(): void {
-    ++this.listGeneration;
-    ++this.openGeneration;
-    ++this.mutationGeneration;
-    ++this.loadingGeneration;
-    this.assignments.set([]);
-    this.assignmentTotal.set(0);
-    this.detail.set(null);
-    this.draft.set(null);
-    this.loading.set(false);
-    this.saving.set(false);
-    this.attempt.reset();
-    this.clearMessages();
-  }
-
-  private ownsContext(tenantId: string | null, contextGeneration: number): boolean {
-    return (
-      tenantId !== null &&
-      this.loadedTenantId === tenantId &&
-      this.contextGeneration === contextGeneration
-    );
-  }
-
-  private ownsList(request: number, tenantId: string, contextGeneration: number): boolean {
-    return this.listGeneration === request && this.ownsContext(tenantId, contextGeneration);
-  }
-
-  private ownsOpen(request: number, tenantId: string | null, contextGeneration: number): boolean {
-    return this.openGeneration === request && this.ownsContext(tenantId, contextGeneration);
-  }
-
-  private ownsMutation(
-    operation: number,
-    tenantId: string | null,
-    contextGeneration: number,
-  ): boolean {
-    return this.mutationGeneration === operation && this.ownsContext(tenantId, contextGeneration);
-  }
-
-  private beginLoading(): number {
-    const generation = ++this.loadingGeneration;
+  private reset(): void {
+    this.items.set([]);
+    this.total.set(0);
     this.loading.set(true);
-    return generation;
-  }
-
-  private endLoading(generation: number): void {
-    if (this.loadingGeneration === generation) {
-      this.loading.set(false);
-    }
-  }
-
-  /** Including the denial, so a refusal from one workspace is not still on screen in the next. */
-  private clearMessages(): void {
+    this.loadingMore.set(false);
     this.error.set(null);
-    this.notice.set(null);
     this.denial.set(null);
-    this.serverIssues.set([]);
-  }
-
-  private resetTenantState(): void {
-    this.loadedTenantId = null;
-    ++this.contextGeneration;
-    ++this.listGeneration;
-    ++this.openGeneration;
-    ++this.mutationGeneration;
-    ++this.loadingGeneration;
-    this.assignments.set([]);
-    this.assignmentTotal.set(0);
-    this.detail.set(null);
-    this.draft.set(null);
-    this.serverIssues.set([]);
-    this.loading.set(false);
-    this.saving.set(false);
-    this.error.set(null);
-    this.notice.set(null);
-    this.denial.set(null);
-    this.isChoice = isChoice;
-    this.attempt.reset();
+    this.nextDetail.set(null);
+    this.coachName.set(null);
+    this.showAllSent.set(false);
   }
 }
 
@@ -498,28 +206,5 @@ function appendUnique(
   incoming: readonly CheckInAssignmentListItem[],
 ): CheckInAssignmentListItem[] {
   const ids = new Set(current.map((item) => item.assignment.id));
-  return [
-    ...current,
-    ...incoming.filter((item) => {
-      if (ids.has(item.assignment.id)) {
-        return false;
-      }
-
-      ids.add(item.assignment.id);
-      return true;
-    }),
-  ];
-}
-
-/**
- * The submit route reports every refusal at once in a `failures` extension alongside the standard
- * validation problem, so the form can place each message on its own question.
- */
-function submissionFailures(error: unknown): ServerSubmissionFailure[] {
-  if (!(error instanceof HttpErrorResponse)) {
-    return [];
-  }
-
-  const failures = (error.error as { failures?: unknown } | undefined)?.failures;
-  return Array.isArray(failures) ? (failures as ServerSubmissionFailure[]) : [];
+  return [...current, ...incoming.filter((item) => !ids.has(item.assignment.id))];
 }

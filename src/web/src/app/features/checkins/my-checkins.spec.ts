@@ -1,746 +1,290 @@
-import { signal, type WritableSignal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { of, Subject, throwError } from 'rxjs';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
-  CheckInAssignmentListView,
-  CheckInAssignmentView,
-  CheckInQuestionView,
+  CheckInAssignmentListItem,
+  CheckInAssignmentResponseSummary,
   CheckInResponseDetail,
-  CheckInResponseView,
 } from '../../core/api/generated';
-import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { announced, focusedId, leaveAt, press, query, settle, type } from '../../../testing/dom';
+import { announced, button, focusedId, press, settle } from '../../../testing/dom';
 import { MyCheckIns } from './my-checkins';
 
-const TEXT_KEY = 'a'.repeat(32);
-const SCALE_KEY = 'b'.repeat(32);
-
-const TEXT_QUESTION: CheckInQuestionView = {
-  id: 'question-1',
-  questionKey: TEXT_KEY,
-  order: 1,
-  questionType: 'ShortText',
-  prompt: 'How is your body feeling?',
-  helpText: null,
-  isRequired: true,
-  scaleMinimum: null,
-  scaleMaximum: null,
-  scaleStep: null,
-  options: [],
-};
-
-const SCALE_QUESTION: CheckInQuestionView = {
-  ...TEXT_QUESTION,
-  id: 'question-2',
-  questionKey: SCALE_KEY,
-  order: 2,
-  questionType: 'NumericScale',
-  prompt: 'Sleep quality',
-  scaleMinimum: 1,
-  scaleMaximum: 10,
-  scaleStep: 1,
-};
-
-const ASSIGNMENT: CheckInAssignmentView = {
-  id: 'assignment-1',
-  formId: 'form-1',
-  formTitle: 'Weekly check-in',
-  formVersionId: 'version-1',
-  formVersionNumber: 1,
-  clientProfileId: 'client-1',
-  dueDate: '2026-08-27',
-  assignedAtUtc: '2026-08-22T09:00:00Z',
-  assignedByUserId: 'coach-1',
-};
-
-function ownList(
-  total: number,
-  ...assignments: CheckInAssignmentView[]
-): CheckInAssignmentListView {
+function item(
+  id: string,
+  dueDate: string,
+  response: Partial<CheckInAssignmentResponseSummary> | null = null,
+): CheckInAssignmentListItem {
   return {
-    clientProfileId: 'client-1',
-    total,
-    items: assignments.map((assignment) => ({ assignment, response: null })),
+    assignment: {
+      id,
+      formId: 'form-1',
+      formTitle: 'Weekly check-in',
+      formVersionId: 'version-1',
+      formVersionNumber: 2,
+      clientProfileId: 'client-1',
+      dueDate,
+      assignedAtUtc: '2026-09-01T09:00:00Z',
+      assignedByUserId: 'coach-1',
+    },
+    response:
+      response === null
+        ? null
+        : {
+            responseId: `r-${id}`,
+            status: 'Submitted',
+            submittedDate: dueDate,
+            submittedAtUtc: `${dueDate}T18:00:00Z`,
+            reviewedAtUtc: null,
+            isLate: false,
+            ...response,
+          },
   };
 }
 
-function detail(response: CheckInResponseView | null): CheckInResponseDetail {
+const page = (total: number, ...items: CheckInAssignmentListItem[]) =>
+  of({ clientProfileId: 'client-1', total, items });
+
+function nextDetail(answered: number): CheckInResponseDetail {
+  const questions = ['a', 'b', 'c', 'd'].map((key, index) => ({
+    id: `q-${key}`,
+    questionKey: key.repeat(32),
+    order: index + 1,
+    questionType: 'LongText' as const,
+    prompt: `Question ${key}`,
+    helpText: null,
+    isRequired: false,
+    scaleMinimum: null,
+    scaleMaximum: null,
+    scaleStep: null,
+    options: [],
+  }));
   return {
-    assignment: ASSIGNMENT,
+    assignment: item('due', '2026-09-27').assignment,
     version: {
       id: 'version-1',
       formId: 'form-1',
       formTitle: 'Weekly check-in',
-      formDescription: null,
-      versionNumber: 1,
+      formDescription: 'Takes two minutes. Be honest.',
+      versionNumber: 2,
       status: 'Published',
       derivedFromVersionId: null,
-      publishedAtUtc: '2026-08-22T09:00:00Z',
-      publishedByUserId: 'coach-1',
-      questions: [TEXT_QUESTION, SCALE_QUESTION],
-      version: 4,
+      publishedAtUtc: null,
+      publishedByUserId: null,
+      questions,
+      version: 1,
     },
-    response,
+    response:
+      answered === 0
+        ? null
+        : {
+            id: 'r',
+            assignmentId: 'due',
+            clientProfileId: 'client-1',
+            status: 'Draft',
+            submittedAtUtc: null,
+            submittedDate: null,
+            isLate: false,
+            reviewedAtUtc: null,
+            reviewedByUserId: null,
+            version: 3,
+            answers: questions.slice(0, answered).map((question) => ({
+              questionId: question.id,
+              questionKey: question.questionKey,
+              questionType: question.questionType,
+              textValue: 'yes',
+              numericValue: null,
+              choices: [],
+            })),
+          },
   };
 }
 
-function response(overrides: Partial<CheckInResponseView> = {}): CheckInResponseView {
-  return {
-    id: 'response-1',
-    assignmentId: 'assignment-1',
-    clientProfileId: 'client-1',
-    status: 'Draft',
-    submittedAtUtc: null,
-    submittedDate: null,
-    isLate: false,
-    reviewedAtUtc: null,
-    reviewedByUserId: null,
-    answers: [],
-    version: 9,
-    ...overrides,
+async function render(api: Partial<Record<keyof ApiClient, unknown>> = {}) {
+  const selectedTenantId = signal<string | null>('tenant-1');
+  const client = {
+    listOwnCheckInAssignments: vi.fn(() => page(1, item('due', '2026-09-27'))),
+    getOwnCheckInResponse: vi.fn(() => of(nextDetail(0))),
+    getOwnCoach: vi.fn(() => of({ name: 'Lea Haddad' })),
+    ...api,
   };
-}
-
-interface Harness {
-  open(assignmentId: string): Promise<void>;
-  setText(questionId: string, value: string): void;
-  setNumber(questionId: string, value: string): void;
-  submit(): Promise<void>;
-  guard(): { canSubmit: boolean };
-  questionIssues(questionKey: string): string[];
-  saveDraft(): Promise<void>;
-  loadMoreAssignments(): Promise<void>;
-}
-
-async function render(
-  api: Partial<ApiClient>,
-  options: {
-    selectedTenantId?: WritableSignal<string | null>;
-    csrfRefresh?: () => Promise<void>;
-  } = {},
-) {
-  const selectedTenantId = options.selectedTenantId ?? signal<string | null>('tenant-1');
   await TestBed.configureTestingModule({
     imports: [MyCheckIns],
     providers: [
-      {
-        provide: ApiClient,
-        useValue: {
-          listOwnCheckInAssignments: vi.fn(() =>
-            of({
-              clientProfileId: 'client-1',
-              total: 1,
-              items: [{ assignment: ASSIGNMENT, response: null }],
-            }),
-          ),
-          ...api,
-        },
-      },
+      provideRouter([]),
+      { provide: ApiClient, useValue: client },
       { provide: TenantStore, useValue: { selectedTenantId } },
-      {
-        provide: CsrfService,
-        useValue: { refresh: vi.fn(options.csrfRefresh ?? (() => Promise.resolve())) },
-      },
     ],
   }).compileComponents();
-
   const fixture = TestBed.createComponent(MyCheckIns);
   await settle(fixture);
+  const host = fixture.nativeElement as HTMLElement;
   return {
-    fixture,
-    host: fixture.nativeElement as HTMLElement,
-    component: fixture.componentInstance as unknown as Harness,
+    host,
+    client,
     selectedTenantId,
+    settle: () => settle(fixture),
+    read: () => (host.textContent ?? '').replace(/\s+/g, ' '),
   };
 }
 
 describe('MyCheckIns', () => {
-  afterEach(() => {
-    TestBed.resetTestingModule();
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('makes the check-in due first the one action, with its size and the coach’s note', async () => {
+    const { host, read } = await render();
+
+    const hero = host.querySelector('.hero')!;
+    expect(hero.querySelector('h2')?.textContent?.trim()).toBe('Weekly check-in');
+    expect(read()).toContain('Due Sun 27 Sep');
+    expect(read()).toContain('4 questions');
+    expect(read()).toContain('Takes two minutes. Be honest.');
+    expect(read()).toContain('From Lea Haddad');
+    expect(hero.querySelector('app-avatar')?.textContent?.trim()).toBe('LH');
+    const start = hero.querySelector('a.hero-action')!;
+    expect(start.textContent?.trim()).toBe('Start check-in');
+    expect(start.getAttribute('href')).toBe('/checkins/me/due');
+    // A client reads the date, not the form's version number (R2.4c words decision).
+    expect(read()).not.toContain('v2');
+    expect(focusedId()).toBe('');
+    expect(document.activeElement?.tagName).toBe('H1');
   });
 
-  it('lists assigned check-ins and shows nothing started until one is opened', async () => {
-    const { host } = await render({});
-
-    expect(host.textContent).toContain('Weekly check-in');
-    expect(host.textContent).toContain('Choose a check-in to answer it.');
-  });
-
-  /**
-   * The client's list used to show the title alone while the coach's showed the version too. Two
-   * check-ins can share a title and ask different questions, so the version belongs on both.
-   */
-  it('names the form version in the client’s own list, as the coach’s list does', async () => {
-    const { host } = await render({});
-
-    expect(host.querySelector('.assignments button')?.textContent).toContain(
-      'Weekly check-in (v1)',
-    );
-  });
-
-  /**
-   * The status badge and the submitted date are separate elements in one paragraph, and Angular
-   * removes the newline between them, so they used to render as "Submitted26 Aug 2026".
-   */
-  it('keeps the status badge and the submitted date apart', async () => {
-    const submitted = response({
-      status: 'Submitted',
-      submittedAtUtc: '2026-08-26T10:00:00Z',
-      submittedDate: '2026-08-26',
-    });
-    const { fixture, host, component } = await render({
-      getOwnCheckInResponse: vi.fn(() => of(detail(submitted))),
-    });
-
-    await component.open('assignment-1');
-    await settle(fixture);
-
-    const summary = host.querySelector('.badge-row');
-    expect(summary).not.toBeNull();
-    expect(summary!.textContent).not.toContain('SubmittedSubmitted');
-  });
-
-  it('keeps assignment B when assignment A resolves last', async () => {
-    const first = new Subject<CheckInResponseDetail>();
-    const second = new Subject<CheckInResponseDetail>();
-    const firstDetail = detail(
-      response({
-        answers: [
-          {
-            questionId: TEXT_QUESTION.id,
-            questionKey: TEXT_KEY,
-            questionType: 'ShortText',
-            textValue: 'Older assignment A',
-            numericValue: null,
-            choices: [],
-          },
-        ],
-      }),
-    );
-    const secondDetail = detail(
-      response({
-        assignmentId: 'assignment-2',
-        answers: [
-          {
-            questionId: TEXT_QUESTION.id,
-            questionKey: TEXT_KEY,
-            questionType: 'ShortText',
-            textValue: 'Current assignment B',
-            numericValue: null,
-            choices: [],
-          },
-        ],
-      }),
-    );
-    secondDetail.assignment = {
-      ...ASSIGNMENT,
-      id: 'assignment-2',
-      formTitle: 'Second check-in',
-    };
-    const { fixture, host, component } = await render({
-      getOwnCheckInResponse: vi.fn((assignmentId: string) =>
-        assignmentId === ASSIGNMENT.id ? first : second,
-      ) as never,
-    });
-
-    const pendingFirst = component.open(ASSIGNMENT.id);
-    const pendingSecond = component.open('assignment-2');
-    second.next(secondDetail);
-    second.complete();
-    first.next(firstDetail);
-    first.complete();
-    await Promise.all([pendingFirst, pendingSecond]);
-    await settle(fixture);
-
-    expect(query<HTMLInputElement>(host, '#q-question-1').value).toBe('Current assignment B');
-    expect(query<HTMLInputElement>(host, '#q-question-1').value).not.toBe('Older assignment A');
-    expect(host.textContent).not.toContain('Loading your check-ins');
-  });
-
-  it('blocks submission until every required question is answered', async () => {
-    const { fixture, host, component } = await render({
-      getOwnCheckInResponse: vi.fn(() => of(detail(null))),
-    });
-
-    await component.open('assignment-1');
-    await settle(fixture);
-
-    expect(component.guard().canSubmit).toBe(false);
-    // The button stays operable while the check-in is incomplete: a disabled one cannot be pressed,
-    // reached by Enter, or focused, so it could not tell anyone why it was refusing.
-    const submit = host.querySelector<HTMLButtonElement>('button[type="submit"]');
-    expect(submit?.disabled).toBe(false);
-    // The draft reassurance is guidance, not an accusation, so it is here from the start and does
-    // not restate what the summary names once a send is actually refused.
-    expect(host.textContent).toContain('Saving a draft keeps what you have written');
-    expect(host.textContent).not.toContain('Answer every required question before submitting');
-
-    component.setText('question-1', 'Shoulders are tight.');
-    component.setNumber('question-2', '8');
-    await settle(fixture);
-
-    expect(component.guard().canSubmit).toBe(true);
-    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
-  });
-
-  it('reports an off-step answer against its own question before the round trip', async () => {
-    const { fixture, component } = await render({
-      getOwnCheckInResponse: vi.fn(() => of(detail(null))),
-    });
-
-    await component.open('assignment-1');
-    component.setText('question-1', 'Fine.');
-    component.setNumber('question-2', '7.5');
-    await settle(fixture);
-
-    expect(component.guard().canSubmit).toBe(false);
-    expect(component.questionIssues(SCALE_KEY)[0]).toContain('steps of');
-    // The valid text answer is not implicated by the invalid scale one.
-    expect(component.questionIssues(TEXT_KEY)).toEqual([]);
-  });
-
-  it('resumes a partial draft with its saved answers intact', async () => {
-    const saved = response({
-      answers: [
-        {
-          questionId: 'question-1',
-          questionKey: TEXT_KEY,
-          questionType: 'ShortText',
-          textValue: 'Shoulders are tight.',
-          numericValue: null,
-          choices: [],
-        },
-      ],
-    });
-    const { fixture, host, component } = await render({
-      getOwnCheckInResponse: vi.fn(() => of(detail(saved))),
-    });
-
-    await component.open('assignment-1');
-    await settle(fixture);
-
-    const inputs = host.querySelectorAll<HTMLInputElement>('input[type="text"]');
-    expect(inputs[0].value).toBe('Shoulders are tight.');
-    // The unanswered scale question still blocks submission.
-    expect(component.guard().canSubmit).toBe(false);
-  });
-
-  it('renders a submitted check-in as read-only with no submit control', async () => {
-    const submitted = response({
-      status: 'Submitted',
-      submittedAtUtc: '2026-08-26T10:00:00Z',
-      submittedDate: '2026-08-26',
-    });
-    const { fixture, host, component } = await render({
-      getOwnCheckInResponse: vi.fn(() => of(detail(submitted))),
-    });
-
-    await component.open('assignment-1');
-    await settle(fixture);
-
-    expect(host.textContent).toContain('can no longer be changed');
-    expect(host.querySelector('button[type="submit"]')).toBeNull();
-    expect(host.querySelector<HTMLInputElement>('input[type="text"]')?.disabled).toBe(true);
-  });
-
-  it('marks a check-in submitted after the due date as late, as a fact and nothing more', async () => {
-    const late = response({
-      status: 'Submitted',
-      submittedAtUtc: '2026-08-29T10:00:00Z',
-      submittedDate: '2026-08-29',
-      isLate: true,
-    });
-    const { fixture, host, component } = await render({
-      getOwnCheckInResponse: vi.fn(() => of(detail(late))),
-    });
-
-    await component.open('assignment-1');
-    await settle(fixture);
-
-    expect(host.textContent).toContain('After the due date');
-    // No score, rating or judgement accompanies it.
-    expect(host.textContent).not.toContain('compliance');
-  });
-
-  it('surfaces every server refusal against its own question', async () => {
-    const draft = response();
-    const failure = new HttpErrorResponse({
-      status: 400,
-      error: {
-        failures: [
-          {
-            questionKey: TEXT_KEY,
-            code: 'RequiredAnswerMissing',
-            message: 'This question has to be answered.',
-          },
-          {
-            questionKey: SCALE_KEY,
-            code: 'NumericOutOfRange',
-            message: 'Answer between 1 and 10.',
-          },
-        ],
-      },
-    });
-    const { fixture, component } = await render({
-      getOwnCheckInResponse: vi.fn(() => of(detail(draft))),
-      saveOwnCheckInDraftResponse: vi.fn(() => of(detail(draft))),
-      submitOwnCheckInResponse: vi.fn(() => throwError(() => failure)),
-    });
-
-    await component.open('assignment-1');
-    component.setText('question-1', 'Fine.');
-    component.setNumber('question-2', '8');
-    await component.submit();
-    await settle(fixture);
-
-    expect(component.questionIssues(TEXT_KEY)).toContain('This question has to be answered.');
-    expect(component.questionIssues(SCALE_KEY)).toContain('Answer between 1 and 10.');
-  });
-
-  it('discards an assignment page from the workspace the client left', async () => {
-    const selectedTenantId = signal<string | null>('tenant-1');
-    const oldWorkspace = new Subject<CheckInAssignmentListView>();
-    const newWorkspace = new Subject<CheckInAssignmentListView>();
-    const currentAssignment = { ...ASSIGNMENT, id: 'current', formTitle: 'Current workspace form' };
-    const oldAssignment = { ...ASSIGNMENT, id: 'old', formTitle: 'Old workspace form' };
-    const listAssignments = vi
-      .fn()
-      .mockReturnValueOnce(oldWorkspace)
-      .mockReturnValueOnce(newWorkspace);
-    const { fixture, host } = await render(
-      { listOwnCheckInAssignments: listAssignments as never },
-      { selectedTenantId },
-    );
-
-    selectedTenantId.set('tenant-2');
-    fixture.detectChanges();
-    newWorkspace.next(ownList(1, currentAssignment));
-    newWorkspace.complete();
-    oldWorkspace.next(ownList(1, oldAssignment));
-    oldWorkspace.complete();
-    await settle(fixture);
-
-    expect(host.textContent).toContain('Current workspace form');
-    expect(host.textContent).not.toContain('Old workspace form');
-  });
-
-  it('discards an open response after the workspace changes', async () => {
-    const selectedTenantId = signal<string | null>('tenant-1');
-    const staleDetail = new Subject<CheckInResponseDetail>();
-    const { fixture, host, component } = await render(
-      { getOwnCheckInResponse: vi.fn(() => staleDetail) },
-      { selectedTenantId },
-    );
-
-    const pending = component.open(ASSIGNMENT.id);
-    selectedTenantId.set('tenant-2');
-    fixture.detectChanges();
-    staleDetail.next(
-      detail(
-        response({
-          answers: [
-            {
-              questionId: TEXT_QUESTION.id,
-              questionKey: TEXT_KEY,
-              questionType: 'ShortText',
-              textValue: 'Old workspace answer',
-              numericValue: null,
-              choices: [],
-            },
-          ],
-        }),
+  it('continues a started check-in and shows how far it got', async () => {
+    const { host, read } = await render({
+      listOwnCheckInAssignments: vi.fn(() =>
+        page(1, item('due', '2026-09-27', { status: 'Draft', submittedDate: null })),
       ),
-    );
-    staleDetail.complete();
-    await pending;
-    await settle(fixture);
-
-    expect(host.textContent).not.toContain('Old workspace answer');
-    expect(host.textContent).toContain('Choose a check-in to answer it.');
-  });
-
-  it('does not save a draft after the workspace changes during CSRF refresh', async () => {
-    let releaseCsrf!: () => void;
-    const csrf = new Promise<void>((resolve) => {
-      releaseCsrf = resolve;
-    });
-    const selectedTenantId = signal<string | null>('tenant-1');
-    const save = vi.fn(() => of(detail(response())));
-    const { fixture, component } = await render(
-      {
-        getOwnCheckInResponse: vi.fn(() => of(detail(response()))),
-        saveOwnCheckInDraftResponse: save as never,
-      },
-      { selectedTenantId, csrfRefresh: () => csrf },
-    );
-    await component.open(ASSIGNMENT.id);
-    component.setText(TEXT_QUESTION.id, 'A private draft');
-
-    const pending = component.saveDraft();
-    selectedTenantId.set('tenant-2');
-    fixture.detectChanges();
-    releaseCsrf();
-    await pending;
-    await settle(fixture);
-
-    expect(save).not.toHaveBeenCalled();
-  });
-
-  it('does not submit after the workspace changes during CSRF refresh', async () => {
-    let releaseCsrf!: () => void;
-    const csrf = new Promise<void>((resolve) => {
-      releaseCsrf = resolve;
-    });
-    const selectedTenantId = signal<string | null>('tenant-1');
-    const save = vi.fn(() => of(detail(response())));
-    const submit = vi.fn(() => of(detail(response({ status: 'Submitted' }))));
-    const { fixture, component } = await render(
-      {
-        getOwnCheckInResponse: vi.fn(() => of(detail(response()))),
-        saveOwnCheckInDraftResponse: save as never,
-        submitOwnCheckInResponse: submit as never,
-      },
-      { selectedTenantId, csrfRefresh: () => csrf },
-    );
-    await component.open(ASSIGNMENT.id);
-    component.setText(TEXT_QUESTION.id, 'Ready');
-    component.setNumber(SCALE_QUESTION.id, '8');
-
-    const pending = component.submit();
-    selectedTenantId.set('tenant-2');
-    fixture.detectChanges();
-    releaseCsrf();
-    await pending;
-    await settle(fixture);
-
-    expect(save).not.toHaveBeenCalled();
-    expect(submit).not.toHaveBeenCalled();
-  });
-
-  it('loads all assignment pages without duplicates and clears them on workspace reload', async () => {
-    const selectedTenantId = signal<string | null>('tenant-1');
-    const rows = Array.from({ length: 51 }, (_, index) => ({
-      ...ASSIGNMENT,
-      id: `page-${index}`,
-      formTitle: `Paged own check-in ${index}`,
-    }));
-    const other = { ...ASSIGNMENT, id: 'other', formTitle: 'Other workspace check-in' };
-    const listAssignments = vi.fn((_skip: number, _take: number) => {
-      const skip = _skip;
-      return selectedTenantId() === 'tenant-1'
-        ? of(ownList(51, ...rows.slice(skip, skip + _take)))
-        : of(ownList(1, other));
-    });
-    const { fixture, host, component } = await render(
-      { listOwnCheckInAssignments: listAssignments as never },
-      { selectedTenantId },
-    );
-
-    expect(host.textContent).toContain('Showing 50 of 51 check-ins, newest first.');
-    await component.loadMoreAssignments();
-    await settle(fixture);
-    expect(host.querySelectorAll('ul.assignments > li')).toHaveLength(51);
-    expect(host.textContent).toContain('Showing 51 of 51 check-ins, newest first.');
-
-    selectedTenantId.set('tenant-2');
-    await settle(fixture);
-    expect(host.querySelectorAll('ul.assignments > li')).toHaveLength(1);
-    expect(host.textContent).toContain('Other workspace check-in');
-    expect(host.textContent).not.toContain('Paged own check-in 0');
-  });
-
-  it('reports a load failure instead of rendering a blank form', async () => {
-    const { fixture, host, component } = await render({
-      getOwnCheckInResponse: vi.fn(() => throwError(() => new Error('offline'))),
+      getOwnCheckInResponse: vi.fn(() => of(nextDetail(1))),
     });
 
-    await component.open('assignment-1');
-    await settle(fixture);
-
-    expect(host.querySelector('[role="alert"]')).not.toBeNull();
-    expect(host.textContent).toContain('Choose a check-in to answer it.');
+    expect(read()).toContain('Started · due Sun 27 Sep');
+    expect(read()).toContain('4 questions · , 1 answered');
+    expect(host.querySelector('a.hero-action')?.textContent?.trim()).toBe('Continue check-in');
+    expect(host.querySelector<HTMLElement>('.hero-progress span')?.style.inlineSize).toBe('25%');
   });
 
-  /**
-   * A lapsed entitlement closes the client's own past submissions. The refusal carries the
-   * deciding reason, and the screen has to use it: showing "you have no check-ins right now" to
-   * someone who has two of them is a wrong statement, not a neutral empty state.
-   */
-  it('explains a lapsed entitlement using the reason the server sent', async () => {
-    const denied = new HttpErrorResponse({
-      status: 403,
-      error: {
-        title: 'Check-ins are not available for this client.',
-        accessReason: 'Cancelled',
-      },
-    });
+  it('lists the other open check-ins after the one due first', async () => {
     const { host } = await render({
-      listOwnCheckInAssignments: vi.fn(() => throwError(() => denied)),
+      listOwnCheckInAssignments: vi.fn(() =>
+        page(2, item('later', '2026-10-04'), item('due', '2026-09-27')),
+      ),
     });
 
-    expect(host.textContent).toContain('Your plan was cancelled');
-    expect(host.textContent).toContain('including the ones you sent');
-    // Never the flat contradiction, and never the coach's phrasing about "this client".
-    expect(host.textContent).not.toContain('You have no check-ins right now.');
-    expect(host.textContent).not.toContain('not available for this client');
-    expect(host.textContent).not.toContain('403');
+    expect(host.querySelector('a.hero-action')?.getAttribute('href')).toBe('/checkins/me/due');
+    const also = host.querySelector('[aria-labelledby="open-heading"] a.row')!;
+    expect(also.getAttribute('href')).toBe('/checkins/me/later');
+    expect(also.textContent?.replace(/\s+/g, ' ')).toContain('Due Sun 4 Oct');
   });
 
-  it('distinguishes each denial reason rather than collapsing them', async () => {
-    const denied = (accessReason: string) =>
-      new HttpErrorResponse({ status: 403, error: { accessReason } });
-    const expired = await render({
-      listOwnCheckInAssignments: vi.fn(() => throwError(() => denied('Expired'))),
-    });
-    expect(expired.host.textContent).toContain('Your plan has ended');
-    TestBed.resetTestingModule();
-
-    const blocked = await render({
-      listOwnCheckInAssignments: vi.fn(() => throwError(() => denied('RelationshipBlocked'))),
-    });
-    expect(blocked.host.textContent).toContain('Your coach has paused your access');
-  });
-
-  it('still reports a plain transport failure as an error, not as a denial', async () => {
-    const { host } = await render({
-      listOwnCheckInAssignments: vi.fn(() => throwError(() => new Error('offline'))),
+  it('invites rather than showing an empty list when nothing is due', async () => {
+    const { host, read } = await render({
+      listOwnCheckInAssignments: vi.fn(() => page(0)),
     });
 
-    expect(host.querySelector('[role="alert"]')).not.toBeNull();
-    expect(host.textContent).toContain('Your check-ins could not be loaded.');
-  });
-});
-
-/** The reason rendered against one question, found by the id that question's control points at. */
-function reasonFor(host: HTMLElement, questionId: string): string {
-  return (host.querySelector(`#q-${questionId}-reason`)?.textContent ?? '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
- * The client's answer sheet under the ratified validation convention. Every question here is
- * required, so a freshly opened check-in has two outstanding reasons — and must show neither until
- * the client has either left that question or tried to send the whole thing.
- */
-describe('MyCheckIns validation display', () => {
-  afterEach(() => {
-    TestBed.resetTestingModule();
+    expect(read()).toContain("You're all caught up");
+    expect(host.querySelector('app-empty-state a')?.getAttribute('href')).toBe('/');
   });
 
-  async function opened() {
-    const rendered = await render({
-      getOwnCheckInResponse: vi.fn(() => of(detail(null))),
+  it('keeps sent check-ins collapsed, with status and lateness as plain facts', async () => {
+    const sent = [
+      item('s1', '2026-09-20', { status: 'Submitted' }),
+      item('s2', '2026-09-13', { status: 'Reviewed', isLate: true, submittedDate: '2026-09-14' }),
+      item('s3', '2026-09-06', { status: 'Reviewed' }),
+      item('s4', '2026-08-30', { status: 'Reviewed' }),
+    ];
+    const { host, read, settle } = await render({
+      listOwnCheckInAssignments: vi.fn(() => page(4, ...sent)),
     });
-    await rendered.component.open('assignment-1');
-    await settle(rendered.fixture);
-    return rendered;
-  }
 
-  it('announces nothing and shows no reason on a freshly opened check-in', async () => {
-    const { host } = await opened();
+    const rows = () => Array.from(host.querySelectorAll('[aria-labelledby="sent-heading"] a.row'));
+    expect(rows()).toHaveLength(3);
+    expect(rows()[0].getAttribute('href')).toBe('/checkins/me/s1');
+    expect(rows()[0].textContent).toContain('Waiting for your coach');
+    expect(rows()[1].textContent?.replace(/\s+/g, ' ')).toContain(
+      'Sent Mon 14 Sep · , after the due date',
+    );
+    expect(rows()[1].textContent).toContain('Reviewed');
+    expect(read()).toContain("You're all caught up");
 
-    expect(announced(host)).toBe('');
-    expect(host.textContent).not.toContain('This question has to be answered.');
+    // Looks like a button, full width, so it reads as pressable rather than as a stray line of text.
+    const more = button(host, 'Show 1 more');
+    expect(more.classList.contains('tb-button--outlined')).toBe(true);
+    expect(more.classList.contains('more')).toBe(true);
+    press(host, 'Show 1 more');
+    await settle();
+    expect(rows()).toHaveLength(4);
   });
 
-  it('reveals a question’s reason when it is left, and only that question’s', async () => {
-    const { fixture, host } = await opened();
+  it('loads older check-ins page by page once the history is open', async () => {
+    const listOwnCheckInAssignments = vi
+      .fn()
+      .mockReturnValueOnce(
+        page(
+          5,
+          item('s1', '2026-09-20', {}),
+          item('s2', '2026-09-13', {}),
+          item('s3', '2026-09-06', {}),
+          item('s4', '2026-08-30', {}),
+        ),
+      )
+      .mockReturnValueOnce(page(5, item('s4', '2026-08-30', {}), item('s5', '2026-08-23', {})));
+    const { host, settle } = await render({ listOwnCheckInAssignments });
 
-    leaveAt(host, '#q-question-1');
-    await settle(fixture);
+    press(host, 'Show 1 more');
+    await settle();
+    press(host, 'Show older check-ins');
+    await settle();
 
-    expect(reasonFor(host, 'question-1')).toContain('This question has to be answered.');
-    expect(reasonFor(host, 'question-2')).toBe('');
-    expect(announced(host)).toBe('');
+    expect(listOwnCheckInAssignments).toHaveBeenLastCalledWith(4, 50);
+    expect(host.querySelectorAll('[aria-labelledby="sent-heading"] a.row')).toHaveLength(5);
+    expect(host.textContent).not.toContain('Show older check-ins');
   });
 
-  it('names every outstanding reason at once when a blocked submit is attempted', async () => {
-    const { fixture, host } = await opened();
-
-    press(host, 'Submit check-in');
-    await settle(fixture);
-
-    const summary = announced(host);
-    // The summary names the questions, not just the rule, because "answer it" alone does not say
-    // which one is outstanding when two are.
-    expect(summary).toContain('How is your body feeling?');
-    expect(summary).toContain('Sleep quality');
-    expect(reasonFor(host, 'question-1')).toContain('This question has to be answered.');
-    expect(reasonFor(host, 'question-2')).toContain('This question has to be answered.');
-  });
-
-  it('clears a corrected question’s reason and leaves the other standing', async () => {
-    const { fixture, host } = await opened();
-
-    press(host, 'Submit check-in');
-    await settle(fixture);
-
-    type(host, '#q-question-1', 'Shoulders are tight.');
-    await settle(fixture);
-
-    expect(reasonFor(host, 'question-1')).toBe('');
-    expect(reasonFor(host, 'question-2')).toContain('This question has to be answered.');
-  });
-
-  it('carries aria-invalid and aria-describedby exactly while the reason is showing', async () => {
-    const { fixture, host } = await opened();
-    const control = () => query<HTMLInputElement>(host, '#q-question-1');
-
-    expect(control().getAttribute('aria-invalid')).toBeNull();
-    expect(control().getAttribute('aria-describedby')).toBeNull();
-
-    leaveAt(host, '#q-question-1');
-    await settle(fixture);
-
-    expect(control().getAttribute('aria-invalid')).toBe('true');
-    expect(control().getAttribute('aria-describedby')).toBe('q-question-1-reason');
-
-    type(host, '#q-question-1', 'Shoulders are tight.');
-    await settle(fixture);
-
-    expect(control().getAttribute('aria-invalid')).toBeNull();
-    expect(control().getAttribute('aria-describedby')).toBeNull();
-  });
-
-  it('keeps the submit control operable while the check-in is incomplete', async () => {
-    const { host } = await opened();
-    const submit = query<HTMLButtonElement>(host, 'button[type="submit"]');
-
-    expect(submit.disabled).toBe(false);
-    expect(submit.getAttribute('aria-describedby')).toBe('answer-summary');
-  });
-
-  it('moves focus to the summary when a send is refused', async () => {
-    const { fixture, host } = await opened();
-
-    press(host, 'Submit check-in');
-    await settle(fixture);
-
-    expect(focusedId()).toBe('answer-summary');
-  });
-
-  it('does not reach the API when a refused send is attempted', async () => {
-    const save = vi.fn(() => of(detail(null)));
-    const submitResponse = vi.fn(() => of(detail(null)));
-    const { fixture, host, component } = await render({
-      getOwnCheckInResponse: vi.fn(() => of(detail(null))),
-      saveOwnCheckInDraftResponse: save as never,
-      submitOwnCheckInResponse: submitResponse as never,
+  it('says why check-ins are closed instead of showing an empty page', async () => {
+    const { host, read } = await render({
+      listOwnCheckInAssignments: vi.fn(() =>
+        throwError(
+          () => new HttpErrorResponse({ status: 403, error: { accessReason: 'NoEntitlement' } }),
+        ),
+      ),
     });
-    await component.open('assignment-1');
-    await settle(fixture);
 
-    press(host, 'Submit check-in');
-    await settle(fixture);
+    expect(read()).toContain('Check-ins are closed');
+    expect(read()).toContain('Check-ins are not in your plan. Ask your coach.');
+    expect(host.querySelector('app-empty-state')).toBeNull();
+  });
 
-    // A refused send saves nothing and submits nothing: the draft is untouched either way.
-    expect(save).not.toHaveBeenCalled();
-    expect(submitResponse).not.toHaveBeenCalled();
-    expect(announced(host)).toContain('How is your body feeling?');
+  it('reports a failure as one, and retries it', async () => {
+    const listOwnCheckInAssignments = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 500 })))
+      .mockReturnValue(page(1, item('due', '2026-09-27')));
+    const { host, read, settle } = await render({ listOwnCheckInAssignments });
+
+    expect(announced(host)).toContain('Your check-ins could not be loaded.');
+    press(host, 'Try again');
+    await settle();
+    expect(read()).toContain('Start check-in');
+  });
+
+  it('starts over for another workspace, without the previous one’s check-ins', async () => {
+    const listOwnCheckInAssignments = vi
+      .fn()
+      .mockReturnValueOnce(page(1, item('due', '2026-09-27')))
+      .mockReturnValueOnce(page(0));
+    const { selectedTenantId, read, settle } = await render({ listOwnCheckInAssignments });
+
+    expect(read()).toContain('Start check-in');
+    selectedTenantId.set('tenant-2');
+    await settle();
+
+    expect(listOwnCheckInAssignments).toHaveBeenCalledTimes(2);
+    expect(read()).not.toContain('Start check-in');
+    expect(read()).toContain("You're all caught up");
   });
 });
