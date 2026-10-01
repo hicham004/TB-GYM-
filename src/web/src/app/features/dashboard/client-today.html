@@ -249,7 +249,7 @@
                 <bdi dir="auto">{{ next.name }}</bdi>
               </p>
             }
-            <a class="text-link" routerLink="/training/today" i18n>View training</a>
+            <a class="text-link" routerLink="/training/program" i18n>View training</a>
           }
           @case ('week-not-shared') {
             <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
@@ -291,4 +291,6 @@
 
   <app-today-also [today]="localDate()" />
   <app-today-coach-message [today]="localDate()" />
+  <!-- Only where the browser can install the app, never in the app itself, and gone for a month once dismissed. -->
+  <app-install-card variant="banner" />
 </div>

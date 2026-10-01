@@ -18,6 +18,7 @@ const USER: CurrentUser = {
   displayName: 'Client One',
   preferredCulture: 'en-LB',
   preferredThemeMode: 'system',
+  preferredWeightUnit: 'Kilogram',
   emailConfirmed: true,
   roles: [],
 };

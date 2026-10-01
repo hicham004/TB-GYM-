@@ -713,69 +713,15 @@ internal sealed partial class TrainingApplicationService
         WorkoutExecution execution,
         CancellationToken cancellationToken)
     {
-        var completedSets = execution.Exercises
-            .SelectMany(exercise => exercise.Sets.Select(set => (exercise, set)))
-            .Where(item => item.set.IsCompleted)
-            .ToArray();
-        var exerciseIds = execution.Exercises.Select(item => item.ActualExerciseId).Distinct().ToArray();
-        var prior = await (
-            from set in dbContext.WorkoutSetPerformances.AsNoTracking()
-            join exercise in dbContext.WorkoutExercisePerformances.AsNoTracking()
-                on new { set.TenantId, Id = set.WorkoutExercisePerformanceId }
-                equals new { exercise.TenantId, exercise.Id }
-            join workout in dbContext.WorkoutExecutions.AsNoTracking()
-                on new { exercise.TenantId, Id = exercise.WorkoutExecutionId }
-                equals new { workout.TenantId, workout.Id }
-            where workout.ClientProfileId == execution.ClientProfileId &&
-                  workout.Id != execution.Id &&
-                  workout.Status == WorkoutExecutionStatus.Completed &&
-                  workout.CompletedAtUtc <= execution.StartedAtUtc &&
-                  exerciseIds.Contains(exercise.ActualExerciseId) &&
-                  set.IsCompleted && set.ActualRepetitions != null &&
-                  set.ActualLoad != null && set.ActualLoadUnit != null
-            select new
-            {
-                exercise.ActualExerciseId,
-                set.ActualRepetitions,
-                set.ActualLoad,
-                set.ActualLoadUnit,
-            }).ToListAsync(cancellationToken);
-        var priorBest = prior.GroupBy(item => (
-                item.ActualExerciseId, item.ActualRepetitions, item.ActualLoadUnit))
-            .ToDictionary(group => group.Key, group => group.Max(item => item.ActualLoad));
-        var records = new List<WorkoutPersonalRecordView>();
-        foreach (var (exercise, set) in completedSets.OrderBy(item => item.exercise.Position)
-                     .ThenBy(item => item.set.Position))
-        {
-            if (set.ActualRepetitions is not { } reps || set.ActualLoad is not { } load ||
-                set.ActualLoadUnit is not { } unit)
-            {
-                continue;
-            }
-
-            var key = (exercise.ActualExerciseId, (int?)reps, (TrainingLoadUnit?)unit);
-            priorBest.TryGetValue(key, out var best);
-            if (WorkoutPersonalRecordRule.IsRecord(true, reps, load, unit, best))
-            {
-                records.Add(new WorkoutPersonalRecordView(
-                    set.Id, exercise.ActualExerciseName, reps, load, unit,
-                    WorkoutPersonalRecordRule.Key, WorkoutPersonalRecordRule.Version));
-            }
-            priorBest[key] = best is null ? load : Math.Max(best.Value, load);
-        }
-
-        var volume = completedSets
-            .Where(item => item.set.ActualLoad is not null && item.set.ActualRepetitions is not null &&
-                           item.set.ActualLoadUnit is not null)
-            .GroupBy(item => item.set.ActualLoadUnit!.Value)
-            .Select(group => new WorkoutVolumeView(group.Key,
-                group.Sum(item => item.set.ActualLoad!.Value * item.set.ActualRepetitions!.Value)))
-            .ToArray();
-        var duration = (int)Math.Max(0, Math.Floor(
-            ((execution.CompletedAtUtc ?? clock.UtcNow) - execution.StartedAtUtc).TotalSeconds));
+        var earlier = await LoadEarlierSetsAsync(
+            execution.ClientProfileId,
+            execution.Exercises.Select(item => item.ActualExerciseId).Distinct().ToArray(),
+            execution.StartedAtUtc,
+            cancellationToken);
+        var summary = SummarizeWorkout(execution, earlier.Where(item => item.WorkoutId != execution.Id));
         return new WorkoutFinishSummaryView(
-            duration, completedSets.Length, execution.Exercises.Sum(item => item.Sets.Count),
-            volume, records);
+            WorkoutDurationSeconds(execution), summary.CompletedSetCount, summary.TotalSetCount,
+            summary.Volume, summary.PersonalRecords);
     }
 
     private async Task<bool> IsNewPersonalRecordAsync(

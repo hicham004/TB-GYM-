@@ -1,0 +1,404 @@
+<div class="training tb-theme">
+  <header class="page-head">
+    <p class="kicker" i18n>Your program</p>
+    <h1 #heading tabindex="-1" i18n>Training</h1>
+  </header>
+
+  @if (loading()) {
+    <div class="hero hero-skeleton">
+      <app-skeleton label="Loading your program…" i18n-label [lines]="3" />
+    </div>
+  } @else if (error(); as message) {
+    <section class="state-card" role="alert">
+      <h2 i18n>We couldn’t load your program</h2>
+      <p>{{ message }}</p>
+      <button appButton type="button" variant="outlined" (click)="retryProgram()" i18n>
+        Try again
+      </button>
+    </section>
+  } @else if (read(); as current) {
+    @if (!current.isAllowed) {
+      <section class="state-card" role="status">
+        <h2 i18n>Training is not available</h2>
+        <p>{{ accessLabel(current.accessReason) }}</p>
+        @if (canMessage()) {
+          <a class="text-link" routerLink="/messages" i18n>Message your coach</a>
+        }
+      </section>
+    } @else if (program(); as plan) {
+      <section class="hero" aria-labelledby="program-heading">
+        <p class="hero-eyebrow">
+          @switch (plan.phase) {
+            @case ('Current') {
+              <ng-container i18n>Week {{ plan.currentWeek }} of {{ plan.weekCount }}</ng-container>
+            }
+            @case ('Upcoming') {
+              <ng-container i18n
+                >Starts {{ plan.startDate + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+              >
+            }
+            @default {
+              <ng-container i18n>Program finished</ng-container>
+            }
+          }
+        </p>
+        <h2 id="program-heading" dir="auto">{{ plan.name }}</h2>
+        <ul class="hero-chips">
+          @if (plan.sessionCount > 0) {
+            <li i18n>
+              {plan.sessionCount, plural,
+                =1 {{{ plan.completedCount }} of 1 session done}
+                other {{{ plan.completedCount }} of {{ plan.sessionCount }} sessions done}
+              }
+            </li>
+          }
+          @if (plan.missedCount > 0) {
+            <li class="chip-missed" i18n>{{ plan.missedCount }} missed</li>
+          }
+          @if (plan.phase === 'Finished') {
+            <li i18n>Ended {{ plan.lastDate + 'T12:00:00' | date: 'EEE d MMM' }}</li>
+          } @else {
+            <li i18n>Ends {{ plan.lastDate + 'T12:00:00' | date: 'EEE d MMM' }}</li>
+          }
+        </ul>
+        <ol class="hero-weeks" aria-hidden="true">
+          @for (week of plan.weeks; track week.number) {
+            <li [class.is-current]="week.isCurrent">
+              <span [style.inline-size.%]="weekFill(week)"></span>
+            </li>
+          }
+        </ol>
+
+        @let next = action();
+        @switch (next.kind) {
+          @case ('start') {
+            <p class="hero-today">
+              <ng-container i18n>Today:</ng-container>
+              <bdi dir="auto"> {{ next.session.name }}</bdi>
+            </p>
+            <a
+              appButton
+              variant="accent"
+              size="touch"
+              class="hero-action"
+              routerLink="/training/today"
+              [queryParams]="{ sessionId: next.session.sessionId }"
+              i18n
+              >Start workout</a
+            >
+          }
+          @case ('continue') {
+            <p class="hero-today">
+              @if (next.session.date === current.localDate) {
+                <ng-container i18n>In progress:</ng-container>
+              } @else {
+                <ng-container i18n
+                  >Started {{ next.session.date + 'T12:00:00' | date: 'EEE d MMM' }}:</ng-container
+                >
+              }
+              <bdi dir="auto"> {{ next.session.name }}</bdi>
+            </p>
+            <a
+              appButton
+              variant="accent"
+              size="touch"
+              class="hero-action"
+              routerLink="/training/today"
+              [queryParams]="{ sessionId: next.session.sessionId }"
+              i18n
+              >Continue workout</a
+            >
+          }
+          @case ('view') {
+            <p class="hero-today">
+              <ng-container i18n>Done today:</ng-container>
+              <bdi dir="auto"> {{ next.session.name }}</bdi>
+            </p>
+            <a
+              class="hero-link"
+              routerLink="/training/today"
+              [queryParams]="{ sessionId: next.session.sessionId }"
+              i18n
+              >See today’s workout</a
+            >
+          }
+          @case ('next') {
+            <p class="hero-today">
+              <ng-container i18n
+                >Next: {{ next.session.date + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+              >
+              <bdi dir="auto"> · {{ next.session.name }}</bdi>
+            </p>
+          }
+        }
+      </section>
+
+      @if (focus(); as week) {
+        <section class="block" aria-labelledby="focus-heading">
+          <div class="block-head">
+            <h2 id="focus-heading">
+              @if (week.isCurrent) {
+                <ng-container i18n>This week</ng-container>
+              } @else {
+                <ng-container i18n>Week {{ week.number }}</ng-container>
+              }
+            </h2>
+            @if (week.visible && week.sessions.length > 0) {
+              <span class="block-meta" i18n
+                >{{ week.done }} of {{ week.sessions.length }} done</span
+              >
+            }
+          </div>
+          <ng-container
+            [ngTemplateOutlet]="weekBody"
+            [ngTemplateOutletContext]="{ $implicit: week }"
+          />
+        </section>
+      }
+
+      @if (otherWeeks().length > 0) {
+        <section class="block" aria-labelledby="weeks-heading">
+          <div class="block-head">
+            <h2 id="weeks-heading">
+              @if (focus()) {
+                <ng-container i18n>Other weeks</ng-container>
+              } @else {
+                <ng-container i18n>All weeks</ng-container>
+              }
+            </h2>
+          </div>
+          <ol class="weeks">
+            @for (week of otherWeeks(); track week.number) {
+              <li class="week">
+                @if (week.visible && week.sessions.length > 0) {
+                  <button
+                    type="button"
+                    class="week-row"
+                    [attr.aria-expanded]="isOpen(week)"
+                    [attr.aria-controls]="'week-' + week.number"
+                    (click)="toggleWeek(week)"
+                  >
+                    <span class="week-name" i18n>Week {{ week.number }}</span
+                    ><span class="tb-visually-hidden">, </span>
+                    <span class="week-summary">
+                      <ng-container i18n
+                        >{{ week.done }} of {{ week.sessions.length }} done</ng-container
+                      >
+                      @if (week.missed > 0) {
+                        <ng-container i18n> · {{ week.missed }} missed</ng-container>
+                      }
+                    </span>
+                    <app-icon name="chevron-down" class="week-chevron" />
+                  </button>
+                  @if (isOpen(week)) {
+                    <div class="week-body" [id]="'week-' + week.number">
+                      <ng-container
+                        [ngTemplateOutlet]="weekBody"
+                        [ngTemplateOutletContext]="{ $implicit: week }"
+                      />
+                    </div>
+                  }
+                } @else {
+                  <div class="week-row is-static">
+                    <span class="week-name" i18n>Week {{ week.number }}</span
+                    ><span class="tb-visually-hidden">, </span>
+                    <span class="week-summary">
+                      <ng-container
+                        [ngTemplateOutlet]="weekClosed"
+                        [ngTemplateOutletContext]="{ $implicit: week }"
+                      />
+                    </span>
+                  </div>
+                }
+              </li>
+            }
+          </ol>
+        </section>
+      }
+    } @else {
+      <app-empty-state
+        heading="Nothing assigned yet"
+        i18n-heading
+        description="Your coach will put your program here."
+        i18n-description
+      >
+        @if (canMessage()) {
+          <a appButton variant="outlined" routerLink="/messages" empty-state-action i18n
+            >Message your coach</a
+          >
+        }
+      </app-empty-state>
+    }
+
+    @if (current.isAllowed) {
+      <section class="block" aria-labelledby="history-heading">
+        <div class="block-head">
+          <h2 id="history-heading" i18n>Finished workouts</h2>
+        </div>
+        @if (historyLoading()) {
+          <app-skeleton label="Loading your finished workouts…" i18n-label [lines]="2" />
+        } @else if (historyError() && history().length === 0) {
+          <div class="inline-state" role="alert">
+            <p>{{ historyError() }}</p>
+            <button appButton type="button" variant="text" (click)="retryHistory()" i18n>
+              Try again
+            </button>
+          </div>
+        } @else if (history().length === 0) {
+          <p class="empty-line" i18n>
+            Workouts you finish will appear here, with any personal records you set.
+          </p>
+        } @else {
+          <ul class="history">
+            @for (item of historyShown(); track item.id) {
+              <li class="history-item">
+                <div class="history-top">
+                  <strong dir="auto">{{ item.name }}</strong>
+                  <span class="history-date">{{
+                    item.date + 'T12:00:00' | date: 'EEE d MMM'
+                  }}</span>
+                </div>
+                <p class="history-meta">
+                  <span i18n>{{ item.completedSets }} of {{ item.totalSets }} sets</span>
+                  @for (volume of item.volume; track volume.unit) {
+                    <span aria-hidden="true"> · </span>
+                    <span class="tb-visually-hidden">, </span>
+                    <span i18n
+                      >{{ volume.amount | number: '1.0-1' }}
+                      {{ unitLabel(volume.unit) }} lifted</span
+                    >
+                  }
+                  @if (item.minutes !== null) {
+                    <span aria-hidden="true"> · </span>
+                    <span class="tb-visually-hidden">, </span>
+                    <span i18n>{{ item.minutes }} min</span>
+                  }
+                  @if (item.programName !== program()?.name) {
+                    <span aria-hidden="true"> · </span>
+                    <span class="tb-visually-hidden">, </span>
+                    <bdi dir="auto">{{ item.programName }}</bdi>
+                  }
+                </p>
+                @if (item.records.length > 0) {
+                  <ul class="records">
+                    @for (record of item.records; track record.id) {
+                      <li>
+                        <span class="pr-badge" aria-hidden="true" i18n>PR</span>
+                        <span class="tb-visually-hidden" i18n>Personal record: </span>
+                        <span dir="auto">{{ record.exercise }}</span>
+                        <b>
+                          {{ record.load | number: '1.0-2' }} {{ unitLabel(record.unit) }} ×
+                          {{ record.reps }}
+                        </b>
+                      </li>
+                    }
+                  </ul>
+                }
+              </li>
+            }
+          </ul>
+          @if (historyError()) {
+            <p class="inline-error" role="alert">{{ historyError() }}</p>
+          }
+          @if (canShowMoreHistory()) {
+            <button
+              appButton
+              type="button"
+              variant="text"
+              class="history-more"
+              [loading]="loadingMore()"
+              (click)="moreHistory()"
+              i18n
+            >
+              Show more workouts
+            </button>
+          }
+        }
+      </section>
+    }
+  }
+</div>
+
+<ng-template #weekBody let-week>
+  @if (!week.visible) {
+    <p class="empty-line">
+      <ng-container
+        [ngTemplateOutlet]="weekClosed"
+        [ngTemplateOutletContext]="{ $implicit: week }"
+      />
+    </p>
+  } @else if (week.sessions.length === 0) {
+    <p class="empty-line" i18n>No sessions this week.</p>
+  } @else {
+    <ul class="sessions">
+      @for (session of week.sessions; track session.sessionId) {
+        <li>
+          @if (session.opensPlayer) {
+            <a
+              [class]="'session is-' + session.state"
+              routerLink="/training/today"
+              [queryParams]="{ sessionId: session.sessionId }"
+            >
+              <ng-container
+                [ngTemplateOutlet]="sessionBody"
+                [ngTemplateOutletContext]="{ $implicit: session }"
+              />
+            </a>
+          } @else {
+            <div [class]="'session is-' + session.state">
+              <ng-container
+                [ngTemplateOutlet]="sessionBody"
+                [ngTemplateOutletContext]="{ $implicit: session }"
+              />
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  }
+</ng-template>
+
+<ng-template #weekClosed let-week>
+  @if (week.shared) {
+    <ng-container i18n>Opens {{ week.startDate + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container>
+  } @else {
+    <ng-container i18n>Your coach hasn’t shared this week yet</ng-container>
+  }
+</ng-template>
+
+<ng-template #sessionBody let-session>
+  <span class="session-mark" aria-hidden="true">
+    @if (session.state === 'Completed') {
+      <app-icon name="check-circle" />
+    }
+  </span>
+  <span class="session-text">
+    <span class="session-day">{{ session.date + 'T12:00:00' | date: 'EEE d MMM' }}</span
+    ><span class="tb-visually-hidden">, </span> <strong dir="auto">{{ session.name }}</strong
+    ><span class="tb-visually-hidden">, </span>
+    <span class="session-meta" i18n
+      >{session.exerciseCount, plural,
+        =1 {1 exercise}
+        other {{{ session.exerciseCount }} exercises}
+      }
+      · {session.setCount, plural, =1 {1 set} other {{{ session.setCount }} sets}}</span
+    >
+  </span>
+  @if (session.state !== 'Upcoming') {
+    <span class="tb-visually-hidden">, </span>
+  }
+  @switch (session.state) {
+    @case ('Completed') {
+      <span class="session-tag tag-done" i18n>Done</span>
+    }
+    @case ('Missed') {
+      <span class="session-tag tag-missed" i18n>Missed</span>
+    }
+    @case ('Today') {
+      <span class="session-tag tag-today" i18n>Today</span>
+    }
+    @case ('InProgress') {
+      <span class="session-tag tag-progress" i18n>In progress</span>
+    }
+  }
+</ng-template>

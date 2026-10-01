@@ -7,6 +7,12 @@
   <!-- Clients have no top bar: Today's header holds Notifications and Me, and the Me page holds
        workspace switching and sign-out. -->
   <a class="skip-link" href="#main-content" (click)="skipToContent($event)" i18n>Skip to content</a>
+} @else if (launching()) {
+  <!-- The app is starting: the launch screen index.html draws for an installed app, held until the
+       session answers, rather than a bar saying "Checking session". -->
+  <div class="launch" role="status">
+    <span class="tb-visually-hidden" i18n>Loading <span translate="no">TB Gym</span>…</span>
+  </div>
 } @else if (shell() !== 'public') {
   <!-- An account with no workspace keeps the existing top bar, light like the pages it serves.
        Signed-out pages (the homepage, sign-in and the rest of /auth, invitations) draw their own

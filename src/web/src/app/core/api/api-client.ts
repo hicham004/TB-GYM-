@@ -137,6 +137,10 @@ export class ApiClient {
     return this.http.put<CurrentUser>('/api/auth/me/theme', { mode });
   }
 
+  updateOwnWeightUnit(unit: CurrentUser['preferredWeightUnit']): Observable<CurrentUser> {
+    return this.http.put<CurrentUser>('/api/auth/me/weight-unit', { unit });
+  }
+
   confirmEmail(userId: string, code: string): Observable<void> {
     return this.http.post<void>('/api/auth/confirm-email', { userId, code });
   }
@@ -704,6 +708,17 @@ export class ApiClient {
     );
   }
 
+  // The Training page maps these itself, so their mapping stays out of the initial bundle.
+  getMyTrainingProgram(): Observable<Phase3Contracts.ClientTrainingProgramView> {
+    return this.http.get<Phase3Contracts.ClientTrainingProgramView>('/api/training/me/program');
+  }
+
+  getMyWorkoutHistory(skip = 0): Observable<Phase3Contracts.ClientWorkoutHistoryPage> {
+    return this.http.get<Phase3Contracts.ClientWorkoutHistoryPage>('/api/training/me/history', {
+      params: { skip },
+    });
+  }
+
   listStrengthMaxes(
     clientId: string,
     exerciseId?: string,
@@ -1083,10 +1098,18 @@ export class ApiClient {
       .pipe(map(mapHistory));
   }
 
-  getMyProgressDashboard(from: string | null = null, to: string | null = null) {
+  /** The unit is the client's saved one; left out, the server answers in kilograms. */
+  getMyProgressDashboard(
+    from: string | null = null,
+    to: string | null = null,
+    displayUnit: Phase3Contracts.RecordedMassUnit | null = null,
+  ) {
     return this.http
       .get<Phase3Contracts.ProgressDashboardView>('/api/progress/me/dashboard', {
-        params: progressWindowParams(from, to),
+        params: {
+          ...progressWindowParams(from, to),
+          ...(displayUnit === null ? {} : { displayUnit }),
+        },
       })
       .pipe(map(mapProgressDashboard));
   }

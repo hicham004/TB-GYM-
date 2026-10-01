@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import type { MeasurementType, MeasurementUnit, RecordedMassUnit } from '../../core/api/generated';
+import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import type {
@@ -32,6 +33,7 @@ import { mapProgressPhotoImage } from './progress.models';
 export class ProgressView {
   readonly clientId = input<string | null>(null);
   private readonly api = inject(ApiClient);
+  private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
@@ -109,11 +111,20 @@ export class ProgressView {
       const key = tenantId ? `${tenantId}:${clientId ?? 'me'}` : null;
       if (key && key !== this.loadedKey) {
         this.loadedKey = key;
+        this.useStartingUnits();
         void this.load();
         void this.loadMeasurements();
         void this.loadPhotos();
       }
     });
+  }
+
+  /** A client's own page starts in the unit they saved in Me; a coach reading a client's, in kilograms. */
+  private useStartingUnits(): void {
+    const unit = this.clientId() === null ? this.auth.weightUnit() : 'Kilogram';
+    this.displayUnit = unit;
+    this.entryUnit = unit;
+    this.correctionUnit = unit;
   }
 
   protected async changeDisplayUnit(): Promise<void> {

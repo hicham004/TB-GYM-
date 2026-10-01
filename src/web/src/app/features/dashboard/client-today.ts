@@ -25,6 +25,7 @@ import { Avatar } from '../../ui/avatar';
 import { Button, ButtonLink } from '../../ui/button';
 import { Icon } from '../../ui/icon';
 import { StatusLabel } from '../../ui/status-label';
+import { InstallCard } from '../install/install-card';
 import { trainingReadAccessLabel, type UpcomingTraining } from '../training/training-read.models';
 import type { RenewalStatus } from './renewal.models';
 import { TodayAlso } from './today-also';
@@ -46,6 +47,7 @@ import { trainingCard, type TrainingWeek } from './today.models';
     ButtonLink,
     DatePipe,
     Icon,
+    InstallCard,
     RouterLink,
     StatusLabel,
     TodayAlso,

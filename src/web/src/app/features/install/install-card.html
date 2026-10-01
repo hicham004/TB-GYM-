@@ -1,0 +1,45 @@
+@if (offer(); as current) {
+  <section
+    class="install"
+    [class.is-banner]="variant() === 'banner'"
+    [attr.aria-labelledby]="titleId"
+  >
+    <img class="icon" src="icons/icon-192.png" alt="" width="48" height="48" />
+    <div class="body">
+      <h2 [id]="titleId" i18n>Add <span translate="no">TB Gym</span> to your home screen</h2>
+      @if (current === 'prompt') {
+        <p i18n>Open it like any app: full screen, one tap from your home screen.</p>
+      } @else {
+        <ol class="steps" role="list">
+          <li>
+            <span i18n>Tap Share</span>
+            <app-icon name="share" />
+          </li>
+          <li i18n>Choose Add to Home Screen</li>
+          <li i18n>Tap Add</li>
+        </ol>
+      }
+    </div>
+    @if (current === 'prompt' || variant() === 'banner') {
+      <div class="actions">
+        @if (current === 'prompt') {
+          <button
+            appButton
+            type="button"
+            size="touch"
+            [loading]="installing()"
+            (click)="install()"
+            i18n
+          >
+            Install app
+          </button>
+        }
+        @if (variant() === 'banner') {
+          <button appButton type="button" variant="text" class="dismiss" (click)="dismiss()" i18n>
+            Not now
+          </button>
+        }
+      </div>
+    }
+  </section>
+}

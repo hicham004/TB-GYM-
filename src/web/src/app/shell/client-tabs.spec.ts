@@ -45,7 +45,7 @@ describe('ClientTabs', () => {
     ]);
     expect(tabs().map((tab) => tab.getAttribute('href'))).toEqual([
       '/',
-      '/training/today',
+      '/training/program',
       '/nutrition/today',
       '/progress/dashboard',
       '/messages',
@@ -58,7 +58,7 @@ describe('ClientTabs', () => {
     );
     expect(tabs().map((tab) => tab.getAttribute('href'))).toEqual([
       '/',
-      '/training/today',
+      '/training/program',
       '/progress/dashboard',
     ]);
   });
@@ -77,7 +77,7 @@ describe('ClientTabs', () => {
 
     access.set({ Training: 'NoEntitlement' });
     await settle(fixture);
-    expect(tabs().map((tab) => tab.getAttribute('href'))).not.toContain('/training/today');
+    expect(tabs().map((tab) => tab.getAttribute('href'))).not.toContain('/training/program');
   });
 
   it('marks the open page, and its section from another page of it', async () => {
@@ -151,12 +151,12 @@ describe('clientTabState', () => {
 
   it('selects a tab as the page on its own link, ignoring the query', () => {
     expect(clientTabState('/', today)).toBe('page');
-    expect(clientTabState('/training/today?sessionId=a', training)).toBe('page');
+    expect(clientTabState('/training/program?week=2', training)).toBe('page');
   });
 
   it('selects a section for another page of it, and nothing elsewhere', () => {
     expect(clientTabState('/progress', progress)).toBe('section');
-    expect(clientTabState('/training/history', training)).toBe('section');
+    expect(clientTabState('/training/today?sessionId=a', training)).toBe('section');
     expect(clientTabState('/me', today)).toBeNull();
     expect(clientTabState('/checkins/me', today)).toBeNull();
   });

@@ -348,6 +348,21 @@ public static class TrainingEndpoints
             .WithName("GetMyTrainingPersonalRecords")
             .Produces<ClientPersonalRecordsResult>();
 
+        client.MapGet("/program", async (
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetMyProgramAsync(cancellationToken)))
+            .WithName("GetMyTrainingProgram")
+            .Produces<ClientTrainingProgramView>();
+
+        client.MapGet("/history", async (
+            int? skip,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetMyWorkoutHistoryAsync(Math.Max(0, skip ?? 0), cancellationToken)))
+            .WithName("GetMyWorkoutHistory")
+            .Produces<ClientWorkoutHistoryPage>();
+
         client.MapPost("/sessions/{sessionId:guid}/start", async (
             Guid sessionId,
             HttpContext context,

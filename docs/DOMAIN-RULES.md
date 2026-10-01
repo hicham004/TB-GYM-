@@ -114,6 +114,14 @@ relationship with a new profile and reactivates their one membership row; the ol
 read-only and is not shown to them. Following a coach to another workspace is a normal invitation
 from that workspace; history does not move between workspaces.
 
+**CLI-017** A person's own display settings, light or dark mode and (R2.5c) the weight unit, are
+stored on the global account, not on a workspace membership, so they follow the person across
+coaches, devices and the installed app. The weight unit is only the starting unit for that person's
+own weigh-ins and progress charts: stored weights stay canonical kilograms with the entered unit
+kept (SYS-007, ADR 0009), a coach reading a client's progress starts in kilograms, and TRN-016 is
+unchanged (the workout player asks for its own unit). Values are `Kilogram` or `Pound`, enforced by
+a database check.
+
 ## 3. Products, enrollments, payments, programs, and access
 
 **SUB-001** Product/catalog identity, offer/price, client enrollment, payment operation,
@@ -311,6 +319,15 @@ the coach.
 **TRN-019** Workout PR v1 is the highest positive load for one exercise, exact repetition count,
 and explicit unit among completed sets (ADR 0031). A tie is not a new PR. Set saves and workout
 completion evaluate the same named, versioned server rule; the UI does not convert units.
+The client's workout history (R2.5b) shows, for each finished workout, the records it set against
+the workouts finished before it started, through the same rule.
+
+**TRN-020** Session state v1 (`WorkoutThenScheduledDate`, R2.5b) is what the client's Training page
+shows for each session of a visible week. The workout decides first: a completed workout is
+Completed and a started one In progress, on any day. A session never started is Missed before the
+workspace's today, Today on it and Upcoming after it. A week the client cannot see (TRN-006) sends
+no sessions, so it counts neither done nor missed. The API still lets a client start a missed
+session while its block is active; no screen offers that yet.
 
 ## 5. Strength, 1RM, RPE, RIR, and progression
 

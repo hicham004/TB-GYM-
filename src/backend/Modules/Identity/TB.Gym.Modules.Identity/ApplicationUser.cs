@@ -11,6 +11,12 @@ public sealed class ApplicationUser : IdentityUser<Guid>
 
     public string PreferredThemeMode { get; set; } = "system";
 
+    /// <summary>
+    /// "Kilogram" or "Pound": the unit a person's own weigh-ins and progress charts start in. It
+    /// never changes stored values (kilograms stay canonical, SYS-007) and is not a workspace setting.
+    /// </summary>
+    public string PreferredWeightUnit { get; set; } = "Kilogram";
+
     public bool IsPlatformBlocked { get; set; }
 
     public DateTimeOffset CreatedAtUtc { get; set; }

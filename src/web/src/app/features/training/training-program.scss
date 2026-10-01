@@ -1,0 +1,201 @@
+// Client Training (M3), in the approved prototype's language: bold sans headings, the brand hero
+// with its accent glow and dot texture, accent for what is done. Lists live in the second sheet.
+:host {
+  display: block;
+  color: var(--tb-ink);
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+.training {
+  display: grid;
+  gap: var(--space-24);
+  margin-inline: auto;
+  max-inline-size: 44rem;
+}
+h1,
+h2,
+p,
+ul,
+ol {
+  margin: 0;
+}
+ul,
+ol {
+  list-style: none;
+  padding: 0;
+}
+h1:focus {
+  outline: none;
+}
+.page-head {
+  display: grid;
+  gap: var(--space-4);
+}
+.kicker {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+h1 {
+  font-size: clamp(1.95rem, 7vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.hero {
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tb-brand) 86%, #ffffff),
+    var(--tb-brand) 55%,
+    color-mix(in srgb, var(--tb-brand) 80%, #000000)
+  );
+  border-radius: 26px;
+  color: var(--tb-on-brand);
+  display: grid;
+  gap: var(--space-12);
+  isolation: isolate;
+  overflow: hidden;
+  padding: clamp(1.25rem, 5vw, 1.75rem);
+  position: relative;
+}
+// The prototype's glow and dot texture: decoration only, under the content.
+.hero::before,
+.hero::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+.hero::before {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--tb-accent) 60%, transparent),
+    transparent 66%
+  );
+  block-size: 21rem;
+  border-radius: 50%;
+  inline-size: 21rem;
+  inset-block-start: -10rem;
+  inset-inline-end: -8rem;
+  opacity: 0.55;
+}
+.hero::after {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--tb-accent) 30%, transparent) 1px,
+    transparent 1.4px
+  );
+  background-size: 14px 14px;
+  inset: 0;
+  mask-image: linear-gradient(205deg, #000000 5%, transparent 55%);
+}
+.hero-skeleton {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+}
+.hero-skeleton::before,
+.hero-skeleton::after {
+  display: none;
+}
+.hero-eyebrow {
+  color: var(--tb-accent);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.hero h2 {
+  font-size: clamp(1.5rem, 6vw, 1.85rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+.hero-chips li {
+  background: rgb(255 255 255 / 11%);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.25rem 0.65rem;
+}
+.hero-chips .chip-missed {
+  background: color-mix(in srgb, var(--tb-warm) 30%, transparent);
+}
+// One segment per week, filled by the share of its visible sessions done.
+.hero-weeks {
+  display: grid;
+  gap: 5px;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  margin-block: var(--space-4);
+}
+.hero-weeks li {
+  background: rgb(255 255 255 / 14%);
+  block-size: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.hero-weeks li.is-current {
+  box-shadow: 0 0 0 1px var(--tb-accent);
+}
+.hero-weeks span {
+  background: var(--tb-accent);
+  block-size: 100%;
+  display: block;
+}
+.hero-today {
+  color: var(--tb-on-brand-soft);
+  font-size: 0.9375rem;
+}
+.hero-today bdi {
+  color: var(--tb-on-brand);
+  font-weight: 600;
+}
+.hero-action {
+  inline-size: 100%;
+  justify-content: center;
+}
+.hero-link {
+  color: var(--tb-accent);
+  font-weight: 600;
+  justify-self: start;
+}
+.hero-link:hover {
+  color: var(--tb-on-brand);
+}
+
+.state-card {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: 22px;
+  display: grid;
+  gap: var(--space-12);
+  justify-items: start;
+  padding: var(--space-24);
+}
+.text-link {
+  color: var(--tb-accent-ink);
+  font-weight: 600;
+}
+
+@media (forced-colors: active) {
+  .hero {
+    border: 1px solid CanvasText;
+  }
+  .hero-weeks li {
+    border: 1px solid CanvasText;
+  }
+  .hero-weeks span {
+    background: CanvasText;
+  }
+}

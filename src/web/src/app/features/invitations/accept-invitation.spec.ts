@@ -46,6 +46,7 @@ function user(email: string): CurrentUser {
     displayName: 'Rana Haddad',
     preferredCulture: 'en-LB',
     preferredThemeMode: 'system',
+    preferredWeightUnit: 'Kilogram',
     emailConfirmed: true,
     roles: [],
   };

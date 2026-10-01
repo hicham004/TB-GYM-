@@ -14,6 +14,7 @@ const coach: CurrentUser = {
   displayName: 'Coach',
   preferredCulture: 'en-LB',
   preferredThemeMode: 'system',
+  preferredWeightUnit: 'Kilogram',
   emailConfirmed: true,
   roles: [],
 };

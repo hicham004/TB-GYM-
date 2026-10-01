@@ -1,53 +1,147 @@
-<section class="me-page tb-theme">
-  <header class="me-header">
-    <app-avatar [initials]="initials()" presentation="mobile-account" />
-    <div class="me-identity">
-      <h1 class="tb-text-page-title" i18n>Me</h1>
-      <p class="me-name" dir="auto">{{ displayName() }}</p>
-    </div>
+<div class="me tb-theme">
+  <header class="page-head">
+    <p class="kicker" i18n>Your account</p>
+    <h1 #heading tabindex="-1" i18n>Me</h1>
   </header>
 
-  <nav aria-label="My account" i18n-aria-label>
-    <ul class="me-list">
-      <li><a class="me-row" routerLink="/profile" i18n>My profile</a></li>
-      <li><a class="me-row" routerLink="/account/security" i18n>Account security</a></li>
-      <li><a class="me-row" routerLink="/account/appearance" i18n>Appearance</a></li>
+  <section class="hero" aria-labelledby="me-name">
+    <div class="who">
+      <app-avatar class="face" [initials]="initials()" presentation="mobile-account" />
+      <div class="who-text">
+        <h2 id="me-name" dir="auto">{{ displayName() }}</h2>
+        <p class="email" dir="auto">{{ email() }}</p>
+      </div>
+    </div>
+    @if (coachName(); as coach) {
+      @if (canMessage()) {
+        <a class="coach" routerLink="/messages">
+          <ng-container
+            [ngTemplateOutlet]="coachBody"
+            [ngTemplateOutletContext]="{ $implicit: coach }"
+          />
+          <span class="tb-visually-hidden">, </span>
+          <span class="coach-action">
+            <ng-container i18n>Message</ng-container>
+            <app-icon name="chevron-right" />
+          </span>
+        </a>
+      } @else {
+        <div class="coach">
+          <ng-container
+            [ngTemplateOutlet]="coachBody"
+            [ngTemplateOutletContext]="{ $implicit: coach }"
+          />
+        </div>
+      }
+    }
+  </section>
+
+  <section class="group" aria-labelledby="me-account">
+    <h2 id="me-account" class="group-title" i18n>Account</h2>
+    <ul class="rows" role="list">
       <li>
-        <a class="me-row" routerLink="/notifications/settings" i18n>Notification settings</a>
+        <a class="row" routerLink="/profile">
+          <span class="row-icon"><app-icon name="user" /></span>
+          <span class="row-text">
+            <strong i18n>My profile</strong><span class="tb-visually-hidden">, </span>
+            <small i18n>Your goals, health details and contact info</small>
+          </span>
+          <app-icon name="chevron-right" class="row-chevron" />
+        </a>
       </li>
-      <li><a class="me-row" routerLink="/progress" i18n>Weight and measurements</a></li>
+      <li>
+        <a class="row" routerLink="/notifications/settings">
+          <span class="row-icon"><app-icon name="bell" /></span>
+          <span class="row-text">
+            <strong i18n>Notifications</strong><span class="tb-visually-hidden">, </span>
+            <small i18n>Emails from your coach and quiet hours</small>
+          </span>
+          <app-icon name="chevron-right" class="row-chevron" />
+        </a>
+      </li>
+      <li>
+        <a class="row" routerLink="/account/security">
+          <span class="row-icon"><app-icon name="lock" /></span>
+          <span class="row-text">
+            <strong i18n>Password and security</strong><span class="tb-visually-hidden">, </span>
+            <small i18n>Change your password or sign out everywhere</small>
+          </span>
+          <app-icon name="chevron-right" class="row-chevron" />
+        </a>
+      </li>
       @if (isPlatformAdmin()) {
-        <li><a class="me-row" routerLink="/admin/billing" i18n>Platform billing</a></li>
+        <li>
+          <a class="row" routerLink="/admin/billing">
+            <span class="row-icon"><app-icon name="products" /></span>
+            <span class="row-text">
+              <strong i18n>Platform billing</strong>
+            </span>
+            <app-icon name="chevron-right" class="row-chevron" />
+          </a>
+        </li>
       }
     </ul>
-  </nav>
+  </section>
+
+  <section class="group" aria-labelledby="me-preferences">
+    <h2 id="me-preferences" class="group-title" i18n>Preferences</h2>
+    <div class="prefs">
+      <div class="pref">
+        <app-segmented-control
+          label="Appearance"
+          i18n-label
+          [options]="themeOptions"
+          [selected]="theme()"
+          (selectedChange)="chooseTheme($event)"
+        />
+        <p class="pref-hint" i18n>Device follows your phone’s light or dark setting.</p>
+      </div>
+      <div class="pref">
+        <app-segmented-control
+          label="Body weight"
+          i18n-label
+          [options]="unitOptions"
+          [selected]="unit()"
+          (selectedChange)="chooseUnit($event)"
+        />
+        <p class="pref-hint" i18n>Your weigh-ins and weight chart start in this unit.</p>
+      </div>
+      <!-- Present from the first render so the live region is registered before anything lands in it. -->
+      <p class="pref-error" role="alert">{{ preferenceError() }}</p>
+    </div>
+  </section>
+
+  <app-install-card />
 
   @if (tenants.memberships().length > 1) {
-    <section class="me-section" aria-labelledby="me-workspaces">
-      <h2 id="me-workspaces" class="tb-text-section-title" i18n>Your coaches</h2>
-      <ul class="me-list">
+    <section class="group" aria-labelledby="me-coaches">
+      <h2 id="me-coaches" class="group-title" i18n>Your coaches</h2>
+      <ul class="rows" role="list">
         @for (membership of tenants.memberships(); track membership.tenantId) {
           <li>
             @if (membership.tenantId === tenants.selectedTenantId()) {
-              <p class="me-row me-workspace" aria-current="true">
-                <span class="me-workspace-name" dir="auto">{{ membership.tenantName }}</span>
-                <span class="me-meta"
-                  >{{ roleLabel(membership.role) }} ·
-                  <ng-container i18n>open now</ng-container></span
-                >
+              <p class="row is-current" aria-current="true">
+                <app-avatar [initials]="initialsOf(membership.tenantName)" presentation="client" />
+                <span class="row-text">
+                  <strong dir="auto">{{ membership.tenantName }}</strong>
+                  <small
+                    >{{ roleLabel(membership.role) }} ·
+                    <ng-container i18n>open now</ng-container></small
+                  >
+                </span>
               </p>
             } @else {
-              <button
-                type="button"
-                class="me-row me-workspace"
-                (click)="chooseWorkspace(membership.tenantId)"
-              >
-                <span class="me-workspace-name">
-                  <ng-container i18n>Switch to</ng-container>
-                  <span dir="auto"> {{ membership.tenantName }}</span>
+              <button type="button" class="row" (click)="chooseWorkspace(membership.tenantId)">
+                <app-avatar [initials]="initialsOf(membership.tenantName)" presentation="client" />
+                <span class="row-text">
+                  <strong>
+                    <ng-container i18n>Switch to</ng-container>
+                    <span dir="auto"> {{ membership.tenantName }}</span>
+                  </strong>
+                  <span class="tb-visually-hidden">, </span>
+                  <small>{{ roleLabel(membership.role) }}</small>
                 </span>
-                <span class="tb-visually-hidden">, </span>
-                <span class="me-meta">{{ roleLabel(membership.role) }}</span>
+                <app-icon name="chevron-right" class="row-chevron" />
               </button>
             }
           </li>
@@ -61,11 +155,19 @@
     type="button"
     variant="outlined"
     size="touch"
-    class="me-sign-out"
+    class="sign-out"
     [loading]="signingOut()"
     (click)="signOut()"
     i18n
   >
     Sign out
   </button>
-</section>
+</div>
+
+<ng-template #coachBody let-coach>
+  <app-avatar class="coach-face" [initials]="initialsOf(coach)" presentation="message-sender" />
+  <span class="coach-text">
+    <span class="coach-label" i18n>Your coach</span><span class="tb-visually-hidden">, </span>
+    <strong dir="auto">{{ coach }}</strong>
+  </span>
+</ng-template>

@@ -1,9 +1,10 @@
-import { signal } from '@angular/core';
+import { type Provider, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { type Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
+import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { settle } from '../../../testing/dom';
@@ -130,7 +131,11 @@ async function render(
   return (await renderWith(result, api)).host;
 }
 
-async function renderWith(result: Observable<ProgressDashboard>, api: Partial<ApiClient> = {}) {
+async function renderWith(
+  result: Observable<ProgressDashboard>,
+  api: Partial<ApiClient> = {},
+  options: { providers?: Provider[]; clientId?: string } = {},
+) {
   const selectedTenantId = signal('tenant-1');
   const createMediaAccessBatch = vi.fn((assetIds: string[]) =>
     of({ items: assetIds.map((assetId) => ({ assetId })) }),
@@ -179,10 +184,12 @@ async function renderWith(result: Observable<ProgressDashboard>, api: Partial<Ap
       { provide: TenantStore, useValue: { selectedTenantId } },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: UiSheet, useValue: { open: vi.fn(() => ({ close: vi.fn() })) } },
+      ...(options.providers ?? []),
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ProgressDashboardView);
+  if (options.clientId) fixture.componentRef.setInput('clientId', options.clientId);
   await settle(fixture);
   return {
     fixture,
@@ -319,6 +326,45 @@ describe('ProgressDashboardView states', () => {
     expect(host.querySelectorAll('.photo-tile img')).toHaveLength(1);
     expect(host.querySelector('.photo-tile > span')?.textContent).toContain('Preview unavailable');
     expect(text).toContain('One does not explain another');
+  });
+
+  it('reads a client’s own weight in the unit they saved in Me, and offers it for a new weigh-in', async () => {
+    const getMyProgressDashboard = vi.fn(() =>
+      of(mapProgressDashboard(contract({ displayUnit: 'Pound' }))),
+    );
+    const getMyProgress = vi.fn(() => of({ days: [], weeks: [], displayUnit: 'Pound' } as never));
+    await renderWith(
+      of(mapProgressDashboard(contract({ displayUnit: 'Pound' }))),
+      {
+        getMyProgressDashboard: getMyProgressDashboard as never,
+        getMyProgress: getMyProgress as never,
+      },
+      { providers: [{ provide: AuthStore, useValue: { weightUnit: signal('Pound') } }] },
+    );
+
+    expect(getMyProgressDashboard).toHaveBeenCalledWith(null, null, 'Pound');
+    expect(getMyProgress).toHaveBeenCalledWith('Pound', null, null);
+  });
+
+  it('keeps a coach reading a client’s progress in kilograms, whatever the coach saved', async () => {
+    const getClientProgressDashboard = vi.fn(() => of(mapProgressDashboard(contract())));
+    const getClientProgress = vi.fn(() =>
+      of({ days: [], weeks: [], displayUnit: 'Kilogram' } as never),
+    );
+    await renderWith(
+      of(mapProgressDashboard(contract())),
+      {
+        getClientProgressDashboard: getClientProgressDashboard as never,
+        getClientProgress: getClientProgress as never,
+      },
+      {
+        clientId: 'client-9',
+        providers: [{ provide: AuthStore, useValue: { weightUnit: signal('Pound') } }],
+      },
+    );
+
+    expect(getClientProgressDashboard).toHaveBeenCalledWith('client-9', null, null);
+    expect(getClientProgress).toHaveBeenCalledWith('client-9', 'Kilogram', null, null);
   });
 
   it('renders an empty state when nothing readable was recorded', async () => {

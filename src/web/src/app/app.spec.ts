@@ -42,6 +42,8 @@ async function render(
 ) {
   const clear = vi.fn();
   const clearMessages = vi.fn();
+  const user = signal<typeof OWNER | null>(options.signedIn ? OWNER : null);
+  const loading = signal(Boolean(options.loading));
   const select = vi.fn();
   const canCoach = Boolean(options.owner || options.coach);
   const membership = options.owner
@@ -80,8 +82,8 @@ async function render(
       {
         provide: AuthStore,
         useValue: {
-          user: signal(options.signedIn ? OWNER : null),
-          loading: signal(Boolean(options.loading)),
+          user,
+          loading,
           initialize: vi.fn().mockResolvedValue(undefined),
           logout: vi.fn().mockResolvedValue(undefined),
         },
@@ -111,6 +113,7 @@ async function render(
     clear,
     clearMessages,
     select,
+    auth: { user, loading },
   };
 }
 
@@ -206,7 +209,40 @@ describe('App', () => {
 
     expect(host.querySelector('app-coach-shell')).toBeNull();
     expect(host.querySelector('.authenticated-nav')).toBeNull();
+    expect(host.querySelector('.launch')).not.toBeNull();
+  });
+
+  /**
+   * The installed app starts on a launch screen, not on a bar saying "Checking session". Only the
+   * first wait is a launch: signing in later waits again, and that keeps the bar over the form.
+   */
+  it('draws the launch screen for the first wait only, never for one while signing in', async () => {
+    const { fixture, host, auth } = await render({ loading: true });
+
+    expect(host.querySelector('.launch')?.getAttribute('role')).toBe('status');
+    expect(host.querySelector('.launch')?.textContent).toContain('Loading TB Gym');
+    expect(host.querySelector('.topbar')).toBeNull();
+
+    auth.loading.set(false);
+    await settle(fixture);
+    expect(host.querySelector('.launch')).toBeNull();
+
+    auth.loading.set(true);
+    await settle(fixture);
+    expect(host.querySelector('.launch')).toBeNull();
     expect(host.textContent).toContain('Checking session');
+  });
+
+  it('hands over from the launch screen to the shell when the session answers', async () => {
+    const { fixture, host, auth } = await render({ loading: true, client: true });
+    expect(host.querySelector('.launch')).not.toBeNull();
+
+    auth.user.set(OWNER);
+    auth.loading.set(false);
+    await settle(fixture);
+
+    expect(host.querySelector('.launch')).toBeNull();
+    expect(host.querySelector('app-client-tabs')).not.toBeNull();
   });
 
   it('clears both badges as part of signing out from the member bar', async () => {

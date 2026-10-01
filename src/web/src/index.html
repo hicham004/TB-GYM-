@@ -7,7 +7,8 @@
       name="description"
       content="TB Gym brings training, nutrition, check-ins, progress, and client conversations together for coaches and teams."
     />
-    <meta name="theme-color" content="#f5f3ea" />
+    <meta name="theme-color" content="#f5f3ea" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1513" media="(prefers-color-scheme: dark)" />
     <!--
       Link previews (WhatsApp, Instagram, iMessage, LinkedIn). Crawlers do not run the app, so the
       tags live here and cover every route. og:image is relative until a production origin exists;
@@ -61,7 +62,35 @@
       never be able to carry a reset or invitation token to a third party.
     -->
     <meta name="referrer" content="no-referrer" />
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <!--
+      The installable app (R2.5c). There is deliberately no service worker: nothing here is cached
+      offline, so no coach's or client's data can outlive a sign-out in a cache.
+    -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <!--
+      The installed app's launch screen, shown while the script downloads. When the app starts it
+      draws the same screen (.launch in app.scss) until the session answers. A visitor in an ordinary
+      browser tab never matches display-mode: standalone and sees the page as before.
+    -->
+    <style>
+      @media (display-mode: standalone) {
+        app-root:empty::before {
+          background: #fbfaf5 url('/icons/icon-192.png') center / 96px 96px no-repeat;
+          content: '';
+          display: block;
+          inset: 0;
+          position: fixed;
+        }
+      }
+      @media (display-mode: standalone) and (prefers-color-scheme: dark) {
+        app-root:empty::before {
+          background-color: #0f1513;
+        }
+      }
+    </style>
   </head>
   <body>
     <app-root></app-root>

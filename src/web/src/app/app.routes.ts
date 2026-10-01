@@ -110,6 +110,8 @@ export const routes: Routes = [
   {
     path: 'me',
     canActivate: [authGuard, clientGuard],
+    // Rebuilt on brand v2 in R2.5c, so it follows the person's light or dark choice, which is made here.
+    data: REDESIGNED,
     title: $localize`Me | TB Gym`,
     loadComponent: () =>
       import('./features/account/client-account').then((module) => module.ClientAccount),

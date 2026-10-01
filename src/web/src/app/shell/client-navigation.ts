@@ -30,7 +30,7 @@ export const CLIENT_TABS: readonly ClientTab[] = [
   {
     key: 'training',
     label: $localize`:Bottom tab; about 10 characters at most:Training`,
-    link: '/training/today',
+    link: '/training/program',
     icon: 'training',
     section: 'training',
     feature: 'Training',

@@ -14,6 +14,7 @@ const ALPHA_USER: CurrentUser = {
   displayName: 'Alpha',
   preferredCulture: 'en-LB',
   preferredThemeMode: 'system',
+  preferredWeightUnit: 'Kilogram',
   emailConfirmed: true,
   roles: [],
 };

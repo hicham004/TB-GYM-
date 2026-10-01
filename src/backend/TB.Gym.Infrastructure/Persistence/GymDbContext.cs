@@ -339,10 +339,13 @@ public sealed partial class GymDbContext(
     {
         builder.Entity<ApplicationUser>(entity =>
         {
-            entity.ToTable("Users", "identity");
+            entity.ToTable("Users", "identity", table => table.HasCheckConstraint(
+                "CK_Users_PreferredWeightUnit",
+                "\"PreferredWeightUnit\" IN ('Kilogram', 'Pound')"));
             entity.Property(user => user.DisplayName).HasMaxLength(200);
             entity.Property(user => user.PreferredCulture).HasMaxLength(20).HasDefaultValue("en-LB");
             entity.Property(user => user.PreferredThemeMode).HasMaxLength(6).HasDefaultValue("system");
+            entity.Property(user => user.PreferredWeightUnit).HasMaxLength(8).HasDefaultValue("Kilogram");
             entity.Property(user => user.CreatedAtUtc).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(user => user.UpdatedAtUtc).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });

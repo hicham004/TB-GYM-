@@ -1,0 +1,125 @@
+// Client Me: the groups of rows, the preferences card and Sign out.
+.group {
+  display: grid;
+  gap: var(--space-8);
+}
+.group-title {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  padding-inline: var(--space-4);
+  text-transform: uppercase;
+}
+
+.rows,
+.prefs {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.rows li + li {
+  border-block-start: 1px solid var(--tb-line);
+}
+.row {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: inherit;
+  display: flex;
+  font: inherit;
+  gap: var(--space-12);
+  inline-size: 100%;
+  margin: 0;
+  min-block-size: 3.75rem;
+  padding: var(--space-12) var(--space-16);
+  text-align: start;
+  text-decoration: none;
+}
+a.row,
+button.row {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+a.row:hover,
+button.row:hover {
+  background: var(--tb-surface-2);
+}
+// Inside the row: the card clips what it holds, so an outer ring would be cut off.
+a.row:focus-visible,
+button.row:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--tb-focus);
+  outline-offset: calc(-1 * var(--focus-ring-width, 3px));
+}
+.row.is-current {
+  background: var(--tb-accent-soft);
+}
+.row-icon {
+  background: var(--tb-surface-2);
+  block-size: 2.25rem;
+  border-radius: 12px;
+  color: var(--tb-accent-ink);
+  display: grid;
+  flex: none;
+  inline-size: 2.25rem;
+  place-items: center;
+}
+.row-text {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+}
+.row-text strong {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.row-text small {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+}
+.row-chevron {
+  color: var(--tb-muted);
+}
+.row-chevron:dir(rtl) {
+  transform: scaleX(-1);
+}
+
+.pref {
+  display: grid;
+  gap: var(--space-8);
+  padding: var(--space-16);
+}
+.pref + .pref {
+  border-block-start: 1px solid var(--tb-line);
+}
+.pref-hint {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+}
+.pref-error {
+  color: var(--tb-danger);
+  font-size: 0.875rem;
+  padding-inline: var(--space-16);
+}
+.pref-error:not(:empty) {
+  padding-block-end: var(--space-12);
+}
+
+.sign-out {
+  inline-size: 100%;
+  justify-content: center;
+}
+@media (min-width: 40rem) {
+  .sign-out {
+    inline-size: auto;
+    justify-self: start;
+  }
+}
+
+@media (forced-colors: active) {
+  .rows,
+  .prefs {
+    border-color: CanvasText;
+  }
+}

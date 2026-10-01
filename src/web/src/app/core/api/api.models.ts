@@ -43,7 +43,10 @@ export type CoachingFeature = ContractCoachingFeature;
 export type OfferDurationUnit = ContractOfferDurationUnit;
 export type ManualPaymentMethod = ContractManualPaymentMethod;
 
-export type CurrentUser = CurrentUserResponse & { preferredThemeMode: 'light' | 'dark' | 'system' };
+export type CurrentUser = CurrentUserResponse & {
+  preferredThemeMode: 'light' | 'dark' | 'system';
+  preferredWeightUnit: BodyweightUnit;
+};
 export type TenantMembership = TenantMembershipSummary;
 export type RegisterCoachRequest = ContractRegisterCoachRequest;
 export type RegistrationResponse = CoachRegistrationResponse;

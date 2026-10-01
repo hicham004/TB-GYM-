@@ -4,6 +4,7 @@ import { of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type { MediaAccessView } from '../../core/api/generated';
+import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { ProgressView } from './progress-view';
@@ -104,5 +105,69 @@ describe('ProgressView progress photo thumbnails', () => {
     // load a full size it is showing.
     expect(harness.openPhotoUrl()).toBe('/api/media/asset-1/content');
     expect(harness.showingThumbnail()).toBe(false);
+  });
+});
+
+describe('ProgressView starting units', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  interface UnitHarness {
+    displayUnit: string;
+    entryUnit: string;
+    correctionUnit: string;
+  }
+
+  async function render(
+    clientId: string | null,
+  ): Promise<{ units: UnitHarness; getProgress: ReturnType<typeof vi.fn> }> {
+    const getProgress = vi.fn(() => of(null));
+    await TestBed.configureTestingModule({
+      imports: [ProgressView],
+      providers: [
+        {
+          provide: ApiClient,
+          useValue: {
+            getMyProgress: getProgress,
+            getClientProgress: getProgress,
+            getMyBodyMeasurements: () => of(null),
+            getClientBodyMeasurements: () => of(null),
+            getMyProgressPhotos: () => of(null),
+            getClientProgressPhotos: () => of(null),
+          },
+        },
+        { provide: AuthStore, useValue: { weightUnit: signal('Pound') } },
+        { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProgressView);
+    if (clientId) fixture.componentRef.setInput('clientId', clientId);
+    fixture.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve));
+    return { units: fixture.componentInstance as unknown as UnitHarness, getProgress };
+  }
+
+  it('starts a client’s own page in the unit they saved in Me, for the chart, a new weigh-in and a correction', async () => {
+    const { units, getProgress } = await render(null);
+
+    expect([units.displayUnit, units.entryUnit, units.correctionUnit]).toEqual([
+      'Pound',
+      'Pound',
+      'Pound',
+    ]);
+    expect(getProgress).toHaveBeenCalledWith('Pound');
+  });
+
+  it('starts a coach reading a client’s page in kilograms, whatever the coach saved', async () => {
+    const { units, getProgress } = await render('client-9');
+
+    expect([units.displayUnit, units.entryUnit, units.correctionUnit]).toEqual([
+      'Kilogram',
+      'Kilogram',
+      'Kilogram',
+    ]);
+    expect(getProgress).toHaveBeenCalledWith('client-9', 'Kilogram');
   });
 });

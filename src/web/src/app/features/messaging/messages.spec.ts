@@ -32,6 +32,7 @@ const COACH: CurrentUser = {
   displayName: 'Tarek Bou',
   preferredCulture: 'en-LB',
   preferredThemeMode: 'system',
+  preferredWeightUnit: 'Kilogram',
   emailConfirmed: true,
   roles: [],
 };

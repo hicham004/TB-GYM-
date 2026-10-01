@@ -2,6 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import {
   Component,
   computed,
+  effect,
   ElementRef,
   inject,
   LOCALE_ID,
@@ -66,6 +67,14 @@ export class App implements OnInit {
     return this.tenants.isClient() ? 'client' : 'member';
   });
 
+  /**
+   * True once the session has answered at least once. Waiting for that first answer is the app
+   * starting up (`launching`); a wait later, while signing in, is not a launch. An effect keeps
+   * the latch, because a computed one only sees the states a template happens to read.
+   */
+  private readonly launched = signal(false);
+  protected readonly launching = computed(() => this.shell() === 'pending' && !this.launched());
+
   private readonly redesigned = toSignal(
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
@@ -79,6 +88,12 @@ export class App implements OnInit {
    * brand v2 (REDESIGNED); the shells around it follow the mode.
    */
   protected readonly contentMode = computed(() => (this.redesigned() ? null : 'light'));
+
+  constructor() {
+    effect(() => {
+      if (this.shell() !== 'pending') this.launched.set(true);
+    });
+  }
 
   ngOnInit(): void {
     this.document.documentElement.lang = this.locale;

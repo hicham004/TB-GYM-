@@ -1,98 +1,186 @@
-.me-page {
+// Client Me (M8), in the approved prototype's language like the Training page: bold sans headings,
+// the brand card with its accent glow and dot texture, accent for what is yours. The settings
+// groups, rows and preferences are in the second sheet.
+:host {
+  display: block;
+  color: var(--tb-ink);
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+.me {
   display: grid;
   gap: var(--space-24);
   margin-inline: auto;
-  max-inline-size: var(--content-width-720);
+  max-inline-size: 44rem;
+}
+h1,
+h2,
+p,
+ul {
+  margin: 0;
+}
+ul {
+  list-style: none;
+  padding: 0;
+}
+h1:focus {
+  outline: none;
+}
+.page-head {
+  display: grid;
+  gap: var(--space-4);
+}
+.kicker {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+h1 {
+  font-size: clamp(1.95rem, 7vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 
-.me-header {
+.hero {
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tb-brand) 86%, #ffffff),
+    var(--tb-brand) 55%,
+    color-mix(in srgb, var(--tb-brand) 80%, #000000)
+  );
+  border-radius: 26px;
+  color: var(--tb-on-brand);
+  display: grid;
+  gap: var(--space-16);
+  isolation: isolate;
+  overflow: hidden;
+  padding: clamp(1.25rem, 5vw, 1.75rem);
+  position: relative;
+}
+// The prototype's glow and dot texture: decoration only, under the content.
+.hero::before,
+.hero::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+.hero::before {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--tb-accent) 60%, transparent),
+    transparent 66%
+  );
+  block-size: 21rem;
+  border-radius: 50%;
+  inline-size: 21rem;
+  inset-block-start: -10rem;
+  inset-inline-end: -8rem;
+  opacity: 0.55;
+}
+.hero::after {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--tb-accent) 30%, transparent) 1px,
+    transparent 1.4px
+  );
+  background-size: 14px 14px;
+  inset: 0;
+  mask-image: linear-gradient(205deg, #000000 5%, transparent 55%);
+}
+
+.who {
   align-items: center;
   display: flex;
   gap: var(--space-16);
 }
-
-.me-identity {
-  min-inline-size: 0;
+// The initials, on the accent: the face this app has until a profile photo exists.
+.hero .face {
+  --avatar-size: 3.75rem;
+  background: var(--tb-accent);
+  border-radius: 20px;
+  color: var(--tb-on-accent);
+  font-size: 1.25rem;
 }
-
-h1,
-h2,
-.me-name {
-  margin: 0;
+.who-text {
+  display: grid;
+  gap: 2px;
 }
-
-.me-name {
-  color: var(--color-text-secondary);
+.hero h2 {
+  font-size: clamp(1.4rem, 5.5vw, 1.7rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.email {
+  color: var(--tb-on-brand-soft);
+  font-size: 0.9375rem;
   overflow-wrap: anywhere;
 }
 
-.me-section {
-  display: grid;
-  gap: var(--space-12);
-}
-
-.me-list {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-8);
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.me-list li + li {
-  border-block-start: 1px solid var(--color-border-subtle);
-}
-
-.me-row {
+// The coach, as a pill with a face. A link to the chat when messaging is in the plan.
+.coach {
   align-items: center;
-  background: none;
-  border: 0;
-  box-sizing: border-box;
-  color: var(--color-text-primary);
+  background: rgb(255 255 255 / 10%);
+  border-radius: 18px;
+  color: inherit;
   display: flex;
-  font: inherit;
-  gap: var(--space-8);
-  inline-size: 100%;
-  justify-content: space-between;
-  margin: 0;
-  min-block-size: 56px;
-  padding: var(--space-12) var(--space-16);
-  text-align: start;
+  gap: var(--space-12);
+  min-block-size: 3.5rem;
+  padding-block: var(--space-8);
+  padding-inline: var(--space-8) var(--space-16);
   text-decoration: none;
 }
-
-a.me-row,
-button.me-row {
-  cursor: pointer;
+a.coach {
+  touch-action: manipulation;
 }
-
-a.me-row:hover,
-button.me-row:hover {
-  background-color: var(--color-surface-subtle);
+a.coach:hover {
+  background: rgb(255 255 255 / 16%);
 }
-
-a.me-row:focus-visible,
-button.me-row:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-accent);
-  outline-offset: calc(-1 * var(--focus-ring-width));
+a.coach:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--tb-accent);
+  outline-offset: 2px;
 }
-
-.me-workspace {
-  flex-wrap: wrap;
+.hero .coach-face {
+  background: rgb(255 255 255 / 18%);
+  color: var(--tb-on-brand);
 }
-
-.me-workspace-name {
-  font-weight: var(--font-weight-strong);
+.coach-text {
+  display: grid;
+  flex: 1;
+}
+.coach-label {
+  color: var(--tb-on-brand-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.coach strong {
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
-
-.me-meta {
-  color: var(--color-text-secondary);
-  font-size: var(--text-compact-size);
-  line-height: var(--text-compact-line-height);
+.coach-action {
+  align-items: center;
+  color: var(--tb-accent);
+  display: inline-flex;
+  font-weight: 600;
+  gap: 2px;
+  white-space: nowrap;
+}
+.coach-action:dir(rtl) app-icon {
+  transform: scaleX(-1);
 }
 
-.me-sign-out {
-  justify-self: start;
+@media (forced-colors: active) {
+  .hero,
+  .coach {
+    border: 1px solid CanvasText;
+  }
 }

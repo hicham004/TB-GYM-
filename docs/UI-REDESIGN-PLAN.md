@@ -58,8 +58,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R2.4b | **Nutrition demo data:** assigned meal plan for Atlas plus screenshot review on that workspace; correction for mistaken extra-food entries | §2 on the demo workspace | Done · 2026-09-30 · 9634bc4 |
 | R2.4c | **Check-in** (M6): one question per screen, optional progress photos, review and a sent moment; Today opens the check-in due | §2 | Done · 2026-10-01 · b184eca |
 | R2.5a | **Messages** (M7, the shared chat C6 reuses): inbox with faces and counts, a thread of bubbles by day with a "New messages" line, a pinned composer, live updates with no Refresh | §2 | Done · 2026-10-01 |
-| R2.5b | **Training** (M3): the program overview (week x of y, sessions done and missed) and history with PRs | §2 | To do |
-| R2.5c | **Me** (M8) and the **installable app** (manifest, icons, splash, install prompt) | §2 | To do |
+| R2.5b | **Training** (M3): the program overview (week x of y, sessions done and missed) and history with PRs | §2 | Done · 2026-10-01 |
+| R2.5c | **Me** (M8) and the **installable app** (manifest, icons, splash, install prompt) | §2 | Done · 2026-10-01 |
 | R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | To do |
 | R3.2 | **Coach Today** (C1) | §2 | To do |
 | R3.3 | **Clients** (C2) and the **client profile** overview and progress (C3) | §2 | To do |
@@ -130,7 +130,7 @@ of the implemented R1.3 screens before production rollout.
   A small own-workspace date read would allow relative wording without trusting the phone's clock.
 - **Client dark mode (seen in R2.4c).** Today, Nutrition, Progress and Check-in use brand tokens but
   none is marked `REDESIGNED`, so all stay light in dark mode. Mark them together after one dark
-  screenshot pass.
+  screenshot pass. (R2.5c marked Me, since dark mode is chosen there.)
 - **Scale answers in other languages (from R2.4c).** "8 out of 10" formats the number with plain
   digits, as the coach's comparison view already did. Use locale number formatting with the
   translation work.
@@ -141,8 +141,44 @@ of the implemented R1.3 screens before production rollout.
   `@angular/router` 22.0–22.1 (GHSA-ff3f-86qr-9cv3, a server-rendering denial of service). The app
   renders in the browser today, but `check.ps1` stops at this step and R6.2 adds pre-rendering, so
   bump Angular to 22.2 or later in its own step.
-- **Initial bundle budget.** The initial bundle is 531.6 kB against the 520 kB warning (530.1 kB
-  before R2.4c, which added only three icon glyphs; R2.5a's shell changes added about 1 kB).
+- **Prototype fidelity pass (owner, 2026-10-01).** The owner felt the built screens have the
+  prototype's feel but not its look, and will test the app and list changes per screen. Claude
+  recommended doing that after R2.5c, before the coach side. Gaps found against the prototype:
+  - **Motion.** GSAP runs only in the dev lab (`hero-lab`). The client screens have no motion: no
+    card opening into the player, set tick, PR burst, rest ring or count-ups (§3 signature moments).
+  - **Rest timer.** It works (starts after a ticked set, keeps time while the phone is locked,
+    +15 s, Skip, screen kept awake), but at zero it just disappears; the prototype buzzes and says
+    "Rest is over".
+  - **Workout player.** The kg/lb choice is a browser `<select>` (forbidden by §2), the client tabs
+    show inside the player, and the prototype's set table with a "previous" column and the pill
+    tools (Watch demo, Note, Swap) are not there.
+  - **Type and accent.** Today, Check-in and other pages use small italic serif titles; the
+    prototype uses bold sans headings, lime for done days, ticked sets and the active tab, and a
+    coach pill with a face. R2.5b's Training page follows the prototype, so it can serve as the
+    comparison.
+- **Doing a missed session later (from R2.5b).** The API lets a client start a past session while
+  its block is active, but no screen offers it: the Training page marks it missed. Offering it is an
+  owner decision (TRN-020).
+- **A finished workout from an earlier day (from R2.5b).** History rows show sets, volume, time and
+  records but open nothing; the player opens only today's and unfinished workouts.
+- **Weight unit in the workout player (from R2.5c).** Me's saved unit reaches weigh-ins and
+  Progress but not the player: TRN-016 says a set with no prescribed unit asks rather than assumes,
+  so a client who chose lb on Me is still asked there. Pre-selecting the saved unit in the draft (the
+  client could still change it) would fix that. It changes TRN-016, so it needs an owner decision;
+  Claude recommends yes.
+- **The coach's brand and the installed app (from R2.5c).** The manifest, icon and launch colours
+  are TB Gym's own and static, so a coach's brand (R3.5) does not colour the home-screen icon or the
+  phone's launch screen. Per-coach manifests would need the server to render them; not planned.
+- **Old screens behind Me (from R2.5c).** My profile (the intake form, which the coach's client page
+  reuses), Password and security and Notification settings are still the old screens. Rebuild each
+  with its unsaved-changes guard (§9): the intake form with R3.3, notifications with R5.1 and
+  security with R5.2.
+- **The brand hero (from R2.5c).** Training and Me each carry their own copy of the hero's gradient,
+  glow and dots. Move it into one shared style when a third screen needs it.
+- **Initial bundle budget.** The initial bundle is 535.7 kB against the 520 kB warning (530.1 kB
+  before R2.4c, which added only three icon glyphs; R2.5a's shell changes added about 1 kB, R2.5b
+  0.2 kB, its mapping kept in the lazy Training chunk, and R2.5c 3.9 kB: the install service, four
+  icon glyphs and the saved-unit code).
 
 ---
 
@@ -340,6 +376,18 @@ Tokens are theme-ready from R1, so this costs little later.
   clients, so TB Gym opens from the home screen without browser chrome. People see it as an app,
   not a website. Wrapping it for the App Store and Google Play with Capacitor is a later,
   separate decision.
+- Built in R2.5c: `manifest.webmanifest` (standalone, starts at sign-in, cream launch colours), the
+  "TB." icons (standard, maskable and iPhone) and a branded favicon, all made by
+  `scripts/make-app-icons.mjs`. An installed app draws a launch screen from `index.html` until the
+  script arrives, and the app draws the same one until the session answers, instead of a bar saying
+  "Checking session". `InstallPrompt` is created at start-up, because Chrome announces an installable
+  page once and only to a listener already there. It feeds an install card on Me and a dismissible
+  banner on Today (gone for a month after "Not now"): an Install button where Chrome offers one,
+  Share-menu steps on an iPhone or iPad, nothing inside the installed app.
+- **No service worker, on purpose.** Chromium reports the page installable without one (checked with
+  its own installability errors), and nothing is cached, so a client's health data and a coach's
+  client list never sit in an offline cache. Not built: iPhone startup images (iOS shows its own
+  launch screen until the page paints; not tested without a device), push and offline use.
 
 ---
 
@@ -459,6 +507,12 @@ limited to the coach's assigned clients.
 
 **M3. Training**
 - The program overview (week x of y, sessions done/missed) and history with PRs.
+- Built in R2.5b at `/training/program` (the Training tab; the player stays at `/training/today`):
+  a brand hero with "Week 3 of 8", sessions done and missed, the end date, one segment per week and
+  the one action (start or continue today's workout, else the next session). This week's sessions
+  follow with Done, Missed, Today or In progress; other weeks sit behind disclosures, and a week the
+  client cannot see yet says when it opens. Finished workouts list sets, volume, time and their PRs,
+  four at first. States and records come from the server (TRN-019, TRN-020).
 
 **M4. Nutrition day**
 - A **day strip** instead of a date input.
@@ -504,6 +558,16 @@ limited to the coach's assigned clients.
 
 **M8. Me**
 - Profile, units, notifications, switching workspace and sign-out.
+- Built in R2.5c at `/me`, reached from the avatar on Today (Me is not a tab). A brand card holds the
+  client's initials, name and email, and their coach as a pill with a face that opens the chat (plain
+  text when messaging is not in the plan, left out when the coach cannot be read). Rows lead to My
+  profile, Notifications and Password and security, which are still the old screens. Appearance
+  (Device, Light, Dark) and Body weight (kg, lb) are inline and save as they are chosen, one at a
+  time, on the account (CLI-017), so they follow the client to a new phone or the installed app; a
+  refused save puts the control back and says so. Body weight is the starting unit of weigh-ins and
+  the Progress screens only: stored weights stay kilograms (ADR 0009) and the workout player still
+  asks for its own unit (TRN-016). With more than one coach, "Your coaches" switches between them.
+  Me follows dark mode (marked `REDESIGNED`), and the install card sits above Sign out.
 
 **M9. Share cards (R6)**
 - A branded image of a PR, a finished program or a before/after. **Created only by the client,

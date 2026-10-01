@@ -15,6 +15,12 @@ export const trainingRoutes: Routes = [
     loadComponent: () => import('./exercise-library').then((module) => module.ExerciseLibrary),
   },
   {
+    path: 'program',
+    canActivate: [clientGuard],
+    title: $localize`Training | TB Gym`,
+    loadComponent: () => import('./training-program').then((module) => module.TrainingProgram),
+  },
+  {
     path: 'today',
     canActivate: [clientGuard],
     title: $localize`Today's training | TB Gym`,

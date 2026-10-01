@@ -61,6 +61,12 @@ public static class IdentityEndpoints
             .Produces<CurrentUserResponse>()
             .ProducesValidationProblem()
             .Produces(StatusCodes.Status401Unauthorized);
+        group.MapPut("/me/weight-unit", UpdateWeightUnitAsync)
+            .RequireAuthorization()
+            .WithName("UpdateOwnWeightUnit")
+            .Produces<CurrentUserResponse>()
+            .ProducesValidationProblem()
+            .Produces(StatusCodes.Status401Unauthorized);
         group.MapPost("/confirm-email", ConfirmEmailAsync)
             .AllowAnonymous()
             .RequireRateLimiting(RateLimitPolicies.PublicAuthentication)
@@ -174,6 +180,35 @@ public static class IdentityEndpoints
         var user = await userManager.GetUserAsync(principal);
         if (user is null || user.IsPlatformBlocked) return Results.Unauthorized();
         user.PreferredThemeMode = request.Mode;
+        var result = await userManager.UpdateAsync(user);
+        return result.Succeeded
+            ? Results.Ok(await ToResponseAsync(user, userManager))
+            : IdentityValidationProblem(result);
+    }
+
+    /// <summary>
+    /// The person's own starting unit for weigh-ins and progress charts. It changes no stored value:
+    /// kilograms stay canonical and every observation keeps the unit it was entered in (SYS-007).
+    /// </summary>
+    private static async Task<IResult> UpdateWeightUnitAsync(
+        WeightUnitRequest request,
+        ClaimsPrincipal principal,
+        HttpContext context,
+        IAntiforgery antiforgery,
+        UserManager<ApplicationUser> userManager)
+    {
+        await antiforgery.ValidateRequestAsync(context);
+        if (request.Unit is not ("Kilogram" or "Pound"))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["unit"] = ["Choose kilograms or pounds."],
+            });
+        }
+
+        var user = await userManager.GetUserAsync(principal);
+        if (user is null || user.IsPlatformBlocked) return Results.Unauthorized();
+        user.PreferredWeightUnit = request.Unit;
         var result = await userManager.UpdateAsync(user);
         return result.Succeeded
             ? Results.Ok(await ToResponseAsync(user, userManager))
@@ -351,7 +386,8 @@ public static class IdentityEndpoints
             user.PreferredCulture,
             user.EmailConfirmed,
             roles.ToArray(),
-            user.PreferredThemeMode);
+            user.PreferredThemeMode,
+            user.PreferredWeightUnit);
     }
 
     private static IResult AuthenticationFailed() =>
@@ -402,6 +438,8 @@ public sealed record ChangePasswordRequest(string CurrentPassword, string NewPas
 
 public sealed record ThemeModeRequest(string Mode);
 
+public sealed record WeightUnitRequest(string Unit);
+
 public sealed record EmailActionResponse(string Message, string? DevelopmentActionUrl);
 
 public sealed record CurrentUserResponse(
@@ -411,4 +449,5 @@ public sealed record CurrentUserResponse(
     string PreferredCulture,
     bool EmailConfirmed,
     IReadOnlyList<string> Roles,
-    string PreferredThemeMode);
+    string PreferredThemeMode,
+    string PreferredWeightUnit);

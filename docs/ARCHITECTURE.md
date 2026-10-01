@@ -498,6 +498,25 @@ Both use the current client profile and server-side access rules. The user's lig
 is stored on the Identity account and applied after session load; it is independent of the tenant
 brand and can be changed from the personal Appearance screen.
 
+R2.5b adds two client reads for the Training tab (`/training/program`), with no schema or write
+change. `GET /api/training/me/program` describes one block: the one covering today, else the next,
+else the last finished (at most eight open blocks are read, as for coverage). It sends every week's
+number, start and sharing, but sessions only for weeks the calendar policy shows (TRN-006), each
+with its `ClientSessionStatePolicy` state (TRN-020). `GET /api/training/me/history` pages finished
+workouts ten at a time, newest first. Its records come from the same `RecordSetIds` helper as the
+finish summary, compared with the client's workouts finished before each one started.
+
+R2.5c adds one column and one endpoint: `identity."Users"."PreferredWeightUnit"` (`Kilogram` or
+`Pound`, default `Kilogram`, a database check) and `PUT /api/auth/me/weight-unit`, beside the personal
+light/dark mode and answering with the same account shape (CLI-017). `AuthStore` saves personal
+settings one at a time, because the account's concurrency stamp refuses two at once, and the Progress
+dashboard asks the server for the client's own numbers in that unit (`displayUnit`); no stored value
+changes. The installable app is static files plus one service: `public/manifest.webmanifest`, the
+icons, a launch screen in `index.html`, and `InstallPrompt`, created at start-up to keep Chrome's
+one-time install event. There is no service worker, so nothing is cached offline. nginx's default
+type table has no `.webmanifest`, so `nginx.conf` names the manifest's type itself; the built app
+behind that image and its existing CSP reports no installability errors in Chromium.
+
 R2.4a keeps client-entered extra food in a separate Nutrition log table, linked by tenant and log
 ID. The day read returns it beside planned slots and includes it in consumed totals; the assigned
 meal snapshot and targets remain unchanged. The add command checks the current client and server

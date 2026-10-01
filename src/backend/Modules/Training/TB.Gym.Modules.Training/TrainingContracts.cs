@@ -92,6 +92,10 @@ public interface ITrainingApplicationService
 
     Task<ClientPersonalRecordsResult> GetMyPersonalRecordsAsync(CancellationToken cancellationToken);
 
+    Task<ClientTrainingProgramView> GetMyProgramAsync(CancellationToken cancellationToken);
+
+    Task<ClientWorkoutHistoryPage> GetMyWorkoutHistoryAsync(int skip, CancellationToken cancellationToken);
+
     Task<ClientTrainingUpcomingView> GetUpcomingAsync(int skip, CancellationToken cancellationToken);
 
     Task<CoachWorkoutDetailResult?> GetCoachWorkoutAsync(
@@ -512,6 +516,81 @@ public sealed record ClientPersonalRecordsResult(
     bool IsAllowed,
     string AccessReason,
     IReadOnlyList<ClientPersonalRecordView> Items);
+
+/// <summary>
+/// The client's Training page (R2.5b): the program it describes (the one covering today, else the
+/// next, else the last one finished) and, separately, the start of a later program.
+/// </summary>
+public sealed record ClientTrainingProgramView(
+    bool IsAllowed,
+    string AccessReason,
+    DateOnly LocalDate,
+    ClientProgramView? Program,
+    DateOnly? NextProgramStartDate,
+    string SessionStateRuleKey,
+    int SessionStateRuleVersion);
+
+public enum ClientProgramPhase
+{
+    Upcoming = 1,
+    Current = 2,
+    Finished = 3,
+}
+
+/// <summary>Counts cover only the weeks the client can see.</summary>
+public sealed record ClientProgramView(
+    Guid Id,
+    string Name,
+    DateOnly StartDate,
+    DateOnly EndDateExclusive,
+    ClientProgramPhase Phase,
+    int WeekCount,
+    int? CurrentWeekNumber,
+    int SessionCount,
+    int CompletedCount,
+    int MissedCount,
+    IReadOnlyList<ClientProgramWeekView> Weeks);
+
+/// <summary>
+/// A week the client cannot see yet (TRN-006) carries no sessions: <c>IsShared</c> says whether the
+/// coach has shared it, and a shared week opens on its <c>StartDate</c>.
+/// </summary>
+public sealed record ClientProgramWeekView(
+    int WeekNumber,
+    DateOnly StartDate,
+    bool IsVisible,
+    bool IsShared,
+    IReadOnlyList<ClientProgramSessionView> Sessions);
+
+public sealed record ClientProgramSessionView(
+    Guid SessionId,
+    string Name,
+    DateOnly ScheduledDate,
+    ClientSessionState State,
+    Guid? WorkoutExecutionId,
+    int ExerciseCount,
+    int SetCount);
+
+/// <summary>Finished workouts, newest first, each with the records it set (TRN-019).</summary>
+public sealed record ClientWorkoutHistoryPage(
+    bool IsAllowed,
+    string AccessReason,
+    IReadOnlyList<ClientWorkoutHistoryItemView> Items,
+    int? NextSkip,
+    string PersonalRecordRuleKey,
+    int PersonalRecordRuleVersion);
+
+public sealed record ClientWorkoutHistoryItemView(
+    Guid WorkoutExecutionId,
+    string Name,
+    string ProgramName,
+    DateOnly Date,
+    DateTimeOffset CompletedAtUtc,
+    int DurationSeconds,
+    int CompletedSetCount,
+    int TotalSetCount,
+    IReadOnlyList<WorkoutVolumeView> Volume,
+    IReadOnlyList<WorkoutPersonalRecordView> PersonalRecords);
 
 public sealed record WorkoutVolumeView(TrainingLoadUnit Unit, decimal LoadTimesRepetitions);
 

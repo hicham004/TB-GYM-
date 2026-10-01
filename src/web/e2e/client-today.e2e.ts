@@ -409,7 +409,7 @@ test('keyboard order runs from the skip link through Today to the tabs', async (
     '/checkins/me',
     '/messages',
     '/',
-    '/training/today',
+    '/training/program',
     '/nutrition/today',
     '/progress/dashboard',
     '/messages',
@@ -486,4 +486,39 @@ test('personal mode persists when the account screen reloads', async ({ page }) 
   await expect(page.getByRole('radio', { name: /Dark/ })).toBeChecked();
   await expectNoHorizontalOverflow(page);
   await expectNoAxeViolations(page);
+});
+
+test.describe('on an iPhone', () => {
+  test.use({
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+  });
+
+  test('Today offers the app last, and "Not now" keeps it quiet after a reload', async ({
+    page,
+  }) => {
+    await openToday(page);
+
+    const offer = page.getByRole('region', { name: 'Add TB Gym to your home screen' });
+    await expect(offer).toBeVisible();
+    // After the coach's message: it never outranks the workout.
+    const message = await page.locator('app-today-coach-message').boundingBox();
+    const box = await offer.boundingBox();
+    expect(box?.y ?? 0).toBeGreaterThan((message?.y ?? 0) + (message?.height ?? 0) - 1);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: 'test-results/r25c-today-install-390.png', fullPage: true });
+
+    await offer.getByRole('button', { name: 'Not now' }).click();
+    await expect(offer).toHaveCount(0);
+    await page.reload();
+    await expect(page.locator('#today-training-heading')).toBeVisible();
+    await expect(offer).toHaveCount(0);
+
+    // Me is where it can always be found again.
+    await page.locator('a.today-me').click();
+    await expect(
+      page.getByRole('region', { name: 'Add TB Gym to your home screen' }),
+    ).toBeVisible();
+  });
 });

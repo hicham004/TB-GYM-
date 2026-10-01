@@ -22,6 +22,7 @@ import type {
   MeasurementType,
   RecordedMassUnit,
 } from '../../core/api/generated';
+import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { previewAssetIds, type ProgressDashboard } from './progress-dashboard.models';
@@ -41,6 +42,7 @@ import { ModalSurface } from '../../ui/modal-surface';
 export class ProgressDashboardView {
   readonly clientId = input<string | null>(null);
   private readonly api = inject(ApiClient);
+  private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
   private readonly sheet = inject(UiSheet);
   private readonly tenants = inject(TenantStore);
@@ -221,6 +223,9 @@ export class ProgressDashboardView {
       this.grantedPreviewIds.set(new Set());
       try {
         const clientId = this.clientId();
+        // A client reads their own numbers in the unit they saved in Me. A coach reading a client's
+        // stays in kilograms, and the server converts from the canonical kilograms either way.
+        const unit = this.auth.weightUnit();
         const to = this.dashboard()?.toExclusive ?? null;
         const from =
           to === null
@@ -230,10 +235,10 @@ export class ProgressDashboardView {
           Promise.all([
             clientId
               ? firstValueFrom(this.api.getClientProgressDashboard(clientId, from, to))
-              : firstValueFrom(this.api.getMyProgressDashboard(from, to)),
+              : firstValueFrom(this.api.getMyProgressDashboard(from, to, unit)),
             clientId
               ? firstValueFrom(this.api.getClientProgress(clientId, 'Kilogram', from, to))
-              : firstValueFrom(this.api.getMyProgress('Kilogram', from, to)),
+              : firstValueFrom(this.api.getMyProgress(unit, from, to)),
             clientId
               ? Promise.resolve(null)
               : firstValueFrom(this.api.getMyTrainingPersonalRecords()).catch(() => null),
@@ -256,7 +261,7 @@ export class ProgressDashboardView {
               ? await owner.wait(
                   firstValueFrom(this.api.getClientProgress(clientId, 'Kilogram', start, end)),
                 )
-              : await owner.wait(firstValueFrom(this.api.getMyProgress('Kilogram', start, end)));
+              : await owner.wait(firstValueFrom(this.api.getMyProgress(unit, start, end)));
             progress = {
               ...progress,
               from: start,

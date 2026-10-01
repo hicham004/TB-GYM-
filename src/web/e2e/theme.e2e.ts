@@ -115,7 +115,11 @@ for (const preset of PRESETS) {
             role: 'Client',
           },
         ],
-        extra: { 'GET /api/client-access/me': (route) => json(route, 200, []) },
+        extra: {
+          'GET /api/client-access/me': (route) => json(route, 200, []),
+          'GET /api/client-profile/me/coach': (route) =>
+            json(route, 200, { name: 'Hicham Haddad' }),
+        },
       });
       await page.goto(`/me${query}`);
       await expect(page.locator('app-client-tabs')).toBeVisible();

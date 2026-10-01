@@ -1763,6 +1763,13 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(6)")
                         .HasDefaultValue("system");
 
+                    b.Property<string>("PreferredWeightUnit")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasDefaultValue("Kilogram");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
@@ -1787,7 +1794,10 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
 
-                    b.ToTable("Users", "identity");
+                    b.ToTable("Users", "identity", t =>
+                        {
+                            t.HasCheckConstraint("CK_Users_PreferredWeightUnit", "\"PreferredWeightUnit\" IN ('Kilogram', 'Pound')");
+                        });
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Identity.LegalConsentAcceptance", b =>

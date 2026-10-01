@@ -120,6 +120,29 @@ const GLYPHS = {
       ' 2.883C10.928 2.795 10.464 2.75 10 2.75ZM10 12.25C11.243 12.25 12.25 11.243 12.25 10C12.25' +
       ' 8.757 11.243 7.75 10 7.75C8.757 7.75 7.75 8.757 7.75 10C7.75 11.243 8.757 12.25 10 12.25Z',
   },
+  // The Me page (R2.5c), drawn in code on the same 20px, 1.5px-stroke grid; not in Figma.
+  'chevron-right': { size: 20, path: 'M8 6L12 10L8 14' },
+  // iOS's Share symbol, which "Add to Home Screen" instructions point at.
+  share: {
+    size: 20,
+    path:
+      'M10 12.5V3.5M10 3.5L7 6.5M10 3.5L13 6.5M6.5 8.5H5.5C4.948 8.5 4.5 8.948 4.5 9.5V15.5' +
+      'C4.5 16.052 4.948 16.5 5.5 16.5H14.5C15.052 16.5 15.5 16.052 15.5 15.5V9.5C15.5 8.948' +
+      ' 15.052 8.5 14.5 8.5H13.5',
+  },
+  user: {
+    size: 20,
+    path:
+      'M10 9C11.657 9 13 7.657 13 6C13 4.343 11.657 3 10 3C8.343 3 7 4.343 7 6C7 7.657 8.343 9 10' +
+      ' 9ZM3.5 17C3.9 13.8 6.5 12 10 12C13.5 12 16.1 13.8 16.5 17',
+  },
+  lock: {
+    size: 20,
+    path:
+      'M5.5 9H14.5C15.052 9 15.5 9.448 15.5 10V16C15.5 16.552 15.052 17 14.5 17H5.5C4.948 17 4.5' +
+      ' 16.552 4.5 16V10C4.5 9.448 4.948 9 5.5 9ZM7 9V6.5C7 4.843 8.343 3.5 10 3.5C11.657 3.5 13' +
+      ' 4.843 13 6.5V9',
+  },
 } as const satisfies Record<string, { size: number; path: string }>;
 
 export type IconName = keyof typeof GLYPHS;

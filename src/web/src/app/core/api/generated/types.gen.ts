@@ -720,6 +720,40 @@ export type ClientPersonalRecordView = {
   ruleVersion: number | string;
 };
 
+export type ClientProgramPhase = 'Upcoming' | 'Current' | 'Finished';
+
+export type ClientProgramSessionView = {
+  sessionId: string;
+  name: string;
+  scheduledDate: string;
+  state: ClientSessionState;
+  workoutExecutionId: null | string;
+  exerciseCount: number | string;
+  setCount: number | string;
+};
+
+export type ClientProgramView = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDateExclusive: string;
+  phase: ClientProgramPhase;
+  weekCount: number | string;
+  currentWeekNumber: null | number | string;
+  sessionCount: number | string;
+  completedCount: number | string;
+  missedCount: number | string;
+  weeks: Array<ClientProgramWeekView>;
+};
+
+export type ClientProgramWeekView = {
+  weekNumber: number | string;
+  startDate: string;
+  isVisible: boolean;
+  isShared: boolean;
+  sessions: Array<ClientProgramSessionView>;
+};
+
 export type ClientReleaseView = {
   releasedAtUtc: string;
   reason: string;
@@ -751,6 +785,8 @@ export type ClientSelfProfile = {
   onboardingCompletedAtUtc: null | string;
   version: number | string;
 };
+
+export type ClientSessionState = 'Completed' | 'InProgress' | 'Missed' | 'Today' | 'Upcoming';
 
 export type ClientSetView = {
   prescriptionId: string;
@@ -794,6 +830,16 @@ export type ClientTrainingDayResult = {
   workouts: Array<ClientWorkoutView>;
 };
 
+export type ClientTrainingProgramView = {
+  isAllowed: boolean;
+  accessReason: string;
+  localDate: string;
+  program: null | ClientProgramView;
+  nextProgramStartDate: null | string;
+  sessionStateRuleKey: string;
+  sessionStateRuleVersion: number | string;
+};
+
 export type ClientTrainingUpcomingView = {
   isAllowed: boolean;
   accessReason: string;
@@ -820,6 +866,28 @@ export type ClientTrainingWeekView = {
   localDate: string;
   weekStart: string;
   days: Array<ClientTrainingWeekDayView>;
+};
+
+export type ClientWorkoutHistoryItemView = {
+  workoutExecutionId: string;
+  name: string;
+  programName: string;
+  date: string;
+  completedAtUtc: string;
+  durationSeconds: number | string;
+  completedSetCount: number | string;
+  totalSetCount: number | string;
+  volume: Array<WorkoutVolumeView>;
+  personalRecords: Array<WorkoutPersonalRecordView>;
+};
+
+export type ClientWorkoutHistoryPage = {
+  isAllowed: boolean;
+  accessReason: string;
+  items: Array<ClientWorkoutHistoryItemView>;
+  nextSkip: null | number | string;
+  personalRecordRuleKey: string;
+  personalRecordRuleVersion: number | string;
 };
 
 export type ClientWorkoutView = {
@@ -1139,6 +1207,7 @@ export type CurrentUserResponse = {
   emailConfirmed: boolean;
   roles: Array<string>;
   preferredThemeMode: string;
+  preferredWeightUnit: string;
 };
 
 export type DailyNutritionLogStatus = 'InProgress' | 'Completed';
@@ -2761,6 +2830,10 @@ export type VoidInvoiceResponse = {
   reissued: null | PlatformInvoiceView;
 };
 
+export type WeightUnitRequest = {
+  unit: string;
+};
+
 export type WorkingMaxSelectionRequest = {
   exerciseId: string;
   strengthMaxRecordId: null | string;
@@ -3373,6 +3446,36 @@ export type UpdateOwnThemeModeResponses = {
 
 export type UpdateOwnThemeModeResponse =
   UpdateOwnThemeModeResponses[keyof UpdateOwnThemeModeResponses];
+
+export type UpdateOwnWeightUnitData = {
+  body: WeightUnitRequest;
+  path?: never;
+  query?: never;
+  url: '/api/auth/me/weight-unit';
+};
+
+export type UpdateOwnWeightUnitErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Unauthorized
+   */
+  401: unknown;
+};
+
+export type UpdateOwnWeightUnitError = UpdateOwnWeightUnitErrors[keyof UpdateOwnWeightUnitErrors];
+
+export type UpdateOwnWeightUnitResponses = {
+  /**
+   * OK
+   */
+  200: CurrentUserResponse;
+};
+
+export type UpdateOwnWeightUnitResponse =
+  UpdateOwnWeightUnitResponses[keyof UpdateOwnWeightUnitResponses];
 
 export type ConfirmEmailData = {
   body: ConfirmEmailRequest;
@@ -5534,6 +5637,42 @@ export type GetMyTrainingPersonalRecordsResponses = {
 
 export type GetMyTrainingPersonalRecordsResponse =
   GetMyTrainingPersonalRecordsResponses[keyof GetMyTrainingPersonalRecordsResponses];
+
+export type GetMyTrainingProgramData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/training/me/program';
+};
+
+export type GetMyTrainingProgramResponses = {
+  /**
+   * OK
+   */
+  200: ClientTrainingProgramView;
+};
+
+export type GetMyTrainingProgramResponse =
+  GetMyTrainingProgramResponses[keyof GetMyTrainingProgramResponses];
+
+export type GetMyWorkoutHistoryData = {
+  body?: never;
+  path?: never;
+  query?: {
+    skip?: number | string;
+  };
+  url: '/api/training/me/history';
+};
+
+export type GetMyWorkoutHistoryResponses = {
+  /**
+   * OK
+   */
+  200: ClientWorkoutHistoryPage;
+};
+
+export type GetMyWorkoutHistoryResponse =
+  GetMyWorkoutHistoryResponses[keyof GetMyWorkoutHistoryResponses];
 
 export type StartMyWorkoutData = {
   body?: never;
