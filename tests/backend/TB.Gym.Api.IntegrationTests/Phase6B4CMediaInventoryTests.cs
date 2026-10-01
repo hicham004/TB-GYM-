@@ -237,10 +237,23 @@ public sealed partial class Phase3TrainingWorkflowTests
             "Concurrent Workspace");
         var orphan = Phase6B4CSeedUnownedObject(workspaceId);
 
-        var passes = await Task.WhenAll(
-            Phase6B4CReconcileAsync(),
-            Phase6B4CReconcileAsync(),
-            Phase6B4CReconcileAsync());
+        // All three are held at the run insert, after each has found no running run. Without the
+        // barrier a fast pass can finish before a slow one claims, and the slow one rightly starts
+        // a second run, so the test would only race when connections happened to be slow.
+        RequiredInsertBarrier.Arm("media.\"InventoryRuns\"", 3);
+        MediaInventoryReconciliationOutcome[] passes;
+        try
+        {
+            passes = await Task.WhenAll(
+                Phase6B4CReconcileAsync(),
+                Phase6B4CReconcileAsync(),
+                Phase6B4CReconcileAsync());
+            Assert.AreEqual(3, RequiredInsertBarrier.Arrived);
+        }
+        finally
+        {
+            RequiredInsertBarrier.Disarm();
+        }
 
         // One replica claims the run; the others find nothing claimable and do nothing at all.
         var runs = await Phase6B4CRunsAsync();
