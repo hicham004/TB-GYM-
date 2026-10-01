@@ -288,6 +288,46 @@ describe('TodayNutrition', () => {
     expect(host.textContent).toContain('This plan is guidance, not medical advice.');
   });
 
+  it('says "1 serving" for one and "servings" for any other amount', async () => {
+    const { host } = await render(
+      {},
+      day({
+        slots: [
+          slot({ id: 'one' }),
+          slot({
+            id: 'two',
+            order: 1,
+            choices: [{ ...slot().choices[0], id: 'choice-3', servings: 1.5 }],
+          }),
+        ],
+      }),
+    );
+
+    const lines = Array.from(host.querySelectorAll('.meal-body span')).map((item) =>
+      item.textContent?.replace(/\s+/g, ' ').trim(),
+    );
+    expect(lines[0]).toBe('1 serving · 520 kcal planned');
+    expect(lines[1]).toBe('1.5 servings · 520 kcal planned');
+  });
+
+  it('lays out three meals, or five or more, in rows of three and two or four in twos', async () => {
+    const meals = (count: number) =>
+      Array.from({ length: count }, (_, index) => slot({ id: `slot-${index}`, order: index }));
+    const layout = async (count: number) => {
+      const { host } = await render({}, day({ slots: meals(count) }));
+      const three = query(host, '.meal-list').classList.contains('three-up');
+      TestBed.resetTestingModule();
+      return three;
+    };
+
+    expect(await layout(1)).toBe(false);
+    expect(await layout(2)).toBe(false);
+    expect(await layout(3)).toBe(true);
+    expect(await layout(4)).toBe(false);
+    expect(await layout(5)).toBe(true);
+    expect(await layout(6)).toBe(true);
+  });
+
   /** One meal failing must not discard the other meals the client has already edited. */
   it('reports a rejected meal against that meal and keeps the rest', async () => {
     const twoSlots = day({

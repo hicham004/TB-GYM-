@@ -295,8 +295,9 @@
         @for (recipe of recipes(); track recipe.versionId) {
           <article>
             <strong>{{ recipe.name }} v{{ recipe.revision }}</strong
-            ><span
-              >{{ recipe.calories | number: '1.0-0' }} kcal · {{ recipe.servings }} servings</span
+            ><span i18n
+              >{{ recipe.calories | number: '1.0-0' }} kcal ·
+              {recipe.servings, plural, =1 {1 serving} other {{{ recipe.servings }} servings}}</span
             ><span>{{ recipe.status }}</span>
             @if (recipe.status === 'Draft') {
               <button

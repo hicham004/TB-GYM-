@@ -341,6 +341,22 @@ describe('ProgressDashboardView states', () => {
     expect(host.querySelectorAll('.photo-tile img')).toHaveLength(0);
   });
 
+  it('keeps the range switch and Log weight in one row, out of the title', async () => {
+    const host = await render(of(mapProgressDashboard(contract())));
+
+    const toolbar = host.querySelector('.toolbar')!;
+    expect(toolbar.querySelector('.range')).not.toBeNull();
+    expect(toolbar.querySelector('.log-button')?.textContent?.trim()).toBe('+ Log weight');
+    expect(host.querySelector('.page-head button')).toBeNull();
+  });
+
+  it('still offers Log weight when the dashboard could not be loaded', async () => {
+    const host = await render(throwError(() => new Error('offline')));
+
+    expect(host.querySelector('.toolbar .log-button')).not.toBeNull();
+    expect(host.querySelector('.toolbar .range')).toBeNull();
+  });
+
   it('surfaces a load failure instead of rendering a blank dashboard', async () => {
     const host = await render(throwError(() => new Error('offline')));
 

@@ -1,0 +1,54 @@
+<ul class="conversation-list">
+  @for (conversation of conversations(); track conversation.id) {
+    @let last = conversation.lastMessage;
+    <li
+      [class.selected]="conversation.id === selectedId()"
+      [class.waiting]="conversation.unreadCount > 0"
+      [class.unavailable]="!conversation.isAvailable"
+    >
+      <button
+        type="button"
+        class="conversation"
+        [attr.data-conversation-id]="conversation.id"
+        [attr.aria-current]="conversation.id === selectedId() ? 'true' : null"
+        [attr.aria-label]="label(conversation)"
+        (click)="choose.emit(conversation)"
+      >
+        <app-avatar
+          [initials]="initialsOf(conversation.counterpart.displayName)"
+          presentation="message-sender"
+        />
+        <span class="who" dir="auto">{{ conversation.counterpart.displayName }}</span>
+        <span class="when">
+          <time [attr.datetime]="conversation.lastActivityAtUtc">{{ time(conversation) }}</time>
+        </span>
+        <span class="preview" dir="auto">
+          @if (!conversation.isAvailable) {
+            <span class="state" i18n>Closed</span>
+          } @else if (last === null) {
+            <span class="state" i18n>No messages yet</span>
+          } @else if (last.isDeleted) {
+            <span class="state" i18n>Message removed</span>
+          } @else {
+            @if (last.isFromCaller) {
+              <span class="you" i18n>You:</span>
+            }
+            {{ last.body }}
+          }
+        </span>
+        @if (conversation.unreadCount > 0) {
+          <!-- The number is the visible cue; the row's name says it in words. -->
+          <span class="count" aria-hidden="true">{{ conversation.unreadCount }}</span>
+        } @else if (conversation.isReadOnly) {
+          <span class="tag">{{ readOnlyLabel(conversation) }}</span>
+        }
+      </button>
+    </li>
+  }
+</ul>
+
+@if (hasMore()) {
+  <button type="button" class="more" [disabled]="loadingMore()" (click)="loadMore.emit()" i18n>
+    Show more conversations
+  </button>
+}

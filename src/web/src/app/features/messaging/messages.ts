@@ -1,7 +1,19 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { DatePipe } from '@angular/common';
-import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  Injector,
+  LOCALE_ID,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
@@ -10,7 +22,6 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import {
   clientMessagingDenialMessage,
-  messageRemovalLabel,
   ownMessagingDenialMessage,
 } from '../../core/i18n/display-labels';
 import { MessageUnreadStore } from '../../core/messaging/message-unread.store';
@@ -22,6 +33,16 @@ import { CommandKeys } from './command-keys';
 import { ConversationLaunch } from './conversation-launch';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { initialsOf } from '../../shell/initials';
+import { Avatar } from '../../ui/avatar';
+import { Button, ButtonLink } from '../../ui/button';
+import { EmptyState } from '../../ui/empty-state';
+import { Icon } from '../../ui/icon';
+import { Skeleton } from '../../ui/skeleton';
+import { ChatBubble } from './chat-bubble';
+import { ChatComposer } from './chat-composer';
+import { chatTimeline, firstUnreadSequence } from './chat-timeline';
+import { ConversationList } from './conversation-list';
 import {
   isNewerProjection,
   mergeNewer,
@@ -39,6 +60,9 @@ const messagePageSize = 50;
 export const maximumMessageLength = 2000;
 export const maximumReasonLength = 500;
 
+/** How close to the newest message still counts as reading it, so a new one scrolls into view. */
+const followLatestPx = 160;
+
 /**
  * The signed-in member's own conversations, for one workspace.
  *
@@ -53,12 +77,27 @@ export const maximumReasonLength = 500;
  * server stores plain text only, so a message that looks like markup is shown as the characters it
  * is.
  *
- * There is no polling and no realtime channel in this slice: the thread is read when it is opened
- * and when the user asks for it again.
+ * It reads as a chat (M7, and the coach's C6): an inbox, and a thread of bubbles grouped by day with
+ * a composer at the bottom. A client with one coach lands straight in that thread. Live updates
+ * arrive through `MessagingRealtimeService`, so nothing polls and there is no Refresh button; only
+ * an offline channel offers to check by hand.
  */
 @Component({
   selector: 'app-messages',
-  imports: [DatePipe, FormsModule],
+  host: { '(keydown.escape)': 'closeOptions()' },
+  imports: [
+    Avatar,
+    Button,
+    ButtonLink,
+    ChatBubble,
+    ChatComposer,
+    ConversationList,
+    EmptyState,
+    FormsModule,
+    Icon,
+    RouterLink,
+    Skeleton,
+  ],
   templateUrl: './messages.html',
   styleUrl: './messages.scss',
 })
@@ -71,6 +110,10 @@ export class Messages {
   private readonly unreadStore = inject(MessageUnreadStore);
   private readonly realtime = inject(MessagingRealtimeService);
   private readonly conversationLaunch = inject(ConversationLaunch);
+  private readonly locale = inject(LOCALE_ID);
+  private readonly injector = inject(Injector);
+  private readonly document = inject(DOCUMENT);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   /** Bumped whenever the recipient or the workspace changes. */
   private contextGeneration = 0;
@@ -105,9 +148,21 @@ export class Messages {
   protected readonly error = signal<string | null>(null);
   protected readonly deniedReason = signal<FeatureAccessReason | null>(null);
 
+  /** The message whose options (edit, remove) are open. One at a time. */
+  protected readonly optionsFor = signal<string | null>(null);
+  /**
+   * The first message that was unread when this thread was opened. Fixed for the visit, so the "New
+   * messages" divider stays where it was after the read cursor moves past it.
+   */
+  private readonly unreadFrom = signal<number | null>(null);
+  /** The reader's "now", for day labels; renewed on every read rather than ticking. */
+  protected readonly now = signal(new Date());
+
   protected readonly maximumLength = maximumMessageLength;
   protected readonly maximumReason = maximumReasonLength;
+  protected readonly skeletonRows = [0, 1, 2];
   protected readonly unread = this.unreadStore.unread;
+  protected readonly initialsOf = initialsOf;
 
   /**
    * The channel's state, for the accessible status line.
@@ -133,9 +188,13 @@ export class Messages {
    */
   protected readonly commandKeys = new CommandKeys();
 
-  private readonly composerSummary = viewChild<ElementRef<HTMLElement>>('composerSummary');
+  private readonly composer = viewChild(ChatComposer);
   private readonly editSummary = viewChild<ElementRef<HTMLElement>>('editSummary');
   private readonly moderationSummary = viewChild<ElementRef<HTMLElement>>('moderationSummary');
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly threadHeading = viewChild<ElementRef<HTMLElement>>('threadHeading');
+  private readonly feed = viewChild<ElementRef<HTMLElement>>('feed');
+  private readonly inbox = viewChild<ElementRef<HTMLElement>>('inbox');
 
   protected readonly selected = computed(() =>
     this.conversations().find((conversation) => conversation.id === this.selectedId()),
@@ -143,11 +202,47 @@ export class Messages {
 
   protected readonly isCoachSide = computed(() => this.selected()?.callerRole === 'Coach');
 
+  /** Presentation only: the words and the room the shell leaves. The API decides everything else. */
+  protected readonly forClient = computed(
+    () => this.tenants.selectedMembership()?.role === 'Client',
+  );
+
+  /**
+   * A client with one coach has one conversation, so there is no inbox to choose from: the screen
+   * is that thread. A second (a former coach's, read-only) brings the inbox back.
+   */
+  protected readonly singleThread = computed(() => {
+    const conversations = this.conversations();
+    return (
+      conversations.length === 1 &&
+      !this.conversationsHasMore() &&
+      conversations[0].callerRole === 'Client'
+    );
+  });
+
+  protected readonly timeline = computed(() =>
+    chatTimeline(this.messages(), this.unreadFrom(), this.now(), this.locale),
+  );
+
+  /** A connected channel says nothing; only a problem earns a line on screen. */
+  protected readonly liveTrouble = computed(() => {
+    const state = this.realtimeState();
+    return state === 'reconnecting' || state === 'offline';
+  });
+
+  protected readonly emptyHeading = computed(() =>
+    this.forClient() ? $localize`No messages yet` : $localize`No conversations yet`,
+  );
+
+  protected readonly emptyDescription = computed(() =>
+    this.forClient()
+      ? $localize`Your coach starts the conversation. When they write, you can reply here.`
+      : $localize`Open a client and choose Message to start a conversation.`,
+  );
+
   protected readonly listIsEmpty = computed(
     () => !this.listLoading() && this.error() === null && this.conversations().length === 0,
   );
-
-  protected readonly remaining = computed(() => this.maximumLength - this.draft().trim().length);
 
   /** Derived reasons the composer works out for itself; never the channel a server error uses. */
   protected readonly composerIssues = computed(() => bodyIssues(this.draft()));
@@ -173,6 +268,8 @@ export class Messages {
 
   constructor() {
     this.scope.onReset(() => this.resetTenantState());
+    // The page heading takes focus on arrival, so a screen reader starts at "Messages".
+    afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
     effect(() => {
       this.scope.epoch();
       const key = this.contextKey();
@@ -236,9 +333,17 @@ export class Messages {
       return false;
     }
 
+    const arrived = current === undefined && incoming.sequence > this.latestSequence();
+    const following = arrived && this.isNearLatest();
     this.messages.update((loaded) => mergeNewer(loaded, [incoming]));
     this.latestSequence.set(Math.max(this.latestSequence(), incoming.sequence));
     this.applyToPreview(incoming);
+    if (following) {
+      // Someone reading the newest messages keeps seeing the newest; someone scrolled back through
+      // history is left where they are.
+      this.scrollToLatest();
+    }
+
     if (this.editingId() === incoming.id && incoming.isDeleted) {
       // The message being edited was removed underneath. Keeping the form open would offer to save
       // an edit the server has already made impossible.
@@ -264,10 +369,6 @@ export class Messages {
       : ownMessagingDenialMessage(reason);
   }
 
-  protected removalLabel(message: Message): string {
-    return messageRemovalLabel(message.deletionKind);
-  }
-
   /** Dynamic action labels, built from localizable templates rather than concatenated prose. */
   protected editLabel(message: Message): string {
     return $localize`Edit your message ${message.sequence}:seq:`;
@@ -281,10 +382,65 @@ export class Messages {
     return $localize`Remove message ${message.sequence}:seq: as coach`;
   }
 
-  protected conversationLabel(conversation: Conversation): string {
-    return conversation.unreadCount > 0
-      ? $localize`${conversation.counterpart.displayName}:name:, ${conversation.unreadCount}:count: unread messages`
-      : $localize`${conversation.counterpart.displayName}:name:, no unread messages`;
+  protected optionsLabel(message: Message): string {
+    return message.isFromCaller
+      ? $localize`Options for your message ${message.sequence}:seq:`
+      : $localize`Options for message ${message.sequence}:seq:`;
+  }
+
+  /** Who the other person is to the reader, under their name. */
+  protected counterpartRole(conversation: Conversation): string {
+    if (conversation.callerRole !== 'Client') {
+      return $localize`Client`;
+    }
+
+    return conversation.isReadOnly ? $localize`Your former coach` : $localize`Your coach`;
+  }
+
+  protected placeholder(conversation: Conversation): string {
+    return $localize`Message ${conversation.counterpart.displayName}:name:`;
+  }
+
+  /** Whether a message has anything to offer under its options button. */
+  protected hasActions(message: Message): boolean {
+    return (
+      !message.isDeleted &&
+      this.editingId() !== message.id &&
+      this.selected()?.isReadOnly !== true &&
+      (message.canEdit || message.canDelete || message.canModerate)
+    );
+  }
+
+  protected toggleOptions(message: Message): void {
+    this.optionsFor.set(this.optionsFor() === message.id ? null : message.id);
+  }
+
+  /** Escape closes open options and hands focus back to the button that opened them. */
+  protected closeOptions(): void {
+    const open = this.optionsFor();
+    if (open === null) {
+      return;
+    }
+
+    this.optionsFor.set(null);
+    afterNextRender(
+      () => this.host.querySelector<HTMLElement>(`[aria-controls="options-${open}"]`)?.focus(),
+      { injector: this.injector },
+    );
+  }
+
+  /** Back from a thread to the inbox, on a screen too narrow to show both. */
+  protected closeThread(): void {
+    const leaving = this.selectedId();
+    ++this.threadGeneration;
+    this.resetThread();
+    afterNextRender(
+      () =>
+        this.host
+          .querySelector<HTMLElement>(`.conversation[data-conversation-id="${leaving}"]`)
+          ?.focus(),
+      { injector: this.injector },
+    );
   }
 
   protected async refresh(): Promise<void> {
@@ -369,6 +525,7 @@ export class Messages {
       const thread = ++this.threadGeneration;
       this.resetThread();
       this.selectedId.set(conversation.id);
+      this.focusThreadWhenInboxHidden();
       if (!conversation.isAvailable) {
         // The list already carries the decision, so a refused conversation explains itself without a
         // request that would only be refused again.
@@ -442,7 +599,7 @@ export class Messages {
       // attempt gets as far as the server. A refused send reaches no API and says so out loud.
       this.composerAttempt.attempt();
       if (this.composerIssues().length > 0) {
-        this.composerSummary()?.nativeElement.focus();
+        this.composer()?.focusSummary();
         return;
       }
 
@@ -473,6 +630,7 @@ export class Messages {
         this.commandKeys.release('send', conversationId);
         this.draft.set('');
         this.composerAttempt.reset();
+        this.scrollToLatest();
       } catch (error) {
         if (!owner.current) return;
         if (this.owns(generation, thread)) {
@@ -489,6 +647,7 @@ export class Messages {
   }
 
   protected startEdit(message: Message): void {
+    this.optionsFor.set(null);
     this.cancelModeration();
     this.editAttempt.reset();
     this.editingId.set(message.id);
@@ -604,6 +763,7 @@ export class Messages {
         this.messages.update((loaded) => mergeNewer(loaded, [removed]));
         this.applyToPreview(removed);
         this.commandKeys.release('delete', message.id);
+        this.optionsFor.set(null);
         if (this.editingId() === message.id) {
           this.cancelEdit();
         }
@@ -623,6 +783,7 @@ export class Messages {
   }
 
   protected startModeration(message: Message): void {
+    this.optionsFor.set(null);
     this.cancelEdit();
     this.moderationAttempt.reset();
     this.moderatingId.set(message.id);
@@ -730,6 +891,7 @@ export class Messages {
           return;
         }
 
+        this.now.set(new Date());
         this.conversations.set(page.items);
         this.applyCursor(page);
         const requested = this.conversationLaunch.take(this.tenants.selectedTenantId());
@@ -739,6 +901,10 @@ export class Messages {
             this.conversations.update((items) => [conversation, ...items]);
           }
           await owner.wait(this.select(conversation));
+        } else if (this.singleThread() && this.selectedId() === null) {
+          // Opening a client's only conversation is what they came for. Reading it is still their
+          // own act: the cursor moves only once the messages are on screen.
+          await owner.wait(this.select(page.items[0]));
         }
       } catch (error) {
         if (!owner.current) return;
@@ -914,6 +1080,9 @@ export class Messages {
   }
 
   private applyPage(page: MessagePage): void {
+    this.now.set(new Date());
+    this.unreadFrom.set(firstUnreadSequence(page.items));
+    this.scrollToLatest();
     this.messages.set(page.items);
     this.hasOlder.set(page.hasOlder);
     this.oldestSequence.set(page.oldestSequence);
@@ -980,6 +1149,8 @@ export class Messages {
     void this.realtime.closeConversation();
     this.selectedId.set(null);
     this.messages.set([]);
+    this.optionsFor.set(null);
+    this.unreadFrom.set(null);
     this.hasOlder.set(false);
     this.oldestSequence.set(null);
     this.latestSequence.set(0);
@@ -1011,6 +1182,8 @@ export class Messages {
     this.nextIdCursor.set(null);
     this.selectedId.set(null);
     this.messages.set([]);
+    this.optionsFor.set(null);
+    this.unreadFrom.set(null);
     this.hasOlder.set(false);
     this.oldestSequence.set(null);
     this.latestSequence.set(0);
@@ -1032,6 +1205,55 @@ export class Messages {
     this.moderationAttempt.reset();
     this.commandKeys.clear();
     void this.realtime.closeConversation();
+  }
+
+  /**
+   * Brings the newest message into view once it has rendered. A wide screen scrolls the thread
+   * panel; a phone scrolls the page, where the newest message sits just above the composer.
+   */
+  private scrollToLatest(): void {
+    afterNextRender(
+      {
+        write: () => {
+          const feed = this.feed()?.nativeElement;
+          if (feed === undefined) return;
+          feed.scrollTop = feed.scrollHeight;
+          const root = this.document.scrollingElement;
+          if (root !== null && feed.scrollHeight <= feed.clientHeight + 1) {
+            root.scrollTop = root.scrollHeight;
+          }
+        },
+      },
+      { injector: this.injector },
+    );
+  }
+
+  /** Whether the reader is at (or near) the newest message, in whichever of the two scrolls. */
+  private isNearLatest(): boolean {
+    const feed = this.feed()?.nativeElement;
+    const root = this.document.scrollingElement;
+    const scroller =
+      feed !== undefined && feed.scrollHeight > feed.clientHeight + 1 ? feed : (root ?? feed);
+    if (scroller === undefined) return true;
+    return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < followLatestPx;
+  }
+
+  /**
+   * On a phone the inbox disappears when a thread opens, taking the focused row with it, so focus
+   * moves to the thread's heading. On a wide screen the inbox stays and focus stays in it. A
+   * client's only thread has no inbox at all and opens by itself, so focus stays on the page
+   * heading it was given on arrival.
+   */
+  private focusThreadWhenInboxHidden(): void {
+    afterNextRender(
+      () => {
+        const inbox = this.inbox()?.nativeElement;
+        if (inbox !== undefined && inbox.getClientRects().length === 0) {
+          this.threadHeading()?.nativeElement.focus({ preventScroll: true });
+        }
+      },
+      { injector: this.injector },
+    );
   }
 }
 

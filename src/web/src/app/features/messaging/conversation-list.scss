@@ -1,0 +1,138 @@
+// The chat inbox (M7/C6): face, name, time, last line and a count, one row per conversation.
+:host {
+  display: block;
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+.conversation-list {
+  display: grid;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.conversation {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-inline-start: 3px solid transparent;
+  border-radius: var(--tb-radius-card-small);
+  color: inherit;
+  column-gap: var(--space-12);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  grid-template-areas:
+    'avatar who when'
+    'avatar preview count';
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  inline-size: 100%;
+  min-block-size: 4.5rem;
+  padding: var(--space-12);
+  row-gap: 2px;
+  text-align: start;
+  transition: background-color var(--tb-duration-fast) var(--tb-ease);
+}
+.conversation:hover {
+  background: var(--tb-surface-2);
+}
+.conversation:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+// Selection is the bar, the fill and aria-current together, never the colour alone.
+li.selected .conversation {
+  background: var(--tb-accent-soft);
+  border-inline-start-color: var(--tb-accent-ink);
+}
+app-avatar {
+  --avatar-size: 44px;
+  background: var(--tb-surface-2);
+  color: var(--tb-ink);
+  grid-area: avatar;
+}
+li.selected app-avatar {
+  background: var(--tb-surface);
+}
+.who,
+.preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.who {
+  font-weight: 600;
+  grid-area: who;
+}
+.when {
+  color: var(--tb-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  grid-area: when;
+}
+.preview {
+  color: var(--tb-muted);
+  font-size: 0.9rem;
+  grid-area: preview;
+}
+// Waiting rows: the count, plus heavier text, so it never rests on colour alone.
+li.waiting .preview {
+  color: var(--tb-ink);
+  font-weight: 600;
+}
+li.waiting .when {
+  color: var(--tb-accent-ink);
+  font-weight: 700;
+}
+li.unavailable .who {
+  color: var(--tb-muted);
+}
+.state {
+  font-style: italic;
+}
+.you {
+  font-weight: 400;
+}
+.count,
+.tag {
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  grid-area: count;
+  justify-self: end;
+}
+.count {
+  background: var(--tb-accent);
+  color: var(--tb-on-accent);
+  font-variant-numeric: tabular-nums;
+  min-inline-size: 1.5rem;
+  padding: 0.1rem 0.45rem;
+  text-align: center;
+}
+.tag {
+  border: 1px solid var(--tb-line-strong);
+  color: var(--tb-muted);
+  font-weight: 600;
+  padding: 0.05rem 0.5rem;
+}
+.more {
+  background: none;
+  border: 0;
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-accent-ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  margin-block-start: var(--space-8);
+  min-block-size: 2.75rem;
+  padding-inline: var(--space-12);
+}
+.more:focus-visible {
+  outline: 2px solid var(--tb-focus);
+}
+.more:disabled {
+  color: var(--tb-muted);
+  cursor: progress;
+}

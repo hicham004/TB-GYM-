@@ -141,7 +141,7 @@
       @if (plan.slots.length === 0) {
         <p class="state-card" i18n>Your coach hasn't added meals to this day yet.</p>
       }
-      <div class="meal-list">
+      <div class="meal-list" [class.three-up]="plan.slots.length === 3 || plan.slots.length >= 5">
         @for (slot of plan.slots; track slot.id) {
           @if (draft(slot.id); as entry) {
             <article class="meal-card" [class.saved]="!!slot.selectedChoiceId">

@@ -80,15 +80,18 @@ const CIRCUMFERENCE = 2 * Math.PI * 26;
       font-weight: 600;
     }
     .caption {
-      color: var(--tb-muted);
-      font-size: var(--text-metadata-size);
-      line-height: 1.25;
+      color: var(--tb-ink);
+      font-size: 0.875rem;
+      font-weight: 600;
+      line-height: 1.3;
       overflow-wrap: anywhere;
     }
     small {
+      color: var(--tb-muted);
       display: block;
-      font-size: inherit;
+      font-size: 0.8125rem;
       font-variant-numeric: tabular-nums;
+      font-weight: 400;
     }
     @media (forced-colors: active) {
       .track {

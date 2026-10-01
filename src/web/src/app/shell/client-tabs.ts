@@ -1,5 +1,14 @@
-import { formatNumber } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, LOCALE_ID } from '@angular/core';
+import { DOCUMENT, formatNumber } from '@angular/common';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  ElementRef,
+  inject,
+  LOCALE_ID,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, map } from 'rxjs';
@@ -46,7 +55,31 @@ export class ClientTabs {
     countDisplay(this.unread(), (value) => formatNumber(value, this.locale, '1.0-0')),
   );
 
+  constructor() {
+    publishBlockSize(inject(ElementRef).nativeElement, inject(DOCUMENT), inject(DestroyRef));
+  }
+
   protected state(tab: ClientTab): 'page' | 'section' | null {
     return clientTabState(this.url(), tab);
   }
+}
+
+/** The custom property a page reads to keep a pinned element (the chat composer) above the tabs. */
+export const CLIENT_TABS_BLOCK_SIZE = '--tb-client-tabs-block-size';
+
+/**
+ * Publishes the bar's height on the document, and keeps it current: enlarged or translated labels
+ * wrap the tabs onto a second row. Removed again when the bar goes, so a coach shell reads zero.
+ */
+function publishBlockSize(host: HTMLElement, document: Document, destroyRef: DestroyRef): void {
+  const root = document.documentElement;
+  afterNextRender(() => {
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() =>
+      root.style.setProperty(CLIENT_TABS_BLOCK_SIZE, `${host.getBoundingClientRect().height}px`),
+    );
+    observer.observe(host);
+    destroyRef.onDestroy(() => observer.disconnect());
+  });
+  destroyRef.onDestroy(() => root.style.removeProperty(CLIENT_TABS_BLOCK_SIZE));
 }

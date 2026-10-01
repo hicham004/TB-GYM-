@@ -12,7 +12,6 @@
   padding: clamp(1rem, 3vw, 2.25rem);
   margin-inline: auto;
 }
-.page-head,
 .section-top {
   display: flex;
   align-items: flex-start;
@@ -20,8 +19,7 @@
   gap: 1rem;
 }
 .page-head {
-  margin-block: 1rem 1.7rem;
-  align-items: end;
+  margin-block: 1rem 1.2rem;
 }
 .page-head h1 {
   font-family: 'Instrument Serif', Georgia, serif;
@@ -30,9 +28,18 @@
   line-height: 1;
   margin: 0.25rem 0;
 }
-.page-head p:last-child {
+.page-head > p:last-child {
   margin: 0.35rem 0 0;
   color: var(--tb-muted, #4f6057);
+}
+// The range switch at the start, the one action at the end; they wrap rather than shrink.
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-block-end: 1rem;
 }
 .eyebrow {
   color: var(--tb-muted, #4f6057);
@@ -80,6 +87,11 @@ summary:focus-visible {
   padding: 0.75rem 1.1rem;
   white-space: nowrap;
 }
+// Never shrinks below its label, and stays at the end of the row even when the range is absent.
+.log-button {
+  flex: none;
+  margin-inline-start: auto;
+}
 .range {
   display: inline-flex;
   flex-wrap: wrap;
@@ -88,7 +100,6 @@ summary:focus-visible {
   padding: 0.25rem;
   border-radius: 0.85rem;
   background: var(--tb-surface-2, #f5f3ea);
-  margin-block-end: 1rem;
 }
 .range button {
   min-inline-size: 3.8rem;
@@ -328,11 +339,15 @@ app-trend-chart {
   .two-up {
     grid-template-columns: 1fr;
   }
-  .page-head {
-    align-items: flex-start;
+  // The range switch and the action share one row on a phone (296px of content on a 360px screen);
+  // a larger text size wraps them rather than clipping the label.
+  .range button {
+    min-inline-size: 2.75rem;
+    padding-inline: 0.55rem;
   }
   .log-button {
-    font-size: 0.84rem;
+    font-size: 0.9rem;
+    padding-inline: 0.9rem;
   }
   .date-span {
     display: none;

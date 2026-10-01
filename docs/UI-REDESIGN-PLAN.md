@@ -56,8 +56,10 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R2.3 | **Progress** (M5) and the chart components | §2 | Done · 2026-09-30 · 3124581 |
 | R2.4a | **Nutrition day** (M4): day strip, macro rings, meal cards, planned and alternative logging, and client-entered extra food | Web/API and PostgreSQL tests, axe, reflow, 390/1440 screenshots | Done · 2026-09-30 · 181df23 |
 | R2.4b | **Nutrition demo data:** assigned meal plan for Atlas plus screenshot review on that workspace; correction for mistaken extra-food entries | §2 on the demo workspace | Done · 2026-09-30 · 9634bc4 |
-| R2.4c | **Check-in** (M6): one question per screen, optional progress photos, review and a sent moment; Today opens the check-in due | §2 | Done · 2026-10-01 |
-| R2.5 | **Messages** (M7, shared chat), **Training** (M3), **Me** (M8), installable app | §2 | To do |
+| R2.4c | **Check-in** (M6): one question per screen, optional progress photos, review and a sent moment; Today opens the check-in due | §2 | Done · 2026-10-01 · b184eca |
+| R2.5a | **Messages** (M7, the shared chat C6 reuses): inbox with faces and counts, a thread of bubbles by day with a "New messages" line, a pinned composer, live updates with no Refresh | §2 | Done · 2026-10-01 |
+| R2.5b | **Training** (M3): the program overview (week x of y, sessions done and missed) and history with PRs | §2 | To do |
+| R2.5c | **Me** (M8) and the **installable app** (manifest, icons, splash, install prompt) | §2 | To do |
 | R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | To do |
 | R3.2 | **Coach Today** (C1) | §2 | To do |
 | R3.3 | **Clients** (C2) and the **client profile** overview and progress (C3) | §2 | To do |
@@ -101,6 +103,16 @@ of the implemented R1.3 screens before production rollout.
   titles and bodies ("Open your workspace…", `NotificationTemplates.cs`), stored history reasons
   ("Assigned from a published program template."), emails and problem messages such as the
   training-coverage refusal. They need a backend words pass with its own tests.
+- **Reading live messages (from R2.5a).** A message that arrives while its thread is open shows at
+  once but stays unread until the thread is next opened: the screen moves the read cursor only when
+  it loads a thread, and a test pins "never advances read state from a realtime event" (ADR 0020
+  keeps delivery apart from reading). So the Messages badge can count a message already on screen.
+  Advancing the cursor for a message shown while the page is visible would fix it; it changes a
+  documented read rule, so it needs an owner decision.
+- **Coach chat extras (for R3.5).** R2.5a rebuilt the shared screen only. C6 still wants search,
+  filters (unread, waiting for a reply), the client's plan and last workout beside the thread, and
+  saved replies. Removing your own message stays immediate, as it always was, now behind the
+  message's options; an undo would need care because removal is one way (MSG-008).
 - **Assign program lists every version (from R0.2).** The coach's program picker shows each
   published version ("Full Body Reset · v1"), so "v2" is still visible there. Offer only each
   program's latest version when C3's Actions drawer replaces the form (R3.4).
@@ -129,8 +141,8 @@ of the implemented R1.3 screens before production rollout.
   `@angular/router` 22.0–22.1 (GHSA-ff3f-86qr-9cv3, a server-rendering denial of service). The app
   renders in the browser today, but `check.ps1` stops at this step and R6.2 adds pre-rendering, so
   bump Angular to 22.2 or later in its own step.
-- **Initial bundle budget.** The initial bundle is 530.8 kB against the 520 kB warning (530.1 kB
-  before R2.4c, which added only three icon glyphs).
+- **Initial bundle budget.** The initial bundle is 531.6 kB against the 520 kB warning (530.1 kB
+  before R2.4c, which added only three icon glyphs; R2.5a's shell changes added about 1 kB).
 
 ---
 
@@ -402,6 +414,7 @@ limited to the coach's assigned clients.
 - Shows: a conversation list with avatars, unread counts and last-message previews, a thread with
   bubbles and day separators, a composer, and live updates with no Refresh button. Voice notes and
   attachments come later.
+- R2.5a built the shared screen for both sides (see M7); R3.5 adds the coach-only parts.
 
 **C7. Nutrition library and meal-plan builder**
 - Recipe cards with macro bars and photos.
@@ -456,7 +469,9 @@ limited to the coach's assigned clients.
 
 **M5. Progress**
 - A hero **weight trend chart** with a weekly-average band and a range switch (4 w / 12 w / All).
-- A "Log weight" bottom sheet.
+- A "Log weight" bottom sheet; its button sits in the range row. With fewer than three weigh-ins the
+  chart shows the readings, the change and "Log 1 more weigh-in" instead of a trend line, and the
+  weekly average is a darker dashed line (after the R2.5a audit).
 - Measurement deltas.
 - A photo timeline with a before/after slider.
 - A strength PR list.
@@ -475,6 +490,17 @@ limited to the coach's assigned clients.
 
 **M7. Messages**
 - The same chat components as C6.
+- Built in R2.5a: a client with one coach lands straight in that thread; a second (a former
+  coach's, read-only) brings the inbox back. Messages are grouped by day ("Today", "Mon 28 Sep"),
+  quick messages from one side join into a run, and a "New messages" line marks where the unread
+  began and stays for the visit. Edit and remove wait behind each message's options. Enter sends
+  on a desktop keyboard (Shift+Enter is a new line); on a phone the round send button does. A working
+  live channel shows nothing; only reconnecting or offline earns a line, and offline offers a check.
+  Phones show the inbox or a thread with the composer pinned above the tabs; wide screens show both.
+  On a phone the thread header (back, face, name) sticks to the top, below the coach's top bar
+  (`--tb-topbar-block-size`, published by `CoachShell`).
+  The pieces (`ConversationList`, `ChatBubble`, `ChatComposer`, `chat-timeline.ts`) live in
+  `features/messaging`, the one screen that uses them.
 
 **M8. Me**
 - Profile, units, notifications, switching workspace and sign-out.

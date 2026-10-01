@@ -175,6 +175,8 @@ select:focus-visible {
 .meal-card {
   padding: 1.15rem;
   display: grid;
+  // Cards in a row share a height; their rows stay together instead of spreading to fill it.
+  align-content: start;
   gap: 1rem;
 }
 .meal-card.saved {
@@ -399,6 +401,13 @@ select:focus-visible {
 @media (min-width: 48rem) {
   .meal-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+// Three meals, or five or more, fill rows of three; two and four stay two across. A meal card is
+// too narrow for three columns before this width.
+@media (min-width: 64rem) {
+  .meal-list.three-up {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 @media (max-width: 36rem) {

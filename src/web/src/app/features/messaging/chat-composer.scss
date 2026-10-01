@@ -1,0 +1,99 @@
+// The chat composer: pinned above the client's tab bar on phones while the thread scrolls under it;
+// the thread panel's footer on wide screens.
+:host {
+  background: var(--tb-bg);
+  display: block;
+  inset-block-end: var(--tb-client-tabs-block-size, 0px);
+  padding-block: var(--space-8);
+  position: sticky;
+  z-index: 5;
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+p {
+  margin: 0;
+}
+.composer {
+  display: grid;
+  gap: var(--space-4);
+}
+.row {
+  align-items: flex-end;
+  display: flex;
+  gap: var(--space-8);
+}
+.field {
+  flex: 1;
+}
+textarea {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line-strong);
+  border-radius: 22px;
+  color: var(--tb-ink);
+  display: block;
+  field-sizing: content;
+  font: inherit;
+  font-size: 1rem;
+  inline-size: 100%;
+  line-height: 1.4;
+  max-block-size: 10rem;
+  min-block-size: 2.75rem;
+  padding: 0.6rem 1rem;
+  resize: none;
+}
+textarea::placeholder {
+  color: var(--tb-muted);
+}
+textarea:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 1px;
+}
+textarea[aria-invalid='true'] {
+  border-color: var(--tb-danger);
+}
+.send {
+  background: var(--tb-brand);
+  block-size: 2.75rem;
+  border: 0;
+  border-radius: 50%;
+  color: var(--tb-on-brand);
+  cursor: pointer;
+  display: grid;
+  flex: none;
+  inline-size: 2.75rem;
+  place-items: center;
+  transition: background-color var(--tb-duration-fast) var(--tb-ease);
+}
+.send:hover {
+  background: var(--tb-brand-strong);
+}
+.send:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+.send.busy {
+  cursor: progress;
+  opacity: 0.7;
+}
+.reason,
+.summary {
+  color: var(--tb-danger);
+  font-size: 0.85rem;
+}
+.summary:empty {
+  display: none;
+}
+.count {
+  color: var(--tb-muted);
+  font-size: 0.8rem;
+}
+@media (min-width: 60rem) {
+  :host {
+    background: var(--tb-surface);
+    border-block-start: 1px solid var(--tb-line);
+    padding: var(--space-12) var(--space-16);
+    position: static;
+  }
+}

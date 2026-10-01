@@ -9,7 +9,7 @@ import { TenantContext } from '../core/tenancy/tenant-context';
 import { TenantStore } from '../core/tenancy/tenant.store';
 import { button, settle } from '../../testing/dom';
 import { installDialogSupport } from '../../testing/dialog';
-import { CoachShell } from './coach-shell';
+import { CoachShell, TOPBAR_BLOCK_SIZE } from './coach-shell';
 
 const USER = {
   id: 'user-1',
@@ -274,6 +274,33 @@ describe('CoachShell', () => {
     await settle(fixture);
 
     expect(dialog.open).toBe(false);
+  });
+
+  it('publishes its height for sticky page elements, and takes it away when it goes', async () => {
+    // jsdom has no layout, so the observer reports once on observe and the height reads as 0px.
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(private readonly report: () => void) {}
+        observe(): void {
+          this.report();
+        }
+        disconnect(): void {
+          // Nothing to release.
+        }
+      },
+    );
+    const root = document.documentElement.style;
+    try {
+      const { fixture } = await render();
+      expect(root.getPropertyValue(TOPBAR_BLOCK_SIZE)).toBe('0px');
+
+      fixture.destroy();
+      expect(root.getPropertyValue(TOPBAR_BLOCK_SIZE)).toBe('');
+    } finally {
+      vi.unstubAllGlobals();
+      root.removeProperty(TOPBAR_BLOCK_SIZE);
+    }
   });
 
   it('holds no second navigation while the dialog is closed', async () => {

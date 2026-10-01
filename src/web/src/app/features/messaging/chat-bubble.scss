@@ -1,0 +1,52 @@
+// A chat bubble. Theirs on the surface with a tail at the start; mine on the brand with a tail at
+// the end. Logical corners, so a right-to-left thread mirrors without a second rule set.
+:host {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: 18px;
+  border-end-start-radius: 6px;
+  display: block;
+  padding: 0.45rem 0.8rem 0.3rem;
+}
+:host(.joined) {
+  border-start-start-radius: 6px;
+}
+:host(.mine) {
+  background: var(--tb-brand);
+  border-color: var(--tb-brand);
+  border-end-end-radius: 6px;
+  border-end-start-radius: 18px;
+  color: var(--tb-on-brand);
+}
+:host(.mine.joined) {
+  border-start-end-radius: 6px;
+  border-start-start-radius: 18px;
+}
+:host(.removed) {
+  background: transparent;
+  border: 1px dashed var(--tb-line-strong);
+  color: var(--tb-muted);
+}
+p {
+  margin: 0;
+}
+// Newlines are meaningful in a message and the body is plain text, so it is wrapped rather than
+// collapsed. `pre-wrap` renders the characters; it does not interpret them.
+.body {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.removed-body {
+  font-style: italic;
+}
+.meta {
+  color: var(--tb-muted);
+  display: flex;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  gap: 0.3rem;
+  justify-content: flex-end;
+}
+:host(.mine:not(.removed)) .meta {
+  color: var(--tb-on-brand-soft);
+}

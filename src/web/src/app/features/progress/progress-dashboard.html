@@ -1,15 +1,8 @@
 <div class="progress-page">
   <header class="page-head">
-    <div>
-      <p class="eyebrow" i18n>THE LONG VIEW</p>
-      <h1 i18n>Progress</h1>
-      <p i18n>Small entries add up. See what has changed.</p>
-    </div>
-    @if (!coachMode()) {
-      <button type="button" class="log-button" (click)="openWeightSheet()" i18n>
-        + Log weight
-      </button>
-    }
+    <p class="eyebrow" i18n>THE LONG VIEW</p>
+    <h1 i18n>Progress</h1>
+    <p i18n>Small entries add up. See what has changed.</p>
   </header>
   @if (weightNotice()) {
     <p role="status" class="notice">{{ weightNotice() }}</p>
@@ -17,6 +10,42 @@
   @if (error(); as message) {
     <p role="alert" class="error">{{ message }}</p>
   }
+  <!-- Range switch and the one action share a row, so the action keeps its full label on a phone. -->
+  <div class="toolbar">
+    @if (dashboard()) {
+      <div class="range" role="group" aria-label="Chart range" i18n-aria-label>
+        <button
+          type="button"
+          [attr.aria-pressed]="range() === '4w'"
+          (click)="changeRange('4w')"
+          i18n
+        >
+          4 w
+        </button>
+        <button
+          type="button"
+          [attr.aria-pressed]="range() === '12w'"
+          (click)="changeRange('12w')"
+          i18n
+        >
+          12 w
+        </button>
+        <button
+          type="button"
+          [attr.aria-pressed]="range() === 'all'"
+          (click)="changeRange('all')"
+          i18n
+        >
+          All
+        </button>
+      </div>
+    }
+    @if (!coachMode()) {
+      <button type="button" class="log-button" (click)="openWeightSheet()" i18n>
+        + Log weight
+      </button>
+    }
+  </div>
   @if (loading()) {
     <div class="skeleton" role="status" aria-label="Loading progress" i18n-aria-label>
       <div></div>
@@ -24,27 +53,6 @@
       <div></div>
     </div>
   } @else if (dashboard(); as view) {
-    <div class="range" role="group" aria-label="Chart range" i18n-aria-label>
-      <button type="button" [attr.aria-pressed]="range() === '4w'" (click)="changeRange('4w')" i18n>
-        4 w
-      </button>
-      <button
-        type="button"
-        [attr.aria-pressed]="range() === '12w'"
-        (click)="changeRange('12w')"
-        i18n
-      >
-        12 w
-      </button>
-      <button
-        type="button"
-        [attr.aria-pressed]="range() === 'all'"
-        (click)="changeRange('all')"
-        i18n
-      >
-        All
-      </button>
-    </div>
     @if (range() === 'all') {
       <p class="range-note" i18n>
         Showing all recorded weight entries. The other sections show the latest 12 months.
@@ -92,6 +100,7 @@
           [points]="chartPoints()"
           [weeks]="chartWeeks()"
           [unit]="view.displayUnit === 'Kilogram' ? 'kg' : 'lb'"
+          [audience]="coachMode() ? 'coach' : 'self'"
         />
       }
     </section>

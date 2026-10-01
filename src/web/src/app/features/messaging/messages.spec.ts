@@ -1,5 +1,6 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -241,6 +242,7 @@ async function render(
   await TestBed.configureTestingModule({
     imports: [Messages],
     providers: [
+      provideRouter([]),
       { provide: ApiClient, useValue: api },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       { provide: AuthStore, useValue: { user, loading: signal(false) } },
@@ -292,6 +294,31 @@ function rowKeys(host: HTMLElement): string[] {
   );
 }
 
+/**
+ * Presses one of a message's actions the way a reader reaches it: through the message's options
+ * button, unless those options are already open.
+ */
+async function messageAction(harness: Harness, label: string): Promise<void> {
+  if (harness.host.querySelector(`button[aria-label="${label}"]`) === null) {
+    const sequence = /\d+/.exec(label)?.[0];
+    press(
+      harness.host,
+      label.includes('your')
+        ? `Options for your message ${sequence}`
+        : `Options for message ${sequence}`,
+    );
+    await settle(harness.fixture);
+  }
+
+  query<HTMLButtonElement>(harness.host, `button[aria-label="${label}"]`).click();
+}
+
+/** Takes the live channel offline, which is the one state that offers a manual check. */
+async function goOffline(harness: Harness): Promise<void> {
+  harness.realtime.state.set('offline');
+  await settle(harness.fixture);
+}
+
 async function open(harness: Harness, name = 'Rania Haddad'): Promise<void> {
   const target = Array.from(harness.host.querySelectorAll<HTMLButtonElement>('.conversation')).find(
     (candidate) => (candidate.textContent ?? '').includes(name),
@@ -319,9 +346,9 @@ describe('Messages', () => {
   it('renders an accessible empty state when there are no conversations', async () => {
     const { host } = await render();
 
-    expect(host.querySelector('.conversation-list .empty')?.textContent).toContain(
-      'no conversations',
-    );
+    expect(host.querySelector('.inbox .empty')?.textContent).toContain('No conversations yet');
+    // The coach is told where a conversation starts, and offered the way there.
+    expect(host.querySelector('.inbox .empty a')?.getAttribute('href')).toBe('/clients');
     expect(host.querySelector('.feed')).toBeNull();
     // The live region exists from first render so a later message can be announced at all, and it
     // says nothing until something has happened.
@@ -354,8 +381,9 @@ describe('Messages', () => {
     const row = query(host, '.conversation-list li');
     expect(row.textContent).toContain('Rania Haddad');
     expect(row.textContent).toContain('See you tomorrow');
-    // Unread is carried by the word as well as by the marker and the border weight.
-    expect(row.textContent).toContain('3 unread');
+    // The count is the visible cue and the row's name says it in words; the row is also heavier.
+    expect(query(row, '.count').textContent?.trim()).toBe('3');
+    expect(row.classList).toContain('waiting');
     expect(query(host, '.conversation').getAttribute('aria-label')).toBe(
       'Rania Haddad, 3 unread messages',
     );
@@ -419,7 +447,8 @@ describe('Messages', () => {
 
     expect(bodies(harness.host)).toEqual(['Message 1', 'Second']);
     expect(harness.listConversationMessages).toHaveBeenCalledWith('conversation-1', null, 50);
-    expect(harness.host.querySelector('.thread h3')?.textContent).toContain('Rania Haddad');
+    expect(query(harness.host, '#thread-heading').textContent).toContain('Rania Haddad');
+    expect(query(harness.host, '.thread-role').textContent).toContain('Client');
   });
 
   /**
@@ -447,7 +476,7 @@ describe('Messages', () => {
     });
 
     await open(harness);
-    press(harness.host, 'Load older messages');
+    press(harness.host, 'Show earlier messages');
     await settle(harness.fixture);
 
     expect(bodies(harness.host)).toEqual(['Message 1', 'Message 2', 'Message 3', 'Message 4']);
@@ -457,10 +486,10 @@ describe('Messages', () => {
     expect(ids).toBe(4);
     expect(rowKeys(harness.host)).toHaveLength(4);
     // Everything is loaded, so the control is gone rather than left offering nothing.
-    expect(harness.host.textContent).not.toContain('Load older messages');
+    expect(harness.host.textContent).not.toContain('Show earlier messages');
   });
 
-  it('stops offering Load older when an older page comes back empty', async () => {
+  it('stops offering earlier messages when an older page comes back empty', async () => {
     const harness = await render(({ listConversations, listConversationMessages }) => {
       listConversations.mockReturnValue(of(conversationPage([conversation()])));
       listConversationMessages
@@ -469,10 +498,10 @@ describe('Messages', () => {
     });
 
     await open(harness);
-    press(harness.host, 'Load older messages');
+    press(harness.host, 'Show earlier messages');
     await settle(harness.fixture);
 
-    expect(harness.host.textContent).not.toContain('Load older messages');
+    expect(harness.host.textContent).not.toContain('Show earlier messages');
   });
 
   it('renders a body that looks like markup as the characters it is', async () => {
@@ -511,12 +540,13 @@ describe('Messages', () => {
         ),
       );
     });
-    await open(harness);
 
     expect(bodies(harness.host)).toContain('Welcome aboard');
     expect(harness.host.textContent).toContain('This conversation is read-only');
+    expect(query(harness.host, '.thread-role').textContent).toContain('Your former coach');
     expect(harness.host.querySelector('form.composer')).toBeNull();
     expect(harness.host.querySelector('.actions')).toBeNull();
+    expect(harness.host.querySelector('.options')).toBeNull();
     expect(harness.sendConversationMessage).not.toHaveBeenCalled();
   });
 
@@ -629,7 +659,7 @@ describe('Messages', () => {
     );
     await open(harness);
 
-    query<HTMLButtonElement>(harness.host, 'button[aria-label="Edit your message 1"]').click();
+    await messageAction(harness, 'Edit your message 1');
     await settle(harness.fixture);
     const editor = field<HTMLTextAreaElement>(harness.host, 'Edit message');
     expect(editor.value).toBe('frist');
@@ -683,7 +713,7 @@ describe('Messages', () => {
     );
     await open(harness);
 
-    query<HTMLButtonElement>(harness.host, 'button[aria-label="Edit your message 1"]').click();
+    await messageAction(harness, 'Edit your message 1');
     await settle(harness.fixture);
     const editor = field<HTMLTextAreaElement>(harness.host, 'Edit message');
     editor.value = 'from a stale screen';
@@ -740,7 +770,7 @@ describe('Messages', () => {
     );
     await open(harness);
 
-    query<HTMLButtonElement>(harness.host, 'button[aria-label="Remove your message 1"]').click();
+    await messageAction(harness, 'Remove your message 1');
     await settle(harness.fixture);
 
     expect(harness.deleteConversationMessage).toHaveBeenCalledWith(
@@ -781,10 +811,7 @@ describe('Messages', () => {
     );
     await open(harness);
 
-    query<HTMLButtonElement>(
-      harness.host,
-      'button[aria-label="Remove message 1 as coach"]',
-    ).click();
+    await messageAction(harness, 'Remove message 1 as coach');
     await settle(harness.fixture);
 
     // A reason is required, and a refused confirmation says so instead of disabling the button.
@@ -831,10 +858,10 @@ describe('Messages', () => {
       );
     });
 
-    await open(harness);
-
     expect(harness.host.querySelector('button[aria-label^="Remove message"]')).toBeNull();
     expect(harness.host.textContent).not.toContain('Remove as coach');
+    // With nothing to offer, the other person's message has no options button at all.
+    expect(harness.host.textContent).not.toContain('Options for message 1');
   });
 
   it('advances the read cursor after the messages are displayed', async () => {
@@ -940,7 +967,7 @@ describe('Messages', () => {
     expect(harness.host.querySelectorAll('.conversation-list li')).toHaveLength(0);
     expect(harness.host.querySelector('.feed li')).toBeNull();
     expect(harness.host.querySelector('.composer')).toBeNull();
-    expect(harness.host.querySelector('.conversation-list .empty')).not.toBeNull();
+    expect(harness.host.querySelector('.inbox .empty')).not.toBeNull();
   });
 
   it('clears everything when the signed-in account changes', async () => {
@@ -1185,7 +1212,7 @@ describe('Messages', () => {
     });
     await open(harness);
 
-    query<HTMLButtonElement>(harness.host, 'button[aria-label="Remove your message 1"]').click();
+    await messageAction(harness, 'Remove your message 1');
     await settle(harness.fixture);
     await open(harness, 'Nadia Khoury');
     expect(bodies(harness.host)).toEqual(['second thread']);
@@ -1231,7 +1258,7 @@ describe('Messages', () => {
     });
     await open(harness);
 
-    query<HTMLButtonElement>(harness.host, 'button[aria-label="Edit your message 1"]').click();
+    await messageAction(harness, 'Edit your message 1');
     await settle(harness.fixture);
     const editor = field<HTMLTextAreaElement>(harness.host, 'Edit message');
     editor.value = 'corrected';
@@ -1359,7 +1386,7 @@ describe('Messages', () => {
       },
     );
     await open(harness);
-    query<HTMLButtonElement>(harness.host, 'button[aria-label="Edit your message 1"]').click();
+    await messageAction(harness, 'Edit your message 1');
     await settle(harness.fixture);
 
     const editor = field<HTMLTextAreaElement>(harness.host, 'Edit message');
@@ -1400,7 +1427,7 @@ describe('Messages', () => {
     await open(harness);
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      query<HTMLButtonElement>(harness.host, 'button[aria-label="Remove your message 1"]').click();
+      await messageAction(harness, 'Remove your message 1');
       await settle(harness.fixture);
     }
 
@@ -1419,10 +1446,7 @@ describe('Messages', () => {
       },
     );
     await open(harness);
-    query<HTMLButtonElement>(
-      harness.host,
-      'button[aria-label="Remove message 1 as coach"]',
-    ).click();
+    await messageAction(harness, 'Remove message 1 as coach');
     await settle(harness.fixture);
 
     const reason = field<HTMLInputElement>(harness.host, 'Reason for removing this message');
@@ -1478,7 +1502,7 @@ describe('Messages', () => {
 
   // ---------- superseded loaders ----------
 
-  it('does not leave Load more disabled when Refresh supersedes it', async () => {
+  it('does not leave Show more disabled when a manual check supersedes it', async () => {
     const pending = new Subject<ConversationPage>();
     const harness = await render(({ listConversations }) => {
       listConversations
@@ -1503,21 +1527,22 @@ describe('Messages', () => {
         );
     });
 
-    press(harness.host, 'Load more conversations');
+    press(harness.host, 'Show more conversations');
     await settle(harness.fixture);
-    press(harness.host, 'Refresh');
+    await goOffline(harness);
+    press(harness.host, 'Check for new messages');
     await settle(harness.fixture);
 
     // The superseded page will never write, and its own cleanup is guarded on being the newest
     // request — so without clearing the flag the control would stay disabled for ever.
-    expect(button(harness.host, 'Load more conversations').disabled).toBe(false);
+    expect(button(harness.host, 'Show more conversations').disabled).toBe(false);
     pending.next(conversationPage([]));
     pending.complete();
     await settle(harness.fixture);
-    expect(button(harness.host, 'Load more conversations').disabled).toBe(false);
+    expect(button(harness.host, 'Show more conversations').disabled).toBe(false);
   });
 
-  it('does not leave Load older disabled when Refresh supersedes it', async () => {
+  it('does not leave Show earlier disabled when a manual check supersedes it', async () => {
     const pending = new Subject<MessagePage>();
     const harness = await render(({ listConversations, listConversationMessages }) => {
       listConversations.mockReturnValue(of(conversationPage([conversation()])));
@@ -1528,16 +1553,17 @@ describe('Messages', () => {
     });
     await open(harness);
 
-    press(harness.host, 'Load older messages');
+    press(harness.host, 'Show earlier messages');
     await settle(harness.fixture);
-    press(harness.host, 'Refresh');
+    await goOffline(harness);
+    press(harness.host, 'Check for new messages');
     await settle(harness.fixture);
 
-    expect(button(harness.host, 'Load older messages').disabled).toBe(false);
+    expect(button(harness.host, 'Show earlier messages').disabled).toBe(false);
     pending.next(messagePage([]));
     pending.complete();
     await settle(harness.fixture);
-    expect(button(harness.host, 'Load older messages').disabled).toBe(false);
+    expect(button(harness.host, 'Show earlier messages').disabled).toBe(false);
   });
 
   // ---------- authoritative unread and preview ----------
@@ -1691,7 +1717,7 @@ describe('Messages', () => {
     await open(harness);
     expect(harness.host.textContent).toContain('regrettable');
 
-    query<HTMLButtonElement>(harness.host, 'button[aria-label="Remove your message 1"]').click();
+    await messageAction(harness, 'Remove your message 1');
     await settle(harness.fixture);
 
     expect(query(harness.host, '.conversation .preview').textContent?.trim()).toBe(
@@ -1742,7 +1768,7 @@ describe('Messages', () => {
     );
     await open(harness);
 
-    query<HTMLButtonElement>(harness.host, 'button[aria-label="Edit your message 1"]').click();
+    await messageAction(harness, 'Edit your message 1');
     await settle(harness.fixture);
     const editor = field<HTMLTextAreaElement>(harness.host, 'Edit message');
     editor.value = 'first';
@@ -1804,10 +1830,251 @@ describe('Messages', () => {
     // unread count, and it must not clear the other row's badge either.
     expect(query(harness.host, '.thread-unread').textContent).toContain('4 unread');
     expect(harness.unreadRefresh).not.toHaveBeenCalled();
-    expect(harness.host.textContent).toContain('5 unread');
+    expect(
+      query(harness.host, '.conversation[data-conversation-id="conversation-1"]').getAttribute(
+        'aria-label',
+      ),
+    ).toBe('Rania Haddad, 5 unread messages');
   });
 
   // ---------- realtime, from the screen's side ----------
+
+  describe('chat', () => {
+    const LEA = { userId: 'coach-user', displayName: 'Lea Haddad', role: 'Coach' as const };
+    const withCoach = conversation({ callerRole: 'Client', canModerate: false, counterpart: LEA });
+
+    /** Answers `(pointer: fine)` the way a desktop or a phone would, for the composer's Enter key. */
+    function pointer(fine: boolean): () => void {
+      const view = document.defaultView as Window & { matchMedia?: Window['matchMedia'] };
+      const original = view.matchMedia;
+      view.matchMedia = ((query: string) =>
+        ({
+          matches: fine && query === '(pointer: fine)',
+          media: query,
+        }) as MediaQueryList) as Window['matchMedia'];
+      return () => {
+        view.matchMedia = original as Window['matchMedia'];
+      };
+    }
+
+    async function typeDraft(harness: Harness, value: string): Promise<HTMLTextAreaElement> {
+      const composer = field<HTMLTextAreaElement>(harness.host, 'Write a message');
+      composer.value = value;
+      composer.dispatchEvent(new Event('input'));
+      await settle(harness.fixture);
+      return composer;
+    }
+
+    it('opens a client’s only conversation by itself, with no inbox to choose from', async () => {
+      const harness = await render(({ listConversations, listConversationMessages }) => {
+        listConversations.mockReturnValue(of(conversationPage([withCoach])));
+        listConversationMessages.mockReturnValue(
+          of(messagePage([message(1, { body: 'Hi Maya! Lower A today.' })])),
+        );
+      });
+
+      expect(bodies(harness.host)).toEqual(['Hi Maya! Lower A today.']);
+      expect(harness.host.querySelector('.inbox')).toBeNull();
+      expect(harness.host.textContent).not.toContain('All conversations');
+      expect(query(harness.host, '#thread-heading').textContent).toContain('Lea Haddad');
+      expect(query(harness.host, '.thread-role').textContent).toContain('Your coach');
+      // The page keeps its name for assistive technology even though the thread fills it.
+      expect(query(harness.host, 'h1').textContent).toContain('Messages');
+      expect(harness.realtime.opened).toEqual([
+        { conversationId: 'conversation-1', fromEventSequence: 1 },
+      ]);
+    });
+
+    it('brings the inbox back when a client also has a former coach’s thread', async () => {
+      const former = conversation({
+        ...SECOND,
+        callerRole: 'Client',
+        canModerate: false,
+        isReadOnly: true,
+        counterpart: { userId: 'coach-old', displayName: 'Omar Nasser', role: 'Coach' },
+      });
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(of(conversationPage([withCoach, former])));
+      });
+
+      expect(harness.host.querySelectorAll('.conversation')).toHaveLength(2);
+      expect(query(harness.host, '.conversation-list .tag').textContent).toContain('Former coach');
+      // Choosing is the client's to do; nothing is opened, and nothing marked read, on their behalf.
+      expect(harness.listConversationMessages).not.toHaveBeenCalled();
+    });
+
+    it('tells a client with no conversation that their coach writes first', async () => {
+      const harness = await render();
+      harness.membership.set({ ...ALPHA, role: 'Client' });
+      await settle(harness.fixture);
+
+      const empty = query(harness.host, '.inbox .empty');
+      expect(empty.textContent).toContain('Your coach starts the conversation');
+      expect(query(empty, 'a').getAttribute('href')).toBe('/');
+    });
+
+    it('groups the thread by day and keeps the new-messages line where it was after reading', async () => {
+      const harness = await render(
+        ({ listConversations, listConversationMessages, advanceConversationReadCursor }) => {
+          listConversations.mockReturnValue(
+            of(conversationPage([conversation({ unreadCount: 1 })])),
+          );
+          listConversationMessages.mockReturnValue(
+            of(
+              messagePage([message(1), message(2, { isUnreadByCaller: true })], {
+                readState: readState({ lastReadSequence: 1, unreadCount: 1, latestSequence: 2 }),
+              }),
+            ),
+          );
+          advanceConversationReadCursor.mockReturnValue(
+            of(readState({ lastReadSequence: 2, unreadCount: 0, latestSequence: 2 })),
+          );
+        },
+      );
+
+      await open(harness);
+
+      // Both messages were sent on the same day, so one labelled day holds them both.
+      const days = harness.host.querySelectorAll('.feed .day');
+      expect(days).toHaveLength(1);
+      expect(query(days[0], '.day-label').textContent?.trim()).not.toBe('');
+      // The cursor has moved past message 2, so it is no longer unread, but the line stays put.
+      expect(harness.host.querySelectorAll('.feed li.unread')).toHaveLength(0);
+      const rows = harness.host.querySelectorAll('.feed li');
+      expect(rows[0].querySelector('.new-divider')).toBeNull();
+      expect(rows[1].querySelector('.new-divider')?.textContent).toContain('New messages');
+    });
+
+    it('keeps a message’s actions behind its options button, one message at a time', async () => {
+      const harness = await render(({ listConversations, listConversationMessages }) => {
+        listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        listConversationMessages.mockReturnValue(
+          of(
+            messagePage([
+              message(1, {
+                isFromCaller: true,
+                senderUserId: 'coach-1',
+                canEdit: true,
+                canDelete: true,
+                canModerate: false,
+              }),
+              message(2, { canModerate: true }),
+            ]),
+          ),
+        );
+      });
+      await open(harness);
+      expect(harness.host.querySelector('.actions')).toBeNull();
+
+      press(harness.host, 'Options for your message 1');
+      await settle(harness.fixture);
+      const own = query(harness.host, '.actions');
+      expect(own.textContent).toContain('Edit');
+      expect(own.textContent).toContain('Remove');
+      expect(button(harness.host, 'Options for your message 1').getAttribute('aria-expanded')).toBe(
+        'true',
+      );
+
+      press(harness.host, 'Options for message 2');
+      await settle(harness.fixture);
+      expect(harness.host.querySelectorAll('.actions')).toHaveLength(1);
+      expect(query(harness.host, '.actions').textContent).toContain('Remove as coach');
+      expect(button(harness.host, 'Options for your message 1').getAttribute('aria-expanded')).toBe(
+        'false',
+      );
+
+      query(harness.host, '.actions').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      await settle(harness.fixture);
+      expect(harness.host.querySelector('.actions')).toBeNull();
+    });
+
+    it('goes back from a thread to the inbox and leaves the thread’s live subscription', async () => {
+      const harness = await render(({ listConversations, listConversationMessages }) => {
+        listConversations.mockReturnValue(
+          of(conversationPage([conversation(), conversation(SECOND)])),
+        );
+        listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+      });
+      await open(harness);
+      await typeDraft(harness, 'half a thought');
+      expect(harness.realtime.isOpen).toBe(true);
+
+      press(harness.host, 'All conversations');
+      await settle(harness.fixture);
+
+      expect(harness.host.querySelector('.feed')).toBeNull();
+      expect(harness.host.querySelector('.composer')).toBeNull();
+      expect(harness.realtime.isOpen).toBe(false);
+      expect(harness.host.querySelectorAll('.conversation')).toHaveLength(2);
+      expect(harness.host.querySelector('.conversation[aria-current="true"]')).toBeNull();
+
+      // The draft was addressed to that thread, so it went with it.
+      await open(harness);
+      expect(field<HTMLTextAreaElement>(harness.host, 'Write a message').value).toBe('');
+    });
+
+    it('sends with Enter on a desktop keyboard, and keeps Shift+Enter and phones for new lines', async () => {
+      const harness = await render(
+        ({ listConversations, listConversationMessages, sendConversationMessage }) => {
+          listConversations.mockReturnValue(of(conversationPage([conversation()])));
+          listConversationMessages.mockReturnValue(of(messagePage([])));
+          sendConversationMessage.mockReturnValue(
+            of(message(1, { body: 'On my way', isFromCaller: true, senderUserId: 'coach-1' })),
+          );
+        },
+      );
+      await open(harness);
+      const enter = (init: KeyboardEventInit = {}) =>
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init });
+
+      const restorePhone = pointer(false);
+      try {
+        const composer = await typeDraft(harness, 'On my way');
+        composer.dispatchEvent(enter());
+        await settle(harness.fixture);
+        expect(harness.sendConversationMessage).not.toHaveBeenCalled();
+      } finally {
+        restorePhone();
+      }
+
+      const restoreDesktop = pointer(true);
+      try {
+        const composer = field<HTMLTextAreaElement>(harness.host, 'Write a message');
+        composer.dispatchEvent(enter({ shiftKey: true }));
+        await settle(harness.fixture);
+        expect(harness.sendConversationMessage).not.toHaveBeenCalled();
+
+        const plain = enter();
+        composer.dispatchEvent(plain);
+        await settle(harness.fixture);
+        expect(plain.defaultPrevented).toBe(true);
+        expect(harness.sendConversationMessage).toHaveBeenCalledWith(
+          'conversation-1',
+          'On my way',
+          expect.any(String),
+        );
+      } finally {
+        restoreDesktop();
+      }
+    });
+
+    it('shows how many characters are left only when the limit is near', async () => {
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(of(conversationPage([conversation()])));
+      });
+      await open(harness);
+
+      await typeDraft(harness, 'Short and sweet');
+      expect(query(harness.host, '.composer .count').textContent?.trim()).toBe('');
+
+      await typeDraft(harness, 'x'.repeat(1850));
+      expect(query(harness.host, '.composer .count').textContent).toContain(
+        '150 of 2000 characters left.',
+      );
+    });
+  });
 
   describe('realtime', () => {
     it('subscribes before catching up, from the watermark the thread read established', async () => {
@@ -2018,16 +2285,19 @@ describe('Messages', () => {
       harness.realtime.state.set('offline');
       await settle(harness.fixture);
       expect(query(harness.host, '[data-testid="realtime-state"]').textContent).toContain(
-        'Live updates are off',
+        "You're offline",
       );
+      // Offline is the one state that offers a manual check; nothing else ever shows Refresh.
+      expect(button(harness.host, 'Check for new messages')).toBeTruthy();
 
       harness.realtime.state.set('connected');
       await settle(harness.fixture);
+      // A working channel says nothing at all, and is never rendered as delivery or a read receipt.
       const connected = query(harness.host, '[data-testid="realtime-state"]').textContent ?? '';
-      expect(connected).toContain('Live updates are on');
-      // "Connected" is never rendered as delivery or as a read receipt.
-      expect(connected.toLowerCase()).not.toContain('delivered');
-      expect(connected.toLowerCase()).not.toContain('seen');
+      expect(connected.trim()).toBe('');
+      expect(query(harness.host, '.live').classList).not.toContain('shown');
+      expect(harness.host.textContent).not.toContain('Check for new messages');
+      expect(harness.host.textContent).not.toContain('Refresh');
     });
   });
 });

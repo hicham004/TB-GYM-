@@ -1176,6 +1176,16 @@ moderation, read cursor and unread count — checks which of the three it was as
 writes. Phase 6B-2B added realtime delivery to that screen;
 there is still no polling.
 
+R2.5a redraws that screen as a chat (M7; the coach's C6 reuses it) with no contract, key or read
+rule changed. Day groups, runs and the "New messages" line come from the pure `chat-timeline.ts`,
+in the reader's local days; the line is fixed when a thread loads, so it outlives the cursor move.
+A client with a single conversation lands straight in it. There is no Refresh button: only an offline
+channel offers a manual check. The read cursor still moves only when a thread is loaded and shown,
+so a message arriving live stays unread until the next open (ADR 0020). `ClientTabs` publishes its
+height as `--tb-client-tabs-block-size` so the composer can pin above the tab bar. `CoachShell`
+publishes its top bar the same way (`--tb-topbar-block-size`), so on a phone the thread header
+sticks below it; the client's check-in review pins its send bar above the tab bar the same way.
+
 Message bodies, revision bodies, moderation reasons, names and addresses reach no log, analytics,
 exception or operational view. See `docs/adr/0019-persisted-direct-messaging-v1.md`.
 

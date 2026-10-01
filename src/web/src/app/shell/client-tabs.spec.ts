@@ -1,13 +1,13 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../core/access/client-access.store';
 import { MessageUnreadStore } from '../core/messaging/message-unread.store';
 import { settle } from '../../testing/dom';
 import { fakeClientAccess } from '../../testing/today-fixtures';
 import { CLIENT_TABS, clientTabState } from './client-navigation';
-import { ClientTabs } from './client-tabs';
+import { CLIENT_TABS_BLOCK_SIZE, ClientTabs } from './client-tabs';
 
 async function render(access = fakeClientAccess(), unread = 0, url = '/') {
   await TestBed.configureTestingModule({
@@ -116,6 +116,33 @@ describe('ClientTabs', () => {
     const { tabs } = await render();
     expect(tabs()[4].querySelector('.count')).toBeNull();
     expect(tabs()[4].textContent).not.toContain('unread');
+  });
+
+  it('publishes its height for pinned page elements, and takes it away when it goes', async () => {
+    // jsdom has no layout, so the observer reports once on observe and the height reads as 0px.
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(private readonly report: () => void) {}
+        observe(): void {
+          this.report();
+        }
+        disconnect(): void {
+          // Nothing to release.
+        }
+      },
+    );
+    const root = document.documentElement.style;
+    try {
+      const { fixture } = await render();
+      expect(root.getPropertyValue(CLIENT_TABS_BLOCK_SIZE)).toBe('0px');
+
+      fixture.destroy();
+      expect(root.getPropertyValue(CLIENT_TABS_BLOCK_SIZE)).toBe('');
+    } finally {
+      vi.unstubAllGlobals();
+      root.removeProperty(CLIENT_TABS_BLOCK_SIZE);
+    }
   });
 });
 

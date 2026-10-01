@@ -24,17 +24,30 @@ async function mockApi(page: Page, handlers: Record<string, Handler>): Promise<v
 /**
  * A stand-in for the messaging hub, so a signed-in page reaches a server that answers instead of a
  * 404 that the SignalR client reports as an error on every retry. It negotiates once and then
- * behaves as a connected hub with nothing to say: it completes the handshake and answers pings.
- * No event is ever pushed — realtime delivery is not what these checks are about.
+ * behaves as a connected hub with nothing to say: it completes the handshake, answers pings, and
+ * accepts every invocation (joining or leaving a conversation) with `true`. No event is ever
+ * pushed — realtime delivery is not what these checks are about. A page that opens a thread then
+ * catches up over REST, so its test answers `GET …/realtime-events` with an empty page.
  */
 async function mockMessagingHub(page: Page): Promise<void> {
   await page.routeWebSocket(/\/hubs\//, (ws) => {
     ws.onMessage((message) => {
       const text = typeof message === 'string' ? message : message.toString();
-      if (text.includes('"protocol"')) {
-        ws.send('{}\u001e'); // handshake accepted
-      } else if (text.includes('"type":6')) {
-        ws.send('{"type":6}\u001e'); // ping, answered so the client does not time out
+      for (const frame of text.split('\u001e').filter((part) => part.length > 0)) {
+        const parsed = JSON.parse(frame) as {
+          protocol?: string;
+          type?: number;
+          invocationId?: string;
+        };
+        if (parsed.protocol !== undefined) {
+          ws.send('{}\u001e'); // handshake accepted
+        } else if (parsed.type === 6) {
+          ws.send('{"type":6}\u001e'); // ping, answered so the client does not time out
+        } else if (parsed.type === 1 && parsed.invocationId !== undefined) {
+          ws.send(
+            `${JSON.stringify({ type: 3, invocationId: parsed.invocationId, result: true })}\u001e`,
+          );
+        }
       }
     });
   });

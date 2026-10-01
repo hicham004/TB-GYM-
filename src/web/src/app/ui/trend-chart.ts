@@ -1,3 +1,4 @@
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, input } from '@angular/core';
 
 export interface TrendPoint {
@@ -18,52 +19,112 @@ interface ChartMark {
   y: number;
 }
 
+/**
+ * A trend line and weekly averages say nothing about one or two weigh-ins, so below this the chart
+ * shows the readings themselves, compactly, and says how many more it needs.
+ */
+export const TREND_MINIMUM_OBSERVATIONS = 3;
+
+// The SVG's own coordinate space. Dots are placed as a share of it (see `dotLeft`, `dotTop`).
+const WIDTH = 720;
+const HEIGHT = 240;
+
 @Component({
   selector: 'app-trend-chart',
+  imports: [DatePipe, DecimalPipe],
   template: `
     <div class="trend-chart">
       @if (hasData()) {
-        <svg
-          viewBox="0 0 720 240"
-          role="img"
-          aria-label="Bodyweight trend with weekly averages"
-          preserveAspectRatio="none"
-        >
-          @for (band of bands(); track band.from) {
-            <line
-              [attr.x1]="band.x1"
-              [attr.x2]="band.x2"
-              [attr.y1]="band.y"
-              [attr.y2]="band.y"
-              class="week-band"
-            />
-          }
-          <path [attr.d]="line()" class="trend-line" />
+        @if (readings(); as pair) {
+          <div class="readings">
+            <p>
+              <span class="reading-date">{{ pair.first.date | date: 'd MMM' }}</span>
+              <span class="reading-value"
+                >{{ pair.first.value | number: '1.0-2' }} {{ unit() }}</span
+              >
+            </p>
+            <span class="change"
+              >{{ pair.delta > 0 ? '+' : pair.delta < 0 ? '−' : ''
+              }}{{ abs(pair.delta) | number: '1.0-2' }} {{ unit() }}</span
+            >
+            <p class="end">
+              <span class="reading-date">{{ pair.last.date | date: 'd MMM' }}</span>
+              <span class="reading-value"
+                >{{ pair.last.value | number: '1.0-2' }} {{ unit() }}</span
+              >
+            </p>
+          </div>
+        }
+        <div class="plot" [class.compact]="sparse()">
+          <svg
+            [attr.viewBox]="'0 0 ' + width + ' ' + height"
+            role="img"
+            [attr.aria-label]="chartLabel()"
+            preserveAspectRatio="none"
+          >
+            @if (sparse()) {
+              <path [attr.d]="connection()" class="trend-line" />
+            } @else {
+              @for (band of bands(); track band.from) {
+                <line
+                  [attr.x1]="band.x1"
+                  [attr.x2]="band.x2"
+                  [attr.y1]="band.y"
+                  [attr.y2]="band.y"
+                  class="week-band"
+                />
+              }
+              <path [attr.d]="line()" class="trend-line" />
+            }
+          </svg>
+          <!-- Plain elements, not circles: the SVG stretches to its box, and a stretched circle is
+               an ellipse. -->
           @for (mark of observations(); track mark.x) {
-            <circle [attr.cx]="mark.x" [attr.cy]="mark.y" r="4" class="observation" />
+            <i
+              class="observation"
+              aria-hidden="true"
+              [style.left.%]="dotLeft(mark)"
+              [style.top.%]="dotTop(mark)"
+            ></i>
           }
-        </svg>
+        </div>
+        @if (sparse()) {
+          <p class="hint">
+            @if (audience() === 'coach') {
+              <ng-container i18n>A trend line needs at least 3 weigh-ins.</ng-container>
+            } @else {
+              <ng-container i18n
+                >Log
+                {missing(), plural, =1 {1 more weigh-in} other {{{ missing() }} more weigh-ins}} to
+                see your trend line.</ng-container
+              >
+            }
+          </p>
+        }
         <div class="legend">
-          <span><i class="trend-key"></i>Trend estimate</span
-          ><span><i class="week-key"></i>Weekly average</span
-          ><span><i class="dot-key"></i>Weigh-in</span>
+          @if (!sparse()) {
+            <span><i class="trend-key"></i><ng-container i18n>Trend estimate</ng-container></span
+            ><span><i class="week-key"></i><ng-container i18n>Weekly average</ng-container></span>
+          }
+          <span><i class="dot-key"></i><ng-container i18n>Weigh-in</ng-container></span>
         </div>
       } @else {
-        <p class="empty">Log a few weights to see your trend.</p>
+        <p class="empty" i18n>Log a few weights to see your trend.</p>
       }
       <details>
-        <summary>Chart values</summary>
+        <summary i18n>Chart values</summary>
         <table>
           <caption>
-            Bodyweight observations and trend estimates ({{
+            <ng-container i18n>Bodyweight observations and trend estimates</ng-container>
+            ({{
               unit()
             }})
           </caption>
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Weight</th>
-              <th>Trend</th>
+              <th i18n>Date</th>
+              <th i18n>Weight</th>
+              <th i18n>Trend</th>
             </tr>
           </thead>
           <tbody>
@@ -82,6 +143,9 @@ interface ChartMark {
   styles: [
     `
       :host {
+        /* Darker than the accent, so the average reads on a white card: at least 3:1 on the light
+           surface for TB Gym's own brand. */
+        --week-average: color-mix(in srgb, var(--tb-accent, #d9ed94) 40%, var(--tb-brand, #153d33));
         display: block;
       }
       .trend-chart {
@@ -90,16 +154,24 @@ interface ChartMark {
         background: var(--tb-surface, #fff);
         color: var(--tb-ink, #182d27);
       }
-      svg {
-        inline-size: 100%;
+      .plot {
         block-size: 14rem;
+        position: relative;
+      }
+      .plot.compact {
+        block-size: 5.5rem;
+      }
+      svg {
+        block-size: 100%;
+        display: block;
+        inline-size: 100%;
         overflow: visible;
       }
       .week-band {
-        stroke: var(--tb-accent, #a2bd56);
-        stroke-width: 9;
-        stroke-linecap: round;
-        opacity: 0.55;
+        stroke: var(--week-average);
+        stroke-dasharray: 7 5;
+        stroke-width: 3;
+        vector-effect: non-scaling-stroke;
       }
       .trend-line {
         fill: none;
@@ -110,7 +182,52 @@ interface ChartMark {
         vector-effect: non-scaling-stroke;
       }
       .observation {
-        fill: var(--tb-brand, #153d33);
+        background: var(--tb-brand, #153d33);
+        block-size: 0.6rem;
+        border-radius: 50%;
+        inline-size: 0.6rem;
+        position: absolute;
+        transform: translate(-50%, -50%);
+      }
+      .readings {
+        align-items: end;
+        display: grid;
+        gap: 0.5rem;
+        grid-template-columns: 1fr auto 1fr;
+        margin-block-end: 0.75rem;
+      }
+      .readings p {
+        display: grid;
+        gap: 0.1rem;
+        margin: 0;
+      }
+      .readings .end {
+        text-align: end;
+      }
+      .reading-date {
+        color: var(--tb-muted, #4f6057);
+        font-size: 0.78rem;
+      }
+      .reading-value {
+        font-size: 1.25rem;
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+      }
+      .change {
+        background: color-mix(in srgb, var(--tb-accent, #d9ed94) 45%, transparent);
+        border-radius: 99px;
+        color: var(--tb-brand, #153d33);
+        font-size: 0.84rem;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        padding: 0.3rem 0.65rem;
+      }
+      .hint {
+        background: var(--tb-surface-2, #f3f1e7);
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        margin: 0.75rem 0 0;
+        padding: 0.6rem 0.8rem;
       }
       .legend {
         display: flex;
@@ -118,6 +235,7 @@ interface ChartMark {
         gap: 0.5rem 1rem;
         font-size: 0.75rem;
         color: var(--tb-muted, #4f6057);
+        margin-block-start: 0.75rem;
       }
       .legend span {
         display: inline-flex;
@@ -126,20 +244,24 @@ interface ChartMark {
       }
       .legend i {
         display: inline-block;
-        inline-size: 0.8rem;
-        block-size: 0.3rem;
-        border-radius: 1rem;
+        flex: none;
       }
       .trend-key {
         background: var(--tb-brand, #153d33);
+        block-size: 0.25rem;
+        border-radius: 1rem;
+        inline-size: 1rem;
       }
       .week-key {
-        background: var(--tb-accent, #a2bd56);
+        block-size: 0;
+        border-block-start: 3px dashed var(--week-average);
+        inline-size: 1rem;
       }
       .dot-key {
         background: var(--tb-brand, #153d33);
-        block-size: 0.6rem !important;
-        inline-size: 0.6rem !important;
+        block-size: 0.6rem;
+        border-radius: 50%;
+        inline-size: 0.6rem;
       }
       details {
         margin-block-start: 0.6rem;
@@ -176,15 +298,46 @@ export class TrendChart {
   readonly points = input.required<readonly TrendPoint[]>();
   readonly weeks = input.required<readonly TrendWeek[]>();
   readonly unit = input('kg');
+  /** Who is looking: the client is asked to log more, the coach is only told what is needed. */
+  readonly audience = input<'self' | 'coach'>('self');
+  protected readonly width = WIDTH;
+  protected readonly height = HEIGHT;
+  protected readonly abs = Math.abs;
+
   readonly hasData = computed(() =>
     this.points().some((point) => point.value !== null || point.estimate !== null),
   );
+  private readonly observed = computed(() =>
+    this.points().flatMap((point, index) =>
+      point.value === null ? [] : [{ index, date: point.date, value: point.value }],
+    ),
+  );
+  /** One or two weigh-ins: too few for a trend, so the chart shows only the readings. */
+  readonly sparse = computed(
+    () => this.observed().length > 0 && this.observed().length < TREND_MINIMUM_OBSERVATIONS,
+  );
+  protected readonly missing = computed(() => TREND_MINIMUM_OBSERVATIONS - this.observed().length);
+  /** The two readings and the change between them, when there are exactly two. */
+  protected readonly readings = computed(() => {
+    const observed = this.observed();
+    if (!this.sparse() || observed.length !== 2) return null;
+    const [first, last] = observed;
+    // Rounded to what is shown, so float noise (82.3 - 81.9) never prints a sign beside "0".
+    return { first, last, delta: Math.round((last.value - first.value) * 100) / 100 };
+  });
+  protected readonly chartLabel = computed(() =>
+    this.sparse()
+      ? $localize`Bodyweight readings`
+      : $localize`Bodyweight trend with weekly averages`,
+  );
 
   private readonly scale = computed(() => {
-    const values = [
-      ...this.points().flatMap((point) => [point.value, point.estimate]),
-      ...this.weeks().map((week) => week.mean),
-    ].filter((value): value is number => value !== null);
+    const values = this.sparse()
+      ? this.observed().map((entry) => entry.value)
+      : [
+          ...this.points().flatMap((point) => [point.value, point.estimate]),
+          ...this.weeks().map((week) => week.mean),
+        ].filter((value): value is number => value !== null);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const padding = Math.max(1, (max - min) * 0.15);
@@ -197,10 +350,20 @@ export class TrendChart {
     const { min, max } = this.scale();
     return 220 - (200 * (value - min)) / (max - min);
   }
+  protected dotLeft(mark: ChartMark): number {
+    return (100 * mark.x) / WIDTH;
+  }
+  protected dotTop(mark: ChartMark): number {
+    return (100 * mark.y) / HEIGHT;
+  }
   readonly observations = computed<ChartMark[]>(() =>
-    this.points().flatMap((point, index) =>
-      point.value === null ? [] : [{ x: this.x(index), y: this.y(point.value) }],
-    ),
+    this.observed().map((entry) => ({ x: this.x(entry.index), y: this.y(entry.value) })),
+  );
+  /** A plain line from one reading to the next. It claims no trend, so it is drawn only when sparse. */
+  protected readonly connection = computed(() =>
+    this.observations()
+      .map((mark, index) => `${index === 0 ? 'M' : 'L'}${mark.x.toFixed(1)} ${mark.y.toFixed(1)}`)
+      .join(' '),
   );
   readonly line = computed(() => {
     const points = this.points().map((point, index) =>

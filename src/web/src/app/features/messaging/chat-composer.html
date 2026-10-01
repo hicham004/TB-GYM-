@@ -1,0 +1,55 @@
+@let reasons = issues();
+@let shows = attempt().shows('draft', reasons);
+<form class="composer" (ngSubmit)="send.emit()">
+  <div class="row">
+    <label class="field">
+      <span class="tb-visually-hidden" i18n>Write a message</span>
+      <textarea
+        rows="1"
+        id="draft"
+        name="draft"
+        [maxlength]="maximumLength()"
+        [attr.placeholder]="placeholder()"
+        [ngModel]="draft()"
+        (ngModelChange)="draftChange.emit($event)"
+        (blur)="attempt().touch('draft')"
+        (keydown.enter)="sendOnEnter($event)"
+        [attr.aria-invalid]="shows ? 'true' : null"
+        [attr.aria-describedby]="shows ? 'draft-reason' : null"
+      ></textarea>
+    </label>
+    <button
+      type="submit"
+      class="send"
+      aria-describedby="composer-summary"
+      [attr.aria-disabled]="busy() ? 'true' : null"
+      [class.busy]="busy()"
+    >
+      <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false">
+        <path
+          d="M10 16V4M4.5 9.5L10 4l5.5 5.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+      <span class="tb-visually-hidden" i18n>Send message</span>
+    </button>
+  </div>
+  @if (shows) {
+    <p class="reason" id="draft-reason">{{ reasons[0] }}</p>
+  }
+  <p class="count" role="status">
+    @if (remaining() < nearLimit) {
+      <span i18n>{{ remaining() }} of {{ maximumLength() }} characters left.</span>
+    }
+  </p>
+  <p class="summary" id="composer-summary" role="alert" tabindex="-1" #summary>
+    @if (attempt().wasTried() && reasons.length > 0) {
+      <ng-container i18n>This message cannot be sent yet:</ng-container>
+      <span>{{ reasons[0] }}</span>
+    }
+  </p>
+</form>

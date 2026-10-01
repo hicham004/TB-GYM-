@@ -1,5 +1,6 @@
 import { DOCUMENT, formatNumber, NgTemplateOutlet } from '@angular/common';
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -29,6 +30,9 @@ type ShellMenu = 'workspace' | 'account';
 
 /** The desktop sidebar is shown from this width; below it the navigation opens in a dialog. */
 const DESKTOP_QUERY = '(min-width: 1024px)';
+
+/** The custom property a sticky page element (the chat thread header) reads to sit below the bar. */
+export const TOPBAR_BLOCK_SIZE = '--tb-topbar-block-size';
 
 /**
  * The coach and owner shell (Figma coach proof 15:2, Desktop Navigation v1 118:135): a 232px
@@ -84,6 +88,7 @@ export class CoachShell {
   // Optional queries: a context change can close everything before the view exists.
   private readonly navDialog = viewChild<ElementRef<HTMLDialogElement>>('navDialog');
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
+  private readonly topbar = viewChild<ElementRef<HTMLElement>>('topbar');
   private readonly workspaceArea = viewChild<ElementRef<HTMLElement>>('workspaceArea');
   private readonly workspaceButton = viewChild<ElementRef<HTMLButtonElement>>('workspaceButton');
   private readonly accountArea = viewChild<ElementRef<HTMLElement>>('accountArea');
@@ -136,6 +141,20 @@ export class CoachShell {
     }
 
     destroyRef.onDestroy(() => this.closeEverything());
+
+    // The bar grows when text is enlarged or translated, so its height is measured, not assumed.
+    // Removed again with the shell, so a client's pages read zero.
+    const root = this.document.documentElement;
+    afterNextRender(() => {
+      const bar = this.topbar()?.nativeElement;
+      if (bar === undefined || typeof ResizeObserver === 'undefined') return;
+      const observer = new ResizeObserver(() =>
+        root.style.setProperty(TOPBAR_BLOCK_SIZE, `${bar.getBoundingClientRect().height}px`),
+      );
+      observer.observe(bar);
+      destroyRef.onDestroy(() => observer.disconnect());
+    });
+    destroyRef.onDestroy(() => root.style.removeProperty(TOPBAR_BLOCK_SIZE));
   }
 
   // ---------- menus (disclosure pattern: a button that shows and hides a panel) ----------

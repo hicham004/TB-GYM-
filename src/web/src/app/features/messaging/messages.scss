@@ -1,198 +1,452 @@
-.messages {
-  display: grid;
-  gap: 1rem;
-}
-
-.page-head {
-  align-items: center;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-}
-
-.page-head h2 {
-  margin: 0;
-}
-
-/* Logical properties throughout, so a right-to-left locale needs no rewrite. */
-.layout {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
-}
-
-@media (max-width: 60rem) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.conversation-list ul {
-  display: grid;
-  gap: 0.5rem;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.conversation-list li {
-  border: 1px solid var(--border, #d8dde3);
-  border-radius: 0.75rem;
-}
-
-/* Selection and unread are both carried by structure — a border weight plus the word beside it —
-   rather than by colour alone. */
-.conversation-list li.selected {
-  border-inline-start-width: 4px;
-}
-
-.conversation-list li.unavailable .who {
-  font-style: italic;
-}
-
-.conversation {
-  background: none;
-  border: 0;
-  cursor: pointer;
-  display: grid;
-  gap: 0.25rem;
-  inline-size: 100%;
-  padding-block: 0.75rem;
-  padding-inline: 1rem;
-  text-align: start;
-}
-
-.conversation .who {
-  font-weight: 600;
-}
-
-.conversation .preview {
+// Messages (M7, and the coach's C6): an inbox and a chat thread. Phones show one or the other and
+// scroll the page; wide screens show both as fixed panels that scroll inside.
+:host {
+  color: var(--tb-ink);
   display: block;
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+h1:focus,
+h2:focus {
+  outline: none;
+}
+@mixin hidden {
+  block-size: 1px;
+  clip-path: inset(50%);
+  inline-size: 1px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  position: absolute;
   white-space: nowrap;
 }
-
-.conversation .when {
-  font-size: 0.8rem;
+// No row gap: the title can be hidden and the banners are usually empty, and a gap would still
+// open around each of them. Spacing lives on the visible pieces instead.
+.chat {
+  display: grid;
+  grid-template-areas: 'title' 'banners' 'inbox' 'thread';
+  margin-inline: auto;
+  max-inline-size: 72rem;
 }
-
-.badge {
-  display: inline-flex;
-  font-size: 0.8rem;
-  font-weight: 600;
-  gap: 0.25rem;
+.chat-title {
+  font-family: var(--tb-font-serif);
+  font-size: clamp(2.2rem, 8vw, 3rem);
+  font-weight: 400;
+  grid-area: title;
+  line-height: 1;
+  margin-block-end: var(--space-12);
 }
-
+.chat.single .chat-title {
+  @include hidden;
+}
+.banners {
+  display: grid;
+  grid-area: banners;
+}
+.inbox {
+  grid-area: inbox;
+}
 .thread {
+  display: flex;
+  flex-direction: column;
+  grid-area: thread;
+}
+.live.shown,
+.error.shown {
+  border-radius: var(--tb-radius-card-small);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-block-end: var(--space-8);
+  padding: var(--space-8) var(--space-12);
+}
+.live.shown {
+  align-items: center;
+  background: var(--tb-warning-soft);
+  color: var(--tb-warning);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-12);
+  justify-content: space-between;
+}
+.error.shown {
+  background: var(--tb-danger-soft);
+  color: var(--tb-danger);
+}
+.link,
+.older {
+  background: none;
+  border: 0;
+  border-radius: var(--tb-radius-control);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  min-block-size: 2.5rem;
+  padding-inline: var(--space-8);
+}
+.link {
+  text-decoration: underline;
+}
+.older {
+  color: var(--tb-accent-ink);
+  justify-self: center;
+}
+.list-skeleton {
   display: grid;
-  gap: 0.75rem;
+  gap: var(--space-24);
+  padding: var(--space-12);
 }
 
-.feed {
+// ---- Thread ----
+.thread-head {
+  align-items: center;
+  border-block-end: 1px solid var(--tb-line);
+  display: flex;
+  gap: var(--space-12);
+  padding-block: 0 var(--space-12);
+}
+.thread-head app-avatar {
+  --avatar-size: 44px;
+  background: var(--tb-brand);
+  color: var(--tb-on-brand);
+}
+.thread-id h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.thread-role {
+  color: var(--tb-muted);
+  font-size: 0.85rem;
+}
+.back {
+  background: none;
+  block-size: 2.75rem;
+  border: 0;
+  border-radius: 50%;
+  color: var(--tb-ink);
+  cursor: pointer;
   display: grid;
-  gap: 0.75rem;
+  flex: none;
+  inline-size: 2.75rem;
+  margin-inline-start: calc(-1 * var(--space-8));
+  place-items: center;
+}
+.back app-icon {
+  transform: rotate(90deg);
+}
+.back app-icon:dir(rtl) {
+  transform: rotate(-90deg);
+}
+.feed {
+  align-content: start;
+  display: grid;
+  flex: 1;
+  gap: var(--space-4);
+  padding-block: var(--space-12);
+}
+.first {
+  color: var(--tb-muted);
+  padding: var(--space-24);
+  text-align: center;
+}
+.day,
+.day ol {
+  display: grid;
+  gap: 2px;
+}
+.day ol {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-
-.feed li {
-  border: 1px solid var(--border, #d8dde3);
-  border-radius: 0.75rem;
-  padding-block: 0.75rem;
-  padding-inline: 1rem;
-}
-
-.feed li.mine {
-  margin-inline-start: 2rem;
-}
-
-.feed li.theirs {
-  margin-inline-end: 2rem;
-}
-
-.feed li.unread {
-  border-inline-start-width: 4px;
-}
-
-.feed li.removed .removed-body {
-  font-style: italic;
-}
-
-.feed h4 {
-  align-items: baseline;
+.day-label {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-block: 0 0.25rem;
+  justify-content: center;
+  margin-block: var(--space-12) var(--space-4);
 }
-
-.feed p {
-  margin-block: 0 0.25rem;
+.day-label span {
+  background: var(--tb-surface-2);
+  border-radius: 99px;
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.75rem;
 }
-
-/* Newlines are meaningful in a message and the body is plain text, so it is wrapped rather than
-   collapsed. `pre-wrap` renders the characters; it does not interpret them. */
-.body {
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
+li {
+  display: grid;
+  justify-items: start;
 }
-
-.state {
-  font-size: 0.8rem;
-  font-weight: 500;
+li.mine {
+  justify-items: end;
+}
+li.run-start {
+  margin-block-start: var(--space-8);
+}
+article {
+  align-items: center;
+  display: flex;
+  gap: var(--space-4);
+  max-inline-size: min(34rem, 88%);
+}
+li.mine article {
+  flex-direction: row-reverse;
+}
+.new-divider {
+  align-items: center;
+  color: var(--tb-accent-ink);
+  display: flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  gap: var(--space-8);
+  justify-self: stretch;
+  letter-spacing: 0.08em;
+  margin-block: var(--space-12) var(--space-4);
   text-transform: uppercase;
 }
-
+.new-divider::before,
+.new-divider::after {
+  background: currentColor;
+  block-size: 1px;
+  content: '';
+  flex: 1;
+  opacity: 0.4;
+}
+.options {
+  background: none;
+  block-size: 2rem;
+  border: 0;
+  border-radius: 50%;
+  color: var(--tb-muted);
+  cursor: pointer;
+  display: grid;
+  flex: none;
+  inline-size: 2rem;
+  place-items: center;
+  position: relative;
+}
+// The button draws at 32px so a bubble's row keeps its height; the press target is 44px.
+.options::after {
+  content: '';
+  inset: -6px;
+  position: absolute;
+}
+.options:hover,
+.options[aria-expanded='true'] {
+  background: var(--tb-surface-2);
+  color: var(--tb-ink);
+}
+.dots {
+  background: radial-gradient(circle, currentColor 1.5px, transparent 2px) 0 0 / 6px 4px repeat-x;
+  block-size: 4px;
+  inline-size: 17px;
+}
+// With a mouse the options wait for hover or focus; on touch they are always there.
+@media (hover: hover) and (pointer: fine) {
+  .options:not([aria-expanded='true']) {
+    opacity: 0;
+  }
+  article:hover .options,
+  .options:focus-visible {
+    opacity: 1;
+  }
+}
 .actions {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card-small);
+  box-shadow: var(--tb-shadow-overlay);
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  margin-block: var(--space-4);
+  padding: var(--space-4);
 }
-
-.composer,
+.actions button {
+  background: none;
+  border: 0;
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  min-block-size: 2.5rem;
+  padding-inline: var(--space-12);
+}
+.actions button:hover {
+  background: var(--tb-surface-2);
+}
+.actions .danger {
+  color: var(--tb-danger);
+}
+.back:focus-visible,
+.options:focus-visible,
+.actions button:focus-visible,
+.link:focus-visible,
+.older:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
 .edit-form,
 .moderation {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card-small);
   display: grid;
-  gap: 0.5rem;
+  gap: var(--space-8);
+  inline-size: min(34rem, 100%);
+  margin-block: var(--space-4);
+  padding: var(--space-12);
 }
-
-.composer label,
 .edit-form label,
 .moderation label {
   display: grid;
-  gap: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  gap: var(--space-4);
 }
-
-.composer textarea,
-.edit-form textarea,
-.moderation input {
-  inline-size: 100%;
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
 }
-
-/* A derived reason is plain text, not an assertive region: it is already on screen when it renders
-   and re-announcing it on every keystroke is the anti-pattern 6A-5 removed. */
-.reason {
-  font-size: 0.9rem;
+.reason,
+.summary {
+  color: var(--tb-danger);
+  font-size: 0.85rem;
 }
-
 .summary:empty {
   display: none;
 }
-
-.detail {
-  font-size: 0.85rem;
+.note {
+  color: var(--tb-muted);
+  font-size: 0.8rem;
 }
-
-.empty,
-.denied {
-  margin: 0;
+.closed {
+  border: 1px dashed var(--tb-line-strong);
+  border-radius: var(--tb-radius-card);
+  display: grid;
+  gap: var(--space-8);
+  margin-block: var(--space-16);
+  padding: var(--space-24);
+  text-align: center;
 }
-
+.closed h3,
+.placeholder-title {
+  font-family: var(--tb-font-serif);
+  font-size: 1.75rem;
+  font-weight: 400;
+}
 .read-only-notice {
-  border-block-start: 1px solid var(--color-border-subtle);
-  color: var(--color-text-secondary);
-  margin: 0;
-  padding-block-start: 0.75rem;
+  background: var(--tb-surface-2);
+  border-radius: var(--tb-radius-card-small);
+  color: var(--tb-muted);
+  margin-block: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+}
+.thread-skeleton {
+  display: grid;
+  gap: var(--space-12);
+}
+.thread-skeleton span {
+  background: var(--tb-surface-2);
+  block-size: 2.75rem;
+  border-radius: 18px;
+  inline-size: 60%;
+}
+.thread-skeleton .mine {
+  inline-size: 45%;
+  justify-self: end;
+}
+
+.placeholder {
+  color: var(--tb-muted);
+  display: grid;
+  flex: 1;
+  gap: var(--space-8);
+  padding: var(--space-32);
+  place-content: center;
+  text-align: center;
+}
+.placeholder-title {
+  color: var(--tb-ink);
+}
+
+// ---- Phones: the inbox, or one thread ----
+@media (max-width: 59.99rem) {
+  .chat:not(.has-thread) .thread,
+  .chat.has-thread .inbox {
+    display: none;
+  }
+  .chat.has-thread .chat-title {
+    @include hidden;
+  }
+  // The page scrolls here, so the header stays at the top of the thread: who this is, and the way
+  // back. A coach's top bar is sticky too; the thread sits below it (CoachShell publishes its height).
+  .thread-head {
+    background: var(--tb-bg);
+    inset-block-start: var(--tb-topbar-block-size, 0px);
+    padding-block-start: var(--space-8);
+    position: sticky;
+    z-index: 4;
+  }
+}
+
+// ---- Wide screens: both, as panels sized to the window ----
+@media (min-width: 60rem) {
+  .chat {
+    // What the shell takes: the coach's top bar and page padding, or the client's padding and tabs.
+    --chat-chrome: 7.5rem;
+    block-size: calc(100dvh - var(--chat-chrome));
+    column-gap: var(--space-24);
+    grid-template-areas: 'title banners' 'inbox thread';
+    grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-block-size: 32rem;
+  }
+  .chat.for-client {
+    --chat-chrome: calc(4rem + var(--tb-client-tabs-block-size, 4.75rem));
+  }
+  .chat.single {
+    grid-template-areas: 'banners' 'thread';
+    grid-template-columns: minmax(0, 48rem);
+    justify-content: center;
+  }
+  .chat.no-conversations {
+    grid-template-areas: 'title banners' 'inbox inbox';
+  }
+  .chat.no-conversations .thread {
+    display: none;
+  }
+  .inbox {
+    overflow-y: auto;
+  }
+  .thread {
+    background: var(--tb-surface);
+    border: 1px solid var(--tb-line);
+    border-radius: var(--tb-radius-card);
+    box-shadow: var(--tb-shadow-card);
+    overflow: hidden;
+  }
+  .thread-head {
+    padding: var(--space-12) var(--space-16);
+  }
+  .back {
+    display: none;
+  }
+  .feed {
+    background: var(--tb-bg);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-12) var(--space-24) var(--space-16);
+  }
+  .closed,
+  .read-only-notice {
+    margin: var(--space-16);
+  }
 }
