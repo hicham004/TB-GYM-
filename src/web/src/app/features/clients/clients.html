@@ -1,118 +1,212 @@
-<section class="page-heading">
-  <div>
-    <p class="eyebrow" i18n>Coaching</p>
-    @if (showingFormer) {
-      <h1 i18n>Former clients</h1>
-      <p i18n>
-        Clients whose coaching ended, and clients who left. Their records are kept, read-only, and
-        you can invite any of them back as a new client.
-      </p>
-    } @else {
-      <h1 i18n>Clients</h1>
-      <p i18n>Everyone you coach right now.</p>
-    }
-  </div>
-  <a class="primary-button" routerLink="/invitations" i18n>Invite client</a>
-</section>
-
-@if (isOwner()) {
-  <app-section-nav class="client-sections" label="Client lists" i18n-label [links]="sections" />
-}
-
-@if (error()) {
-  <p class="form-error" role="alert">{{ error() }}</p>
-}
-
-<section class="surface-section">
-  @if (loading()) {
-    <p class="loading-row" i18n>Loading clients...</p>
-  } @else if (showingFormer) {
-    @if (former().length === 0) {
-      <div class="empty-state">
-        <h2 i18n>No former clients</h2>
-        <p i18n>When coaching ends, or a client leaves, they are listed here.</p>
-      </div>
-    } @else {
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th scope="col" i18n>Client</th>
-              <th scope="col" i18n>Ended</th>
-              <th scope="col" i18n>How</th>
-              <th scope="col" i18n>Reason</th>
-              <th scope="col"></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (client of former(); track client.id) {
-              <tr>
-                <td>
-                  <strong dir="auto">{{ client.firstName }} {{ client.lastName }}</strong>
-                  <small>{{ client.email }}</small>
-                </td>
-                <td>{{ client.releasedAtUtc | date: 'mediumDate' }}</td>
-                <td>
-                  @if (client.departureKind === 'LeftByClient') {
-                    <ng-container i18n>Left by client</ng-container>
-                  } @else {
-                    <ng-container i18n>Ended by owner</ng-container>
-                  }
-                </td>
-                <td dir="auto">{{ client.reason }}</td>
-                <td><a [routerLink]="['/clients', client.id]" i18n>Open record</a></td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    }
-  } @else if (clients().length === 0) {
-    <div class="empty-state">
-      <h2 i18n>No accepted clients yet</h2>
-      <p i18n>Send an invitation to connect the first client account.</p>
+<section class="clients" aria-labelledby="clients-heading">
+  <header class="top">
+    <div class="intro">
+      @if (showingFormer) {
+        <h1 id="clients-heading" #heading tabindex="-1" i18n>Former clients</h1>
+        <p class="lede" i18n>
+          Clients whose coaching ended, and clients who left. Their records are kept, read-only, and
+          you can invite any of them back as a new client.
+        </p>
+      } @else {
+        <h1 id="clients-heading" #heading tabindex="-1" i18n>Clients</h1>
+        @if (summary(); as line) {
+          <p class="lede" dir="auto">{{ line }}</p>
+        }
+      }
     </div>
-  } @else {
-    <div class="table-scroll">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th scope="col" i18n>Client</th>
-            <th scope="col" i18n>Phone</th>
-            <th scope="col" i18n>Onboarding</th>
-            <th scope="col" i18n>Access</th>
-            <th scope="col"></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (client of clients(); track client.id) {
-            <tr>
-              <td>
-                <strong>{{ client.firstName }} {{ client.lastName }}</strong>
-                <small>{{ client.email }}</small>
-              </td>
-              <td>{{ client.phoneNumber || '-' }}</td>
-              <td>
-                <span
-                  class="status-badge"
-                  [class.success]="client.onboardingStatus === 'Completed'"
-                  [class.warning]="client.onboardingStatus === 'InProgress'"
-                >
-                  {{ onboardingStatusLabel(client.onboardingStatus) }}
-                </span>
-              </td>
-              <td>
-                @if (client.isCoachBlocked) {
-                  <span class="status-badge" i18n>Blocked</span>
-                } @else {
-                  <span class="status-badge success" i18n>Active</span>
-                }
-              </td>
-              <td><a [routerLink]="[client.id]" i18n>Open profile</a></td>
-            </tr>
+    <a appButton routerLink="/invitations">
+      <app-icon name="plus" />
+      <span i18n>Invite client</span>
+    </a>
+  </header>
+
+  @if (isOwner()) {
+    <app-section-nav label="Client lists" i18n-label [links]="sections" />
+  }
+
+  @if (showingFormer) {
+    @if (former(); as rows) {
+      @if (rows.length === 0) {
+        <app-empty-state
+          class="panel"
+          heading="No former clients"
+          description="When coaching ends, or a client leaves, they are listed here."
+          i18n-heading
+          i18n-description
+        />
+      } @else {
+        <div class="panel">
+          <ul class="rows" role="list">
+            @for (row of rows; track row.id) {
+              <li class="client-row former">
+                <app-avatar [initials]="row.initials" presentation="client" />
+                <div class="who">
+                  <a class="name" [routerLink]="row.link" dir="auto">{{ row.name }}</a>
+                  <p class="goal">
+                    {{ row.how }} · <time [attr.datetime]="row.endedAt">{{ row.ended }}</time>
+                  </p>
+                </div>
+                <p class="reason" dir="auto">{{ row.reason }}</p>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    }
+  } @else if (list(); as view) {
+    @if (view.rows.length === 0) {
+      <app-empty-state
+        class="panel"
+        heading="No clients yet"
+        description="Invite your first client. They will show up here with their plan and how their week is going."
+        i18n-heading
+        i18n-description
+      >
+        <a appButton empty-state-action routerLink="/invitations" i18n>Invite your first client</a>
+      </app-empty-state>
+    } @else {
+      <div class="toolbar">
+        <div class="search">
+          <app-icon name="search" />
+          <label class="tb-visually-hidden" for="client-search" i18n>Search clients</label>
+          <input
+            id="client-search"
+            name="client-search"
+            type="search"
+            autocomplete="off"
+            enterkeyhint="search"
+            placeholder="Search by name or goal…"
+            i18n-placeholder
+            [value]="search()"
+            (input)="onSearch($event)"
+          />
+          @if (search() !== '') {
+            <button
+              type="button"
+              class="clear"
+              aria-label="Clear search"
+              i18n-aria-label
+              (click)="search.set('')"
+            >
+              <app-icon name="close" />
+            </button>
           }
-        </tbody>
-      </table>
+        </div>
+        <fieldset class="chips">
+          <legend class="tb-visually-hidden" i18n>Show</legend>
+          @for (chip of chips(); track chip.value) {
+            <label class="chip" [class.is-empty]="chip.count === 0">
+              <input
+                class="tb-visually-hidden"
+                type="radio"
+                name="client-filter"
+                [value]="chip.value"
+                [checked]="filter() === chip.value"
+                (change)="setFilter(chip.value)"
+              />
+              <!-- The space inside the first span keeps "Needs attention 4" apart when read aloud. -->
+              <span>{{ chip.label }} </span>
+              <span class="count">{{ chip.count }}</span>
+            </label>
+          }
+        </fieldset>
+      </div>
+      <p class="tb-visually-hidden" role="status">{{ resultSummary() }}</p>
+
+      @if (visible().length > 0) {
+        <div class="panel">
+          <div class="list-head" aria-hidden="true">
+            <span class="head-client" i18n>Client</span>
+            <span i18n>Status</span>
+            <span i18n>Last activity</span>
+            <span i18n>Last 7 days</span>
+            <span i18n>Plan</span>
+          </div>
+          <ul class="rows" role="list">
+            @for (row of visible(); track row.id) {
+              <li class="client-row">
+                <app-avatar [initials]="row.initials" presentation="client" />
+                <div class="who">
+                  <a class="name" [routerLink]="row.link" dir="auto">{{ row.name }}</a>
+                  @if (row.goal) {
+                    <p class="goal" dir="auto">{{ row.goal }}</p>
+                  }
+                  @if (row.coach) {
+                    <p class="coach" i18n>Coached by {{ row.coach }}</p>
+                  }
+                </div>
+                <div class="state">
+                  <app-status-pill [label]="row.status.label" [tone]="row.status.tone" />
+                  @if (row.reasons) {
+                    <p class="reasons">{{ row.reasons }}</p>
+                  }
+                </div>
+                <div class="facts">
+                  <p class="activity">
+                    @if (row.activityAt) {
+                      <time [attr.datetime]="row.activityAt">{{ row.activity }}</time>
+                    } @else {
+                      {{ row.activity }}
+                    }
+                  </p>
+                  <div class="week">
+                    @if (row.week; as week) {
+                      @if (week.days.length > 0) {
+                        <span class="strip" aria-hidden="true">
+                          @for (day of week.days; track day.date) {
+                            <i class="day" [attr.data-mark]="day.mark"></i>
+                          }
+                        </span>
+                      }
+                      <span
+                        class="week-value"
+                        [class.is-none]="week.days.length === 0"
+                        dir="auto"
+                        aria-hidden="true"
+                        >{{ week.value }}</span
+                      >
+                      <span class="tb-visually-hidden">{{ week.summary }}</span>
+                    } @else {
+                      <span class="no-training" i18n>Training not in plan</span>
+                    }
+                  </div>
+                  <p class="plan" [class.soon]="row.plan.soon">{{ row.plan.label }}</p>
+                </div>
+              </li>
+            }
+          </ul>
+        </div>
+      } @else {
+        <app-empty-state
+          class="panel"
+          [heading]="emptyFilter().heading"
+          [description]="emptyFilter().description"
+        >
+          <button
+            appButton
+            empty-state-action
+            type="button"
+            variant="outlined"
+            (click)="clearFilter()"
+          >
+            {{ emptyFilter().action }}
+          </button>
+        </app-empty-state>
+      }
+    }
+  }
+
+  @if (failed(); as message) {
+    <div class="panel load-failed">
+      <p role="alert">{{ message }}</p>
+      <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+    </div>
+  } @else if (showingFormer ? former() === null : list() === null) {
+    <div class="panel loading">
+      <!-- Announced once: the other placeholders are drawn but say nothing. -->
+      @for (row of [1, 2, 3, 4, 5]; track row; let first = $first) {
+        <app-skeleton [label]="first ? loadingLabel : ''" [lines]="2" [avatar]="true" />
+      }
     </div>
   }
 </section>

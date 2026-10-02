@@ -1,13 +1,332 @@
-td strong,
-td small {
+// Clients (C2): one row per person, a face first (§2 rule 3), the whole row a link. A table of
+// columns on a wide screen, cards on a phone. Brand v2 tokens only, so it follows the coach's
+// brand and the person's mode.
+:host {
+  container-type: inline-size;
   display: block;
 }
 
-td small {
-  color: var(--muted-text);
-  margin-block-start: 2px;
+.clients {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
 }
 
-.client-sections {
-  margin-block-end: var(--space-16);
+.top {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.875rem;
+  justify-content: space-between;
+}
+
+.intro {
+  min-inline-size: 0;
+}
+
+h1 {
+  color: var(--tb-ink);
+  font-size: clamp(1.75rem, 4cqi, 2.125rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  outline: none;
+}
+
+.lede {
+  color: var(--tb-muted);
+  margin: 0.375rem 0 0;
+  max-inline-size: 44rem;
+}
+
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+// ---------- the list ----------
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+// Not `.client`: the avatar's `presentation="client"` puts that class on the avatar itself.
+.client-row {
+  align-items: start;
+  border-block-start: 1px solid var(--tb-line);
+  display: grid;
+  gap: 0.5rem 0.875rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.875rem 1.25rem;
+  position: relative;
+  transition: background-color var(--tb-duration-fast) var(--tb-ease);
+}
+
+.rows > .client-row:first-child {
+  border-block-start: 0;
+}
+
+.client-row:hover {
+  background: var(--tb-surface-2);
+}
+
+.who,
+.state,
+.facts,
+.reason {
+  grid-column: 2;
+  min-inline-size: 0;
+}
+
+.name {
+  color: var(--tb-ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+// The name's link covers the whole row, so any tap on the row opens the client.
+.name::after {
+  content: '';
+  inset: 0;
+  position: absolute;
+}
+
+.client-row:hover .name {
+  text-decoration: underline;
+}
+
+.name:focus-visible {
+  outline: none;
+}
+
+.name:focus-visible::after {
+  border-radius: var(--tb-radius-card-small);
+  outline: 2px solid var(--tb-focus);
+  outline-offset: -3px;
+}
+
+.goal,
+.coach,
+.reasons,
+.reason,
+.activity,
+.plan {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.goal {
+  margin-block-start: 0.125rem;
+}
+
+// Goals and reasons are typed by people and have no length cap here; the client's record shows
+// them in full.
+.client-row:not(.former) .goal,
+.reason {
+  -webkit-box-orient: vertical;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.reason {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.coach {
+  margin-block-start: 0.125rem;
+}
+
+.state {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.625rem;
+}
+
+.reasons {
+  color: var(--tb-ink);
+}
+
+.facts {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 1.25rem;
+}
+
+.activity {
+  color: var(--tb-ink);
+}
+
+.week {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-inline-size: 0;
+}
+
+.strip {
+  align-items: flex-end;
+  block-size: 1.375rem;
+  display: inline-grid;
+  gap: 0.1875rem;
+  grid-template-columns: repeat(7, 0.5rem);
+}
+
+.day {
+  block-size: 100%;
+  border-radius: 3px;
+  box-sizing: border-box;
+  display: block;
+}
+
+.day[data-mark='rest'] {
+  background: var(--tb-line);
+  block-size: 0.25rem;
+}
+
+// Forest on light, the bright accent on dark, as on Coach Today's week.
+.day[data-mark='done'] {
+  background: var(--tb-accent-ink);
+}
+
+.day[data-mark='partial'] {
+  background: linear-gradient(to top, var(--tb-accent-ink) 50%, var(--tb-line) 50%);
+}
+
+.day[data-mark='missed'] {
+  border: 2px solid var(--tb-warning);
+}
+
+.day[data-mark='due'] {
+  border: 2px dashed var(--tb-line-strong);
+}
+
+.week-value {
+  color: var(--tb-ink);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.week-value.is-none,
+.no-training {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.plan.soon {
+  color: var(--tb-warm-ink);
+  font-weight: 600;
+}
+
+// The column names: shown on a wide screen only, and hidden from screen readers, because each
+// cell already says what it is ("Trained 2 hours ago", "Plan ends in 9 days").
+.list-head {
+  display: none;
+}
+
+@container (min-width: 60rem) {
+  .list-head,
+  .client-row:not(.former) {
+    display: grid;
+    gap: 0.5rem 1rem;
+    grid-template-columns:
+      2.5rem minmax(0, 2.2fr) minmax(0, 1.25fr) minmax(0, 1.2fr)
+      minmax(8.5rem, 1fr) minmax(0, 1.1fr);
+  }
+
+  .list-head {
+    background: var(--tb-surface-2);
+    border-block-end: 1px solid var(--tb-line);
+    color: var(--tb-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 0.625rem 1.25rem;
+    text-transform: uppercase;
+  }
+
+  .list-head:lang(ar) {
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .head-client {
+    grid-column: 1 / 3;
+  }
+
+  .client-row:not(.former) {
+    align-items: center;
+  }
+
+  .client-row:not(.former) .who {
+    grid-column: 2;
+  }
+
+  .client-row:not(.former) .state {
+    align-items: flex-start;
+    flex-direction: column;
+    grid-column: 3;
+  }
+
+  // On a wide screen each fact is its own column.
+  .client-row:not(.former) .facts {
+    display: contents;
+  }
+
+  .former {
+    align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr);
+  }
+
+  .former .reason {
+    grid-column: 3;
+  }
+}
+
+// ---------- loading and failure ----------
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem;
+}
+
+.load-failed {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+  padding: 1.25rem;
+}
+
+.load-failed p {
+  color: var(--tb-ink);
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .client-row {
+    transition: none;
+  }
 }

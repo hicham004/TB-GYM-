@@ -517,6 +517,27 @@ one-time install event. There is no service worker, so nothing is cached offline
 type table has no `.webmanifest`, so `nginx.conf` names the manifest's type itself; the built app
 behind that image and its existing CSP reports no installability errors in Chromium.
 
+R3.1 adds the coach's two overview reads, with no schema change: `GET /api/coach-today` (attention
+queue, activity feed, this week's sessions, counts) and `GET /api/clients/overview` (one row per
+client with status, plan end, last activity and the last seven days). The Clients module owns their
+shape and `CoachAttentionPolicy` (CLI-018), Training owns `TrainingAttentionPolicy` (TRN-021), and
+`CoachOverviewReader` in Infrastructure composes them like the progress dashboard (ADR 0013): each
+read is one set-based query over every client in scope, about 22 commands for a whole Coach Today.
+To decide every client's access at once, `ICoachingFeatureAccessService` gained `EvaluateManyAsync`;
+`EvaluateAllAsync` and `EvaluateAsync` are now a batch of one, so all features share one decision path.
+
+R3.2 draws Coach Today from that read with no other call. `ApiClient.getCoachToday` returns the
+generated contract, and `coach-today.models.ts` turns it into sentences and links inside the lazy
+dashboard chunk, so none of it reaches the initial bundle. `/` serves both Todays, so the route
+carries `REDESIGNED_FOR_STAFF`: App lets the content follow dark mode only when the member is not a
+client. Messages opens `?conversation=<id>` once, when that thread is in the first page of the inbox.
+
+R3.3a draws Clients from `GET /api/clients/overview` with no other call, through a feature-local
+`ClientListApi` (like `FormerClientsApi`, so it stays out of the initial bundle). The read returns
+every client in scope at once, so the chips and the search filter in the browser; the chosen chip is
+kept in `?show=` so Back returns to it. Both list routes carry `REDESIGNED`; a client's record does
+not yet and stays light.
+
 R2.4a keeps client-entered extra food in a separate Nutrition log table, linked by tenant and log
 ID. The day read returns it beside planned slots and includes it in consumed totals; the assigned
 meal snapshot and targets remain unchanged. The add command checks the current client and server

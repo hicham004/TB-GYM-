@@ -143,6 +143,13 @@ const GLYPHS = {
       ' 16.552 4.5 16V10C4.5 9.448 4.948 9 5.5 9ZM7 9V6.5C7 4.843 8.343 3.5 10 3.5C11.657 3.5 13' +
       ' 4.843 13 6.5V9',
   },
+  // The Clients search field (R3.3a), on the same 20px, 1.5px-stroke grid; not in Figma.
+  search: {
+    size: 20,
+    path:
+      'M13.5 13.5L17.25 17.25M15.25 9C15.25 12.452 12.452 15.25 9 15.25C5.548 15.25 2.75 12.452' +
+      ' 2.75 9C2.75 5.548 5.548 2.75 9 2.75C12.452 2.75 15.25 5.548 15.25 9Z',
+  },
 } as const satisfies Record<string, { size: number; path: string }>;
 
 export type IconName = keyof typeof GLYPHS;

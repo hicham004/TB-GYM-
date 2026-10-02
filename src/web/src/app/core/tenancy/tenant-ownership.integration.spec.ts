@@ -1,42 +1,39 @@
 import { provideHttpClient, withInterceptors, HttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { firstValueFrom, of, Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../api/api-client';
-import type { ClientInvitation, ClientSummary } from '../api/api.models';
+import type { ClientInvitation } from '../api/api.models';
+import type { ClientOverviewView } from '../api/generated';
+import { AuthStore } from '../auth/auth.store';
 import { CsrfService } from '../security/csrf.service';
+import { ClientListApi } from '../../features/clients/client-list-api';
 import { Clients } from '../../features/clients/clients';
 import { Invitations } from '../../features/invitations/invitations';
 import { ExerciseLibrary } from '../../features/training/exercise-library';
 import { TenantStore } from './tenant.store';
 import { tenantInterceptor } from './tenant.interceptor';
 import { settle } from '../../../testing/dom';
+import { clientListView, overviewRow } from '../../../testing/client-list-fixtures';
+import { coachClient } from '../../../testing/coach-today-fixtures';
 
-const client = (id: string): ClientSummary => ({
-  id,
-  firstName: id,
-  lastName: 'Client',
-  email: `${id}@example.test`,
-  phoneNumber: null,
-  onboardingStatus: 'Completed',
-  isCoachBlocked: false,
-  version: 1,
-  assignedCoachUserId: 'owner-1',
-  assignedCoachName: 'Olivia Owner',
-});
+/** A client list holding one client, whose first name says which workspace it came from. */
+const directory = (id: string): ClientOverviewView =>
+  clientListView({ clients: [overviewRow(coachClient(id, id, 'Client'))] });
 const invitation = (id: string) => ({ id, status: 'Pending' }) as ClientInvitation;
 
 describe('tenant ownership in migrated screens', () => {
   const api = {
     getTenants: vi.fn(() => of(['A', 'B'].map((tenantId) => ({ tenantId, role: 'Owner' })))),
-    getClients: vi.fn(() => of<ClientSummary[]>([])),
     getInvitations: vi.fn(() => of<ClientInvitation[]>([])),
     createInvitation: vi.fn(() => of(invitation('created'))),
     searchExercises: vi.fn(() => of({ items: [], total: 0 })),
     listMedia: vi.fn(() => of({ items: [], total: 0 })),
   };
+  const clientList = { getOverview: vi.fn(() => of(directory('none'))) };
   const csrf = { refresh: vi.fn(async (): Promise<void> => undefined) };
 
   beforeEach(async () => {
@@ -46,6 +43,8 @@ describe('tenant ownership in migrated screens', () => {
       providers: [
         provideRouter([]),
         { provide: ApiClient, useValue: api },
+        { provide: ClientListApi, useValue: clientList },
+        { provide: AuthStore, useValue: { user: signal(null) } },
         { provide: CsrfService, useValue: csrf },
         provideHttpClient(withInterceptors([tenantInterceptor])),
         provideHttpClientTesting(),
@@ -58,77 +57,80 @@ describe('tenant ownership in migrated screens', () => {
     localStorage.clear();
   });
 
+  const listed = (fixture: { componentInstance: Clients }) =>
+    fixture.componentInstance['list']()?.rows.map((row) => row.id) ?? null;
+
   it('client directory rejects slow A success after B and clears synchronously', async () => {
-    const a = new Subject<ClientSummary[]>();
-    api.getClients.mockReturnValueOnce(a).mockReturnValueOnce(of([client('B')]));
+    const a = new Subject<ClientOverviewView>();
+    clientList.getOverview.mockReturnValueOnce(a).mockReturnValueOnce(of(directory('B')));
     const fixture = TestBed.createComponent(Clients);
     await settle(fixture);
     const tenants = TestBed.inject(TenantStore);
     tenants.select('B');
-    expect(fixture.componentInstance['clients']()).toEqual([]);
-    expect(fixture.componentInstance['loading']()).toBe(false);
+    expect(listed(fixture)).toBeNull();
+    expect(fixture.componentInstance['failed']()).toBeNull();
     await settle(fixture);
-    a.next([client('A')]);
+    a.next(directory('A'));
     await settle(fixture);
     expect(fixture.nativeElement.textContent).toContain('B Client');
     expect(fixture.nativeElement.textContent).not.toContain('A Client');
   });
 
   it('client directory ignores an old error after B succeeds', async () => {
-    const a = new Subject<ClientSummary[]>();
-    api.getClients.mockReturnValueOnce(a).mockReturnValueOnce(of([client('B')]));
+    const a = new Subject<ClientOverviewView>();
+    clientList.getOverview.mockReturnValueOnce(a).mockReturnValueOnce(of(directory('B')));
     const fixture = TestBed.createComponent(Clients);
     await settle(fixture);
     TestBed.inject(TenantStore).select('B');
     await settle(fixture);
     a.error(new Error('old tenant failed'));
     await settle(fixture);
-    expect(fixture.componentInstance['error']()).toBeNull();
-    expect(fixture.componentInstance['clients']()[0].id).toBe('B');
+    expect(fixture.componentInstance['failed']()).toBeNull();
+    expect(listed(fixture)).toEqual(['B']);
   });
 
   it('client directory reloads on a coalesced A -> B -> A switch', async () => {
-    const first = new Subject<ClientSummary[]>();
-    api.getClients.mockReturnValueOnce(first).mockReturnValueOnce(of([client('new A')]));
+    const first = new Subject<ClientOverviewView>();
+    clientList.getOverview.mockReturnValueOnce(first).mockReturnValueOnce(of(directory('new A')));
     const fixture = TestBed.createComponent(Clients);
     await settle(fixture);
     const tenants = TestBed.inject(TenantStore);
     tenants.select('B');
     tenants.select('A');
     await settle(fixture);
-    first.next([client('old A')]);
+    first.next(directory('old A'));
     await settle(fixture);
-    expect(api.getClients).toHaveBeenCalledTimes(2);
-    expect(fixture.componentInstance['clients']()[0].id).toBe('new A');
+    expect(clientList.getOverview).toHaveBeenCalledTimes(2);
+    expect(listed(fixture)).toEqual(['new A']);
   });
 
-  it('client directory keeps the newest reload and its spinner', async () => {
-    const old = new Subject<ClientSummary[]>();
-    const latest = new Subject<ClientSummary[]>();
-    api.getClients.mockReturnValueOnce(old).mockReturnValueOnce(latest);
+  it('client directory keeps the newest reload and its placeholder', async () => {
+    const old = new Subject<ClientOverviewView>();
+    const latest = new Subject<ClientOverviewView>();
+    clientList.getOverview.mockReturnValueOnce(old).mockReturnValueOnce(latest);
     const fixture = TestBed.createComponent(Clients);
     await settle(fixture);
     const loading = fixture.componentInstance['load']();
-    old.next([client('old')]);
+    old.next(directory('old'));
     await settle(fixture);
-    expect(fixture.componentInstance['loading']()).toBe(true);
-    expect(fixture.componentInstance['clients']()).toEqual([]);
-    latest.next([client('latest')]);
+    expect(listed(fixture)).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-skeleton')).not.toBeNull();
+    latest.next(directory('latest'));
     await loading;
-    expect(fixture.componentInstance['clients']()[0].id).toBe('latest');
+    expect(listed(fixture)).toEqual(['latest']);
   });
 
   it.each(['logout', 'destroy'])('client directory ignores responses after %s', async (action) => {
-    const result = new Subject<ClientSummary[]>();
-    api.getClients.mockReturnValueOnce(result);
+    const result = new Subject<ClientOverviewView>();
+    clientList.getOverview.mockReturnValueOnce(result);
     const fixture = TestBed.createComponent(Clients);
     await settle(fixture);
     if (action === 'logout') TestBed.inject(TenantStore).clear();
     else fixture.destroy();
-    result.next([client('private')]);
+    result.next(directory('private'));
     await new Promise((resolve) => setTimeout(resolve));
-    expect(fixture.componentInstance['clients']()).toEqual([]);
-    expect(fixture.componentInstance['loading']()).toBe(false);
+    expect(listed(fixture)).toBeNull();
+    expect(fixture.componentInstance['failed']()).toBeNull();
   });
 
   it('invitation writes keep their initiating tenant and suppress late notices and finally', async () => {

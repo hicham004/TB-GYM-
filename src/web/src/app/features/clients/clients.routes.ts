@@ -1,18 +1,22 @@
 import { Routes } from '@angular/router';
+import { REDESIGNED } from '../../core/theme/redesigned-route';
 
 const sections = () => import('./client-workspace-sections');
 
 export const clientRoutes: Routes = [
   {
+    // The two lists are rebuilt on brand v2 (R3.3a) and follow light or dark; a client's record
+    // below is not yet, so it stays light.
     path: '',
     title: $localize`Clients | TB Gym`,
+    data: REDESIGNED,
     loadComponent: () => import('./clients').then((module) => module.Clients),
   },
   {
     // Before ':clientId', so "former" is never read as a client id. The API makes it owner-only.
     path: 'former',
     title: $localize`Former clients | TB Gym`,
-    data: { view: 'former' },
+    data: { ...REDESIGNED, view: 'former' },
     loadComponent: () => import('./clients').then((module) => module.Clients),
   },
   {

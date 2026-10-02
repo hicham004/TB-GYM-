@@ -58,11 +58,12 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R2.4b | **Nutrition demo data:** assigned meal plan for Atlas plus screenshot review on that workspace; correction for mistaken extra-food entries | §2 on the demo workspace | Done · 2026-09-30 · 9634bc4 |
 | R2.4c | **Check-in** (M6): one question per screen, optional progress photos, review and a sent moment; Today opens the check-in due | §2 | Done · 2026-10-01 · b184eca |
 | R2.5a | **Messages** (M7, the shared chat C6 reuses): inbox with faces and counts, a thread of bubbles by day with a "New messages" line, a pinned composer, live updates with no Refresh | §2 | Done · 2026-10-01 |
-| R2.5b | **Training** (M3): the program overview (week x of y, sessions done and missed) and history with PRs | §2 | Done · 2026-10-01 |
-| R2.5c | **Me** (M8) and the **installable app** (manifest, icons, splash, install prompt) | §2 | Done · 2026-10-01 |
-| R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | To do |
-| R3.2 | **Coach Today** (C1) | §2 | To do |
-| R3.3 | **Clients** (C2) and the **client profile** overview and progress (C3) | §2 | To do |
+| R2.5b | **Training** (M3): the program overview (week x of y, sessions done and missed) and history with PRs | §2 | Done · 2026-10-01 · 9218e29 |
+| R2.5c | **Me** (M8) and the **installable app** (manifest, icons, splash, install prompt) | §2 | Done · 2026-10-01 · 9218e29 |
+| R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | Built, not committed |
+| R3.2 | **Coach Today** (C1) | §2 | Built, not committed |
+| R3.3a | **Clients** (C2): the list with status, last activity, the last 7 days, filter chips and search | §2 | Built, not committed |
+| R3.3b | **Client profile** header, overview and progress (C3), with a coach read of the client's personal records | §2, plus backend tests | To do |
 | R3.4 | **Client profile** training timeline and Service & access (C3) | §2 | To do |
 | R3.5 | **Coach Messages** (C6) and **coach brand settings** (§3.1), with backend setting and logo | §2, plus backend tests | To do |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Gate |
@@ -140,7 +141,9 @@ of the implemented R1.3 screens before production rollout.
 - **Angular router advisory (seen in R2.4c).** `npm audit --audit-level=high` fails on
   `@angular/router` 22.0–22.1 (GHSA-ff3f-86qr-9cv3, a server-rendering denial of service). The app
   renders in the browser today, but `check.ps1` stops at this step and R6.2 adds pre-rendering, so
-  bump Angular to 22.2 or later in its own step.
+  bump Angular to 22.2 or later in its own step. Since 2026-10-01 the audit also reports a critical
+  advisory in `piscina` 5.0–5.3.1 (GHSA-67c8-pqhq-4rmx), which `@angular/build` 22.1.4 uses as its
+  build-time worker pool. It never reaches the browser; the same upgrade should clear it.
 - **Prototype fidelity pass (owner, 2026-10-01).** The owner felt the built screens have the
   prototype's feel but not its look, and will test the app and list changes per screen. Claude
   recommended doing that after R2.5c, before the coach side. Gaps found against the prototype:
@@ -175,10 +178,42 @@ of the implemented R1.3 screens before production rollout.
   security with R5.2.
 - **The brand hero (from R2.5c).** Training and Me each carry their own copy of the hero's gradient,
   glow and dots. Move it into one shared style when a third screen needs it.
-- **Initial bundle budget.** The initial bundle is 535.7 kB against the 520 kB warning (530.1 kB
+- **Coach Today extras (from R3.1).** The prototype's "+3 this month", "↑ 6% vs this point last
+  week" and "$240 at stake" are not returned: the deltas need agreed definitions, and plan prices in
+  different currencies cannot be added up. The feed has no nutrition line ("logged every meal" needs
+  a definition of a complete day) and no client messages (their text stays in the chat). Weigh-ins
+  are not feed lines either: on the Atlas demo, daily weigh-ins filled 14 of the 20, so they only
+  count as last activity. A weekly line ("82.4 kg, down 0.6 kg") would need the honest-trend rules of
+  ADR 0013. The "Live"
+  dot needs a push channel; until then the screen reloads.
+- **The Owner's Today in a gym (from R3.1).** The Owner's queue covers every coach's clients
+  (CLI-013), each item naming its coach. An owner with several coaches may want "Mine / Everyone";
+  R3.2 can filter on the coach id without backend work. The same holds for the Clients list
+  (R3.3a), where a coach chip could sit beside the others.
+- **Coach Today, not built in R3.2.**
+  - The sidebar has no Today count. It would need the queue read on every page.
+  - No GSAP count-ups or chart draw-in yet, only a CSS bar growth. This belongs with the
+    prototype fidelity pass.
+  - Queue actions open the place to act; nothing is resolved in place. "Missed sessions" opens
+    the client's training rather than a message, because Today does not know whether messaging
+    is in that client's plan.
+  - The coach's brand logo in the sidebar comes with R3.5.
+- **Missed-session rule (from R3.1).** The owner asked Claude to choose: TRN-021 counts misses since
+  the client's last workout, 14 days back. Revisit after the founding coaches use it (R3.6).
+- **Initial bundle budget.** The initial bundle is 536.0 kB against the 520 kB warning (530.1 kB
   before R2.4c, which added only three icon glyphs; R2.5a's shell changes added about 1 kB, R2.5b
-  0.2 kB, its mapping kept in the lazy Training chunk, and R2.5c 3.9 kB: the install service, four
-  icon glyphs and the saved-unit code).
+  0.2 kB, its mapping kept in the lazy Training chunk, R2.5c 3.9 kB: the install service, four
+  icon glyphs and the saved-unit code, R3.2 0.3 kB, Coach Today itself being lazy, and R3.3a 0.2 kB,
+  the search glyph in the shared icon set, which brought it to 536.2 kB).
+- **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
+  says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
+  Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
+  right, but a coach may read them as a mismatch. Rewording Today's line ("8 need attention, 2 plans
+  ending") or linking Today's tiles to `/clients?show=attention` and `?show=ending` would join them
+  up; R3.2's files, so not changed here.
+- **A very large client list (from R3.3a).** Clients draws every row; fine for founding coaches (10
+  to 80 clients). A gym with several hundred would want CDK virtual scroll or paging on the
+  server. The search text is not kept in the address, so typing never navigates.
 
 ---
 
@@ -411,6 +446,26 @@ limited to the coach's assigned clients.
   - Three stat tiles: active clients, completion this week, and plans ending soon.
 - Removes: the "0" counters and the static "Build a training block" cards.
 - Backend: an attention-and-activity read endpoint.
+- Built in R3.1 as `GET /api/coach-today` (CLI-018, TRN-021): the ranked queue, each item with its
+  client, coach and what its action needs (the check-in's assignment, the conversation, the
+  enrollment, the program block); the newest 20 finished workouts with their PRs and sent check-ins
+  of the last 7 days; this week's sessions done and scheduled per day; and the counts for the tiles.
+  Numbers come as counts with dates, so the screen phrases "26 of 49 so far" itself.
+- Built in R3.2 at `/` for staff (the sidebar's first entry is now "Today"):
+  - The greeting, by the workspace's hour and date, says how many clients need the coach. "Find a
+    client" and "Invite client" sit beside it.
+  - Three tiles: Clients (with the faces waiting), sessions done this week ("10 of 27", "15 were due
+    by today") and plans ending in 14 days.
+  - The queue keeps the server's order, one row per item: face, sentence, tag and one action. Only
+    the first action is filled. Review opens the client's check-ins, Reply opens that conversation
+    (`/messages?conversation=`), Renew plan opens Service with `?renew=` and the rest open the
+    client's training. An Owner sees "Coached by …" on a team member's client.
+  - The feed shows the newest six with "Show all".
+  - The week is drawn as bars, with a hidden table for screen readers.
+  - An empty workspace gets one "Invite your first client" card instead of zeros.
+  - Coach Today follows dark mode (`REDESIGNED_FOR_STAFF`); the client's Today at the same route
+    stays light until its own dark pass.
+  - Screenshots on the Atlas demo: `docs/design/r32-coach-today-*.png`.
 
 **C2. Clients**
 - Job: "How is everyone doing, and who is slipping?"
@@ -424,6 +479,22 @@ limited to the coach's assigned clients.
 - Removes: the phone-number column, the "Onboarding: Not started" noise and the "Open profile"
   link column (the whole row is the link).
 - Backend: a client-list projection (last activity, 7-day completion, plan end, attention flags).
+- Built in R3.1 as `GET /api/clients/overview`: per client the status (the four pills plus "No
+  active plan" for an ended, unpaid, not started or blocked plan), the plan's state and last day,
+  goal, join date and "new", the attention kinds, last activity (workout, check-in or weigh-in) and
+  sessions done and scheduled for each of the last 7 days (null when training is not in the plan).
+- Built in R3.3a at `/clients`, from that read alone:
+  - One row per client in the server's order: face, name, goal, the status pill with why ("Check-in
+    to review · Week not shared"), last activity ("Trained 2 hours ago"), a 7-day strip with "3 of 4"
+    (or "Training not in plan") and the plan line ("Plan ends in 9 days" in the warm colour within
+    14 days). The name's link covers the row, so a tap anywhere opens the client.
+  - Columns from 960 px of content width, cards below. An Owner sees "Coached by …" on a team
+    member's client.
+  - Chips All, Needs attention, Ending soon (also a client whose plan ends soon but who needs
+    attention for something else), Paused (the plan) and New, with counts; the chip is kept in
+    `?show=`. Search covers names and goals, ignoring case and accents.
+  - Former clients (`/clients/former`, Owner) use the same rows: how and when coaching ended, and why.
+  - Both lists follow dark mode. Screenshots on the Atlas demo: `docs/design/r33a-clients-*.png`.
 
 **C3. Client profile**
 - Job: "The whole story of this client in 10 seconds."
