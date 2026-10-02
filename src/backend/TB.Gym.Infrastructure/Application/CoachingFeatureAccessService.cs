@@ -18,66 +18,93 @@ internal sealed class CoachingFeatureAccessService(
         CoachingFeature feature,
         CancellationToken cancellationToken)
     {
-        var decisions = await EvaluateCoreAsync(tenantId, clientProfileId, cancellationToken);
+        var decisions = await EvaluateAllAsync(tenantId, clientProfileId, cancellationToken);
         return decisions.Single(item => item.Feature == feature);
     }
 
-    public Task<IReadOnlyList<FeatureAccessDecision>> EvaluateAllAsync(
+    public async Task<IReadOnlyList<FeatureAccessDecision>> EvaluateAllAsync(
         Guid tenantId,
         Guid clientProfileId,
         CancellationToken cancellationToken) =>
-        EvaluateCoreAsync(tenantId, clientProfileId, cancellationToken);
+        (await EvaluateManyAsync(tenantId, [clientProfileId], cancellationToken))[clientProfileId];
 
-    private async Task<IReadOnlyList<FeatureAccessDecision>> EvaluateCoreAsync(
+    /// <remarks>
+    /// One client is a batch of one, so every feature is decided by this one path. The checks run in
+    /// the same order for each client, and each is a single query however many clients are asked
+    /// about, so a coach's list of clients costs what one client does.
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<FeatureAccessDecision>>> EvaluateManyAsync(
         Guid tenantId,
-        Guid clientProfileId,
+        IReadOnlyCollection<Guid> clientProfileIds,
         CancellationToken cancellationToken)
     {
-        if (!tenantContext.HasTenant || tenantContext.TenantId != tenantId)
+        var ids = clientProfileIds.Distinct().ToArray();
+        var decisions = new Dictionary<Guid, IReadOnlyList<FeatureAccessDecision>>(ids.Length);
+        foreach (var id in ids)
         {
-            return ForEveryFeature(FeatureAccessReason.MembershipInactive);
+            decisions[id] = ForEveryFeature(FeatureAccessReason.MembershipInactive);
         }
 
-        var client = await dbContext.ClientProfiles
-            .AsNoTracking()
-            .Where(item => item.Id == clientProfileId)
-            .Select(item => new { item.UserId, item.IsCoachBlocked, item.ReleasedAtUtc })
-            .SingleOrDefaultAsync(cancellationToken);
+        if (ids.Length == 0 || !tenantContext.HasTenant || tenantContext.TenantId != tenantId)
+        {
+            return decisions;
+        }
+
         // An ended relationship grants nothing, even when the same person has since been invited back:
         // their membership is active again, but for their new profile, not this one (ADR 0027).
-        if (client?.UserId is not { } userId || client.ReleasedAtUtc is not null)
+        var clients = await dbContext.ClientProfiles
+            .AsNoTracking()
+            .Where(item => ids.Contains(item.Id) && item.UserId != null && item.ReleasedAtUtc == null)
+            .Select(item => new { item.Id, UserId = item.UserId!.Value, item.IsCoachBlocked })
+            .ToListAsync(cancellationToken);
+        if (clients.Count == 0)
         {
-            return ForEveryFeature(FeatureAccessReason.MembershipInactive);
+            return decisions;
         }
 
-        var membershipIsActive = await (
+        var userIds = clients.Select(item => item.UserId).Distinct().ToArray();
+        var activeUserIds = await (
             from membership in dbContext.TenantMemberships.AsNoTracking()
             join tenant in dbContext.Tenants.AsNoTracking() on membership.TenantId equals tenant.Id
             where membership.TenantId == tenantId &&
-                  membership.UserId == userId &&
+                  userIds.Contains(membership.UserId) &&
                   membership.Role == TenantRole.Client &&
                   membership.Status == MembershipStatus.Active &&
                   tenant.IsActive
-            select membership.Id)
-            .AnyAsync(cancellationToken);
-        if (!membershipIsActive)
+            select membership.UserId)
+            .ToHashSetAsync(cancellationToken);
+        var members = clients.Where(item => activeUserIds.Contains(item.UserId)).ToArray();
+        if (members.Length == 0)
         {
-            return ForEveryFeature(FeatureAccessReason.MembershipInactive);
+            return decisions;
         }
 
+        var memberUserIds = members.Select(item => item.UserId).Distinct().ToArray();
         var platformBlocked = await dbContext.Users
             .AsNoTracking()
-            .Where(user => user.Id == userId)
-            .Select(user => user.IsPlatformBlocked)
-            .SingleAsync(cancellationToken);
-        if (platformBlocked)
+            .Where(user => memberUserIds.Contains(user.Id) && user.IsPlatformBlocked)
+            .Select(user => user.Id)
+            .ToHashSetAsync(cancellationToken);
+        var entitled = new List<Guid>(members.Length);
+        foreach (var client in members)
         {
-            return ForEveryFeature(FeatureAccessReason.PlatformBlocked);
+            if (platformBlocked.Contains(client.UserId))
+            {
+                decisions[client.Id] = ForEveryFeature(FeatureAccessReason.PlatformBlocked);
+            }
+            else if (client.IsCoachBlocked)
+            {
+                decisions[client.Id] = ForEveryFeature(FeatureAccessReason.RelationshipBlocked);
+            }
+            else
+            {
+                entitled.Add(client.Id);
+            }
         }
 
-        if (client.IsCoachBlocked)
+        if (entitled.Count == 0)
         {
-            return ForEveryFeature(FeatureAccessReason.RelationshipBlocked);
+            return decisions;
         }
 
         var tenantSettings = await dbContext.Tenants
@@ -90,29 +117,41 @@ internal sealed class CoachingFeatureAccessService(
             TimeZoneInfo.FindSystemTimeZoneById(tenantSettings.TimeZoneId));
         var tenantToday = DateOnly.FromDateTime(localNow.DateTime);
 
-        var candidates = await (
+        var entitledIds = entitled.ToArray();
+        var candidates = (await (
             from entitlement in dbContext.EnrollmentEntitlements.AsNoTracking()
             join enrollment in dbContext.ClientEnrollments.AsNoTracking()
                 on new { entitlement.TenantId, Id = entitlement.EnrollmentId }
                 equals new { enrollment.TenantId, enrollment.Id }
-            where entitlement.ClientProfileId == clientProfileId
-            select new AccessCandidate(
-                entitlement.Feature,
-                enrollment.Id,
-                enrollment.StartDate,
-                enrollment.EndDateExclusive,
-                enrollment.Status,
-                enrollment.PriceAmount,
-                dbContext.PaymentRecords
-                    .Where(payment =>
-                        payment.EnrollmentId == enrollment.Id &&
-                        payment.Operation == PaymentOperation.Receipt)
-                    .Sum(payment => (decimal?)payment.Amount) ?? 0m))
-            .ToListAsync(cancellationToken);
+            where entitledIds.Contains(entitlement.ClientProfileId)
+            select new
+            {
+                entitlement.ClientProfileId,
+                Candidate = new AccessCandidate(
+                    entitlement.Feature,
+                    enrollment.Id,
+                    enrollment.StartDate,
+                    enrollment.EndDateExclusive,
+                    enrollment.Status,
+                    enrollment.PriceAmount,
+                    dbContext.PaymentRecords
+                        .Where(payment =>
+                            payment.EnrollmentId == enrollment.Id &&
+                            payment.Operation == PaymentOperation.Receipt)
+                        .Sum(payment => (decimal?)payment.Amount) ?? 0m),
+            })
+            .ToListAsync(cancellationToken))
+            .ToLookup(item => item.ClientProfileId, item => item.Candidate);
 
-        return Enum.GetValues<CoachingFeature>()
-            .Select(feature => EvaluateFeature(feature, candidates, tenantToday))
-            .ToArray();
+        foreach (var clientProfileId in entitledIds)
+        {
+            var clientCandidates = candidates[clientProfileId].ToArray();
+            decisions[clientProfileId] = Enum.GetValues<CoachingFeature>()
+                .Select(feature => EvaluateFeature(feature, clientCandidates, tenantToday))
+                .ToArray();
+        }
+
+        return decisions;
     }
 
     private static FeatureAccessDecision EvaluateFeature(

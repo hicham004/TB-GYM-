@@ -43,4 +43,13 @@ public interface ICoachingFeatureAccessService
         Guid tenantId,
         Guid clientProfileId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The decisions <see cref="EvaluateAllAsync"/> makes, for several clients in one pass, keyed by
+    /// client. Every requested id is answered; one this workspace does not know grants nothing.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<FeatureAccessDecision>>> EvaluateManyAsync(
+        Guid tenantId,
+        IReadOnlyCollection<Guid> clientProfileIds,
+        CancellationToken cancellationToken);
 }

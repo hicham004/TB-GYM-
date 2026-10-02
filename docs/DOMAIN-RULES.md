@@ -122,6 +122,21 @@ kept (SYS-007, ADR 0009), a coach reading a client's progress starts in kilogram
 unchanged (the workout player asks for its own unit). Values are `Kilogram` or `Pound`, enforced by
 a database check.
 
+**CLI-018** Coach attention v1 (`CoachAttention`, R3.1) is what Coach Today asks a coach to act on
+and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
+their own, the Owner all) and never a former client. Each signal is read only while the client's
+plan includes its feature, decided by the shared access service, so a lapsed plan's training or
+check-ins never appear; a weigh-in follows Progress and needs only an unblocked relationship. Ranked
+most urgent first: a submitted check-in not reviewed; the caller's own unread messages (another
+coach's chat is never counted, not even for the Owner); a renewal request from the last 30 days
+while the whole plan is still ended (ADR 0029); a running plan whose last covered day is within 14
+days, counting renewals already in place; a week not shared (TRN-021); two or more missed sessions
+(TRN-021); and training in the plan but no block running or coming. The status is Needs attention
+for any of those but the plan's end, else Paused, Ending soon, On track for a running plan, or No
+active plan. A client is new for 14 days after joining. The activity feed holds finished workouts,
+with their records (TRN-019), and sent check-ins of the last 7 days; a weigh-in counts only as a
+client's last activity. Counts carry their dates; no percentage is derived on the server.
+
 ## 3. Products, enrollments, payments, programs, and access
 
 **SUB-001** Product/catalog identity, offer/price, client enrollment, payment operation,
@@ -328,6 +343,13 @@ Completed and a started one In progress, on any day. A session never started is 
 workspace's today, Today on it and Upcoming after it. A week the client cannot see (TRN-006) sends
 no sessions, so it counts neither done nor missed. The API still lets a client start a missed
 session while its block is active; no screen offers that yet.
+
+**TRN-021** Training signals v1 (`MissedSinceLastWorkoutAndUnsharedWeek`, R3.1) tell a coach about a
+client's training. Missed sessions are those TRN-020 calls Missed, scheduled after the day the
+client last started any workout and at most 14 days back, so a client who trained after missing is
+back on track. An unshared week is a week of a block neither cancelled nor completed that is running
+or starts within two days and is not shared. Sessions counted for the coach (this week, the last
+seven days) are those of shared weeks of blocks not cancelled, plus any session with a workout.
 
 ## 5. Strength, 1RM, RPE, RIR, and progression
 

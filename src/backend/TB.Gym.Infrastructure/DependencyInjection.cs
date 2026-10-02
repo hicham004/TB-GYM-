@@ -152,6 +152,7 @@ public static class DependencyInjection
         services.AddScoped<ITeamApplicationService, TeamApplicationService>();
         services.AddScoped<IInvitationApplicationService, InvitationApplicationService>();
         services.AddScoped<IClientProfileApplicationService, ClientProfileApplicationService>();
+        services.AddScoped<ICoachOverviewService, CoachOverviewReader>();
         services.AddScoped<ICoachingFeatureAccessService, CoachingFeatureAccessService>();
         services.AddScoped<ICommercialApplicationService, CommercialApplicationService>();
         services.AddScoped<IClientRenewalService, ClientRenewalService>();

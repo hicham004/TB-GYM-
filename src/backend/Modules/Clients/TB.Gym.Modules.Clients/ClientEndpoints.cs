@@ -175,6 +175,24 @@ public static class ClientEndpoints
         .WithName("ListFormerClients")
         .Produces<FormerClientSummary[]>();
 
+        // The coach's client list (C2): every client they coach with status and recent activity (R3.1).
+        coachGroup.MapGet("/overview", async (
+            ICoachOverviewService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListAsync(cancellationToken)))
+        .WithName("ListClientOverview")
+        .Produces<ClientOverviewView>();
+
+        // Coach Today (C1): who needs the coach now, what their clients did, and this week (R3.1).
+        endpoints.MapGet("/api/coach-today", async (
+            ICoachOverviewService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetTodayAsync(cancellationToken)))
+        .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+        .WithTags(ClientsModule.Name)
+        .WithName("GetCoachToday")
+        .Produces<CoachTodayView>();
+
         var selfGroup = endpoints
             .MapGroup("/api/client-profile")
             .RequireAuthorization(AuthorizationPolicies.TenantClient)
