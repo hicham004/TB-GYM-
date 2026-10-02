@@ -1,0 +1,266 @@
+<section class="coach-today" aria-labelledby="coach-today-heading">
+  <header class="top">
+    <div class="greeting">
+      @if (today(); as view) {
+        <p class="date">{{ view.dateLabel }}</p>
+      }
+      <h1 id="coach-today-heading" #heading tabindex="-1">
+        @switch (today()?.partOfDay) {
+          @case ('morning') {
+            <ng-container i18n>Good morning,</ng-container>
+          }
+          @case ('evening') {
+            <ng-container i18n>Good evening,</ng-container>
+          }
+          @default {
+            <ng-container i18n>Good afternoon,</ng-container>
+          }
+        }
+        <span class="serif"> {{ firstName() }}.</span>
+      </h1>
+      @if (today(); as view) {
+        @if (view.needsCount > 0) {
+          <p class="needs" i18n>
+            <strong>{view.needsCount, plural,
+              =1 {1 client needs you}
+              other {{{ view.needsCount }} clients need you}
+            }</strong>
+            today. Everyone else is on track.
+          </p>
+        } @else if (view.clientCount > 0) {
+          <p class="needs" i18n>
+            <strong>Everyone is on track today.</strong> Nothing needs you right now.
+          </p>
+        }
+      }
+    </div>
+    <div class="top-actions">
+      <a appButton variant="outlined" routerLink="/clients">
+        <app-icon name="clients" />
+        <span i18n>Find a client</span>
+      </a>
+      <a appButton variant="outlined" routerLink="/invitations">
+        <app-icon name="plus" />
+        <span i18n>Invite client</span>
+      </a>
+    </div>
+  </header>
+
+  @if (today(); as view) {
+    @if (view.clientCount === 0) {
+      <app-empty-state
+        class="first-client"
+        heading="Your coaching space is ready"
+        description="Invite your first client. Their check-ins, messages and workouts will show up here as they come in."
+        i18n-heading
+        i18n-description
+      >
+        <a appButton empty-state-action routerLink="/invitations" i18n>Invite your first client</a>
+      </app-empty-state>
+    } @else {
+      <div class="tiles">
+        <app-stat-tile
+          label="Clients"
+          i18n-label
+          [value]="view.clientCount"
+          [context]="clientsContext()"
+        >
+          @if (waiting().length > 0) {
+            <app-avatar-stack
+              stat-tile-accessory
+              [people]="waiting()"
+              label="Clients who need you"
+              i18n-label
+            />
+          }
+        </app-stat-tile>
+        <app-stat-tile
+          label="Sessions done this week"
+          i18n-label
+          [value]="sessionsValue()"
+          [context]="sessionsContext()"
+        />
+        <app-stat-tile
+          label="Plans ending in 14 days"
+          i18n-label
+          [value]="view.plansEndingSoon"
+          [context]="endingContext()"
+        />
+      </div>
+
+      <div class="columns">
+        <section class="panel queue" aria-labelledby="needs-heading">
+          <header class="panel-head">
+            <h2 id="needs-heading">
+              <ng-container i18n>Needs you</ng-container>
+              @if (view.attention.length > 0) {
+                <span class="badge">{{ view.attention.length }}</span>
+              }
+            </h2>
+          </header>
+          @if (view.attention.length > 0) {
+            <ul class="rows" role="list">
+              @for (row of view.attention; track row.key; let first = $first) {
+                <li class="need" [attr.data-kind]="row.kind">
+                  <app-avatar [initials]="row.initials" presentation="client" />
+                  <div class="need-copy">
+                    <p class="need-heading">{{ row.heading }}</p>
+                    <p class="need-detail">
+                      {{ row.detail }}
+                      @if (row.coach) {
+                        <span class="need-coach" i18n>· Coached by {{ row.coach }}</span>
+                      }
+                    </p>
+                  </div>
+                  <span class="tag" [attr.data-tone]="row.tone">{{ row.tag }}</span>
+                  <a
+                    appButton
+                    class="need-action"
+                    [variant]="first ? 'filled' : 'outlined'"
+                    [routerLink]="row.action.link"
+                    [queryParams]="row.action.queryParams"
+                    >{{ row.action.label
+                    }}<span class="tb-visually-hidden"> {{ row.action.forWhom }}</span></a
+                  >
+                </li>
+              }
+            </ul>
+          } @else {
+            <div class="caught-up">
+              <span class="caught-up-mark" aria-hidden="true"
+                ><app-icon name="check-circle"
+              /></span>
+              <p class="caught-up-title" i18n>All caught up. <span class="serif">Nice.</span></p>
+              <p class="caught-up-text" i18n>New check-ins and messages will appear here.</p>
+            </div>
+          }
+        </section>
+
+        <section class="panel feed" aria-labelledby="activity-heading">
+          <header class="panel-head">
+            <h2 id="activity-heading" i18n>Activity</h2>
+            <span class="panel-span" i18n>Last 7 days</span>
+          </header>
+          @if (view.activity.length > 0) {
+            <ul class="rows" role="list" id="coach-activity">
+              @for (row of activity(); track row.key) {
+                <li class="event">
+                  <app-avatar [initials]="row.initials" presentation="client" />
+                  <div class="event-copy">
+                    <a class="event-link" [routerLink]="row.link">{{ row.sentence }}</a>
+                    @if (row.records.length > 0) {
+                      <span class="records">
+                        @for (record of row.records; track $index) {
+                          <span class="record"
+                            ><span class="pr" i18n>PR</span
+                            ><span class="tb-visually-hidden" i18n>Personal record:</span>
+                            {{ record }}</span
+                          >
+                        }
+                        @if (row.moreRecords > 0) {
+                          <span class="more" i18n>{row.moreRecords, plural,
+                            =1 {and 1 more record}
+                            other {and {{ row.moreRecords }} more records}
+                          }</span>
+                        }
+                      </span>
+                    }
+                    <time class="event-time" [attr.datetime]="row.occurredAt">{{ row.ago }}</time>
+                  </div>
+                </li>
+              }
+            </ul>
+            @if (view.activity.length > feedPreview) {
+              <button
+                appButton
+                type="button"
+                variant="text"
+                class="feed-toggle"
+                aria-controls="coach-activity"
+                [attr.aria-expanded]="feedOpen()"
+                (click)="feedOpen.set(!feedOpen())"
+              >
+                @if (feedOpen()) {
+                  <ng-container i18n>Show less</ng-container>
+                } @else {
+                  <ng-container i18n>Show all {{ view.activity.length }}</ng-container>
+                }
+              </button>
+            }
+          } @else {
+            <p class="feed-empty" i18n>
+              Finished workouts and sent check-ins from the last 7 days will show up here.
+            </p>
+          }
+        </section>
+      </div>
+
+      <section class="panel week" aria-labelledby="week-heading">
+        <div class="week-copy">
+          <h2 id="week-heading" class="week-label" i18n>This week</h2>
+          <p class="week-value">
+            <span class="week-number" i18n
+              >{{ view.week.completed }} of {{ view.week.scheduled }}</span
+            >
+            <span class="week-caption" i18n>sessions done so far</span>
+          </p>
+        </div>
+        <div class="bars" aria-hidden="true">
+          @for (bar of view.week.bars; track bar.date) {
+            <div class="bar" [class.is-today]="bar.isToday" [class.is-future]="bar.isFuture">
+              <span class="bar-track" [style.height.%]="bar.height">
+                <i class="bar-done" [style.height.%]="bar.done"></i>
+              </span>
+              <span class="bar-label">{{ bar.label }}</span>
+            </div>
+          }
+        </div>
+        <!-- A table ignores a 1px width, so the hidden wrapper is what clips it. -->
+        <div class="tb-visually-hidden">
+          <table>
+            <caption i18n>
+              Sessions this week, by day
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col" i18n>Day</th>
+                <th scope="col" i18n>Done</th>
+                <th scope="col" i18n>Scheduled</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (bar of view.week.bars; track bar.date) {
+                <tr>
+                  <th scope="row">{{ bar.longLabel }}</th>
+                  <td>{{ bar.completed }}</td>
+                  <td>{{ bar.scheduled }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+  } @else if (failed()) {
+    <div class="panel load-failed" role="alert">
+      <p i18n>Today could not be loaded. Check your connection and try again.</p>
+      <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+    </div>
+  } @else {
+    <div class="tiles">
+      @for (tile of [1, 2, 3]; track tile) {
+        <app-skeleton class="panel" label="Loading today" i18n-label [lines]="2" />
+      }
+    </div>
+    <div class="columns">
+      <app-skeleton
+        class="panel"
+        label="Loading who needs you"
+        i18n-label
+        [lines]="5"
+        [avatar]="true"
+      />
+      <app-skeleton class="panel" label="Loading activity" i18n-label [lines]="5" [avatar]="true" />
+    </div>
+  }
+</section>

@@ -1,6 +1,7 @@
 import { signal, type WritableSignal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -160,7 +161,7 @@ interface ApiMocks {
 interface Harness extends ApiMocks {
   host: HTMLElement;
   realtime: RealtimeStub;
-  fixture: Awaited<ReturnType<typeof TestBed.createComponent<Messages>>>;
+  fixture: ComponentFixture<unknown>;
   user: WritableSignal<CurrentUser | null>;
   membership: WritableSignal<TenantMembership | undefined>;
   unreadRefresh: ReturnType<typeof vi.fn>;
@@ -224,6 +225,8 @@ class RealtimeStub {
 async function render(
   configure?: (api: ApiMocks) => void,
   prepareLaunch?: (launch: ConversationLaunch) => void,
+  /** Opens the page through the router at this URL, so its query string is real. */
+  url?: string,
 ): Promise<Harness> {
   const user = signal<CurrentUser | null>(COACH);
   const membership = signal<TenantMembership | undefined>(ALPHA);
@@ -243,7 +246,7 @@ async function render(
   await TestBed.configureTestingModule({
     imports: [Messages],
     providers: [
-      provideRouter([]),
+      provideRouter(url ? [{ path: 'messages', component: Messages }] : []),
       { provide: ApiClient, useValue: api },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       { provide: AuthStore, useValue: { user, loading: signal(false) } },
@@ -268,14 +271,24 @@ async function render(
 
   const conversationLaunch = TestBed.inject(ConversationLaunch);
   prepareLaunch?.(conversationLaunch);
-  const fixture = TestBed.createComponent(Messages);
+  let fixture: ComponentFixture<unknown>;
+  let host: HTMLElement;
+  if (url) {
+    const router = await RouterTestingHarness.create();
+    await router.navigateByUrl(url, Messages);
+    fixture = router.fixture;
+    host = router.routeNativeElement!;
+  } else {
+    fixture = TestBed.createComponent(Messages);
+    host = fixture.nativeElement as HTMLElement;
+  }
   await settle(fixture);
   return {
     ...api,
     unreadRefresh,
     realtime,
     fixture,
-    host: fixture.nativeElement as HTMLElement,
+    host,
     user,
     membership,
     conversationLaunch,
@@ -409,6 +422,51 @@ describe('Messages', () => {
     );
     expect(harness.listConversationMessages).toHaveBeenCalledWith('conversation-created', null, 50);
     expect(harness.conversationLaunch.take(ALPHA.tenantId)).toBeNull();
+  });
+
+  it("opens the thread Coach Today's Reply links to", async () => {
+    const harness = await render(
+      ({ listConversations }) => {
+        listConversations.mockReturnValue(
+          of(
+            conversationPage([
+              conversation(),
+              conversation({
+                id: 'conversation-2',
+                clientProfileId: 'client-2',
+                counterpart: {
+                  userId: 'client-user-2',
+                  displayName: 'Sara Mansour',
+                  role: 'Client',
+                },
+              }),
+            ]),
+          ),
+        );
+      },
+      undefined,
+      '/messages?conversation=conversation-2',
+    );
+
+    expect(query(harness.host, '.conversation[aria-current="true"]').textContent).toContain(
+      'Sara Mansour',
+    );
+    expect(harness.listConversationMessages).toHaveBeenCalledWith('conversation-2', null, 50);
+  });
+
+  it('opens nothing for a linked thread that is not in the inbox', async () => {
+    const harness = await render(
+      ({ listConversations }) => {
+        listConversations.mockReturnValue(
+          of(conversationPage([conversation(), conversation({ id: 'conversation-2' })])),
+        );
+      },
+      undefined,
+      '/messages?conversation=someone-elses',
+    );
+
+    expect(harness.host.querySelector('.conversation[aria-current="true"]')).toBeNull();
+    expect(harness.listConversationMessages).not.toHaveBeenCalled();
   });
 
   it('says a removed last message is removed rather than showing nothing', async () => {

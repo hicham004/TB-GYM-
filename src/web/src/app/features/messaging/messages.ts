@@ -13,7 +13,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
@@ -110,6 +110,9 @@ export class Messages {
   private readonly unreadStore = inject(MessageUnreadStore);
   private readonly realtime = inject(MessagingRealtimeService);
   private readonly conversationLaunch = inject(ConversationLaunch);
+  /** Coach Today's "Reply" links here with `?conversation=<id>`; it is opened once, then forgotten. */
+  private linkedConversationId =
+    inject(ActivatedRoute, { optional: true })?.snapshot.queryParamMap.get('conversation') ?? null;
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
@@ -513,6 +516,13 @@ export class Messages {
     });
   }
 
+  /** The linked thread, when it is in the first page of the inbox; a link is never followed twice. */
+  private takeLinkedConversation(items: readonly Conversation[]): Conversation | null {
+    const id = this.linkedConversationId;
+    this.linkedConversationId = null;
+    return id === null ? null : (items.find((item) => item.id === id) ?? null);
+  }
+
   protected async select(conversation: Conversation): Promise<void> {
     return this.scope.run('select', async (owner) => {
       if (this.selectedId() === conversation.id) {
@@ -895,12 +905,15 @@ export class Messages {
         this.conversations.set(page.items);
         this.applyCursor(page);
         const requested = this.conversationLaunch.take(this.tenants.selectedTenantId());
+        const linked = requested ? null : this.takeLinkedConversation(page.items);
         if (requested) {
           const conversation = page.items.find((item) => item.id === requested.id) ?? requested;
           if (!page.items.some((item) => item.id === requested.id)) {
             this.conversations.update((items) => [conversation, ...items]);
           }
           await owner.wait(this.select(conversation));
+        } else if (linked) {
+          await owner.wait(this.select(linked));
         } else if (this.singleThread() && this.selectedId() === null) {
           // Opening a client's only conversation is what they came for. Reading it is still their
           // own act: the cursor moves only once the messages are on screen.

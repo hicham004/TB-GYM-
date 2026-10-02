@@ -1,0 +1,241 @@
+// Coach Today (C1), from the approved R1.3 lab: a greeting, three tiles, the queue beside the feed,
+// and the week. Brand v2 tokens only, so it follows the coach's brand and the person's mode.
+:host {
+  container-type: inline-size;
+  display: block;
+}
+
+.coach-today {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+}
+
+.top {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.875rem;
+  justify-content: space-between;
+}
+
+.date {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.date:lang(ar) {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+h1 {
+  color: var(--tb-ink);
+  font-size: clamp(1.875rem, 4.5cqi, 2.375rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  margin: 0.375rem 0 0;
+  outline: none;
+  text-wrap: balance;
+}
+
+.serif {
+  font-family: var(--tb-font-serif);
+  font-size: 1.12em;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.needs {
+  color: var(--tb-muted);
+  margin: 0.5rem 0 0;
+}
+
+.needs strong {
+  color: var(--tb-ink);
+  font-weight: 600;
+}
+
+.top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+.tiles {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  min-inline-size: 0;
+}
+
+app-skeleton.panel {
+  display: block;
+  padding: 1.25rem;
+}
+
+.columns {
+  align-items: start;
+  display: grid;
+  gap: 1.125rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 58rem) {
+  .columns {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  }
+}
+
+// A card around the kit's empty state; its own flex layout does the centring.
+.first-client {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+}
+
+.load-failed {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+  padding: 1.25rem;
+}
+
+.load-failed p {
+  color: var(--tb-ink);
+  margin: 0;
+}
+
+// ---------- the week ----------
+
+.week {
+  align-items: end;
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 1.125rem 1.25rem;
+}
+
+@container (min-width: 40rem) {
+  .week {
+    grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr);
+  }
+}
+
+.week-label {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.week-label:lang(ar) {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.week-value {
+  display: flex;
+  flex-direction: column;
+  margin: 0.5rem 0 0;
+}
+
+.week-number {
+  color: var(--tb-ink);
+  font-size: 1.875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.week-caption {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+}
+
+.bars {
+  align-items: end;
+  block-size: 7rem;
+  display: grid;
+  gap: clamp(0.375rem, 2cqi, 0.875rem);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.bar {
+  align-items: center;
+  block-size: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  justify-content: flex-end;
+  min-inline-size: 0;
+}
+
+.bar-track {
+  animation: bar-grow var(--tb-duration-slow) var(--tb-ease) both;
+  background: var(--tb-line);
+  border-radius: 7px 7px 3px 3px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  inline-size: 100%;
+  min-block-size: 3px;
+  overflow: hidden;
+  transform-origin: bottom;
+}
+
+.bar.is-future .bar-track,
+.bar.is-today .bar-track {
+  background: repeating-linear-gradient(135deg, var(--tb-surface-2) 0 6px, var(--tb-line) 6px 12px);
+}
+
+// Forest on light, the bright accent on dark, so a done session always stands out.
+.bar-done {
+  background: var(--tb-accent-ink);
+  display: block;
+  inline-size: 100%;
+}
+
+.bar.is-today .bar-track {
+  box-shadow:
+    0 0 0 2px var(--tb-surface),
+    0 0 0 4px var(--tb-accent);
+}
+
+.bar-label {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+}
+
+.bar.is-today .bar-label {
+  color: var(--tb-ink);
+  font-weight: 600;
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-track {
+    animation: none;
+  }
+}

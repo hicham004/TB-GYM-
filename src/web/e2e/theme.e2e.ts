@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { contrast } from '../src/app/core/theme/color';
+import { coachTodayView } from '../src/testing/coach-today-fixtures';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -85,8 +86,8 @@ for (const preset of PRESETS) {
 
       await mockSession(page, {
         extra: {
-          'GET /api/clients': (route) => json(route, 200, []),
-          'GET /api/invitations': (route) => json(route, 200, []),
+          // A full Coach Today, so every tag, badge and bar is checked in this brand and mode.
+          'GET /api/coach-today': (route) => json(route, 200, coachTodayView()),
         },
       });
       await page.goto(`/${query}`);

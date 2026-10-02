@@ -16,7 +16,7 @@ import { filter, map } from 'rxjs';
 import { AuthStore } from './core/auth/auth.store';
 import { SessionActions } from './core/auth/session-actions';
 import { TenantStore } from './core/tenancy/tenant.store';
-import { isRedesignedRoute } from './core/theme/redesigned-route';
+import { redesignedFor } from './core/theme/redesigned-route';
 import { BillingBanner } from './features/billing/billing-banner';
 import { ClientTabs } from './shell/client-tabs';
 import { CoachShell } from './shell/coach-shell';
@@ -78,16 +78,22 @@ export class App implements OnInit {
   private readonly redesigned = toSignal(
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
-      map(() => isRedesignedRoute(this.router.routerState.snapshot.root)),
+      map(() => redesignedFor(this.router.routerState.snapshot.root)),
     ),
-    { initialValue: false },
+    { initialValue: null },
   );
 
   /**
    * The page keeps the light tokens whatever the person's mode until its screen is rebuilt on
-   * brand v2 (REDESIGNED); the shells around it follow the mode.
+   * brand v2 (REDESIGNED); the shells around it follow the mode. A route rebuilt for staff only
+   * follows the mode in the coach shell.
    */
-  protected readonly contentMode = computed(() => (this.redesigned() ? null : 'light'));
+  protected readonly contentMode = computed(() => {
+    const rebuilt = this.redesigned();
+    return rebuilt === 'everyone' || (rebuilt === 'staff' && !this.tenants.isClient())
+      ? null
+      : 'light';
+  });
 
   constructor() {
     effect(() => {

@@ -40,7 +40,7 @@ export const COACH_NAVIGATION: readonly CoachNavigationGroup[] = [
   {
     label: $localize`Coaching`,
     destinations: [
-      { key: 'overview', label: $localize`Overview`, icon: 'overview', link: '/', section: [] },
+      { key: 'overview', label: $localize`Today`, icon: 'overview', link: '/', section: [] },
       {
         key: 'clients',
         label: $localize`Clients`,

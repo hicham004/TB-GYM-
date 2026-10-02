@@ -709,6 +709,11 @@ export class ApiClient {
   }
 
   // The Training page maps these itself, so their mapping stays out of the initial bundle.
+  /** Coach Today (R3.1). Phrased in the lazy dashboard chunk, so none of it is in the initial bundle. */
+  getCoachToday(): Observable<Phase3Contracts.CoachTodayView> {
+    return this.http.get<Phase3Contracts.CoachTodayView>('/api/coach-today');
+  }
+
   getMyTrainingProgram(): Observable<Phase3Contracts.ClientTrainingProgramView> {
     return this.http.get<Phase3Contracts.ClientTrainingProgramView>('/api/training/me/program');
   }

@@ -703,6 +703,34 @@ export type ClientNutritionPlanSummary = {
 
 export type ClientOnboardingStatus = 'NotStarted' | 'InProgress' | 'Completed';
 
+export type ClientOverviewRow = {
+  client: CoachClientRef;
+  goals: null | string;
+  joinedOn: string;
+  isNew: boolean;
+  status: ClientOverviewStatus;
+  planState: ClientPlanState;
+  planEndsOn: null | string;
+  attention: Array<CoachAttentionKind>;
+  lastActivityKind: null | CoachActivityKind;
+  lastActivityAtUtc: null | string;
+  recentSessions: null | Array<SessionDayCountView>;
+};
+
+export type ClientOverviewStatus =
+  'NeedsAttention' | 'Paused' | 'EndingSoon' | 'OnTrack' | 'NoActivePlan';
+
+export type ClientOverviewView = {
+  today: string;
+  recentFrom: string;
+  recentToExclusive: string;
+  clients: Array<ClientOverviewRow>;
+  attentionRuleKey: string;
+  attentionRuleVersion: number | string;
+  trainingRuleKey: string;
+  trainingRuleVersion: number | string;
+};
+
 export type ClientPersonalRecordsResult = {
   isAllowed: boolean;
   accessReason: string;
@@ -719,6 +747,9 @@ export type ClientPersonalRecordView = {
   ruleKey: string;
   ruleVersion: number | string;
 };
+
+export type ClientPlanState =
+  'Running' | 'Paused' | 'PaymentDue' | 'NotStarted' | 'Ended' | 'None' | 'Blocked';
 
 export type ClientProgramPhase = 'Upcoming' | 'Current' | 'Finished';
 
@@ -903,6 +934,46 @@ export type ClientWorkoutView = {
   startedAtUtc?: null | string;
 };
 
+export type CoachActivityItemView = {
+  kind: CoachActivityKind;
+  client: CoachClientRef;
+  occurredAtUtc: string;
+  subjectId: string;
+  title: null | string;
+  durationSeconds: null | number | string;
+  personalRecords: Array<CoachActivityRecordView>;
+};
+
+export type CoachActivityKind = 'WorkoutCompleted' | 'CheckInSubmitted' | 'WeighInLogged';
+
+export type CoachActivityLoadUnit = 'Kilogram' | 'Pound';
+
+export type CoachActivityRecordView = {
+  exerciseName: string;
+  repetitions: number | string;
+  load: number | string;
+  unit: CoachActivityLoadUnit;
+};
+
+export type CoachAttentionItemView = {
+  kind: CoachAttentionKind;
+  client: CoachClientRef;
+  since: null | string;
+  date: null | string;
+  count: null | number | string;
+  weekNumber: null | number | string;
+  subjectId: null | string;
+};
+
+export type CoachAttentionKind =
+  | 'CheckInToReview'
+  | 'UnreadMessages'
+  | 'RenewalRequested'
+  | 'PlanEndingSoon'
+  | 'WeekNotShared'
+  | 'MissedSessions'
+  | 'NoProgram';
+
 export type CoachClientDetails = {
   id: string;
   userId: null | string;
@@ -933,6 +1004,14 @@ export type CoachClientDetails = {
   release?: null | ClientReleaseView;
 };
 
+export type CoachClientRef = {
+  clientProfileId: string;
+  firstName: string;
+  lastName: string;
+  assignedCoachUserId: string;
+  assignedCoachName: null | string;
+};
+
 export type CoachingFeature =
   'Training' | 'Nutrition' | 'CheckIns' | 'Messaging' | 'ResourceLibrary';
 
@@ -953,6 +1032,30 @@ export type CoachRegistrationResponse = {
 export type CoachRemovalResponse = {
   reassignedClientCount: number | string;
   reassignedInvitationCount: number | string;
+};
+
+export type CoachTodayView = {
+  today: string;
+  timeZoneId: string;
+  clientCount: number | string;
+  plansEndingSoonCount: number | string;
+  renewalRequestCount: number | string;
+  week: CoachWeekView;
+  attention: Array<CoachAttentionItemView>;
+  activityFromUtc: string;
+  activity: Array<CoachActivityItemView>;
+  attentionRuleKey: string;
+  attentionRuleVersion: number | string;
+  trainingRuleKey: string;
+  trainingRuleVersion: number | string;
+};
+
+export type CoachWeekView = {
+  from: string;
+  toExclusive: string;
+  scheduled: number | string;
+  completed: number | string;
+  days: Array<SessionDayCountView>;
 };
 
 export type CoachWorkoutDetailResult = {
@@ -2543,6 +2646,12 @@ export type SendMessageRequest = {
   idempotencyKey: string;
 };
 
+export type SessionDayCountView = {
+  date: string;
+  scheduled: number | string;
+  completed: number | string;
+};
+
 export type SetExerciseArchivedRequest = {
   isArchived: boolean;
   version: number | string;
@@ -3161,6 +3270,22 @@ export type AcceptClientInvitationResponses = {
 
 export type AcceptClientInvitationResponse =
   AcceptClientInvitationResponses[keyof AcceptClientInvitationResponses];
+
+export type GetCoachTodayData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/coach-today';
+};
+
+export type GetCoachTodayResponses = {
+  /**
+   * OK
+   */
+  200: CoachTodayView;
+};
+
+export type GetCoachTodayResponse = GetCoachTodayResponses[keyof GetCoachTodayResponses];
 
 export type GetOwnCoachingFeatureAccessData = {
   body?: never;
@@ -4225,6 +4350,23 @@ export type ListFormerClientsResponses = {
 
 export type ListFormerClientsResponse =
   ListFormerClientsResponses[keyof ListFormerClientsResponses];
+
+export type ListClientOverviewData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/clients/overview';
+};
+
+export type ListClientOverviewResponses = {
+  /**
+   * OK
+   */
+  200: ClientOverviewView;
+};
+
+export type ListClientOverviewResponse =
+  ListClientOverviewResponses[keyof ListClientOverviewResponses];
 
 export type GetOwnClientProfileData = {
   body?: never;

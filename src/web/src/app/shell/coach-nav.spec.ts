@@ -67,7 +67,7 @@ describe('coach navigation', () => {
     const { host, labels } = await render({ owner: true });
 
     expect(labels()).toEqual([
-      'Overview',
+      'Today',
       'Clients',
       'Training',
       'Nutrition',
@@ -148,7 +148,7 @@ describe('coach navigation', () => {
     expect(host.querySelector('a.item[aria-current]')).toBeNull();
   });
 
-  it('keeps Overview for the root page alone', async () => {
+  it('keeps Today for the root page alone', async () => {
     const { host, go } = await render({ owner: true });
     await go('/clients');
 

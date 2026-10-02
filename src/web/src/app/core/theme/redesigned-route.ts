@@ -8,10 +8,20 @@ import { ActivatedRouteSnapshot, Data } from '@angular/router';
  */
 export const REDESIGNED: Data = { redesigned: true };
 
-/** Whether the active route, or a route above it, is marked REDESIGNED. */
-export function isRedesignedRoute(root: ActivatedRouteSnapshot): boolean {
+/**
+ * For a route two screens share by role: `/` is Coach Today (rebuilt in R3.2) for staff and the
+ * client's Today (not yet checked in dark) for a client.
+ */
+export const REDESIGNED_FOR_STAFF: Data = { redesigned: 'staff' };
+
+export type RedesignedFor = 'everyone' | 'staff' | null;
+
+/** Who the active route, or a route above it, is rebuilt for. */
+export function redesignedFor(root: ActivatedRouteSnapshot): RedesignedFor {
   for (let route: ActivatedRouteSnapshot | null = root; route; route = route.firstChild) {
-    if (route.data['redesigned'] === true) return true;
+    const marker: unknown = route.data['redesigned'];
+    if (marker === true) return 'everyone';
+    if (marker === 'staff') return 'staff';
   }
-  return false;
+  return null;
 }

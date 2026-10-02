@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
+import { COACH_NOW, emptyCoachTodayView } from '../src/testing/coach-today-fixtures';
 import {
   COACH_MEMBERSHIP,
   expect,
@@ -20,8 +21,8 @@ import {
 const ACCENT = 'rgb(15, 118, 110)';
 
 const DASHBOARD = {
-  'GET /api/clients': (route: Parameters<typeof json>[0]) => json(route, 200, []),
-  'GET /api/invitations': (route: Parameters<typeof json>[0]) => json(route, 200, []),
+  'GET /api/coach-today': (route: Parameters<typeof json>[0]) =>
+    json(route, 200, emptyCoachTodayView()),
 };
 
 async function openShell(
@@ -35,6 +36,8 @@ async function openShell(
     unreadMessages?: number;
   } = {},
 ) {
+  // Coach Today greets by the hour, so the clock is pinned for stable screenshots.
+  await page.clock.setFixedTime(new Date(COACH_NOW));
   await page.setViewportSize({ width: options.width ?? 1440, height: options.height ?? 900 });
   await mockSession(page, {
     memberships: options.memberships,
@@ -54,7 +57,7 @@ test('the owner sidebar is the locked navigation, in order', async ({ page }) =>
   await openShell(page, { unreadMessages: 1 });
 
   await expect(sidebarLinks(page)).toHaveText([
-    /Overview/,
+    /Today/,
     /Clients/,
     /Training/,
     /Nutrition/,
@@ -303,7 +306,7 @@ test('200% text keeps the shell usable at 1440px and at 390px', async ({ page })
   await expectNoHorizontalOverflow(page);
   // Labels are still readable rather than all ellipsis.
   const overview = page.locator('.sidebar a[href="/"] .label');
-  await expect(overview).toHaveText('Overview');
+  await expect(overview).toHaveText('Today');
   expect(
     await overview.evaluate((element) => element.scrollWidth - element.clientWidth),
   ).toBeLessThanOrEqual(1);
