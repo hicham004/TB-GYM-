@@ -1,13 +1,13 @@
 @if (members().length > 1) {
-  <div class="coach-line tb-theme">
-    <p class="tb-text-compact">
-      <span class="coach-label" i18n>Coach</span>
-      <span class="coach-name" dir="auto">{{ client().assignedCoachName }}</span>
-    </p>
+  <div class="coach-line">
+    <div class="coach-copy">
+      <h3 i18n>Coach</h3>
+      <p class="coach-name" dir="auto">{{ client().assignedCoachName }}</p>
+    </div>
     <button #reassignTrigger appButton variant="outlined" type="button" (click)="open()" i18n>
       Reassign coach
     </button>
-    <p class="coach-notice tb-text-compact" role="status">{{ notice() }}</p>
+    <p class="coach-notice" role="status">{{ notice() }}</p>
   </div>
 
   <dialog

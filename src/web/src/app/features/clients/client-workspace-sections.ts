@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
@@ -14,21 +14,19 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { ButtonLink, Button } from '../../ui/button';
 import { StatusLabel, type StatusMarker, type StatusTone } from '../../ui/status-label';
-import { ClientCommercial } from '../commercial/client-commercial';
 import { ClientNutrition } from '../nutrition/client-nutrition';
 import { ProgressDashboardView } from '../progress/progress-dashboard';
 import { ProgressView } from '../progress/progress-view';
-import { ClientCoach } from './client-coach';
 import { ClientIntakeForm } from './client-intake-form';
 import { ClientProgram } from './client-program';
-import { ClientRelease } from './client-release';
+import { ClientService } from './client-service';
 import { ClientWorkspaceContext } from './client-workspace.context';
-import type { CoachClientDetails } from '../../core/api/api.models';
 
 /**
- * The sections of a client's record other than the Overview. Training, Nutrition, Progress, the
- * intake and Service & access render the existing screens unchanged; Check-ins is a short list
- * that opens the existing review screen. Each is its own route under `/clients/:clientId`.
+ * The sections of a client's record other than the Overview. Training, Progress and Service & access
+ * are rebuilt (R3.3b, R3.4); Nutrition and the intake render the existing screens unchanged, and
+ * Check-ins is a short list that opens the existing review screen. Each is its own route under
+ * `/clients/:clientId`.
  */
 
 const FORMER_HIDDEN = $localize`This is a former client. Their records are kept but are not shown here.`;
@@ -153,54 +151,15 @@ export class ClientProgressSection {
 }
 
 /**
- * Plans and payments, and for the owner the assigned coach and releasing the client. The
- * Overview's "Renew plan" arrives here with `?renew=<enrollment id>` and opens that renewal.
+ * Plans and payments, the coach and the client's access (C3, R3.4b). The Overview's and the header's
+ * "Renew plan" arrive here with `?renew=<plan id>` and open that renewal.
  */
 @Component({
   selector: 'app-client-service-section',
-  imports: [ClientCoach, ClientCommercial, ClientRelease],
-  template: `
-    @if (context.profile(); as client) {
-      @if (!context.isFormer() && context.isOwner()) {
-        <app-client-coach [client]="client" (profileChanged)="context.setProfile($event)" />
-      }
-      <app-client-commercial
-        [client]="client"
-        [readOnly]="context.isFormer()"
-        [renewEnrollmentId]="renewEnrollmentId"
-        (profileChanged)="context.setProfile($event)"
-        (plansChanged)="context.setPlans($event)"
-      />
-      @if (!context.isFormer() && context.isOwner()) {
-        <section class="surface-section release-section">
-          <div class="section-heading">
-            <div>
-              <h2 i18n>End coaching</h2>
-              <p class="muted" i18n>
-                Only the owner can end coaching. The client’s record is kept, read-only.
-              </p>
-            </div>
-          </div>
-          <app-client-release [client]="client" (released)="released($event)" />
-        </section>
-      }
-    }
-  `,
+  imports: [ClientService],
+  template: `<app-client-service />`,
 })
-export class ClientServiceSection {
-  protected readonly context = inject(ClientWorkspaceContext);
-  protected readonly renewEnrollmentId =
-    inject(ActivatedRoute).snapshot.queryParamMap.get('renew') ?? null;
-
-  /** The owner released this client; the record turns into the read-only former-client record. */
-  protected released(profile: CoachClientDetails): void {
-    this.context.setProfile(profile);
-    this.context.error.set(null);
-    this.context.notice.set(
-      $localize`Coaching with ${profile.firstName}:name: has ended. They no longer have access, and we are emailing them.`,
-    );
-  }
-}
+export class ClientServiceSection {}
 
 /** The intake form and onboarding, reached from the header's "Edit intake". */
 @Component({

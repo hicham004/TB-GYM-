@@ -1,0 +1,244 @@
+<div class="service">
+  @if (context.isFormer()) {
+    <p class="former" i18n>
+      This is a former client. Their plans and payments are kept here, read-only.
+    </p>
+  }
+
+  @switch (state()) {
+    @case ('loading') {
+      <section class="panel" aria-busy="true">
+        <div class="panel-body">
+          <app-skeleton [label]="loadingLabel" [lines]="4" />
+        </div>
+      </section>
+    }
+    @case ('error') {
+      <section class="panel">
+        <div class="panel-body load-failed">
+          <p role="alert" i18n>The plans could not be loaded.</p>
+          <button appButton type="button" variant="outlined" (click)="load()" i18n>
+            Try again
+          </button>
+        </div>
+      </section>
+    }
+    @default {
+      @if (card(); as plan) {
+        <section class="panel hero" aria-labelledby="plan-title">
+          <div class="hero-main">
+            <div class="hero-copy">
+              <p class="eyebrow">{{ plan.eyebrow }}</p>
+              <div class="title-line">
+                <h2 id="plan-title" dir="auto">{{ plan.name }}</h2>
+                <app-status-pill [label]="plan.pill.label" [tone]="plan.pill.tone" />
+              </div>
+              <ul class="facts">
+                @for (fact of plan.facts; track fact.text) {
+                  <li [class.warm]="fact.warm" dir="auto">{{ fact.text }}</li>
+                }
+                @if (renewalLine(); as line) {
+                  <li class="warm" dir="auto">{{ line }}</li>
+                }
+              </ul>
+            </div>
+            <div class="hero-actions">
+              @if (primary(); as action) {
+                <button
+                  appButton
+                  type="button"
+                  [loading]="action.id === 'resume' && resuming()"
+                  (click)="onAction(action.id)"
+                >
+                  {{ action.label }}
+                </button>
+              }
+              @if (menu().length > 0) {
+                <app-client-actions
+                  [label]="menuLabel"
+                  [items]="menu()"
+                  (chosen)="onAction($event)"
+                />
+              }
+            </div>
+          </div>
+
+          <div class="includes">
+            <h3 class="caption" i18n>What’s included</h3>
+            <ul class="chips">
+              @for (feature of plan.includes; track feature) {
+                <li>{{ feature }}</li>
+              }
+            </ul>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="payments-title">
+          <header class="panel-head">
+            <h2 id="payments-title" i18n>Payments</h2>
+            @if (!plan.free) {
+              <p class="panel-span">{{ plan.paidText }}</p>
+            }
+          </header>
+          <div class="panel-body">
+            @if (plan.free) {
+              <p class="quiet" i18n>This plan is free, so there is nothing to pay.</p>
+            } @else {
+              <div class="paid-bar" role="img" [attr.aria-label]="plan.paidText">
+                <span class="paid-fill" [style.inline-size.%]="plan.paidPercent"></span>
+              </div>
+              <ul class="payments">
+                @for (payment of plan.payments; track payment.id) {
+                  <li class="payment">
+                    <span class="payment-main">
+                      <span class="payment-date">{{ payment.date }}</span>
+                      <span class="payment-detail" dir="auto">{{ payment.detail }}</span>
+                      @if (payment.note; as note) {
+                        <span class="payment-note" dir="auto">{{ note }}</span>
+                      }
+                    </span>
+                    <span class="payment-amount">{{ payment.amount }}</span>
+                  </li>
+                } @empty {
+                  <li class="quiet" i18n>No payment recorded yet.</li>
+                }
+              </ul>
+            }
+          </div>
+        </section>
+      } @else {
+        <section class="panel">
+          <app-empty-state [heading]="emptyHeading" [description]="emptyDescription()">
+            @if (!context.isFormer()) {
+              <button empty-state-action appButton type="button" (click)="openStart()" i18n>
+                Start a plan
+              </button>
+            }
+          </app-empty-state>
+        </section>
+      }
+
+      @if (hasOthers()) {
+        <section class="panel" aria-labelledby="others-title">
+          <header class="panel-head">
+            <h2 id="others-title" i18n>Other plans</h2>
+          </header>
+          <div class="panel-body">
+            @if (others().coming.length > 0) {
+              <h3 class="caption group" i18n>Current and next</h3>
+              <ul class="rows">
+                @for (row of others().coming; track row.id) {
+                  <li>
+                    <button type="button" class="row" (click)="showPlan(row.id)">
+                      <span class="row-main">
+                        <span class="row-name" dir="auto">{{ row.name }}</span>
+                        <span class="row-meta">{{ row.range }} · {{ row.summary }}</span>
+                      </span>
+                      <app-status-pill [label]="row.pill.label" [tone]="row.pill.tone" />
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+            @if (others().earlier.length > 0) {
+              <h3 class="caption group" i18n>Earlier</h3>
+              <ul class="rows">
+                @for (row of others().earlier; track row.id) {
+                  <li>
+                    <button type="button" class="row" (click)="showPlan(row.id)">
+                      <span class="row-main">
+                        <span class="row-name" dir="auto">{{ row.name }}</span>
+                        <span class="row-meta">{{ row.range }} · {{ row.summary }}</span>
+                      </span>
+                      <app-status-pill [label]="row.pill.label" [tone]="row.pill.tone" />
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        </section>
+      }
+
+      @if (!context.isFormer()) {
+        @if (context.profile(); as client) {
+          <section class="panel" aria-labelledby="access-title">
+            <header class="panel-head">
+              <h2 id="access-title" i18n>Coach and access</h2>
+            </header>
+            <div class="panel-body settings">
+              @if (context.isOwner()) {
+                <app-client-coach [client]="client" (profileChanged)="context.setProfile($event)" />
+              }
+              <div class="setting">
+                <div class="setting-copy">
+                  <h3 i18n>Access</h3>
+                  <p dir="auto">{{ accessLine() }}</p>
+                </div>
+                <button appButton type="button" variant="outlined" (click)="openAccess()">
+                  @if (client.isCoachBlocked) {
+                    <ng-container i18n>Unblock</ng-container>
+                  } @else {
+                    <ng-container i18n>Block access</ng-container>
+                  }
+                </button>
+              </div>
+              @if (context.isOwner()) {
+                <div class="setting">
+                  <div class="setting-copy">
+                    <h3 i18n>End coaching</h3>
+                    <p i18n>
+                      Only the owner can end coaching. The client’s record is kept, read-only.
+                    </p>
+                  </div>
+                  <app-client-release [client]="client" (released)="released($event)" />
+                </div>
+              }
+            </div>
+          </section>
+        }
+      }
+    }
+  }
+</div>
+
+<!-- What the menu and the main button open. They stay here so they share this page's data. -->
+<ng-template #startSheet let-sheet>
+  <app-plan-start
+    [clientId]="context.clientId()"
+    [firstName]="firstName()"
+    [today]="today()"
+    [catalog]="catalog()"
+    [plans]="plans()"
+    [renewFrom]="renewSource()"
+    (closed)="sheet.close($event)"
+  />
+</ng-template>
+
+<ng-template #paymentSheet let-sheet>
+  @if (subject(); as plan) {
+    <app-plan-payment
+      [plan]="plan"
+      [firstName]="firstName()"
+      [today]="today()"
+      (closed)="sheet.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #statusDialog let-dialog>
+  @if (subject(); as plan) {
+    <app-plan-status-change
+      [plan]="plan"
+      [mode]="statusMode()"
+      [firstName]="firstName()"
+      (closed)="dialog.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #accessDialog let-dialog>
+  @if (context.profile(); as client) {
+    <app-access-change [client]="client" (closed)="dialog.close($event)" />
+  }
+</ng-template>

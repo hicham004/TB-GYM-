@@ -65,7 +65,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R3.3a | **Clients** (C2): the list with status, last activity, the last 7 days, filter chips and search | §2 | Done · 2026-10-03 · b702cfc |
 | R3.3b | **Client profile** header, overview and progress (C3), with a coach read of the client's personal records | §2, plus backend tests | Done · 2026-10-03 · 214f8b1 |
 | R3.4a | **Client profile Training** (C3): the program as a timeline, with Assign, Reschedule, Complete, Cancel, Build next block and a session sheet | §2, plus backend tests | Done · 2026-10-03 · 80f7b9e |
-| R3.4b | **Client profile Service & access** (C3): plan, payments, renew, change coach and release | §2 | To do |
+| R3.4b | **Client profile Service & access** (C3): plan, payments, renew, change coach and release | §2 | Done · 2026-10-04 |
 | R3.5 | **Coach Messages** (C6) and **coach brand settings** (§3.1), with backend setting and logo | §2, plus backend tests | To do |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Gate |
 | R4.1 | **Program builder** (C4), part 1: library panel, week grid, drag and drop | §2 | To do |
@@ -255,6 +255,15 @@ of the implemented R1.3 screens before production rollout.
   (overlap, coverage, a stale version, a started program) into coach words in `programWriteError`, and
   show a generic line for anything else that still names the engine. The backend words pass above is
   the real fix.
+- **Correcting a payment (from R3.4b, needs an owner decision).** Receipts are append-only (SUB-007), so
+  a coach who records the wrong amount or method has no way to correct it on screen; reversals and
+  corrections are reserved as new linked operations but not designed. Until then a wrong receipt stays,
+  and an overpayment is refused.
+- **Older dialogs inside Service & access (from R3.4b).** Reassign coach and End coaching keep their
+  native `<dialog>` forms, now inside the new page's rows; move them to the kit Dialog with the rest.
+- **The legacy `label > span` rule (seen in R3.4b).** `styles.scss` still gives any span straight
+  inside a label a fixed colour (`#344149`), size, weight and margin, which is wrong on dark and on the
+  new sheets; R3.4b's price cards restate each property. Remove it once the last legacy form is gone.
 - **Header extras (from R3.3b).** The header shows initials until there is a profile photo source,
   and the owner sees "Coached by …" only for a team member's client. A "Last active" line beside the
   plan is possible: the new overview read already returns it.
@@ -610,6 +619,30 @@ limited to the coach's assigned clients.
     past its last day that never closed reads "Ended"). Training max history and an exercise's history
     are the older forms behind one collapsed "More training tools".
   - Follows dark mode. Screenshots on the Atlas demo: `docs/design/r34a-*.png`.
+- Built in R3.4b (Service & access), on the existing plan, payment and access endpoints; no backend
+  change.
+  - Top: the plan in front (the one running, else the next, else the latest), "Current plan",
+    "Starts Tue 13 Oct" or "Ended Tue 29 Sep", its name with a pill ("Active · 41 days left", warm in
+    the last 14, "Waiting for payment", "Paused", "Access blocked"), its dates, length and price, how
+    much is paid ("USD 150 of 330 paid", "Not paid yet", "Paid in full", "Free"), a pause or
+    cancellation reason, and **What's included**. "Maya asked to renew on Thu 1 Oct" sits beside the
+    plan that ran out, until a plan follows it.
+  - One filled button for what needs the coach, in this order: Record payment (a plan that can still
+    take one), Resume plan, Renew plan (in the last 14 days with nothing after it, over with nothing
+    after it, or the plan the client asked about); Start a plan when there is none. **Manage plan**
+    holds the rest (Record payment, Renew plan, Pause or Resume plan, Cancel plan, Start another plan),
+    and what is not possible stays with its reason ("Possible once it is paid", "None of this plan's
+    price options is offered now").
+  - Payments: a paid bar and every receipt (day, method and reference, amount). Other plans: the ones
+    running or coming and the earlier ones, each opening on a tap.
+  - Sheets: Start or renew a plan (price options as cards, the first day with "Runs Tue 13 Oct – Mon 4
+    Jan", a warning before a clash with a running plan, and when the client can use it), Record payment
+    (starts at what is left, says what a part payment leaves, in the plan's own currency). Dialogs ask
+    why for Pause (it still ends on its last day), Cancel plan and Block access.
+  - Coach and access: the coach with Reassign coach (owner, in a team), Access with Block or Unblock,
+    and End coaching (owner). A former client's record shows the same plans and payments with nothing
+    to change.
+  - Follows dark mode. Screenshots on the Atlas demo: `docs/design/r34b-*.png`.
 
 **C4. Program builder (full rebuild): the coach's main tool**
 - Job: "Build a great program fast."

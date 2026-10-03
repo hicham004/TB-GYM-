@@ -1,7 +1,7 @@
 import { NO_ERRORS_SCHEMA, signal, type Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ActivatedRoute, provideRouter } from '@angular/router';
+import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
@@ -76,7 +76,6 @@ async function render<T>(
     profile?: CoachClientDetails;
     isOwner?: boolean;
     api?: Record<string, unknown>;
-    query?: Record<string, string>;
     stubChildren?: boolean;
   } = {},
 ) {
@@ -94,16 +93,6 @@ async function render<T>(
           isOwner: signal(options.isOwner ?? true),
         },
       },
-      ...(options.query
-        ? [
-            {
-              provide: ActivatedRoute,
-              useValue: {
-                snapshot: { queryParamMap: new Map(Object.entries(options.query)) },
-              },
-            },
-          ]
-        : []),
     ],
   });
   if (options.stubChildren ?? true) {
@@ -122,32 +111,10 @@ async function render<T>(
 describe('client record sections', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('gives the owner the coach and release actions for a current client, and a coach neither', async () => {
-    const owner = await render(ClientServiceSection);
-    expect(owner.host.querySelector('app-client-coach')).not.toBeNull();
-    expect(owner.host.querySelector('app-client-release')).not.toBeNull();
-    expect(owner.host.querySelector('app-client-commercial')).not.toBeNull();
+  it('draws Service & access as the plans page', async () => {
+    const { host } = await render(ClientServiceSection);
 
-    TestBed.resetTestingModule();
-    const coach = await render(ClientServiceSection, { isOwner: false });
-    expect(coach.host.querySelector('app-client-coach')).toBeNull();
-    expect(coach.host.querySelector('app-client-release')).toBeNull();
-    expect(coach.host.querySelector('app-client-commercial')).not.toBeNull();
-  });
-
-  it('shows a former client’s plans read-only and offers nothing that changes them', async () => {
-    const { host } = await render(ClientServiceSection, { profile: FORMER });
-
-    expect(host.querySelector('app-client-coach')).toBeNull();
-    expect(host.querySelector('app-client-release')).toBeNull();
-    expect(host.querySelector('app-client-commercial')).not.toBeNull();
-  });
-
-  it('hands the Overview’s renewal request to the plans section', async () => {
-    const { fixture } = await render(ClientServiceSection, { query: { renew: 'enrollment-1' } });
-
-    const component = fixture.componentInstance as unknown as { renewEnrollmentId: string | null };
-    expect(component.renewEnrollmentId).toBe('enrollment-1');
+    expect(host.querySelector('app-client-service')).not.toBeNull();
   });
 
   it('disables the whole intake for a former client', async () => {

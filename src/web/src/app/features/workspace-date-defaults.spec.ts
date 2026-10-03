@@ -4,12 +4,7 @@ import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../core/api/api-client';
-import type {
-  ClientIntakeProfile,
-  CoachClientDetails,
-  ProductCatalog,
-  WorkspaceDetails,
-} from '../core/api/api.models';
+import type { ClientIntakeProfile, ProductCatalog, WorkspaceDetails } from '../core/api/api.models';
 import { CsrfService } from '../core/security/csrf.service';
 import { TenantContext } from '../core/tenancy/tenant-context';
 import { TenantStore } from '../core/tenancy/tenant.store';
@@ -17,7 +12,9 @@ import { field, settle } from '../../testing/dom';
 import { ClientIntakeForm } from './clients/client-intake-form';
 import { ClientTrainingTools } from './clients/client-training-tools';
 import { ProgramAssign } from './clients/program-assign';
-import { ClientCommercial } from './commercial/client-commercial';
+import { planCard } from './clients/client-service.models';
+import { PlanPayment, PlanStart } from './clients/plan-sheets';
+import { unpaidRenewal } from '../../testing/client-service-fixtures';
 
 /**
  * 22:00 UTC on 20 September is 01:00 on the 21st in Asia/Beirut, so the browser's UTC calendar
@@ -70,16 +67,6 @@ const intake: ClientIntakeProfile = {
   onboardingStatus: 'InProgress',
   onboardingCompletedAtUtc: null,
   version: 7,
-};
-
-const client: CoachClientDetails = {
-  ...intake,
-  userId: 'user-1',
-  coachNotes: null,
-  isCoachBlocked: false,
-  assignedCoachUserId: 'owner-1',
-  assignedCoachName: 'Olivia Owner',
-  release: null,
 };
 
 const emptyPage = { items: [], total: 0 };
@@ -205,11 +192,30 @@ describe('date defaults across a coach client page', () => {
         expect(field(host, 'Date').value).toBe(currentDate);
       });
 
-      it('defaults the service start date to the workspace date', async () => {
-        const { host, getWorkspace } = await render(ClientCommercial, { client }, currentDate);
+      it('defaults a new plan’s first day to the workspace date the page was given', async () => {
+        const { host } = await render(
+          PlanStart,
+          { clientId: 'client-1', firstName: 'Rana', today: currentDate, catalog, plans: [] },
+          currentDate,
+        );
 
-        expect(field(host, 'Start date').value).toBe(currentDate);
-        expect(getWorkspace).toHaveBeenCalled();
+        expect(field(host, 'First day').value).toBe(currentDate);
+      });
+
+      it('defaults a payment’s day and its upper bound to the workspace date', async () => {
+        const plan = planCard(unpaidRenewal(), {
+          locale: 'en-US',
+          today: currentDate,
+          firstName: 'Rana',
+        });
+        const { host } = await render(
+          PlanPayment,
+          { plan, firstName: 'Rana', today: currentDate },
+          currentDate,
+        );
+
+        expect(field(host, 'Received on').value).toBe(currentDate);
+        expect(field(host, 'Received on').max).toBe(currentDate);
       });
 
       it('defaults the intake measurement date and its upper bound to the workspace date', async () => {

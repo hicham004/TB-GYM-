@@ -572,6 +572,16 @@ The coach's program, workout and records reads ask `CoachTrainingReadPolicy` (TR
 module) of the same access decision, so they also open before a booked plan begins; the client's own
 reads do not.
 
+R3.4b rebuilds Service & access (`ClientService`, route `…/service`, `REDESIGNED`) on the existing
+commercial and relationship endpoints, with no backend change. It reads the plans
+(`/api/commercial/clients/{id}`, also handed to the record's header), the product catalog and, for the
+client's request to renew, the R3.3b overview read. Pure mapping lives in `client-service.models.ts`
+and the form rules and coach wording of refusals in `client-service-forms.models.ts`; Start or renew a
+plan and Record payment are sheets (`plan-sheets.ts`), Pause, Cancel and Block access are dialogs
+(`plan-dialogs.ts`). A payment retry reuses its idempotency key and its received instant, because the
+server binds the key to the whole payload (SUB-011). The older `ClientCommercial` screen is gone;
+change coach and End coaching keep their components (ADR 0026, ADR 0027) inside the new page.
+
 R2.4a keeps client-entered extra food in a separate Nutrition log table, linked by tenant and log
 ID. The day read returns it beside planned slots and includes it in consumed totals; the assigned
 meal snapshot and targets remain unchanged. The add command checks the current client and server
