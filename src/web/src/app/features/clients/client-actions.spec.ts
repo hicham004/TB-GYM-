@@ -21,6 +21,25 @@ class Host {
   ];
 }
 
+/** Items the page handles itself, one of them not available right now. */
+@Component({
+  imports: [ClientActions],
+  template: `<app-client-actions label="Actions" [items]="items" (chosen)="chosen.push($event)" />`,
+})
+class ActionHost {
+  chosen: string[] = [];
+  items: ClientAction[] = [
+    { label: 'Assign program', hint: 'Choose a program', action: 'assign' },
+    {
+      label: 'Reschedule',
+      hint: 'Not possible once a workout has started',
+      action: 'reschedule',
+      disabled: true,
+    },
+    { label: 'Cancel program', action: 'cancel' },
+  ];
+}
+
 @Component({ template: 'page' })
 class Page {}
 
@@ -141,5 +160,59 @@ describe('ClientActions', () => {
     await settle(fixture);
 
     expect(items()).toHaveLength(0);
+  });
+
+  describe('items the page handles itself', () => {
+    async function renderActions() {
+      TestBed.configureTestingModule({ providers: [provideRouter([])] });
+      const fixture = TestBed.createComponent(ActionHost);
+      document.body.append(fixture.nativeElement);
+      await settle(fixture);
+      const host = fixture.nativeElement as HTMLElement;
+      return {
+        fixture,
+        host,
+        trigger: () => host.querySelector('app-client-actions button') as HTMLButtonElement,
+        items: () => Array.from(host.querySelectorAll<HTMLButtonElement>('button.item')),
+      };
+    }
+
+    it('lists buttons, not links, and reports the action chosen once focus is back on the button', async () => {
+      const { fixture, host, trigger, items } = await renderActions();
+      press(host, 'Actions');
+      await settle(fixture);
+
+      expect(host.querySelectorAll('a.item')).toHaveLength(0);
+      expect(items().map((item) => item.querySelector('.item-title')?.textContent)).toEqual([
+        'Assign program',
+        'Reschedule',
+        'Cancel program',
+      ]);
+      expect(document.activeElement).toBe(items()[0]);
+
+      items()[2].click();
+      await settle(fixture);
+
+      expect(fixture.componentInstance.chosen).toEqual(['cancel']);
+      expect(items()).toHaveLength(0);
+      expect(document.activeElement).toBe(trigger());
+    });
+
+    it('keeps an unavailable item in the list, says why, and does nothing when it is chosen', async () => {
+      const { fixture, host, items } = await renderActions();
+      press(host, 'Actions');
+      await settle(fixture);
+
+      const blocked = items()[1];
+      expect(blocked.getAttribute('aria-disabled')).toBe('true');
+      expect(blocked.textContent).toContain('Not possible once a workout has started');
+      expect(items()[0].getAttribute('aria-disabled')).toBeNull();
+
+      blocked.click();
+      await settle(fixture);
+
+      expect(fixture.componentInstance.chosen).toEqual([]);
+      expect(items()).toHaveLength(3);
+    });
   });
 });

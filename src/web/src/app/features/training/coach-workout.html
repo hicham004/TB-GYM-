@@ -30,9 +30,8 @@
             <div class="set-comparison">
               <strong i18n>Set {{ index + 1 }}</strong>
               <p>
-                <span i18n>Target:</span> {{ set.prescribedRepetitionsMinimum ?? '—' }}–{{
-                  set.prescribedRepetitionsMaximum ?? '—'
-                }}
+                <span i18n>Target:</span>
+                {{ targetReps(set.prescribedRepetitionsMinimum, set.prescribedRepetitionsMaximum) }}
                 <span i18n>reps</span> · {{ set.prescribedLoad ?? '—' }}
                 {{
                   set.prescribedLoadUnit === 'Kilogram'

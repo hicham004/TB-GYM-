@@ -44,6 +44,13 @@ export class CoachWorkout {
     });
   }
 
+  /** "6" when the target is one number, "6–8" for a range. */
+  protected targetReps(minimum: null | number | string, maximum: null | number | string): string {
+    return minimum !== null && Number(minimum) === Number(maximum)
+      ? `${Number(minimum)}`
+      : `${minimum ?? '—'}–${maximum ?? '—'}`;
+  }
+
   protected async load(notesSkip = 0): Promise<void> {
     return this.scope.run('load', async (owner) => {
       const generation = this.generation;

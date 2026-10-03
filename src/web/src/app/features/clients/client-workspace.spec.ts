@@ -284,7 +284,7 @@ describe('ClientWorkspace', () => {
       anchor.getAttribute('href'),
     );
     expect(hrefs).toEqual([
-      '/clients/client-1/training',
+      '/clients/client-1/training?action=assign',
       '/clients/client-1/service',
       '/clients/client-1/intake',
     ]);

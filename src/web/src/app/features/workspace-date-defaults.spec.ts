@@ -1,5 +1,6 @@
 import { signal, Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../core/api/api-client';
@@ -14,8 +15,9 @@ import { TenantContext } from '../core/tenancy/tenant-context';
 import { TenantStore } from '../core/tenancy/tenant.store';
 import { field, settle } from '../../testing/dom';
 import { ClientIntakeForm } from './clients/client-intake-form';
+import { ClientTrainingTools } from './clients/client-training-tools';
+import { ProgramAssign } from './clients/program-assign';
 import { ClientCommercial } from './commercial/client-commercial';
-import { ClientTraining } from './training/client-training';
 
 /**
  * 22:00 UTC on 20 September is 01:00 on the 21st in Asia/Beirut, so the browser's UTC calendar
@@ -82,6 +84,19 @@ const client: CoachClientDetails = {
 
 const emptyPage = { items: [], total: 0 };
 
+/** A plan with training that covers both workspace dates the cases use. */
+const trainingPlan = {
+  id: 'enrollment-1',
+  productName: 'Online Coaching',
+  offerLabel: '12 weeks',
+  startDate: '2026-09-01',
+  endDateExclusive: '2026-12-01',
+  lastActiveDate: '2026-11-30',
+  storedStatus: 'Active',
+  effectiveStatus: 'Active',
+  features: ['Training'],
+};
+
 // One active product with one active offer, so "Assign a service" renders its start-date control.
 const catalog: ProductCatalog = {
   workspaceCurrencyCode: 'USD',
@@ -128,6 +143,7 @@ async function render(
   await TestBed.configureTestingModule({
     imports: [component],
     providers: [
+      provideRouter([]),
       {
         provide: ApiClient,
         useValue: {
@@ -168,19 +184,23 @@ describe('date defaults across a coach client page', () => {
 
   for (const currentDate of workspaceDates) {
     describe(`with the workspace on ${currentDate}`, () => {
-      it('defaults the training assignment start date to the workspace date', async () => {
-        const { host, getWorkspace } = await render(
-          ClientTraining,
-          { clientId: 'client-1' },
+      it('defaults the program start date to the workspace date the page was given', async () => {
+        const { host } = await render(
+          ProgramAssign,
+          {
+            clientId: 'client-1',
+            firstName: 'Rana',
+            today: currentDate,
+            enrollments: [trainingPlan],
+          },
           currentDate,
         );
 
         expect(field(host, 'Start date').value).toBe(currentDate);
-        expect(getWorkspace).toHaveBeenCalled();
       });
 
       it('defaults the strength-max effective date to the workspace date', async () => {
-        const { host } = await render(ClientTraining, { clientId: 'client-1' }, currentDate);
+        const { host } = await render(ClientTrainingTools, { clientId: 'client-1' }, currentDate);
 
         expect(field(host, 'Date').value).toBe(currentDate);
       });
@@ -215,9 +235,9 @@ describe('date defaults across a coach client page', () => {
     });
   }
 
-  it('re-derives the training dates after the active workspace changes', async () => {
+  it('re-derives the training max date after the active workspace changes', async () => {
     const { host, fixture, getWorkspace, tenantId } = await render(
-      ClientTraining,
+      ClientTrainingTools,
       { clientId: 'client-1' },
       '2026-09-21',
     );
@@ -229,7 +249,6 @@ describe('date defaults across a coach client page', () => {
     TestBed.inject(TenantContext).invalidate();
     await settle(fixture);
 
-    expect(field(host, 'Start date').value).toBe('2026-09-23');
     expect(field(host, 'Date').value).toBe('2026-09-23');
   });
 });

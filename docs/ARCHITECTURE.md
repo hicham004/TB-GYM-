@@ -554,6 +554,21 @@ self-service links, the coach's records read); the older entry, correction and p
 one collapsed "Entries and corrections" that loads only when opened, in a light scope. The chart
 pieces draw with `--tb-accent-ink` and a new `--tb-chart-band` token, so they read on dark.
 
+R3.4a rebuilds the Training section of a client's record, with one new read and no schema change.
+`GET /api/training/clients/{clientProfileId}/program` (TRN-022) is the coach's counterpart of the
+client's `/program`: every block with its weeks and the state of each session from
+`ClientSessionStatePolicy.EvaluateForCoach`, after the same Training access check as the coach's
+records and workout reads. In the web app the section (`ClientProgram`, route `…/training`,
+`REDESIGNED`) draws the running block as a timeline and keeps its writes where they were, on the
+existing mesocycle endpoints, reached through one Manage program menu whose items open sheets and
+dialogs (Assign program, Build next block, a session; Reschedule, Mark complete, Cancel program).
+`ClientAction` is now a link or a button that reports an `action`; the header's Assign program, Today
+and the Overview arrive as `?action=assign` and open the same sheet. The read sits in a feature-local
+`ClientProgramApi`, not `ApiClient`, so it stays out of the initial bundle. The server's refusals
+(overlap, coverage, a stale version, a started program) are worded for a coach in `programWriteError`,
+and the old stylesheet-and-form screen is gone; training max history and an exercise's history keep
+their older forms in `ClientTrainingTools`, behind one collapsed section in a light scope.
+
 R2.4a keeps client-entered extra food in a separate Nutrition log table, linked by tenant and log
 ID. The day read returns it beside planned slots and includes it in consumed totals; the assigned
 meal snapshot and targets remain unchanged. The add command checks the current client and server

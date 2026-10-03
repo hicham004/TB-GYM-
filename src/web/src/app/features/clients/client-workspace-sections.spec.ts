@@ -162,8 +162,15 @@ describe('client record sections', () => {
   it('does not show a former client’s training', async () => {
     const { host } = await render(ClientTrainingSection, { profile: FORMER });
 
-    expect(host.querySelector('app-client-training')).toBeNull();
+    expect(host.querySelector('app-client-program')).toBeNull();
     expect(host.textContent).toContain('This is a former client.');
+  });
+
+  it('shows a current client’s training as the program timeline', async () => {
+    const { host } = await render(ClientTrainingSection);
+
+    expect(host.querySelector('app-client-program')).not.toBeNull();
+    expect(host.textContent).not.toContain('This is a former client.');
   });
 
   it('lists the check-ins with their workflow state and links each submission to its review', async () => {

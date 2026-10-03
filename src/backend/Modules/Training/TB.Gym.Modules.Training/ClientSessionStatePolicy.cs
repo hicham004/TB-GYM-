@@ -32,4 +32,20 @@ public static class ClientSessionStatePolicy
             _ when scheduledDate == today => ClientSessionState.Today,
             _ => ClientSessionState.Upcoming,
         };
+
+    /// <summary>
+    /// The state a coach's timeline shows (R3.4a, TRN-022): the client's own state wherever the client
+    /// could train the session. One never started in a week the coach has not shared, or in a
+    /// cancelled block, has none, because the client could not train it: it is neither missed nor
+    /// still to come. A workout always decides first, as for the client.
+    /// </summary>
+    public static ClientSessionState? EvaluateForCoach(
+        DateOnly scheduledDate,
+        DateOnly today,
+        WorkoutExecutionStatus? workout,
+        bool weekIsShared,
+        bool blockIsCancelled) =>
+        workout is null && (!weekIsShared || blockIsCancelled)
+            ? null
+            : Evaluate(scheduledDate, today, workout);
 }

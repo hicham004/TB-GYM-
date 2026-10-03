@@ -136,7 +136,7 @@ describe('Coach Today view model', () => {
         'new',
         'Assign program',
         '/clients/c-lynn/training',
-        null,
+        { action: 'assign' },
       ],
     ]);
     expect(rows[0].action.forWhom).toBe('for Maya Fakhoury');

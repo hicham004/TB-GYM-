@@ -91,7 +91,11 @@ describe('what needs the coach on a client’s page', () => {
     expect(list[2]).toMatchObject({
       heading: 'No program yet',
       detail: 'Joined Mon 14 Sep',
-      action: { label: 'Assign program', link: `${page}/training`, queryParams: null },
+      action: {
+        label: 'Assign program',
+        link: `${page}/training`,
+        queryParams: { action: 'assign' },
+      },
     });
   });
 

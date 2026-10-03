@@ -63,8 +63,9 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | Done · 2026-10-03 · 971482d |
 | R3.2 | **Coach Today** (C1) | §2 | Done · 2026-10-03 · 428346f |
 | R3.3a | **Clients** (C2): the list with status, last activity, the last 7 days, filter chips and search | §2 | Done · 2026-10-03 · b702cfc |
-| R3.3b | **Client profile** header, overview and progress (C3), with a coach read of the client's personal records | §2, plus backend tests | Built, not committed |
-| R3.4 | **Client profile** training timeline and Service & access (C3) | §2 | To do |
+| R3.3b | **Client profile** header, overview and progress (C3), with a coach read of the client's personal records | §2, plus backend tests | Done · 2026-10-03 · 214f8b1 |
+| R3.4a | **Client profile Training** (C3): the program as a timeline, with Assign, Reschedule, Complete, Cancel, Build next block and a session sheet | §2, plus backend tests | Done · 2026-10-03 |
+| R3.4b | **Client profile Service & access** (C3): plan, payments, renew, change coach and release | §2 | To do |
 | R3.5 | **Coach Messages** (C6) and **coach brand settings** (§3.1), with backend setting and logo | §2, plus backend tests | To do |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Gate |
 | R4.1 | **Program builder** (C4), part 1: library panel, week grid, drag and drop | §2 | To do |
@@ -114,9 +115,6 @@ of the implemented R1.3 screens before production rollout.
   filters (unread, waiting for a reply), the client's plan and last workout beside the thread, and
   saved replies. Removing your own message stays immediate, as it always was, now behind the
   message's options; an undo would need care because removal is one way (MSG-008).
-- **Assign program lists every version (from R0.2).** The coach's program picker shows each
-  published version ("Full Body Reset · v1"), so "v2" is still visible there. Offer only each
-  program's latest version when C3's Actions drawer replaces the form (R3.4).
 - **Nutrition day refusals (from R0.2).** A day with no meal plan and a refused day share one
   message ("There is no meal plan for this day…"). Map each access reason, as check-ins do, when
   M4 is rebuilt (R2.4).
@@ -205,7 +203,9 @@ of the implemented R1.3 screens before production rollout.
   0.2 kB, its mapping kept in the lazy Training chunk, R2.5c 3.9 kB: the install service, four
   icon glyphs and the saved-unit code, R3.2 0.3 kB, Coach Today itself being lazy, and R3.3a 0.2 kB,
   the search glyph in the shared icon set, which brought it to 536.2 kB). R3.3b put the client page's
-  two reads in `ApiClient` and measured 536.1 kB.
+  two reads in `ApiClient` and measured 536.1 kB. R3.4a kept its read in a feature-local
+  `ClientProgramApi` and measured 534.7 kB; its stylesheet, `client-program.scss`, is 7.2 kB against
+  the 5 kB component-style warning (8 kB is an error), like the Today, Messages and Progress ones.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -234,6 +234,31 @@ of the implemented R1.3 screens before production rollout.
 - **Numbers in right-to-left (from R3.3b).** With English text in an RTL layout "60 kg × 5" and
   "2 of 5" reorder their pieces, as they already do on Today and Clients. Settle it with the
   translation work (locale number formatting, isolating each figure).
+- **Older training tools (from R3.4a).** Training max history (with the form to record one) and an
+  exercise's history are still the older forms, behind "More training tools" in a light scope inside
+  a dark page. Rebuild them as a sheet and a chart with the unsaved-changes guard (§9).
+- **Sheets on a wide screen (from R3.4a).** Every sheet opens from the bottom, centred, 40 rem wide,
+  at every width. A side drawer from about 960 px would suit the long ones, Assign program and Build
+  next block.
+- **A program that cannot close (from R3.4a; decided 2026-10-03, to build next).** TRN-013 completes a
+  program only when every session is done, so one with a missed session stays active after its last
+  day (the page calls it "Ended") until the coach cancels it, which records it as cancelled rather
+  than finished. The API also still lets the client start one of its missed sessions. The owner left
+  the choice to Claude: once a block's last day has passed, the coach may close it as finished; its
+  missed sessions stay on record as missed and can no longer be started. Before the last day it is
+  still Cancel or Reschedule. Other coaching apps simply end a program on its date with the misses
+  kept. Maya's Phase 1 on the demo is one.
+- **A program for a plan that has not begun (from R3.4a; decided 2026-10-03, to build next).** The
+  coach's read follows today's access, so a program assigned under a plan that starts later is hidden
+  until the plan starts, although the coach may already assign, reschedule and cancel it (TRN-014) and
+  the older screen showed it. The owner left the choice to Claude: before a booked plan begins (a new
+  client, or the gap before a renewal) the coach's training reads open (the program, a workout, the
+  records); the client still sees it only from the plan's first day. A lapsed, paused or cancelled
+  plan with nothing booked still closes them.
+- **Engine sentences (from R3.4a).** The sheets rewrite the refusals the server is known to send
+  (overlap, coverage, a stale version, a started program) into coach words in `programWriteError`, and
+  show a generic line for anything else that still names the engine. The backend words pass above is
+  the real fix.
 - **Header extras (from R3.3b).** The header shows initials until there is a profile photo source,
   and the owner sees "Coached by …" only for a team member's client. A "Last active" line beside the
   plan is possible: the new overview read already returns it.
@@ -557,6 +582,37 @@ limited to the coach's assigned clients.
     opened, and list only days with a weigh-in. The page is about 2,600 px; it was 10,400.
   - Both follow dark mode; the other sections stay light. Screenshots on the Atlas demo:
     `docs/design/r33b-profile-*.png` and `r33b-progress-*.png`.
+- Built in R3.4a (Training; Service & access is R3.4b). One new coach read, `GET
+  /api/training/clients/{clientProfileId}/program` (TRN-022): every program block with its weeks,
+  shared or not, and the state of each session by the rule the client's own Training page uses, so the
+  two never disagree about what was missed. A client whose plan has lapsed, is paused or is blocked
+  gets the reason instead of blocks.
+  - Top: the running program's name, "Week 4 of 6", its dates, "11 of 24 sessions done", "1 missed",
+    and one segment per week showing how much of it is done. **Manage program** holds what a coach can
+    do about it (the client's own Actions stays in the page header). A finished program with nothing
+    lined up shows one filled Assign program instead.
+  - Timeline: weeks side by side on a wide page (the strip scrolls, and the current week comes into
+    view tinted), one week under a row of week numbers on a phone. A week says its dates and how far
+    it got, and has one box, "Shared with Maya", with "opens Sat 10 Oct" while it is shared but still
+    locked. A session is a card: day, name, "4 exercises · 12 sets" and Done, Missed, Today, In
+    progress, Upcoming, Not shared or Cancelled, each in words. A week that was never shared, or a
+    cancelled program, has no Missed.
+  - A session opens a sheet: what it prescribes (equal sets told once, "3 × 8–10 reps · 60 kg · RPE
+    8"), what the client did when they started it (the coach's workout view, set by set against the
+    target) and, for one still to come, a swap for one of the coach's saved sessions.
+  - Manage program: Assign program, Build next block, Reschedule, Open every shared week now (or
+    Open weeks as they start), Mark complete and Cancel program. What cannot be done stays in the list
+    with its reason: a started program cannot move, every session must be done before Mark complete,
+    and a workout in progress blocks Cancel. Assign program is a sheet: a plan (asked only when there
+    are several), a program (each at its newest version), a start date with "Runs Mon 12 Oct – Sun 22
+    Nov", the training maxes the program needs (starting from the recorded ones; kilograms and pounds
+    are never converted) and the load settings on one collapsed line. Build next block previews the
+    new weeks before anything is added. Cancel asks why. The header's Assign program, Today's "No
+    program yet" and the Overview's all open the same sheet (`?action=assign`).
+  - Other programs: the ones running or coming and the earlier ones, each opening on a tap (a program
+    past its last day that never closed reads "Ended"). Training max history and an exercise's history
+    are the older forms behind one collapsed "More training tools".
+  - Follows dark mode. Screenshots on the Atlas demo: `docs/design/r34a-*.png`.
 
 **C4. Program builder (full rebuild): the coach's main tool**
 - Job: "Build a great program fast."

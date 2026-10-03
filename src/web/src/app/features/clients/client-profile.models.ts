@@ -173,7 +173,12 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
         tag: $localize`Program`,
         heading: $localize`No program yet`,
         detail: $localize`Joined ${date(item.date)}:date:`,
-        action: { label: $localize`Assign program`, link: `${page}/training`, queryParams: null },
+        // Opens the Training section with the Assign program sheet already open.
+        action: {
+          label: $localize`Assign program`,
+          link: `${page}/training`,
+          queryParams: { action: 'assign' },
+        },
       };
   }
 }

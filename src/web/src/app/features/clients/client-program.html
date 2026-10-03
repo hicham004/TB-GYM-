@@ -1,0 +1,318 @@
+<div class="program">
+  @switch (state()) {
+    @case ('loading') {
+      <section class="panel" aria-busy="true">
+        <div class="panel-body">
+          <app-skeleton [label]="loadingLabel" [lines]="4" />
+        </div>
+      </section>
+    }
+    @case ('error') {
+      <section class="panel">
+        <div class="panel-body load-failed">
+          <p role="alert" i18n>The program could not be loaded.</p>
+          <button appButton type="button" variant="outlined" (click)="load(true)" i18n>
+            Try again
+          </button>
+        </div>
+      </section>
+    }
+    @default {
+      @if (read(); as program) {
+        @if (!program.isAllowed) {
+          <!-- The plan does not let the coach see this client's training (CLI-018): say why. -->
+          <section class="panel" aria-labelledby="closed-title">
+            <header class="panel-head">
+              <h2 id="closed-title" i18n>Training isn’t open</h2>
+            </header>
+            <div class="panel-body prose">
+              <p dir="auto">{{ closedLine() }}</p>
+              <div class="row-actions">
+                @if (canAssign()) {
+                  <button appButton type="button" (click)="openAssign()" i18n>
+                    Assign program
+                  </button>
+                }
+                @if (canOpenService()) {
+                  <a
+                    appButton
+                    variant="outlined"
+                    [routerLink]="['/clients', context.clientId(), 'service']"
+                    i18n
+                    >Open Service &amp; access</a
+                  >
+                }
+              </div>
+            </div>
+          </section>
+        } @else if (card(); as block) {
+          <section class="panel hero" aria-labelledby="program-title">
+            <div class="hero-main">
+              <div class="hero-copy">
+                <p class="eyebrow">{{ block.eyebrow }}</p>
+                <h2 id="program-title" dir="auto">{{ block.name }}</h2>
+                <ul class="facts">
+                  @for (fact of block.facts; track fact.text) {
+                    <li [class.warm]="fact.warm" dir="auto">{{ fact.text }}</li>
+                  }
+                </ul>
+              </div>
+              <div class="hero-actions">
+                @if (needsProgram()) {
+                  <button appButton type="button" (click)="openAssign()" i18n>
+                    Assign program
+                  </button>
+                }
+                @if (menu().length > 0) {
+                  <app-client-actions
+                    [label]="actionsLabel"
+                    [items]="menu()"
+                    (chosen)="onAction($event)"
+                  />
+                }
+              </div>
+            </div>
+            <ol class="bar" aria-label="How much of each week is done" i18n-aria-label>
+              @for (week of block.weeks; track week.id) {
+                <li [class.current]="week.isCurrent">
+                  <span class="fill" [style.inline-size.%]="week.fill"></span>
+                  <span class="tb-visually-hidden">{{ week.title }}: {{ week.summary }}</span>
+                </li>
+              }
+            </ol>
+          </section>
+
+          <section class="panel timeline" aria-labelledby="timeline-title">
+            <header class="panel-head">
+              <h2 id="timeline-title" i18n>Timeline</h2>
+              <p class="panel-span" dir="auto" i18n>
+                Open a session to see what it asks for and what {{ firstName() }} did.
+              </p>
+            </header>
+
+            <div class="week-picker" role="group" aria-label="Choose a week" i18n-aria-label>
+              @for (week of block.weeks; track week.id) {
+                <button
+                  type="button"
+                  class="pick"
+                  [class.current]="week.isCurrent"
+                  [attr.aria-pressed]="week.number === shownWeek()"
+                  [attr.aria-label]="week.title + ', ' + week.range"
+                  (click)="chooseWeek(week.number)"
+                >
+                  {{ week.number }}
+                </button>
+              }
+            </div>
+
+            <div
+              class="strip"
+              #scroller
+              role="group"
+              aria-label="The weeks of the program"
+              i18n-aria-label
+            >
+              @for (week of block.weeks; track week.id) {
+                <section
+                  class="week"
+                  [class.current]="week.isCurrent"
+                  [class.shown]="week.number === shownWeek()"
+                  [attr.aria-labelledby]="'week-' + week.id"
+                >
+                  <header class="week-head">
+                    <div class="week-title">
+                      <h3 [id]="'week-' + week.id">{{ week.title }}</h3>
+                      @if (week.isCurrent) {
+                        <span class="now" i18n>This week</span>
+                      }
+                    </div>
+                    <p class="range">{{ week.range }}</p>
+                    <p class="summary">{{ week.summary }}</p>
+                  </header>
+
+                  <div class="share">
+                    <app-checkbox [label]="shareText()">
+                      <input
+                        type="checkbox"
+                        appControl
+                        [checked]="week.share !== 'unshared'"
+                        [disabled]="block.terminal || sharing()"
+                        [attr.aria-label]="week.title + ': ' + shareText()"
+                        (change)="toggleShare(week, $any($event.target))"
+                      />
+                    </app-checkbox>
+                    @if (week.share === 'locked') {
+                      <p class="share-note">{{ week.shareLabel }}</p>
+                    }
+                  </div>
+
+                  <ul class="sessions">
+                    @for (session of week.sessions; track session.id) {
+                      <li>
+                        <button
+                          type="button"
+                          class="session"
+                          [attr.data-mark]="session.mark"
+                          (click)="openSession(week, session)"
+                        >
+                          <span class="s-top">
+                            <span class="s-day">{{ session.day }}</span>
+                            <span class="s-mark">{{ session.markLabel }}</span>
+                          </span>
+                          <span class="s-name" dir="auto">{{ session.name }}</span>
+                          <span class="s-detail">{{ session.detail }}</span>
+                        </button>
+                      </li>
+                    } @empty {
+                      <li class="none" i18n>No sessions this week.</li>
+                    }
+                  </ul>
+                </section>
+              }
+            </div>
+          </section>
+
+          @if (hasOthers()) {
+            <section class="panel others" aria-labelledby="others-title">
+              <header class="panel-head">
+                <h2 id="others-title" i18n>Other programs</h2>
+              </header>
+              <div class="panel-body">
+                @if (others().coming.length > 0) {
+                  <h3 class="group" i18n>Current and next</h3>
+                  <ul class="rows">
+                    @for (row of others().coming; track row.id) {
+                      <li>
+                        <button type="button" class="row" (click)="openBlock(row.id)">
+                          <span class="row-main">
+                            <span class="row-name" dir="auto">{{ row.name }}</span>
+                            <span class="row-meta">{{ row.range }} · {{ row.summary }}</span>
+                          </span>
+                          <app-status-pill [label]="row.pill.label" [tone]="row.pill.tone" />
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                }
+                @if (others().earlier.length > 0) {
+                  <h3 class="group" i18n>Earlier</h3>
+                  <ul class="rows">
+                    @for (row of others().earlier; track row.id) {
+                      <li>
+                        <button type="button" class="row" (click)="openBlock(row.id)">
+                          <span class="row-main">
+                            <span class="row-name" dir="auto">{{ row.name }}</span>
+                            <span class="row-meta">{{ row.range }} · {{ row.summary }}</span>
+                          </span>
+                          <app-status-pill [label]="row.pill.label" [tone]="row.pill.tone" />
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+            </section>
+          }
+        } @else {
+          <section class="panel">
+            <app-empty-state [heading]="emptyHeading" [description]="emptyDescription()">
+              @if (canAssign()) {
+                <button empty-state-action appButton type="button" (click)="openAssign()" i18n>
+                  Assign program
+                </button>
+              } @else {
+                <a
+                  empty-state-action
+                  appButton
+                  variant="outlined"
+                  [routerLink]="['/clients', context.clientId(), 'service']"
+                  i18n
+                  >Open Service &amp; access</a
+                >
+              }
+            </app-empty-state>
+          </section>
+        }
+
+        @if (program.isAllowed) {
+          <details class="tools" (toggle)="toolsToggled($event)">
+            <summary>
+              <span class="tools-title" i18n>More training tools</span>
+              <span class="tools-hint" i18n
+                >Training max history, and how {{ firstName() }} has done on one exercise.</span
+              >
+            </summary>
+            @if (toolsOpened()) {
+              <div class="tools-body" data-mode="light">
+                <app-client-training-tools [clientId]="context.clientId()" />
+              </div>
+            }
+          </details>
+        }
+      }
+    }
+  }
+</div>
+
+<!-- What the Actions menu and the timeline open. They stay here so they share this page's data. -->
+<ng-template #assignSheet let-sheet>
+  <app-program-assign
+    [clientId]="context.clientId()"
+    [firstName]="firstName()"
+    [today]="today()"
+    [enrollments]="context.plans()?.enrollments ?? []"
+    (closed)="sheet.close($event)"
+  />
+</ng-template>
+
+<ng-template #nextSheet let-sheet>
+  @if (card(); as block) {
+    <app-program-next-block
+      [block]="block"
+      [firstName]="firstName()"
+      (closed)="sheet.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #sessionSheet let-sheet>
+  @if (active(); as open) {
+    @if (card(); as block) {
+      <app-program-session
+        [block]="block"
+        [week]="open.week"
+        [session]="open.session"
+        [clientId]="context.clientId()"
+        [firstName]="firstName()"
+        [today]="today()"
+        (closed)="sheet.close($event)"
+      />
+    }
+  }
+</ng-template>
+
+<ng-template #rescheduleDialog let-dialog>
+  @if (card(); as block) {
+    <app-program-reschedule
+      [block]="block"
+      [firstName]="firstName()"
+      (closed)="dialog.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #completeDialog let-dialog>
+  @if (card(); as block) {
+    <app-program-complete
+      [block]="block"
+      [firstName]="firstName()"
+      (closed)="dialog.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #cancelDialog let-dialog>
+  @if (card(); as block) {
+    <app-program-cancel [block]="block" [firstName]="firstName()" (closed)="dialog.close($event)" />
+  }
+</ng-template>

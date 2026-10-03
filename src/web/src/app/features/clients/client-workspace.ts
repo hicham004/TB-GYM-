@@ -163,7 +163,7 @@ export class ClientWorkspace {
       : '',
   );
 
-  /** What else a coach does from here. R3.4 turns the training ones into drawers. */
+  /** What else a coach does from here. Assigning a program opens its sheet on the Training section. */
   protected readonly actions = computed<ClientAction[]>(() => {
     const base = `/clients/${this.clientId}`;
     if (this.context.isFormer()) {
@@ -173,29 +173,31 @@ export class ClientWorkspace {
     const plans = this.context.plans();
     const renewal =
       workspace && plans ? renewalPrompt(plans.enrollments, workspace.currentDate) : null;
+    const service: ClientAction = renewal
+      ? {
+          label: $localize`Renew plan`,
+          hint:
+            renewal.daysLeft <= 0
+              ? $localize`Ends today`
+              : renewal.daysLeft === 1
+                ? $localize`Ends tomorrow`
+                : $localize`Ends in ${renewal.daysLeft}:count: days`,
+          link: `${base}/service`,
+          queryParams: { renew: renewal.enrollment.id },
+        }
+      : {
+          label: $localize`Plan and payments`,
+          hint: $localize`Plans, receipts and access`,
+          link: `${base}/service`,
+        };
     return [
       {
         label: $localize`Assign program`,
         hint: $localize`Choose a program and a start date`,
         link: `${base}/training`,
+        queryParams: { action: 'assign' },
       },
-      renewal
-        ? {
-            label: $localize`Renew plan`,
-            hint:
-              renewal.daysLeft <= 0
-                ? $localize`Ends today`
-                : renewal.daysLeft === 1
-                  ? $localize`Ends tomorrow`
-                  : $localize`Ends in ${renewal.daysLeft}:count: days`,
-            link: `${base}/service`,
-            queryParams: { renew: renewal.enrollment.id },
-          }
-        : {
-            label: $localize`Plan and payments`,
-            hint: $localize`Plans, receipts and access`,
-            link: `${base}/service`,
-          },
+      service,
       {
         label: $localize`Edit intake`,
         hint: $localize`Goals, health and contact details`,

@@ -244,7 +244,8 @@ export function attentionRow(
         detail: $localize`Joined ${date(item.date)}:date:`,
         tag: isNew ? $localize`New` : $localize`Program`,
         tone: 'new',
-        action: go($localize`Assign program`, `${clientPage}/training`),
+        // Opens the client's Training with the Assign program sheet already open (R3.4a).
+        action: go($localize`Assign program`, `${clientPage}/training`, { action: 'assign' }),
       };
     }
   }

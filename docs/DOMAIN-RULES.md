@@ -360,6 +360,19 @@ back on track. An unshared week is a week of a block neither cancelled nor compl
 or starts within two days and is not shared. Sessions counted for the coach (this week, the last
 seven days) are those of shared weeks of blocks not cancelled, plus any session with a workout.
 
+**TRN-022** Coach program timeline v1 (R3.4a, `GET /api/training/clients/{clientProfileId}/program`)
+is a coach's read of what the client's own Training page shows (TRN-020), for their own clients only
+(CLI-013). It lists the client's newest 24 program blocks, newest first, each with every week the
+coach wrote, shared or not (a coach sees what the client cannot, TRN-006), and the state of every
+session by the same rule. A session never started in a week the coach has not shared, or in a
+cancelled block, has no state: the client could not train it, so it is neither missed nor still to
+come. A workout always decides first. Counts cover every session of the block. `CurrentWeekNumber`
+is set only while the block is running: a missed session keeps a block from completing (TRN-013), so
+one past its last day stays active and has none. Like every coach read of a client's training
+(CLI-018, TRN-019) it follows the plan: a lapsed, paused or blocked client, a plan without training
+and a former client answer with the reason and no blocks, never an empty list. Changing a block
+(share a week, reschedule, complete, cancel, add weeks) sends back the block's `Version`.
+
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated

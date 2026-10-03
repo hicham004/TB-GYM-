@@ -1,0 +1,166 @@
+@if (error()) {
+  <p class="form-error" role="alert">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="form-success" role="status">{{ notice() }}</p>
+}
+
+<section class="surface-section strength-section">
+  <div class="section-heading">
+    <h3 i18n>Training max history</h3>
+    <span class="muted">{{ maxHistory().length }} / {{ maxHistoryTotal() }}</span>
+  </div>
+  <div class="max-entry">
+    <label class="exercise-field">
+      <span i18n>Exercise</span>
+      <select [(ngModel)]="maxForm.exerciseId">
+        <option value="" i18n>Select...</option>
+        @for (exercise of exercises(); track exercise.id) {
+          <option [value]="exercise.id">{{ exercise.name }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span i18n>Kind</span>
+      <select [(ngModel)]="maxForm.kind">
+        <option value="CoachWorkingMax" i18n>Training max</option>
+        <option value="TestedOneRepMax" i18n>Tested 1RM</option>
+        <option value="EstimatedOneRepMax" i18n>Estimated 1RM</option>
+      </select>
+    </label>
+    <label>
+      <span i18n>Value</span>
+      <input type="number" min="0.01" step="0.25" [(ngModel)]="maxForm.value" />
+    </label>
+    <label>
+      <span i18n>Unit</span>
+      <select [(ngModel)]="maxForm.unit">
+        <option value="Kilogram">kg</option>
+        <option value="Pound">lb</option>
+      </select>
+    </label>
+    <label>
+      <span i18n>Date</span>
+      <input type="date" [(ngModel)]="maxForm.effectiveDate" />
+    </label>
+    <label>
+      <span i18n>Note</span>
+      <input [(ngModel)]="maxForm.note" maxlength="1000" />
+    </label>
+    <button class="secondary-button" type="button" [disabled]="busy()" (click)="recordMax()" i18n>
+      Record
+    </button>
+  </div>
+  @if (maxHistory().length > 0) {
+    <div class="table-scroll compact-table">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th i18n>Date</th>
+            <th i18n>Exercise</th>
+            <th i18n>Kind</th>
+            <th i18n>Value</th>
+            <th i18n>Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (record of maxHistory(); track record.id) {
+            <tr>
+              <td>{{ record.effectiveDate | date: 'd MMM y' }}</td>
+              <td>{{ record.exerciseName }}</td>
+              <td>{{ maxKindLabel(record.kind) }}</td>
+              <td>{{ record.value }} {{ record.unit === 'Kilogram' ? 'kg' : 'lb' }}</td>
+              <td>{{ methodLabel(record) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (maxHistory().length < maxHistoryTotal()) {
+      <button
+        class="quiet-button compact"
+        type="button"
+        [disabled]="busy()"
+        (click)="loadMoreMaxHistory()"
+        i18n
+      >
+        Load more max records
+      </button>
+    }
+  }
+</section>
+
+<section class="surface-section history-section">
+  <div class="section-heading">
+    <h3 i18n>Exercise history</h3>
+    <div class="history-picker">
+      <select
+        aria-label="Exercise"
+        i18n-aria-label
+        [ngModel]="historyExerciseId()"
+        (ngModelChange)="historyExerciseId.set($event); loadExerciseHistory()"
+      >
+        <option value="" i18n>Select exercise...</option>
+        @for (exercise of exercises(); track exercise.id) {
+          <option [value]="exercise.id">{{ exercise.name }}</option>
+        }
+      </select>
+    </div>
+  </div>
+  @if (exerciseHistory().length > 0) {
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th i18n>Date</th>
+            <th i18n>Load</th>
+            <th i18n>Reps</th>
+            <th>RPE</th>
+            <th>RIR</th>
+            <th>e1RM</th>
+            <th i18n>Volume</th>
+            <th i18n>Change</th>
+            <th i18n>Client note</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of exerciseHistory(); track item.workoutExecutionId + item.date + $index) {
+            <tr>
+              <td>{{ item.date | date: 'd MMM y' }}</td>
+              <td>
+                {{ displayNumber(item.load) }}
+                {{ item.loadUnit === 'Kilogram' ? 'kg' : item.loadUnit === 'Pound' ? 'lb' : '' }}
+              </td>
+              <td>{{ displayNumber(item.repetitions) }}</td>
+              <td>{{ displayNumber(item.rpe) }}</td>
+              <td>{{ displayNumber(item.rir) }}</td>
+              <td>{{ displayNumber(item.estimatedOneRepMax) }}</td>
+              <td>{{ displayNumber(item.volume) }}</td>
+              <td>
+                @if (item.wasSubstituted) {
+                  <span i18n>Substituted</span>
+                } @else {
+                  -
+                }
+              </td>
+              <td dir="auto">{{ item.note ?? '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (exerciseHistory().length < exerciseHistoryTotal()) {
+      <button
+        class="quiet-button compact"
+        type="button"
+        [disabled]="loading()"
+        (click)="loadMoreExerciseHistory()"
+        i18n
+      >
+        Load more history
+      </button>
+    }
+  } @else {
+    <p class="inline-empty" i18n>No completed performance for this exercise.</p>
+  }
+</section>

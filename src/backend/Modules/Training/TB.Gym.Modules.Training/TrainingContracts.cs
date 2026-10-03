@@ -102,6 +102,15 @@ public interface ITrainingApplicationService
 
     Task<ClientTrainingProgramView> GetMyProgramAsync(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// A client's programs for their coach (R3.4a): every block with its weeks, shared or not, and the
+    /// state of each session by the client's own rule (TRN-020). Null when the client is not in this
+    /// workspace.
+    /// </summary>
+    Task<CoachClientProgramView?> GetClientProgramAsync(
+        Guid clientProfileId,
+        CancellationToken cancellationToken);
+
     Task<ClientWorkoutHistoryPage> GetMyWorkoutHistoryAsync(int skip, CancellationToken cancellationToken);
 
     Task<ClientTrainingUpcomingView> GetUpcomingAsync(int skip, CancellationToken cancellationToken);
@@ -575,6 +584,69 @@ public sealed record ClientProgramSessionView(
     string Name,
     DateOnly ScheduledDate,
     ClientSessionState State,
+    Guid? WorkoutExecutionId,
+    int ExerciseCount,
+    int SetCount);
+
+/// <summary>
+/// A client's programs as their coach reads them (R3.4a, TRN-022): the newest blocks first, each with
+/// every week, shared or not, and the state of each session. A closed feature carries its reason and
+/// no blocks, never an empty list.
+/// </summary>
+public sealed record CoachClientProgramView(
+    bool IsAllowed,
+    string AccessReason,
+    DateOnly LocalDate,
+    IReadOnlyList<CoachProgramBlockView> Blocks,
+    string SessionStateRuleKey,
+    int SessionStateRuleVersion);
+
+/// <summary>
+/// Counts cover every session of the block, shared or not. <c>CurrentWeekNumber</c> is set only while
+/// the block is running; an active block past its last day (a missed session keeps it from closing)
+/// has none. <c>Version</c> is the concurrency token the block's changes (share a week, reschedule,
+/// complete, cancel, add weeks) must send back.
+/// </summary>
+public sealed record CoachProgramBlockView(
+    Guid Id,
+    Guid EnrollmentId,
+    string Name,
+    DateOnly StartDate,
+    DateOnly EndDateExclusive,
+    MesocycleStatus Status,
+    bool RevealAllWeeks,
+    uint Version,
+    int WeekCount,
+    int? CurrentWeekNumber,
+    int SessionCount,
+    int CompletedCount,
+    int MissedCount,
+    IReadOnlyList<CoachProgramWeekView> Weeks);
+
+/// <summary>
+/// <c>IsShared</c> is the coach's choice; <c>IsVisible</c> is what the client can open today (shared
+/// and unlocked, or all shared weeks revealed). A shared week the client cannot open yet opens on
+/// <c>UnlockDate</c>.
+/// </summary>
+public sealed record CoachProgramWeekView(
+    Guid Id,
+    int WeekNumber,
+    string? Label,
+    DateOnly StartDate,
+    bool IsShared,
+    bool IsVisible,
+    DateOnly UnlockDate,
+    IReadOnlyList<CoachProgramSessionView> Sessions);
+
+/// <summary>
+/// <c>State</c> is null for a session never started in a week that is not shared, or in a cancelled
+/// block: the client could not train it, so it is neither missed nor still to come.
+/// </summary>
+public sealed record CoachProgramSessionView(
+    Guid SessionId,
+    string Name,
+    DateOnly ScheduledDate,
+    ClientSessionState? State,
     Guid? WorkoutExecutionId,
     int ExerciseCount,
     int SetCount);

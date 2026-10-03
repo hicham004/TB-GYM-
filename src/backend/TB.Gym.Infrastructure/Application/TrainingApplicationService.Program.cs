@@ -51,6 +51,117 @@ internal sealed partial class TrainingApplicationService
             ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version);
     }
 
+    /// <summary>
+    /// How many blocks a coach's timeline reads at once, newest first. Earlier ones are kept; a client
+    /// who has had more than this many has history beyond the screen.
+    /// </summary>
+    private const int CoachProgramBlockLimit = 24;
+
+    /// <summary>
+    /// The coach's counterpart of the client's program read (R3.4a, TRN-022): the same session states,
+    /// for every block, and every week including those the coach has not shared. Like every coach read
+    /// of a client's training it follows the plan: a lapsed, paused or blocked client answers with the
+    /// reason and no blocks.
+    /// </summary>
+    public async Task<CoachClientProgramView?> GetClientProgramAsync(
+        Guid clientProfileId,
+        CancellationToken cancellationToken)
+    {
+        if (!await dbContext.ClientProfiles.AsNoTracking()
+                .AnyAsync(item => item.Id == clientProfileId, cancellationToken))
+        {
+            return null;
+        }
+
+        var today = await GetTenantTodayAsync(cancellationToken);
+        var access = await GetTrainingAccessAsync(clientProfileId, cancellationToken);
+        if (!access.IsAllowed)
+        {
+            return new(false, access.Reason.ToString(), today, [],
+                ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version);
+        }
+
+        var blocks = await dbContext.TrainingMesocycles.AsNoTracking()
+            .Where(item => item.ClientProfileId == clientProfileId)
+            .OrderByDescending(item => item.StartDate).ThenByDescending(item => item.Id)
+            .Take(CoachProgramBlockLimit)
+            .ToListAsync(cancellationToken);
+        var blockIds = blocks.Select(item => item.Id).ToArray();
+        var weeks = await dbContext.MesocycleWeeks.AsNoTracking()
+            .Where(item => blockIds.Contains(item.MesocycleId))
+            .OrderBy(item => item.WeekNumber)
+            .Select(item => new { item.Id, item.MesocycleId, item.WeekNumber, item.Label, item.StartsOn, item.IsPublished })
+            .ToListAsync(cancellationToken);
+        var weekIds = weeks.Select(item => item.Id).ToArray();
+        var sessions = await dbContext.TrainingSessions.AsNoTracking()
+            .Where(item => weekIds.Contains(item.MesocycleWeekId))
+            .OrderBy(item => item.ScheduledDate).ThenBy(item => item.Position).ThenBy(item => item.Id)
+            .Select(item => new
+            {
+                item.Id,
+                item.MesocycleWeekId,
+                item.Name,
+                item.ScheduledDate,
+                ExerciseCount = item.Exercises.Count(),
+                SetCount = item.Exercises.SelectMany(exercise => exercise.Sets).Count(),
+            })
+            .ToListAsync(cancellationToken);
+        var sessionIds = sessions.Select(item => item.Id).ToArray();
+        var workouts = await dbContext.WorkoutExecutions.AsNoTracking()
+            .Where(item => sessionIds.Contains(item.TrainingSessionId))
+            .Select(item => new { item.TrainingSessionId, item.Id, item.Status })
+            .ToDictionaryAsync(item => item.TrainingSessionId, cancellationToken);
+        var weeksByBlock = weeks.ToLookup(item => item.MesocycleId);
+        var sessionsByWeek = sessions.ToLookup(item => item.MesocycleWeekId);
+
+        var views = blocks.Select(block =>
+        {
+            var status = block.GetEffectiveStatus(clock.UtcNow);
+            var weekViews = weeksByBlock[block.Id].Select(week =>
+            {
+                var availability = TrainingCalendarPolicy.GetWeekAvailability(block.StartDate, week.WeekNumber,
+                    block.TimeZoneId, clock.UtcNow, block.RevealAllWeeks, week.IsPublished);
+                var sessionViews = sessionsByWeek[week.Id].Select(session =>
+                {
+                    workouts.TryGetValue(session.Id, out var workout);
+                    return new CoachProgramSessionView(
+                        session.Id,
+                        session.Name,
+                        session.ScheduledDate,
+                        ClientSessionStatePolicy.EvaluateForCoach(session.ScheduledDate, today, workout?.Status,
+                            week.IsPublished, status == MesocycleStatus.Cancelled),
+                        workout?.Id,
+                        session.ExerciseCount,
+                        session.SetCount);
+                }).ToArray();
+                return new CoachProgramWeekView(week.Id, week.WeekNumber, week.Label, week.StartsOn,
+                    week.IsPublished, availability.IsVisible, availability.UnlockDate, sessionViews);
+            }).ToArray();
+            var all = weekViews.SelectMany(week => week.Sessions).ToArray();
+            return new CoachProgramBlockView(
+                block.Id,
+                block.EnrollmentId,
+                block.Name,
+                block.StartDate,
+                block.EndDateExclusive,
+                status,
+                block.RevealAllWeeks,
+                block.Version,
+                weekViews.Length,
+                // Running now: an active block past its last day, never closed because a session was
+                // missed, has no current week.
+                status == MesocycleStatus.Active && today < block.EndDateExclusive
+                    ? Math.Clamp((today.DayNumber - block.StartDate.DayNumber) / 7 + 1, 1, Math.Max(1, weekViews.Length))
+                    : null,
+                all.Length,
+                all.Count(item => item.State == ClientSessionState.Completed),
+                all.Count(item => item.State == ClientSessionState.Missed),
+                weekViews);
+        }).ToArray();
+        return new(true, access.Reason.ToString(), today, views,
+            ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version);
+    }
+
     public async Task<ClientWorkoutHistoryPage> GetMyWorkoutHistoryAsync(
         int skip,
         CancellationToken cancellationToken)

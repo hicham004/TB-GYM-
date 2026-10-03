@@ -64,6 +64,28 @@ describe('CoachWorkout', () => {
                   isCompleted: true,
                   clientNote: 'Knees felt good.',
                 },
+                {
+                  prescriptionId: 'set-2',
+                  performanceId: 'set-performance-2',
+                  position: 2,
+                  setType: 'Normal',
+                  // One number asked for, so it is said once: "5 reps", not "5–5 reps".
+                  prescribedRepetitionsMinimum: 5,
+                  prescribedRepetitionsMaximum: 5,
+                  prescribedLoad: 60,
+                  prescribedLoadUnit: 'Kilogram',
+                  prescribedTargetRpe: null,
+                  prescribedTargetRir: null,
+                  restSeconds: 120,
+                  tempo: null,
+                  actualRepetitions: null,
+                  actualLoad: null,
+                  actualLoadUnit: null,
+                  actualRpe: null,
+                  actualRir: null,
+                  isCompleted: false,
+                  clientNote: null,
+                },
               ],
             },
           ],
@@ -153,6 +175,8 @@ describe('CoachWorkout', () => {
     expect(content()).toContain('Approved swap. Prescribed: Back squat');
     expect(content()).toContain('Target: 6–8 reps · 60 kg · RPE 8');
     expect(content()).toContain('Actual: 7 reps · 62.5 kg · RPE 8.5 · Logged');
+    expect(content()).toContain('Target: 5 reps · 60 kg');
+    expect(content()).not.toContain('5–5');
     expect(content()).toContain('Client note: Knees felt good.');
     expect(content()).toContain('Felt stable today.');
     expect(host.querySelector('input, textarea, select')).toBeNull();

@@ -312,6 +312,20 @@ public static class TrainingEndpoints
         .Produces<ClientPersonalRecordsResult>()
         .Produces(StatusCodes.Status404NotFound);
 
+        // The coach's read of what the client's own Training page shows, with the weeks not yet shared
+        // (R3.4a, TRN-020, TRN-022).
+        coach.MapGet("/clients/{clientProfileId:guid}/program", async (
+            Guid clientProfileId,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var program = await service.GetClientProgramAsync(clientProfileId, cancellationToken);
+            return program is null ? Results.NotFound() : Results.Ok(program);
+        })
+        .WithName("GetClientTrainingProgram")
+        .Produces<CoachClientProgramView>()
+        .Produces(StatusCodes.Status404NotFound);
+
         var client = endpoints
             .MapGroup("/api/training/me")
             .RequireAuthorization(AuthorizationPolicies.TenantClient)

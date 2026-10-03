@@ -441,7 +441,7 @@ test('Actions holds the rest, opens on a key, moves with the arrows and closes o
   await actions.click();
   await expect(page.getByRole('link', { name: /Assign program/ })).toHaveAttribute(
     'href',
-    `/clients/${ID}/training`,
+    `/clients/${ID}/training?action=assign`,
   );
   await expect(page.getByRole('link', { name: /Plan and payments/ })).toHaveAttribute(
     'href',

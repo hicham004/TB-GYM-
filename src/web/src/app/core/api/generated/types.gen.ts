@@ -1022,6 +1022,15 @@ export type CoachClientDetails = {
   release?: null | ClientReleaseView;
 };
 
+export type CoachClientProgramView = {
+  isAllowed: boolean;
+  accessReason: string;
+  localDate: string;
+  blocks: Array<CoachProgramBlockView>;
+  sessionStateRuleKey: string;
+  sessionStateRuleVersion: number | string;
+};
+
 export type CoachClientRef = {
   clientProfileId: string;
   firstName: string;
@@ -1040,6 +1049,44 @@ export type CoachingProductView = {
   isActive: boolean;
   offers: Array<ProductOfferView>;
   version: number | string;
+};
+
+export type CoachProgramBlockView = {
+  id: string;
+  enrollmentId: string;
+  name: string;
+  startDate: string;
+  endDateExclusive: string;
+  status: MesocycleStatus;
+  revealAllWeeks: boolean;
+  version: number | string;
+  weekCount: number | string;
+  currentWeekNumber: null | number | string;
+  sessionCount: number | string;
+  completedCount: number | string;
+  missedCount: number | string;
+  weeks: Array<CoachProgramWeekView>;
+};
+
+export type CoachProgramSessionView = {
+  sessionId: string;
+  name: string;
+  scheduledDate: string;
+  state: null | ClientSessionState;
+  workoutExecutionId: null | string;
+  exerciseCount: number | string;
+  setCount: number | string;
+};
+
+export type CoachProgramWeekView = {
+  id: string;
+  weekNumber: number | string;
+  label: null | string;
+  startDate: string;
+  isShared: boolean;
+  isVisible: boolean;
+  unlockDate: string;
+  sessions: Array<CoachProgramSessionView>;
 };
 
 export type CoachRegistrationResponse = {
@@ -5750,6 +5797,32 @@ export type GetClientTrainingPersonalRecordsResponses = {
 
 export type GetClientTrainingPersonalRecordsResponse =
   GetClientTrainingPersonalRecordsResponses[keyof GetClientTrainingPersonalRecordsResponses];
+
+export type GetClientTrainingProgramData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/training/clients/{clientProfileId}/program';
+};
+
+export type GetClientTrainingProgramErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetClientTrainingProgramResponses = {
+  /**
+   * OK
+   */
+  200: CoachClientProgramView;
+};
+
+export type GetClientTrainingProgramResponse =
+  GetClientTrainingProgramResponses[keyof GetClientTrainingProgramResponses];
 
 export type GetCoachWorkoutDetailData = {
   body?: never;

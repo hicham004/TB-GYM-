@@ -35,6 +35,36 @@ public sealed class TrainingProgramDomainTests
     }
 
     [TestMethod]
+    public void ACoachSeesTheClientsStateWhereTheyCouldTrainAndNoneWhereTheyCouldNot()
+    {
+        // A shared week of a running block: the client's own rule.
+        Assert.AreEqual(ClientSessionState.Missed,
+            ClientSessionStatePolicy.EvaluateForCoach(Today.AddDays(-1), Today, null, true, false));
+        Assert.AreEqual(ClientSessionState.Today,
+            ClientSessionStatePolicy.EvaluateForCoach(Today, Today, null, true, false));
+        Assert.AreEqual(ClientSessionState.Upcoming,
+            ClientSessionStatePolicy.EvaluateForCoach(Today.AddDays(1), Today, null, true, false));
+
+        // Never started in a week that is not shared, or in a cancelled block: the client could not
+        // train it, so it is neither missed nor still to come.
+        Assert.IsNull(ClientSessionStatePolicy.EvaluateForCoach(Today.AddDays(-1), Today, null, false, false));
+        Assert.IsNull(ClientSessionStatePolicy.EvaluateForCoach(Today.AddDays(3), Today, null, false, false));
+        Assert.IsNull(ClientSessionStatePolicy.EvaluateForCoach(Today.AddDays(-1), Today, null, true, true));
+        Assert.IsNull(ClientSessionStatePolicy.EvaluateForCoach(Today.AddDays(3), Today, null, true, true));
+    }
+
+    [TestMethod]
+    public void AWorkoutStillDecidesForTheCoachInAnUnsharedWeekOrACancelledBlock()
+    {
+        Assert.AreEqual(ClientSessionState.Completed,
+            ClientSessionStatePolicy.EvaluateForCoach(Today.AddDays(-4), Today, WorkoutExecutionStatus.Completed, false, true));
+        Assert.AreEqual(ClientSessionState.InProgress,
+            ClientSessionStatePolicy.EvaluateForCoach(Today, Today, WorkoutExecutionStatus.InProgress, false, false));
+        Assert.AreEqual(ClientSessionState.Completed,
+            ClientSessionStatePolicy.EvaluateForCoach(Today.AddDays(-4), Today, WorkoutExecutionStatus.Completed, true, false));
+    }
+
+    [TestMethod]
     public void AWorkoutSetsARecordOnlyByBeatingEveryEarlierWorkoutAndItsOwnEarlierSets()
     {
         var earlier = new[]

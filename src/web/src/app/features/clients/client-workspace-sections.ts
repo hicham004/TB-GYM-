@@ -18,9 +18,9 @@ import { ClientCommercial } from '../commercial/client-commercial';
 import { ClientNutrition } from '../nutrition/client-nutrition';
 import { ProgressDashboardView } from '../progress/progress-dashboard';
 import { ProgressView } from '../progress/progress-view';
-import { ClientTraining } from '../training/client-training';
 import { ClientCoach } from './client-coach';
 import { ClientIntakeForm } from './client-intake-form';
+import { ClientProgram } from './client-program';
 import { ClientRelease } from './client-release';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import type { CoachClientDetails } from '../../core/api/api.models';
@@ -33,14 +33,15 @@ import type { CoachClientDetails } from '../../core/api/api.models';
 
 const FORMER_HIDDEN = $localize`This is a former client. Their records are kept but are not shown here.`;
 
+/** A client's Training (C3): the program as a timeline, with what a coach can do about it. */
 @Component({
   selector: 'app-client-training-section',
-  imports: [ClientTraining],
+  imports: [ClientProgram],
   template: `
     @if (context.isFormer()) {
       <p class="muted">{{ formerHidden }}</p>
     } @else {
-      <app-client-training [clientId]="context.clientId()" />
+      <app-client-program />
     }
   `,
 })
