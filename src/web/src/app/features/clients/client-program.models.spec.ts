@@ -253,11 +253,12 @@ describe('a program past its last day that never closed', () => {
 
     expect(items.map((item) => item.label)).toEqual([
       'Assign program',
-      'Mark complete',
+      'Close program',
       'Cancel program',
     ]);
-    // Two sessions were missed, so it cannot be marked complete.
-    expect(items[1]).toMatchObject({ disabled: true, hint: 'Needs every session finished' });
+    // Past its last day it closes as finished, the two missed sessions kept on record (TRN-013).
+    expect(items[1]).toMatchObject({ action: 'complete', hint: 'Missed sessions stay on record' });
+    expect(items[1].disabled).toBeFalsy();
     expect(items[2].disabled).toBeFalsy();
   });
 });
@@ -327,7 +328,7 @@ describe('what a coach can do about a program', () => {
       'Build next block',
       'Reschedule',
       'Open every shared week now',
-      'Mark complete',
+      'Close program',
       'Cancel program',
     ]);
     // Workouts were done, so the dates can no longer move; sessions remain, so it cannot be closed.
@@ -339,7 +340,7 @@ describe('what a coach can do about a program', () => {
     expect(items[4]).toMatchObject({
       action: 'complete',
       disabled: true,
-      hint: 'Needs every session finished',
+      hint: 'Possible after its last day, Sun 25 Oct',
     });
     expect(items[5].disabled).toBeFalsy();
     expect(items[3].hint).toBe(
@@ -399,7 +400,7 @@ describe('what a coach can do about a program', () => {
     expect(programMenu(null, false, context)).toEqual([]);
   });
 
-  it('can mark a running program complete only when every session is done', () => {
+  it('closes a running program early only when every session is done', () => {
     const done = programBlock(
       [programWeek('d', '2026-09-14', 1, ['Completed', 'Completed', 'Completed', 'Completed'])],
       { id: 'd', status: 'Active', currentWeekNumber: 1 },
@@ -409,8 +410,21 @@ describe('what a coach can do about a program', () => {
       (item) => item.action === 'complete',
     );
 
-    expect(complete).toMatchObject({ hint: 'Close the program' });
+    expect(complete).toMatchObject({ label: 'Close program', hint: 'Every session is done' });
     expect(complete?.disabled).toBeFalsy();
+  });
+
+  it('does not close a program while a workout is open, even past its last day', () => {
+    const open = programBlock(
+      [programWeek('o', '2026-08-03', 1, ['Completed', 'InProgress', 'Missed'])],
+      { id: 'o', status: 'Active', currentWeekNumber: null },
+    );
+
+    const complete = programMenu(blockCard(open, context), false, context).find(
+      (item) => item.action === 'complete',
+    );
+
+    expect(complete).toMatchObject({ disabled: true, hint: 'A workout is in progress' });
   });
 });
 

@@ -1,4 +1,5 @@
 using TB.Gym.Modules.Training;
+using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Domain.Tests;
 
@@ -96,6 +97,35 @@ public sealed class TrainingProgramDomainTests
 
         // A first bench set and a first set in pounds are records; kg and lb are never compared.
         CollectionAssert.AreEqual(new[] { otherExercise.SetId, pounds.SetId }, records.ToArray());
+    }
+
+    [TestMethod]
+    public void ACoachReadsTrainingWhileThePlanRunsAndBeforeABookedPlanBegins()
+    {
+        var training = CoachingFeature.Training;
+        var later = Today.AddDays(5);
+
+        Assert.IsTrue(CoachTrainingReadPolicy.Opens(
+            new FeatureAccessDecision(training, true, FeatureAccessReason.Granted), Today));
+        Assert.IsTrue(CoachTrainingReadPolicy.Opens(
+            new FeatureAccessDecision(training, false, FeatureAccessReason.NotStarted, Guid.NewGuid(), later), Today));
+        // A booked plan still waiting for its payment opens too; one already running unpaid does not.
+        Assert.IsTrue(CoachTrainingReadPolicy.Opens(
+            new FeatureAccessDecision(training, false, FeatureAccessReason.PaymentRequired, Guid.NewGuid(), later), Today));
+        Assert.IsFalse(CoachTrainingReadPolicy.Opens(
+            new FeatureAccessDecision(training, false, FeatureAccessReason.PaymentRequired, Guid.NewGuid(), Today), Today));
+
+        foreach (var closed in new[]
+                 {
+                     FeatureAccessReason.Expired, FeatureAccessReason.Paused, FeatureAccessReason.Cancelled,
+                     FeatureAccessReason.NoEntitlement, FeatureAccessReason.RelationshipBlocked,
+                     FeatureAccessReason.MembershipInactive, FeatureAccessReason.PlatformBlocked,
+                 })
+        {
+            Assert.IsFalse(
+                CoachTrainingReadPolicy.Opens(new FeatureAccessDecision(training, false, closed, Guid.NewGuid(), later), Today),
+                closed.ToString());
+        }
     }
 
     private static PerformedSet Set(

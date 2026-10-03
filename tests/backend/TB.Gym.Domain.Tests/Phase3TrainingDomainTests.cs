@@ -260,6 +260,36 @@ public sealed class Phase3TrainingDomainTests
     }
 
     [TestMethod]
+    public void ABlockWithAMissedSessionClosesOnlyAfterItsLastDay()
+    {
+        // One week from Mon 17 Aug: Sun 23 Aug is its last day in Beirut.
+        var mesocycle = CreateMesocycle(Program("Base", "Squat"));
+        var lastDay = new DateTimeOffset(2026, 8, 23, 20, 59, 0, TimeSpan.Zero);
+        var dayAfter = new DateTimeOffset(2026, 8, 23, 21, 0, 0, TimeSpan.Zero);
+
+        Assert.IsFalse(mesocycle.HasEnded(lastDay));
+        Assert.ThrowsExactly<InvalidOperationException>(() => mesocycle.Complete(lastDay));
+        Assert.AreEqual(MesocycleStatus.Active, mesocycle.GetEffectiveStatus(dayAfter));
+
+        Assert.IsTrue(mesocycle.HasEnded(dayAfter));
+        Assert.AreEqual(MesocycleStatus.Active, mesocycle.Complete(dayAfter));
+        Assert.AreEqual(MesocycleStatus.Completed, mesocycle.GetEffectiveStatus(dayAfter));
+        Assert.IsFalse(mesocycle.Weeks.Single().Sessions.Single().IsCompleted);
+        Assert.ThrowsExactly<InvalidOperationException>(
+            () => mesocycle.MarkSessionStarted(mesocycle.Weeks.Single().Sessions.Single().Id));
+    }
+
+    [TestMethod]
+    public void AnOpenWorkoutKeepsABlockFromClosingEvenAfterItsLastDay()
+    {
+        var mesocycle = CreateMesocycle(Program("Base", "Squat"));
+        mesocycle.MarkSessionStarted(mesocycle.Weeks.Single().Sessions.Single().Id);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => mesocycle.Complete(Now.AddDays(30)));
+        Assert.AreEqual(MesocycleStatus.Active, mesocycle.GetEffectiveStatus(Now.AddDays(30)));
+    }
+
+    [TestMethod]
     public void WorkingMaxSnapshotAndProgressionDoNotMutateTheirSources()
     {
         var global = StrengthMaxRecord.Create(

@@ -127,7 +127,7 @@ internal sealed partial class TrainingApplicationService
         {
             return null;
         }
-        var access = await GetTrainingAccessAsync(clientProfileId, cancellationToken);
+        var access = await GetCoachTrainingAccessAsync(clientProfileId, cancellationToken);
         if (!access.IsAllowed)
         {
             return new(false, access.Reason.ToString(), null, null);

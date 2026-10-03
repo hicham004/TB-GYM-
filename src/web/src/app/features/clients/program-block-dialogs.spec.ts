@@ -10,7 +10,10 @@ import { ProgramComplete } from './program-block-dialogs';
 
 const context: ProgramContext = { locale: 'en-US', today: '2026-10-01', firstName: 'Maya' };
 
-async function render(sessions: Parameters<typeof programWeek>[3]) {
+async function render(
+  sessions: Parameters<typeof programWeek>[3],
+  currentWeekNumber: number | null = 1,
+) {
   const api = { completeTrainingMesocycle: vi.fn(() => of({})) };
   TestBed.configureTestingModule({
     imports: [ProgramComplete],
@@ -22,7 +25,7 @@ async function render(sessions: Parameters<typeof programWeek>[3]) {
   const block = programBlock([programWeek('b', '2026-09-14', 1, sessions)], {
     id: 'b',
     status: 'Active',
-    currentWeekNumber: 1,
+    currentWeekNumber,
     version: 7,
     name: 'Foundations',
   });
@@ -38,25 +41,46 @@ async function render(sessions: Parameters<typeof programWeek>[3]) {
 const textOf = (element: Element | null | undefined) =>
   (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
-describe('Mark complete', () => {
+describe('Close program', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('closes the program once every session is done', async () => {
     const { fixture, host, api, closed } = await render(['Completed', 'Completed']);
-    expect(textOf(host)).toContain('Mark Foundations complete? Every session is done');
+    expect(textOf(host)).toContain('Close Foundations? Every session is done');
 
-    press(host, 'Mark complete');
+    press(host, 'Close program');
     await settle(fixture);
 
     expect(api.completeTrainingMesocycle).toHaveBeenCalledWith('b', { version: 7 });
     expect(closed).toHaveBeenCalledWith(true);
   });
 
-  it('says what is left instead of offering to close a program with sessions still to do', async () => {
+  it('closes a program past its last day as finished, keeping the misses on record', async () => {
+    const { fixture, host, api, closed } = await render(['Completed', 'Missed', 'Missed'], null);
+    expect(textOf(host)).toContain(
+      'Close Foundations as finished? 2 missed sessions stay on record as missed, and Maya can no longer start them.',
+    );
+
+    press(host, 'Close program');
+    await settle(fixture);
+
+    expect(api.completeTrainingMesocycle).toHaveBeenCalledWith('b', { version: 7 });
+    expect(closed).toHaveBeenCalledWith(true);
+  });
+
+  it('does not call sessions of a week never shared missed', async () => {
+    const { host } = await render(['Completed', null], null);
+
+    expect(textOf(host)).toContain(
+      'Close Foundations as finished? Its last day has passed, and Maya’s workouts stay in their history.',
+    );
+  });
+
+  it('says when it can close instead of offering to close a program still running', async () => {
     const { host, api } = await render(['Completed', 'Upcoming', 'Upcoming']);
 
     expect(textOf(host)).toContain(
-      'Foundations can be marked complete once every session is finished. 2 sessions are still to go.',
+      'Foundations can be closed after its last day, Sun 20 Sep, or once every session is done. 2 sessions are still to go.',
     );
     expect(Array.from(host.querySelectorAll('button')).map(textOf)).toEqual(['Not now']);
     expect(api.completeTrainingMesocycle).not.toHaveBeenCalled();

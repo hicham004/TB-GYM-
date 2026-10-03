@@ -397,7 +397,7 @@ test('the Manage program menu opens on a key, moves with the arrows and closes o
     'Build next block',
     'Reschedule',
     'Open every shared week now',
-    'Mark complete',
+    'Close program',
     'Cancel program',
   ]);
   await expect(items.first()).toBeFocused();

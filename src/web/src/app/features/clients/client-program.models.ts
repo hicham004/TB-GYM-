@@ -225,6 +225,8 @@ export interface BlockCard {
   readonly name: string;
   /** The first day, `YYYY-MM-DD`: what rescheduling starts from. */
   readonly startDate: string;
+  /** The last day, `YYYY-MM-DD`: after it a program with missed sessions may be closed. */
+  readonly lastDay: string;
   /** The token the block's changes send back, so a stale screen conflicts instead of overwriting. */
   readonly version: number;
   readonly status: MesocycleStatus;
@@ -330,6 +332,7 @@ export function blockCard(block: CoachProgramBlockView, context: ProgramContext)
     id: block.id,
     name: block.name,
     startDate: block.startDate,
+    lastDay: addDays(block.endDateExclusive, -1),
     version: count(block.version),
     status: block.status,
     eyebrow: status.eyebrow,
@@ -480,15 +483,32 @@ export function programMenu(
     );
   }
   if (block.status === 'Active') {
-    items.push({
-      label: $localize`Mark complete`,
-      hint:
-        block.doneCount === block.sessionCount
-          ? $localize`Close the program`
-          : $localize`Needs every session finished`,
-      action: 'complete',
-      disabled: block.doneCount !== block.sessionCount,
-    });
+    // Closing finishes it (TRN-013): once every session is done, or after its last day with the
+    // missed ones kept on record. A workout still open blocks it either way.
+    const allDone = block.doneCount === block.sessionCount;
+    items.push(
+      block.inProgress
+        ? {
+            label: $localize`Close program`,
+            hint: $localize`A workout is in progress`,
+            action: 'complete',
+            disabled: true,
+          }
+        : allDone || block.ended
+          ? {
+              label: $localize`Close program`,
+              hint: allDone
+                ? $localize`Every session is done`
+                : $localize`Missed sessions stay on record`,
+              action: 'complete',
+            }
+          : {
+              label: $localize`Close program`,
+              hint: $localize`Possible after its last day, ${formatDate(block.lastDay, 'EEE d MMM', context.locale)}:date:`,
+              action: 'complete',
+              disabled: true,
+            },
+    );
   }
   items.push(
     block.inProgress

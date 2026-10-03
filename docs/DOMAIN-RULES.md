@@ -308,7 +308,10 @@ rows cannot be rewritten even when templates or future prescriptions change.
 **TRN-013** Planned and Active are derived from the mesocycle dates in its snapshotted time
 zone. Completed and Cancelled are explicit terminal states. Cancellation requires an audit
 reason, preserves history, releases future primary-overlap blocking, and cannot occur while
-a workout is in progress. Completion requires every programmed session to be complete.
+a workout is in progress. Completion requires every programmed session to be complete, or the
+block's last day to have passed in its time zone (decided 2026-10-03): the coach then closes it as
+finished, its sessions never done stay on record as missed and can no longer be started, and the
+lifecycle event says how many were not done. A workout in progress blocks completion too.
 A terminal mesocycle's programming is never edited, and an assignment is never deleted to
 correct it.
 
@@ -342,9 +345,9 @@ completion evaluate the same named, versioned server rule; the UI does not conve
 The client's workout history (R2.5b) shows, for each finished workout, the records it set against
 the workouts finished before it started, through the same rule. A coach reads a client's records
 (R3.3b, `GET /api/training/clients/{clientProfileId}/personal-records`) as the same list by the
-same rule, for their own clients only (CLI-013) and while the client's plan includes training: a
-lapsed or paused plan, a block or a former client closes it for the coach too, answering with the
-reason and no records, never an empty list.
+same rule, for their own clients only (CLI-013) and while the client's plan includes training
+(TRN-023): a lapsed or paused plan, a block or a former client closes it for the coach too, answering
+with the reason and no records, never an empty list.
 
 **TRN-020** Session state v1 (`WorkoutThenScheduledDate`, R2.5b) is what the client's Training page
 shows for each session of a visible week. The workout decides first: a completed workout is
@@ -367,11 +370,21 @@ coach wrote, shared or not (a coach sees what the client cannot, TRN-006), and t
 session by the same rule. A session never started in a week the coach has not shared, or in a
 cancelled block, has no state: the client could not train it, so it is neither missed nor still to
 come. A workout always decides first. Counts cover every session of the block. `CurrentWeekNumber`
-is set only while the block is running: a missed session keeps a block from completing (TRN-013), so
-one past its last day stays active and has none. Like every coach read of a client's training
-(CLI-018, TRN-019) it follows the plan: a lapsed, paused or blocked client, a plan without training
-and a former client answer with the reason and no blocks, never an empty list. Changing a block
-(share a week, reschedule, complete, cancel, add weeks) sends back the block's `Version`.
+is set only while the block is running: one past its last day with a missed session stays active,
+with none, until the coach closes it (TRN-013). Like every coach read of a client's training it
+follows the plan (TRN-023): a lapsed, paused or blocked client, a plan without training and a former
+client answer with the reason and no blocks, never an empty list. Changing a block (share a week,
+reschedule, complete, cancel, add weeks) sends back the block's `Version`.
+
+**TRN-023** Coach training reads v1 (`TodayOrBeforeBookedPlan`, decided 2026-10-03,
+`CoachTrainingReadPolicy`) decide when a coach reads a client's program (TRN-022), one workout and the
+records (TRN-019). Today's training access decides, as for the client, with one difference: before a
+booked plan begins (`NotStarted`, or `PaymentRequired` for a plan whose first day is still ahead) the
+read opens, so a coach can check a program for a new client or across the gap before a renewal; they
+may already assign and change programs on those dates (TRN-014). The answer keeps the plan's own
+reason, so the page can say from when the client sees it. The client's own reads still follow today.
+A lapsed, paused or cancelled plan with nothing booked, a blocked relationship and a former client
+close it.
 
 ## 5. Strength, 1RM, RPE, RIR, and progression
 

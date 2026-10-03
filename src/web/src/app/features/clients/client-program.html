@@ -55,6 +55,9 @@
                   @for (fact of block.facts; track fact.text) {
                     <li [class.warm]="fact.warm" dir="auto">{{ fact.text }}</li>
                   }
+                  @if (!block.terminal && !block.ended && bookedLine(); as line) {
+                    <li class="warm" dir="auto">{{ line }}</li>
+                  }
                 </ul>
               </div>
               <div class="hero-actions">

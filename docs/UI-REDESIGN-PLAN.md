@@ -64,7 +64,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R3.2 | **Coach Today** (C1) | §2 | Done · 2026-10-03 · 428346f |
 | R3.3a | **Clients** (C2): the list with status, last activity, the last 7 days, filter chips and search | §2 | Done · 2026-10-03 · b702cfc |
 | R3.3b | **Client profile** header, overview and progress (C3), with a coach read of the client's personal records | §2, plus backend tests | Done · 2026-10-03 · 214f8b1 |
-| R3.4a | **Client profile Training** (C3): the program as a timeline, with Assign, Reschedule, Complete, Cancel, Build next block and a session sheet | §2, plus backend tests | Done · 2026-10-03 |
+| R3.4a | **Client profile Training** (C3): the program as a timeline, with Assign, Reschedule, Complete, Cancel, Build next block and a session sheet | §2, plus backend tests | Done · 2026-10-03 · 80f7b9e |
 | R3.4b | **Client profile Service & access** (C3): plan, payments, renew, change coach and release | §2 | To do |
 | R3.5 | **Coach Messages** (C6) and **coach brand settings** (§3.1), with backend setting and logo | §2, plus backend tests | To do |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Gate |
@@ -240,21 +240,17 @@ of the implemented R1.3 screens before production rollout.
 - **Sheets on a wide screen (from R3.4a).** Every sheet opens from the bottom, centred, 40 rem wide,
   at every width. A side drawer from about 960 px would suit the long ones, Assign program and Build
   next block.
-- **A program that cannot close (from R3.4a; decided 2026-10-03, to build next).** TRN-013 completes a
-  program only when every session is done, so one with a missed session stays active after its last
-  day (the page calls it "Ended") until the coach cancels it, which records it as cancelled rather
-  than finished. The API also still lets the client start one of its missed sessions. The owner left
-  the choice to Claude: once a block's last day has passed, the coach may close it as finished; its
-  missed sessions stay on record as missed and can no longer be started. Before the last day it is
-  still Cancel or Reschedule. Other coaching apps simply end a program on its date with the misses
-  kept. Maya's Phase 1 on the demo is one.
-- **A program for a plan that has not begun (from R3.4a; decided 2026-10-03, to build next).** The
-  coach's read follows today's access, so a program assigned under a plan that starts later is hidden
-  until the plan starts, although the coach may already assign, reschedule and cancel it (TRN-014) and
-  the older screen showed it. The owner left the choice to Claude: before a booked plan begins (a new
-  client, or the gap before a renewal) the coach's training reads open (the program, a workout, the
-  records); the client still sees it only from the plan's first day. A lapsed, paused or cancelled
-  plan with nothing booked still closes them.
+- **Closing a program with a missed session (from R3.4a; decided and built 2026-10-03).** The owner
+  left both R3.4a questions to Claude. Once a block's last day has passed the coach may close it as
+  finished (TRN-013): Manage program's **Close program** says the missed sessions stay on record, and
+  the client can no longer start them late (the API used to allow it). Before the last day it is still
+  Cancel or Reschedule. Other coaching apps simply end a program on its date with the misses kept. An
+  automatic close on the last day is possible later; it would need a scheduled job.
+- **Training before a booked plan begins (from R3.4a; decided and built 2026-10-03).** The coach's
+  program, workout and records reads open before a booked plan begins (TRN-023): a new client, or the
+  gap before a renewal, since the coach may already assign and change programs on those dates. The
+  program's header says "Maya sees it from Mon 12 Oct, when the plan starts". The client's own reads
+  still follow today.
 - **Engine sentences (from R3.4a).** The sheets rewrite the refusals the server is known to send
   (overlap, coverage, a stale version, a started program) into coach words in `programWriteError`, and
   show a generic line for anything else that still names the engine. The backend words pass above is
@@ -586,7 +582,7 @@ limited to the coach's assigned clients.
   /api/training/clients/{clientProfileId}/program` (TRN-022): every program block with its weeks,
   shared or not, and the state of each session by the rule the client's own Training page uses, so the
   two never disagree about what was missed. A client whose plan has lapsed, is paused or is blocked
-  gets the reason instead of blocks.
+  gets the reason instead of blocks; before a booked plan begins the coach sees them (TRN-023).
   - Top: the running program's name, "Week 4 of 6", its dates, "11 of 24 sessions done", "1 missed",
     and one segment per week showing how much of it is done. **Manage program** holds what a coach can
     do about it (the client's own Actions stays in the page header). A finished program with nothing
@@ -601,9 +597,10 @@ limited to the coach's assigned clients.
     8"), what the client did when they started it (the coach's workout view, set by set against the
     target) and, for one still to come, a swap for one of the coach's saved sessions.
   - Manage program: Assign program, Build next block, Reschedule, Open every shared week now (or
-    Open weeks as they start), Mark complete and Cancel program. What cannot be done stays in the list
-    with its reason: a started program cannot move, every session must be done before Mark complete,
-    and a workout in progress blocks Cancel. Assign program is a sheet: a plan (asked only when there
+    Open weeks as they start), Close program and Cancel program. What cannot be done stays in the list
+    with its reason: a started program cannot move, Close program waits for every session to be done
+    or for the last day to pass (the misses stay on record), and a workout in progress blocks Close and
+    Cancel. Assign program is a sheet: a plan (asked only when there
     are several), a program (each at its newest version), a start date with "Runs Mon 12 Oct – Sun 22
     Nov", the training maxes the program needs (starting from the recorded ones; kilograms and pounds
     are never converted) and the load settings on one collapsed line. Build next block previews the

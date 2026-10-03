@@ -357,11 +357,16 @@ describe('what the server answers', () => {
     expect(say('A mesocycle with a workout in progress cannot be cancelled.')).toBe(
       'Maya has a workout open right now. Cancel the program once it is finished.',
     );
-    expect(say('Every programmed session must be completed before the mesocycle closes.')).toBe(
-      'Every session has to be finished before the program can be marked complete.',
+    expect(
+      say(
+        'Every programmed session must be completed, or the last day must have passed, before the mesocycle closes.',
+      ),
+    ).toBe('The program can be closed after its last day, or once every session is done.');
+    expect(say('A mesocycle with a workout in progress cannot be completed.')).toBe(
+      'Maya has a workout open right now. Close the program once it is finished.',
     );
     expect(say('A planned mesocycle cannot be completed before it starts.')).toBe(
-      'A program that hasn’t started can’t be marked complete.',
+      'A program that hasn’t started can’t be closed.',
     );
     expect(say('Completed or cancelled mesocycle history is immutable.')).toBe(
       'A completed or cancelled program can’t be changed.',

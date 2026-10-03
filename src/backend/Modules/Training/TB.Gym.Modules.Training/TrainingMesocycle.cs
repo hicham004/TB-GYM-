@@ -122,6 +122,11 @@ public sealed class TrainingMesocycle : TenantEntity
             : MesocycleStatus.Active;
     }
 
+    /// <summary>Whether the block's last day is behind it in its own time zone.</summary>
+    public bool HasEnded(DateTimeOffset now) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, TimeZoneInfo.FindSystemTimeZoneById(TimeZoneId)).DateTime) >=
+        EndDateExclusive;
+
     public static TrainingMesocycle CreateSnapshot(
         Guid tenantId,
         Guid clientProfileId,
@@ -198,9 +203,18 @@ public sealed class TrainingMesocycle : TenantEntity
             throw new InvalidOperationException("A planned mesocycle cannot be completed before it starts.");
         }
 
-        if (weeks.SelectMany(item => item.Sessions).Any(session => !session.IsCompleted))
+        var sessions = weeks.SelectMany(item => item.Sessions).ToArray();
+        if (sessions.Any(session => session.HasStarted && !session.IsCompleted))
         {
-            throw new InvalidOperationException("Every programmed session must be completed before the mesocycle closes.");
+            throw new InvalidOperationException("A mesocycle with a workout in progress cannot be completed.");
+        }
+
+        // After its last day a block may close with sessions never done (TRN-013); they stay on record
+        // as missed, and closing stops them being started late.
+        if (sessions.Any(session => !session.IsCompleted) && !HasEnded(now))
+        {
+            throw new InvalidOperationException(
+                "Every programmed session must be completed, or the last day must have passed, before the mesocycle closes.");
         }
 
         Status = MesocycleStatus.Completed;

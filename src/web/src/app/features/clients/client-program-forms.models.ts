@@ -348,11 +348,14 @@ function knownSentence(text: string, name: string): string | null {
   if (said.includes('workout in progress cannot be cancelled')) {
     return $localize`${name}:name: has a workout open right now. Cancel the program once it is finished.`;
   }
-  if (said.includes('must be completed before the mesocycle closes')) {
-    return $localize`Every session has to be finished before the program can be marked complete.`;
+  if (said.includes('or the last day must have passed')) {
+    return $localize`The program can be closed after its last day, or once every session is done.`;
+  }
+  if (said.includes('workout in progress cannot be completed')) {
+    return $localize`${name}:name: has a workout open right now. Close the program once it is finished.`;
   }
   if (said.includes('cannot be completed before it starts')) {
-    return $localize`A program that hasn’t started can’t be marked complete.`;
+    return $localize`A program that hasn’t started can’t be closed.`;
   }
   if (said.includes('history is immutable')) {
     return $localize`A completed or cancelled program can’t be changed.`;

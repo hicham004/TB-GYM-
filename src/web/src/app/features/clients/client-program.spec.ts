@@ -19,6 +19,7 @@ import {
   cancelledBlock,
   closedProgram,
   coachProgram,
+  endedBlock,
   completedBlock,
   plannedBlock,
   runningBlock,
@@ -57,6 +58,7 @@ interface Options {
   /** Replaces the program read, to fail it or to answer differently the second time. */
   getProgram?: () => Observable<CoachClientProgramView>;
   enrollments?: ClientEnrollment[];
+  featureAccess?: ClientCommercialOverview['featureAccess'];
   url?: string;
   api?: Record<string, unknown>;
 }
@@ -102,7 +104,7 @@ async function render(options: Options = {}) {
   context.plans.set({
     clientProfileId: 'client-1',
     isRelationshipBlocked: false,
-    featureAccess: [],
+    featureAccess: options.featureAccess ?? [],
     enrollments: options.enrollments ?? [plan()],
   } as ClientCommercialOverview);
   context.workspace.set({ currentDate: '2026-10-01', weekStartsOn: 'Monday' } as WorkspaceDetails);
@@ -258,9 +260,8 @@ describe('a client’s Training', () => {
       expect(host.querySelector('button.tb-button')).toBeNull();
     });
 
-    it('says when a plan that has not begun starts, and still lets a program be lined up', async () => {
-      const { host } = await render({
-        program: closedProgram('NotStarted'),
+    describe('before a booked plan begins (TRN-023)', () => {
+      const booked = {
         enrollments: [
           plan({
             startDate: '2026-10-12',
@@ -268,10 +269,72 @@ describe('a client’s Training', () => {
             lastActiveDate: '2026-11-30',
           }),
         ],
+        featureAccess: [
+          {
+            feature: 'Training',
+            isAllowed: false,
+            reason: 'NotStarted',
+            enrollmentId: 'enrollment-1',
+            accessibleFrom: '2026-10-12',
+            accessibleUntilExclusive: '2026-12-01',
+          },
+        ] as ClientCommercialOverview['featureAccess'],
+      };
+
+      it('shows the program lined up and says from when the client sees it', async () => {
+        const { host } = await render({
+          ...booked,
+          program: coachProgram([plannedBlock({ start: '2026-10-12' })], {
+            accessReason: 'NotStarted',
+          }),
+        });
+
+        expect(all(host, '.facts li').map(textOf)).toContain(
+          'Maya sees it from Mon 12 Oct, when the plan starts',
+        );
+        expect(host.querySelector('.timeline')).not.toBeNull();
       });
 
-      expect(textOf(host)).toContain('Maya’s plan starts Mon 12 Oct. Their training opens then.');
-      expect(all(host, 'button').map(textOf)).toContain('Assign program');
+      it('says when a plan waiting for its payment starts', async () => {
+        const { host } = await render({
+          ...booked,
+          featureAccess: [{ ...booked.featureAccess[0], reason: 'PaymentRequired' }],
+          program: coachProgram([plannedBlock({ start: '2026-10-12' })], {
+            accessReason: 'PaymentRequired',
+          }),
+        });
+
+        expect(all(host, '.facts li').map(textOf)).toContain(
+          'Maya sees it from Mon 12 Oct, once the plan is paid',
+        );
+      });
+
+      it('invites a first program before the plan begins', async () => {
+        const { host } = await render({
+          ...booked,
+          program: coachProgram([], { accessReason: 'NotStarted' }),
+        });
+
+        expect(textOf(host)).toContain(
+          'Maya’s plan starts Mon 12 Oct. Assign a program now and Maya sees it from that day.',
+        );
+        expect(all(host, 'button').map(textOf)).toContain('Assign program');
+      });
+
+      it('says nothing of it beside a program that is running', async () => {
+        const { host } = await render();
+
+        expect(all(host, '.facts li').map(textOf).join(' ')).not.toContain('sees it from');
+      });
+
+      it('says nothing of it beside an earlier program that ended', async () => {
+        const { host } = await render({
+          ...booked,
+          program: coachProgram([endedBlock()], { accessReason: 'NotStarted' }),
+        });
+
+        expect(all(host, '.facts li').map(textOf).join(' ')).not.toContain('sees it from');
+      });
     });
 
     it('does not offer to open a plan for someone who has left', async () => {
@@ -438,7 +501,7 @@ describe('a client’s Training', () => {
         'Build next block',
         'Reschedule',
         'Open every shared week now',
-        'Mark complete',
+        'Close program',
         'Cancel program',
       ]);
       expect(items[2].getAttribute('aria-disabled')).toBe('true');

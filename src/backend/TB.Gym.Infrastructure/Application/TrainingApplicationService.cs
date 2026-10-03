@@ -516,6 +516,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         try
         {
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = request.Version;
+            var notDone = mesocycle.Weeks.SelectMany(item => item.Sessions).Count(session => !session.IsCompleted);
             var previous = mesocycle.Complete(clock.UtcNow);
             dbContext.MesocycleLifecycleEvents.Add(MesocycleLifecycleEvent.Record(
                 tenantContext.TenantId,
@@ -523,7 +524,9 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
                 MesocycleLifecycleEventType.Completed,
                 previous,
                 MesocycleStatus.Completed,
-                "All programmed sessions were completed.",
+                notDone == 0
+                    ? "All programmed sessions were completed."
+                    : $"Closed after its last day with {notDone} programmed session(s) not done.",
                 clock.UtcNow));
             await dbContext.SaveChangesAsync(cancellationToken);
             return SuccessMesocycle(await ToViewAsync(mesocycle, cancellationToken));

@@ -181,17 +181,24 @@ export class ProgramReschedule {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="body">
-      @if (ready()) {
-        <p dir="auto" i18n>
-          Mark {{ block().name }} complete? Every session is done, and {{ firstName() }}’s workouts
-          stay in their history.
-        </p>
-        <p class="muted" i18n>You can’t undo this.</p>
-      } @else {
-        <p dir="auto" i18n>
-          {{ block().name }} can be marked complete once every session is finished.
-          {{ remaining() }} still to go.
-        </p>
+      @switch (closing()) {
+        @case ('done') {
+          <p dir="auto" i18n>
+            Close {{ block().name }}? Every session is done, and {{ firstName() }}’s workouts stay
+            in their history.
+          </p>
+          <p class="muted" i18n>You can’t undo this.</p>
+        }
+        @case ('ended') {
+          <p dir="auto">{{ endedLine() }}</p>
+          <p class="muted" i18n>You can’t undo this.</p>
+        }
+        @default {
+          <p dir="auto" i18n>
+            {{ block().name }} can be closed after its last day, {{ lastDay() }}, or once every
+            session is done. {{ remaining() }} still to go.
+          </p>
+        }
       }
       @if (error(); as message) {
         <p class="problem" role="alert">{{ message }}</p>
@@ -200,12 +207,12 @@ export class ProgramReschedule {
         <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
           Not now
         </button>
-        @if (ready()) {
+        @if (closing() !== 'not-yet') {
           <button appButton type="button" [loading]="busy()" (click)="submit()">
             @if (busy()) {
-              <ng-container i18n>Marking complete…</ng-container>
+              <ng-container i18n>Closing…</ng-container>
             } @else {
-              <ng-container i18n>Mark complete</ng-container>
+              <ng-container i18n>Close program</ng-container>
             }
           </button>
         }
@@ -217,17 +224,43 @@ export class ProgramReschedule {
 export class ProgramComplete {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
+  private readonly locale = inject(LOCALE_ID);
 
   readonly block = input.required<BlockCard>();
   readonly firstName = input.required<string>();
-  /** True when the program was marked complete. */
+  /** True when the program was closed. */
   readonly closed = output<boolean>();
 
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
-  /** Whether every session is done; the server asks the same before it closes the program. */
-  protected readonly ready = computed(() => this.block().doneCount === this.block().sessionCount);
+  /**
+   * Whether it can close, as the server will decide again (TRN-013): every session done, or past its
+   * last day with the missed ones kept on record.
+   */
+  protected readonly closing = computed<'done' | 'ended' | 'not-yet'>(() => {
+    const block = this.block();
+    if (block.doneCount === block.sessionCount) return 'done';
+    return block.ended ? 'ended' : 'not-yet';
+  });
+
+  protected readonly lastDay = computed(() =>
+    formatDate(this.block().lastDay, 'EEE d MMM', this.locale),
+  );
+
+  /** After its last day: the misses stay on record (sessions in weeks never shared were not missed). */
+  protected readonly endedLine = computed(() => {
+    const { name, missedCount } = this.block();
+    const first = this.firstName();
+    if (missedCount === 0) {
+      return $localize`Close ${name}:program: as finished? Its last day has passed, and ${first}:name:’s workouts stay in their history.`;
+    }
+    const missed =
+      missedCount === 1
+        ? $localize`1 missed session stays`
+        : $localize`${missedCount}:count: missed sessions stay`;
+    return $localize`Close ${name}:program: as finished? ${missed}:missed: on record as missed, and ${first}:name: can no longer start them.`;
+  });
 
   protected readonly remaining = computed(() => {
     const left = this.block().sessionCount - this.block().doneCount;
@@ -247,11 +280,7 @@ export class ProgramComplete {
       this.closed.emit(true);
     } catch (error) {
       this.error.set(
-        programWriteError(
-          error,
-          $localize`The program could not be marked complete.`,
-          this.firstName(),
-        ),
+        programWriteError(error, $localize`The program could not be closed.`, this.firstName()),
       );
     } finally {
       this.busy.set(false);

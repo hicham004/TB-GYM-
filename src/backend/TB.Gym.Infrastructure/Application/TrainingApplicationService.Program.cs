@@ -60,8 +60,8 @@ internal sealed partial class TrainingApplicationService
     /// <summary>
     /// The coach's counterpart of the client's program read (R3.4a, TRN-022): the same session states,
     /// for every block, and every week including those the coach has not shared. Like every coach read
-    /// of a client's training it follows the plan: a lapsed, paused or blocked client answers with the
-    /// reason and no blocks.
+    /// of a client's training it follows the plan (TRN-023): open before a booked plan begins, while a
+    /// lapsed, paused or blocked client answers with the reason and no blocks.
     /// </summary>
     public async Task<CoachClientProgramView?> GetClientProgramAsync(
         Guid clientProfileId,
@@ -74,7 +74,7 @@ internal sealed partial class TrainingApplicationService
         }
 
         var today = await GetTenantTodayAsync(cancellationToken);
-        var access = await GetTrainingAccessAsync(clientProfileId, cancellationToken);
+        var access = await GetCoachTrainingAccessAsync(clientProfileId, cancellationToken);
         if (!access.IsAllowed)
         {
             return new(false, access.Reason.ToString(), today, [],

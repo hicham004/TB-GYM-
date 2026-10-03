@@ -561,13 +561,16 @@ client's `/program`: every block with its weeks and the state of each session fr
 records and workout reads. In the web app the section (`ClientProgram`, route `…/training`,
 `REDESIGNED`) draws the running block as a timeline and keeps its writes where they were, on the
 existing mesocycle endpoints, reached through one Manage program menu whose items open sheets and
-dialogs (Assign program, Build next block, a session; Reschedule, Mark complete, Cancel program).
+dialogs (Assign program, Build next block, a session; Reschedule, Close program, Cancel program).
 `ClientAction` is now a link or a button that reports an `action`; the header's Assign program, Today
 and the Overview arrive as `?action=assign` and open the same sheet. The read sits in a feature-local
 `ClientProgramApi`, not `ApiClient`, so it stays out of the initial bundle. The server's refusals
 (overlap, coverage, a stale version, a started program) are worded for a coach in `programWriteError`,
 and the old stylesheet-and-form screen is gone; training max history and an exercise's history keep
 their older forms in `ClientTrainingTools`, behind one collapsed section in a light scope.
+The coach's program, workout and records reads ask `CoachTrainingReadPolicy` (TRN-023, Training
+module) of the same access decision, so they also open before a booked plan begins; the client's own
+reads do not.
 
 R2.4a keeps client-entered extra food in a separate Nutrition log table, linked by tenant and log
 ID. The day read returns it beside planned slots and includes it in consumed totals; the assigned

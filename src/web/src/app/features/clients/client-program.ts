@@ -33,7 +33,6 @@ import { StatusPill } from '../../ui/status-pill';
 import { UiDialog } from '../../ui/dialog';
 import { UiSheet } from '../../ui/sheet';
 import { ClientActions } from './client-actions';
-import { currentEnrollment } from './client-overview.models';
 import { planChoices, programWriteError } from './client-program-forms.models';
 import { ClientProgramApi } from './client-program-api';
 import {
@@ -129,10 +128,13 @@ export class ClientProgram {
   protected readonly firstName = computed(() => this.context.profile()?.firstName ?? '');
   /** The label of every week's share box; each box also names its week for assistive technology. */
   protected readonly shareText = computed(() => $localize`Shared with ${this.firstName()}:name:`);
-  protected readonly emptyDescription = computed(
-    () =>
-      $localize`Assign a program and ${this.firstName()}:name: sees it as soon as its first week opens.`,
-  );
+  protected readonly emptyDescription = computed(() => {
+    const name = this.firstName();
+    const starts = this.bookedStart();
+    return starts
+      ? $localize`${name}:name:’s plan starts ${starts}:date:. Assign a program now and ${name}:name: sees it from that day.`
+      : $localize`Assign a program and ${name}:name: sees it as soon as its first week opens.`;
+  });
   protected readonly today = computed(
     () => this.read()?.localDate ?? this.context.workspace()?.currentDate ?? '',
   );
@@ -189,20 +191,39 @@ export class ClientProgram {
     return view && !view.isAllowed ? (view.accessReason as FeatureAccessReason) : null;
   });
 
-  /** Why training is not shown, in a sentence; a plan that has not begun says when it does. */
+  /** Why training is not shown, in a sentence. */
   protected readonly closedLine = computed(() => {
     const reason = this.closedReason();
-    if (reason === null) return '';
+    return reason === null ? '' : trainingClosed(reason, this.firstName());
+  });
+
+  /**
+   * The day a booked plan begins, while the coach can already read its training and the client cannot
+   * (TRN-023); null while the plan runs.
+   */
+  private readonly bookedStart = computed(() => {
+    const view = this.read();
+    if (!view?.isAllowed || view.accessReason === 'Granted') return null;
+    const from = this.context
+      .plans()
+      ?.featureAccess.find((item) => item.feature === 'Training')?.accessibleFrom;
+    return from ? formatDate(from, 'EEE d MMM', this.locale) : null;
+  });
+
+  /** Beside the program: the client does not see it yet, and from when they will. */
+  protected readonly bookedLine = computed(() => {
+    const view = this.read();
+    if (!view?.isAllowed || view.accessReason === 'Granted') return '';
     const name = this.firstName();
-    const plans = this.context.plans();
-    const today = this.today();
-    if (reason === 'NotStarted' && plans && today) {
-      const next = currentEnrollment(plans.enrollments, today);
-      if (next && next.startDate > today) {
-        return $localize`${name}:name:’s plan starts ${formatDate(next.startDate, 'EEE d MMM', this.locale)}:date:. Their training opens then.`;
-      }
+    const starts = this.bookedStart();
+    if (view.accessReason === 'PaymentRequired') {
+      return starts
+        ? $localize`${name}:name: sees it from ${starts}:date:, once the plan is paid`
+        : $localize`${name}:name: sees it once the next plan is paid and starts`;
     }
-    return trainingClosed(reason, name);
+    return starts
+      ? $localize`${name}:name: sees it from ${starts}:date:, when the plan starts`
+      : $localize`${name}:name: sees it once the plan starts`;
   });
 
   /** There is nothing to open on the service page when the person has simply left. */
@@ -306,8 +327,8 @@ export class ClientProgram {
         return this.open(
           this.dialogs,
           this.completeDialog(),
-          $localize`Mark complete`,
-          () => $localize`${name}:program: is complete.`,
+          $localize`Close program`,
+          () => $localize`${name}:program: is closed.`,
         );
       case 'cancel':
         return this.open(

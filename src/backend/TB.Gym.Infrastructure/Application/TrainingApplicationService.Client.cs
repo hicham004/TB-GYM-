@@ -15,14 +15,20 @@ internal sealed partial class TrainingApplicationService
         var client = await FindSelfClientAsync(cancellationToken);
         return client is null
             ? new ClientPersonalRecordsResult(false, FeatureAccessReason.MembershipInactive.ToString(), [])
-            : await ReadPersonalRecordsAsync(client.Id, cancellationToken);
+            : await ReadPersonalRecordsAsync(
+                client.Id,
+                await GetTrainingAccessAsync(client.Id, cancellationToken),
+                cancellationToken);
     }
 
     public async Task<ClientPersonalRecordsResult?> GetClientPersonalRecordsAsync(
         Guid clientProfileId,
         CancellationToken cancellationToken) =>
         await dbContext.ClientProfiles.AsNoTracking().AnyAsync(item => item.Id == clientProfileId, cancellationToken)
-            ? await ReadPersonalRecordsAsync(clientProfileId, cancellationToken)
+            ? await ReadPersonalRecordsAsync(
+                clientProfileId,
+                await GetCoachTrainingAccessAsync(clientProfileId, cancellationToken),
+                cancellationToken)
             : null;
 
     /// <summary>
@@ -32,9 +38,9 @@ internal sealed partial class TrainingApplicationService
     /// </summary>
     private async Task<ClientPersonalRecordsResult> ReadPersonalRecordsAsync(
         Guid clientProfileId,
+        FeatureAccessDecision access,
         CancellationToken cancellationToken)
     {
-        var access = await GetTrainingAccessAsync(clientProfileId, cancellationToken);
         if (!access.IsAllowed)
         {
             return new ClientPersonalRecordsResult(false, access.Reason.ToString(), []);
@@ -611,6 +617,21 @@ internal sealed partial class TrainingApplicationService
             clientProfileId,
             CoachingFeature.Training,
             cancellationToken);
+
+    /// <summary>
+    /// Today's training access as a coach's reads of the client see it (TRN-023): open as well before
+    /// a booked plan begins, keeping the plan's own reason so the page can say when it starts.
+    /// </summary>
+    private async Task<FeatureAccessDecision> GetCoachTrainingAccessAsync(
+        Guid clientProfileId,
+        CancellationToken cancellationToken)
+    {
+        var access = await GetTrainingAccessAsync(clientProfileId, cancellationToken);
+        return !access.IsAllowed &&
+               CoachTrainingReadPolicy.Opens(access, await GetTenantTodayAsync(cancellationToken))
+            ? access with { IsAllowed = true }
+            : access;
+    }
 
     private async Task<bool> CanCurrentClientUseExecutionAsync(
         WorkoutExecution execution,
