@@ -13,11 +13,31 @@ internal sealed partial class TrainingApplicationService
         CancellationToken cancellationToken)
     {
         var client = await FindSelfClientAsync(cancellationToken);
-        var access = client is null ? null : await GetTrainingAccessAsync(client.Id, cancellationToken);
-        if (client is null || access is not { IsAllowed: true })
+        return client is null
+            ? new ClientPersonalRecordsResult(false, FeatureAccessReason.MembershipInactive.ToString(), [])
+            : await ReadPersonalRecordsAsync(client.Id, cancellationToken);
+    }
+
+    public async Task<ClientPersonalRecordsResult?> GetClientPersonalRecordsAsync(
+        Guid clientProfileId,
+        CancellationToken cancellationToken) =>
+        await dbContext.ClientProfiles.AsNoTracking().AnyAsync(item => item.Id == clientProfileId, cancellationToken)
+            ? await ReadPersonalRecordsAsync(clientProfileId, cancellationToken)
+            : null;
+
+    /// <summary>
+    /// The client's records (TRN-019) while their plan includes training: for each exercise, exact
+    /// repetition count and unit, the heaviest completed load and the day it was lifted. The client
+    /// and their coach read the same list by the same rule, so a record on one screen is on the other.
+    /// </summary>
+    private async Task<ClientPersonalRecordsResult> ReadPersonalRecordsAsync(
+        Guid clientProfileId,
+        CancellationToken cancellationToken)
+    {
+        var access = await GetTrainingAccessAsync(clientProfileId, cancellationToken);
+        if (!access.IsAllowed)
         {
-            return new ClientPersonalRecordsResult(false,
-                (access?.Reason ?? FeatureAccessReason.MembershipInactive).ToString(), []);
+            return new ClientPersonalRecordsResult(false, access.Reason.ToString(), []);
         }
 
         var performances =
@@ -28,7 +48,7 @@ internal sealed partial class TrainingApplicationService
             join workout in dbContext.WorkoutExecutions.AsNoTracking()
                 on new { exercise.TenantId, Id = exercise.WorkoutExecutionId }
                 equals new { workout.TenantId, workout.Id }
-            where workout.ClientProfileId == client.Id &&
+            where workout.ClientProfileId == clientProfileId &&
                   workout.Status == WorkoutExecutionStatus.Completed &&
                   set.IsCompleted && set.ActualRepetitions != null &&
                   set.ActualLoad > 0 && set.ActualLoadUnit != null

@@ -76,7 +76,7 @@ export interface ChartBar {
         display: block;
         block-size: 100%;
         border-radius: inherit;
-        background: var(--tb-brand, #153d33);
+        background: var(--tb-accent-ink, #153d33);
       }
       details {
         margin-block-start: 0.75rem;

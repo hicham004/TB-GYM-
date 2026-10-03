@@ -1,684 +1,408 @@
 @if (profile(); as client) {
-  <div class="overview tb-theme">
+  <div class="overview">
     @if (client.release; as release) {
       <!-- A former client (ADR 0027): the record is kept and read-only. The API refuses every change. -->
-      <section class="card former" aria-labelledby="former-title">
-        <h2 id="former-title" class="tb-text-body-strong" i18n>Former client</h2>
-        @if (release.departureKind === 'LeftByClient') {
-          <p class="tb-text-compact" i18n>
-            Left on {{ release.releasedAtUtc | date: 'mediumDate' }}.
-          </p>
-        } @else {
-          <p class="tb-text-compact" i18n>
-            Coaching ended on {{ release.releasedAtUtc | date: 'mediumDate' }} by
-            {{ release.releasedByName }}.
-          </p>
-        }
-        <p class="tb-text-compact" i18n>
-          Their access ended then, and their open plans and programs were closed. This record is
-          kept read-only. You can invite them back as a new client.
-        </p>
-        <p class="tb-text-compact">
-          <span class="muted" i18n>Reason</span>
-          <span class="reason" dir="auto">{{ release.reason }}</span>
-        </p>
-        <p class="tb-text-compact muted" i18n>
-          Training, nutrition and detailed progress records are kept but are not shown for former
-          clients.
-        </p>
-      </section>
-    } @else {
-      @if (checkIn(); as state) {
-        @if (state.kind === 'needsReview') {
-          <section class="attention warning" aria-labelledby="attention-checkin">
-            <div class="attention-copy">
-              <p class="attention-meta tb-text-metadata">
-                <app-status-label label="Awaiting coach review" i18n-label tone="warning" />
-                <span class="separator" aria-hidden="true">·</span>
-                <span i18n>Submitted {{ state.submittedAtUtc | date: 'EEE d MMM, HH:mm' }}</span>
-              </p>
-              <h2 id="attention-checkin" class="tb-text-body-strong" dir="auto" i18n>
-                {{ client.firstName }}’s check-in is ready to review
-              </h2>
-              <p class="tb-text-compact muted">
-                <bdi>“{{ state.item.assignment.formTitle }}”</bdi>.
-                <ng-container i18n
-                  >Compare the submitted answers with the previous check-in before
-                  responding.</ng-container
-                >
-              </p>
-            </div>
-            <a
-              appButton
-              routerLink="/checkins/clients"
-              [queryParams]="{ clientId: client.id, assignmentId: state.item.assignment.id }"
-              i18n
-              >Review check-in</a
-            >
-          </section>
-        }
-      }
-
-      @if (renewal(); as prompt) {
-        <section class="attention information" aria-labelledby="attention-renewal">
-          <div class="attention-copy">
-            <p class="attention-meta tb-text-metadata">
-              <span dir="auto">{{ prompt.enrollment.productName }}</span>
-              <span class="separator" aria-hidden="true">·</span>
-              <span i18n>Last day {{ prompt.enrollment.lastActiveDate | date: 'EEE d MMM' }}</span>
+      <section class="panel" aria-labelledby="former-title">
+        <header class="panel-head">
+          <h2 id="former-title" i18n>Former client</h2>
+        </header>
+        <div class="panel-body prose">
+          @if (release.departureKind === 'LeftByClient') {
+            <p i18n>Left on {{ release.releasedAtUtc | date: 'EEE d MMM y' }}.</p>
+          } @else {
+            <p i18n>
+              Coaching ended on {{ release.releasedAtUtc | date: 'EEE d MMM y' }} by
+              {{ release.releasedByName }}.
             </p>
-            <h2 id="attention-renewal" class="tb-text-body-strong" dir="auto">
-              @switch (prompt.daysLeft) {
-                @case (0) {
-                  <ng-container i18n>{{ client.firstName }}’s plan ends today</ng-container>
+          }
+          <p i18n>
+            Their access ended then, and their open plans and programs were closed. This record is
+            kept read-only. You can invite them back as a new client.
+          </p>
+          <p>
+            <span class="muted" i18n>Reason</span>
+            <span dir="auto">{{ release.reason }}</span>
+          </p>
+          <p class="muted" i18n>
+            Training, nutrition and detailed progress records are kept but are not shown for former
+            clients.
+          </p>
+        </div>
+      </section>
+      <ng-container [ngTemplateOutlet]="notes" />
+    } @else if (blocked()) {
+      <!-- A blocked relationship closes training, progress and check-ins (ADR 0009), so none is read. -->
+      <section class="panel" aria-labelledby="blocked-title">
+        <header class="panel-head">
+          <h2 id="blocked-title" i18n>Access blocked</h2>
+        </header>
+        <div class="panel-body prose">
+          <p dir="auto" i18n>
+            {{ client.firstName }}’s access is blocked. Their training, progress and check-ins stay
+            closed to you until you unblock them.
+          </p>
+          <a appButton variant="outlined" [routerLink]="['/clients', client.id, 'service']" i18n
+            >Open Service &amp; access</a
+          >
+        </div>
+      </section>
+      <ng-container [ngTemplateOutlet]="notes" />
+    } @else {
+      <!-- What needs the coach: the same read as Today and Clients, so the three always agree. -->
+      <section class="panel needs" aria-labelledby="needs-heading">
+        <header class="panel-head">
+          <h2 id="needs-heading">
+            <ng-container i18n>Needs you</ng-container>
+            @if (needs().length > 0) {
+              <span class="badge">{{ needs().length }}</span>
+            }
+          </h2>
+        </header>
+        @switch (overview().state) {
+          @case ('loading') {
+            <div class="panel-body">
+              <app-skeleton [label]="loadingLabel" [lines]="2" />
+            </div>
+          }
+          @case ('error') {
+            <div class="panel-body load-failed">
+              <p role="alert" i18n>What needs you could not be loaded.</p>
+              <button appButton type="button" variant="outlined" (click)="loadOverview()" i18n>
+                Try again
+              </button>
+            </div>
+          }
+          @default {
+            @if (needs().length > 0) {
+              <ul class="rows" role="list">
+                @for (row of needs(); track row.key; let first = $first) {
+                  <li class="need" [attr.data-kind]="row.kind">
+                    <div class="need-copy">
+                      <p class="need-heading" dir="auto">{{ row.heading }}</p>
+                      <p class="need-detail">{{ row.detail }}</p>
+                    </div>
+                    <span class="tag" [attr.data-tone]="row.tone">{{ row.tag }}</span>
+                    <a
+                      appButton
+                      class="need-action"
+                      [variant]="first ? 'filled' : 'outlined'"
+                      [routerLink]="row.action.link"
+                      [queryParams]="row.action.queryParams"
+                      >{{ row.action.label }}</a
+                    >
+                  </li>
                 }
-                @case (1) {
-                  <ng-container i18n>{{ client.firstName }}’s plan ends tomorrow</ng-container>
+              </ul>
+            } @else {
+              <p class="all-clear">
+                <app-icon name="check-circle" />
+                <span i18n>Nothing needs you right now.</span>
+              </p>
+            }
+          }
+        }
+      </section>
+
+      <div class="grid">
+        <!-- Both columns dissolve on a phone, so the cards run in the order given by `order`. -->
+        <div class="main">
+          <section class="panel week" aria-labelledby="week-heading">
+            <header class="panel-head">
+              <div>
+                <h2 id="week-heading" i18n>This week</h2>
+                @if (week(); as story) {
+                  <p class="panel-span">{{ story.range }}</p>
+                }
+              </div>
+              @if (program(); as line) {
+                <p class="panel-span program" dir="auto">{{ line }}</p>
+              }
+            </header>
+            <div class="panel-body">
+              @switch (overview().state) {
+                @case ('loading') {
+                  <app-skeleton [label]="loadingLabel" [lines]="3" />
+                }
+                @case ('error') {
+                  <div class="load-failed">
+                    <p role="alert" i18n>This week could not be loaded.</p>
+                    <button
+                      appButton
+                      type="button"
+                      variant="outlined"
+                      (click)="loadOverview()"
+                      i18n
+                    >
+                      Try again
+                    </button>
+                  </div>
                 }
                 @default {
-                  <ng-container i18n
-                    >{{ client.firstName }}’s plan ends in {{ prompt.daysLeft }} days</ng-container
-                  >
-                }
-              }
-            </h2>
-            <p class="tb-text-compact muted" i18n>
-              Renew now so the next plan starts the day after this one ends.
-            </p>
-          </div>
-          <a
-            appButton
-            variant="outlined"
-            [routerLink]="['/clients', client.id, 'service']"
-            [queryParams]="{ renew: prompt.enrollment.id }"
-            i18n
-            >Renew plan</a
-          >
-        </section>
-      }
-
-      <div class="evidence-region">
-        <section class="card this-week" aria-labelledby="this-week-title">
-          <header class="week-header">
-            <h2 id="this-week-title" class="tb-text-compact-strong">
-              <ng-container i18n>This week</ng-container>
-              @if (week(); as range) {
-                ·
-                <span
-                  >{{ range.start | date: 'EEE d' }} – {{ weekLastDay() | date: 'EEE d MMM' }}</span
-                >
-              }
-            </h2>
-            @if (trainingWeek(); as state) {
-              @if (state.kind === 'shared' || state.kind === 'notShared') {
-                <p class="tb-text-metadata muted">
-                  <bdi>{{ state.blockName }}</bdi>
-                  @if (state.weekNumber !== null) {
-                    ·
-                    <ng-container i18n
-                      >Week {{ state.weekNumber }} of {{ state.weekCount }}</ng-container
-                    >
-                  }
-                </p>
-              }
-            }
-          </header>
-
-          <dl class="metrics">
-            <div class="metric">
-              <dt class="tb-text-metadata-strong" i18n>Training</dt>
-              <dd class="value tb-text-section-title tb-numeric">
-                @if (trainingCounts(); as counts) {
-                  <ng-container i18n>{{ counts.done }} of {{ counts.scheduled }}</ng-container>
-                } @else {
-                  —
-                }
-              </dd>
-              <dd class="meaning tb-text-metadata">
-                @if (trainingCounts()) {
-                  @if (trainingWeek()?.kind === 'shared' && trainingWeek(); as state) {
-                    @if (state.kind === 'shared' && state.today) {
-                      <ng-container i18n>Sessions done, one scheduled today</ng-container>
-                    } @else {
-                      <ng-container i18n>Sessions done this week</ng-container>
-                    }
-                  } @else {
-                    <ng-container i18n>Sessions done this week</ng-container>
-                  }
-                } @else if (dashboard().state === 'loading') {
-                  <ng-container i18n>Loading…</ng-container>
-                } @else if (dashboard().value?.training; as section) {
-                  {{ unavailable(section.reason) }}
-                } @else {
-                  <ng-container i18n>Couldn’t load</ng-container>
-                }
-              </dd>
-            </div>
-            <div class="metric">
-              <dt class="tb-text-metadata-strong" i18n>Nutrition</dt>
-              <dd class="value tb-text-section-title tb-numeric">
-                @if (nutritionCounts(); as counts) {
-                  <ng-container i18n>{{ counts.logged }} of {{ counts.elapsed }}</ng-container>
-                } @else {
-                  —
-                }
-              </dd>
-              <dd class="meaning tb-text-metadata">
-                @if (nutritionCounts()) {
-                  <ng-container i18n>Days logged so far this week</ng-container>
-                } @else if (dashboard().state === 'loading') {
-                  <ng-container i18n>Loading…</ng-container>
-                } @else if (dashboard().value?.nutrition; as section) {
-                  {{ unavailable(section.reason) }}
-                } @else {
-                  <ng-container i18n>Couldn’t load</ng-container>
-                }
-              </dd>
-            </div>
-            <div class="metric">
-              <dt class="tb-text-metadata-strong" i18n>Calorie target</dt>
-              <dd class="value tb-text-section-title tb-numeric">
-                @if (calorieTarget(); as target) {
-                  <ng-container i18n>{{ target | number: '1.0-0' }} kcal</ng-container>
-                } @else {
-                  —
-                }
-              </dd>
-              <dd class="meaning tb-text-metadata">
-                @if (calorieTarget() !== null) {
-                  <ng-container i18n>Active nutrition target</ng-container>
-                } @else if (nutritionPlans().state === 'loading') {
-                  <ng-container i18n>Loading…</ng-container>
-                } @else if (nutritionUnavailable(); as reason) {
-                  {{ unavailable(reason) }}
-                } @else if (nutritionPlans().state === 'error') {
-                  <ng-container i18n>Couldn’t load</ng-container>
-                } @else {
-                  <ng-container i18n>No active meal plan</ng-container>
-                }
-              </dd>
-            </div>
-            <div class="metric">
-              <dt class="tb-text-metadata-strong" i18n>Bodyweight</dt>
-              <dd class="value tb-text-section-title tb-numeric">
-                @if (bodyweight()?.latest; as latest) {
-                  {{ latest.value | number: '1.1-1' }} {{ massUnit() }}
-                } @else {
-                  —
-                }
-              </dd>
-              <dd class="meaning tb-text-metadata">
-                @if (bodyweight(); as summary) {
-                  @if (summary.latest === null) {
-                    <ng-container i18n>No weigh-ins in eight weeks</ng-container>
-                  } @else if (summary.change === null || summary.change === 0) {
-                    <ng-container i18n>Latest weekly average</ng-container>
-                  } @else if (summary.change < 0) {
-                    <ng-container i18n
-                      >Weekly average, down {{ -summary.change | number: '1.1-1' }}
-                      {{ massUnit() }}</ng-container
-                    >
-                  } @else {
-                    <ng-container i18n
-                      >Weekly average, up {{ summary.change | number: '1.1-1' }}
-                      {{ massUnit() }}</ng-container
-                    >
-                  }
-                } @else if (dashboard().state === 'loading') {
-                  <ng-container i18n>Loading…</ng-container>
-                } @else {
-                  <ng-container i18n>Couldn’t load</ng-container>
-                }
-              </dd>
-            </div>
-          </dl>
-
-          <ul class="evidence" aria-label="This week by area" i18n-aria-label>
-            <!-- Training -->
-            <li class="evidence-row">
-              <span class="domain tb-text-metadata-strong" i18n>Training</span>
-              <div class="evidence-copy">
-                @if (trainingUnavailable(); as reason) {
-                  <p class="statement tb-text-compact">{{ unavailable(reason) }}</p>
-                  <p class="detail tb-text-metadata" i18n>
-                    Training figures are not shown while it is not part of an active plan.
-                  </p>
-                } @else {
-                  @switch (training().state) {
-                    @case ('loading') {
-                      <p class="statement tb-text-compact" i18n>Loading training…</p>
-                    }
-                    @case ('error') {
-                      @if (training().denied; as reason) {
-                        <p class="statement tb-text-compact">{{ unavailable(reason) }}</p>
-                      } @else {
-                        <p class="statement tb-text-compact" i18n>Training couldn’t be loaded.</p>
-                      }
-                    }
-                    @default {
-                      @if (trainingWeek(); as state) {
-                        @switch (state.kind) {
-                          @case ('notShared') {
-                            <p class="statement tb-text-compact" i18n>
-                              This week isn’t shared yet.
-                            </p>
-                            <p class="detail tb-text-metadata" dir="auto" i18n>
-                              {{ client.firstName }} can’t see week {{ state.weekNumber }} until you
-                              publish it.
-                            </p>
-                          }
-                          @case ('betweenPrograms') {
-                            <p class="statement tb-text-compact" i18n>No program this week.</p>
-                            <p class="detail tb-text-metadata" i18n>
-                              The next program starts
-                              {{ state.nextStartDate | date: 'EEE d MMM' }}.
-                            </p>
-                          }
-                          @case ('noProgram') {
-                            <p class="statement tb-text-compact" i18n>No program assigned.</p>
-                            <p class="detail tb-text-metadata" dir="auto" i18n>
-                              Assign a program so {{ client.firstName }} has sessions to follow.
-                            </p>
-                          }
-                          @case ('shared') {
-                            @if (trainingCounts(); as counts) {
-                              <p class="statement tb-text-compact" i18n>
-                                {{ counts.done }} of {{ counts.scheduled }} sessions completed this
-                                week.
-                              </p>
-                            }
-                            @if (state.next; as next) {
-                              <p class="detail tb-text-metadata">
-                                @if (next.date === today()) {
-                                  <ng-container i18n
-                                    >Next: <bdi>{{ next.name }}</bdi
-                                    >, scheduled today.</ng-container
-                                  >
-                                } @else {
-                                  <ng-container i18n
-                                    >Next: <bdi>{{ next.name }}</bdi
-                                    >, {{ next.date | date: 'EEE d MMM' }}.</ng-container
-                                  >
-                                }
-                              </p>
-                            } @else {
-                              <p class="detail tb-text-metadata" i18n>
-                                No more sessions in this program.
-                              </p>
-                            }
-                          }
+                  @if (week(); as story) {
+                    @if (story.scheduled > 0) {
+                      <p class="week-count">
+                        <strong>{{ story.done }} of {{ story.scheduled }}</strong>
+                        <span i18n>sessions done</span>
+                      </p>
+                      <ol class="strip" aria-label="This week, day by day" i18n-aria-label>
+                        @for (day of story.days; track day.date) {
+                          <li class="day" [attr.data-mark]="day.mark" [class.today]="day.isToday">
+                            <span class="bar" aria-hidden="true"></span>
+                            <span class="day-label" aria-hidden="true">{{ day.label }}</span>
+                            <span class="tb-visually-hidden"
+                              >{{ day.longLabel }}: {{ day.state }}</span
+                            >
+                          </li>
                         }
-                      }
-                    }
-                  }
-                }
-              </div>
-              <div class="evidence-status">
-                @switch (trainingUnavailable() ? null : trainingWeek()?.kind) {
-                  @case ('notShared') {
-                    <app-status-label label="Not shared" i18n-label tone="warning" />
-                  }
-                  @case ('betweenPrograms') {
-                    <app-status-label label="Between programs" i18n-label />
-                  }
-                  @case ('noProgram') {
-                    <app-status-label label="Not assigned" i18n-label />
-                  }
-                  @case ('shared') {
-                    @if (trainingCounts(); as counts) {
-                      @if (counts.scheduled > counts.done) {
-                        <app-status-label
-                          [label]="sessionsLeft(counts.scheduled - counts.done)"
-                          tone="warning"
-                        />
-                      } @else if (counts.scheduled > 0) {
-                        <app-status-label
-                          label="Week complete"
-                          i18n-label
-                          tone="success"
-                          marker="check"
-                        />
-                      }
-                    }
-                  }
-                }
-              </div>
-              <div class="evidence-action">
-                @if (training().state === 'error' && !trainingUnavailable()) {
-                  <button appButton type="button" variant="text" (click)="loadTraining()" i18n>
-                    Retry
-                  </button>
-                } @else if (trainingUnavailable()) {
-                  <a
-                    appButton
-                    variant="text"
-                    [routerLink]="['/clients', client.id, 'training']"
-                    i18n
-                    >Open training</a
-                  >
-                } @else if (trainingWeek()?.kind === 'noProgram') {
-                  <a
-                    appButton
-                    variant="text"
-                    [routerLink]="['/clients', client.id, 'training']"
-                    i18n
-                    >Assign program</a
-                  >
-                } @else {
-                  <a
-                    appButton
-                    variant="text"
-                    [routerLink]="['/clients', client.id, 'training']"
-                    i18n
-                    >Adjust assignment</a
-                  >
-                }
-              </div>
-            </li>
-
-            <!-- Nutrition -->
-            <li class="evidence-row">
-              <span class="domain tb-text-metadata-strong" i18n>Nutrition</span>
-              <div class="evidence-copy">
-                @if (nutritionCounts(); as counts) {
-                  <p class="statement tb-text-compact" i18n>
-                    {{ counts.logged }} of {{ counts.elapsed }} days logged this week.
-                  </p>
-                  <p class="detail tb-text-metadata">
-                    @if (counts.lastLoggedDate; as last) {
-                      <ng-container i18n>Last logged {{ last | date: 'EEE d MMM' }}.</ng-container>
+                      </ol>
                     } @else {
-                      <ng-container i18n>Nothing logged yet.</ng-container>
-                    }
-                  </p>
-                } @else if (dashboard().state === 'loading') {
-                  <p class="statement tb-text-compact" i18n>Loading nutrition…</p>
-                } @else if (dashboard().value?.nutrition; as section) {
-                  <p class="statement tb-text-compact">{{ unavailable(section.reason) }}</p>
-                } @else {
-                  <p class="statement tb-text-compact" i18n>Nutrition couldn’t be loaded.</p>
-                }
-              </div>
-              <div class="evidence-status">
-                @if (nutritionCounts(); as counts) {
-                  @if (counts.missing > 0) {
-                    <app-status-label [label]="daysNotLogged(counts.missing)" />
-                  } @else if (counts.elapsed > 0) {
-                    <app-status-label
-                      label="All days logged"
-                      i18n-label
-                      tone="success"
-                      marker="check"
-                    />
-                  }
-                }
-              </div>
-              <div class="evidence-action">
-                @if (dashboard().state === 'error') {
-                  <button appButton type="button" variant="text" (click)="loadDashboard()" i18n>
-                    Retry
-                  </button>
-                } @else {
-                  <a
-                    appButton
-                    variant="text"
-                    [routerLink]="['/clients', client.id, 'nutrition']"
-                    i18n
-                    >Open nutrition</a
-                  >
-                }
-              </div>
-            </li>
-
-            <!-- Check-ins: workflow facts only, never a reading of the answers (CHK-012). -->
-            <li class="evidence-row">
-              <span class="domain tb-text-metadata-strong" i18n>Check-ins</span>
-              <div class="evidence-copy">
-                @if (checkIn(); as state) {
-                  @switch (state.kind) {
-                    @case ('needsReview') {
-                      <p class="statement tb-text-compact" i18n>
-                        Submitted {{ state.submittedAtUtc | date: 'EEE d MMM' }}, not yet reviewed.
-                      </p>
-                      <p class="detail tb-text-metadata">
-                        <bdi>{{ state.item.assignment.formTitle }}</bdi>
-                        @if (state.item.response?.isLate) {
-                          · <ng-container i18n>submitted late</ng-container>
-                        }
+                      <p class="muted" dir="auto" i18n>
+                        Nothing is scheduled for {{ client.firstName }} this week.
                       </p>
                     }
-                    @case ('overdue') {
-                      <p class="statement tb-text-compact" i18n>
-                        Was due {{ state.item.assignment.dueDate | date: 'EEE d MMM' }}, not
-                        submitted.
-                      </p>
-                      <p class="detail tb-text-metadata">
-                        <bdi>{{ state.item.assignment.formTitle }}</bdi>
-                      </p>
-                    }
-                    @case ('due') {
-                      <p class="statement tb-text-compact" i18n>
-                        Due {{ state.item.assignment.dueDate | date: 'EEE d MMM' }}.
-                      </p>
-                      <p class="detail tb-text-metadata">
-                        <bdi>{{ state.item.assignment.formTitle }}</bdi>
-                      </p>
-                    }
-                    @case ('reviewed') {
-                      <p class="statement tb-text-compact" i18n>
-                        Last check-in reviewed
-                        {{ state.item.response?.reviewedAtUtc | date: 'EEE d MMM' }}.
-                      </p>
-                      <p class="detail tb-text-metadata">
-                        <bdi>{{ state.item.assignment.formTitle }}</bdi>
-                      </p>
-                    }
-                    @case ('none') {
-                      <p class="statement tb-text-compact" i18n>No check-ins assigned.</p>
-                    }
-                  }
-                } @else if (checkIns().state === 'loading') {
-                  <p class="statement tb-text-compact" i18n>Loading check-ins…</p>
-                } @else if (checkIns().denied; as reason) {
-                  <p class="statement tb-text-compact">{{ checkInDenial(reason) }}</p>
-                } @else {
-                  <p class="statement tb-text-compact" i18n>Check-ins couldn’t be loaded.</p>
-                }
-              </div>
-              <div class="evidence-status">
-                @switch (checkIn()?.kind) {
-                  @case ('needsReview') {
-                    <app-status-label label="Needs review" i18n-label tone="danger" />
-                  }
-                  @case ('overdue') {
-                    <app-status-label label="Overdue" i18n-label tone="warning" />
-                  }
-                  @case ('due') {
-                    <app-status-label label="Not submitted" i18n-label />
-                  }
-                  @case ('reviewed') {
-                    <app-status-label label="Reviewed" i18n-label tone="success" marker="check" />
-                  }
-                }
-              </div>
-              <div class="evidence-action">
-                @if (checkIns().state === 'error' && !checkIns().denied) {
-                  <button appButton type="button" variant="text" (click)="loadCheckIns()" i18n>
-                    Retry
-                  </button>
-                } @else {
-                  <a
-                    appButton
-                    variant="text"
-                    [routerLink]="['/clients', client.id, 'checkins']"
-                    i18n
-                    >View all check-ins</a
-                  >
-                }
-              </div>
-            </li>
-
-            <!-- Progress -->
-            <li class="evidence-row">
-              <span class="domain tb-text-metadata-strong" i18n>Progress</span>
-              <div class="evidence-copy">
-                @if (bodyweight(); as summary) {
-                  @if (summary.latest; as latest) {
-                    <p class="statement tb-text-compact" i18n>
-                      {{ latest.value | number: '1.1-1' }} {{ massUnit() }} weekly average.
-                    </p>
                   } @else {
-                    <p class="statement tb-text-compact" i18n>No weigh-ins in eight weeks.</p>
+                    <p class="muted" dir="auto">{{ weekClosed() }}</p>
                   }
-                  <p class="detail tb-text-metadata">
-                    @if (lastPhotoDate(); as photo) {
-                      <ng-container i18n
-                        >Last progress photo {{ photo | date: 'EEE d MMM' }}.</ng-container
-                      >
-                    } @else {
-                      <ng-container i18n>No progress photos in eight weeks.</ng-container>
+                  <dl class="facts">
+                    <div>
+                      <dt i18n>Last activity</dt>
+                      <dd>{{ lastActivity() }}</dd>
+                    </div>
+                    @if (nutrition(); as eaten) {
+                      <div>
+                        <dt i18n>Nutrition</dt>
+                        <dd>{{ eaten.text }}</dd>
+                      </div>
                     }
-                  </p>
-                } @else if (dashboard().state === 'loading') {
-                  <p class="statement tb-text-compact" i18n>Loading progress…</p>
-                } @else {
-                  <p class="statement tb-text-compact" i18n>Progress couldn’t be loaded.</p>
+                  </dl>
                 }
-              </div>
-              <div class="evidence-status">
-                @if (bodyweight()?.change; as change) {
-                  <app-status-label [label]="weightChange(change)" />
-                }
-              </div>
-              <div class="evidence-action">
-                @if (dashboard().state === 'error') {
-                  <button appButton type="button" variant="text" (click)="loadDashboard()" i18n>
-                    Retry
-                  </button>
-                } @else {
-                  <a
-                    appButton
-                    variant="text"
-                    [routerLink]="['/clients', client.id, 'progress']"
-                    i18n
-                    >Open progress</a
-                  >
-                }
-              </div>
-            </li>
-          </ul>
-        </section>
-
-        <aside class="context-rail" aria-label="Client context" i18n-aria-label>
-          <section class="card trend" aria-labelledby="trend-title">
-            <div class="trend-heading">
-              <h2 id="trend-title" class="tb-text-compact-strong" i18n>Bodyweight trend</h2>
-              @if (trendStart(); as start) {
-                <span class="tb-text-metadata muted"
-                  >{{ start | date: 'd MMM' }} – {{ weekLastDay() | date: 'd MMM' }}</span
-                >
               }
             </div>
-            @if (bodyweight()?.latest; as latest) {
-              <div class="trend-current">
-                <span class="tb-text-section-title tb-numeric"
-                  >{{ latest.value | number: '1.1-1' }} {{ massUnit() }}</span
-                >
-                @if (bodyweight()?.change; as change) {
-                  <span class="tb-text-metadata muted" i18n
-                    >{{ change < 0 ? '↓' : '↑' }}
-                    {{ (change < 0 ? -change : change) | number: '1.1-1' }} {{ massUnit() }} vs last
-                    week</span
-                  >
+          </section>
+
+          <section class="panel weight" aria-labelledby="weight-heading">
+            <header class="panel-head">
+              <h2 id="weight-heading" i18n>Weight</h2>
+              <a class="panel-link" [routerLink]="['/clients', client.id, 'progress']" i18n
+                >Open progress</a
+              >
+            </header>
+            <div class="panel-body">
+              @switch (dashboard().state) {
+                @case ('loading') {
+                  <app-skeleton [label]="loadingLabel" [lines]="2" />
                 }
-              </div>
-              @if (trend(); as plot) {
-                <div class="trend-plot">
-                  <div class="y-axis tb-text-metadata muted" aria-hidden="true">
-                    <span>{{ plot.max | number: '1.1-1' }} {{ massUnit() }}</span>
-                    <span>{{ plot.min | number: '1.1-1' }} {{ massUnit() }}</span>
+                @case ('error') {
+                  <div class="load-failed">
+                    <p role="alert" i18n>Weight could not be loaded.</p>
+                    <button
+                      appButton
+                      type="button"
+                      variant="outlined"
+                      (click)="loadDashboard()"
+                      i18n
+                    >
+                      Try again
+                    </button>
                   </div>
-                  <svg
-                    class="plot"
-                    [attr.viewBox]="'0 0 ' + trendWidth + ' ' + trendHeight"
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                    focusable="false"
-                  >
-                    <polyline [attr.points]="plot.path" />
-                    @if (plot.last; as last) {
-                      <circle [attr.cx]="last.x" [attr.cy]="last.y" r="3.5" />
-                    }
-                  </svg>
-                </div>
-                <div class="x-axis tb-text-metadata muted" aria-hidden="true">
-                  <span>{{ trendStart() | date: 'd MMM' }}</span>
-                  <span i18n>weekly averages</span>
-                  <span>{{ weekLastDay() | date: 'd MMM' }}</span>
-                </div>
-                <!-- The same weekly averages as text, for anyone who cannot see the line. -->
-                <ul
-                  class="tb-visually-hidden"
-                  aria-label="Weekly average bodyweight"
-                  i18n-aria-label
-                >
-                  @for (point of bodyweight()?.points ?? []; track point.weekStart) {
-                    <li i18n>
-                      Week of {{ point.weekStart | date: 'd MMM' }}:
-                      {{ point.value | number: '1.1-1' }} {{ massUnit() }}
-                    </li>
+                }
+                @default {
+                  @if (weight(); as story) {
+                    <div class="weight-row">
+                      <div class="weight-copy">
+                        <p class="figure">
+                          <strong>{{ story.value }}</strong>
+                          <span class="unit">{{ story.unit }}</span>
+                        </p>
+                        <p class="delta">{{ story.context }}</p>
+                        <p class="weight-note">
+                          <ng-container i18n>Weekly average</ng-container>
+                          @if (story.lastWeighed) {
+                            · {{ story.lastWeighed }}
+                          }
+                        </p>
+                      </div>
+                      @if (story.values.length > 1) {
+                        <app-sparkline
+                          class="spark"
+                          [values]="story.values"
+                          [summary]="story.summary"
+                        />
+                      }
+                    </div>
+                  } @else {
+                    <p class="muted" dir="auto" i18n>
+                      No weigh-ins in the last 8 weeks. {{ client.firstName }} logs them from their
+                      Progress page.
+                    </p>
                   }
-                </ul>
+                }
               }
-            } @else if (dashboard().state === 'loading') {
-              <p class="tb-text-compact muted" i18n>Loading…</p>
-            } @else if (dashboard().state === 'error') {
-              <p class="tb-text-compact muted" i18n>The bodyweight trend couldn’t be loaded.</p>
-            } @else {
-              <p class="tb-text-compact muted" i18n>No weigh-ins in the last eight weeks.</p>
-            }
+            </div>
           </section>
 
-          <section class="card note" aria-labelledby="note-title">
-            <h2 id="note-title" class="note-label tb-text-metadata-strong" i18n>Coach note</h2>
-            @if (editingNote()) {
-              <form class="note-form" [formGroup]="noteForm" (ngSubmit)="saveNote()">
-                <app-field
-                  label="Coach note"
-                  i18n-label
-                  hideLabel
-                  help="Your client never sees this note. Up to 8,000 characters."
-                  i18n-help
-                  [errors]="noteErrors()"
-                >
-                  <textarea appControl formControlName="notes" rows="5"></textarea>
-                </app-field>
-                <div class="note-actions">
-                  <button appButton type="submit" [loading]="context.busy()" i18n>Save note</button>
-                  <button appButton type="button" variant="text" (click)="cancelNoteEdit()" i18n>
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            } @else {
-              @if (client.coachNotes) {
-                <p class="note-body tb-text-compact" dir="auto">{{ client.coachNotes }}</p>
-              } @else {
-                <p class="note-body tb-text-compact muted" i18n>No note yet.</p>
-              }
-              <div class="note-action">
-                <button appButton type="button" variant="text" (click)="startNoteEdit()">
-                  @if (client.coachNotes) {
-                    <ng-container i18n>Edit coach note</ng-container>
+          <section class="panel records" aria-labelledby="records-heading">
+            <header class="panel-head">
+              <h2 id="records-heading" i18n>Strength records</h2>
+              <a class="panel-link" [routerLink]="['/clients', client.id, 'progress']" i18n
+                >All records</a
+              >
+            </header>
+            <div class="panel-body">
+              @switch (records().state) {
+                @case ('loading') {
+                  <app-skeleton [label]="loadingLabel" [lines]="3" />
+                }
+                @case ('error') {
+                  <div class="load-failed">
+                    <p role="alert" i18n>Records could not be loaded.</p>
+                    <button appButton type="button" variant="outlined" (click)="loadRecords()" i18n>
+                      Try again
+                    </button>
+                  </div>
+                }
+                @default {
+                  @if (recordList().length > 0) {
+                    <ul class="record-list" role="list">
+                      @for (record of recordList(); track record.key) {
+                        <li class="record">
+                          <span class="pr" aria-hidden="true">PR</span>
+                          <span class="record-name" dir="auto">{{ record.exercise }}</span>
+                          <strong class="record-amount">{{ record.amount }}</strong>
+                          <time class="record-date" [attr.datetime]="record.isoDate">
+                            {{ record.date }}
+                          </time>
+                        </li>
+                      }
+                    </ul>
+                  } @else if (records().value?.isAllowed === false) {
+                    <p class="muted" dir="auto">{{ recordsClosed() }}</p>
                   } @else {
-                    <ng-container i18n>Add coach note</ng-container>
+                    <p class="muted" dir="auto" i18n>
+                      No records yet. Each one appears here when {{ client.firstName }} lifts more
+                      than before at the same number of reps.
+                    </p>
                   }
-                </button>
-              </div>
-            }
+                }
+              }
+            </div>
           </section>
-        </aside>
+        </div>
+
+        <div class="rail">
+          <section class="panel checkin" aria-labelledby="checkin-heading">
+            <header class="panel-head">
+              <h2 id="checkin-heading" i18n>Check-in</h2>
+              @if (checkIn()?.pill; as pill) {
+                <app-status-pill [label]="pill.label" [tone]="pill.tone" />
+              }
+            </header>
+            <div class="panel-body">
+              @switch (checkIns().state) {
+                @case ('loading') {
+                  <app-skeleton [label]="loadingLabel" [lines]="2" />
+                }
+                @case ('denied') {
+                  <p class="muted" dir="auto">{{ checkInDenied() }}</p>
+                }
+                @case ('error') {
+                  <div class="load-failed">
+                    <p role="alert" i18n>Check-ins could not be loaded.</p>
+                    <button
+                      appButton
+                      type="button"
+                      variant="outlined"
+                      (click)="loadCheckIns()"
+                      i18n
+                    >
+                      Try again
+                    </button>
+                  </div>
+                }
+                @default {
+                  @if (checkIn(); as card) {
+                    <p class="checkin-title" dir="auto">{{ card.heading }}</p>
+                    @if (card.detail) {
+                      <p class="muted">{{ card.detail }}</p>
+                    }
+                    @if (card.next; as next) {
+                      <p class="checkin-next" [class.late]="next.late">{{ next.text }}</p>
+                    }
+                    <div class="checkin-actions">
+                      @if (card.action; as action) {
+                        <a
+                          appButton
+                          variant="outlined"
+                          [routerLink]="action.link"
+                          [queryParams]="action.queryParams"
+                          >{{ action.label }}</a
+                        >
+                      }
+                      <a class="panel-link" [routerLink]="['/clients', client.id, 'checkins']" i18n
+                        >All check-ins</a
+                      >
+                    </div>
+                  }
+                }
+              }
+            </div>
+          </section>
+
+          <ng-container [ngTemplateOutlet]="notes" />
+        </div>
       </div>
     }
   </div>
+
+  <ng-template #notes>
+    <section class="panel notes" aria-labelledby="notes-heading">
+      <header class="panel-head">
+        <h2 id="notes-heading" i18n>Coach notes</h2>
+        <span class="panel-span" i18n>Private to your team</span>
+      </header>
+      <div class="panel-body">
+        @if (editingNote()) {
+          <form class="note-form" [formGroup]="noteForm" (ngSubmit)="saveNote()">
+            <app-field
+              label="Coach notes"
+              i18n-label
+              hideLabel
+              help="Your client never sees this. Up to 8,000 characters."
+              i18n-help
+              [errors]="noteErrors()"
+            >
+              <textarea
+                appControl
+                formControlName="notes"
+                name="coach-notes"
+                autocomplete="off"
+                rows="6"
+              ></textarea>
+            </app-field>
+            <div class="note-actions">
+              <button appButton type="submit" [loading]="context.busy()" i18n>Save note</button>
+              <button appButton type="button" variant="text" (click)="cancelNoteEdit()" i18n>
+                Cancel
+              </button>
+            </div>
+          </form>
+        } @else {
+          @if (client.coachNotes) {
+            <p class="note-body" dir="auto">{{ client.coachNotes }}</p>
+          } @else {
+            <p class="muted" i18n>No notes yet. Add what you want to remember about this client.</p>
+          }
+          @if (!client.release) {
+            <button appButton type="button" variant="outlined" (click)="startNoteEdit()">
+              @if (client.coachNotes) {
+                <ng-container i18n>Edit notes</ng-container>
+              } @else {
+                <ng-container i18n>Add a note</ng-container>
+              }
+            </button>
+          }
+        }
+      </div>
+    </section>
+  </ng-template>
 }

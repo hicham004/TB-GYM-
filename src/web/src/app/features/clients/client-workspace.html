@@ -1,6 +1,6 @@
 <div class="client-workspace">
-  <header class="client-header tb-theme">
-    <nav class="breadcrumb tb-text-metadata" aria-label="Breadcrumb" i18n-aria-label>
+  <header class="client-header">
+    <nav class="breadcrumb" aria-label="Breadcrumb" i18n-aria-label>
       <ol>
         <li><a routerLink="/clients" i18n>Clients</a></li>
         <li aria-current="page">
@@ -10,68 +10,62 @@
     </nav>
 
     @if (profile(); as client) {
-      <div class="identity">
-        <app-avatar [initials]="initials()" presentation="client" />
-        <div class="identity-copy">
-          <div class="name-row">
-            <h1 class="tb-text-section-title" dir="auto">{{ fullName() }}</h1>
-            @if (planStatus(); as status) {
-              <app-status-label [label]="status.label" [tone]="status.tone" />
+      <div class="identity-card">
+        <div class="identity">
+          <app-avatar class="face" [initials]="initials()" presentation="client" />
+          <div class="who">
+            <h1 #heading tabindex="-1" dir="auto">{{ fullName() }}</h1>
+            @if (client.goals) {
+              <p class="goal" dir="auto">{{ client.goals }}</p>
             }
-          </div>
-          @if (!context.isFormer()) {
-            @if (enrollment(); as plan) {
-              <p class="plan-line tb-text-metadata">
-                <span dir="auto">{{ plan.productName }}</span>
-                <span class="separator" aria-hidden="true">·</span>
-                <span i18n
-                  >Plan {{ plan.startDate | date: 'd MMM' }} –
-                  {{ plan.lastActiveDate | date: 'd MMM y' }}</span
-                >
-              </p>
-            } @else if (context.plans()) {
-              <p class="plan-line tb-text-metadata"><span i18n>No plan assigned yet</span></p>
-            }
-          }
-        </div>
-        <div class="header-actions">
-          <a appButton variant="text" [routerLink]="['/clients', clientId, 'intake']">
-            @if (context.isFormer()) {
-              <ng-container i18n>View intake</ng-container>
-            } @else {
-              <ng-container i18n>Edit intake</ng-container>
-            }
-          </a>
-          @if (!context.isFormer()) {
-            <button
-              appButton
-              type="button"
-              variant="outlined"
-              [loading]="startingConversation()"
-              (click)="messageClient()"
-            >
-              @if (startingConversation()) {
-                <ng-container i18n>Opening conversation…</ng-container>
-              } @else {
-                <span dir="auto" i18n>Message {{ client.firstName }}</span>
+            <div class="plan-row">
+              @if (planStatus(); as status) {
+                <app-status-pill [label]="status.label" [tone]="status.tone" />
               }
-            </button>
-          }
+              @if (planLine(); as line) {
+                <span class="plan-line" dir="auto">{{ line }}</span>
+              }
+              @if (coachLine(); as line) {
+                <span class="plan-line" dir="auto">{{ line }}</span>
+              }
+            </div>
+          </div>
+          <div class="header-actions">
+            @if (!context.isFormer()) {
+              @if (messagingIncluded()) {
+                <button
+                  appButton
+                  type="button"
+                  [loading]="startingConversation()"
+                  (click)="messageClient()"
+                >
+                  @if (startingConversation()) {
+                    <ng-container i18n>Opening conversation…</ng-container>
+                  } @else {
+                    <span dir="auto" i18n>Message {{ client.firstName }}</span>
+                  }
+                </button>
+              } @else if (messagingNote(); as note) {
+                <p class="messaging-note">{{ note }}</p>
+              }
+            }
+            <app-client-actions [label]="actionsLabel" [items]="actions()" />
+          </div>
         </div>
-      </div>
 
-      <app-section-nav class="sections" label="Client sections" i18n-label [links]="sections()" />
+        <app-section-nav class="sections" label="Client sections" i18n-label [links]="sections()" />
+      </div>
     }
 
-    <p class="page-error tb-text-compact" role="alert">{{ context.error() }}</p>
-    <p class="page-notice tb-text-compact" role="status">{{ context.notice() }}</p>
+    <p class="page-error" role="alert">{{ context.error() }}</p>
+    <p class="page-notice" role="status">{{ context.notice() }}</p>
   </header>
 
   @if (context.loading() && !profile()) {
-    <p class="loading-row tb-theme tb-text-compact" role="status" i18n>Loading client…</p>
+    <p class="loading-row" role="status" i18n>Loading client…</p>
   } @else if (context.loadError(); as message) {
-    <div class="load-error tb-theme">
-      <p class="tb-text-compact" role="alert">{{ message }}</p>
+    <div class="load-error">
+      <p role="alert">{{ message }}</p>
       <button appButton type="button" variant="outlined" (click)="retry()" i18n>Retry</button>
     </div>
   } @else if (profile()) {

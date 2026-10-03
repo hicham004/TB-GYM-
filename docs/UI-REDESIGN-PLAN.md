@@ -60,10 +60,10 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R2.5a | **Messages** (M7, the shared chat C6 reuses): inbox with faces and counts, a thread of bubbles by day with a "New messages" line, a pinned composer, live updates with no Refresh | §2 | Done · 2026-10-01 |
 | R2.5b | **Training** (M3): the program overview (week x of y, sessions done and missed) and history with PRs | §2 | Done · 2026-10-01 · 9218e29 |
 | R2.5c | **Me** (M8) and the **installable app** (manifest, icons, splash, install prompt) | §2 | Done · 2026-10-01 · 9218e29 |
-| R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | Built, not committed |
-| R3.2 | **Coach Today** (C1) | §2 | Built, not committed |
-| R3.3a | **Clients** (C2): the list with status, last activity, the last 7 days, filter chips and search | §2 | Built, not committed |
-| R3.3b | **Client profile** header, overview and progress (C3), with a coach read of the client's personal records | §2, plus backend tests | To do |
+| R3.1 | **Backend reads:** attention and activity, and the client-list projection (§5 C1–C2) | Integration tests, including wrong-tenant and other-coach cases | Done · 2026-10-03 · 971482d |
+| R3.2 | **Coach Today** (C1) | §2 | Done · 2026-10-03 · 428346f |
+| R3.3a | **Clients** (C2): the list with status, last activity, the last 7 days, filter chips and search | §2 | Done · 2026-10-03 · b702cfc |
+| R3.3b | **Client profile** header, overview and progress (C3), with a coach read of the client's personal records | §2, plus backend tests | Built, not committed |
 | R3.4 | **Client profile** training timeline and Service & access (C3) | §2 | To do |
 | R3.5 | **Coach Messages** (C6) and **coach brand settings** (§3.1), with backend setting and logo | §2, plus backend tests | To do |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Gate |
@@ -204,7 +204,8 @@ of the implemented R1.3 screens before production rollout.
   before R2.4c, which added only three icon glyphs; R2.5a's shell changes added about 1 kB, R2.5b
   0.2 kB, its mapping kept in the lazy Training chunk, R2.5c 3.9 kB: the install service, four
   icon glyphs and the saved-unit code, R3.2 0.3 kB, Coach Today itself being lazy, and R3.3a 0.2 kB,
-  the search glyph in the shared icon set, which brought it to 536.2 kB).
+  the search glyph in the shared icon set, which brought it to 536.2 kB). R3.3b put the client page's
+  two reads in `ApiClient` and measured 536.1 kB.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -214,6 +215,28 @@ of the implemented R1.3 screens before production rollout.
 - **A very large client list (from R3.3a).** Clients draws every row; fine for founding coaches (10
   to 80 clients). A gym with several hundred would want CDK virtual scroll or paging on the
   server. The search text is not kept in the address, so typing never navigates.
+- **Entry and correction tools (from R3.3b).** Recording a weigh-in, measurement or photo for a
+  client, and correcting or re-dating one, are still the older forms (browser selects and date
+  inputs) behind "Entries and corrections", in a light scope inside a dark page. Rebuild them as
+  sheets with the unsaved-changes guard (§9); the client's own `/progress` page opens the same
+  screen.
+- **Client Progress in dark (from R3.3b).** The weight, bar and photo-compare pieces now draw with
+  `--tb-accent-ink` and `--tb-chart-band`, and the dashboard's own colours are tokens, so the
+  client's Progress can be marked `REDESIGNED` after one dark screenshot pass (see "Client dark
+  mode"). Its "Personal records" list shows all 12 at once; the coach's does too, and both could
+  show five with "Show all".
+- **Check-in answers on the profile (from R3.3b).** The Check-in card says when the latest was sent
+  and its state, never what the client answered (CHK-012). Showing the answers beside the previous
+  check-in's is C5 (R4.3).
+- **An unsaved coach note (from R3.3b).** A refresh or closed tab asks first, but moving to another
+  section discards a note being edited, because the kit has no leave-confirmation dialog yet. The
+  same dialog serves the intake form, C4 and C7 (§9).
+- **Numbers in right-to-left (from R3.3b).** With English text in an RTL layout "60 kg × 5" and
+  "2 of 5" reorder their pieces, as they already do on Today and Clients. Settle it with the
+  translation work (locale number formatting, isolating each figure).
+- **Header extras (from R3.3b).** The header shows initials until there is a profile photo source,
+  and the owner sees "Coached by …" only for a team member's client. A "Last active" line beside the
+  plan is possible: the new overview read already returns it.
 
 ---
 
@@ -509,6 +532,31 @@ limited to the coach's assigned clients.
   - **Service & access** holds the plan, payments, renew, change coach and release.
 - Removes: raw ISO timestamps, always-visible admin forms, and "Cancellation reason" boxes shown
   by default.
+- Built in R3.3b (header, Overview and Progress; Training and Service & access are R3.4). Two coach
+  reads: `GET /api/clients/{clientId}/overview`, one client's slice of what Today and Clients already
+  work out (status, what needs the coach with each action's target, last activity, the workspace
+  week's sessions), so the page can never disagree with the list; and `GET
+  /api/training/clients/{clientProfileId}/personal-records`, the client's own list by the same rule
+  (TRN-019).
+  - Header: face (initials), name, goal, a plan pill with the days left ("Active · 41 days left", warm
+    in the last 14), the plan line, and "Coached by …" for an owner on a team member's client.
+    Message is the one filled button (hidden, with a plain line, when the plan lacks messaging).
+    Actions holds Assign program, Plan and payments (Renew plan in the last 14 days) and Edit intake;
+    each opens the section where the work happens until R3.4's drawers.
+  - Overview, in the order a coach asks: **Needs you** (the server's items, one action each, the
+    first filled; "Nothing needs you right now" when empty), **This week** (seven day marks, "2 of 4
+    sessions done", the program and its week, last activity, days logged), **Weight** (latest weekly
+    average, change on last week, a line), **Strength records** (the newest four), **Check-in** (the
+    latest sent with its state, and the next one due or overdue; workflow facts only, CHK-012) and
+    **Coach notes** (edited in place; a refresh asks before losing an unsaved note). A closed feature
+    says why ("Elie's plan has ended, so their training isn't shown", "Check-ins aren't part of Karl's
+    plan") instead of "could not be loaded", and a blocked client reads nothing and says so.
+  - Progress: the weight trend with a range switch, measurements, photos, strength records, training
+    and nutrition logging, in coach words (no "Your…", no self-service links). The older entry,
+    correction and photo tools sit behind one collapsed "Entries and corrections", loaded only when
+    opened, and list only days with a weigh-in. The page is about 2,600 px; it was 10,400.
+  - Both follow dark mode; the other sections stay light. Screenshots on the Atlas demo:
+    `docs/design/r33b-profile-*.png` and `r33b-progress-*.png`.
 
 **C4. Program builder (full rebuild): the coach's main tool**
 - Job: "Build a great program fast."

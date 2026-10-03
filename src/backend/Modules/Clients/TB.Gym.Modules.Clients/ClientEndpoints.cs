@@ -183,6 +183,20 @@ public static class ClientEndpoints
         .WithName("ListClientOverview")
         .Produces<ClientOverviewView>();
 
+        // One client's slice of the same read for their page (C3, R3.3b). The client id is a route
+        // parameter, so the tenant handler answers another coach's client 404 before this runs.
+        coachGroup.MapGet("/{clientId:guid}/overview", async (
+            Guid clientId,
+            ICoachOverviewService service,
+            CancellationToken cancellationToken) =>
+        {
+            var view = await service.GetClientAsync(clientId, cancellationToken);
+            return view is null ? Results.NotFound() : Results.Ok(view);
+        })
+        .WithName("GetClientOverview")
+        .Produces<ClientProfileOverviewView>()
+        .Produces(StatusCodes.Status404NotFound);
+
         // Coach Today (C1): who needs the coach now, what their clients did, and this week (R3.1).
         endpoints.MapGet("/api/coach-today", async (
             ICoachOverviewService service,

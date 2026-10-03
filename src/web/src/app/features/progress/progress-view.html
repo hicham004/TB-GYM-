@@ -117,9 +117,13 @@
       }
     </div>
 
+    <!-- Only days with a weigh-in: a row for every empty day made this page thousands of pixels tall. -->
+    @if (entryDays().length === 0) {
+      <p class="muted" i18n>No weigh-ins in this period.</p>
+    }
     <div class="day-list">
-      @for (day of view.days; track day.date) {
-        <article [class.missing]="!day.observation">
+      @for (day of entryDays(); track day.date) {
+        <article>
           <!--
             'mediumDate' is a named alias and cannot be embedded in a custom pattern: its own
             letters get read as pattern characters, which rendered "Sun, 0e28iu0DPMte". The alias
@@ -216,8 +220,6 @@
                 </button>
               </form>
             }
-          } @else {
-            <span class="missing-label" i18n>No weigh-in</span>
           }
         </article>
       }

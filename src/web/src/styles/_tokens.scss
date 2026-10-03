@@ -42,6 +42,9 @@ $serif: 'TB Home Serif', Georgia, 'Times New Roman', serif;
   --tb-on-accent-ink: var(--tb-on-brand);
   --tb-accent-ink-strong: var(--tb-brand-strong);
   --tb-accent-soft: color-mix(in srgb, var(--tb-accent) 30%, transparent);
+  // A chart's weekly-average line: darker than the accent so it reads on a white card (at least
+  // 3:1 for TB Gym's own brand).
+  --tb-chart-band: color-mix(in srgb, var(--tb-accent) 40%, var(--tb-brand));
   --tb-focus: var(--tb-accent-ink);
   // Status colours never follow the brand. Each reads at AA on every surface and on its own soft
   // fill, and ink reads on every soft fill.
@@ -80,6 +83,7 @@ $serif: 'TB Home Serif', Georgia, 'Times New Roman', serif;
   --tb-accent-ink-strong: color-mix(in srgb, var(--tb-accent-bright) 82%, #ffffff);
   // Weaker than on light, so muted text still reads on it.
   --tb-accent-soft: color-mix(in srgb, var(--tb-accent) 14%, transparent);
+  --tb-chart-band: color-mix(in srgb, var(--tb-accent-bright) 60%, var(--tb-surface));
   --tb-focus: var(--tb-accent-ink);
   --tb-success: #8fd3a6;
   --tb-success-soft: #173a27;

@@ -41,6 +41,8 @@ import { ModalSurface } from '../../ui/modal-surface';
 })
 export class ProgressDashboardView {
   readonly clientId = input<string | null>(null);
+  /** The client's first name, for the coach's sentences ("Maya has no weigh-ins in this period"). */
+  readonly clientName = input<string | null>(null);
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
@@ -64,6 +66,7 @@ export class ProgressDashboardView {
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly coachMode = computed(() => this.clientId() !== null);
+  protected readonly who = computed(() => this.clientName() ?? $localize`This client`);
   /** Only exact asset ids returned by the batch are eligible to bind protected image paths. */
   protected readonly grantedPreviewIds = signal<ReadonlySet<string>>(new Set());
   protected readonly chartPoints = computed(() =>
@@ -239,9 +242,12 @@ export class ProgressDashboardView {
             clientId
               ? firstValueFrom(this.api.getClientProgress(clientId, 'Kilogram', from, to))
               : firstValueFrom(this.api.getMyProgress(unit, from, to)),
-            clientId
-              ? Promise.resolve(null)
-              : firstValueFrom(this.api.getMyTrainingPersonalRecords()).catch(() => null),
+            // The same list by the same rule (TRN-019); a refused or failed read leaves it blank
+            // rather than the whole dashboard.
+            (clientId
+              ? firstValueFrom(this.api.getClientTrainingPersonalRecords(clientId))
+              : firstValueFrom(this.api.getMyTrainingPersonalRecords())
+            ).catch(() => null),
           ]),
         );
         if (!this.ownsLoad(key, generation)) {

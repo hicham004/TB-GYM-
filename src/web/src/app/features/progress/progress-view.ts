@@ -72,6 +72,10 @@ export class ProgressView {
   protected readonly measurementDays = computed(() =>
     (this.measurements()?.days ?? []).filter((day) => day.measurements.length > 0),
   );
+  /** The days with a weigh-in, oldest first: an empty day never gets a row (plan §2 rule 7). */
+  protected readonly entryDays = computed(() =>
+    (this.progress()?.days ?? []).filter((day) => day.observation !== null),
+  );
   protected readonly loading = signal(false);
   protected readonly measurementsLoading = signal(false);
   protected readonly busy = signal(false);

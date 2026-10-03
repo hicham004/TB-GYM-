@@ -299,6 +299,19 @@ public static class TrainingEndpoints
         .Produces<ExerciseHistoryPage>()
         .Produces(StatusCodes.Status404NotFound);
 
+        // The coach's read of what the client's own "personal records" shows (R3.3b, TRN-019).
+        coach.MapGet("/clients/{clientProfileId:guid}/personal-records", async (
+            Guid clientProfileId,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var records = await service.GetClientPersonalRecordsAsync(clientProfileId, cancellationToken);
+            return records is null ? Results.NotFound() : Results.Ok(records);
+        })
+        .WithName("GetClientTrainingPersonalRecords")
+        .Produces<ClientPersonalRecordsResult>()
+        .Produces(StatusCodes.Status404NotFound);
+
         var client = endpoints
             .MapGroup("/api/training/me")
             .RequireAuthorization(AuthorizationPolicies.TenantClient)

@@ -5,8 +5,8 @@ const sections = () => import('./client-workspace-sections');
 
 export const clientRoutes: Routes = [
   {
-    // The two lists are rebuilt on brand v2 (R3.3a) and follow light or dark; a client's record
-    // below is not yet, so it stays light.
+    // The two lists are rebuilt on brand v2 (R3.3a) and follow light or dark. In a client's record
+    // below only the Overview and Progress are (R3.3b); the other sections stay light.
     path: '',
     title: $localize`Clients | TB Gym`,
     data: REDESIGNED,
@@ -20,8 +20,8 @@ export const clientRoutes: Routes = [
     loadComponent: () => import('./clients').then((module) => module.Clients),
   },
   {
-    // One client's record (Figma 131:419): a header and one route per section, so each section
-    // can be linked to, bookmarked and reloaded. The API authorizes every read and change.
+    // One client's record (C3): a header and one route per section, so each section can be linked
+    // to, bookmarked and reloaded. The API authorizes every read and change.
     path: ':clientId',
     loadComponent: () => import('./client-workspace').then((module) => module.ClientWorkspace),
     children: [
@@ -29,6 +29,7 @@ export const clientRoutes: Routes = [
         path: '',
         pathMatch: 'full',
         title: $localize`Client overview | TB Gym`,
+        data: REDESIGNED,
         loadComponent: () => import('./client-overview').then((module) => module.ClientOverview),
       },
       {
@@ -49,6 +50,7 @@ export const clientRoutes: Routes = [
       {
         path: 'progress',
         title: $localize`Client progress | TB Gym`,
+        data: REDESIGNED,
         loadComponent: () => sections().then((module) => module.ClientProgressSection),
       },
       {

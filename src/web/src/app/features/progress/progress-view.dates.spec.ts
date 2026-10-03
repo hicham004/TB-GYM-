@@ -75,17 +75,20 @@ const progress: ProgressViewModel = {
 };
 
 /** The client's own page by default; a coach's view of one client when `clientId` is given. */
-async function renderProgress(clientId: string | null = null): Promise<HTMLElement> {
+async function renderProgress(
+  clientId: string | null = null,
+  model: ProgressViewModel = progress,
+): Promise<HTMLElement> {
   await TestBed.configureTestingModule({
     imports: [ProgressView],
     providers: [
       {
         provide: ApiClient,
         useValue: {
-          getMyProgress: vi.fn(() => of(progress)),
+          getMyProgress: vi.fn(() => of(model)),
           getMyBodyMeasurements: vi.fn(() => of(null)),
           getMyProgressPhotos: vi.fn(() => of(null)),
-          getClientProgress: vi.fn(() => of(progress)),
+          getClientProgress: vi.fn(() => of(model)),
           getClientBodyMeasurements: vi.fn(() => of(null)),
           getClientProgressPhotos: vi.fn(() => of(null)),
         },
@@ -108,8 +111,17 @@ describe('ProgressView day list dates', () => {
     TestBed.resetTestingModule();
   });
 
-  it('renders each day as a readable weekday and date', async () => {
-    const element = await renderProgress();
+  it('renders each weigh-in day as a readable weekday and date', async () => {
+    // Every day has a weigh-in here, so every day is listed.
+    const weighed = (day: ProgressViewModel['days'][number]) => ({
+      ...day,
+      observation: { ...progress.days[0].observation!, measurementDate: day.date },
+      displayValue: 80,
+    });
+    const element = await renderProgress(null, {
+      ...progress,
+      days: progress.days.map(weighed),
+    });
 
     const days = [...element.querySelectorAll('.day-list article time')].map((time) => ({
       datetime: time.getAttribute('datetime'),
@@ -124,6 +136,28 @@ describe('ProgressView day list dates', () => {
       { datetime: '2026-06-30', text: 'Tue, Jun 30, 2026' },
       { datetime: '2026-07-01', text: 'Wed, Jul 1, 2026' },
     ]);
+  });
+
+  it('leaves a day without a weigh-in out of the list instead of giving it a row', async () => {
+    // Only the first of the three days has a weigh-in: the page was thousands of pixels tall
+    // because every empty day got a row of its own (plan §2 rule 7).
+    const element = await renderProgress();
+
+    const days = [...element.querySelectorAll('.day-list article time')].map((time) =>
+      time.getAttribute('datetime'),
+    );
+    expect(days).toEqual(['2026-06-29']);
+    expect(element.textContent).not.toContain('No weigh-in');
+  });
+
+  it('says so when the period holds no weigh-in at all', async () => {
+    const element = await renderProgress(null, {
+      ...progress,
+      days: progress.days.map((day) => ({ ...day, observation: null, displayValue: null })),
+    });
+
+    expect(element.querySelectorAll('.day-list article')).toHaveLength(0);
+    expect(element.textContent).toContain('No weigh-ins in this period.');
   });
 
   it('never embeds a named date alias inside a custom pattern anywhere on the page', async () => {

@@ -1,338 +1,314 @@
-// Coach desktop — Client overview (Figma 131:419): attention notices, the "This week" card with
-// its four metrics and four area rows, and the context rail (bodyweight trend, coach note).
+// A client's Overview (C3): cards in the order a coach asks the questions. Brand v2 tokens only, so
+// it follows the coach's brand and the person's mode. The layout answers to the width of the page
+// beside the sidebar, not the window, so it holds on a tablet and on a wide screen alike.
 :host {
+  container-type: inline-size;
   display: block;
 }
 
 .overview {
   display: flex;
   flex-direction: column;
-  gap: var(--space-24);
+  gap: 1.125rem;
   min-inline-size: 0;
 }
 
-.overview h2,
-.overview p {
-  margin: 0;
-}
+// ---------- the grid ----------
 
-.muted {
-  color: var(--color-text-secondary);
-}
-
-.separator {
-  color: var(--color-text-secondary);
-}
-
-.card {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-8);
-  min-inline-size: 0;
-}
-
-// ------------------------------------------------------------------------------------------------
-// Attention: a 4px rail, the reason, and one action at the inline end
-// ------------------------------------------------------------------------------------------------
-
-.attention {
-  align-items: center;
-  border: 1px solid var(--color-border-subtle);
-  border-inline-start: 4px solid var(--attention-rail);
-  border-radius: var(--radius-8);
+// On a phone both columns dissolve and the cards run in one column in the order set here.
+.grid {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-16) var(--space-24);
-  padding: var(--space-16) var(--space-24);
-}
-
-.attention.warning {
-  --attention-rail: var(--color-warning);
-  background-color: var(--color-warning-subtle);
-}
-
-// On the plain surface, not information-subtle: secondary text there falls below 4.5:1.
-.attention.information {
-  --attention-rail: var(--color-information);
-  background-color: var(--color-surface);
-}
-
-.attention-copy {
-  display: flex;
-  flex: 1 1 24rem;
   flex-direction: column;
-  gap: var(--space-8);
-  min-inline-size: 0;
+  gap: 1.125rem;
 }
 
-.attention-meta {
-  align-items: center;
-  color: var(--color-text-secondary);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4) var(--space-12);
+.main,
+.rail {
+  display: contents;
 }
 
-.attention h2 {
-  overflow-wrap: anywhere;
+.week {
+  order: 1;
 }
 
-// ------------------------------------------------------------------------------------------------
-// Evidence region: the week card and the 328px context rail side by side, stacked when narrow
-// ------------------------------------------------------------------------------------------------
-
-.evidence-region {
-  align-items: start;
-  display: grid;
-  gap: var(--space-24);
-  grid-template-columns: minmax(0, 1fr) minmax(16rem, 20.5rem);
+.checkin {
+  order: 2;
 }
 
-@media (max-width: 71.99em) {
-  .evidence-region {
-    grid-template-columns: minmax(0, 1fr);
+.weight {
+  order: 3;
+}
+
+.records {
+  order: 4;
+}
+
+.notes {
+  order: 5;
+}
+
+@container (min-width: 62rem) {
+  .grid {
+    align-items: start;
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  }
+
+  .main,
+  .rail {
+    display: flex;
+    flex-direction: column;
+    gap: 1.125rem;
+    min-inline-size: 0;
   }
 }
 
-.this-week {
-  display: flex;
-  flex-direction: column;
+// ---------- a card ----------
+
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  min-inline-size: 0;
   overflow: hidden;
 }
 
-.week-header {
-  border-block-end: 1px solid var(--color-border-subtle);
+.panel-head {
+  align-items: center;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-16) var(--space-24);
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  justify-content: space-between;
+  padding: 1rem 1.25rem 0.25rem;
 }
 
-// Four metrics in a row, divided by 1px rules; two by two, then one column, as width shrinks.
-.metrics {
-  border-block-end: 1px solid var(--color-border-subtle);
-  display: grid;
-  gap: 1px;
-  background-color: var(--color-border-subtle);
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+.panel-head h2 {
+  align-items: center;
+  color: var(--tb-ink);
+  display: flex;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.625rem;
   margin: 0;
 }
 
-.metric {
-  background-color: var(--color-surface);
+.panel-span {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+// A text link in a card's header or footer. The padding makes a finger-sized target; the stronger
+// colour on hover is the feedback.
+.panel-link {
+  border-radius: 6px;
+  color: var(--tb-accent-ink);
+  display: inline-block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding-block: 0.375rem;
+  text-underline-offset: 0.2em;
+}
+
+.panel-link:hover {
+  color: var(--tb-accent-ink-strong);
+}
+
+.panel-link:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.panel-body {
+  padding: 0.75rem 1.25rem 1.25rem;
+}
+
+.badge {
+  background: var(--tb-accent);
+  border-radius: 999px;
+  color: var(--tb-on-accent);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  padding: 0.125rem 0.5625rem;
+}
+
+.muted {
+  color: var(--tb-muted);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.prose {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--space-16) var(--space-24);
+  gap: 0.625rem;
+  justify-items: start;
 }
 
-.metric dt {
-  color: var(--color-text-secondary);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.prose p {
+  color: var(--tb-ink);
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
-.metric dd {
+.prose p.muted {
+  color: var(--tb-muted);
+}
+
+.prose a {
+  align-self: flex-start;
+}
+
+.load-failed {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.load-failed p {
+  color: var(--tb-ink);
   margin: 0;
 }
 
-.metric .value {
-  color: var(--color-text-primary);
-}
+// ---------- what needs the coach ----------
 
-.metric .meaning {
-  color: var(--color-text-secondary);
-}
-
-// Area rows: domain | statement + detail | status | action
-.evidence {
+.rows {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.evidence-row {
+.need {
   align-items: center;
+  border-block-start: 1px solid var(--tb-line);
   display: grid;
-  gap: var(--space-8) var(--space-16);
-  grid-template-columns: 5.5rem minmax(0, 1fr) 9rem auto;
-  padding: var(--space-12) var(--space-8) var(--space-12) var(--space-24);
+  gap: 0.5rem 0.875rem;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0.75rem 1.25rem;
 }
 
-.evidence-row + .evidence-row {
-  border-block-start: 1px solid var(--color-border-subtle);
+.rows > .need:first-child {
+  margin-block-start: 0.5rem;
 }
 
-.domain {
-  color: var(--color-text-secondary);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.need-action {
+  justify-self: start;
 }
 
-.evidence-copy {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  min-inline-size: 0;
+.tag {
+  display: none;
 }
 
-.statement {
-  color: var(--color-text-primary);
-  overflow-wrap: anywhere;
-}
-
-.detail {
-  color: var(--color-text-secondary);
-  overflow-wrap: anywhere;
-}
-
-.evidence-action {
-  display: flex;
-  justify-content: flex-end;
-}
-
-@media (max-width: 47.99em) {
-  .evidence-row {
-    grid-template-columns: minmax(0, 1fr);
-    padding-inline-end: var(--space-24);
+@container (min-width: 34rem) {
+  .need {
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
 
-  .evidence-action {
-    justify-content: flex-start;
+  .need-action {
+    justify-self: auto;
+  }
+
+  .tag {
+    display: inline-block;
   }
 }
 
-// ------------------------------------------------------------------------------------------------
-// Context rail
-// ------------------------------------------------------------------------------------------------
+.need-heading {
+  color: var(--tb-ink);
+  font-size: 0.90625rem;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 
-.context-rail {
+.need-detail {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  margin: 0.125rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.tag {
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.625rem;
+  white-space: nowrap;
+}
+
+.tag[data-tone='review'] {
+  background: var(--tb-warning-soft);
+  color: var(--tb-warning);
+}
+
+.tag[data-tone='message'],
+.tag[data-tone='new'] {
+  background: var(--tb-info-soft);
+  color: var(--tb-info);
+}
+
+.tag[data-tone='renew'] {
+  background: var(--tb-accent-soft);
+  color: var(--tb-ink);
+}
+
+.tag[data-tone='ending'] {
+  background: var(--tb-warm-soft);
+  color: var(--tb-warm-ink);
+}
+
+.tag[data-tone='share'] {
+  background: var(--tb-success-soft);
+  color: var(--tb-success);
+}
+
+.tag[data-tone='missed'] {
+  background: var(--tb-danger-soft);
+  color: var(--tb-danger);
+}
+
+.all-clear {
+  align-items: center;
+  color: var(--tb-muted);
   display: flex;
-  flex-direction: column;
-  gap: var(--space-16);
-  min-inline-size: 0;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.5rem 1.25rem 1.125rem;
 }
 
-.trend {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-12) var(--space-16);
+.all-clear app-icon {
+  background: var(--tb-accent);
+  border-radius: 50%;
+  color: var(--tb-on-accent);
+  padding: 0.125rem;
 }
 
-.trend-heading,
-.trend-current {
-  align-items: baseline;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4) var(--space-8);
-  justify-content: space-between;
-}
-
-.trend-plot {
-  display: flex;
-  gap: var(--space-8);
-}
-
-.y-axis {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  inline-size: 3.5rem;
-  justify-content: space-between;
-  text-align: end;
-}
-
-.plot {
-  block-size: 80px;
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  overflow: visible;
-}
-
-.plot polyline {
-  fill: none;
-  stroke: var(--color-accent);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2;
-  vector-effect: non-scaling-stroke;
-}
-
-.plot circle {
-  fill: var(--color-accent);
-}
-
-.x-axis {
-  display: flex;
-  gap: var(--space-8);
-  justify-content: space-between;
-  padding-inline-start: calc(3.5rem + var(--space-8));
-}
-
-.note {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-12) 0;
-}
-
-.note-label,
-.note-body,
-.note-form {
-  padding-inline: var(--space-16);
-}
-
-.note-label {
-  color: var(--color-text-secondary);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
+// ---------- coach notes ----------
 
 .note-body {
+  color: var(--tb-ink);
+  margin: 0 0 0.875rem;
   overflow-wrap: anywhere;
-  white-space: pre-line;
+  white-space: pre-wrap;
 }
 
-// Text-button row sits 8px in, so the button's 5px focus reach stays inside the card.
-.note-action {
-  padding-inline: var(--space-8);
+.notes .muted {
+  margin-block-end: 0.875rem;
 }
 
 .note-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-12);
+  gap: 0.75rem;
 }
 
 .note-actions {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-8);
-}
-
-// Former client record
-.former {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-16) var(--space-24);
-}
-
-.former .reason {
-  margin-inline-start: var(--space-8);
-}
-
-@media (forced-colors: active) {
-  .attention {
-    border-inline-start-color: CanvasText;
-  }
-
-  .plot polyline {
-    stroke: CanvasText;
-  }
-
-  .plot circle {
-    fill: CanvasText;
-  }
+  gap: 0.5rem;
 }

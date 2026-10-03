@@ -751,6 +751,24 @@ export type ClientPersonalRecordView = {
 export type ClientPlanState =
   'Running' | 'Paused' | 'PaymentDue' | 'NotStarted' | 'Ended' | 'None' | 'Blocked';
 
+export type ClientProfileOverviewView = {
+  today: string;
+  client: CoachClientRef;
+  joinedOn: string;
+  isNew: boolean;
+  status: ClientOverviewStatus;
+  planState: ClientPlanState;
+  planEndsOn: null | string;
+  attention: Array<CoachAttentionItemView>;
+  lastActivityKind: null | CoachActivityKind;
+  lastActivityAtUtc: null | string;
+  week: null | CoachWeekView;
+  attentionRuleKey: string;
+  attentionRuleVersion: number | string;
+  trainingRuleKey: string;
+  trainingRuleVersion: number | string;
+};
+
 export type ClientProgramPhase = 'Upcoming' | 'Current' | 'Finished';
 
 export type ClientProgramSessionView = {
@@ -4368,6 +4386,32 @@ export type ListClientOverviewResponses = {
 export type ListClientOverviewResponse =
   ListClientOverviewResponses[keyof ListClientOverviewResponses];
 
+export type GetClientOverviewData = {
+  body?: never;
+  path: {
+    clientId: string;
+  };
+  query?: never;
+  url: '/api/clients/{clientId}/overview';
+};
+
+export type GetClientOverviewErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetClientOverviewResponses = {
+  /**
+   * OK
+   */
+  200: ClientProfileOverviewView;
+};
+
+export type GetClientOverviewResponse =
+  GetClientOverviewResponses[keyof GetClientOverviewResponses];
+
 export type GetOwnClientProfileData = {
   body?: never;
   path?: never;
@@ -5680,6 +5724,32 @@ export type GetClientExerciseHistoryResponses = {
 
 export type GetClientExerciseHistoryResponse =
   GetClientExerciseHistoryResponses[keyof GetClientExerciseHistoryResponses];
+
+export type GetClientTrainingPersonalRecordsData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/training/clients/{clientProfileId}/personal-records';
+};
+
+export type GetClientTrainingPersonalRecordsErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetClientTrainingPersonalRecordsResponses = {
+  /**
+   * OK
+   */
+  200: ClientPersonalRecordsResult;
+};
+
+export type GetClientTrainingPersonalRecordsResponse =
+  GetClientTrainingPersonalRecordsResponses[keyof GetClientTrainingPersonalRecordsResponses];
 
 export type GetCoachWorkoutDetailData = {
   body?: never;

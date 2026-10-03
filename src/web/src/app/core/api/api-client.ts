@@ -708,6 +708,22 @@ export class ApiClient {
     );
   }
 
+  /** A coach's read of a client's personal records (R3.3b): the same list and rule as their own. */
+  getClientTrainingPersonalRecords(
+    clientId: string,
+  ): Observable<Phase3Contracts.ClientPersonalRecordsResult> {
+    return this.http.get<Phase3Contracts.ClientPersonalRecordsResult>(
+      `/api/training/clients/${clientId}/personal-records`,
+    );
+  }
+
+  /** One client's status, what needs the coach and this week, as Today and Clients work them out. */
+  getClientOverview(clientId: string): Observable<Phase3Contracts.ClientProfileOverviewView> {
+    return this.http.get<Phase3Contracts.ClientProfileOverviewView>(
+      `/api/clients/${clientId}/overview`,
+    );
+  }
+
   // The Training page maps these itself, so their mapping stays out of the initial bundle.
   /** Coach Today (R3.1). Phrased in the lazy dashboard chunk, so none of it is in the initial bundle. */
   getCoachToday(): Observable<Phase3Contracts.CoachTodayView> {

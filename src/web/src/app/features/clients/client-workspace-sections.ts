@@ -65,18 +65,90 @@ export class ClientNutritionSection {
   protected readonly formerHidden = FORMER_HIDDEN;
 }
 
+/**
+ * A client's Progress (C3): charts and a photo compare first, in coach words. Recording a weigh-in
+ * or measurement for the client, correcting one, and adding or removing photos stay behind one
+ * collapsed "Entries and corrections", and are only loaded once it is opened. That part is the
+ * older screen, so it keeps its own light colours inside a dark page.
+ */
 @Component({
   selector: 'app-client-progress-section',
   imports: [ProgressDashboardView, ProgressView],
   template: `
-    <app-progress-dashboard [clientId]="context.clientId()" />
+    <app-progress-dashboard
+      [clientId]="context.clientId()"
+      [clientName]="context.profile()?.firstName ?? null"
+    />
     @if (!context.isFormer()) {
-      <app-progress-view [clientId]="context.clientId()" />
+      <details class="entries" (toggle)="entriesToggled($event)">
+        <summary>
+          <span class="entries-title" i18n>Entries and corrections</span>
+          <span class="entries-hint" i18n
+            >Record a weigh-in or measurement, fix a mistake, add or remove photos.</span
+          >
+        </summary>
+        @if (entriesOpened()) {
+          <div class="entries-body" data-mode="light">
+            <app-progress-view [clientId]="context.clientId()" />
+          </div>
+        }
+      </details>
+    }
+  `,
+  styles: `
+    :host {
+      display: block;
+    }
+
+    .entries {
+      background: var(--tb-surface);
+      border: 1px solid var(--tb-line);
+      border-radius: var(--tb-radius-card);
+      box-shadow: var(--tb-shadow-card);
+      margin-block-start: 1rem;
+      overflow: hidden;
+    }
+
+    summary {
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+      min-block-size: 2.75rem;
+      padding: 0.875rem 1.25rem;
+    }
+
+    summary:focus-visible {
+      outline: 3px solid var(--tb-focus);
+      outline-offset: -3px;
+    }
+
+    .entries-title {
+      color: var(--tb-ink);
+      font-weight: 600;
+    }
+
+    .entries-hint {
+      color: var(--tb-muted);
+      font-size: 0.875rem;
+    }
+
+    // The older entry screen only has light colours, so it keeps a light scope inside a dark page.
+    .entries-body {
+      background: var(--tb-surface);
+      border-block-start: 1px solid var(--tb-line);
+      color: var(--tb-ink);
+      padding: 1rem 1.25rem 1.25rem;
     }
   `,
 })
 export class ClientProgressSection {
   protected readonly context = inject(ClientWorkspaceContext);
+  protected readonly entriesOpened = signal(false);
+
+  protected entriesToggled(event: Event): void {
+    if ((event.target as HTMLDetailsElement).open) this.entriesOpened.set(true);
+  }
 }
 
 /**

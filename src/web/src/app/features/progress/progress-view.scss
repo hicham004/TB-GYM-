@@ -41,7 +41,6 @@
 .week-grid small,
 .measurement small,
 .measurement span,
-.missing-label,
 .history-panel small {
   color: var(--muted-text);
 }
@@ -94,10 +93,6 @@
   min-height: 4rem;
   padding: 0.75rem;
   border-block-end: 1px solid var(--border);
-}
-
-.day-list > article.missing {
-  opacity: 0.72;
 }
 
 .row-actions {

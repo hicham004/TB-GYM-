@@ -1,10 +1,11 @@
 namespace TB.Gym.Modules.Clients;
 
 /// <summary>
-/// The coach's two overview reads (R3.1): Coach Today (C1) and the client list (C2). Both cover the
-/// clients the caller coaches (ADR 0026: a Coach their own, the Owner all) and leave out former
-/// clients. Each training, check-in and message signal is read only while the client's plan
-/// includes that feature (ADR 0013), and a weigh-in only while the relationship is not blocked.
+/// The coach's overview reads: Coach Today (C1) and the client list (C2) from R3.1, and one client's
+/// own slice of them for the client page (C3, R3.3b). All cover the clients the caller coaches
+/// (ADR 0026: a Coach their own, the Owner all) and leave out former clients. Each training, check-in
+/// and message signal is read only while the client's plan includes that feature (ADR 0013), and a
+/// weigh-in only while the relationship is not blocked.
 /// </summary>
 /// <remarks>
 /// The shape lives here; the composition is in Infrastructure, because only that layer may read the
@@ -18,6 +19,12 @@ public interface ICoachOverviewService
 
     /// <summary>Every client the caller coaches, with status, last activity and the last seven days.</summary>
     Task<ClientOverviewView> ListAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// One client the caller coaches, as Today and the list already work them out; null when the caller
+    /// does not coach them, or they do not exist, or they are a former client.
+    /// </summary>
+    Task<ClientProfileOverviewView?> GetClientAsync(Guid clientProfileId, CancellationToken cancellationToken);
 }
 
 /// <summary>Something waiting for the coach, most urgent first (CLI-018).</summary>
@@ -169,6 +176,29 @@ public sealed record ClientOverviewRow(
     CoachActivityKind? LastActivityKind,
     DateTimeOffset? LastActivityAtUtc,
     IReadOnlyList<SessionDayCountView>? RecentSessions);
+
+/// <summary>
+/// One client on their own page (C3): the status, what waits for the coach and the last activity the
+/// list shows for them, with each waiting item carrying what its one-tap action needs, as Today's
+/// queue does. <see cref="Week"/> is the workspace's calendar week (the same days Today counts), and
+/// is null when the plan does not include training.
+/// </summary>
+public sealed record ClientProfileOverviewView(
+    DateOnly Today,
+    CoachClientRef Client,
+    DateOnly JoinedOn,
+    bool IsNew,
+    ClientOverviewStatus Status,
+    ClientPlanState PlanState,
+    DateOnly? PlanEndsOn,
+    IReadOnlyList<CoachAttentionItemView> Attention,
+    CoachActivityKind? LastActivityKind,
+    DateTimeOffset? LastActivityAtUtc,
+    CoachWeekView? Week,
+    string AttentionRuleKey,
+    int AttentionRuleVersion,
+    string TrainingRuleKey,
+    int TrainingRuleVersion);
 
 /// <summary>The client list (C2), sorted by name, with the span the recent sessions were counted over.</summary>
 public sealed record ClientOverviewView(

@@ -92,6 +92,14 @@ public interface ITrainingApplicationService
 
     Task<ClientPersonalRecordsResult> GetMyPersonalRecordsAsync(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// A client's personal records for their coach (R3.3b), by the same rule as their own read
+    /// (TRN-019). Null when the client is not in this workspace.
+    /// </summary>
+    Task<ClientPersonalRecordsResult?> GetClientPersonalRecordsAsync(
+        Guid clientProfileId,
+        CancellationToken cancellationToken);
+
     Task<ClientTrainingProgramView> GetMyProgramAsync(CancellationToken cancellationToken);
 
     Task<ClientWorkoutHistoryPage> GetMyWorkoutHistoryAsync(int skip, CancellationToken cancellationToken);

@@ -535,8 +535,24 @@ client. Messages opens `?conversation=<id>` once, when that thread is in the fir
 R3.3a draws Clients from `GET /api/clients/overview` with no other call, through a feature-local
 `ClientListApi` (like `FormerClientsApi`, so it stays out of the initial bundle). The read returns
 every client in scope at once, so the chips and the search filter in the browser; the chosen chip is
-kept in `?show=` so Back returns to it. Both list routes carry `REDESIGNED`; a client's record does
-not yet and stays light.
+kept in `?show=` so Back returns to it. Both list routes carry `REDESIGNED`; the sections of a
+client's record follow in R3.3b and later.
+
+R3.3b adds two coach reads and rebuilds the front of a client's record, with no schema change.
+`GET /api/clients/{clientId}/overview` is one client's slice of the R3.1 reader (`LoadScopeAsync` can
+narrow to one client, so status, attention items and the workspace week come from the same code as
+Today and Clients). `GET /api/training/clients/{clientProfileId}/personal-records` shares one query
+with the client's own read (`ReadPersonalRecordsAsync`) and the training access decision. Both route
+parameters are named so the tenant handler answers another coach's client 404 before any code runs.
+In the web app the record's header (`ClientWorkspace`) shows the person, the plan with its days left,
+Message and an Actions menu (`ClientActions`, a disclosure menu like the shell's); the Overview and
+Progress routes carry `REDESIGNED`, the other sections stay light. The Overview loads five reads
+independently (`Part<T>`: one failure never blanks the page; a refused feature is `denied` with its
+reason, not "could not be loaded") and phrases them in `client-profile.models.ts`. The coach's
+Progress is the shared `ProgressDashboardView` in coach mode (client name input, coach wording, no
+self-service links, the coach's records read); the older entry, correction and photo tools sit behind
+one collapsed "Entries and corrections" that loads only when opened, in a light scope. The chart
+pieces draw with `--tb-accent-ink` and a new `--tb-chart-band` token, so they read on dark.
 
 R2.4a keeps client-entered extra food in a separate Nutrition log table, linked by tenant and log
 ID. The day read returns it beside planned slots and includes it in consumed totals; the assigned

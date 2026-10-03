@@ -143,9 +143,10 @@ const HEIGHT = 240;
   styles: [
     `
       :host {
-        /* Darker than the accent, so the average reads on a white card: at least 3:1 on the light
-           surface for TB Gym's own brand. */
-        --week-average: color-mix(in srgb, var(--tb-accent, #d9ed94) 40%, var(--tb-brand, #153d33));
+        /* The weekly average's line is a mode token (darker than the accent on light, lighter on
+           dark), and the trend and weigh-ins use the accent as ink: the brand on light, the bright
+           accent on dark, so the chart reads on both. */
+        --week-average: var(--tb-chart-band, #5f8b5c);
         display: block;
       }
       .trend-chart {
@@ -175,14 +176,14 @@ const HEIGHT = 240;
       }
       .trend-line {
         fill: none;
-        stroke: var(--tb-brand, #153d33);
+        stroke: var(--tb-accent-ink, #153d33);
         stroke-width: 3;
         stroke-linecap: round;
         stroke-linejoin: round;
         vector-effect: non-scaling-stroke;
       }
       .observation {
-        background: var(--tb-brand, #153d33);
+        background: var(--tb-accent-ink, #153d33);
         block-size: 0.6rem;
         border-radius: 50%;
         inline-size: 0.6rem;
@@ -214,9 +215,9 @@ const HEIGHT = 240;
         font-weight: 600;
       }
       .change {
-        background: color-mix(in srgb, var(--tb-accent, #d9ed94) 45%, transparent);
+        background: var(--tb-accent, #d9ed94);
         border-radius: 99px;
-        color: var(--tb-brand, #153d33);
+        color: var(--tb-on-accent, #11201b);
         font-size: 0.84rem;
         font-variant-numeric: tabular-nums;
         font-weight: 700;
@@ -247,7 +248,7 @@ const HEIGHT = 240;
         flex: none;
       }
       .trend-key {
-        background: var(--tb-brand, #153d33);
+        background: var(--tb-accent-ink, #153d33);
         block-size: 0.25rem;
         border-radius: 1rem;
         inline-size: 1rem;
@@ -258,7 +259,7 @@ const HEIGHT = 240;
         inline-size: 1rem;
       }
       .dot-key {
-        background: var(--tb-brand, #153d33);
+        background: var(--tb-accent-ink, #153d33);
         block-size: 0.6rem;
         border-radius: 50%;
         inline-size: 0.6rem;
@@ -283,7 +284,7 @@ const HEIGHT = 240;
       th,
       td {
         padding: 0.25rem;
-        border-block-end: 1px solid #d9dfd1;
+        border-block-end: 1px solid var(--tb-line, #d9dfd1);
         text-align: start;
       }
       .empty {

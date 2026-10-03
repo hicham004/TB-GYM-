@@ -33,7 +33,7 @@ internal sealed class CoachOverviewReader(
 {
     public async Task<CoachTodayView> GetTodayAsync(CancellationToken cancellationToken)
     {
-        var scope = await LoadScopeAsync(cancellationToken);
+        var scope = await LoadScopeAsync(null, cancellationToken);
         var today = scope.Calendar.Today;
         var weekFrom = StartOfWeek(today, scope.Calendar.WeekStartsOn);
         var states = await LoadStatesAsync(
@@ -68,7 +68,7 @@ internal sealed class CoachOverviewReader(
 
     public async Task<ClientOverviewView> ListAsync(CancellationToken cancellationToken)
     {
-        var scope = await LoadScopeAsync(cancellationToken);
+        var scope = await LoadScopeAsync(null, cancellationToken);
         var today = scope.Calendar.Today;
         var recentFrom = today.AddDays(1 - CoachAttentionPolicy.RecentDays);
         var states = await LoadStatesAsync(
@@ -105,13 +105,65 @@ internal sealed class CoachOverviewReader(
             TrainingAttentionPolicy.Version);
     }
 
+    /// <summary>
+    /// One client's page (C3): the same state, status and attention items the list and Today derive,
+    /// for the one client, plus the workspace week's days counted as Today counts them.
+    /// </summary>
+    public async Task<ClientProfileOverviewView?> GetClientAsync(
+        Guid clientProfileId,
+        CancellationToken cancellationToken)
+    {
+        var scope = await LoadScopeAsync(clientProfileId, cancellationToken);
+        if (scope.Clients.Count == 0)
+        {
+            return null;
+        }
+
+        var today = scope.Calendar.Today;
+        var weekFrom = StartOfWeek(today, scope.Calendar.WeekStartsOn);
+        var states = await LoadStatesAsync(
+            scope,
+            Earliest(today.AddDays(-TrainingAttentionPolicy.MissedLookbackDays), weekFrom),
+            Latest(today.AddDays(1), weekFrom.AddDays(7)),
+            cancellationToken);
+        var state = states.Single();
+        var lastActivity = await LoadLastActivityAsync(scope, cancellationToken);
+        lastActivity.TryGetValue(state.Client.Id, out var last);
+
+        var days = Days(state.Sessions, weekFrom, 7);
+        return new ClientProfileOverviewView(
+            today,
+            state.Client.Ref,
+            state.JoinedOn,
+            CoachAttentionPolicy.IsNew(state.JoinedOn, today),
+            CoachAttentionPolicy.Status(state.Flags, state.PlanState),
+            state.PlanState,
+            state.PlanEndsOn,
+            CoachAttentionPolicy.Rank(Items(state)),
+            last?.Kind,
+            last?.AtUtc,
+            state.TrainingIncluded
+                ? new CoachWeekView(
+                    weekFrom,
+                    weekFrom.AddDays(7),
+                    days.Sum(day => day.Scheduled),
+                    days.Sum(day => day.Completed),
+                    days)
+                : null,
+            CoachAttentionPolicy.Key,
+            CoachAttentionPolicy.Version,
+            TrainingAttentionPolicy.Key,
+            TrainingAttentionPolicy.Version);
+    }
+
     // ---------- scope and per-client state ----------
 
     /// <summary>
     /// The caller's clients (ADR 0026: a Coach's own, every one for the Owner; never a former client),
-    /// the workspace calendar, and every client's access decisions from one batched evaluation.
+    /// or just <paramref name="onlyClientProfileId"/> when that one is among them, the workspace
+    /// calendar, and every client's access decisions from one batched evaluation.
     /// </summary>
-    private async Task<Scope> LoadScopeAsync(CancellationToken cancellationToken)
+    private async Task<Scope> LoadScopeAsync(Guid? onlyClientProfileId, CancellationToken cancellationToken)
     {
         var calendar = await WorkspaceCalendarReader.ReadAsync(
             dbContext,
@@ -119,6 +171,11 @@ internal sealed class CoachOverviewReader(
             tenantContext.TenantId,
             cancellationToken);
         var query = dbContext.ClientProfiles.AsNoTracking().Where(client => client.ReleasedAtUtc == null);
+        if (onlyClientProfileId is { } clientProfileId)
+        {
+            query = query.Where(client => client.Id == clientProfileId);
+        }
+
         if (await coachClientScope.RestrictedCoachUserIdAsync(cancellationToken) is { } coachUserId)
         {
             query = query.Where(client => client.AssignedCoachUserId == coachUserId);

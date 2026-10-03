@@ -1,9 +1,12 @@
-<div class="progress-page">
-  <header class="page-head">
-    <p class="eyebrow" i18n>THE LONG VIEW</p>
-    <h1 i18n>Progress</h1>
-    <p i18n>Small entries add up. See what has changed.</p>
-  </header>
+<div class="progress-page" [class.coach]="coachMode()">
+  <!-- A coach reads this inside a client's record, whose own heading and tabs say where they are. -->
+  @if (!coachMode()) {
+    <header class="page-head">
+      <p class="eyebrow" i18n>THE LONG VIEW</p>
+      <h1 i18n>Progress</h1>
+      <p i18n>Small entries add up. See what has changed.</p>
+    </header>
+  }
   @if (weightNotice()) {
     <p role="status" class="notice">{{ weightNotice() }}</p>
   }
@@ -62,7 +65,13 @@
       <div class="section-top">
         <div>
           <p class="eyebrow" i18n>BODYWEIGHT</p>
-          <h2 id="weight-heading" i18n>Your weight trend</h2>
+          <h2 id="weight-heading">
+            @if (coachMode()) {
+              <ng-container i18n>Weight trend</ng-container>
+            } @else {
+              <ng-container i18n>Your weight trend</ng-container>
+            }
+          </h2>
         </div>
         <span class="date-span"
           >{{ progress()?.from ?? view.from | date: 'd MMM y' }} –
@@ -92,10 +101,12 @@
           Last weighed {{ entries()[0].date | date: 'd MMM' }} · {{ entries().length }} of
           {{ progress()?.days?.length ?? view.windowDayCount }} days recorded
         </p>
+      } @else if (coachMode()) {
+        <p class="empty" dir="auto" i18n>{{ who() }} has no weigh-ins in this period.</p>
       } @else {
         <p class="empty" i18n>Your weight chart will appear after your first entry.</p>
       }
-      @if (progress()) {
+      @if (progress() && entries().length) {
         <app-trend-chart
           [points]="chartPoints()"
           [weeks]="chartWeeks()"
@@ -112,10 +123,16 @@
             <p class="eyebrow" i18n>THE DETAILS</p>
             <h2 id="measurements-heading" i18n>Measurements</h2>
           </div>
-          <a routerLink="/progress" i18n>Manage</a>
+          @if (!coachMode()) {
+            <a routerLink="/progress" i18n>Manage</a>
+          }
         </div>
         @if (!view.measurements.length) {
-          <p class="empty" i18n>Measurements you log will show their changes here.</p>
+          @if (coachMode()) {
+            <p class="empty" dir="auto" i18n>{{ who() }} has no measurements in this period.</p>
+          } @else {
+            <p class="empty" i18n>Measurements you log will show their changes here.</p>
+          }
         } @else {
           <ul class="measurement-list">
             @for (measurement of view.measurements; track measurement.measurementType) {
@@ -150,19 +167,28 @@
             <p class="eyebrow" i18n>VISUAL HISTORY</p>
             <h2 id="photos-heading" i18n>Photos</h2>
           </div>
-          <a routerLink="/progress" i18n>View all</a>
+          @if (!coachMode()) {
+            <a routerLink="/progress" i18n>View all</a>
+          }
         </div>
         @if (photoPair(); as pair) {
           <app-photo-compare
             [beforeSrc]="pair.before.thumbnailUrl!"
             [afterSrc]="pair.after.thumbnailUrl!"
-            [beforeLabel]="pair.before.photoDate"
-            [afterLabel]="pair.after.photoDate"
+            [beforeLabel]="(pair.before.photoDate | date: 'd MMM y') ?? ''"
+            [afterLabel]="(pair.after.photoDate | date: 'd MMM y') ?? ''"
           />
         } @else if (view.photos.photoCount > 0) {
-          <p class="empty" i18n>
-            Two photos in the same pose are needed for a comparison. Your photos are under View all.
-          </p>
+          @if (coachMode()) {
+            <p class="empty" i18n>Two photos in the same pose are needed for a comparison.</p>
+          } @else {
+            <p class="empty" i18n>
+              Two photos in the same pose are needed for a comparison. Your photos are under View
+              all.
+            </p>
+          }
+        } @else if (coachMode()) {
+          <p class="empty" dir="auto" i18n>{{ who() }} has no progress photos in this period.</p>
         } @else {
           <p class="empty" i18n>Log photos over time to compare them here.</p>
         }
@@ -187,10 +213,17 @@
             }
           </div>
           @if (view.photos.previewPhotoCount < view.photos.photoCount) {
-            <p class="context" i18n>
-              Showing {{ view.photos.previewPhotoCount }} of {{ view.photos.photoCount }} photos.
-              View all for the full history.
-            </p>
+            @if (coachMode()) {
+              <p class="context" i18n>
+                Showing {{ view.photos.previewPhotoCount }} of {{ view.photos.photoCount }} photos.
+                The full list is under Entries and corrections.
+              </p>
+            } @else {
+              <p class="context" i18n>
+                Showing {{ view.photos.previewPhotoCount }} of {{ view.photos.photoCount }} photos.
+                View all for the full history.
+              </p>
+            }
           }
         }
       </section>
@@ -201,7 +234,13 @@
         <div class="section-top">
           <div>
             <p class="eyebrow" i18n>STRONGER</p>
-            <h2 id="records-heading" i18n>Personal records</h2>
+            <h2 id="records-heading">
+              @if (coachMode()) {
+                <ng-container i18n>Strength records</ng-container>
+              } @else {
+                <ng-container i18n>Personal records</ng-container>
+              }
+            </h2>
           </div>
         </div>
         @if (!view.training.available) {
@@ -222,66 +261,76 @@
               </li>
             }
           </ul>
+        } @else if (coachMode()) {
+          <p class="empty" dir="auto" i18n>
+            No records yet. Each one appears when {{ who() }} lifts more than before at the same
+            number of reps.
+          </p>
         } @else {
           <p class="empty" i18n>Your best completed lifts will appear here.</p>
         }
       </section>
-      <section class="panel" aria-labelledby="training-heading">
-        <div class="section-top">
-          <div>
-            <p class="eyebrow" i18n>SHOWING UP</p>
-            <h2 id="training-heading" i18n>Training</h2>
+      <div class="stack">
+        <section class="panel" aria-labelledby="training-heading">
+          <div class="section-top">
+            <div>
+              <p class="eyebrow" i18n>SHOWING UP</p>
+              <h2 id="training-heading" i18n>Training</h2>
+            </div>
           </div>
-        </div>
-        @if (!view.training.available) {
-          <p class="empty">{{ unavailableReason(view.training.reason) }}</p>
-        } @else if (view.training.context) {
-          <app-bar-chart
-            [bars]="trainingBars()"
-            label="Completed sessions compared with scheduled sessions"
-          />
-        }
-      </section>
+          @if (!view.training.available) {
+            <p class="empty">{{ unavailableReason(view.training.reason) }}</p>
+          } @else if (view.training.context) {
+            <app-bar-chart
+              [bars]="trainingBars()"
+              label="Completed sessions compared with scheduled sessions"
+            />
+          }
+        </section>
+
+        <section class="panel nutrition-panel" aria-labelledby="nutrition-heading">
+          <div class="section-top">
+            <div>
+              <p class="eyebrow" i18n>DAILY RHYTHM</p>
+              <h2 id="nutrition-heading" i18n>Nutrition logging</h2>
+            </div>
+          </div>
+          @if (!view.nutrition.available) {
+            <p class="empty">{{ unavailableReason(view.nutrition.reason) }}</p>
+          } @else if (view.nutrition.context; as nutrition) {
+            <strong>{{ nutrition.recentLoggedDayCount }} of {{ nutrition.recentDayCount }}</strong
+            ><span i18n> days logged recently</span>
+            <p class="context" i18n>
+              {{ nutrition.windowLoggedDayCount }} of {{ view.windowDayCount }} days logged in this
+              period
+            </p>
+          }
+        </section>
+      </div>
     </div>
 
-    <section class="panel nutrition-panel" aria-labelledby="nutrition-heading">
-      <div class="section-top">
-        <div>
-          <p class="eyebrow" i18n>DAILY RHYTHM</p>
-          <h2 id="nutrition-heading" i18n>Nutrition logging</h2>
-        </div>
-      </div>
-      @if (!view.nutrition.available) {
-        <p class="empty">{{ unavailableReason(view.nutrition.reason) }}</p>
-      } @else if (view.nutrition.context; as nutrition) {
-        <strong>{{ nutrition.recentLoggedDayCount }} of {{ nutrition.recentDayCount }}</strong
-        ><span i18n> days logged recently</span>
-        <p class="context" i18n>
-          {{ nutrition.windowLoggedDayCount }} of {{ view.windowDayCount }} days logged in this
-          period
-        </p>
-      }
-    </section>
-
-    <details class="all-entries">
-      <summary i18n>All entries</summary>
-      @if (!entries().length) {
-        <p class="empty" i18n>No weight entries in this period yet.</p>
-      } @else {
-        <ol>
-          @for (entry of entries(); track entry.date) {
-            <li>
-              <time>{{ entry.date | date: 'mediumDate' }}</time
-              ><strong
-                >{{ entry.displayValue | number: '1.0-2' }}
-                {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}</strong
-              >
-            </li>
-          }
-        </ol>
-      }
-      <a routerLink="/progress" i18n>Open the full entry history and corrections</a>
-    </details>
+    <!-- A coach's list of weigh-ins, with its corrections, is under "Entries and corrections". -->
+    @if (!coachMode()) {
+      <details class="all-entries">
+        <summary i18n>All entries</summary>
+        @if (!entries().length) {
+          <p class="empty" i18n>No weight entries in this period yet.</p>
+        } @else {
+          <ol>
+            @for (entry of entries(); track entry.date) {
+              <li>
+                <time>{{ entry.date | date: 'mediumDate' }}</time
+                ><strong
+                  >{{ entry.displayValue | number: '1.0-2' }}
+                  {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}</strong
+                >
+              </li>
+            }
+          </ol>
+        }
+        <a routerLink="/progress" i18n>Open the full entry history and corrections</a>
+      </details>
+    }
     <p class="footnote" i18n>
       These figures show recorded activity side by side. One does not explain another.
     </p>

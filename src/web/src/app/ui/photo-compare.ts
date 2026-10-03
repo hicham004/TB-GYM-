@@ -62,7 +62,7 @@ import { Component, input, signal } from '@angular/core';
       }
       input {
         flex: 1;
-        accent-color: var(--tb-brand, #153d33);
+        accent-color: var(--tb-accent-ink, #153d33);
         min-block-size: 2.75rem;
       }
     `,

@@ -136,6 +136,11 @@ for any of those but the plan's end, else Paused, Ending soon, On track for a ru
 active plan. A client is new for 14 days after joining. The activity feed holds finished workouts,
 with their records (TRN-019), and sent check-ins of the last 7 days; a weigh-in counts only as a
 client's last activity. Counts carry their dates; no percentage is derived on the server.
+A client's own page (R3.3b, `GET /api/clients/{clientId}/overview`) reads the same rule for that one
+client: the same status, the same ranked items with what each one's action needs, the last activity,
+and the workspace calendar week's sessions counted as Today counts them (null when training is not in
+the plan). It answers 404 for a former client, another coach's client or an unknown one, so the page
+can never say "nothing needs you" about a client the list flags.
 
 ## 3. Products, enrollments, payments, programs, and access
 
@@ -335,7 +340,11 @@ the coach.
 and explicit unit among completed sets (ADR 0031). A tie is not a new PR. Set saves and workout
 completion evaluate the same named, versioned server rule; the UI does not convert units.
 The client's workout history (R2.5b) shows, for each finished workout, the records it set against
-the workouts finished before it started, through the same rule.
+the workouts finished before it started, through the same rule. A coach reads a client's records
+(R3.3b, `GET /api/training/clients/{clientProfileId}/personal-records`) as the same list by the
+same rule, for their own clients only (CLI-013) and while the client's plan includes training: a
+lapsed or paused plan, a block or a former client closes it for the coach too, answering with the
+reason and no records, never an empty list.
 
 **TRN-020** Session state v1 (`WorkoutThenScheduledDate`, R2.5b) is what the client's Training page
 shows for each session of a visible week. The workout decides first: a completed workout is

@@ -1,49 +1,65 @@
-import { DatePipe } from '@angular/common';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { formatDate } from '@angular/common';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  Injector,
+  LOCALE_ID,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { ActivatedRoute, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
+import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Avatar } from '../../ui/avatar';
-import { Button, ButtonLink } from '../../ui/button';
+import { Button } from '../../ui/button';
 import { SectionNav, type SectionLink } from '../../ui/section-nav';
-import { StatusLabel, type StatusTone } from '../../ui/status-label';
+import { StatusPill, type StatusPillTone } from '../../ui/status-pill';
 import { ConversationLaunch } from '../messaging/conversation-launch';
-import { currentEnrollment, daysBetween, RENEWAL_PROMPT_DAYS } from './client-overview.models';
+import { ClientActions, type ClientAction } from './client-actions';
+import {
+  currentEnrollment,
+  daysBetween,
+  RENEWAL_PROMPT_DAYS,
+  renewalPrompt,
+} from './client-overview.models';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
 /**
- * One client's record (Figma 131:419): the header, the section links and the open section. Each
- * section is its own route under `/clients/:clientId`, so it can be linked to and reloaded.
+ * One client's record (C3): the header, the section links and the open section. Each section is
+ * its own route under `/clients/:clientId`, so it can be linked to, bookmarked and reloaded. The
+ * header is the person first (face, name, goal), then where their plan stands, then the one
+ * primary action (Message) with everything else behind Actions (plan §2 rules 3 and 5).
  */
 @Component({
   selector: 'app-client-workspace',
-  imports: [
-    Avatar,
-    Button,
-    ButtonLink,
-    DatePipe,
-    RouterLink,
-    RouterOutlet,
-    SectionNav,
-    StatusLabel,
-  ],
+  imports: [Avatar, Button, ClientActions, RouterLink, RouterOutlet, SectionNav, StatusPill],
   providers: [ClientWorkspaceContext],
   templateUrl: './client-workspace.html',
   styleUrl: './client-workspace.scss',
 })
 export class ClientWorkspace {
   private readonly api = inject(ApiClient);
+  private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
   private readonly router = inject(Router);
   private readonly conversationLaunch = inject(ConversationLaunch);
+  private readonly injector = inject(Injector);
+  private readonly locale = inject(LOCALE_ID);
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly conversationKeys = new Map<string, string>();
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private loadedKey: string | null = null;
+  private focusedHeading = false;
 
   protected readonly context = inject(ClientWorkspaceContext);
   protected readonly clientId = inject(ActivatedRoute).snapshot.paramMap.get('clientId') ?? '';
@@ -51,6 +67,7 @@ export class ClientWorkspace {
   protected readonly startingConversation = signal(false);
   /** The breadcrumb's last item until the record has loaded. */
   protected readonly clientLabel = $localize`Client`;
+  protected readonly actionsLabel = $localize`Actions`;
 
   protected readonly fullName = computed(() => {
     const profile = this.profile();
@@ -71,7 +88,8 @@ export class ClientWorkspace {
     return workspace && plans ? currentEnrollment(plans.enrollments, workspace.currentDate) : null;
   });
 
-  protected readonly planStatus = computed<{ label: string; tone: StatusTone } | null>(() => {
+  /** Where the plan stands, with the days left while it runs. */
+  protected readonly planStatus = computed<{ label: string; tone: StatusPillTone } | null>(() => {
     if (this.context.isFormer()) return { label: $localize`Former client`, tone: 'neutral' };
     const workspace = this.context.workspace();
     if (!workspace || !this.context.plans()) return null;
@@ -80,18 +98,15 @@ export class ClientWorkspace {
     switch (enrollment.effectiveStatus) {
       case 'Active': {
         const daysLeft = daysBetween(workspace.currentDate, enrollment.lastActiveDate);
-        if (daysLeft === 0) return { label: $localize`Plan ends today`, tone: 'warning' };
-        if (daysLeft === 1) return { label: $localize`Plan ends tomorrow`, tone: 'warning' };
-        if (daysLeft > 0 && daysLeft <= RENEWAL_PROMPT_DAYS) {
-          return {
-            label: $localize`Plan ends in ${daysLeft}:count: days`,
-            tone: 'warning',
-          };
+        if (daysLeft <= 0) return { label: $localize`Plan ends today`, tone: 'warm' };
+        if (daysLeft === 1) return { label: $localize`Plan ends tomorrow`, tone: 'warm' };
+        if (daysLeft <= RENEWAL_PROMPT_DAYS) {
+          return { label: $localize`Plan ends in ${daysLeft}:count: days`, tone: 'warm' };
         }
-        return { label: $localize`Active plan`, tone: 'success' };
+        return { label: $localize`Active · ${daysLeft}:count: days left`, tone: 'success' };
       }
       case 'Paused':
-        return { label: $localize`Plan paused`, tone: 'warning' };
+        return { label: $localize`Plan paused`, tone: 'info' };
       case 'PendingPayment':
         return { label: $localize`Awaiting payment`, tone: 'warning' };
       case 'Upcoming':
@@ -103,6 +118,90 @@ export class ClientWorkspace {
       case 'Blocked':
         return { label: $localize`Access blocked`, tone: 'danger' };
     }
+  });
+
+  /** "Online Coaching · 12 weeks · until Thu 22 Oct": the plan in a line. */
+  protected readonly planLine = computed(() => {
+    const workspace = this.context.workspace();
+    const plan = this.enrollment();
+    if (this.context.isFormer() || !workspace || !plan) return '';
+    const last = plan.lastActiveDate;
+    const sameYear = last.slice(0, 4) === workspace.currentDate.slice(0, 4);
+    const date = formatDate(last, sameYear ? 'EEE d MMM' : 'd MMM y', this.locale);
+    const when =
+      plan.effectiveStatus === 'Expired' || plan.effectiveStatus === 'Cancelled'
+        ? $localize`ended ${date}:date:`
+        : $localize`until ${date}:date:`;
+    return [plan.productName, plan.offerLabel, when].filter(Boolean).join(' · ');
+  });
+
+  /** The owner sees whose client this is when it is a team member's. */
+  protected readonly coachLine = computed(() => {
+    const profile = this.profile();
+    const me = this.auth.user()?.id;
+    return this.tenants.isOwner() && profile && me && profile.assignedCoachUserId !== me
+      ? $localize`Coached by ${profile.assignedCoachName}:coach:`
+      : '';
+  });
+
+  /**
+   * Messaging is offered unless the plan is known not to include it, so the coach is not sent to
+   * an error after the click. Until the plans arrive it is offered.
+   */
+  protected readonly messagingDecision = computed(
+    () => this.context.plans()?.featureAccess.find((item) => item.feature === 'Messaging') ?? null,
+  );
+
+  protected readonly messagingIncluded = computed(
+    () => this.messagingDecision()?.isAllowed ?? true,
+  );
+
+  /** Only said when the plan simply lacks messaging; a block or a lapse is told by the plan pill. */
+  protected readonly messagingNote = computed(() =>
+    this.messagingDecision()?.reason === 'NoEntitlement'
+      ? $localize`Messaging isn’t part of this plan.`
+      : '',
+  );
+
+  /** What else a coach does from here. R3.4 turns the training ones into drawers. */
+  protected readonly actions = computed<ClientAction[]>(() => {
+    const base = `/clients/${this.clientId}`;
+    if (this.context.isFormer()) {
+      return [{ label: $localize`View intake`, link: `${base}/intake` }];
+    }
+    const workspace = this.context.workspace();
+    const plans = this.context.plans();
+    const renewal =
+      workspace && plans ? renewalPrompt(plans.enrollments, workspace.currentDate) : null;
+    return [
+      {
+        label: $localize`Assign program`,
+        hint: $localize`Choose a program and a start date`,
+        link: `${base}/training`,
+      },
+      renewal
+        ? {
+            label: $localize`Renew plan`,
+            hint:
+              renewal.daysLeft <= 0
+                ? $localize`Ends today`
+                : renewal.daysLeft === 1
+                  ? $localize`Ends tomorrow`
+                  : $localize`Ends in ${renewal.daysLeft}:count: days`,
+            link: `${base}/service`,
+            queryParams: { renew: renewal.enrollment.id },
+          }
+        : {
+            label: $localize`Plan and payments`,
+            hint: $localize`Plans, receipts and access`,
+            link: `${base}/service`,
+          },
+      {
+        label: $localize`Edit intake`,
+        hint: $localize`Goals, health and contact details`,
+        link: `${base}/intake`,
+      },
+    ];
   });
 
   /**
@@ -135,6 +234,15 @@ export class ClientWorkspace {
       if (key && key !== this.loadedKey) {
         this.loadedKey = key;
         void this.context.load(this.clientId);
+      }
+    });
+    // A screen reader starts at the client's name when the record opens, once.
+    effect(() => {
+      if (this.profile() && !this.focusedHeading) {
+        this.focusedHeading = true;
+        afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }), {
+          injector: this.injector,
+        });
       }
     });
   }
@@ -180,6 +288,7 @@ export class ClientWorkspace {
 
   private resetTenantState(): void {
     this.loadedKey = null;
+    this.focusedHeading = false;
     this.conversationKeys.clear();
     this.startingConversation.set(false);
   }

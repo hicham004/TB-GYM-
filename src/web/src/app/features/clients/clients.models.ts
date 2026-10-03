@@ -199,7 +199,11 @@ function attentionReason(kind: CoachAttentionKind): string {
   }
 }
 
-function activityLabel(row: ClientOverviewRow, context: ClientListContext): string {
+/** What a client last did, in words; the list and a client's own page say it the same way. */
+export function activityLabel(
+  row: Pick<ClientOverviewRow, 'lastActivityKind' | 'lastActivityAtUtc' | 'status'>,
+  context: ClientListContext,
+): string {
   const when = ago(row.lastActivityAtUtc, context);
   switch (row.lastActivityKind) {
     case 'WorkoutCompleted':
@@ -240,7 +244,12 @@ export function clientWeek(days: readonly SessionDayCountView[], today: string):
   };
 }
 
-function dayMark(scheduled: number, completed: number, date: string, today: string): DayMark {
+export function dayMark(
+  scheduled: number,
+  completed: number,
+  date: string,
+  today: string,
+): DayMark {
   if (scheduled === 0) return 'rest';
   if (completed >= scheduled) return 'done';
   if (completed > 0) return 'partial';
