@@ -36,6 +36,9 @@ const WORKSPACE: WorkspaceDetails = {
   weekStartsOn: 'Monday',
   currentDate: COACH_TODAY,
   version: 1,
+  brandColor: null,
+  accentColor: null,
+  logoAssetId: null,
 };
 
 const PROFILE = {

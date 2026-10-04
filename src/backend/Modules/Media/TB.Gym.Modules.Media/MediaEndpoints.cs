@@ -16,6 +16,7 @@ namespace TB.Gym.Modules.Media;
 public static class MediaEndpoints
 {
     private const long MaximumMultipartRequestBytes = MediaUploadPolicy.MaximumVideoBytes + (1024 * 1024);
+    private const long MaximumLogoRequestBytes = MediaLogoPolicy.MaximumBytes + (1024 * 1024);
 
     public static IEndpointRouteBuilder MapMediaModule(this IEndpointRouteBuilder endpoints)
     {
@@ -82,6 +83,28 @@ public static class MediaEndpoints
         .WithName("DeleteMediaAsset")
         .Produces<MediaAssetView>()
         .ProducesProblem(StatusCodes.Status409Conflict);
+
+        // The workspace logo (MED-013) is the owner's, like the rest of the brand (GAM-005). It is only
+        // ever an image, so the request is held to the logo's own limit rather than the video one.
+        endpoints.MapPost("/api/media/workspace-logo", async (
+            HttpRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IMediaApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return await StreamUploadAsync(request, service, cancellationToken, MediaPurpose.WorkspaceLogo);
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .WithTags(MediaModule.Name)
+        .WithName("UploadWorkspaceLogo")
+        .Accepts<IFormFile>("multipart/form-data")
+        .Produces<MediaAssetView>()
+        .ProducesValidationProblem()
+        .Produces(StatusCodes.Status429TooManyRequests)
+        .RequireRateLimiting(RateLimitPolicies.MediaUpload)
+        .WithMetadata(new RequestSizeLimitAttribute(MaximumLogoRequestBytes));
 
         var member = endpoints
             .MapGroup("/api/media")
@@ -354,9 +377,11 @@ public static class MediaEndpoints
     private static async Task<IResult> StreamUploadAsync(
         HttpRequest request,
         IMediaApplicationService service,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        MediaPurpose purpose = MediaPurpose.ExerciseMedia)
     {
-        if (request.ContentLength > MaximumMultipartRequestBytes ||
+        var isLogo = purpose == MediaPurpose.WorkspaceLogo;
+        if (request.ContentLength > (isLogo ? MaximumLogoRequestBytes : MaximumMultipartRequestBytes) ||
             !MediaTypeHeaderValue.TryParse(request.ContentType, out var mediaType) ||
             !string.Equals(mediaType.MediaType.Value, "multipart/form-data", StringComparison.OrdinalIgnoreCase))
         {
@@ -373,7 +398,7 @@ public static class MediaEndpoints
         {
             var reader = new MultipartReader(boundary, request.Body)
             {
-                BodyLengthLimit = MediaUploadPolicy.MaximumVideoBytes,
+                BodyLengthLimit = isLogo ? MediaLogoPolicy.MaximumBytes : MediaUploadPolicy.MaximumVideoBytes,
             };
             string? title = null;
             while (await reader.ReadNextSectionAsync(cancellationToken) is { } section)
@@ -403,7 +428,8 @@ public static class MediaEndpoints
                     Path.GetFileName(fileName),
                     contentType,
                     section.Body,
-                    cancellationToken));
+                    cancellationToken,
+                    purpose));
             }
         }
         catch (InvalidDataException exception)

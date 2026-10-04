@@ -51,10 +51,79 @@ internal static class ProgressPhotoSanitizer
         string verifiedContentType,
         out SanitizedProgressPhoto? sanitized)
     {
+        SanitizedProgressPhoto? produced = null;
+        var ok = TryProcessUpright(source, verifiedContentType, (upright, format) =>
+        {
+            MemoryStream? image = null;
+            MemoryStream? thumbnail = null;
+            try
+            {
+                using (var full = SKImage.FromBitmap(upright))
+                {
+                    image = Encode(full, format, JpegQuality);
+                }
+
+                if (image is null)
+                {
+                    return false;
+                }
+
+                var (thumbnailWidth, thumbnailHeight) = MediaThumbnailPolicy.Fit(upright.Width, upright.Height);
+                thumbnail = RenderThumbnail(upright, thumbnailWidth, thumbnailHeight);
+                if (thumbnail is null)
+                {
+                    return false;
+                }
+
+                produced = new SanitizedProgressPhoto(image, thumbnail, thumbnailWidth, thumbnailHeight);
+                image = null;
+                thumbnail = null;
+                return true;
+            }
+            finally
+            {
+                image?.Dispose();
+                thumbnail?.Dispose();
+            }
+        });
+        sanitized = ok ? produced : null;
+        return ok;
+    }
+
+    /// <summary>
+    /// Re-encodes a workspace logo (MED-013) from its pixels, fitted inside
+    /// <see cref="MediaLogoPolicy.LongestEdgePixels"/>, in its own format so a PNG keeps its
+    /// transparency. The same bounded decode and orientation as a progress photo; no thumbnail.
+    /// </summary>
+    public static bool TrySanitizeLogo(Stream source, string verifiedContentType, out MemoryStream? logo)
+    {
+        MemoryStream? produced = null;
+        var ok = TryProcessUpright(source, verifiedContentType, (upright, format) =>
+        {
+            var (width, height) = MediaLogoPolicy.Fit(upright.Width, upright.Height);
+            produced = RenderLogo(upright, width, height, format);
+            return produced is not null;
+        });
+        logo = ok ? produced : null;
+        if (!ok)
+        {
+            produced?.Dispose();
+        }
+
+        return ok;
+    }
+
+    /// <summary>
+    /// Decodes an uploaded image within the decode limits, makes its pixels upright, and hands them
+    /// to <paramref name="produce"/> with the format to re-encode in. False for anything that is not a
+    /// decodable JPEG or PNG inside the limits, or when <paramref name="produce"/> fails.
+    /// </summary>
+    private static bool TryProcessUpright(
+        Stream source,
+        string verifiedContentType,
+        Func<SKBitmap, SKEncodedImageFormat, bool> produce)
+    {
         ArgumentNullException.ThrowIfNull(source);
-        sanitized = null;
-        MemoryStream? image = null;
-        MemoryStream? thumbnail = null;
         SKBitmap? rotated = null;
         try
         {
@@ -115,29 +184,7 @@ internal static class ProgressPhotoSanitizer
             rotated = origin is SKEncodedOrigin.TopLeft or SKEncodedOrigin.Default
                 ? null
                 : ApplyOrientation(decoded, origin);
-            var upright = rotated ?? decoded;
-
-            using (var full = SKImage.FromBitmap(upright))
-            {
-                image = Encode(full, format.Value, JpegQuality);
-            }
-
-            if (image is null)
-            {
-                return false;
-            }
-
-            var (thumbnailWidth, thumbnailHeight) = MediaThumbnailPolicy.Fit(upright.Width, upright.Height);
-            thumbnail = RenderThumbnail(upright, thumbnailWidth, thumbnailHeight);
-            if (thumbnail is null)
-            {
-                return false;
-            }
-
-            sanitized = new SanitizedProgressPhoto(image, thumbnail, thumbnailWidth, thumbnailHeight);
-            image = null;
-            thumbnail = null;
-            return true;
+            return produce(rotated ?? decoded, format.Value);
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
@@ -146,9 +193,30 @@ internal static class ProgressPhotoSanitizer
         finally
         {
             rotated?.Dispose();
-            image?.Dispose();
-            thumbnail?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Draws the uprighted pixels into the logo box on a transparent surface, so a PNG's
+    /// transparency survives; a JPEG has none and is encoded at the original's quality.
+    /// </summary>
+    private static MemoryStream? RenderLogo(
+        SKBitmap upright,
+        int width,
+        int height,
+        SKEncodedImageFormat format)
+    {
+        using var target = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using (var canvas = new SKCanvas(target))
+        using (var source = SKImage.FromBitmap(upright))
+        {
+            canvas.Clear(SKColors.Transparent);
+            canvas.DrawImage(source, new SKRect(0, 0, width, height), ThumbnailSampling);
+            canvas.Flush();
+        }
+
+        using var rendered = SKImage.FromBitmap(target);
+        return Encode(rendered, format, JpegQuality);
     }
 
     /// <summary>

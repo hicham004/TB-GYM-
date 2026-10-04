@@ -49,6 +49,20 @@
   line-height: var(--text-compact-line-height);
 }
 
+// A logo sits on its own white tile: most logos are drawn dark on transparent, and the brand behind
+// it is always dark, so a fixed light backing is what keeps any logo visible.
+.brand-mark.has-logo {
+  background-color: #fff;
+  overflow: hidden;
+  padding: 3px;
+
+  img {
+    block-size: 100%;
+    inline-size: 100%;
+    object-fit: contain;
+  }
+}
+
 .brand-copy {
   display: flex;
   flex-direction: column;
@@ -58,6 +72,8 @@
 
 .brand-name {
   color: var(--tb-on-brand);
+  // A space's name is the coach's own and can be long; it wraps rather than being cut short.
+  overflow-wrap: anywhere;
   font-size: var(--text-body-size);
   line-height: var(--text-body-line-height);
 }
@@ -165,6 +181,7 @@
 }
 
 .nav-dialog-header .brand {
+  flex: 1 1 auto;
   min-inline-size: 0;
 }
 
@@ -172,6 +189,8 @@
 .nav-dialog .nav-close {
   border-color: var(--tb-on-brand-muted);
   color: var(--tb-on-brand);
+  // A long coaching-space name wraps beside it; the button keeps its one-line label.
+  flex: none;
 }
 
 .nav-dialog .nav-close:focus-visible {

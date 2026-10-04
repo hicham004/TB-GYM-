@@ -7,7 +7,7 @@ import {
   publicHomeGuard,
   signedOutGuard,
 } from './core/auth/auth.guards';
-import { REDESIGNED, REDESIGNED_FOR_STAFF } from './core/theme/redesigned-route';
+import { HOUSE_BRAND, REDESIGNED, REDESIGNED_FOR_STAFF } from './core/theme/redesigned-route';
 import { devRoutes } from './dev/dev-routes';
 import { platformAdminGuard } from './features/platform-admin/platform-admin.guard';
 
@@ -129,6 +129,15 @@ export const routes: Routes = [
       import('./features/progress/progress-view').then((module) => module.ProgressView),
   },
   {
+    // The coach's brand (R3.5a, plan §3.1), a Settings page beside the coaching space's details.
+    path: 'workspace/brand',
+    canActivate: [authGuard, ownerGuard],
+    data: REDESIGNED,
+    title: $localize`Brand | TB Gym`,
+    loadComponent: () =>
+      import('./features/workspace/workspace-brand').then((module) => module.WorkspaceBrand),
+  },
+  {
     path: 'workspace',
     canActivate: [authGuard, ownerGuard],
     title: $localize`Coaching space | TB Gym`,
@@ -144,6 +153,7 @@ export const routes: Routes = [
   {
     path: 'billing',
     canActivate: [authGuard, ownerGuard],
+    data: HOUSE_BRAND,
     title: $localize`Billing | TB Gym`,
     loadComponent: () => import('./features/billing/billing').then((module) => module.Billing),
   },
@@ -151,6 +161,7 @@ export const routes: Routes = [
     // The platform admin's screen (ADR 0028): a global role, needing no workspace at all.
     path: 'admin/billing',
     canActivate: [authGuard, platformAdminGuard],
+    data: HOUSE_BRAND,
     title: $localize`Platform billing | TB Gym`,
     loadComponent: () =>
       import('./features/platform-admin/platform-admin').then((module) => module.PlatformAdmin),

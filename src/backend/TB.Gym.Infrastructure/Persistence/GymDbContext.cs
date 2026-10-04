@@ -385,9 +385,28 @@ public sealed partial class GymDbContext(
                 .HasDefaultValue(DayOfWeek.Monday)
                 .HasSentinel((DayOfWeek)(-1));
             entity.HasIndex(tenant => tenant.Slug).IsUnique();
-            entity.ToTable(table => table.HasCheckConstraint(
-                "CK_Tenants_DefaultCurrencyCode",
-                "\"DefaultCurrencyCode\" ~ '^[A-Z]{3}$'"));
+            entity.Property(tenant => tenant.BrandColor).HasMaxLength(7);
+            entity.Property(tenant => tenant.AccentColor).HasMaxLength(7);
+            // The logo is a media asset of this same workspace (MED-013): the key pairs the workspace
+            // with the asset, so no row can ever point at another workspace's upload.
+            entity.HasOne<MediaAsset>()
+                .WithMany()
+                .HasForeignKey(tenant => new { tenant.Id, tenant.LogoMediaAssetId })
+                .HasPrincipalKey(asset => new { asset.TenantId, asset.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_Tenants_DefaultCurrencyCode",
+                    "\"DefaultCurrencyCode\" ~ '^[A-Z]{3}$'");
+                // Both brand colours or neither, each only a lower-case #rrggbb (GAM-005): the values
+                // are written into style properties, so no other shape may ever be stored.
+                table.HasCheckConstraint(
+                    "CK_Tenants_Brand",
+                    "(\"BrandColor\" IS NULL) = (\"AccentColor\" IS NULL) AND " +
+                    "(\"BrandColor\" IS NULL OR \"BrandColor\" ~ '^#[0-9a-f]{6}$') AND " +
+                    "(\"AccentColor\" IS NULL OR \"AccentColor\" ~ '^#[0-9a-f]{6}$')");
+            });
             ConfigureAuditable(entity);
         });
 

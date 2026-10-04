@@ -42,6 +42,9 @@ function workspaceOn(currentDate: string, id = 'workspace-a'): WorkspaceDetails 
     weekStartsOn: 'Monday',
     currentDate,
     version: 1,
+    brandColor: null,
+    accentColor: null,
+    logoAssetId: null,
   };
 }
 

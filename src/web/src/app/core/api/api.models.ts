@@ -83,6 +83,11 @@ export interface WorkspaceDetails {
    */
   currentDate: string;
   version: number;
+  /** The coach's brand colours (`#rrggbb`), both or neither; null keeps TB Gym's (GAM-005). */
+  brandColor: string | null;
+  accentColor: string | null;
+  /** The logo's media asset, read through a media grant like any other upload (MED-013). */
+  logoAssetId: string | null;
 }
 
 export interface ClientInvitation {

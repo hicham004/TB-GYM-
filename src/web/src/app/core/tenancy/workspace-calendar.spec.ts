@@ -22,6 +22,9 @@ const workspace: WorkspaceDetails = {
   weekStartsOn: 'Monday',
   currentDate: '2026-09-21',
   version: 1,
+  brandColor: null,
+  accentColor: null,
+  logoAssetId: null,
 };
 
 function configure(

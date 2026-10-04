@@ -1,0 +1,238 @@
+<section class="brand-page" aria-labelledby="brand-heading">
+  <header class="top">
+    <h1 id="brand-heading" i18n>Brand</h1>
+    <p class="lede" i18n>
+      Your clients see your colours and logo everywhere in the app. TB Gym’s own colours stay on
+      sign-in and on your TB Gym bill.
+    </p>
+  </header>
+
+  <app-section-nav label="Settings sections" i18n-label [links]="sections" />
+
+  @if (loadFailed()) {
+    <div class="panel load-failed" role="alert">
+      <p i18n>Your brand couldn’t be loaded.</p>
+      <button appButton type="button" variant="outlined" (click)="retry()" i18n>Try again</button>
+    </div>
+  } @else if (workspace() === null) {
+    <app-skeleton label="Loading your brand" i18n-label [lines]="6" />
+  } @else {
+    <div class="layout">
+      <div class="settings">
+        <section class="panel" aria-labelledby="colours-heading">
+          <h2 id="colours-heading" i18n>Colours</h2>
+          <fieldset class="looks">
+            <legend class="tb-visually-hidden" i18n>Choose a look</legend>
+            @for (preset of presets; track preset.id) {
+              <label class="look" [class.selected]="choice() === preset.id">
+                <input
+                  type="radio"
+                  name="look"
+                  [value]="preset.id"
+                  [checked]="choice() === preset.id"
+                  (change)="choose(preset.id)"
+                />
+                <span
+                  class="look-swatch"
+                  aria-hidden="true"
+                  [style.--look-brand]="preset.brand"
+                  [style.--look-accent]="preset.accent"
+                ></span>
+                <span class="look-name">{{ preset.label }}</span>
+              </label>
+            }
+            <label class="look" [class.selected]="choice() === 'custom'">
+              <input
+                type="radio"
+                name="look"
+                value="custom"
+                [checked]="choice() === 'custom'"
+                (change)="choose('custom')"
+              />
+              <span class="look-swatch own" aria-hidden="true"></span>
+              <span class="look-name" i18n>Your own colours</span>
+            </label>
+          </fieldset>
+
+          @if (choice() === 'custom') {
+            <div class="own-colours">
+              <div class="colour">
+                <!-- The swatch opens the device's colour picker; the field takes a typed colour. -->
+                <label class="picker" [style.background-color]="colors().brand">
+                  <input
+                    type="color"
+                    [value]="colors().brand"
+                    (input)="typeBrand($any($event.target).value)"
+                    i18n-aria-label
+                    aria-label="Pick your brand colour"
+                  />
+                </label>
+                <app-field [label]="brandLabel" [help]="brandHelp" [errors]="shows('brand')">
+                  <input
+                    appControl
+                    type="text"
+                    name="brandColor"
+                    autocomplete="off"
+                    spellcheck="false"
+                    maxlength="7"
+                    dir="ltr"
+                    [value]="brandText()"
+                    (input)="typeBrand($any($event.target).value)"
+                    (blur)="tidy('brand')"
+                  />
+                </app-field>
+              </div>
+              <div class="colour">
+                <label class="picker" [style.background-color]="colors().accent">
+                  <input
+                    type="color"
+                    [value]="colors().accent"
+                    (input)="typeAccent($any($event.target).value)"
+                    i18n-aria-label
+                    aria-label="Pick your accent colour"
+                  />
+                </label>
+                <app-field [label]="accentLabel" [help]="accentHelp" [errors]="shows('accent')">
+                  <input
+                    appControl
+                    type="text"
+                    name="accentColor"
+                    autocomplete="off"
+                    spellcheck="false"
+                    maxlength="7"
+                    dir="ltr"
+                    [value]="accentText()"
+                    (input)="typeAccent($any($event.target).value)"
+                    (blur)="tidy('accent')"
+                  />
+                </app-field>
+              </div>
+            </div>
+          }
+
+          <!-- Polite, because a note appears while the owner types a colour. -->
+          <div class="notes" role="status">
+            @for (note of notes(); track note) {
+              <p class="note">{{ note }}</p>
+            }
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="logo-heading">
+          <h2 id="logo-heading" i18n>Logo</h2>
+          <div class="logo-row">
+            <span class="logo-tile" [class.has-logo]="logo()?.url" aria-hidden="true">
+              @if (logo()?.url; as url) {
+                <img [src]="url" alt="" width="72" height="72" (error)="logoBroken()" />
+              } @else {
+                {{ initials() }}
+              }
+            </span>
+            <div class="logo-copy">
+              <p class="quiet">
+                @if (logo()) {
+                  <ng-container i18n
+                    >Your logo, beside your name in the sidebar and on your clients’ Today. A square
+                    logo on a clear background looks best: PNG or JPEG, up to
+                    5&nbsp;MB.</ng-container
+                  >
+                } @else {
+                  <ng-container i18n
+                    >Until you add one, your initials stand in for it. A square logo on a clear
+                    background looks best: PNG or JPEG, up to 5&nbsp;MB.</ng-container
+                  >
+                }
+              </p>
+              <div class="logo-actions">
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  [loading]="uploading()"
+                  (click)="pickLogo()"
+                >
+                  @if (uploading()) {
+                    <ng-container i18n>Uploading…</ng-container>
+                  } @else if (logo()) {
+                    <ng-container i18n>Replace logo</ng-container>
+                  } @else {
+                    <ng-container i18n>Upload logo</ng-container>
+                  }
+                </button>
+                @if (logo() && !uploading()) {
+                  <button appButton type="button" variant="text" (click)="removeLogo()" i18n>
+                    Remove logo
+                  </button>
+                }
+              </div>
+              @if (logoError(); as message) {
+                <p class="error" role="alert">{{ message }}</p>
+              }
+              <p class="tb-visually-hidden" role="status">{{ logoStatus() }}</p>
+            </div>
+          </div>
+          <input
+            #fileInput
+            class="file"
+            type="file"
+            tabindex="-1"
+            aria-hidden="true"
+            [accept]="logoTypes"
+            (change)="upload($event)"
+          />
+        </section>
+
+        <div class="actions">
+          @if (attempt.wasTried() && hasProblems()) {
+            <p class="error" role="alert" i18n>Check the colours marked above.</p>
+          }
+          @if (saveError(); as message) {
+            <p class="error" role="alert">{{ message }}</p>
+          }
+          <div class="action-buttons">
+            <button
+              appButton
+              type="button"
+              [loading]="saving()"
+              [disabled]="!dirty() || uploading()"
+              (click)="save()"
+            >
+              @if (saving()) {
+                <ng-container i18n>Saving…</ng-container>
+              } @else {
+                <ng-container i18n>Save brand</ng-container>
+              }
+            </button>
+            @if (dirty() && !saving()) {
+              <button appButton type="button" variant="text" (click)="discard()" i18n>
+                Discard changes
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <section class="panel preview-column" aria-labelledby="preview-heading">
+        <div class="preview-head">
+          <h2 id="preview-heading" i18n>Preview</h2>
+          <app-segmented-control
+            label="Show the preview in"
+            i18n-label
+            [options]="modeOptions"
+            [(selected)]="previewMode"
+          />
+        </div>
+        <p class="tb-visually-hidden" i18n>
+          A picture of your sidebar and your client’s Today screen in these colours.
+        </p>
+        <app-brand-preview
+          [colors]="colors()"
+          [mode]="previewMode() === 'dark' ? 'dark' : 'light'"
+          [name]="name()"
+          [initials]="initials()"
+          [logoUrl]="logo()?.url ?? null"
+        />
+      </section>
+    </div>
+  }
+</section>

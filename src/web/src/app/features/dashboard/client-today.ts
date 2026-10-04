@@ -18,6 +18,7 @@ import type { ClientTrainingDayResult } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { NotificationStore } from '../../core/notifications/notification.store';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { WorkspaceBrandStore } from '../../core/theme/workspace-brand.store';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { countDisplay } from '../../shell/coach-navigation';
 import { initialsOf } from '../../shell/initials';
@@ -64,6 +65,7 @@ export class ClientToday {
   private readonly auth = inject(AuthStore);
   private readonly notifications = inject(NotificationStore);
   private readonly access = inject(ClientAccessStore);
+  protected readonly brand = inject(WorkspaceBrandStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly trainingHeading = viewChild<ElementRef<HTMLElement>>('trainingHeading');

@@ -1382,6 +1382,14 @@ deletion is idempotent. Purge finalization is what clears a key and releases quo
 storage confirms the deletion. Inventory reconciliation never does either: it is a read-only observer
 that records findings, and MED-012 is the rule that governs it.
 
+**MED-013** A workspace logo (R3.5a) is a media asset with its own purpose: an image only (PNG or JPEG,
+at most 5 MB), uploaded by the owner, scanned like every upload, and re-encoded from its pixels fitted
+inside 512 px in its own format, so a PNG keeps its transparency; it has no thumbnail. Every active
+member of the workspace may read the current logo; only the owner may read one not saved as the logo.
+Saving the brand tombstones every other ready logo upload on the delete retention (MED-008). A logo is
+never exercise media: the coach library lists, attaches and deletes exercise media only, and that
+delete answers a logo or a progress photo as unknown (a photo leaves only through PRG-007).
+
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and
 cannot leak one coach's private library into another tenant.
@@ -1403,6 +1411,15 @@ until product and coaching impact are approved.
 **GAM-004** The requested Solo Leveling theme uses third-party intellectual property. Do not
 ship names, artwork, characters, or trade dress without documented rights. A generic
 coach-configurable progression theme is the safe default.
+
+**GAM-005** Workspace brand v1 (R3.5a, plan §3.1). A workspace may have a brand colour and an accent
+colour, both or neither, each stored as a lower-case `#rrggbb` (domain and database check); neither
+means TB Gym's own colours. The owner sets them, like the other workspace settings, with the
+workspace's version; coaches and clients read them with their workspaces. The stored values are the
+coach's picks: wherever the app draws them it derives the tones that keep AA contrast (white text on
+the brand, dark text on the accent) and says on the settings page when it had to adjust one; success,
+warning and danger never derive from the brand. TB Gym's own colours stay on the website, sign-in and
+the coach's TB Gym billing. Read-only while the workspace is unpaid, like every staff setting.
 
 ## 10. Planned database protections
 

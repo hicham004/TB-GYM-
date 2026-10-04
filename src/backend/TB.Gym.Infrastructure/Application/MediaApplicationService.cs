@@ -103,11 +103,14 @@ internal sealed class MediaApplicationService(
                     "The workspace media-storage allowance is full.");
             }
 
-            // A progress photo can only ever be an image, so cap the accepted stream at the image
-            // limit rather than streaming up to the video limit before rejecting it.
-            var acceptedBytes = purpose == MediaPurpose.ProgressPhoto
-                ? MediaUploadPolicy.MaximumImageBytes
-                : MediaUploadPolicy.MaximumVideoBytes;
+            // A progress photo and a logo can only ever be images, so cap the accepted stream at
+            // their own limit rather than streaming up to the video limit before rejecting it.
+            var acceptedBytes = purpose switch
+            {
+                MediaPurpose.ProgressPhoto => MediaUploadPolicy.MaximumImageBytes,
+                MediaPurpose.WorkspaceLogo => MediaLogoPolicy.MaximumBytes,
+                _ => MediaUploadPolicy.MaximumVideoBytes,
+            };
             var quotaBoundsTheStream = remainingBytes < acceptedBytes;
             var objectKey = $"{tenantContext.TenantId:N}/{Guid.CreateVersion7():N}";
             var originalLocator = new StorageObjectLocator(
@@ -157,7 +160,7 @@ internal sealed class MediaApplicationService(
 
             var validation = MediaUploadPolicy.Validate(fileName, contentType, stored.Length, stored.Signature);
             ProgressPhotoRendition? rendition = null;
-            if (purpose == MediaPurpose.ProgressPhoto)
+            if (purpose is MediaPurpose.ProgressPhoto or MediaPurpose.WorkspaceLogo)
             {
                 using var decodeLease = uploadConcurrencyGate.TryEnterProgressPhotoDecode();
                 if (decodeLease is null)
@@ -170,16 +173,23 @@ internal sealed class MediaApplicationService(
                 // thumbnail from those same sanitised pixels. The ingest stream stayed bounded
                 // above, the original object is deleted, and both sets of stored bytes are
                 // re-validated and scanned below, so no protection is skipped.
-                rendition = await SanitizeProgressPhotoAsync(
-                    stored,
-                    validation,
-                    clientProfileId,
-                    ingestObjects,
-                    cancellationToken);
+                // A logo is re-encoded the same way (MED-013), fitted small and with no thumbnail.
+                rendition = purpose == MediaPurpose.WorkspaceLogo
+                    ? await SanitizeLogoAsync(stored, validation, ingestObjects, cancellationToken)
+                    : await SanitizeProgressPhotoAsync(
+                        stored,
+                        validation,
+                        clientProfileId,
+                        ingestObjects,
+                        cancellationToken);
                 if (rendition is null)
                 {
                     await CleanupIngestObjectsAsync(ingestObjects);
-                    return Invalid("file", "The progress photo could not be processed as a valid image.");
+                    return Invalid(
+                        "file",
+                        purpose == MediaPurpose.WorkspaceLogo
+                            ? "The logo could not be processed as a valid image."
+                            : "The progress photo could not be processed as a valid image.");
                 }
 
                 if (!await CleanupIngestObjectAsync(originalReservation))
@@ -221,22 +231,22 @@ internal sealed class MediaApplicationService(
                 var assetReservation = rendition?.Image.Reservation ?? originalReservation;
                 assetReservation.RecordScanEvidence(assetScanEvidence);
 
-                if (rendition is not null && assetScanEvidence.IsAllowed)
+                if (rendition?.Thumbnail is { } renditionThumbnail && assetScanEvidence.IsAllowed)
                 {
                     // The thumbnail is bytes this workspace actually stores and serves, so the
                     // scanner runs against it too. A refusal of the original already rejects the
                     // complete upload, so it must not invoke a second scan for bytes that will
                     // only be cleaned up.
                     var thumbnailScan = await scanner.ScanAsync(
-                        rendition.Thumbnail.Stored.Locator,
+                        renditionThumbnail.Stored.Locator,
                         MediaThumbnailPolicy.ContentType,
                         cancellationToken);
                     thumbnailScanEvidence = MediaScanEvidence.Record(
-                        rendition.Thumbnail.Stored.Locator,
-                        rendition.Thumbnail.Stored.Sha256,
+                        renditionThumbnail.Stored.Locator,
+                        renditionThumbnail.Stored.Sha256,
                         thumbnailScan,
                         clock.UtcNow);
-                    rendition.Thumbnail.Reservation.RecordScanEvidence(thumbnailScanEvidence);
+                    renditionThumbnail.Reservation.RecordScanEvidence(thumbnailScanEvidence);
                 }
 
                 // Evidence is durable before any refusal cleanup begins. If deletion then fails,
@@ -284,21 +294,23 @@ internal sealed class MediaApplicationService(
                 LogScanUnavailable(logger, purpose, null);
                 return ScannerUnavailable();
             }
-            var derivative = rendition is null
+            var derivative = rendition?.Thumbnail is not { } storedThumbnail
                 ? null
                 : MediaAssetDerivative.RegisterThumbnail(
                     tenantContext.TenantId,
                     asset.Id,
-                    rendition.Thumbnail.Stored.Length,
-                    rendition.Thumbnail.Stored.Sha256,
-                    rendition.Thumbnail.Stored.Locator,
+                    storedThumbnail.Stored.Length,
+                    storedThumbnail.Stored.Sha256,
+                    storedThumbnail.Stored.Locator,
                     thumbnailScanEvidence!,
                     rendition.Width,
                     rendition.Height);
 
             var attachmentReservations = rendition is null
                 ? new[] { originalReservation }
-                : new[] { rendition.Image.Reservation, rendition.Thumbnail.Reservation };
+                : rendition.Thumbnail is null
+                    ? new[] { rendition.Image.Reservation }
+                    : new[] { rendition.Image.Reservation, rendition.Thumbnail.Reservation };
 
             var admitted = await AdmitWithinQuotaAsync(
                 asset,
@@ -831,7 +843,12 @@ internal sealed class MediaApplicationService(
         DeleteMediaRequest request,
         CancellationToken cancellationToken)
     {
-        var asset = await dbContext.MediaAssets.SingleOrDefaultAsync(item => item.Id == assetId, cancellationToken);
+        // The coach's library delete reaches exercise media only. A progress photo is removed through
+        // its own audited operation (PRG-007, MED-008), and the logo by saving the brand (MED-013), so
+        // neither can be tombstoned here by any coach who learns its id.
+        var asset = await dbContext.MediaAssets.SingleOrDefaultAsync(
+            item => item.Id == assetId && item.Purpose == MediaPurpose.ExerciseMedia,
+            cancellationToken);
         if (asset is null)
         {
             return new MediaCommandResult(MediaCommandStatus.NotFound);
@@ -881,6 +898,17 @@ internal sealed class MediaApplicationService(
         }
 
         var role = await ActiveMembershipRoleAsync(userId, cancellationToken);
+        if (purpose == MediaPurpose.WorkspaceLogo)
+        {
+            // The logo is how the workspace looks to its own members (MED-013): every active member
+            // reads the current one, and only the owner, who uploads them, one not saved as the logo.
+            return role == TenantRole.Owner ||
+                   (role is TenantRole.Coach or TenantRole.Client &&
+                    await dbContext.Tenants.AsNoTracking().AnyAsync(
+                        item => item.Id == tenantContext.TenantId && item.LogoMediaAssetId == assetId,
+                        cancellationToken));
+        }
+
         if (role is TenantRole.Owner or TenantRole.Coach)
         {
             return true;
@@ -1015,6 +1043,56 @@ internal sealed class MediaApplicationService(
                 produced.ThumbnailHeight);
             rewritten = null;
             return result;
+        }
+        finally
+        {
+            if (produced is not null)
+            {
+                await produced.DisposeAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Re-encodes a stored logo upload from its pixels (MED-013), fitted small and in its own format,
+    /// and stores the result. Null when the bytes cannot be decoded or the output no longer passes
+    /// the upload policy, in which case nothing it stored is left behind.
+    /// </summary>
+    private async Task<ProgressPhotoRendition?> SanitizeLogoAsync(
+        StoredObject stored,
+        MediaFileValidation validation,
+        ICollection<MediaIngestObject> ingestObjects,
+        CancellationToken cancellationToken)
+    {
+        MemoryStream? produced = null;
+        try
+        {
+            var read = await objectStorage.ReadAsync(
+                new ObjectReadRequest(stored.Locator, validation.VerifiedContentType),
+                cancellationToken);
+            if (read is not { Status: ObjectStorageOperationStatus.Success, Content: { } original })
+            {
+                throw new MediaStorageException(read.FailureCode ?? "storage_unavailable");
+            }
+
+            await using (original)
+            {
+                if (!ProgressPhotoSanitizer.TrySanitizeLogo(original, validation.VerifiedContentType, out produced) ||
+                    produced is null)
+                {
+                    return null;
+                }
+            }
+
+            var rewritten = await StoreValidatedAsync(
+                produced,
+                validation.VerifiedContentType,
+                MediaLogoPolicy.MaximumBytes,
+                MediaPurpose.WorkspaceLogo,
+                null,
+                ingestObjects,
+                cancellationToken);
+            return rewritten is null ? null : new ProgressPhotoRendition(rewritten, null, 0, 0);
         }
         finally
         {
@@ -1385,9 +1463,13 @@ internal sealed class MediaApplicationService(
     /// The two objects a sanitised progress photo occupies in storage: the metadata-free original
     /// and its thumbnail rendition, plus the dimensions the rendition was scaled to.
     /// </summary>
+    /// <summary>
+    /// The re-encoded image that replaces an upload, and its thumbnail with the thumbnail's size; a
+    /// logo has no thumbnail (MED-013).
+    /// </summary>
     private sealed record ProgressPhotoRendition(
         IngestStoredObject Image,
-        IngestStoredObject Thumbnail,
+        IngestStoredObject? Thumbnail,
         int Width,
         int Height);
 

@@ -1,9 +1,17 @@
+<!-- The coaching space's own brand (R3.5a, plan §3.1): its logo, or its initials until it has one,
+     and its name, on TB Gym. -->
 <ng-template #brand>
   <div class="brand">
-    <span class="brand-mark" aria-hidden="true">TB</span>
+    <span class="brand-mark" [class.has-logo]="spaceBrand.logoUrl() !== null" aria-hidden="true">
+      @if (spaceBrand.logoUrl(); as logo) {
+        <img [src]="logo" alt="" width="36" height="36" (error)="spaceBrand.logoFailed()" />
+      } @else {
+        {{ brandInitials() }}
+      }
+    </span>
     <span class="brand-copy">
-      <span class="brand-name">TB Gym</span>
-      <span class="brand-descriptor" i18n>Coaching OS</span>
+      <span class="brand-name" dir="auto">{{ spaceBrand.name() }}</span>
+      <span class="brand-descriptor" i18n>on TB Gym</span>
     </span>
   </div>
 </ng-template>

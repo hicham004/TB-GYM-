@@ -229,3 +229,42 @@ public static class MediaThumbnailPolicy
             Math.Max(1, (int)Math.Round(height * scale, MidpointRounding.AwayFromZero)));
     }
 }
+
+/// <summary>
+/// How a workspace logo is kept (MED-013): re-encoded from its pixels like a progress photo, then
+/// fitted inside a small square, because it is only ever drawn at avatar size on every page.
+/// </summary>
+/// <remarks>
+/// The logo is the asset itself, not a rendition, and it keeps its own format: a PNG keeps its
+/// transparency, which a logo usually depends on, and a JPEG stays a JPEG.
+/// </remarks>
+public static class MediaLogoPolicy
+{
+    public const int LongestEdgePixels = 512;
+
+    /// <summary>A logo upload is refused above this many bytes, before it is decoded.</summary>
+    public const long MaximumBytes = 5 * 1024 * 1024;
+
+    /// <summary>
+    /// Scales the longest edge down to <see cref="LongestEdgePixels"/>, keeping the aspect ratio; a
+    /// smaller logo keeps its size, because upscaling only adds bytes.
+    /// </summary>
+    public static (int Width, int Height) Fit(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(width), "Image dimensions must be positive.");
+        }
+
+        var longestEdge = Math.Max(width, height);
+        if (longestEdge <= LongestEdgePixels)
+        {
+            return (width, height);
+        }
+
+        var scale = (double)LongestEdgePixels / longestEdge;
+        return (
+            Math.Max(1, (int)Math.Round(width * scale, MidpointRounding.AwayFromZero)),
+            Math.Max(1, (int)Math.Round(height * scale, MidpointRounding.AwayFromZero)));
+    }
+}

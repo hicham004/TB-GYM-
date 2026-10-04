@@ -12,7 +12,14 @@
     <div class="today-actions">
       @if (coachName(); as coach) {
         <div class="today-coach">
-          <app-avatar [initials]="initialsOf(coach)" presentation="mobile-account" />
+          <!-- The coach's logo, once they have one, stands where their initials were (R3.5a). -->
+          @if (brand.logoUrl(); as logo) {
+            <span class="today-logo" aria-hidden="true">
+              <img [src]="logo" alt="" width="48" height="48" (error)="brand.logoFailed()" />
+            </span>
+          } @else {
+            <app-avatar [initials]="initialsOf(coach)" presentation="mobile-account" />
+          }
           <span class="tb-visually-hidden" i18n>Coached by </span>
           <span dir="auto">{{ coach }}</span>
         </div>

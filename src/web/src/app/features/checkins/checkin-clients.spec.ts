@@ -279,6 +279,9 @@ const WORKSPACE = {
   weekStartsOn: 'Monday',
   currentDate: '2026-08-22',
   version: 1,
+  brandColor: null,
+  accentColor: null,
+  logoAssetId: null,
 } as const;
 
 async function render(

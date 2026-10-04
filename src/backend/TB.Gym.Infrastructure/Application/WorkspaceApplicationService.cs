@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Identity;
+using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
@@ -180,6 +181,72 @@ internal sealed class WorkspaceApplicationService(
         }
     }
 
+    public async Task<WorkspaceUpdateResult> UpdateBrandAsync(
+        UpdateWorkspaceBrandRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!tenantContext.HasTenant)
+        {
+            return new WorkspaceUpdateResult(WorkspaceUpdateStatus.NotFound);
+        }
+
+        var tenant = await dbContext.Tenants.SingleOrDefaultAsync(
+            item => item.Id == tenantContext.TenantId && item.IsActive,
+            cancellationToken);
+        if (tenant is null)
+        {
+            return new WorkspaceUpdateResult(WorkspaceUpdateStatus.NotFound);
+        }
+
+        // A logo is a finished logo upload of this workspace (MED-013). Another workspace's asset is
+        // already invisible here through the tenant filter, so it is refused like an unknown id.
+        if (request.LogoAssetId is { } logoAssetId &&
+            !await dbContext.MediaAssets.AsNoTracking().AnyAsync(
+                item => item.Id == logoAssetId &&
+                        item.Purpose == MediaPurpose.WorkspaceLogo &&
+                        item.Status == MediaAssetStatus.Ready,
+                cancellationToken))
+        {
+            return new WorkspaceUpdateResult(
+                WorkspaceUpdateStatus.Invalid,
+                Errors: new Dictionary<string, string[]>
+                {
+                    ["logoAssetId"] = ["The logo must be a finished logo upload of this coaching space."],
+                });
+        }
+
+        try
+        {
+            dbContext.Entry(tenant).Property(item => item.Version).OriginalValue = request.Version;
+            tenant.SetBrand(request.BrandColor, request.AccentColor, request.LogoAssetId);
+
+            // Every other ready logo upload, the one replaced and any previewed but never saved, goes
+            // on the shared deletion retention (MED-008), so old logos never pile up in the allowance.
+            var others = await dbContext.MediaAssets
+                .Where(item => item.Purpose == MediaPurpose.WorkspaceLogo &&
+                               item.Status == MediaAssetStatus.Ready &&
+                               item.Id != request.LogoAssetId)
+                .ToListAsync(cancellationToken);
+            foreach (var other in others)
+            {
+                other.MarkTombstoned(clock.UtcNow, MediaRetentionPolicy.DeleteRetention, isHistoricallyReferenced: false);
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return new WorkspaceUpdateResult(WorkspaceUpdateStatus.Updated, ToDetails(tenant));
+        }
+        catch (ArgumentException exception)
+        {
+            return new WorkspaceUpdateResult(
+                WorkspaceUpdateStatus.Invalid,
+                Errors: new Dictionary<string, string[]> { ["brand"] = [exception.Message] });
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return new WorkspaceUpdateResult(WorkspaceUpdateStatus.Conflict);
+        }
+    }
+
     private static Dictionary<string, string[]> ValidateRegistration(RegisterCoachRequest request)
     {
         var errors = new Dictionary<string, string[]>();
@@ -261,7 +328,10 @@ internal sealed class WorkspaceApplicationService(
             // The workspace-local date, resolved from IClock through the workspace's own zone, so a
             // browser never has to work out what "today" means here.
             WorkspaceLocalDate(tenant),
-            tenant.Version);
+            tenant.Version,
+            tenant.BrandColor,
+            tenant.AccentColor,
+            tenant.LogoMediaAssetId);
 
     private DateOnly WorkspaceLocalDate(Tenant tenant) =>
         DateOnly.FromDateTime(

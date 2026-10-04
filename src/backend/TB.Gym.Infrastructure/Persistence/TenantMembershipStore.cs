@@ -19,7 +19,10 @@ internal sealed class TenantMembershipStore(GymDbContext dbContext) : ITenantMem
                 tenant.Id,
                 tenant.Name,
                 tenant.Slug,
-                membership.Role))
+                membership.Role,
+                tenant.BrandColor,
+                tenant.AccentColor,
+                tenant.LogoMediaAssetId))
             .ToListAsync(cancellationToken);
 
     public Task<TenantMembership?> FindActiveAsync(

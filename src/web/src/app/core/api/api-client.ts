@@ -1654,8 +1654,14 @@ function toNullableNumber(value: number | string | null): number | null {
   return value === null ? null : toNumber(value);
 }
 
-function toWorkspace(value: ContractWorkspaceDetails): WorkspaceDetails {
-  return { ...value, version: toNumber(value.version) };
+export function toWorkspace(value: ContractWorkspaceDetails): WorkspaceDetails {
+  return {
+    ...value,
+    version: toNumber(value.version),
+    brandColor: value.brandColor ?? null,
+    accentColor: value.accentColor ?? null,
+    logoAssetId: value.logoAssetId ?? null,
+  };
 }
 
 export function toInvitation(value: InvitationSummary): ClientInvitation {

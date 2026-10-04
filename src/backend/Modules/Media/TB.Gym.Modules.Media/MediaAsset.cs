@@ -32,6 +32,11 @@ public sealed class MediaAsset : TenantEntity
             throw new ArgumentException("A progress photo must be an image.");
         }
 
+        if (purpose == MediaPurpose.WorkspaceLogo && kind != MediaKind.Image)
+        {
+            throw new ArgumentException("A workspace logo must be an image.");
+        }
+
         OwnerUserId = ownerUserId;
         Title = MediaText.Required(title, 200, nameof(title));
         Kind = kind;
@@ -493,6 +498,12 @@ public enum MediaPurpose
 {
     ExerciseMedia = 1,
     ProgressPhoto = 2,
+
+    /// <summary>
+    /// The workspace's logo (MED-013): uploaded by the owner, re-encoded small, and readable by
+    /// every active member of the workspace while it is the current logo.
+    /// </summary>
+    WorkspaceLogo = 3,
 }
 
 public enum MediaKind

@@ -63,6 +63,24 @@ h1:focus {
   font-size: 0.75rem;
   font-weight: 700;
 }
+// The same white tile as the sidebar's: it keeps a dark logo on transparent visible on any card.
+.today-logo {
+  background-color: #fff;
+  block-size: var(--control-height-48);
+  border-radius: var(--radius-8);
+  box-sizing: border-box;
+  flex: none;
+  inline-size: var(--control-height-48);
+  overflow: hidden;
+  padding: 4px;
+
+  img {
+    block-size: 100%;
+    display: block;
+    inline-size: 100%;
+    object-fit: contain;
+  }
+}
 .today-coach span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -108,6 +108,16 @@ export function safeBrand(colors: BrandColors | null | undefined): BrandColors {
     : TB_GYM_BRAND;
 }
 
+/** Draws `element` and everything inside it in one brand, over the stylesheet's TB Gym tones. */
+export function writeBrandTokens(element: HTMLElement, tokens: BrandTokens): void {
+  for (const name of BRAND_TOKEN_NAMES) element.style.setProperty(name, tokens[name]);
+}
+
+/** Returns `element` to the stylesheet's TB Gym tones. */
+export function clearBrandTokens(element: HTMLElement): void {
+  for (const name of BRAND_TOKEN_NAMES) element.style.removeProperty(name);
+}
+
 /** Mixes `toward` into `color` until `ok` holds. `toward` itself always satisfies `ok` here. */
 function shiftUntil(color: string, toward: string, ok: (candidate: string) => boolean): string {
   for (let step = 0; step * STEP < 1; step++) {

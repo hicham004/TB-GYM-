@@ -2830,6 +2830,9 @@ export type TenantMembershipSummary = {
   tenantName: string;
   tenantSlug: string;
   role: TenantRole;
+  brandColor?: null | string;
+  accentColor?: null | string;
+  logoAssetId?: null | string;
 };
 
 export type TenantRole = 'Owner' | 'Coach' | 'Client';
@@ -2985,6 +2988,13 @@ export type UpdateNutritionSettingsRequest = {
   version: number | string;
 };
 
+export type UpdateWorkspaceBrandRequest = {
+  brandColor: null | string;
+  accentColor: null | string;
+  logoAssetId: null | string;
+  version: number | string;
+};
+
 export type UpdateWorkspaceRequest = {
   name: string;
   timeZoneId: string;
@@ -3117,6 +3127,9 @@ export type WorkspaceDetails = {
   weekStartsOn: DayOfWeek;
   currentDate: string;
   version: number | string;
+  brandColor?: null | string;
+  accentColor?: null | string;
+  logoAssetId?: null | string;
 };
 
 export type WorkspaceDiscountView = {
@@ -3245,6 +3258,37 @@ export type UpdateCurrentWorkspaceResponses = {
 
 export type UpdateCurrentWorkspaceResponse =
   UpdateCurrentWorkspaceResponses[keyof UpdateCurrentWorkspaceResponses];
+
+export type UpdateWorkspaceBrandData = {
+  body: UpdateWorkspaceBrandRequest;
+  path?: never;
+  query?: never;
+  url: '/api/workspace/brand';
+};
+
+export type UpdateWorkspaceBrandErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type UpdateWorkspaceBrandError =
+  UpdateWorkspaceBrandErrors[keyof UpdateWorkspaceBrandErrors];
+
+export type UpdateWorkspaceBrandResponses = {
+  /**
+   * OK
+   */
+  200: WorkspaceDetails;
+};
+
+export type UpdateWorkspaceBrandResponse =
+  UpdateWorkspaceBrandResponses[keyof UpdateWorkspaceBrandResponses];
 
 export type ResignFromTeamData = {
   body?: never;
@@ -3375,6 +3419,36 @@ export type GetOwnCoachingFeatureAccessResponses = {
 
 export type GetOwnCoachingFeatureAccessResponse =
   GetOwnCoachingFeatureAccessResponses[keyof GetOwnCoachingFeatureAccessResponses];
+
+export type UploadWorkspaceLogoData = {
+  body: IFormFile;
+  path?: never;
+  query?: never;
+  url: '/api/media/workspace-logo';
+};
+
+export type UploadWorkspaceLogoErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Too Many Requests
+   */
+  429: unknown;
+};
+
+export type UploadWorkspaceLogoError = UploadWorkspaceLogoErrors[keyof UploadWorkspaceLogoErrors];
+
+export type UploadWorkspaceLogoResponses = {
+  /**
+   * OK
+   */
+  200: MediaAssetView;
+};
+
+export type UploadWorkspaceLogoResponse =
+  UploadWorkspaceLogoResponses[keyof UploadWorkspaceLogoResponses];
 
 export type StreamPrivateMediaData = {
   body?: never;

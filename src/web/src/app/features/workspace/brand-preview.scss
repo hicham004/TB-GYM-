@@ -1,0 +1,180 @@
+// The preview wears its own brand and mode (see BrandPreview), so every colour here is a token.
+:host {
+  background: var(--tb-bg);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  color: var(--tb-ink);
+  display: grid;
+  font-family: var(--font-sans);
+  grid-template-columns: minmax(7.5rem, 2fr) 3fr;
+  overflow: hidden;
+}
+
+.sidebar {
+  background: var(--tb-brand);
+  color: var(--tb-on-brand);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 0.5rem;
+}
+
+.brand {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  margin-block-end: 0.625rem;
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.descriptor {
+  color: var(--tb-on-brand-muted);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+}
+
+// As in the app: the initials on the accent, a logo on its own white tile.
+.mark {
+  align-items: center;
+  background: var(--tb-accent);
+  block-size: 1.75rem;
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: var(--tb-on-accent);
+  display: inline-flex;
+  flex: none;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  inline-size: 1.75rem;
+  justify-content: center;
+  overflow: hidden;
+
+  &.has-logo {
+    background: #fff;
+    padding: 2px;
+  }
+
+  img {
+    block-size: 100%;
+    inline-size: 100%;
+    object-fit: contain;
+  }
+}
+
+.item {
+  align-items: center;
+  border-radius: 6px;
+  display: flex;
+  font-size: 0.75rem;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+
+  &.selected {
+    background: color-mix(in srgb, var(--tb-accent) 17%, var(--tb-brand));
+  }
+}
+
+.phone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  min-inline-size: 0;
+  padding: 0.75rem;
+}
+
+.today-head {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.today-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.hero {
+  background: var(--tb-brand);
+  border-radius: var(--tb-radius-card-small);
+  color: var(--tb-on-brand);
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.75rem;
+}
+
+.soft {
+  color: var(--tb-on-brand-soft);
+  font-size: 0.6875rem;
+}
+
+.hero-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.start {
+  align-self: start;
+  background: var(--tb-accent);
+  border-radius: 999px;
+  color: var(--tb-on-accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-block-start: 0.5rem;
+  padding: 0.3125rem 0.75rem;
+}
+
+.week {
+  align-items: center;
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card-small);
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+}
+
+.week-copy {
+  color: var(--tb-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+
+  strong {
+    color: var(--tb-ink);
+    font-size: 0.8125rem;
+  }
+}
+
+.ring {
+  block-size: 2.25rem;
+  flex: none;
+  inline-size: 2.25rem;
+  transform: rotate(-90deg);
+
+  circle {
+    fill: none;
+    stroke-width: 5;
+  }
+
+  .track {
+    stroke: var(--tb-surface-2);
+  }
+
+  .fill {
+    stroke: var(--tb-accent-ink);
+    stroke-linecap: round;
+  }
+}

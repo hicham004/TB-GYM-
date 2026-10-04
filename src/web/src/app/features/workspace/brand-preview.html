@@ -1,0 +1,49 @@
+<div class="sidebar">
+  <div class="brand">
+    <span class="mark" [class.has-logo]="logoUrl()">
+      @if (logoUrl(); as url) {
+        <img [src]="url" alt="" width="28" height="28" />
+      } @else {
+        {{ initials() }}
+      }
+    </span>
+    <span class="brand-copy">
+      <span class="name" dir="auto">{{ name() }}</span>
+      <span class="descriptor" i18n>on TB Gym</span>
+    </span>
+  </div>
+  <span class="item selected"
+    ><app-icon name="overview" /><ng-container i18n>Today</ng-container></span
+  >
+  <span class="item"><app-icon name="clients" /><ng-container i18n>Clients</ng-container></span>
+  <span class="item"><app-icon name="messages" /><ng-container i18n>Messages</ng-container></span>
+</div>
+
+<div class="phone">
+  <div class="today-head">
+    <span class="today-title" i18n>Today, Maya.</span>
+    <span class="mark" [class.has-logo]="logoUrl()">
+      @if (logoUrl(); as url) {
+        <img [src]="url" alt="" width="28" height="28" />
+      } @else {
+        {{ initials() }}
+      }
+    </span>
+  </div>
+  <div class="hero">
+    <span class="soft" i18n>Today’s workout</span>
+    <span class="hero-title" i18n>Lower A</span>
+    <span class="soft" i18n>6 exercises · about 24 sets</span>
+    <span class="start" i18n>Start workout</span>
+  </div>
+  <div class="week">
+    <svg class="ring" viewBox="0 0 36 36" focusable="false">
+      <circle class="track" cx="18" cy="18" r="14" />
+      <circle class="fill" cx="18" cy="18" r="14" pathLength="100" stroke-dasharray="75 100" />
+    </svg>
+    <span class="week-copy">
+      <strong i18n>3 of 4 this week</strong>
+      <span i18n>One to go</span>
+    </span>
+  </div>
+</div>

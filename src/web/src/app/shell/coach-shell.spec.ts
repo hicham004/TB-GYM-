@@ -7,6 +7,7 @@ import { MessageUnreadStore } from '../core/messaging/message-unread.store';
 import { NotificationStore } from '../core/notifications/notification.store';
 import { TenantContext } from '../core/tenancy/tenant-context';
 import { TenantStore } from '../core/tenancy/tenant.store';
+import { WorkspaceBrandStore } from '../core/theme/workspace-brand.store';
 import { button, settle } from '../../testing/dom';
 import { installDialogSupport } from '../../testing/dialog';
 import { CoachShell, TOPBAR_BLOCK_SIZE } from './coach-shell';
@@ -43,8 +44,15 @@ const BEIRUT: Membership = {
 
 let uninstallDialog: () => void;
 
-async function render(options: { memberships?: Membership[]; unread?: number } = {}) {
+async function render(
+  options: { memberships?: Membership[]; unread?: number; logoUrl?: string | null } = {},
+) {
   const memberships = options.memberships ?? [ATLAS];
+  const brand = {
+    name: signal(memberships[0].tenantName),
+    logoUrl: signal(options.logoUrl ?? null),
+    logoFailed: vi.fn(),
+  };
   const selectedTenantId = signal(memberships[0].tenantId);
   await TestBed.configureTestingModule({
     imports: [CoachShell],
@@ -84,6 +92,7 @@ async function render(options: { memberships?: Membership[]; unread?: number } =
         provide: MessageUnreadStore,
         useValue: { unread: signal(0), isAvailable: signal(true) },
       },
+      { provide: WorkspaceBrandStore, useValue: brand },
     ],
   }).compileComponents();
 
@@ -118,6 +127,26 @@ describe('CoachShell', () => {
     expect(host.querySelector('.identity-name')?.textContent?.trim()).toBe('Hicham Haddad');
     expect(host.querySelector('.identity-role')?.textContent?.trim()).toBe('Owner');
     expect(host.querySelector('app-avatar')?.textContent?.trim()).toBe('HH');
+  });
+
+  it('heads the sidebar with the coaching space, its initials until it has a logo', async () => {
+    const { host } = await render();
+
+    const brand = host.querySelector('aside .brand');
+    expect(brand?.querySelector('.brand-name')?.textContent?.trim()).toBe('Atlas Performance');
+    expect(brand?.querySelector('.brand-descriptor')?.textContent?.trim()).toBe('on TB Gym');
+    expect(brand?.querySelector('.brand-mark')?.textContent?.trim()).toBe('AP');
+    expect(brand?.querySelector('.brand-mark')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('shows the space’s logo, and asks for it again when the image breaks', async () => {
+    const { host } = await render({ logoUrl: '/api/media/logo-1/content' });
+
+    const logo = host.querySelector<HTMLImageElement>('aside .brand-mark.has-logo img');
+    expect(logo?.getAttribute('src')).toBe('/api/media/logo-1/content');
+    expect(logo?.getAttribute('alt')).toBe('');
+    logo?.dispatchEvent(new Event('error'));
+    expect(TestBed.inject(WorkspaceBrandStore).logoFailed).toHaveBeenCalledTimes(1);
   });
 
   it('shows the Coach role of a coach membership', async () => {

@@ -22,6 +22,9 @@ function workspace(overrides: Partial<WorkspaceDetails> = {}): WorkspaceDetails 
     weekStartsOn: 'Monday',
     currentDate: '2026-08-22',
     version: 5,
+    brandColor: null,
+    accentColor: null,
+    logoAssetId: null,
     ...overrides,
   };
 }

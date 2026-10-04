@@ -65,8 +65,9 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R3.3a | **Clients** (C2): the list with status, last activity, the last 7 days, filter chips and search | §2 | Done · 2026-10-03 · b702cfc |
 | R3.3b | **Client profile** header, overview and progress (C3), with a coach read of the client's personal records | §2, plus backend tests | Done · 2026-10-03 · 214f8b1 |
 | R3.4a | **Client profile Training** (C3): the program as a timeline, with Assign, Reschedule, Complete, Cancel, Build next block and a session sheet | §2, plus backend tests | Done · 2026-10-03 · 80f7b9e |
-| R3.4b | **Client profile Service & access** (C3): plan, payments, renew, change coach and release | §2 | Done · 2026-10-04 |
-| R3.5 | **Coach Messages** (C6) and **coach brand settings** (§3.1), with backend setting and logo | §2, plus backend tests | To do |
+| R3.4b | **Client profile Service & access** (C3): plan, payments, renew, change coach and release | §2 | Done · 2026-10-04 · 9c1468f |
+| R3.5a | **Coach brand settings** (§3.1): a look or own colours and a logo, with the backend setting and logo upload, drawn for the coach's staff and clients | §2, plus backend tests | Done · 2026-10-04 |
+| R3.5b | **Coach Messages** (C6): search, filters, the client's plan and last workout beside the thread, saved replies | §2, plus backend tests | To do |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Gate |
 | R4.1 | **Program builder** (C4), part 1: library panel, week grid, drag and drop | §2 | To do |
 | R4.2 | **Program builder**, part 2: inline editing, autosave, unsaved-changes guard, publish preview | §2 | To do |
@@ -111,7 +112,7 @@ of the implemented R1.3 screens before production rollout.
   keeps delivery apart from reading). So the Messages badge can count a message already on screen.
   Advancing the cursor for a message shown while the page is visible would fix it; it changes a
   documented read rule, so it needs an owner decision.
-- **Coach chat extras (for R3.5).** R2.5a rebuilt the shared screen only. C6 still wants search,
+- **Coach chat extras (for R3.5b).** R2.5a rebuilt the shared screen only. C6 still wants search,
   filters (unread, waiting for a reply), the client's plan and last workout beside the thread, and
   saved replies. Removing your own message stays immediate, as it always was, now behind the
   message's options; an undo would need care because removal is one way (MSG-008).
@@ -168,7 +169,7 @@ of the implemented R1.3 screens before production rollout.
   client could still change it) would fix that. It changes TRN-016, so it needs an owner decision;
   Claude recommends yes.
 - **The coach's brand and the installed app (from R2.5c).** The manifest, icon and launch colours
-  are TB Gym's own and static, so a coach's brand (R3.5) does not colour the home-screen icon or the
+  are TB Gym's own and static, so a coach's brand (R3.5a) does not colour the home-screen icon or the
   phone's launch screen. Per-coach manifests would need the server to render them; not planned.
 - **Old screens behind Me (from R2.5c).** My profile (the intake form, which the coach's client page
   reuses), Password and security and Notification settings are still the old screens. Rebuild each
@@ -195,7 +196,7 @@ of the implemented R1.3 screens before production rollout.
   - Queue actions open the place to act; nothing is resolved in place. "Missed sessions" opens
     the client's training rather than a message, because Today does not know whether messaging
     is in that client's plan.
-  - The coach's brand logo in the sidebar comes with R3.5.
+  - The coach's brand logo in the sidebar came with R3.5a.
 - **Missed-session rule (from R3.1).** The owner asked Claude to choose: TRN-021 counts misses since
   the client's last workout, 14 days back. Revisit after the founding coaches use it (R3.6).
 - **Initial bundle budget.** The initial bundle is 536.0 kB against the 520 kB warning (530.1 kB
@@ -206,6 +207,9 @@ of the implemented R1.3 screens before production rollout.
   two reads in `ApiClient` and measured 536.1 kB. R3.4a kept its read in a feature-local
   `ClientProgramApi` and measured 534.7 kB; its stylesheet, `client-program.scss`, is 7.2 kB against
   the 5 kB component-style warning (8 kB is an error), like the Today, Messages and Progress ones.
+  R3.5a measured 537.9 kB: `WorkspaceBrandStore` and the sidebar's space name and logo (+3.1 kB). The
+  colour derivation it needs (`brand-theme.ts`, `color.ts`, about 2.5 kB) is a lazy chunk the store
+  fetches at start-up, so the first frame still wears the coach's colours.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -230,7 +234,8 @@ of the implemented R1.3 screens before production rollout.
   check-in's is C5 (R4.3).
 - **An unsaved coach note (from R3.3b).** A refresh or closed tab asks first, but moving to another
   section discards a note being edited, because the kit has no leave-confirmation dialog yet. The
-  same dialog serves the intake form, C4 and C7 (§9).
+  same dialog serves the intake form, C4 and C7 (§9), and the Brand page (R3.5a), which also only
+  asks before a refresh or a closed tab.
 - **Numbers in right-to-left (from R3.3b).** With English text in an RTL layout "60 kg × 5" and
   "2 of 5" reorder their pieces, as they already do on Today and Clients. Settle it with the
   translation work (locale number formatting, isolating each figure).
@@ -264,6 +269,15 @@ of the implemented R1.3 screens before production rollout.
 - **The legacy `label > span` rule (seen in R3.4b).** `styles.scss` still gives any span straight
   inside a label a fixed colour (`#344149`), size, weight and margin, which is wrong on dark and on the
   new sheets; R3.4b's price cards restate each property. Remove it once the last legacy form is gone.
+- **The brand outside the app (from R3.5a).** Sign-in, accepting an invitation, emails and notifications
+  are still TB Gym's: a person signs in before any workspace is known. Branding the invitation page and
+  emails would need the workspace on those requests; not planned.
+- **A logo on its tile (from R3.5a).** Every logo sits on a white tile, so a dark logo on a clear
+  background stays visible on the dark sidebar; a white logo on a clear background would vanish. A
+  per-logo backing choice could come later if a founding coach has one.
+- **Logo uploads never saved (from R3.5a).** A logo previewed but never saved stays in storage, counted
+  in the allowance, until the next brand save tombstones it. A sweep for unsaved logos older than a day
+  would reclaim them sooner.
 - **Header extras (from R3.3b).** The header shows initials until there is a profile photo source,
   and the owner sees "Coached by …" only for a team member's client. A "Last active" line beside the
   plan is possible: the new overview read already returns it.
@@ -416,6 +430,13 @@ Tokens are theme-ready from R1, so this costs little later.
   - Personal light/dark ships with the client app (R2).
   - The coach brand settings screen ships with the coach core (R3), so founding coaches see their
     own brand in the demo.
+  - Built in R3.5a: Settings › Brand (`/workspace/brand`, owner only) with the four looks or the
+    coach's own two colours (a swatch opens the device's picker, a field takes a typed colour), a logo
+    (PNG or JPEG up to 5 MB, shown on a white tile), a preview of the sidebar and a client's Today in
+    light or dark, and a note when a colour is adjusted to stay readable. Saved, the brand paints the
+    whole app for staff and clients from the first frame; the logo replaces the space's initials in
+    the sidebar and the coach's initials on the client's Today. Billing keeps TB Gym's colours.
+    Screenshots: `docs/design/r35a-*.png`.
 - **Prototype:** the live prototype (§8) already shows four coach brands, a custom colour picker,
   and light/dark.
 
@@ -667,7 +688,7 @@ limited to the coach's assigned clients.
 - Shows: a conversation list with avatars, unread counts and last-message previews, a thread with
   bubbles and day separators, a composer, and live updates with no Refresh button. Voice notes and
   attachments come later.
-- R2.5a built the shared screen for both sides (see M7); R3.5 adds the coach-only parts.
+- R2.5a built the shared screen for both sides (see M7); R3.5b adds the coach-only parts.
 
 **C7. Nutrition library and meal-plan builder**
 - Recipe cards with macro bars and photos.

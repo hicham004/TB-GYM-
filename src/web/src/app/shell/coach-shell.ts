@@ -19,6 +19,7 @@ import { tenantRoleLabel } from '../core/i18n/display-labels';
 import { NotificationStore } from '../core/notifications/notification.store';
 import { TenantContext } from '../core/tenancy/tenant-context';
 import { TenantStore } from '../core/tenancy/tenant.store';
+import { WorkspaceBrandStore } from '../core/theme/workspace-brand.store';
 import { Avatar } from '../ui/avatar';
 import { Button, IconButton } from '../ui/button';
 import { Icon } from '../ui/icon';
@@ -76,6 +77,8 @@ export class CoachShell {
   protected readonly auth = inject(AuthStore);
   protected readonly tenants = inject(TenantStore);
   protected readonly notifications = inject(NotificationStore);
+  protected readonly spaceBrand = inject(WorkspaceBrandStore);
+  protected readonly brandInitials = computed(() => initialsOf(this.spaceBrand.name() ?? 'TB Gym'));
 
   /** A different workspace was chosen. The app selects it and owns what happens next. */
   readonly workspaceSelected = output<string>();

@@ -8622,8 +8622,15 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("TB.Gym.Modules.Tenancy.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("AccentColor")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<string>("BrandColor")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .ValueGeneratedOnAdd()
@@ -8650,6 +8657,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LogoMediaAssetId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -8694,8 +8704,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasIndex("Slug")
                         .IsUnique();
 
+                    b.HasIndex("Id", "LogoMediaAssetId");
+
                     b.ToTable("Tenants", "tenancy", t =>
                         {
+                            t.HasCheckConstraint("CK_Tenants_Brand", "(\"BrandColor\" IS NULL) = (\"AccentColor\" IS NULL) AND (\"BrandColor\" IS NULL OR \"BrandColor\" ~ '^#[0-9a-f]{6}$') AND (\"AccentColor\" IS NULL OR \"AccentColor\" ~ '^#[0-9a-f]{6}$')");
+
                             t.HasCheckConstraint("CK_Tenants_DefaultCurrencyCode", "\"DefaultCurrencyCode\" ~ '^[A-Z]{3}$'");
                         });
                 });
@@ -12122,6 +12136,15 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Tenancy.Tenant", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Media.MediaAsset", null)
+                        .WithMany()
+                        .HasForeignKey("Id", "LogoMediaAssetId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Tenancy.TenantMembership", b =>

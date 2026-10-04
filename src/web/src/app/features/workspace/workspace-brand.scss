@@ -1,0 +1,280 @@
+// The coach's brand (R3.5a): settings beside a live preview. Brand v2 tokens only; the preview's
+// own brand and mode are written onto it by the component.
+:host {
+  container-type: inline-size;
+  display: block;
+}
+
+.brand-page,
+.settings,
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+  min-inline-size: 0;
+}
+
+h1 {
+  color: var(--tb-ink);
+  text-wrap: balance;
+  font-size: clamp(1.75rem, 4cqi, 2.125rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+}
+
+h2 {
+  color: var(--tb-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.lede,
+.quiet {
+  color: var(--tb-muted);
+  margin: 0.375rem 0 0;
+  max-inline-size: 44rem;
+}
+
+.quiet {
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.error {
+  color: var(--tb-danger);
+  margin: 0;
+}
+
+.layout {
+  align-items: start;
+  display: grid;
+  gap: 1.125rem;
+}
+
+@container (min-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
+  }
+
+  .preview-column {
+    inset-block-start: 1rem;
+    position: sticky;
+  }
+}
+
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-inline-size: 0;
+  padding: 1.25rem;
+}
+
+.load-failed {
+  align-items: center;
+  flex-flow: row wrap;
+
+  p {
+    margin: 0;
+  }
+}
+
+// ---------- looks ----------
+
+.looks {
+  border: 0;
+  display: grid;
+  gap: 0.625rem;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  margin: 0;
+  padding: 0;
+}
+
+.look {
+  position: relative;
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-ink);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem;
+
+  &:hover {
+    border-color: var(--tb-line-strong);
+  }
+
+  &.selected {
+    border-color: var(--tb-accent-ink);
+    box-shadow: inset 0 0 0 1px var(--tb-accent-ink);
+  }
+
+  &:focus-within {
+    outline: 3px solid var(--tb-focus);
+    outline-offset: 2px;
+  }
+
+  input {
+    block-size: 1px;
+    inline-size: 1px;
+    opacity: 0;
+    position: absolute;
+  }
+}
+
+.look-swatch {
+  background: linear-gradient(135deg, var(--look-brand) 0 58%, var(--look-accent) 58% 100%);
+  block-size: 2.75rem;
+  border-radius: 8px;
+
+  &.own {
+    background: conic-gradient(#ff8a4c, #f3d34a, #9be15d, #3ec5c9, #6f7cf6, #d46be3, #ff8a4c);
+  }
+}
+
+// The colour and margin restate the legacy `label > span` rule in styles.scss for these spans.
+.look-swatch {
+  margin: 0;
+}
+
+.look-name {
+  color: var(--tb-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.own-colours {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.colour {
+  align-items: start;
+  display: flex;
+  gap: 0.75rem;
+
+  app-field {
+    flex: 1;
+    min-inline-size: 0;
+  }
+}
+
+// The swatch is the visible control; the device's own colour picker opens from it.
+.picker {
+  block-size: 2.75rem;
+  border: 1px solid var(--tb-line-strong);
+  border-radius: var(--tb-radius-control);
+  cursor: pointer;
+  flex: none;
+  inline-size: 2.75rem;
+  margin-block-start: 1.625rem;
+  position: relative;
+
+  &:focus-within {
+    outline: 3px solid var(--tb-focus);
+    outline-offset: 2px;
+  }
+
+  input {
+    block-size: 100%;
+    cursor: pointer;
+    inline-size: 100%;
+    inset: 0;
+    opacity: 0;
+    position: absolute;
+  }
+}
+
+// The live region stays rendered so it is registered before a note lands in it; empty, it takes
+// back the panel's gap instead of adding a blank line.
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  &:not(:has(.note)) {
+    margin-block-start: -1rem;
+  }
+}
+
+.note {
+  background: var(--tb-info-soft);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-ink);
+  font-size: 0.875rem;
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+}
+
+// ---------- logo ----------
+
+.logo-row {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+}
+
+.logo-copy,
+.logo-actions,
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  min-inline-size: 0;
+}
+
+.logo-copy {
+  flex-direction: column;
+}
+
+// A logo sits on white, like in the sidebar, so a dark logo on a clear background stays visible.
+.logo-tile {
+  align-items: center;
+  background: var(--tb-accent);
+  border-radius: 12px;
+  box-sizing: border-box;
+  color: var(--tb-on-accent);
+  display: inline-flex;
+  flex: none;
+  font-weight: 600;
+  justify-content: center;
+  overflow: hidden;
+  block-size: 4.5rem;
+  font-size: 1.25rem;
+  inline-size: 4.5rem;
+
+  &.has-logo {
+    background: #fff;
+    padding: 0.375rem;
+  }
+
+  img {
+    block-size: 100%;
+    inline-size: 100%;
+    object-fit: contain;
+  }
+}
+
+.file {
+  display: none;
+}
+
+// ---------- preview ----------
+
+.preview-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+}

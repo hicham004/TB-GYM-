@@ -41,6 +41,15 @@ public sealed partial class Tenant : AuditableEntity
 
     public bool IsActive { get; private set; }
 
+    /// <summary>The coach's brand colour (GAM-005), lower-case <c>#rrggbb</c>; null keeps TB Gym's.</summary>
+    public string? BrandColor { get; private set; }
+
+    /// <summary>The coach's accent colour, set and cleared together with <see cref="BrandColor"/>.</summary>
+    public string? AccentColor { get; private set; }
+
+    /// <summary>The workspace logo, a media asset of this workspace with the logo purpose (MED-013).</summary>
+    public Guid? LogoMediaAssetId { get; private set; }
+
     public static Tenant Create(
         string name,
         string slug,
@@ -86,6 +95,24 @@ public sealed partial class Tenant : AuditableEntity
         WeekStartsOn = settings.WeekStartsOn;
     }
 
+    /// <summary>
+    /// Sets the coach's brand (GAM-005). Both colours or neither: a lone accent has no brand to sit
+    /// on, and clearing both returns the workspace to TB Gym's colours. Only the stored values are
+    /// checked here; the readable tones are derived from them where they are drawn.
+    /// </summary>
+    public void SetBrand(string? brandColor, string? accentColor, Guid? logoMediaAssetId)
+    {
+        var colors = WorkspaceBrand.Validate(brandColor, accentColor);
+        if (logoMediaAssetId == Guid.Empty)
+        {
+            throw new ArgumentException("A logo must name a media asset.", nameof(logoMediaAssetId));
+        }
+
+        BrandColor = colors?.BrandColor;
+        AccentColor = colors?.AccentColor;
+        LogoMediaAssetId = logoMediaAssetId;
+    }
+
     private static string ValidateName(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -109,6 +136,40 @@ public sealed partial class Tenant : AuditableEntity
 
     [GeneratedRegex("^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.CultureInvariant)]
     private static partial Regex SlugPattern();
+}
+
+/// <summary>A workspace's two brand colours, each lower-case <c>#rrggbb</c> (GAM-005).</summary>
+public sealed partial record WorkspaceBrand(string BrandColor, string AccentColor)
+{
+    /// <summary>
+    /// Null when both are blank, the two normalised colours when both are given, and an error when
+    /// only one is, or either is not a six-digit hex colour. No names, alpha or CSS functions: the
+    /// value is written into style properties, so only this one shape is ever stored.
+    /// </summary>
+    public static WorkspaceBrand? Validate(string? brandColor, string? accentColor)
+    {
+        var brand = string.IsNullOrWhiteSpace(brandColor) ? null : brandColor.Trim().ToLowerInvariant();
+        var accent = string.IsNullOrWhiteSpace(accentColor) ? null : accentColor.Trim().ToLowerInvariant();
+        if (brand is null && accent is null)
+        {
+            return null;
+        }
+
+        if (brand is null || accent is null)
+        {
+            throw new ArgumentException("A brand needs both its brand colour and its accent colour.");
+        }
+
+        if (!HexColor().IsMatch(brand) || !HexColor().IsMatch(accent))
+        {
+            throw new ArgumentException("Brand colours must be six-digit hex colours such as #153d33.");
+        }
+
+        return new WorkspaceBrand(brand, accent);
+    }
+
+    [GeneratedRegex("^#[0-9a-f]{6}$", RegexOptions.CultureInvariant)]
+    private static partial Regex HexColor();
 }
 
 public sealed record WorkspaceSettings(

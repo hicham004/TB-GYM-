@@ -20,13 +20,26 @@ public interface IWorkspaceApplicationService
     Task<WorkspaceUpdateResult> UpdateCurrentAsync(
         UpdateWorkspaceRequest request,
         CancellationToken cancellationToken);
+
+    /// <summary>The owner sets or clears the brand colours and the logo (GAM-005, MED-013).</summary>
+    Task<WorkspaceUpdateResult> UpdateBrandAsync(
+        UpdateWorkspaceBrandRequest request,
+        CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// One of the caller's workspaces. The brand travels with it (GAM-005) so the app is drawn in the
+/// coach's colours from its first frame, without a second request per workspace; the colours are
+/// null while the workspace keeps TB Gym's, and the logo is fetched through its own media grant.
+/// </summary>
 public sealed record TenantMembershipSummary(
     Guid TenantId,
     string TenantName,
     string TenantSlug,
-    TenantRole Role);
+    TenantRole Role,
+    string? BrandColor = null,
+    string? AccentColor = null,
+    Guid? LogoAssetId = null);
 
 public sealed record RegisterCoachRequest(
     string DisplayName,
@@ -74,7 +87,10 @@ public sealed record WorkspaceDetails(
     string DefaultCurrencyCode,
     DayOfWeek WeekStartsOn,
     DateOnly CurrentDate,
-    uint Version);
+    uint Version,
+    string? BrandColor = null,
+    string? AccentColor = null,
+    Guid? LogoAssetId = null);
 
 public sealed record UpdateWorkspaceRequest(
     string Name,
@@ -82,6 +98,16 @@ public sealed record UpdateWorkspaceRequest(
     string DefaultCulture,
     string DefaultCurrencyCode,
     DayOfWeek WeekStartsOn,
+    uint Version);
+
+/// <summary>
+/// The whole brand at once: both colours or neither (TB Gym's), and the logo or none. A logo is a
+/// ready logo upload of this workspace; saving one schedules every other logo upload for deletion.
+/// </summary>
+public sealed record UpdateWorkspaceBrandRequest(
+    string? BrandColor,
+    string? AccentColor,
+    Guid? LogoAssetId,
     uint Version);
 
 public sealed record WorkspaceUpdateResult(

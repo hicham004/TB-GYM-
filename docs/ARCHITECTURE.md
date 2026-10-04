@@ -582,6 +582,19 @@ plan and Record payment are sheets (`plan-sheets.ts`), Pause, Cancel and Block a
 server binds the key to the whole payload (SUB-011). The older `ClientCommercial` screen is gone;
 change coach and End coaching keep their components (ADR 0026, ADR 0027) inside the new page.
 
+R3.5a adds the coach's brand (plan §3.1, GAM-005, MED-013). `tenancy."Tenants"` gains `BrandColor`,
+`AccentColor` (both or neither, `#rrggbb`, by check constraint) and `LogoMediaAssetId`, whose key pairs
+the tenant with the asset (`(Id, LogoMediaAssetId)` → `media."Assets"(TenantId, Id)`), so a workspace can
+never point at another's upload. The owner uploads through `POST /api/media/workspace-logo` (Media, new
+`WorkspaceLogo` purpose, re-encoded small by the progress-photo sanitiser) and saves through
+`PUT /api/workspace/brand` (Tenancy, owner only, version checked), which also tombstones every other
+logo upload. Every member reads the brand on `GET /api/tenants` and `GET /api/workspace`. In the web
+app `WorkspaceBrandStore` (core/theme) paints the selected membership's colours on <html> and grants
+the logo for the sidebar and the client's Today; the colour derivation (`brand-theme.ts`) is a lazy
+chunk it fetches at start-up, so the first load does not carry it, and `HOUSE_BRAND` routes (billing,
+platform admin) keep TB Gym's colours. The owner's page is `WorkspaceBrand` (`/workspace/brand`, a
+Settings section), with `BrandPreview` drawing the unsaved brand on its own element.
+
 R2.4a keeps client-entered extra food in a separate Nutrition log table, linked by tenant and log
 ID. The day read returns it beside planned slots and includes it in consumed totals; the assigned
 meal snapshot and targets remain unchanged. The add command checks the current client and server

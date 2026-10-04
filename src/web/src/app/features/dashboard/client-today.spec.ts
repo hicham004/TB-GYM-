@@ -11,6 +11,7 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { NotificationStore } from '../../core/notifications/notification.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { WorkspaceBrandStore } from '../../core/theme/workspace-brand.store';
 import type { UpcomingTraining } from '../training/training-read.models';
 import type { RenewalStatus } from './renewal.models';
 import { press, settle } from '../../../testing/dom';
@@ -45,8 +46,10 @@ async function render(
     access?: ReturnType<typeof fakeClientAccess>;
     api?: Record<string, unknown>;
     unread?: number;
+    logoUrl?: string | null;
   } = {},
 ) {
+  const brand = { logoUrl: signal(options.logoUrl ?? null), logoFailed: vi.fn() };
   const tenant = signal<string | null>('tenant-1');
   const api = {
     getMyTrainingToday: vi.fn(() => of(options.day ?? day([workout()]))),
@@ -85,6 +88,7 @@ async function render(
     providers: [
       provideRouter([]),
       { provide: TenantStore, useValue: { selectedTenantId: tenant } },
+      { provide: WorkspaceBrandStore, useValue: brand },
       { provide: ApiClient, useValue: api },
       { provide: ClientAccessStore, useValue: options.access ?? fakeClientAccess() },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
@@ -124,6 +128,20 @@ describe('ClientToday', () => {
     const me = host.querySelector('a[href="/me"]');
     expect(me?.textContent).toContain('Me: Maya Rahman');
     expect(me?.querySelector('app-avatar')?.textContent?.trim()).toBe('MR');
+  });
+
+  it('shows the coach’s logo where their initials were, and asks again when it breaks', async () => {
+    const { host } = await render({ logoUrl: '/api/media/logo-1/content' });
+
+    const coach = host.querySelector('.today-coach');
+    expect(coach?.querySelector('app-avatar')).toBeNull();
+    const logo = coach?.querySelector<HTMLImageElement>('.today-logo img');
+    expect(logo?.getAttribute('src')).toBe('/api/media/logo-1/content');
+    expect(logo?.getAttribute('alt')).toBe('');
+    expect(coach?.textContent).toContain('Hicham Haddad');
+
+    logo?.dispatchEvent(new Event('error'));
+    expect(TestBed.inject(WorkspaceBrandStore).logoFailed).toHaveBeenCalledTimes(1);
   });
 
   it('shows the scheduled session with one dominant action that records nothing', async () => {

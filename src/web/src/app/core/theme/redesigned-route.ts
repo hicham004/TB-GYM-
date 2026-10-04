@@ -25,3 +25,17 @@ export function redesignedFor(root: ActivatedRouteSnapshot): RedesignedFor {
   }
   return null;
 }
+
+/**
+ * Route data for a screen that is TB Gym's own rather than the coach's (plan §3.1): the coach's
+ * billing and the platform admin keep TB Gym's colours whatever the workspace's brand.
+ */
+export const HOUSE_BRAND: Data = { houseBrand: true };
+
+/** Whether the active route, or a route above it, is drawn in TB Gym's own brand. */
+export function wantsHouseBrand(root: ActivatedRouteSnapshot): boolean {
+  for (let route: ActivatedRouteSnapshot | null = root; route; route = route.firstChild) {
+    if (route.data['houseBrand'] === true) return true;
+  }
+  return false;
+}

@@ -108,6 +108,37 @@ public static class TenancyEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // The brand is the owner's, like the other workspace settings (GAM-005); every member reads it
+        // with the workspace and with their list of workspaces.
+        endpoints.MapPut("/api/workspace/brand", async (
+            UpdateWorkspaceBrandRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IWorkspaceApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var result = await service.UpdateBrandAsync(request, cancellationToken);
+            return result.Status switch
+            {
+                WorkspaceUpdateStatus.Updated => Results.Ok(result.Workspace),
+                WorkspaceUpdateStatus.NotFound => Results.NotFound(),
+                WorkspaceUpdateStatus.Invalid => Results.ValidationProblem(
+                    result.Errors ?? new Dictionary<string, string[]>()),
+                _ => Results.Conflict(new
+                {
+                    code = "concurrency_conflict",
+                    message = "The workspace was changed by another request.",
+                }),
+            };
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+        .WithName("UpdateWorkspaceBrand")
+        .WithTags(TenancyModule.Name)
+        .Produces<WorkspaceDetails>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
         endpoints.MapTeamEndpoints();
         return endpoints;
     }

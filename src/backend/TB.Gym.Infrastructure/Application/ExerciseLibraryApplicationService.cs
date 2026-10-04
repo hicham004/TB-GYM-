@@ -217,7 +217,8 @@ internal sealed class ExerciseLibraryApplicationService(
         var mediaIds = mediaAssetIds.Distinct().ToArray();
         if (mediaIds.Length > 0 &&
             await dbContext.MediaAssets.CountAsync(
-                item => mediaIds.Contains(item.Id) && item.Status == MediaAssetStatus.Ready,
+                item => mediaIds.Contains(item.Id) && item.Status == MediaAssetStatus.Ready &&
+                        item.Purpose == MediaPurpose.ExerciseMedia,
                 cancellationToken) != mediaIds.Length)
         {
             throw new ArgumentException("Every media item must be ready and owned by this workspace.");
