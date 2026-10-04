@@ -1,0 +1,69 @@
+@if (showTitle()) {
+  <h2 class="title" dir="auto" i18n>About {{ name() }}</h2>
+}
+@if (state().status === 'loading') {
+  <app-skeleton label="Loading the client…" i18n-label [lines]="4" />
+} @else if (panel(); as panel) {
+  <div class="standing">
+    <app-status-pill [label]="panel.status.label" [tone]="panel.status.tone" />
+    <p class="muted">{{ panel.activity }}</p>
+  </div>
+
+  <section class="block" [attr.aria-labelledby]="uid + '-plan'">
+    <h3 [id]="uid + '-plan'" i18n>Plan</h3>
+    <p class="lead" dir="auto">{{ panel.plan.name ?? panel.plan.label }}</p>
+    @if (panel.plan.name) {
+      <p class="plan-state" [class.soon]="panel.plan.soon">{{ panel.plan.label }}</p>
+    }
+  </section>
+
+  <section class="block" [attr.aria-labelledby]="uid + '-workout'">
+    <h3 [id]="uid + '-workout'" i18n>Last workout</h3>
+    @if (panel.lastWorkout; as workout) {
+      <a class="lead workout" [routerLink]="workout.link" dir="auto">{{ workout.title }}</a>
+      <p class="muted">
+        <time [attr.datetime]="workout.at">{{ workout.detail }}</time>
+      </p>
+      @if (workout.records.length > 0) {
+        <ul class="records" aria-label="Records set" i18n-aria-label>
+          @for (record of workout.records; track record) {
+            <li dir="auto">{{ record }}</li>
+          }
+          @if (workout.moreRecords > 0) {
+            <li class="muted" i18n>and {{ workout.moreRecords }} more</li>
+          }
+        </ul>
+      }
+    } @else if (panel.trainingClosed) {
+      <p class="muted">{{ panel.trainingClosed }}</p>
+    } @else {
+      <p class="muted" i18n>No workout finished yet.</p>
+    }
+    @if (panel.week) {
+      <p class="week">{{ panel.week }}</p>
+    }
+  </section>
+
+  @if (panel.needs.length > 0) {
+    <section class="block" [attr.aria-labelledby]="uid + '-needs'">
+      <h3 [id]="uid + '-needs'" i18n>Needs you</h3>
+      <ul class="needs">
+        @for (need of panel.needs; track need.key) {
+          <li>
+            <a [routerLink]="need.action.link" [queryParams]="need.action.queryParams" dir="auto">{{
+              need.heading
+            }}</a>
+            <span class="muted">{{ need.detail }}</span>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
+  <a appButton variant="outlined" class="open" [routerLink]="panel.link" i18n>Open profile</a>
+} @else {
+  <p class="muted" role="status" i18n>Their details could not be loaded.</p>
+  <a appButton variant="outlined" class="open" [routerLink]="['/clients', clientId()]" i18n
+    >Open profile</a
+  >
+}

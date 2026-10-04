@@ -183,6 +183,14 @@ public sealed record ClientOverviewRow(
 /// queue does. <see cref="Week"/> is the workspace's calendar week (the same days Today counts), and
 /// is null when the plan does not include training.
 /// </summary>
+/// <param name="PlanName">
+/// The name the client's plan was sold under, for the plan <see cref="PlanEndsOn"/> is about: the
+/// one running or booked that ends last, else the one that ran out (R3.5b). Null with no such plan.
+/// </param>
+/// <param name="LastWorkout">
+/// The client's newest finished workout, with its duration and records, as Today's feed shows one;
+/// null when the plan does not include training or nothing has been finished (R3.5b).
+/// </param>
 public sealed record ClientProfileOverviewView(
     DateOnly Today,
     CoachClientRef Client,
@@ -191,9 +199,11 @@ public sealed record ClientProfileOverviewView(
     ClientOverviewStatus Status,
     ClientPlanState PlanState,
     DateOnly? PlanEndsOn,
+    string? PlanName,
     IReadOnlyList<CoachAttentionItemView> Attention,
     CoachActivityKind? LastActivityKind,
     DateTimeOffset? LastActivityAtUtc,
+    CoachActivityItemView? LastWorkout,
     CoachWeekView? Week,
     string AttentionRuleKey,
     int AttentionRuleVersion,

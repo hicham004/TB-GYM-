@@ -1,0 +1,16 @@
+// The inbox is a narrow column: the search takes its width and the chips wrap under it.
+:host {
+  display: block;
+  margin-block-end: var(--space-12);
+}
+.search {
+  flex-basis: 100%;
+  max-inline-size: none;
+}
+.chips {
+  gap: 0.375rem;
+}
+.chip {
+  gap: 0.375rem;
+  padding-inline: 0.75rem;
+}

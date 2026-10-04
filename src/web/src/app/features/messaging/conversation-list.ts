@@ -30,6 +30,8 @@ export class ConversationList {
   readonly hasMore = input(false);
   readonly loadingMore = input(false);
   readonly now = input.required<Date>();
+  /** The coach's side marks a thread whose client spoke last (MSG-022); a client's side does not. */
+  readonly showWaiting = input(false);
   readonly choose = output<Conversation>();
   readonly loadMore = output<void>();
 
@@ -41,9 +43,17 @@ export class ConversationList {
 
   /** The row's name for assistive technology: who, and whether anything is waiting. */
   protected label(conversation: Conversation): string {
-    return conversation.unreadCount > 0
-      ? $localize`${conversation.counterpart.displayName}:name:, ${conversation.unreadCount}:count: unread messages`
-      : $localize`${conversation.counterpart.displayName}:name:, no unread messages`;
+    const name = conversation.counterpart.displayName;
+    const waiting = this.showWaiting() && conversation.isAwaitingReply;
+    if (conversation.unreadCount > 0) {
+      return waiting
+        ? $localize`${name}:name:, ${conversation.unreadCount}:count: unread messages, waiting for your reply`
+        : $localize`${name}:name:, ${conversation.unreadCount}:count: unread messages`;
+    }
+
+    return waiting
+      ? $localize`${name}:name:, waiting for your reply`
+      : $localize`${name}:name:, no unread messages`;
   }
 
   /** A client's past coach, or a thread nobody can write in any more. */

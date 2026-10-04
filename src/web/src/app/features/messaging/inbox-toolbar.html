@@ -1,0 +1,49 @@
+<div class="toolbar">
+  <div class="search">
+    <app-icon name="search" />
+    <label class="tb-visually-hidden" for="conversation-search" i18n>Search conversations</label>
+    <input
+      id="conversation-search"
+      name="conversation-search"
+      type="search"
+      autocomplete="off"
+      enterkeyhint="search"
+      placeholder="Search by name…"
+      i18n-placeholder
+      #box
+      [value]="search()"
+      (input)="onSearch($event)"
+    />
+    @if (search() !== '') {
+      <button
+        type="button"
+        class="clear"
+        aria-label="Clear search"
+        i18n-aria-label
+        (click)="clear(box)"
+      >
+        <app-icon name="close" />
+      </button>
+    }
+  </div>
+  <fieldset class="chips">
+    <legend class="tb-visually-hidden" i18n>Show</legend>
+    @for (chip of chips(); track chip.value) {
+      <label class="chip" [class.is-empty]="chip.count === 0">
+        <input
+          class="tb-visually-hidden"
+          type="radio"
+          name="conversation-filter"
+          [value]="chip.value"
+          [checked]="filter() === chip.value"
+          (change)="filterChange.emit(chip.value)"
+        />
+        <!-- The space inside the first span keeps "Unread 3" apart when read aloud. -->
+        <span>{{ chip.label }} </span>
+        @if (chip.count !== null) {
+          <span class="count">{{ chip.count }}</span>
+        }
+      </label>
+    }
+  </fieldset>
+</div>

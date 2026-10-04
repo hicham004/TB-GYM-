@@ -83,6 +83,8 @@ export const routes: Routes = [
     // participant row the API checks, and a route guard could never stand in for it.
     path: 'messages',
     canActivate: [authGuard],
+    // The chat follows dark mode for coaches and clients alike (C6, M7; checked in R3.5b).
+    data: REDESIGNED,
     loadChildren: () =>
       import('./features/messaging/messages.routes').then((module) => module.messagingRoutes),
   },

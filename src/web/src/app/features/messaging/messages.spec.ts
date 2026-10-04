@@ -1,6 +1,6 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +15,8 @@ import {
 } from '../../core/messaging/messaging-realtime.service';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { profileOverview } from '../../../testing/client-profile-fixtures';
+import { MAYA } from '../../../testing/coach-today-fixtures';
 import { button, field, press, query, settle } from '../../../testing/dom';
 import { ConversationLaunch } from './conversation-launch';
 import { messagingRoutes } from './messages.routes';
@@ -71,6 +73,7 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
     accessReason: 'Granted',
     lastMessage: null,
     isReadOnly: false,
+    isAwaitingReply: false,
     ...overrides,
   };
 }
@@ -84,6 +87,7 @@ function conversationPage(
     hasMore: false,
     nextBeforeActivityAtUtc: null,
     nextBeforeConversationId: null,
+    counts: null,
     ...overrides,
   };
 }
@@ -156,6 +160,7 @@ interface ApiMocks {
   deleteConversationMessage: ReturnType<typeof vi.fn>;
   moderateConversationMessage: ReturnType<typeof vi.fn>;
   advanceConversationReadCursor: ReturnType<typeof vi.fn>;
+  getClientOverview: ReturnType<typeof vi.fn>;
 }
 
 interface Harness extends ApiMocks {
@@ -239,6 +244,13 @@ async function render(
     deleteConversationMessage: vi.fn(),
     moderateConversationMessage: vi.fn(),
     advanceConversationReadCursor: vi.fn(() => of(readState())),
+    getClientOverview: vi.fn(() =>
+      of(
+        profileOverview({
+          client: { ...MAYA, clientProfileId: 'client-1', firstName: 'Rania', lastName: 'Haddad' },
+        }),
+      ),
+    ),
   };
   configure?.(api);
   const unreadRefresh = vi.fn().mockResolvedValue(undefined);
@@ -1652,7 +1664,7 @@ describe('Messages', () => {
 
     // The marks and the count must agree: the server has just said where the cursor is.
     expect(harness.host.querySelectorAll('.feed li.unread')).toHaveLength(0);
-    expect(harness.host.textContent).not.toContain('Unread');
+    expect(query(harness.host, '.feed').textContent).not.toContain('Unread');
     expect(query(harness.host, '.thread-unread').textContent).toContain('Nothing unread');
   });
 
@@ -1894,6 +1906,296 @@ describe('Messages', () => {
         'aria-label',
       ),
     ).toBe('Rania Haddad, 5 unread messages');
+  });
+
+  // ---------- the coach's inbox and the client beside the thread (C6, R3.5b) ----------
+
+  describe('coach inbox', () => {
+    const COUNTS = { all: 5, unread: 2, waiting: 3 };
+    const waitingRow = conversation({ isAwaitingReply: true });
+
+    afterEach(() => {
+      document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
+    });
+
+    function chip(host: HTMLElement, label: string): HTMLInputElement {
+      const found = Array.from(host.querySelectorAll<HTMLLabelElement>('.chip')).find((candidate) =>
+        (candidate.textContent ?? '').trim().startsWith(label),
+      );
+      if (found === undefined) throw new Error(`No chip "${label}".`);
+      return query<HTMLInputElement>(found, 'input');
+    }
+
+    function chips(host: HTMLElement): string[] {
+      return Array.from(host.querySelectorAll('.chip')).map((element) =>
+        (element.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      );
+    }
+
+    async function choose(harness: Harness, label: string): Promise<void> {
+      chip(harness.host, label).dispatchEvent(new Event('change'));
+      await settle(harness.fixture);
+    }
+
+    async function search(harness: Harness, value: string): Promise<void> {
+      const box = query<HTMLInputElement>(harness.host, '#conversation-search');
+      box.value = value;
+      box.dispatchEvent(new Event('input'));
+      // The search waits for typing to pause before it asks.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await settle(harness.fixture);
+    }
+
+    function lastQuery(harness: Harness): unknown {
+      return harness.listConversations.mock.calls.at(-1)?.[3];
+    }
+
+    it('counts each chip from the server and asks the server for what a chip names', async () => {
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+      });
+
+      expect(chips(harness.host)).toEqual(['All 5', 'Unread 2', 'Waiting for reply 3']);
+      expect(chip(harness.host, 'All').checked).toBe(true);
+      expect(lastQuery(harness)).toEqual({ filter: 'all', search: '' });
+
+      await choose(harness, 'Waiting for reply');
+      // Every conversation is searched by the server, not only the page already loaded.
+      expect(harness.listConversations).toHaveBeenLastCalledWith(null, null, 25, {
+        filter: 'waiting',
+        search: '',
+      });
+
+      await search(harness, 'rania');
+      expect(lastQuery(harness)).toEqual({ filter: 'waiting', search: 'rania' });
+      const calls = harness.listConversations.mock.calls.length;
+      await search(harness, '');
+      expect(harness.listConversations.mock.calls.length).toBe(calls + 1);
+      expect(lastQuery(harness)).toEqual({ filter: 'waiting', search: '' });
+    });
+
+    it('keeps the chip in the address, so Back returns to the same list', async () => {
+      const harness = await render(
+        ({ listConversations }) => {
+          listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+        },
+        undefined,
+        '/messages?show=unread',
+      );
+
+      expect(lastQuery(harness)).toEqual({ filter: 'unread', search: '' });
+      expect(chip(harness.host, 'Unread').checked).toBe(true);
+
+      await choose(harness, 'All');
+      expect(TestBed.inject(Router).url).toBe('/messages');
+    });
+
+    it('says why a narrowed list is empty and offers the way back', async () => {
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockImplementation(
+          (
+            _before: unknown,
+            _id: unknown,
+            _take: unknown,
+            wanted?: { filter: string; search: string },
+          ) =>
+            of(
+              conversationPage(
+                wanted?.filter === 'all' && wanted.search === '' ? [waitingRow] : [],
+                { counts: COUNTS },
+              ),
+            ),
+        );
+      });
+
+      await choose(harness, 'Waiting for reply');
+      expect(query(harness.host, '.inbox .empty').textContent).toContain(
+        'Nobody is waiting for a reply',
+      );
+      // Not the invitation a coach with no conversations at all is given.
+      expect(harness.host.textContent).not.toContain('No conversations yet');
+
+      await search(harness, 'zz');
+      expect(query(harness.host, '.inbox .empty').textContent).toContain(
+        'No conversation matches “zz”',
+      );
+      press(harness.host, 'Clear search');
+      await settle(harness.fixture);
+      expect(lastQuery(harness)).toEqual({ filter: 'waiting', search: '' });
+
+      press(harness.host, 'Show all conversations');
+      await settle(harness.fixture);
+      expect(harness.host.querySelectorAll('.conversation')).toHaveLength(1);
+    });
+
+    it('marks a thread whose client spoke last, until the coach answers', async () => {
+      const harness = await render(({ listConversations, sendConversationMessage }) => {
+        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+        sendConversationMessage.mockReturnValue(
+          of(message(3, { isFromCaller: true, senderUserId: 'coach-1', body: 'Friday at 7.' })),
+        );
+      });
+
+      const row = query(harness.host, '.conversation');
+      expect(query(row, '.tag.waiting').textContent).toContain('Waiting');
+      expect(row.getAttribute('aria-label')).toBe('Rania Haddad, waiting for your reply');
+
+      await open(harness);
+      const composer = field<HTMLTextAreaElement>(harness.host, 'Write a message');
+      composer.value = 'Friday at 7.';
+      composer.dispatchEvent(new Event('input'));
+      await settle(harness.fixture);
+      press(harness.host, 'Send message');
+      await settle(harness.fixture);
+
+      expect(harness.host.querySelector('.conversation .tag.waiting')).toBeNull();
+      expect(chips(harness.host)).toContain('Waiting for reply 2');
+    });
+
+    it('keeps the open thread when answering takes it out of the filtered list', async () => {
+      const harness = await render(({ listConversations, listConversationMessages }) => {
+        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+        listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+      });
+      await choose(harness, 'Waiting for reply');
+      await open(harness);
+
+      // The list is read again and the thread no longer answers the chip.
+      harness.listConversations.mockReturnValue(
+        of(conversationPage([], { counts: { ...COUNTS, waiting: 2 } })),
+      );
+      harness.realtime.invalidate();
+      await settle(harness.fixture);
+
+      expect(harness.host.querySelectorAll('.conversation')).toHaveLength(0);
+      expect(query(harness.host, '#thread-heading').textContent).toContain('Rania Haddad');
+      expect(bodies(harness.host)).toEqual(['Message 1']);
+    });
+
+    it('takes a read thread off the unread count', async () => {
+      const harness = await render(({ listConversations, listConversationMessages }) => {
+        listConversations.mockReturnValue(
+          of(
+            conversationPage([conversation({ unreadCount: 1, lastReadSequence: 0 })], {
+              counts: COUNTS,
+            }),
+          ),
+        );
+        listConversationMessages.mockReturnValue(
+          of(
+            messagePage([message(1, { isUnreadByCaller: true })], {
+              readState: readState({ lastReadSequence: 0, unreadCount: 1 }),
+            }),
+          ),
+        );
+      });
+
+      await open(harness);
+
+      expect(chips(harness.host)).toContain('Unread 1');
+    });
+
+    it('shows the client beside the coach’s thread, from the read their page uses', async () => {
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+      });
+      await open(harness);
+
+      expect(harness.getClientOverview).toHaveBeenCalledWith('client-1');
+      const panel = query(harness.host, 'app-chat-client-panel.client-column');
+      expect(panel.getAttribute('role')).toBe('complementary');
+      expect(panel.getAttribute('aria-label')).toBe('About Rania Haddad');
+      expect(panel.textContent).toContain('Online coaching');
+      expect(panel.textContent).toContain('Lower A');
+      expect(panel.textContent).toContain('Back squat 85 kg × 5');
+      expect(query(panel, 'a.open').getAttribute('href')).toBe('/clients/client-1');
+    });
+
+    it('opens the same panel as a sheet where the column does not fit', async () => {
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+      });
+      await open(harness);
+
+      press(harness.host, 'Client details');
+      await settle(harness.fixture);
+
+      const sheet = query(document.body, '.tb-modal-pane--sheet');
+      expect(sheet.textContent).toContain('About Rania Haddad');
+      expect(sheet.textContent).toContain('Online coaching');
+      expect(harness.getClientOverview).toHaveBeenCalledTimes(1);
+    });
+
+    it('says when the client could not be read, and leaves the chat working', async () => {
+      const harness = await render(
+        ({ listConversations, listConversationMessages, getClientOverview }) => {
+          listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+          listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+          getClientOverview.mockReturnValue(
+            throwError(() => new HttpErrorResponse({ status: 404 })),
+          );
+        },
+      );
+      await open(harness);
+
+      const panel = query(harness.host, 'app-chat-client-panel.client-column');
+      expect(panel.textContent).toContain('Their details could not be loaded.');
+      expect(query(panel, 'a.open').getAttribute('href')).toBe('/clients/client-1');
+      expect(bodies(harness.host)).toEqual(['Message 1']);
+      expect(query(harness.host, 'p.error[role="alert"]').textContent?.trim()).toBe('');
+    });
+
+    it('gives a client no search, chips, waiting marks or client panel', async () => {
+      const LEA = { userId: 'coach-user', displayName: 'Lea Haddad', role: 'Coach' as const };
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(
+          of(
+            conversationPage([
+              conversation({ callerRole: 'Client', counterpart: LEA, isAwaitingReply: true }),
+              conversation({ ...SECOND, callerRole: 'Client', isReadOnly: true, counterpart: LEA }),
+            ]),
+          ),
+        );
+      });
+      harness.membership.set({ ...ALPHA, role: 'Client' });
+      await settle(harness.fixture);
+
+      expect(harness.host.querySelector('app-inbox-toolbar')).toBeNull();
+      expect(harness.host.querySelector('.tag.waiting')).toBeNull();
+      await open(harness, 'Lea Haddad');
+      expect(harness.getClientOverview).not.toHaveBeenCalled();
+      expect(harness.host.querySelector('app-chat-client-panel')).toBeNull();
+      expect(harness.host.textContent).not.toContain('Client details');
+    });
+
+    it('puts focus back in the search box when the search is cleared', async () => {
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+      });
+      await search(harness, 'rania');
+
+      query<HTMLButtonElement>(harness.host, 'app-inbox-toolbar button.clear').click();
+      await settle(harness.fixture);
+
+      const box = query<HTMLInputElement>(harness.host, '#conversation-search');
+      expect(box.value).toBe('');
+      expect(document.activeElement).toBe(box);
+      expect(lastQuery(harness)).toEqual({ filter: 'all', search: '' });
+    });
+
+    it('forgets the search when the workspace changes', async () => {
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+      });
+      await search(harness, 'rania');
+      expect(lastQuery(harness)).toEqual({ filter: 'all', search: 'rania' });
+
+      harness.membership.set(BETA);
+      await settle(harness.fixture);
+
+      expect(lastQuery(harness)).toEqual({ filter: 'all', search: '' });
+      expect(query<HTMLInputElement>(harness.host, '#conversation-search').value).toBe('');
+    });
   });
 
   // ---------- realtime, from the screen's side ----------

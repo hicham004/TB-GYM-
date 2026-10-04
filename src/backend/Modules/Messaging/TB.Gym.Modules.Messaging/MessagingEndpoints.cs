@@ -32,6 +32,8 @@ public static class MessagingEndpoints
             DateTimeOffset? beforeActivityAtUtc,
             Guid? beforeConversationId,
             int? take,
+            string? search,
+            ConversationListFilter? filter,
             IMessagingApplicationService service,
             CancellationToken token) =>
         {
@@ -46,10 +48,20 @@ public static class MessagingEndpoints
                 });
             }
 
+            if (ConversationListQuery.TryCreate(search, filter) is not { } query)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    [search is { Length: > ConversationListQuery.MaximumSearchLength } ? "search" : "filter"] =
+                        [$"Search at most {ConversationListQuery.MaximumSearchLength} characters, with one of the listed filters."],
+                });
+            }
+
             return Results.Ok(await service.ListConversationsAsync(
                 beforeActivityAtUtc,
                 beforeConversationId,
                 MessagingPaging.NormalizeConversationTake(take),
+                query,
                 token));
         })
         .WithName("ListOwnConversations")

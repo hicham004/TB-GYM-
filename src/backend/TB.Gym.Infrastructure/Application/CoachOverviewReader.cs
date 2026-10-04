@@ -129,6 +129,10 @@ internal sealed class CoachOverviewReader(
         var state = states.Single();
         var lastActivity = await LoadLastActivityAsync(scope, cancellationToken);
         lastActivity.TryGetValue(state.Client.Id, out var last);
+        var planName = state.RunningPlanName ?? await ReadPlanNameAsync(state.EndedPlan?.EnrollmentId, cancellationToken);
+        var lastWorkout = state.TrainingIncluded
+            ? await LoadLastWorkoutAsync(scope, state.Client.Id, cancellationToken)
+            : null;
 
         var days = Days(state.Sessions, weekFrom, 7);
         return new ClientProfileOverviewView(
@@ -139,9 +143,11 @@ internal sealed class CoachOverviewReader(
             CoachAttentionPolicy.Status(state.Flags, state.PlanState),
             state.PlanState,
             state.PlanEndsOn,
+            planName,
             CoachAttentionPolicy.Rank(Items(state)),
             last?.Kind,
             last?.AtUtc,
+            lastWorkout,
             state.TrainingIncluded
                 ? new CoachWeekView(
                     weekFrom,
@@ -276,6 +282,7 @@ internal sealed class CoachOverviewReader(
                 planState,
                 runningPlan?.EndDateExclusive.AddDays(-1) ?? endedPlan?.LastDay,
                 runningPlan?.EnrollmentId,
+                runningPlan?.PlanName,
                 endedPlan,
                 CoachAttentionPolicy.Flags(signals, planState, today),
                 signals,
@@ -417,7 +424,7 @@ internal sealed class CoachOverviewReader(
                                (item.Status == EnrollmentStatus.Active ||
                                 item.Status == EnrollmentStatus.PendingPayment ||
                                 item.Status == EnrollmentStatus.Paused))
-                .Select(item => new PlanEnd(item.ClientProfileId, item.Id, item.EndDateExclusive))
+                .Select(item => new PlanEnd(item.ClientProfileId, item.Id, item.EndDateExclusive, item.ProductNameSnapshot))
                 .ToListAsync(cancellationToken))
             .ToLookup(item => item.ClientProfileId);
 
@@ -671,6 +678,52 @@ internal sealed class CoachOverviewReader(
     }
 
     /// <summary>
+    /// One client's newest finished workout, with its duration and records, shaped as a line of Today's
+    /// feed. The caller asks only for a client whose plan includes training.
+    /// </summary>
+    private async Task<CoachActivityItemView?> LoadLastWorkoutAsync(
+        Scope scope,
+        Guid clientProfileId,
+        CancellationToken cancellationToken)
+    {
+        var workout = await dbContext.WorkoutExecutions.AsNoTracking()
+            .Where(item => item.ClientProfileId == clientProfileId &&
+                           item.Status == WorkoutExecutionStatus.Completed &&
+                           item.CompletedAtUtc != null)
+            .OrderByDescending(item => item.CompletedAtUtc).ThenByDescending(item => item.Id)
+            .Select(item => new FinishedWorkout(
+                item.Id,
+                item.ClientProfileId,
+                item.SessionNameSnapshot,
+                item.StartedAtUtc,
+                item.CompletedAtUtc!.Value))
+            .FirstOrDefaultAsync(cancellationToken);
+        if (workout is null)
+        {
+            return null;
+        }
+
+        var records = await ReadRecordsAsync([workout], cancellationToken);
+        return new CoachActivityItemView(
+            CoachActivityKind.WorkoutCompleted,
+            scope.Client(workout.ClientProfileId).Ref,
+            workout.CompletedAtUtc,
+            workout.Id,
+            workout.SessionName,
+            (int)Math.Max(0, Math.Floor((workout.CompletedAtUtc - workout.StartedAtUtc).TotalSeconds)),
+            records[workout.Id].ToArray());
+    }
+
+    /// <summary>The name a plan was sold under, kept on the enrollment when it was booked.</summary>
+    private async Task<string?> ReadPlanNameAsync(Guid? enrollmentId, CancellationToken cancellationToken) =>
+        enrollmentId is not { } id
+            ? null
+            : await dbContext.ClientEnrollments.AsNoTracking()
+                .Where(item => item.Id == id)
+                .Select(item => item.ProductNameSnapshot)
+                .SingleOrDefaultAsync(cancellationToken);
+
+    /// <summary>
     /// When each client last did something the coach may see: finished a workout or sent a check-in
     /// (while the plan includes it), or logged a weigh-in (while the relationship is not blocked).
     /// </summary>
@@ -790,6 +843,7 @@ internal sealed class CoachOverviewReader(
         ClientPlanState PlanState,
         DateOnly? PlanEndsOn,
         Guid? RunningEnrollmentId,
+        string? RunningPlanName,
         EndedPlan? EndedPlan,
         IReadOnlyList<CoachAttentionKind> Flags,
         ClientAttentionSignals Signals,
@@ -811,7 +865,7 @@ internal sealed class CoachOverviewReader(
 
     private sealed record RenewalAsk(Guid ClientProfileId, DateOnly RequestedOn, DateTimeOffset RequestedAtUtc);
 
-    private sealed record PlanEnd(Guid ClientProfileId, Guid EnrollmentId, DateOnly EndDateExclusive);
+    private sealed record PlanEnd(Guid ClientProfileId, Guid EnrollmentId, DateOnly EndDateExclusive, string PlanName);
 
     private sealed record OpenBlockWeek(Guid BlockId, AttentionWeek? Week);
 

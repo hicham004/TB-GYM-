@@ -1,0 +1,111 @@
+// The client beside the chat (C6): small blocks read top to bottom, each a fact and where to act.
+:host {
+  color: var(--tb-ink);
+  display: grid;
+  gap: var(--space-16);
+}
+h2,
+h3,
+p,
+ul {
+  margin: 0;
+}
+.title {
+  font-size: 1rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.standing {
+  display: grid;
+  gap: var(--space-8);
+  justify-items: start;
+}
+.block {
+  border-block-start: 1px solid var(--tb-line);
+  display: grid;
+  gap: var(--space-4);
+  padding-block-start: var(--space-12);
+}
+h3 {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lead {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.muted {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+.plan-state {
+  font-size: 0.875rem;
+}
+.plan-state.soon {
+  color: var(--tb-warm-ink);
+  font-weight: 700;
+}
+a {
+  color: inherit;
+}
+.workout,
+.needs a {
+  text-decoration-color: var(--tb-line-strong);
+  text-underline-offset: 0.2em;
+}
+.workout:hover,
+.needs a:hover {
+  text-decoration-color: currentColor;
+}
+.records,
+.needs {
+  display: grid;
+  gap: var(--space-4);
+  list-style: none;
+  padding: 0;
+}
+.records li {
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.records li:not(.muted)::before {
+  color: var(--tb-accent-ink);
+  content: '★ ';
+}
+.needs li {
+  display: grid;
+}
+.needs a {
+  font-weight: 600;
+}
+.week {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  margin-block-start: var(--space-4);
+}
+.open {
+  justify-self: start;
+}
+
+// Beside the thread (Messages places it in the grid's third column), only when there is room.
+:host(.client-column) {
+  display: none;
+  grid-area: panel;
+}
+@container messages (min-width: 66rem) {
+  :host(.client-column) {
+    align-self: start;
+    background: var(--tb-surface);
+    border: 1px solid var(--tb-line);
+    border-radius: var(--tb-radius-card);
+    box-shadow: var(--tb-shadow-card);
+    display: grid;
+    max-block-size: 100%;
+    overflow-y: auto;
+    padding: var(--space-16);
+  }
+}

@@ -117,6 +117,12 @@ li.unavailable .who {
   font-weight: 600;
   padding: 0.05rem 0.5rem;
 }
+// Waiting for the coach: the warm accent Today uses for what is due, and a word, not a colour alone.
+.tag.waiting {
+  background: var(--tb-warm-soft);
+  border-color: transparent;
+  color: var(--tb-warm-ink);
+}
 .more {
   background: none;
   border: 0;

@@ -1,5 +1,7 @@
 import type {
   ConversationDetail as ContractConversationDetail,
+  ConversationListCounts as ContractListCounts,
+  ConversationListFilter,
   ConversationMessagePreview as ContractPreview,
   ConversationPage as ContractConversationPage,
   ConversationParticipantRole,
@@ -62,13 +64,42 @@ export interface Conversation {
   readonly lastMessage: MessagePreview | null;
   /** The client's thread with a coach they no longer have: readable, never writable (ADR 0026). */
   readonly isReadOnly: boolean;
+  /** The other person spoke last and the caller can still answer (MSG-022). */
+  readonly isAwaitingReply: boolean;
 }
+
+/** The coach's inbox filters (C6, MSG-022), as the address keeps them (`?show=waiting`). */
+export type InboxFilter = 'all' | 'unread' | 'waiting';
+
+export const INBOX_FILTERS: readonly InboxFilter[] = ['all', 'unread', 'waiting'];
+
+/** How many conversations each filter holds, over the whole list whatever the search. */
+export type InboxCounts = Readonly<Record<InboxFilter, number>>;
 
 export interface ConversationPage {
   readonly items: readonly Conversation[];
   readonly hasMore: boolean;
   readonly nextBeforeActivityAtUtc: string | null;
   readonly nextBeforeConversationId: string | null;
+  /** Present on a first page only. */
+  readonly counts: InboxCounts | null;
+}
+
+/** What the list is narrowed to, as the API takes it. */
+export interface InboxQuery {
+  readonly filter: InboxFilter;
+  readonly search: string;
+}
+
+export function inboxFilterParam(filter: InboxFilter): ConversationListFilter {
+  switch (filter) {
+    case 'unread':
+      return 'Unread';
+    case 'waiting':
+      return 'AwaitingReply';
+    default:
+      return 'All';
+  }
 }
 
 export interface Message {
@@ -193,6 +224,7 @@ export function mapConversation(value: ContractConversationSummary): Conversatio
     accessReason: value.accessReason,
     lastMessage: value.lastMessage ? mapPreview(value.lastMessage) : null,
     isReadOnly: value.isReadOnly ?? false,
+    isAwaitingReply: value.isAwaitingReply ?? false,
   };
 }
 
@@ -202,6 +234,15 @@ export function mapConversationPage(value: ContractConversationPage): Conversati
     hasMore: value.hasMore,
     nextBeforeActivityAtUtc: value.nextBeforeActivityAtUtc ?? null,
     nextBeforeConversationId: value.nextBeforeConversationId ?? null,
+    counts: value.counts ? mapCounts(value.counts) : null,
+  };
+}
+
+function mapCounts(value: ContractListCounts): InboxCounts {
+  return {
+    all: toCount(value.all),
+    unread: toCount(value.unread),
+    waiting: toCount(value.awaitingReply),
   };
 }
 

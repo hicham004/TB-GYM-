@@ -62,6 +62,7 @@ internal sealed class MessagingApplicationService(
         DateTimeOffset? beforeActivityAtUtc,
         Guid? beforeConversationId,
         int take,
+        ConversationListQuery query,
         CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } userId || !tenantContext.HasTenant)
@@ -69,13 +70,46 @@ internal sealed class MessagingApplicationService(
             return new ConversationPage([], false, null, null);
         }
 
+        // The whole list is classified only when something needs it: the counts a first page carries,
+        // or a filter or a search, which have to look past the page to find what matches.
+        var firstPage = beforeActivityAtUtc is null;
+        var classified = firstPage || !query.IsEverything
+            ? await ClassifyAsync(userId, withNames: query.Terms.Count > 0, cancellationToken)
+            : null;
+        var counts = firstPage
+            ? new ConversationListCounts(
+                classified!.Count,
+                classified.Count(item => item.HasUnread),
+                classified.Count(item => item.IsAwaitingReply))
+            : null;
+
         var normalizedTake = MessagingPaging.NormalizeConversationTake(take);
-        var ordered = await ConversationKeysetAsync(
-            userId,
-            beforeActivityAtUtc,
-            beforeConversationId,
-            normalizedTake + 1,
-            cancellationToken);
+        IReadOnlyList<Guid> ordered;
+        if (query.IsEverything)
+        {
+            ordered = await ConversationKeysetAsync(
+                userId,
+                beforeActivityAtUtc,
+                beforeConversationId,
+                normalizedTake + 1,
+                cancellationToken);
+        }
+        else
+        {
+            var matching = classified!
+                .Where(item => query.Matches(item.CounterpartName, item.HasUnread, item.IsAwaitingReply))
+                .Select(item => item.Id)
+                .ToArray();
+            ordered = matching.Length == 0
+                ? []
+                : await MatchingKeysetAsync(
+                    matching,
+                    beforeActivityAtUtc,
+                    beforeConversationId,
+                    normalizedTake + 1,
+                    cancellationToken);
+        }
+
         var hasMore = ordered.Count > normalizedTake;
         if (hasMore)
         {
@@ -84,7 +118,7 @@ internal sealed class MessagingApplicationService(
 
         if (ordered.Count == 0)
         {
-            return new ConversationPage([], false, null, null);
+            return new ConversationPage([], false, null, null, counts);
         }
 
         var summaries = await SummarizeAsync(ordered, userId, cancellationToken);
@@ -93,7 +127,8 @@ internal sealed class MessagingApplicationService(
             summaries,
             hasMore,
             hasMore ? last.LastActivityAtUtc : null,
-            hasMore ? last.Id : null);
+            hasMore ? last.Id : null,
+            counts);
     }
 
     public async Task<ConversationCommandResult> CreateDirectConversationAsync(
@@ -1346,6 +1381,22 @@ internal sealed class MessagingApplicationService(
             userId,
             cancellationToken);
         var previews = await PreviewsAsync(available, userId, cancellationToken);
+        var readOnly = new HashSet<Guid>();
+        foreach (var conversation in ordered)
+        {
+            if (!await coachClientScope.MayCoachAsync(
+                    conversation.CoachUserId,
+                    conversation.ClientProfileId,
+                    cancellationToken))
+            {
+                readOnly.Add(conversation.Id);
+            }
+        }
+
+        var awaiting = await AwaitingReplyAsync(
+            [.. available.Where(conversation => !readOnly.Contains(conversation.Id)).Select(conversation => conversation.Id)],
+            userId,
+            cancellationToken);
 
         var summaries = new List<ConversationSummary>(ordered.Length);
         foreach (var conversation in ordered)
@@ -1353,10 +1404,7 @@ internal sealed class MessagingApplicationService(
             var participant = participants[conversation.Id];
             var decision = decisions[conversation.Id];
             var counterpartId = conversation.CounterpartOf(userId);
-            var isReadOnly = !await coachClientScope.MayCoachAsync(
-                conversation.CoachUserId,
-                conversation.ClientProfileId,
-                cancellationToken);
+            var isReadOnly = readOnly.Contains(conversation.Id);
             summaries.Add(new ConversationSummary(
                 conversation.Id,
                 conversation.ClientProfileId,
@@ -1377,10 +1425,130 @@ internal sealed class MessagingApplicationService(
                 decision.IsAllowed,
                 decision.Reason,
                 decision.IsAllowed ? previews.GetValueOrDefault(conversation.Id) : null,
-                isReadOnly));
+                isReadOnly,
+                awaiting.Contains(conversation.Id)));
         }
 
         return summaries;
+    }
+
+    /// <summary>
+    /// Every conversation the caller may see in the list, with whether it holds something unread and
+    /// whether it waits for the caller's reply (MSG-022), for the counts, the filters and the search.
+    /// </summary>
+    /// <remarks>
+    /// Feature access is decided first and in one batch, and only conversations that pass it are asked
+    /// anything about their messages, exactly as the page projection does; a refused conversation
+    /// still counts in All and can still be found by name. The decisions land in the request's cache,
+    /// so the page summarized afterwards does not decide them again.
+    /// </remarks>
+    private async Task<IReadOnlyList<ClassifiedConversation>> ClassifyAsync(
+        Guid userId,
+        bool withNames,
+        CancellationToken cancellationToken)
+    {
+        var visible = await ConversationKeysetAsync(
+            userId,
+            null,
+            null,
+            MessagingPaging.MaximumClassifiedConversations,
+            cancellationToken);
+        if (visible.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = visible.ToArray();
+        var conversations = await dbContext.Conversations
+            .AsNoTracking()
+            .Where(conversation => ids.Contains(conversation.Id))
+            .ToListAsync(cancellationToken);
+        var roles = await dbContext.ConversationParticipants
+            .AsNoTracking()
+            .Where(participant => ids.Contains(participant.ConversationId) && participant.UserId == userId)
+            .ToDictionaryAsync(participant => participant.ConversationId, participant => participant.Role, cancellationToken);
+
+        var undecided = conversations
+            .Select(conversation => conversation.ClientProfileId)
+            .Where(clientProfileId => !accessCache.ContainsKey(clientProfileId))
+            .Distinct()
+            .ToArray();
+        if (undecided.Length > 0)
+        {
+            var decisions = await featureAccessService.EvaluateManyAsync(
+                tenantContext.TenantId,
+                undecided,
+                cancellationToken);
+            foreach (var (clientProfileId, features) in decisions)
+            {
+                accessCache[clientProfileId] = features.Single(item => item.Feature == CoachingFeature.Messaging);
+            }
+        }
+
+        var available = conversations
+            .Where(conversation => accessCache[conversation.ClientProfileId].IsAllowed)
+            .ToArray();
+        // The list shows a coach a thread only while they coach the client, so on the coach side every
+        // listed thread can be answered. A client's thread with a former coach is kept to read and
+        // waits for nobody (ADR 0026).
+        var writable = new List<Guid>(available.Length);
+        foreach (var conversation in available)
+        {
+            if (roles.GetValueOrDefault(conversation.Id) == ConversationParticipantRole.Coach ||
+                await coachClientScope.MayCoachAsync(conversation.CoachUserId, conversation.ClientProfileId, cancellationToken))
+            {
+                writable.Add(conversation.Id);
+            }
+        }
+
+        var unread = await UnreadByConversationAsync(
+            [.. available.Select(conversation => conversation.Id)],
+            userId,
+            cancellationToken);
+        var awaiting = await AwaitingReplyAsync([.. writable], userId, cancellationToken);
+        var names = withNames
+            ? await CounterpartNamesAsync([.. conversations], userId, cancellationToken)
+            : [];
+
+        return conversations
+            .Select(conversation => new ClassifiedConversation(
+                conversation.Id,
+                names.GetValueOrDefault(conversation.CounterpartOf(userId), string.Empty),
+                unread.GetValueOrDefault(conversation.Id, 0L) > 0,
+                awaiting.Contains(conversation.Id)))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// The conversations whose newest message still present was written by somebody other than the
+    /// caller (MSG-022). A removed message is passed over, so taking one back never leaves the other
+    /// person's earlier question looking answered. The caller passes only conversations it may read.
+    /// </summary>
+    private async Task<HashSet<Guid>> AwaitingReplyAsync(
+        Guid[] conversationIds,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        if (conversationIds.Length == 0)
+        {
+            return [];
+        }
+
+        var newest = await (
+            from message in dbContext.Messages.AsNoTracking()
+            where conversationIds.Contains(message.ConversationId) &&
+                  message.DeletedAtUtc == null &&
+                  message.Sequence == dbContext.Messages
+                      .Where(other => other.TenantId == message.TenantId &&
+                                      other.ConversationId == message.ConversationId &&
+                                      other.DeletedAtUtc == null)
+                      .Max(other => other.Sequence)
+            select new { message.ConversationId, message.SenderUserId })
+            .ToListAsync(cancellationToken);
+        return newest
+            .Where(item => item.SenderUserId != userId)
+            .Select(item => item.ConversationId)
+            .ToHashSet();
     }
 
     /// <summary>
@@ -1610,6 +1778,42 @@ internal sealed class MessagingApplicationService(
             """).ToListAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// One page of a filtered or searched list: the same order and cursor as the plain list, over the
+    /// conversations already found to match. PostgreSQL orders the identifiers, so the tie-breaker is
+    /// the one the plain list uses.
+    /// </summary>
+    private async Task<IReadOnlyList<Guid>> MatchingKeysetAsync(
+        Guid[] matching,
+        DateTimeOffset? beforeActivityAtUtc,
+        Guid? beforeConversationId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = tenantContext.TenantId;
+        if (beforeActivityAtUtc is { } activity && beforeConversationId is { } cursorId)
+        {
+            return await dbContext.Database.SqlQuery<Guid>($"""
+                SELECT c."Id" AS "Value"
+                FROM messaging."Conversations" AS c
+                WHERE c."TenantId" = {tenantId}
+                  AND c."Id" = ANY({matching})
+                  AND (c."LastActivityAtUtc", c."Id") < ({activity}, {cursorId})
+                ORDER BY c."LastActivityAtUtc" DESC, c."Id" DESC
+                LIMIT {limit}
+                """).ToListAsync(cancellationToken);
+        }
+
+        return await dbContext.Database.SqlQuery<Guid>($"""
+            SELECT c."Id" AS "Value"
+            FROM messaging."Conversations" AS c
+            WHERE c."TenantId" = {tenantId}
+              AND c."Id" = ANY({matching})
+            ORDER BY c."LastActivityAtUtc" DESC, c."Id" DESC
+            LIMIT {limit}
+            """).ToListAsync(cancellationToken);
+    }
+
     private Task<MessagingCommandRecord?> FindCommandAsync(
         Guid idempotencyKey,
         CancellationToken cancellationToken) =>
@@ -1738,6 +1942,8 @@ internal sealed class MessagingApplicationService(
 
     /// <summary>What a command body decided: either a refusal that rolls back, or what it wrote.</summary>
     private sealed record CommandOutcome<TResult>(TResult? Refusal, Guid? TargetId);
+
+    private sealed record ClassifiedConversation(Guid Id, string CounterpartName, bool HasUnread, bool IsAwaitingReply);
 
     private sealed record IdempotentDecision<TResult>(
         MessagingCommandRecord? Replay,

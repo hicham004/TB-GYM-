@@ -34,6 +34,10 @@ public sealed record ConversationMessagePreview(
     MessageDeletionKind? DeletionKind);
 
 /// <summary>One conversation as its own participant sees it.</summary>
+/// <param name="IsAwaitingReply">
+/// The newest message still present was written by the other participant (MSG-022). False for a
+/// conversation the caller cannot currently open or can no longer write in.
+/// </param>
 public sealed record ConversationSummary(
     Guid Id,
     Guid ClientProfileId,
@@ -49,7 +53,26 @@ public sealed record ConversationSummary(
     bool IsAvailable,
     FeatureAccessReason AccessReason,
     ConversationMessagePreview? LastMessage,
-    bool IsReadOnly = false);
+    bool IsReadOnly = false,
+    bool IsAwaitingReply = false);
+
+/// <summary>Which of the caller's conversations a list shows (MSG-022).</summary>
+public enum ConversationListFilter
+{
+    All = 1,
+
+    /// <summary>Something from the other participant the caller has not read yet.</summary>
+    Unread = 2,
+
+    /// <summary>The other participant spoke last and the caller can still answer.</summary>
+    AwaitingReply = 3,
+}
+
+/// <summary>
+/// How many of the caller's conversations each filter holds, over all of them whatever the search,
+/// so a filter's count never changes because of what was typed.
+/// </summary>
+public sealed record ConversationListCounts(int All, int Unread, int AwaitingReply);
 
 /// <summary>
 /// One keyset page of the caller's own conversations, newest activity first.
@@ -57,13 +80,16 @@ public sealed record ConversationSummary(
 /// <remarks>
 /// The cursor is the last row's activity instant and identifier together. Offset paging would
 /// silently skip or repeat rows every time a message arrived between two pages, which on a list
-/// ordered by activity is not an edge case but the normal state of affairs.
+/// ordered by activity is not an edge case but the normal state of affairs. A filtered or searched
+/// list pages by the same cursor over the conversations that match.
 /// </remarks>
+/// <param name="Counts">Present on the first page only, where a list is read from the top.</param>
 public sealed record ConversationPage(
     IReadOnlyList<ConversationSummary> Items,
     bool HasMore,
     DateTimeOffset? NextBeforeActivityAtUtc,
-    Guid? NextBeforeConversationId);
+    Guid? NextBeforeConversationId,
+    ConversationListCounts? Counts = null);
 
 /// <summary>One message as a participant sees it.</summary>
 /// <remarks>
@@ -269,6 +295,13 @@ public static class MessagingPaging
 
     public const int MaximumMessagePageSize = 100;
 
+    /// <summary>
+    /// How many of the caller's most recently active conversations a filter, a search and the counts
+    /// look at. A coach's conversations are one per client, so this is far above any real list; it
+    /// is here so that no request reads an unbounded number of rows.
+    /// </summary>
+    public const int MaximumClassifiedConversations = 2000;
+
     public static int NormalizeConversationTake(int? take) =>
         take is null or <= 0
             ? DefaultConversationPageSize
@@ -291,10 +324,15 @@ public static class MessagingPaging
 /// </remarks>
 public interface IMessagingApplicationService
 {
+    /// <summary>
+    /// The caller's conversations, newest activity first, narrowed by a filter and a search on the
+    /// other participant's name (MSG-022). Message text is never searched.
+    /// </summary>
     Task<ConversationPage> ListConversationsAsync(
         DateTimeOffset? beforeActivityAtUtc,
         Guid? beforeConversationId,
         int take,
+        ConversationListQuery query,
         CancellationToken cancellationToken);
 
     Task<ConversationCommandResult> CreateDirectConversationAsync(

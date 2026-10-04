@@ -2,6 +2,9 @@
 // scroll the page; wide screens show both as fixed panels that scroll inside.
 :host {
   color: var(--tb-ink);
+  // The coach's client column needs room the window size alone does not tell (the sidebar takes
+  // some), so it is decided on the screen's own width.
+  container: messages / inline-size;
   display: block;
 }
 * {
@@ -124,6 +127,10 @@ h2:focus {
 .thread-role {
   color: var(--tb-muted);
   font-size: 0.85rem;
+}
+.details {
+  flex: none;
+  margin-inline-start: auto;
 }
 .back {
   background: none;
@@ -448,5 +455,16 @@ li.mine article {
   .closed,
   .read-only-notice {
     margin: var(--space-16);
+  }
+}
+
+// ---- The coach's client column, when the screen is wide enough for three ----
+@container messages (min-width: 66rem) {
+  .chat.with-panel {
+    grid-template-areas: 'title banners banners' 'inbox thread panel';
+    grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr) minmax(15rem, 18rem);
+  }
+  .chat.with-panel .details {
+    display: none;
   }
 }

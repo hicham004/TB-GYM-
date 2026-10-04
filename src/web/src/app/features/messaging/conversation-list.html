@@ -41,6 +41,9 @@
           <span class="count" aria-hidden="true">{{ conversation.unreadCount }}</span>
         } @else if (conversation.isReadOnly) {
           <span class="tag">{{ readOnlyLabel(conversation) }}</span>
+        } @else if (showWaiting() && conversation.isAwaitingReply) {
+          <!-- Read but not answered yet; the row's name says it in words. -->
+          <span class="tag waiting" aria-hidden="true" i18n>Waiting</span>
         }
       </button>
     </li>

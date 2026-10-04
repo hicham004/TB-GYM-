@@ -257,8 +257,9 @@ export function dayMark(
   return date < today ? 'missed' : 'due';
 }
 
-function planLabel(
-  row: ClientOverviewRow,
+/** Where the plan stands, as the list and the chat's client panel say it. */
+export function planLabel(
+  row: Pick<ClientOverviewRow, 'planState' | 'planEndsOn'>,
   today: string,
   locale: string,
 ): { label: string; soon: boolean } {

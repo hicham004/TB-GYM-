@@ -759,9 +759,11 @@ export type ClientProfileOverviewView = {
   status: ClientOverviewStatus;
   planState: ClientPlanState;
   planEndsOn: null | string;
+  planName: null | string;
   attention: Array<CoachAttentionItemView>;
   lastActivityKind: null | CoachActivityKind;
   lastActivityAtUtc: null | string;
+  lastWorkout: null | CoachActivityItemView;
   week: null | CoachWeekView;
   attentionRuleKey: string;
   attentionRuleVersion: number | string;
@@ -1176,6 +1178,14 @@ export type ConversationDetail = {
   readState: ConversationReadState;
 };
 
+export type ConversationListCounts = {
+  all: number | string;
+  unread: number | string;
+  awaitingReply: number | string;
+};
+
+export type ConversationListFilter = 'All' | 'Unread' | 'AwaitingReply';
+
 export type ConversationMessagePreview = {
   messageId: string;
   sequence: number | string;
@@ -1192,6 +1202,7 @@ export type ConversationPage = {
   hasMore: boolean;
   nextBeforeActivityAtUtc: null | string;
   nextBeforeConversationId: null | string;
+  counts?: null | ConversationListCounts;
 };
 
 export type ConversationParticipantRole = 'Coach' | 'Client';
@@ -1222,6 +1233,7 @@ export type ConversationSummary = {
   accessReason: FeatureAccessReason;
   lastMessage: null | ConversationMessagePreview;
   isReadOnly?: boolean;
+  isAwaitingReply?: boolean;
 };
 
 export type CookingFactorKind = 'Yield' | 'Retention';
@@ -8951,6 +8963,8 @@ export type ListOwnConversationsData = {
     beforeActivityAtUtc?: string;
     beforeConversationId?: string;
     take?: number | string;
+    search?: string;
+    filter?: ConversationListFilter;
   };
   url: '/api/messaging/conversations';
 };

@@ -66,8 +66,9 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R3.3b | **Client profile** header, overview and progress (C3), with a coach read of the client's personal records | §2, plus backend tests | Done · 2026-10-03 · 214f8b1 |
 | R3.4a | **Client profile Training** (C3): the program as a timeline, with Assign, Reschedule, Complete, Cancel, Build next block and a session sheet | §2, plus backend tests | Done · 2026-10-03 · 80f7b9e |
 | R3.4b | **Client profile Service & access** (C3): plan, payments, renew, change coach and release | §2 | Done · 2026-10-04 · 9c1468f |
-| R3.5a | **Coach brand settings** (§3.1): a look or own colours and a logo, with the backend setting and logo upload, drawn for the coach's staff and clients | §2, plus backend tests | Done · 2026-10-04 |
-| R3.5b | **Coach Messages** (C6): search, filters, the client's plan and last workout beside the thread, saved replies | §2, plus backend tests | To do |
+| R3.5a | **Coach brand settings** (§3.1): a look or own colours and a logo, with the backend setting and logo upload, drawn for the coach's staff and clients | §2, plus backend tests | Done · 2026-10-04 · a37645d |
+| R3.5b | **Coach Messages** (C6): search and filters (unread, waiting for a reply) over every conversation, the client's plan and last workout beside the thread | §2, plus backend tests | Done · 2026-10-04 |
+| R3.5c | **Saved replies** (C6): a coach's own short replies, kept on the server and dropped into the composer | §2, plus backend tests | To do |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Gate |
 | R4.1 | **Program builder** (C4), part 1: library panel, week grid, drag and drop | §2 | To do |
 | R4.2 | **Program builder**, part 2: inline editing, autosave, unsaved-changes guard, publish preview | §2 | To do |
@@ -112,10 +113,17 @@ of the implemented R1.3 screens before production rollout.
   keeps delivery apart from reading). So the Messages badge can count a message already on screen.
   Advancing the cursor for a message shown while the page is visible would fix it; it changes a
   documented read rule, so it needs an owner decision.
-- **Coach chat extras (for R3.5b).** R2.5a rebuilt the shared screen only. C6 still wants search,
-  filters (unread, waiting for a reply), the client's plan and last workout beside the thread, and
-  saved replies. Removing your own message stays immediate, as it always was, now behind the
-  message's options; an undo would need care because removal is one way (MSG-008).
+- **Coach chat extras (R3.5b, R3.5c).** R3.5b built search, the filters and the client beside the
+  thread; saved replies are R3.5c. Owner question for R3.5c: are a coach's saved replies their own,
+  or shared with the gym's team? Claude recommends each coach's own first (a coach's voice is
+  personal) and team sharing later; C5's "reply with saved templates" can use the same ones. They
+  stay plain text the coach edits before sending: MSG-004 allows no template that fills itself in.
+  Removing your own message stays immediate, as it always was, now behind the message's options; an
+  undo would need care because removal is one way (MSG-008).
+- **Searching message text (from R3.5b).** The inbox search reads names only (MSG-022); searching
+  what was said is deferred by the roadmap (Phase 6B) and would need its own index and access rules.
+- **The client beside the chat is read when a thread opens (from R3.5b).** A workout the client
+  finishes while the coach has the thread open shows the next time it is opened, like the plan.
 - **Nutrition day refusals (from R0.2).** A day with no meal plan and a refused day share one
   message ("There is no meal plan for this day…"). Map each access reason, as check-ins do, when
   M4 is rebuilt (R2.4).
@@ -209,7 +217,9 @@ of the implemented R1.3 screens before production rollout.
   the 5 kB component-style warning (8 kB is an error), like the Today, Messages and Progress ones.
   R3.5a measured 537.9 kB: `WorkspaceBrandStore` and the sidebar's space name and logo (+3.1 kB). The
   colour derivation it needs (`brand-theme.ts`, `color.ts`, about 2.5 kB) is a lazy chunk the store
-  fetches at start-up, so the first frame still wears the coach's colours.
+  fetches at start-up, so the first frame still wears the coach's colours. R3.5b measured 538.3 kB
+  (+0.4 kB, the list's filter and search parameters in `ApiClient`); `messages.scss` is 7.5 kB, the
+  client column's own styles living in its component.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -689,6 +699,21 @@ limited to the coach's assigned clients.
   bubbles and day separators, a composer, and live updates with no Refresh button. Voice notes and
   attachments come later.
 - R2.5a built the shared screen for both sides (see M7); R3.5b adds the coach-only parts.
+- Built in R3.5b, on the same list endpoint with `filter` and `search` (MSG-022), and the client
+  page's read (now with the plan's name and the last workout):
+  - Above the inbox: a search box (names, ignoring case and accents, over every conversation, not
+    just the loaded page) and chips All, Unread and Waiting for reply with the server's counts; the
+    chip is kept in `?show=`. A narrowed list that comes back empty says why ("Nobody is waiting for
+    a reply", "No conversation matches …") with the one way back. A thread whose client spoke last
+    carries a warm "Waiting" mark; answering takes it off, and the open thread stays open when it
+    leaves the filtered list.
+  - Beside the thread, when the screen has room for three columns: the client's standing ("On
+    track", "Trained yesterday"), the plan with its end, the last workout with its duration and
+    records, this week's sessions, what else needs the coach (messages left out: the coach is in
+    them) and Open profile. Narrower, Client details in the thread header opens the same panel as a
+    sheet. A client sees none of this.
+  - Messages now follows dark mode, for coaches and clients. Screenshots on the Atlas demo:
+    `docs/design/r35b-*.png`.
 
 **C7. Nutrition library and meal-plan builder**
 - Recipe cards with macro bars and photos.

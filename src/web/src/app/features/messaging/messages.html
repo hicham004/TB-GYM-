@@ -4,6 +4,7 @@
   [class.single]="singleThread()"
   [class.for-client]="forClient()"
   [class.no-conversations]="listIsEmpty()"
+  [class.with-panel]="isCoachSide()"
 >
   <h1 id="messages-heading" class="chat-title" #heading tabindex="-1" i18n>Messages</h1>
 
@@ -55,6 +56,15 @@
 
   @if (!singleThread()) {
     <nav class="inbox" #inbox aria-label="Conversations" i18n-aria-label>
+      @if (showToolbar()) {
+        <app-inbox-toolbar
+          [filter]="inboxFilter()"
+          [search]="searchDraft()"
+          [counts]="counts()"
+          (filterChange)="setInboxFilter($event)"
+          (searchChange)="onSearch($event)"
+        />
+      }
       @if (listLoading() && conversations().length === 0) {
         <!-- The status line above already says the list is loading. -->
         <div class="list-skeleton" aria-hidden="true">
@@ -76,6 +86,19 @@
             >
           }
         </app-empty-state>
+      } @else if (nothingMatches()) {
+        @let copy = nothingMatchesCopy();
+        <app-empty-state class="empty" [heading]="copy.heading" [description]="copy.description">
+          <button
+            empty-state-action
+            appButton
+            type="button"
+            variant="outlined"
+            (click)="clearNarrowing()"
+          >
+            {{ copy.action }}
+          </button>
+        </app-empty-state>
       } @else {
         <app-conversation-list
           [conversations]="conversations()"
@@ -83,6 +106,7 @@
           [hasMore]="conversationsHasMore()"
           [loadingMore]="listLoadingMore()"
           [now]="now()"
+          [showWaiting]="!forClient()"
           (choose)="select($event)"
           (loadMore)="loadMoreConversations()"
         />
@@ -109,6 +133,20 @@
           </h2>
           <p class="thread-role">{{ counterpartRole(conversation) }}</p>
         </div>
+        @if (isCoachSide()) {
+          <!-- The client column takes this place on a wide screen. -->
+          <button
+            appButton
+            type="button"
+            variant="text"
+            class="details"
+            aria-haspopup="dialog"
+            (click)="openClientDetails(conversation)"
+            i18n
+          >
+            Client details
+          </button>
+        }
         <p class="thread-unread tb-visually-hidden" role="status">
           @if (conversationUnread() > 0) {
             <span i18n>{{ conversationUnread() }} unread in this conversation.</span>
@@ -390,4 +428,26 @@
       </div>
     }
   </section>
+
+  @if (isCoachSide() && selected(); as conversation) {
+    <app-chat-client-panel
+      class="client-column"
+      role="complementary"
+      [attr.aria-label]="aboutLabel(conversation)"
+      [state]="panelState()"
+      [name]="conversation.counterpart.displayName"
+      [clientId]="conversation.clientProfileId"
+    />
+  }
 </div>
+
+<ng-template #clientSheet>
+  @if (selected(); as conversation) {
+    <app-chat-client-panel
+      [state]="panelState()"
+      [name]="conversation.counterpart.displayName"
+      [clientId]="conversation.clientProfileId"
+      [showTitle]="false"
+    />
+  }
+</ng-template>

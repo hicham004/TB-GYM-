@@ -289,6 +289,8 @@ export type {
   ConfirmEmailResponses,
   ConversationCounterpart,
   ConversationDetail,
+  ConversationListCounts,
+  ConversationListFilter,
   ConversationMessagePreview,
   ConversationPage,
   ConversationParticipantRole,

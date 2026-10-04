@@ -44,6 +44,7 @@ import type {
   NotificationPreferences,
 } from '../../features/notifications/notification.models';
 import {
+  inboxFilterParam,
   mapConversationDetail,
   mapConversationPage,
   mapMessage,
@@ -57,6 +58,7 @@ import type {
   ConversationDetail,
   ConversationPage,
   ConversationReadState,
+  InboxQuery,
   Message,
   MessagePage,
   RealtimeAcknowledgement,
@@ -1316,6 +1318,7 @@ export class ApiClient {
     beforeActivityAtUtc?: string | null,
     beforeConversationId?: string | null,
     take = 25,
+    query?: InboxQuery,
   ): Observable<ConversationPage> {
     // Both halves of the keyset cursor or neither: the API refuses one without the other, because a
     // half cursor cannot identify a position.
@@ -1323,6 +1326,10 @@ export class ApiClient {
       beforeActivityAtUtc && beforeConversationId
         ? { beforeActivityAtUtc, beforeConversationId, take }
         : { take };
+    // The plain list sends neither, so it pages straight from the index.
+    if (query && query.filter !== 'all') params['filter'] = inboxFilterParam(query.filter);
+    const search = query?.search.trim() ?? '';
+    if (search !== '') params['search'] = search;
     return this.http
       .get<Phase3Contracts.ConversationPage>('/api/messaging/conversations', { params })
       .pipe(map(mapConversationPage));

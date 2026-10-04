@@ -4,16 +4,18 @@ import {
   afterNextRender,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
   Injector,
   LOCALE_ID,
   signal,
+  TemplateRef,
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
@@ -38,16 +40,24 @@ import { Avatar } from '../../ui/avatar';
 import { Button, ButtonLink } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
+import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import { ChatBubble } from './chat-bubble';
+import { ChatClientPanel } from './chat-client-panel';
+import { clientPanel, type ClientPanelState } from './chat-client-panel.models';
 import { ChatComposer } from './chat-composer';
 import { chatTimeline, firstUnreadSequence } from './chat-timeline';
 import { ConversationList } from './conversation-list';
+import { InboxToolbar } from './inbox-toolbar';
 import {
+  INBOX_FILTERS,
   isNewerProjection,
   mergeNewer,
   mergeOlder,
   type Conversation,
+  type InboxCounts,
+  type InboxFilter,
+  type InboxQuery,
   type Message,
   type MessagePage,
   type RealtimeEvent,
@@ -62,6 +72,11 @@ export const maximumReasonLength = 500;
 
 /** How close to the newest message still counts as reading it, so a new one scrolls into view. */
 const followLatestPx = 160;
+
+/** How long typing pauses before the search is asked for. */
+const searchDelayMs = 250;
+
+const plainQuery: InboxQuery = { filter: 'all', search: '' };
 
 /**
  * The signed-in member's own conversations, for one workspace.
@@ -90,11 +105,13 @@ const followLatestPx = 160;
     Button,
     ButtonLink,
     ChatBubble,
+    ChatClientPanel,
     ChatComposer,
     ConversationList,
     EmptyState,
     FormsModule,
     Icon,
+    InboxToolbar,
     RouterLink,
     Skeleton,
   ],
@@ -110,9 +127,11 @@ export class Messages {
   private readonly unreadStore = inject(MessageUnreadStore);
   private readonly realtime = inject(MessagingRealtimeService);
   private readonly conversationLaunch = inject(ConversationLaunch);
+  private readonly route = inject(ActivatedRoute, { optional: true });
+  private readonly router = inject(Router, { optional: true });
+  private readonly sheets = inject(UiSheet);
   /** Coach Today's "Reply" links here with `?conversation=<id>`; it is opened once, then forgotten. */
-  private linkedConversationId =
-    inject(ActivatedRoute, { optional: true })?.snapshot.queryParamMap.get('conversation') ?? null;
+  private linkedConversationId = this.route?.snapshot.queryParamMap.get('conversation') ?? null;
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
@@ -131,6 +150,29 @@ export class Messages {
   private readonly nextActivityCursor = signal<string | null>(null);
   private readonly nextIdCursor = signal<string | null>(null);
   protected readonly selectedId = signal<string | null>(null);
+  /**
+   * The open conversation as it was chosen. A filtered list can drop it (answering a client takes
+   * them out of "Waiting for reply"), and the thread being read must not vanish with the row.
+   */
+  private readonly pinned = signal<Conversation | null>(null);
+
+  /** The coach's filter chip, kept in the address (`?show=waiting`) so Back returns to it. */
+  protected readonly inboxFilter = signal<InboxFilter>(
+    INBOX_FILTERS.find((filter) => filter === this.route?.snapshot.queryParamMap.get('show')) ??
+      'all',
+  );
+  /** What the search box shows, and what the list was last asked for. */
+  protected readonly searchDraft = signal('');
+  private readonly searchApplied = signal('');
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  /** How many conversations each chip holds, from the newest first page. */
+  protected readonly counts = signal<InboxCounts | null>(null);
+  /** The client beside a coach's open thread. */
+  protected readonly clientPanel = signal<ClientPanelState | null>(null);
+  protected readonly panelState = computed<ClientPanelState>(
+    () => this.clientPanel() ?? { status: 'loading' },
+  );
+
   protected readonly messages = signal<readonly Message[]>([]);
   protected readonly hasOlder = signal(false);
   private readonly oldestSequence = signal<number | null>(null);
@@ -198,10 +240,16 @@ export class Messages {
   private readonly threadHeading = viewChild<ElementRef<HTMLElement>>('threadHeading');
   private readonly feed = viewChild<ElementRef<HTMLElement>>('feed');
   private readonly inbox = viewChild<ElementRef<HTMLElement>>('inbox');
+  private readonly clientSheet = viewChild<TemplateRef<unknown>>('clientSheet');
 
-  protected readonly selected = computed(() =>
-    this.conversations().find((conversation) => conversation.id === this.selectedId()),
-  );
+  protected readonly selected = computed(() => {
+    const id = this.selectedId();
+    const pinned = this.pinned();
+    return (
+      this.conversations().find((conversation) => conversation.id === id) ??
+      (pinned !== null && pinned.id === id ? pinned : undefined)
+    );
+  });
 
   protected readonly isCoachSide = computed(() => this.selected()?.callerRole === 'Coach');
 
@@ -243,9 +291,61 @@ export class Messages {
       : $localize`Open a client and choose Message to start a conversation.`,
   );
 
-  protected readonly listIsEmpty = computed(
-    () => !this.listLoading() && this.error() === null && this.conversations().length === 0,
+  /** What the list is asked for. A client has one or two threads and no filters. */
+  private readonly query = computed<InboxQuery>(() =>
+    this.forClient() ? plainQuery : { filter: this.inboxFilter(), search: this.searchApplied() },
   );
+
+  private readonly isNarrowed = computed(() => {
+    const query = this.query();
+    return query.filter !== 'all' || query.search.trim() !== '';
+  });
+
+  /** No conversation at all, whatever the filter: the invitation to start one. */
+  protected readonly listIsEmpty = computed(
+    () =>
+      !this.listLoading() &&
+      this.error() === null &&
+      this.conversations().length === 0 &&
+      (!this.isNarrowed() || this.counts()?.all === 0),
+  );
+
+  /** Conversations exist, but none answers the filter or the search. */
+  protected readonly nothingMatches = computed(
+    () =>
+      !this.listLoading() &&
+      this.error() === null &&
+      this.conversations().length === 0 &&
+      !this.listIsEmpty(),
+  );
+
+  /** The coach's search and chips, once there is something to search. */
+  protected readonly showToolbar = computed(
+    () => !this.forClient() && (this.isNarrowed() || this.conversations().length > 0),
+  );
+
+  protected readonly nothingMatchesCopy = computed(() => {
+    const search = this.searchApplied().trim();
+    if (search !== '') {
+      return {
+        heading: $localize`No conversation matches “${search}:search:”`,
+        description: $localize`The search looks at names. Try part of a first or last name.`,
+        action: $localize`Clear search`,
+      };
+    }
+
+    return this.inboxFilter() === 'unread'
+      ? {
+          heading: $localize`Nothing unread`,
+          description: $localize`You have read everything your clients sent.`,
+          action: $localize`Show all conversations`,
+        }
+      : {
+          heading: $localize`Nobody is waiting for a reply`,
+          description: $localize`Every client has heard back from you.`,
+          action: $localize`Show all conversations`,
+        };
+  });
 
   /** Derived reasons the composer works out for itself; never the channel a server error uses. */
   protected readonly composerIssues = computed(() => bodyIssues(this.draft()));
@@ -271,6 +371,7 @@ export class Messages {
 
   constructor() {
     this.scope.onReset(() => this.resetTenantState());
+    inject(DestroyRef).onDestroy(() => this.cancelSearchTimer());
     // The page heading takes focus on arrival, so a screen reader starts at "Messages".
     afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
     effect(() => {
@@ -446,6 +547,65 @@ export class Messages {
     );
   }
 
+  /** A chip: the list is asked again for what it names, and the address keeps it. */
+  protected setInboxFilter(filter: InboxFilter): void {
+    if (filter === this.inboxFilter()) {
+      return;
+    }
+
+    this.inboxFilter.set(filter);
+    void this.router?.navigate([], {
+      relativeTo: this.route,
+      queryParams: { show: filter === 'all' ? null : filter },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+    this.reloadList();
+  }
+
+  /** Typing asks once it pauses; clearing the box asks at once. */
+  protected onSearch(value: string): void {
+    this.searchDraft.set(value);
+    this.cancelSearchTimer();
+    const apply = (): void => {
+      this.searchTimer = null;
+      if (this.searchApplied() !== value) {
+        this.searchApplied.set(value);
+        this.reloadList();
+      }
+    };
+    if (value.trim() === '') {
+      apply();
+    } else {
+      this.searchTimer = setTimeout(apply, searchDelayMs);
+    }
+  }
+
+  /** The way out of an empty filtered list: the search first, then the chip. */
+  protected clearNarrowing(): void {
+    if (this.searchApplied().trim() !== '') {
+      this.onSearch('');
+    } else {
+      this.setInboxFilter('all');
+    }
+  }
+
+  /** "About Maya Rahman": the client column's name, and the sheet's title. */
+  protected aboutLabel(conversation: Conversation): string {
+    return $localize`About ${conversation.counterpart.displayName}:name:`;
+  }
+
+  /** On a screen too narrow for the client column, the same panel opens as a sheet. */
+  protected openClientDetails(conversation: Conversation): void {
+    const template = this.clientSheet();
+    if (template !== undefined) {
+      this.sheets.open(template, {
+        title: this.aboutLabel(conversation),
+        closeLabel: $localize`Close`,
+      });
+    }
+  }
+
   protected async refresh(): Promise<void> {
     return this.scope.run('refresh', async (owner) => {
       const generation = this.contextGeneration;
@@ -484,6 +644,7 @@ export class Messages {
               this.nextActivityCursor(),
               this.nextIdCursor(),
               conversationPageSize,
+              this.query(),
             ),
           ),
         );
@@ -535,7 +696,12 @@ export class Messages {
       const thread = ++this.threadGeneration;
       this.resetThread();
       this.selectedId.set(conversation.id);
+      this.pinned.set(conversation);
       this.focusThreadWhenInboxHidden();
+      if (conversation.callerRole === 'Coach') {
+        // Read beside the thread, not before it: the chat is what the coach came for.
+        void this.loadClientPanel(conversation.clientProfileId, generation, thread);
+      }
       if (!conversation.isAvailable) {
         // The list already carries the decision, so a refused conversation explains itself without a
         // request that would only be refused again.
@@ -634,9 +800,16 @@ export class Messages {
           return;
         }
 
+        const wasWaiting = this.selected()?.isAwaitingReply === true;
         this.messages.update((loaded) => mergeNewer(loaded, [sent]));
         this.latestSequence.set(Math.max(this.latestSequence(), sent.sequence));
         this.applyToPreview(sent);
+        if (wasWaiting) {
+          // Answered: one fewer waiting, until the next read of the list says so itself.
+          this.counts.update((counts) =>
+            counts === null ? null : { ...counts, waiting: Math.max(0, counts.waiting - 1) },
+          );
+        }
         this.commandKeys.release('send', conversationId);
         this.draft.set('');
         this.composerAttempt.reset();
@@ -885,6 +1058,49 @@ export class Messages {
     });
   }
 
+  /** A new filter or search: the list is read again from the top, the open thread stays. */
+  private reloadList(): void {
+    const generation = this.contextGeneration;
+    if (this.contextKey() !== null) {
+      void this.loadConversations(generation);
+    }
+  }
+
+  private cancelSearchTimer(): void {
+    if (this.searchTimer !== null) {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+    }
+  }
+
+  /**
+   * The client beside the coach's thread, from the read their page uses. A failure leaves the chat
+   * alone and says so in the panel; the thread never waits for it.
+   */
+  private async loadClientPanel(
+    clientProfileId: string,
+    generation: number,
+    thread: number,
+  ): Promise<void> {
+    return this.scope.run('clientPanel', async (owner) => {
+      this.clientPanel.set({ status: 'loading' });
+      try {
+        const view = await owner.wait(firstValueFrom(this.api.getClientOverview(clientProfileId)));
+        if (this.owns(generation, thread)) {
+          this.clientPanel.set({
+            status: 'ready',
+            panel: clientPanel(view, { locale: this.locale, now: new Date() }),
+          });
+        }
+      } catch {
+        if (!owner.current) return;
+        if (this.owns(generation, thread)) {
+          this.clientPanel.set({ status: 'failed' });
+        }
+      }
+    });
+  }
+
   private async loadConversations(generation: number): Promise<void> {
     return this.scope.run('conversations', async (owner) => {
       const request = ++this.listRequest;
@@ -895,7 +1111,9 @@ export class Messages {
       this.error.set(null);
       try {
         const page = await owner.wait(
-          firstValueFrom(this.api.listConversations(null, null, conversationPageSize)),
+          firstValueFrom(
+            this.api.listConversations(null, null, conversationPageSize, this.query()),
+          ),
         );
         if (!this.ownsList(generation, request)) {
           return;
@@ -903,6 +1121,7 @@ export class Messages {
 
         this.now.set(new Date());
         this.conversations.set(page.items);
+        this.counts.set(page.counts);
         this.applyCursor(page);
         const requested = this.conversationLaunch.take(this.tenants.selectedTenantId());
         const linked = requested ? null : this.takeLinkedConversation(page.items);
@@ -1016,6 +1235,18 @@ export class Messages {
           return;
         }
 
+        const hadUnread = (this.selected()?.unreadCount ?? 0) > 0;
+        if (hadUnread && readState.unreadCount === 0) {
+          // Reading is not an event the live channel carries, so the chip is told here.
+          this.counts.update((counts) =>
+            counts === null ? null : { ...counts, unread: Math.max(0, counts.unread - 1) },
+          );
+        }
+        this.pinned.update((pinned) =>
+          pinned?.id === conversationId
+            ? { ...pinned, unreadCount: readState.unreadCount }
+            : pinned,
+        );
         this.conversationUnread.set(readState.unreadCount);
         // The rows the cursor now covers stop being unread. Leaving the marks up would contradict the
         // count beside them, and the server has just said authoritatively where the cursor is.
@@ -1056,40 +1287,47 @@ export class Messages {
    * fail.
    */
   private applyToPreview(message: Message): void {
-    this.conversations.update((loaded) =>
-      loaded.map((conversation) => {
-        if (conversation.id !== message.conversationId) {
-          return conversation;
-        }
+    const preview = (conversation: Conversation): Conversation => {
+      if (conversation.id !== message.conversationId) {
+        return conversation;
+      }
 
-        const isNewest =
-          conversation.lastMessage === null ||
-          conversation.lastMessage.messageId === message.id ||
-          message.sequence >= conversation.lastMessage.sequence;
-        if (!isNewest) {
-          return conversation;
-        }
+      const isNewest =
+        conversation.lastMessage === null ||
+        conversation.lastMessage.messageId === message.id ||
+        message.sequence >= conversation.lastMessage.sequence;
+      if (!isNewest) {
+        return conversation;
+      }
 
-        return {
-          ...conversation,
-          lastSequence: Math.max(conversation.lastSequence, message.sequence),
-          lastActivityAtUtc:
-            message.sentAtUtc > conversation.lastActivityAtUtc
-              ? message.sentAtUtc
-              : conversation.lastActivityAtUtc,
-          lastMessage: {
-            messageId: message.id,
-            sequence: message.sequence,
-            senderUserId: message.senderUserId,
-            isFromCaller: message.isFromCaller,
-            sentAtUtc: message.sentAtUtc,
-            body: message.body,
-            isDeleted: message.isDeleted,
-            deletionKind: message.deletionKind,
-          },
-        };
-      }),
-    );
+      return {
+        ...conversation,
+        // Who spoke last decides who waits (MSG-022). A removal is left to the next read of the
+        // list, which knows which earlier message is now the newest.
+        isAwaitingReply: message.isDeleted
+          ? conversation.isAwaitingReply
+          : !message.isFromCaller && !conversation.isReadOnly,
+        lastSequence: Math.max(conversation.lastSequence, message.sequence),
+        lastActivityAtUtc:
+          message.sentAtUtc > conversation.lastActivityAtUtc
+            ? message.sentAtUtc
+            : conversation.lastActivityAtUtc,
+        lastMessage: {
+          messageId: message.id,
+          sequence: message.sequence,
+          senderUserId: message.senderUserId,
+          isFromCaller: message.isFromCaller,
+          sentAtUtc: message.sentAtUtc,
+          body: message.body,
+          isDeleted: message.isDeleted,
+          deletionKind: message.deletionKind,
+        },
+      };
+    };
+
+    this.conversations.update((loaded) => loaded.map(preview));
+    // The open thread may have left a filtered list; its pinned copy tells the same truth.
+    this.pinned.update((pinned) => (pinned === null ? null : preview(pinned)));
   }
 
   private applyPage(page: MessagePage): void {
@@ -1150,6 +1388,11 @@ export class Messages {
     this.nextIdCursor.set(null);
     this.listLoading.set(false);
     this.listLoadingMore.set(false);
+    this.counts.set(null);
+    // Another account or workspace has other clients: a name typed for these means nothing there.
+    this.cancelSearchTimer();
+    this.searchDraft.set('');
+    this.searchApplied.set('');
     ++this.threadGeneration;
     this.resetThread();
   }
@@ -1161,6 +1404,8 @@ export class Messages {
     // showing, and the next thread's cursor would start behind them.
     void this.realtime.closeConversation();
     this.selectedId.set(null);
+    this.pinned.set(null);
+    this.clientPanel.set(null);
     this.messages.set([]);
     this.optionsFor.set(null);
     this.unreadFrom.set(null);
@@ -1190,6 +1435,12 @@ export class Messages {
     ++this.historyRequest;
     this.context = null;
     this.conversations.set([]);
+    this.counts.set(null);
+    this.pinned.set(null);
+    this.clientPanel.set(null);
+    this.cancelSearchTimer();
+    this.searchDraft.set('');
+    this.searchApplied.set('');
     this.conversationsHasMore.set(false);
     this.nextActivityCursor.set(null);
     this.nextIdCursor.set(null);

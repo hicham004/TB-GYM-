@@ -1,5 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
+import { profileOverview } from '../src/testing/client-profile-fixtures';
+import { MAYA } from '../src/testing/coach-today-fixtures';
 import {
   COACH_MEMBERSHIP,
   expect,
@@ -118,6 +120,8 @@ function summary(
       deletionKind: null,
     },
     isReadOnly: false,
+    // The other person spoke last (MSG-022).
+    isAwaitingReply: !last.fromCaller,
   };
 }
 
@@ -237,13 +241,54 @@ async function openMessages(
             reason: 'Granted',
           })),
         ),
-      'GET /api/messaging/conversations': (route: Route) =>
-        json(route, 200, {
-          items: inbox,
+      // The server filters and searches every conversation (MSG-022); this answers the same way.
+      'GET /api/messaging/conversations': (route: Route) => {
+        const url = new URL(route.request().url());
+        const filter = url.searchParams.get('filter');
+        const search = (url.searchParams.get('search') ?? '').toLowerCase();
+        const unread = (item: (typeof inbox)[number]) => item.unreadCount > 0;
+        const waiting = (item: (typeof inbox)[number]) => item.isAwaitingReply;
+        return json(route, 200, {
+          items: inbox.filter(
+            (item) =>
+              (filter === 'Unread'
+                ? unread(item)
+                : filter === 'AwaitingReply'
+                  ? waiting(item)
+                  : true) && item.counterpart.displayName.toLowerCase().includes(search),
+          ),
           hasMore: false,
           nextBeforeActivityAtUtc: null,
           nextBeforeConversationId: null,
-        }),
+          counts: {
+            all: inbox.length,
+            unread: inbox.filter(unread).length,
+            awaitingReply: inbox.filter(waiting).length,
+          },
+        });
+      },
+      // The client beside the coach's thread, from the read their page uses.
+      [`GET /api/clients/profile-${THREAD}/overview`]: (route: Route) =>
+        json(
+          route,
+          200,
+          profileOverview({
+            today: '2026-09-30',
+            client: { ...MAYA, clientProfileId: `profile-${THREAD}` },
+            lastActivityAtUtc: '2026-09-30T10:00:00Z',
+            lastWorkout: {
+              kind: 'WorkoutCompleted',
+              client: { ...MAYA, clientProfileId: `profile-${THREAD}` },
+              occurredAtUtc: '2026-09-30T10:00:00Z',
+              subjectId: 'workout-1',
+              title: 'Lower A',
+              durationSeconds: 3120,
+              personalRecords: [
+                { exerciseName: 'Back squat', repetitions: 5, load: 85, unit: 'Kilogram' },
+              ],
+            },
+          }),
+        ),
       [`GET /api/messaging/conversations/${THREAD}/messages`]: (route: Route) =>
         json(route, 200, {
           conversationId: THREAD,
@@ -357,7 +402,9 @@ test('a coach at 1440px keeps the inbox beside the thread and sends with Enter',
   await check(page, 'coach-inbox', 1440);
 
   await inbox.getByRole('button', { name: 'Maya Fakhoury, no unread messages' }).click();
-  await expect(page.getByRole('heading', { name: 'Maya Fakhoury', level: 2 })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Maya Fakhoury', level: 2, exact: true }),
+  ).toBeVisible();
   // On a wide screen the inbox stays, and so does the reader's place in it.
   await expect(inbox).toBeVisible();
   await expect(page.getByRole('button', { name: 'All conversations' })).toBeHidden();
@@ -383,7 +430,9 @@ test('a coach on a phone moves from the inbox to a thread and back', async ({ pa
   await expect(page.getByText('Choose a conversation')).toBeHidden();
 
   await inbox.getByRole('button', { name: 'Maya Fakhoury, no unread messages' }).click();
-  await expect(page.getByRole('heading', { name: 'Maya Fakhoury', level: 2 })).toBeFocused();
+  await expect(
+    page.getByRole('heading', { name: 'Maya Fakhoury', level: 2, exact: true }),
+  ).toBeFocused();
   await expect(inbox).toBeHidden();
   await check(page, 'coach-thread', 390);
 
@@ -413,4 +462,69 @@ test('the chat mirrors in right-to-left', async ({ page }) => {
   const mine = await page.locator('.feed li.mine app-chat-bubble').first().boundingBox();
   const theirs = await page.locator('.feed li.theirs app-chat-bubble').first().boundingBox();
   expect(mine!.x).toBeLessThan(theirs!.x);
+});
+
+// R3.5b: the coach's inbox finds who is waiting, and the client sits beside the thread (C6).
+test('a coach at 1440px finds who is waiting and sees the client beside the thread', async ({
+  page,
+}) => {
+  await openMessages(page, 'lea', 1440, 900);
+  const inbox = page.getByRole('navigation', { name: 'Conversations' });
+  const chips = inbox.getByRole('group', { name: 'Show' });
+  await expect(chips.getByRole('radio')).toHaveCount(3);
+  await expect(inbox.locator('.chip')).toHaveText(['All 5', 'Unread 1', 'Waiting for reply 2']);
+  await expect(
+    inbox.getByRole('button', { name: 'Rita Daher, waiting for your reply' }),
+  ).toBeVisible();
+
+  // The radio is the chip's own input; a reader clicks the chip around it.
+  await inbox.locator('.chip', { hasText: 'Waiting for reply' }).click();
+  await expect(chips.getByRole('radio', { name: /Waiting for reply/ })).toBeChecked();
+  await expect(inbox.locator('.conversation')).toHaveCount(2);
+  await expect(page).toHaveURL(/show=waiting/);
+  await inbox.getByRole('searchbox', { name: 'Search conversations' }).fill('rit');
+  await expect(inbox.locator('.conversation')).toHaveCount(1);
+  await inbox.getByRole('searchbox', { name: 'Search conversations' }).fill('zz');
+  await expect(inbox.getByText('No conversation matches “zz”')).toBeVisible();
+  await inbox.getByRole('button', { name: 'Clear search' }).first().click();
+  await inbox.locator('.chip').first().click();
+  await expect(inbox.locator('.conversation')).toHaveCount(5);
+
+  await inbox.getByRole('button', { name: 'Maya Fakhoury, no unread messages' }).click();
+  const panel = page.getByRole('complementary', { name: 'About Maya Fakhoury' });
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText('Online coaching');
+  await expect(panel).toContainText('Lower A');
+  await expect(panel).toContainText('Back squat 85 kg × 5');
+  await expect(panel.getByRole('link', { name: 'Open profile' })).toHaveAttribute(
+    'href',
+    `/clients/profile-${THREAD}`,
+  );
+  // The column has the room, so the thread offers no second way to the same details.
+  await expect(page.getByRole('button', { name: 'Client details' })).toBeHidden();
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/r35b-messages-coach-panel-1440.png' });
+});
+
+test('a coach on a phone opens the client as a sheet from the thread', async ({ page }) => {
+  await openMessages(page, 'lea', 390, 844);
+  const inbox = page.getByRole('navigation', { name: 'Conversations' });
+  await expect(inbox.getByRole('searchbox', { name: 'Search conversations' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/r35b-messages-coach-inbox-390.png', fullPage: true });
+
+  await inbox.getByRole('button', { name: 'Maya Fakhoury, no unread messages' }).click();
+  await expect(page.getByRole('complementary', { name: 'About Maya Fakhoury' })).toBeHidden();
+  await page.getByRole('button', { name: 'Client details' }).click();
+  const sheet = page.getByRole('dialog', { name: 'About Maya Fakhoury' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText('Online coaching');
+  await expect(sheet).toContainText('Lower A');
+  await axe(page);
+  await page.screenshot({ path: 'test-results/r35b-messages-coach-sheet-390.png' });
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Client details' })).toBeFocused();
 });
