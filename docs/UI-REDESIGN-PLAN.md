@@ -146,12 +146,6 @@ of the implemented R1.3 screens before production rollout.
 - **E2E writes into docs (seen in R2.4c).** `nutrition-day.e2e.ts` and `workout-progress.e2e.ts`
   save their screenshots into `docs/design/`, so every full e2e run rewrites committed images. Point
   them at `test-results/` as `checkin.e2e.ts` does.
-- **Angular router advisory (seen in R2.4c).** `npm audit --audit-level=high` fails on
-  `@angular/router` 22.0–22.1 (GHSA-ff3f-86qr-9cv3, a server-rendering denial of service). The app
-  renders in the browser today, but `check.ps1` stops at this step and R6.2 adds pre-rendering, so
-  bump Angular to 22.2 or later in its own step. Since 2026-10-01 the audit also reports a critical
-  advisory in `piscina` 5.0–5.3.1 (GHSA-67c8-pqhq-4rmx), which `@angular/build` 22.1.4 uses as its
-  build-time worker pool. It never reaches the browser; the same upgrade should clear it.
 - **Prototype fidelity pass (owner, 2026-10-01).** The owner felt the built screens have the
   prototype's feel but not its look, and will test the app and list changes per screen. Claude
   recommended doing that after R2.5c, before the coach side. Gaps found against the prototype:
@@ -208,7 +202,7 @@ of the implemented R1.3 screens before production rollout.
   - The coach's brand logo in the sidebar came with R3.5a.
 - **Missed-session rule (from R3.1).** The owner asked Claude to choose: TRN-021 counts misses since
   the client's last workout, 14 days back. Revisit after the founding coaches use it (R3.6).
-- **Initial bundle budget.** The initial bundle is 536.0 kB against the 520 kB warning (530.1 kB
+- **Initial bundle budget.** The initial bundle is 539.2 kB against the 520 kB warning (530.1 kB
   before R2.4c, which added only three icon glyphs; R2.5a's shell changes added about 1 kB, R2.5b
   0.2 kB, its mapping kept in the lazy Training chunk, R2.5c 3.9 kB: the install service, four
   icon glyphs and the saved-unit code, R3.2 0.3 kB, Coach Today itself being lazy, and R3.3a 0.2 kB,
@@ -220,7 +214,9 @@ of the implemented R1.3 screens before production rollout.
   colour derivation it needs (`brand-theme.ts`, `color.ts`, about 2.5 kB) is a lazy chunk the store
   fetches at start-up, so the first frame still wears the coach's colours. R3.5b measured 538.3 kB
   (+0.4 kB, the list's filter and search parameters in `ApiClient`); `messages.scss` is 7.5 kB, the
-  client column's own styles living in its component.
+  client column's own styles living in its component. R3.5c measured 538.3 kB, and the Angular 22.2.1
+  upgrade (2026-10-04, which cleared the router and `piscina` audit advisories) 539.2 kB: +0.9 kB of
+  framework code.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
