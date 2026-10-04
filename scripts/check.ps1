@@ -1,8 +1,11 @@
-param([switch] $SkipRestore)
+# -UseConfiguredPostgres runs the backend tests against the PostgreSQL in the two connection
+# variables even when Docker could provide the throwaway one (see TestPostgres.ps1).
+param([switch] $SkipRestore, [switch] $UseConfiguredPostgres)
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'Toolchain.ps1')
+. (Join-Path $PSScriptRoot 'TestPostgres.ps1')
 Initialize-TbGymToolchains -RepositoryRoot $repositoryRoot
 
 # The backend integration suite talks to a real PostgreSQL, so it needs a connection string to reach
@@ -44,7 +47,7 @@ this script, for example:
     `$env:TB_GYM_TEST_ADMIN_CONNECTION = 'Host=127.0.0.1;Port=5433;Database=postgres;Username=tbgym;Password=<password>;Pooling=false'
 
 TB_GYM_TEST_ADMIN_CONNECTION must reach a database the user may run CREATE DATABASE against; the
-suite creates one database per test class and drops it on the way out.
+suite creates one database per test and drops it on the way out.
 "@
 }
 
@@ -74,6 +77,8 @@ try {
     if ($dockerAvailable) {
         docker pull redis:8.2.2-alpine
         Assert-TbGymCommandSucceeded 'docker pull redis'
+        docker pull $TbGymTestPostgresImage
+        Assert-TbGymCommandSucceeded 'docker pull postgres'
         $env:TB_GYM_REQUIRE_REDIS_TESTS = 'true'
 
         docker compose config --quiet
@@ -84,8 +89,27 @@ try {
         $env:TB_GYM_REQUIRE_REDIS_TESTS = 'false'
     }
 
-    dotnet test TB.Gym.slnx --configuration Release --no-build
-    Assert-TbGymCommandSucceeded 'dotnet test'
+    $testPostgres = $null
+    if ($dockerAvailable -and -not $UseConfiguredPostgres) {
+        $testPostgres = Start-TbGymTestPostgres
+    }
+    else {
+        Write-Warning 'Backend tests use the configured PostgreSQL; expect the run to take about twice as long.'
+    }
+
+    try {
+        # One line per finished test, so a slow run can be told from a stuck one while it runs. A
+        # test still running after 30 minutes is a hang (the longest takes a few): it is named and
+        # the run stops, instead of the run sitting silent until someone gives up on it.
+        dotnet test TB.Gym.slnx --configuration Release --no-build --logger 'console;verbosity=normal' `
+            --blame-hang-timeout 30m --blame-hang-dump-type none
+        Assert-TbGymCommandSucceeded 'dotnet test'
+    }
+    finally {
+        if ($null -ne $testPostgres) {
+            Stop-TbGymTestPostgres $testPostgres
+        }
+    }
 
     Push-Location 'src\web'
     try {

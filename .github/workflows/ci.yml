@@ -49,8 +49,11 @@ jobs:
         run: dotnet format analyzers TB.Gym.slnx --verify-no-changes --no-restore
       - name: Build
         run: dotnet build TB.Gym.slnx --configuration Release --no-restore
+      # The same progress lines and hang limit as scripts/check.ps1.
       - name: Test
-        run: dotnet test TB.Gym.slnx --configuration Release --no-build
+        run: >-
+          dotnet test TB.Gym.slnx --configuration Release --no-build
+          --logger "console;verbosity=normal" --blame-hang-timeout 30m --blame-hang-dump-type none
       - name: Verify EF model and migrations agree
         run: |
           dotnet tool restore

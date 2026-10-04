@@ -73,7 +73,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
     public async Task InitializeAsync()
     {
         adminConnection = PostgreSqlTestEnvironment.RequireAdminConnection();
-        databaseName = await PostgreSqlTestEnvironment.CreateDatabaseAsync("tbgym_p6b1");
+        databaseName = await PostgreSqlTestEnvironment.CreateMigratedDatabaseAsync("tbgym_p6b1");
         databaseConnection = new NpgsqlConnectionStringBuilder(adminConnection)
         {
             Database = databaseName,

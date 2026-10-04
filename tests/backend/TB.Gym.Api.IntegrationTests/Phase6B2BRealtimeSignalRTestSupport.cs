@@ -64,7 +64,7 @@ public sealed partial class Phase6B2BRealtimeSignalRTests : IDisposable
     public async Task InitializeAsync()
     {
         adminConnection = PostgreSqlTestEnvironment.RequireAdminConnection();
-        databaseName = await PostgreSqlTestEnvironment.CreateDatabaseAsync("tbgym_p6b2b_ws");
+        databaseName = await PostgreSqlTestEnvironment.CreateMigratedDatabaseAsync("tbgym_p6b2b_ws");
         databaseConnection = new NpgsqlConnectionStringBuilder(adminConnection)
         {
             Database = databaseName,

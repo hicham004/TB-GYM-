@@ -48,7 +48,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task InitializeAsync()
     {
         adminConnection = PostgreSqlTestEnvironment.RequireAdminConnection();
-        databaseName = await PostgreSqlTestEnvironment.CreateDatabaseAsync("tbgym_p3");
+        databaseName = await PostgreSqlTestEnvironment.CreateMigratedDatabaseAsync("tbgym_p3");
 
         databaseConnection = new NpgsqlConnectionStringBuilder(adminConnection)
         {

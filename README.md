@@ -202,10 +202,29 @@ container image smoke tests.
 
 The backend suite needs a reachable PostgreSQL. It uses two connection strings: `ConnectionStrings__Database`
 for the application and `TB_GYM_TEST_ADMIN_CONNECTION` for the administrative connection that creates
-one database per test class and drops it afterwards. Both are derived from the `POSTGRES_*` values in
-`.env`, so the setup above is enough; to run against a different database, set the two variables
-yourself before running the script. `check.ps1` verifies them before it builds and stops with the
-names to set rather than failing every integration test after a full Release build.
+one database per test and drops it afterwards. The run migrates one `tbgym_template_*` database first
+and most tests start from a copy of it; migration-upgrade and startup tests get an empty one. Both
+connection strings are derived from the `POSTGRES_*` values in `.env`, so the setup above is enough;
+to run against a different database, set the two variables yourself before running the script.
+`check.ps1` verifies them before it builds and stops with the names to set rather than failing every
+integration test after a full Release build.
+
+When Docker is running, `check.ps1` runs the backend tests against a throwaway PostgreSQL instead
+(`scripts/TestPostgres.ps1`): the CI image, in memory, with durability switched off, listening on
+127.0.0.1 only with a password made up for the run, and removed when the run ends. It only ever holds
+test databases, so nothing of value can be lost, and dropping each test's database no longer waits
+on disk flushes; the suite runs in about half the time. `-UseConfiguredPostgres` keeps the configured
+server. To use it when running `dotnet test` yourself:
+
+```powershell
+. .\scripts\TestPostgres.ps1
+$testPostgres = Start-TbGymTestPostgres
+try { dotnet test TB.Gym.slnx --configuration Release --no-build } finally { Stop-TbGymTestPostgres $testPostgres }
+```
+
+The suite prints each test as it finishes; a test still running after 30 minutes is reported as hung
+and stops the run. Run it on mains power: on battery, Windows slows the disk and processor enough to
+roughly double the time.
 
 Docker also has to be running for the run to be free of skips: the Redis scale-out tests start their
 own pinned Redis container, and without a daemon they report inconclusive instead of executing. CI

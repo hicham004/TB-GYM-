@@ -74,7 +74,14 @@ public sealed class DemoWorkspaceTests
     {
         adminConnection = PostgreSqlTestEnvironment.RequireAdminConnection();
         databaseName = await PostgreSqlTestEnvironment.CreateDatabaseAsync("tbgym_demo");
-        var connection = new NpgsqlConnectionStringBuilder(adminConnection) { Database = databaseName }.ConnectionString;
+        // Pooled even when the admin connection is not: the demo makes tens of thousands of queries,
+        // and opening a new server process for each one took this test from minutes to over half an
+        // hour in a full run. Cleanup clears the pools before it drops the database.
+        var connection = new NpgsqlConnectionStringBuilder(adminConnection)
+        {
+            Database = databaseName,
+            Pooling = true,
+        }.ConnectionString;
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");

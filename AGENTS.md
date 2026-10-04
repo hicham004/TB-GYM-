@@ -11,7 +11,7 @@
 - **Build complete slices:** backend rule, API, screen and tests together, small enough to
   finish and commit in one session.
 - **Verify in proportion:** during work, run the tests for the area you changed. Before reporting,
-  run the full backend suite (about an hour) only when backend code changed, and the web checks
+  run the full backend suite (about 35 minutes) only when backend code changed, and the web checks
   only when web code changed; docs-only work needs neither. Click through any new or changed screen
   in a real browser. Security, tenant isolation and money correctness are always tested, never
   traded off.
@@ -142,9 +142,11 @@
 - Before reporting, run only the `./scripts/check.ps1` steps for the side you changed: the backend
   build and `dotnet test` when backend code changed, the npm steps when web code changed. If Docker
   isn't running, run those steps directly. Always run `git diff --check`.
-- The full backend suite can take about an hour. Start it once with a log and an exit-code marker,
-  arrange a completion watcher, and do other useful work or wait for the notification instead of
-  repeatedly polling. Read the final result before reporting; do not mistake silence for a pass.
+- The full backend suite takes about 35 minutes against the throwaway PostgreSQL that `check.ps1`
+  starts when Docker runs (`scripts/TestPostgres.ps1`; use it too when running `dotnet test` yourself),
+  about an hour against a normal server, and twice that on battery. Start it once with a log and
+  an exit-code marker, arrange a completion watcher, and do other useful work or wait for the
+  notification instead of repeatedly polling. Read the final result before reporting; do not mistake silence for a pass.
 
 ## Commands
 
