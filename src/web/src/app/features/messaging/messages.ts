@@ -49,6 +49,8 @@ import { ChatComposer } from './chat-composer';
 import { chatTimeline, firstUnreadSequence } from './chat-timeline';
 import { ConversationList } from './conversation-list';
 import { InboxToolbar } from './inbox-toolbar';
+import { SavedRepliesSheet } from './saved-replies';
+import { insertReply } from './saved-replies.models';
 import {
   INBOX_FILTERS,
   isNewerProjection,
@@ -113,6 +115,7 @@ const plainQuery: InboxQuery = { filter: 'all', search: '' };
     Icon,
     InboxToolbar,
     RouterLink,
+    SavedRepliesSheet,
     Skeleton,
   ],
   templateUrl: './messages.html',
@@ -241,6 +244,8 @@ export class Messages {
   private readonly feed = viewChild<ElementRef<HTMLElement>>('feed');
   private readonly inbox = viewChild<ElementRef<HTMLElement>>('inbox');
   private readonly clientSheet = viewChild<TemplateRef<unknown>>('clientSheet');
+  private readonly savedRepliesSheet = viewChild<TemplateRef<unknown>>('savedRepliesSheet');
+  private savedRepliesRef: { close(): void } | null = null;
 
   protected readonly selected = computed(() => {
     const id = this.selectedId();
@@ -604,6 +609,31 @@ export class Messages {
         closeLabel: $localize`Close`,
       });
     }
+  }
+
+  /** The coach's own saved replies, in a sheet over the thread (R3.5c). */
+  protected openSavedReplies(): void {
+    const template = this.savedRepliesSheet();
+    if (template === undefined) return;
+    const ref = this.sheets.open(template, {
+      title: $localize`Saved replies`,
+      closeLabel: $localize`Close`,
+    });
+    this.savedRepliesRef = ref;
+    ref.closed.subscribe(() => {
+      if (this.savedRepliesRef === ref) this.savedRepliesRef = null;
+    });
+  }
+
+  /**
+   * A chosen reply joins the draft, after anything already written, and waits there: the coach
+   * reads it, may change it, and sends it. Nothing is sent from the sheet.
+   */
+  protected useSavedReply(body: string): void {
+    this.draft.set(insertReply(this.draft(), body));
+    this.savedRepliesRef?.close();
+    this.savedRepliesRef = null;
+    afterNextRender(() => this.composer()?.focusField(), { injector: this.injector });
   }
 
   protected async refresh(): Promise<void> {

@@ -13,8 +13,88 @@ public static class MessagingEndpoints
     {
         MapConversations(endpoints);
         MapMessages(endpoints);
+        MapSavedReplies(endpoints);
         return endpoints;
     }
+
+    /// <summary>
+    /// The caller's own saved replies (MSG-023). Staff only, by policy; a client has none. Writes are
+    /// staff changes like any other, so they wait while the workspace is read-only for an unpaid bill.
+    /// </summary>
+    private static void MapSavedReplies(IEndpointRouteBuilder endpoints)
+    {
+        var replies = endpoints.MapGroup("/api/messaging/saved-replies")
+            .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithTags(MessagingModule.Name);
+
+        replies.MapGet("", async (ISavedReplyService service, CancellationToken token) =>
+            Results.Ok(await service.ListAsync(token)))
+            .WithName("ListOwnSavedReplies")
+            .Produces<SavedReplyList>();
+
+        replies.MapPost("", async (
+            CreateSavedReplyRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ISavedReplyService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToSavedReplyResult(await service.CreateAsync(request, token));
+        })
+        .WithName("CreateSavedReply")
+        .Produces<SavedReplyView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
+
+        replies.MapPost("/{savedReplyId:guid}/edit", async (
+            Guid savedReplyId,
+            EditSavedReplyRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ISavedReplyService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToSavedReplyResult(await service.EditAsync(savedReplyId, request, token));
+        })
+        .WithName("EditSavedReply")
+        .Produces<SavedReplyView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
+
+        replies.MapPost("/{savedReplyId:guid}/delete", async (
+            Guid savedReplyId,
+            DeleteSavedReplyRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ISavedReplyService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var result = await service.DeleteAsync(savedReplyId, request, token);
+            return result.Status == SavedReplyCommandStatus.Success
+                ? Results.NoContent()
+                : ToSavedReplyResult(result);
+        })
+        .WithName("DeleteSavedReply")
+        .Produces(StatusCodes.Status204NoContent)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
+    }
+
+    private static IResult ToSavedReplyResult(SavedReplyCommandResult result) => result.Status switch
+    {
+        SavedReplyCommandStatus.Success => Results.Ok(result.Reply),
+        SavedReplyCommandStatus.NotFound => Results.NotFound(),
+        SavedReplyCommandStatus.Invalid => Validation(result.Field, result.Detail),
+        SavedReplyCommandStatus.Conflict => Conflict(result.Code, result.Detail),
+        _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+    };
 
     /// <summary>
     /// The caller's own conversations. Every route sits behind the tenant-member policy, which

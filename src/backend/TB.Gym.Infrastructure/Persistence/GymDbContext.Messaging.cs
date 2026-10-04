@@ -26,6 +26,42 @@ public sealed partial class GymDbContext
     /// The sender key is the load-bearing one: a message whose sender is not an explicit participant
     /// of that exact conversation cannot be inserted at all.
     /// </remarks>
+    /// <summary>
+    /// A coach's own saved replies (MSG-023). The owner key runs to the membership, so a reply can only
+    /// belong to somebody who is or was a member of that workspace; the query filter and the service
+    /// narrow it further to the signed-in caller.
+    /// </summary>
+    private void ConfigureSavedReplies(ModelBuilder builder)
+    {
+        builder.Entity<SavedReply>(entity =>
+        {
+            entity.ToTable("SavedReplies", "messaging", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_SavedReplies_Title",
+                    $"char_length(btrim(\"Title\")) BETWEEN 1 AND {SavedReplyText.MaximumTitleLength}");
+                table.HasCheckConstraint(
+                    "CK_SavedReplies_Body",
+                    $"char_length(btrim(\"Body\")) BETWEEN 1 AND {MessageContentPolicy.MaximumLength}");
+            });
+            entity.HasKey(reply => reply.Id);
+            entity.HasIndex(reply => new { reply.TenantId, reply.OwnerUserId, reply.Title });
+            entity.Property(reply => reply.Title).HasMaxLength(SavedReplyText.MaximumTitleLength).IsRequired();
+            entity.Property(reply => reply.Body).HasMaxLength(MessageContentPolicy.MaximumLength).IsRequired();
+            entity.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(reply => reply.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(reply => new { reply.TenantId, reply.OwnerUserId })
+                .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(reply => tenantContext.HasTenant && reply.TenantId == tenantContext.TenantId);
+            ConfigureAuditable(entity);
+        });
+    }
+
     private void ConfigureMessaging(ModelBuilder builder)
     {
         builder.Entity<Conversation>(entity =>

@@ -19,6 +19,7 @@ import { profileOverview } from '../../../testing/client-profile-fixtures';
 import { MAYA } from '../../../testing/coach-today-fixtures';
 import { button, field, press, query, settle } from '../../../testing/dom';
 import { ConversationLaunch } from './conversation-launch';
+import { SavedRepliesApi } from './saved-replies-api';
 import { messagingRoutes } from './messages.routes';
 import type {
   Conversation,
@@ -278,6 +279,27 @@ async function render(
         },
       },
       { provide: MessagingRealtimeService, useValue: realtime },
+      {
+        provide: SavedRepliesApi,
+        useValue: {
+          list: vi.fn(() =>
+            of({
+              items: [
+                {
+                  id: 'reply-1',
+                  title: 'Check-in reminder',
+                  body: 'Your check-in is due today.',
+                  version: 1,
+                },
+              ],
+              maximum: 100,
+            }),
+          ),
+          create: vi.fn(),
+          edit: vi.fn(),
+          delete: vi.fn(),
+        },
+      },
     ],
   }).compileComponents();
 
@@ -2181,6 +2203,41 @@ describe('Messages', () => {
       expect(box.value).toBe('');
       expect(document.activeElement).toBe(box);
       expect(lastQuery(harness)).toEqual({ filter: 'all', search: '' });
+    });
+
+    it('drops a saved reply into the coach’s draft and sends nothing', async () => {
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+      });
+      await open(harness);
+      const composer = field<HTMLTextAreaElement>(harness.host, 'Write a message');
+      composer.value = 'Hi Rania!';
+      composer.dispatchEvent(new Event('input'));
+      await settle(harness.fixture);
+
+      press(harness.host, 'Saved replies');
+      await settle(harness.fixture);
+      const sheet = query(document.body, '.tb-modal-pane--sheet');
+      expect(sheet.textContent).toContain('Check-in reminder');
+      query<HTMLButtonElement>(sheet, '.use').click();
+      await settle(harness.fixture);
+
+      expect(composer.value).toBe('Hi Rania!\nYour check-in is due today.');
+      expect(harness.sendConversationMessage).not.toHaveBeenCalled();
+      expect(document.body.querySelector('.tb-modal-pane--sheet')).toBeNull();
+      expect(document.activeElement).toBe(composer);
+    });
+
+    it('offers saved replies on the coach’s side only', async () => {
+      const LEA = { userId: 'coach-user', displayName: 'Lea Haddad', role: 'Coach' as const };
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(
+          of(conversationPage([conversation({ callerRole: 'Client', counterpart: LEA })])),
+        );
+      });
+
+      expect(harness.host.querySelector('app-chat-composer')).not.toBeNull();
+      expect(harness.host.textContent).not.toContain('Saved replies');
     });
 
     it('forgets the search when the workspace changes', async () => {

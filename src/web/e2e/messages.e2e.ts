@@ -528,3 +528,85 @@ test('a coach on a phone opens the client as a sheet from the thread', async ({ 
   await expect(sheet).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Client details' })).toBeFocused();
 });
+
+// R3.5c: a coach's own saved replies, dropped into the composer and never sent by themselves.
+test('a coach on a phone drops a saved reply into the message and keeps a new one', async ({
+  page,
+}) => {
+  const created: { title: string; body: string }[] = [];
+  const replies = [
+    {
+      id: 'reply-1',
+      title: 'Check-in reminder',
+      body: 'Your check-in is due today. It takes five minutes.',
+      updatedAtUtc: '2026-09-30T08:00:00Z',
+      version: 1,
+    },
+    {
+      id: 'reply-2',
+      title: 'Deload week',
+      body: 'Lighter this week: same sessions, two sets fewer each.',
+      updatedAtUtc: '2026-09-30T08:00:00Z',
+      version: 1,
+    },
+  ];
+  const { sent } = await openMessages(page, 'lea', 390, 844);
+  // Answered after the session mocks, so it takes precedence over their catch-all.
+  await page.route('**/api/messaging/saved-replies', (route) => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as { title: string; body: string };
+      created.push(body);
+      const reply = {
+        id: `reply-${replies.length + 1}`,
+        updatedAtUtc: NOW.toISOString(),
+        version: 1,
+        ...body,
+      };
+      replies.push(reply);
+      return json(route, 200, reply);
+    }
+    return json(route, 200, { items: replies, maximum: 100 });
+  });
+  await page
+    .getByRole('navigation', { name: 'Conversations' })
+    .getByRole('button', { name: 'Maya Fakhoury, no unread messages' })
+    .click();
+
+  const composer = page.getByRole('textbox', { name: 'Write a message' });
+  await composer.fill('Hi Maya!');
+  await page.getByRole('button', { name: 'Saved replies' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Saved replies' });
+  await expect(sheet.getByRole('button', { name: 'Check-in reminder', exact: true })).toBeVisible();
+  await axe(page);
+  await page.screenshot({ path: 'test-results/r35c-saved-replies-390.png' });
+
+  await sheet.getByRole('searchbox', { name: 'Search saved replies' }).fill('lighter');
+  await expect(sheet.getByRole('button', { name: 'Check-in reminder', exact: true })).toHaveCount(
+    0,
+  );
+  await sheet.getByRole('button', { name: 'Deload week', exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(composer).toHaveValue(
+    'Hi Maya!\nLighter this week: same sessions, two sets fewer each.',
+  );
+  await expect(composer).toBeFocused();
+  expect(sent).toEqual([]);
+
+  // Keep what was written as a new reply.
+  await page.getByRole('button', { name: 'Saved replies' }).click();
+  await sheet.getByRole('button', { name: 'Save what you wrote' }).click();
+  await sheet.getByRole('textbox', { name: 'Title' }).fill('Deload hello');
+  await expect(sheet.getByRole('textbox', { name: 'Text' })).toHaveValue(
+    'Hi Maya!\nLighter this week: same sessions, two sets fewer each.',
+  );
+  await axe(page);
+  await sheet.getByRole('button', { name: 'Save reply' }).click();
+  await expect(sheet.getByRole('button', { name: 'Deload hello', exact: true })).toBeVisible();
+  expect(created).toEqual([
+    {
+      title: 'Deload hello',
+      body: 'Hi Maya!\nLighter this week: same sessions, two sets fewer each.',
+    },
+  ]);
+  expect(sent).toEqual([]);
+});

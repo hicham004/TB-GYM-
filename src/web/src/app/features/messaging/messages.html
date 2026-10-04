@@ -416,8 +416,10 @@
             [issues]="composerIssues()"
             [attempt]="composerAttempt"
             [busy]="busy()"
+            [savedReplies]="isCoachSide()"
             (draftChange)="draft.set($event)"
             (send)="send()"
+            (openSavedReplies)="openSavedReplies()"
           />
         }
       }
@@ -440,6 +442,10 @@
     />
   }
 </div>
+
+<ng-template #savedRepliesSheet>
+  <app-saved-replies [draft]="draft()" (use)="useSavedReply($event)" />
+</ng-template>
 
 <ng-template #clientSheet>
   @if (selected(); as conversation) {

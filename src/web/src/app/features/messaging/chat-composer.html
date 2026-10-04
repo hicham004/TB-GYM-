@@ -5,6 +5,7 @@
     <label class="field">
       <span class="tb-visually-hidden" i18n>Write a message</span>
       <textarea
+        #field
         rows="1"
         id="draft"
         name="draft"
@@ -40,6 +41,17 @@
   </div>
   @if (shows) {
     <p class="reason" id="draft-reason">{{ reasons[0] }}</p>
+  }
+  @if (savedReplies()) {
+    <button
+      type="button"
+      class="saved"
+      aria-haspopup="dialog"
+      (click)="openSavedReplies.emit()"
+      i18n
+    >
+      Saved replies
+    </button>
   }
   <p class="count" role="status">
     @if (remaining() < nearLimit) {

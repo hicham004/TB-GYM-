@@ -198,6 +198,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         // The brand is a staff setting like any other (R3.5a): neither saved nor given a new logo.
         await AssertReadOnlyAsync(await R35aPutBrandAsync(owner, "#15233f", "#ffb48c", null, 0));
         await AssertReadOnlyAsync(await R35aPostLogoAsync(owner, R35aLogoPng(32, 32)));
+        // Saved replies too (R3.5c): kept replies can still be read, not added to.
+        await RefreshCsrfAsync(coach);
+        await AssertReadOnlyAsync(await coach.PostAsJsonAsync(R35cRepliesUrl, new { title = "Hi", body = "Hello" }));
+        await AssertStatusAsync(await coach.GetAsync(R35cRepliesUrl), HttpStatusCode.OK);
         await AssertStatusAsync(await owner.GetAsync("/api/clients"), HttpStatusCode.OK);
         await AssertStatusAsync(await coach.GetAsync($"/api/clients/{clientId}"), HttpStatusCode.OK);
         Assert.IsTrue((await RequiredJsonAsync<BillingAccess>(await coach.GetAsync("/api/billing/access"))).IsReadOnly);

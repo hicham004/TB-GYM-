@@ -67,8 +67,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R3.4a | **Client profile Training** (C3): the program as a timeline, with Assign, Reschedule, Complete, Cancel, Build next block and a session sheet | §2, plus backend tests | Done · 2026-10-03 · 80f7b9e |
 | R3.4b | **Client profile Service & access** (C3): plan, payments, renew, change coach and release | §2 | Done · 2026-10-04 · 9c1468f |
 | R3.5a | **Coach brand settings** (§3.1): a look or own colours and a logo, with the backend setting and logo upload, drawn for the coach's staff and clients | §2, plus backend tests | Done · 2026-10-04 · a37645d |
-| R3.5b | **Coach Messages** (C6): search and filters (unread, waiting for a reply) over every conversation, the client's plan and last workout beside the thread | §2, plus backend tests | Done · 2026-10-04 |
-| R3.5c | **Saved replies** (C6): a coach's own short replies, kept on the server and dropped into the composer | §2, plus backend tests | To do |
+| R3.5b | **Coach Messages** (C6): search and filters (unread, waiting for a reply) over every conversation, the client's plan and last workout beside the thread | §2, plus backend tests | Done · 2026-10-04 · fe6aa5e |
+| R3.5c | **Saved replies** (C6): a coach's own short replies, kept on the server and dropped into the composer | §2, plus backend tests | Done · 2026-10-04 |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Gate |
 | R4.1 | **Program builder** (C4), part 1: library panel, week grid, drag and drop | §2 | To do |
 | R4.2 | **Program builder**, part 2: inline editing, autosave, unsaved-changes guard, publish preview | §2 | To do |
@@ -114,10 +114,11 @@ of the implemented R1.3 screens before production rollout.
   Advancing the cursor for a message shown while the page is visible would fix it; it changes a
   documented read rule, so it needs an owner decision.
 - **Coach chat extras (R3.5b, R3.5c).** R3.5b built search, the filters and the client beside the
-  thread; saved replies are R3.5c. Owner question for R3.5c: are a coach's saved replies their own,
-  or shared with the gym's team? Claude recommends each coach's own first (a coach's voice is
-  personal) and team sharing later; C5's "reply with saved templates" can use the same ones. They
-  stay plain text the coach edits before sending: MSG-004 allows no template that fills itself in.
+  thread; R3.5c saved replies. The owner said "continue" without choosing between each coach's own
+  replies and replies shared with the team, so R3.5c built Claude's recommendation: each coach's own
+  (MSG-023). Sharing a reply with the team would be a later, separate choice. C5's "reply with saved
+  templates" can use the same ones. They stay plain text the coach edits before sending: MSG-004
+  allows no template that fills itself in, so "{first name}" is not offered.
   Removing your own message stays immediate, as it always was, now behind the message's options; an
   undo would need care because removal is one way (MSG-008).
 - **Searching message text (from R3.5b).** The inbox search reads names only (MSG-022); searching
@@ -714,6 +715,12 @@ limited to the coach's assigned clients.
     sheet. A client sees none of this.
   - Messages now follows dark mode, for coaches and clients. Screenshots on the Atlas demo:
     `docs/design/r35b-*.png`.
+- Built in R3.5c: Saved replies under the coach's message box opens a sheet with the coach's own
+  replies by title, a search over titles and text, and one tap to drop a reply into the message after
+  what is already written; nothing is sent from the sheet. New saved reply (or Save what you wrote,
+  which starts from the message being written), Edit and Delete (asked first) live in the same sheet;
+  at 100 the sheet says to delete one first. A client sees none of it. Screenshots on the Atlas demo:
+  `docs/design/r35c-*.png`.
 
 **C7. Nutrition library and meal-plan builder**
 - Recipe cards with macro bars and photos.

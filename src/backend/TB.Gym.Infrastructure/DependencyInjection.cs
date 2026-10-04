@@ -166,6 +166,7 @@ public static class DependencyInjection
         services.AddScoped<ICheckInApplicationService, CheckInApplicationService>();
         services.AddScoped<ICheckInResponseApplicationService, CheckInResponseApplicationService>();
         services.AddScoped<IMessagingApplicationService, MessagingApplicationService>();
+        services.AddScoped<ISavedReplyService, SavedReplyService>();
         services.AddTbGymMessagingRealtime(configuration, environment);
         services.AddHttpClient<INutritionDataProvider, UsdaFoodDataCentralProvider>((provider, client) =>
         {

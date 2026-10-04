@@ -1365,6 +1365,11 @@ export type CreateRecipeRequest = {
   ingredients: Array<RecipeIngredientRequest>;
 };
 
+export type CreateSavedReplyRequest = {
+  title: null | string;
+  body: null | string;
+};
+
 export type CsrfResponse = {
   token: string;
 };
@@ -1501,6 +1506,10 @@ export type DeleteMessageRequest = {
   idempotencyKey: string;
 };
 
+export type DeleteSavedReplyRequest = {
+  version: number | string;
+};
+
 export type DeriveCheckInDraftRequest = {
   sourceVersionId: string;
   formVersion: number | string;
@@ -1510,6 +1519,12 @@ export type EditMessageRequest = {
   body: string;
   expectedVersion: number | string;
   idempotencyKey: string;
+};
+
+export type EditSavedReplyRequest = {
+  title: null | string;
+  body: null | string;
+  version: number | string;
 };
 
 export type EffectiveEnrollmentStatus =
@@ -2694,6 +2709,19 @@ export type SaveCheckInDraftRequest = {
 export type SaveCheckInResponseRequest = {
   answers: Array<CheckInAnswerRequest>;
   version?: null | number | string;
+};
+
+export type SavedReplyList = {
+  items: Array<SavedReplyView>;
+  maximum: number | string;
+};
+
+export type SavedReplyView = {
+  id: string;
+  title: string;
+  body: string;
+  updatedAtUtc: string;
+  version: number | string;
 };
 
 export type SavedSessionView = {
@@ -9348,6 +9376,118 @@ export type AcknowledgeConversationRealtimeEventsResponses = {
 
 export type AcknowledgeConversationRealtimeEventsResponse =
   AcknowledgeConversationRealtimeEventsResponses[keyof AcknowledgeConversationRealtimeEventsResponses];
+
+export type ListOwnSavedRepliesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/messaging/saved-replies';
+};
+
+export type ListOwnSavedRepliesResponses = {
+  /**
+   * OK
+   */
+  200: SavedReplyList;
+};
+
+export type ListOwnSavedRepliesResponse =
+  ListOwnSavedRepliesResponses[keyof ListOwnSavedRepliesResponses];
+
+export type CreateSavedReplyData = {
+  body: CreateSavedReplyRequest;
+  path?: never;
+  query?: never;
+  url: '/api/messaging/saved-replies';
+};
+
+export type CreateSavedReplyErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CreateSavedReplyError = CreateSavedReplyErrors[keyof CreateSavedReplyErrors];
+
+export type CreateSavedReplyResponses = {
+  /**
+   * OK
+   */
+  200: SavedReplyView;
+};
+
+export type CreateSavedReplyResponse = CreateSavedReplyResponses[keyof CreateSavedReplyResponses];
+
+export type EditSavedReplyData = {
+  body: EditSavedReplyRequest;
+  path: {
+    savedReplyId: string;
+  };
+  query?: never;
+  url: '/api/messaging/saved-replies/{savedReplyId}/edit';
+};
+
+export type EditSavedReplyErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type EditSavedReplyError = EditSavedReplyErrors[keyof EditSavedReplyErrors];
+
+export type EditSavedReplyResponses = {
+  /**
+   * OK
+   */
+  200: SavedReplyView;
+};
+
+export type EditSavedReplyResponse = EditSavedReplyResponses[keyof EditSavedReplyResponses];
+
+export type DeleteSavedReplyData = {
+  body: DeleteSavedReplyRequest;
+  path: {
+    savedReplyId: string;
+  };
+  query?: never;
+  url: '/api/messaging/saved-replies/{savedReplyId}/delete';
+};
+
+export type DeleteSavedReplyErrors = {
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type DeleteSavedReplyError = DeleteSavedReplyErrors[keyof DeleteSavedReplyErrors];
+
+export type DeleteSavedReplyResponses = {
+  /**
+   * No Content
+   */
+  204: void;
+};
+
+export type DeleteSavedReplyResponse = DeleteSavedReplyResponses[keyof DeleteSavedReplyResponses];
 
 export type ListOwnNotificationsData = {
   body?: never;

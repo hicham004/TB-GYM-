@@ -1,0 +1,190 @@
+@if (editing(); as form) {
+  @let reasons = issues();
+  <form class="form" (submit)="submit($event)" novalidate>
+    <button type="button" class="back" (click)="backToList()">
+      <app-icon name="chevron-down" />
+      <span i18n>All saved replies</span>
+    </button>
+    <h3 class="form-title">
+      @if (form.reply === null) {
+        <span i18n>New saved reply</span>
+      } @else {
+        <span i18n>Change saved reply</span>
+      }
+    </h3>
+
+    <app-field
+      label="Title"
+      i18n-label
+      help="A few words to find it by."
+      i18n-help
+      [errors]="attempt.shows('title', reasons.title) ? reasons.title : null"
+    >
+      <input
+        appControl
+        #titleInput
+        name="title"
+        autocomplete="off"
+        dir="auto"
+        [attr.maxlength]="maximumTitle"
+        [value]="title()"
+        (input)="title.set($any($event.target).value)"
+        (blur)="attempt.touch('title')"
+      />
+    </app-field>
+    <app-field
+      label="Text"
+      i18n-label
+      help="Dropped into the message box as it is, for you to change before sending."
+      i18n-help
+      [errors]="attempt.shows('body', reasons.body) ? reasons.body : null"
+    >
+      <textarea
+        appControl
+        name="body"
+        rows="6"
+        dir="auto"
+        [attr.maxlength]="maximumBody"
+        [value]="body()"
+        (input)="body.set($any($event.target).value)"
+        (blur)="attempt.touch('body')"
+      ></textarea>
+    </app-field>
+
+    <p class="summary" role="alert" tabindex="-1" #summary>
+      @if (error(); as message) {
+        {{ message }}
+      } @else if (attempt.wasTried() && (reasons.title.length > 0 || reasons.body.length > 0)) {
+        <ng-container i18n>This reply cannot be saved yet:</ng-container>
+        <span>{{ reasons.title[0] ?? reasons.body[0] }}</span>
+      }
+    </p>
+
+    @if (confirmingDelete() && form.reply !== null) {
+      <div class="confirm" role="group" aria-labelledby="delete-question">
+        <p id="delete-question" dir="auto" i18n>
+          Delete “{{ form.reply.title }}”? This can’t be undone.
+        </p>
+        <div class="actions">
+          <button
+            appButton
+            type="button"
+            variant="outlined"
+            class="danger"
+            [loading]="busy()"
+            (click)="remove()"
+            i18n
+          >
+            Delete reply
+          </button>
+          <button appButton type="button" variant="text" (click)="confirmingDelete.set(false)" i18n>
+            Keep it
+          </button>
+        </div>
+      </div>
+    } @else {
+      <div class="actions">
+        <button appButton type="submit" [loading]="busy()" i18n>Save reply</button>
+        <button appButton type="button" variant="text" (click)="backToList()" i18n>Cancel</button>
+        @if (form.reply !== null) {
+          <button
+            appButton
+            type="button"
+            variant="text"
+            class="delete danger"
+            (click)="confirmingDelete.set(true)"
+            i18n
+          >
+            Delete
+          </button>
+        }
+      </div>
+    }
+  </form>
+} @else if (items(); as all) {
+  @if (all.length === 0) {
+    <div class="empty">
+      <p class="empty-title" i18n>No saved replies yet</p>
+      <p i18n>
+        Keep the answers you give often, like a check-in reminder, and drop one into a chat in a
+        tap.
+      </p>
+      <button appButton type="button" (click)="startNew()" i18n>New saved reply</button>
+    </div>
+  } @else {
+    <div class="search">
+      <app-icon name="search" />
+      <label class="tb-visually-hidden" for="saved-reply-search" i18n>Search saved replies</label>
+      <input
+        #searchInput
+        id="saved-reply-search"
+        name="saved-reply-search"
+        type="search"
+        autocomplete="off"
+        enterkeyhint="search"
+        placeholder="Search saved replies…"
+        i18n-placeholder
+        [value]="search()"
+        (input)="search.set($any($event.target).value)"
+      />
+    </div>
+    <p class="tb-visually-hidden" role="status">
+      <span i18n>{{ visible().length }} of {{ all.length }} saved replies shown.</span>
+    </p>
+    @if (visible().length === 0) {
+      <p class="none" i18n>No saved reply matches “{{ search().trim() }}”.</p>
+    } @else {
+      <ul class="replies">
+        @for (reply of visible(); track reply.id) {
+          <li>
+            <button
+              type="button"
+              class="use"
+              [attr.aria-label]="reply.title"
+              [attr.aria-describedby]="'reply-text-' + reply.id"
+              (click)="useReply(reply)"
+            >
+              <span class="reply-title" dir="auto">{{ reply.title }}</span>
+              <span class="reply-text" dir="auto" [id]="'reply-text-' + reply.id">{{
+                reply.body
+              }}</span>
+            </button>
+            <button
+              type="button"
+              class="edit"
+              [attr.data-reply-edit]="reply.id"
+              [attr.aria-label]="editLabel(reply)"
+              (click)="startEdit(reply)"
+              i18n
+            >
+              Edit
+            </button>
+          </li>
+        }
+      </ul>
+    }
+    <div class="foot">
+      @if (atLimit()) {
+        <p class="limit" i18n>
+          You keep {{ all.length }} of {{ maximum() }}. Delete one to add another.
+        </p>
+      } @else {
+        <button appButton type="button" variant="outlined" (click)="startNew()">
+          <app-icon name="plus" />
+          @if (draft().trim() !== '') {
+            <span i18n>Save what you wrote</span>
+          } @else {
+            <span i18n>New saved reply</span>
+          }
+        </button>
+      }
+    </div>
+  }
+} @else if (loadFailed(); as message) {
+  <div class="empty" role="alert">
+    <p>{{ message }}</p>
+    <button appButton type="button" variant="outlined" (click)="retry()" i18n>Try again</button>
+  </div>
+} @else {
+  <app-skeleton label="Loading your saved replies…" i18n-label [lines]="3" />
+}

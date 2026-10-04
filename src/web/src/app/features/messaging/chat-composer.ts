@@ -39,10 +39,14 @@ export class ChatComposer {
   readonly issues = input.required<readonly string[]>();
   readonly attempt = input.required<FormAttempt>();
   readonly busy = input(false);
+  /** The coach's side offers their saved replies (R3.5c); a client's does not. */
+  readonly savedReplies = input(false);
   readonly draftChange = output<string>();
   readonly send = output<void>();
+  readonly openSavedReplies = output<void>();
 
   private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
+  private readonly field = viewChild<ElementRef<HTMLTextAreaElement>>('field');
 
   protected readonly remaining = computed(() => this.maximumLength() - this.draft().trim().length);
   protected readonly nearLimit = nearLimitCharacters;
@@ -50,6 +54,14 @@ export class ChatComposer {
   /** Where focus goes when a send is refused, so the reason is what is read next. */
   focusSummary(): void {
     this.summary()?.nativeElement.focus();
+  }
+
+  /** Back to the message, with the caret after the text, once a saved reply has been dropped in. */
+  focusField(): void {
+    const field = this.field()?.nativeElement;
+    if (field === undefined) return;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
   }
 
   /**

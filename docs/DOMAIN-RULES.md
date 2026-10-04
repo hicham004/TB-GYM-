@@ -781,6 +781,15 @@ now is neither unread nor waiting, though its name can still be found. A thread 
 (a client's former coach, ADR 0026) waits for nobody. The first page carries how many conversations
 each filter holds, over the whole list whatever the search.
 
+**MSG-023** A saved reply (R3.5c) belongs to one Owner or Coach in one workspace and nobody else reads
+or changes it, the workspace owner included: it is a coach's own wording. Its title is one line of at
+most 60 characters (inner whitespace collapsed) and its text follows MSG-004 exactly; a person keeps at
+most 100, counted under a per-person lock so two saves cannot both take the last place. It never sends
+anything: choosing one puts its text in the composer after what is already written, and what goes out
+is an ordinary message under MSG-004 to MSG-006, so there is no placeholder the server fills in. A
+change carries the version read; deleting removes it, since it is a writing aid, not a record. Keeping
+replies is a staff change, so it waits while the workspace is read-only for an unpaid bill.
+
 **NOT-001** In-app, email, and WhatsApp notifications share one logical notification and keep
 entirely separate delivery state per channel. Retries are idempotent; provider acknowledgement is
 never confused with user read status. Phase 6B-3A makes the separation structural: the scheduled

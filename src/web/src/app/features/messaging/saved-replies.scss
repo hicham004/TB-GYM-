@@ -1,0 +1,176 @@
+// A coach's saved replies, in the composer's sheet (C6, R3.5c): find, tap to use, keep new ones.
+:host {
+  color: var(--tb-ink);
+  display: grid;
+  gap: var(--space-12);
+}
+h3,
+p,
+ul {
+  margin: 0;
+}
+.search {
+  align-items: center;
+  color: var(--tb-muted);
+  display: flex;
+  position: relative;
+}
+.search app-icon {
+  inset-inline-start: 0.75rem;
+  pointer-events: none;
+  position: absolute;
+}
+.search input {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line-strong);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-ink);
+  font: inherit;
+  inline-size: 100%;
+  min-block-size: 2.75rem;
+  padding-inline: 2.5rem 0.75rem;
+}
+.search input::placeholder {
+  color: var(--tb-muted);
+  opacity: 1;
+}
+.search input:focus-visible {
+  border-color: var(--tb-focus);
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 0;
+}
+.replies {
+  display: grid;
+  gap: var(--space-8);
+  list-style: none;
+  padding: 0;
+}
+.replies li {
+  align-items: start;
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card-small);
+  display: flex;
+  gap: var(--space-4);
+}
+.use,
+.edit,
+.back {
+  background: none;
+  border: 0;
+  border-radius: var(--tb-radius-card-small);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  touch-action: manipulation;
+}
+.use {
+  display: grid;
+  flex: 1;
+  gap: var(--space-4);
+  min-inline-size: 0;
+  padding: var(--space-12);
+  text-align: start;
+}
+.use:hover {
+  background: var(--tb-surface-2);
+}
+.reply-title {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.reply-text {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--tb-muted);
+  display: -webkit-box;
+  font-size: 0.875rem;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.edit {
+  color: var(--tb-accent-ink);
+  flex: none;
+  font-size: 0.875rem;
+  font-weight: 700;
+  min-block-size: 2.75rem;
+  min-inline-size: 2.75rem;
+  padding-inline: var(--space-12);
+}
+.edit:hover {
+  text-decoration: underline;
+}
+.foot {
+  display: flex;
+  justify-content: flex-start;
+}
+.limit,
+.none,
+.empty p:not(.empty-title) {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+.empty {
+  display: grid;
+  gap: var(--space-8);
+  justify-items: start;
+  padding-block: var(--space-8);
+}
+.empty-title {
+  font-family: var(--tb-font-serif);
+  font-size: 1.375rem;
+}
+.form {
+  display: grid;
+  gap: var(--space-12);
+}
+.back {
+  align-items: center;
+  display: inline-flex;
+  font-weight: 700;
+  gap: var(--space-4);
+  justify-self: start;
+  min-block-size: 2.5rem;
+  padding-inline: var(--space-4);
+}
+// The chevron points down in the set; turned, it points back the way reading came.
+.back app-icon {
+  transform: rotate(90deg);
+}
+:host-context([dir='rtl']) .back app-icon {
+  transform: rotate(-90deg);
+}
+.form-title {
+  font-size: 1.125rem;
+}
+.summary {
+  color: var(--tb-danger);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.summary:focus {
+  outline: none;
+}
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+.delete {
+  margin-inline-start: auto;
+}
+.danger {
+  color: var(--tb-danger);
+}
+.confirm {
+  background: var(--tb-danger-soft);
+  border-radius: var(--tb-radius-card-small);
+  display: grid;
+  gap: var(--space-8);
+  padding: var(--space-12);
+}
+.confirm p {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

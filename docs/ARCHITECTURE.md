@@ -1293,6 +1293,13 @@ reply. Beside the thread, the coach reads the client's page read (`GET /api/clie
 which now also names the plan and carries the last finished workout. The `/messages` route is
 `REDESIGNED`, so the chat follows dark mode on both sides.
 
+R3.5c adds saved replies (MSG-023): `messaging."SavedReplies"`, owned by Messaging, keyed to the
+membership `(TenantId, OwnerUserId)` → `tenancy."Memberships"(TenantId, UserId)` and filtered by tenant,
+behind `/api/messaging/saved-replies` (list, add, `/{id}/edit`, `/{id}/delete`; Owner and Coach) and
+`SavedReplyService`, which narrows every read and write to the caller. In the web app the composer's
+Saved replies opens `SavedRepliesSheet` (feature-local `SavedRepliesApi`, so nothing joins the initial
+bundle); a chosen reply is appended to the draft, never sent.
+
 Message bodies, revision bodies, moderation reasons, names and addresses reach no log, analytics,
 exception or operational view. See `docs/adr/0019-persisted-direct-messaging-v1.md`.
 

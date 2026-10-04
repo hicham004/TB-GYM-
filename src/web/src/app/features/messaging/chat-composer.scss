@@ -89,6 +89,24 @@ textarea[aria-invalid='true'] {
   color: var(--tb-muted);
   font-size: 0.8rem;
 }
+// The coach's saved replies: a quiet word under the field, not a second send.
+.saved {
+  background: none;
+  border: 0;
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-accent-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  justify-self: start;
+  min-block-size: 2.25rem;
+  padding-inline: var(--space-4);
+  touch-action: manipulation;
+}
+.saved:hover {
+  text-decoration: underline;
+}
 @media (min-width: 60rem) {
   :host {
     background: var(--tb-surface);

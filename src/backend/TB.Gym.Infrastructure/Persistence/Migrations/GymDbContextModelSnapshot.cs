@@ -3915,6 +3915,62 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Messaging.SavedReply", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "OwnerUserId", "Title");
+
+                    b.ToTable("SavedReplies", "messaging", t =>
+                        {
+                            t.HasCheckConstraint("CK_SavedReplies_Body", "char_length(btrim(\"Body\")) BETWEEN 1 AND 2000");
+
+                            t.HasCheckConstraint("CK_SavedReplies_Title", "char_length(btrim(\"Title\")) BETWEEN 1 AND 60");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Notifications.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -11296,6 +11352,22 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "RealtimeEventId", "ConversationId")
                         .HasPrincipalKey("TenantId", "Id", "ConversationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Messaging.SavedReply", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "OwnerUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

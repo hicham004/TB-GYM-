@@ -286,6 +286,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<MessagingCommandRecord> MessagingCommandRecords => Set<MessagingCommandRecord>();
 
+    public DbSet<SavedReply> SavedReplies => Set<SavedReply>();
+
     public DbSet<MessagingRealtimeEvent> MessagingRealtimeEvents => Set<MessagingRealtimeEvent>();
 
     public DbSet<MessagingRealtimeRecipient> MessagingRealtimeRecipients =>
@@ -317,6 +319,7 @@ public sealed partial class GymDbContext(
         ConfigureNutrition(builder);
         ConfigureCheckIns(builder);
         ConfigureMessaging(builder);
+        ConfigureSavedReplies(builder);
         ConfigureMessagingRealtime(builder);
         ConfigurePlatformBilling(builder);
     }
