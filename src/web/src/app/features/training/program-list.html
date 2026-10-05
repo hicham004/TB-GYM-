@@ -1,0 +1,88 @@
+<section class="programs" aria-labelledby="programs-heading">
+  <header class="top">
+    <div class="intro">
+      <h1 id="programs-heading" #heading tabindex="-1" i18n>Programs</h1>
+      @if (summary(); as line) {
+        <p class="lede" dir="auto">{{ line }}</p>
+      } @else {
+        <p class="lede" i18n>Build a program once, then assign it to any client.</p>
+      }
+    </div>
+    <a appButton routerLink="/training/programs/new">
+      <app-icon name="plus" />
+      <span i18n>New program</span>
+    </a>
+  </header>
+
+  <!-- Programs and Exercises are the two pages of Training; the sidebar links to this one. -->
+  <app-section-nav label="Training sections" i18n-label [links]="sections" />
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>Your programs could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (cards().length === 0) {
+        <app-empty-state
+          class="panel"
+          heading="No programs yet"
+          description="Lay out the weeks, drop exercises into the days, then assign the program to your clients. Each client gets their own copy."
+          i18n-heading
+          i18n-description
+        >
+          <a appButton empty-state-action routerLink="/training/programs/new" i18n
+            >Build your first program</a
+          >
+        </app-empty-state>
+      } @else {
+        <ul class="cards" role="list">
+          @for (card of cards(); track card.id) {
+            <li class="card">
+              <div class="card-top">
+                <app-status-pill [label]="card.status" [tone]="card.tone" />
+                <span class="weeks">{{ card.weeks }}</span>
+              </div>
+              <h2 class="card-name" dir="auto">
+                <!-- The whole card is the link (a stretched link), named by the program. -->
+                <a class="stretched" [routerLink]="['/training/programs', card.id]">{{
+                  card.name
+                }}</a>
+              </h2>
+              <p class="card-meta">
+                @if (card.note) {
+                  <span class="note">{{ card.note }}</span>
+                }
+                <span>{{ card.changed }}</span>
+              </p>
+            </li>
+          }
+        </ul>
+        @if (hasMore()) {
+          <div class="more">
+            @if (moreFailed()) {
+              <p role="alert" i18n>More programs could not be loaded.</p>
+            }
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="loadingMore()"
+              (click)="loadMore()"
+              i18n
+            >
+              Show more programs
+            </button>
+          </div>
+        }
+      }
+    }
+  }
+</section>

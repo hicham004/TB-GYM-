@@ -1,0 +1,199 @@
+@if (showTabs()) {
+  <app-segmented-control class="tabs" label="Show" i18n-label [options]="tabs" [(selected)]="tab" />
+}
+
+@if (tab() === 'saved' && showTabs()) {
+  <p class="help">
+    @if (mode() === 'drag') {
+      <ng-container i18n>Drag a saved session onto a day.</ng-container>
+    } @else {
+      <ng-container i18n>Choose a saved session to add a copy on this day.</ng-container>
+    }
+  </p>
+  @if (mode() === 'drag') {
+    <ul
+      class="items"
+      role="list"
+      cdkDropList
+      cdkDropListSortingDisabled
+      [cdkDropListConnectedTo]="connectedTo()"
+      [cdkDropListEnterPredicate]="never"
+    >
+      @for (session of saved(); track session.id) {
+        <li
+          class="lib-item"
+          cdkDrag
+          [cdkDragData]="savedItem(session)"
+          [cdkDragStartDelay]="dragDelay"
+          cdkDragPreviewClass="tb-drag-preview"
+        >
+          <div *cdkDragPlaceholder class="drop-slot"></div>
+          <span class="tile saved" aria-hidden="true"><app-icon name="training" /></span>
+          <span class="text">
+            <span class="name" dir="auto">{{ session.name }}</span>
+            <span class="detail">{{ savedLine(session) }}</span>
+          </span>
+          <span class="grip" aria-hidden="true"><app-icon name="grip" /></span>
+        </li>
+      }
+    </ul>
+  } @else {
+    <ul class="items" role="list">
+      @for (session of saved(); track session.id) {
+        <li>
+          <button class="lib-item pick" type="button" (click)="pickSaved.emit(session)">
+            <span class="tile saved" aria-hidden="true"><app-icon name="training" /></span>
+            <span class="text">
+              <span class="name" dir="auto">{{ session.name }}</span>
+              <span class="detail">{{ savedLine(session) }}</span>
+            </span>
+            <span class="add" aria-hidden="true"><app-icon name="plus" /></span>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+} @else {
+  <div class="filters" [class.sticky]="mode() === 'pick'">
+    <div class="search">
+      <app-icon name="search" />
+      <input
+        type="search"
+        [value]="search()"
+        (input)="search.set($any($event.target).value)"
+        placeholder="Search exercises…"
+        i18n-placeholder
+        autocomplete="off"
+        aria-label="Search exercises"
+        i18n-aria-label
+        enterkeyhint="search"
+      />
+    </div>
+
+    @if (chips().length > 2) {
+      <fieldset class="chips">
+        <legend class="tb-visually-hidden" i18n>Movement</legend>
+        @for (chip of chips(); track chip.value) {
+          <label class="chip">
+            <input
+              class="tb-visually-hidden"
+              type="radio"
+              [name]="mode() + '-library-group'"
+              [value]="chip.value"
+              [checked]="group() === chip.value"
+              (change)="group.set(chip.value)"
+            />
+            <span>{{ chip.label }}</span>
+          </label>
+        }
+      </fieldset>
+    }
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <app-skeleton [label]="loadingLabel" [lines]="5" [avatar]="true" />
+    }
+    @case ('error') {
+      <div class="note">
+        <p role="alert" i18n>Your exercises could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="retry.emit()" i18n>
+          Try again
+        </button>
+      </div>
+    }
+    @default {
+      @if (exercises().length === 0) {
+        <div class="note">
+          <p i18n>Your exercise library is empty. Add the exercises you program, once.</p>
+          <a class="link" routerLink="/training/exercises" i18n>Add exercises</a>
+        </div>
+      } @else if (shown().length === 0) {
+        <div class="note">
+          <p role="status">{{ noMatch() }}</p>
+          <button appButton type="button" variant="text" (click)="clear()" i18n>
+            Show all exercises
+          </button>
+        </div>
+      } @else if (mode() === 'drag') {
+        <p class="help" i18n>Drag an exercise into a session, or onto an empty day.</p>
+        <ul
+          class="items"
+          role="list"
+          cdkDropList
+          cdkDropListSortingDisabled
+          [cdkDropListConnectedTo]="connectedTo()"
+          [cdkDropListEnterPredicate]="never"
+        >
+          @for (exercise of shown(); track exercise.id) {
+            <li
+              class="lib-item"
+              cdkDrag
+              [cdkDragData]="exerciseItem(exercise)"
+              [cdkDragStartDelay]="dragDelay"
+              cdkDragPreviewClass="tb-drag-preview"
+            >
+              <div *cdkDragPlaceholder class="drop-slot"></div>
+              @if (thumb(exercise); as src) {
+                <img
+                  class="tile"
+                  [src]="src"
+                  alt=""
+                  width="40"
+                  height="40"
+                  loading="lazy"
+                  decoding="async"
+                />
+              } @else {
+                <span class="tile" aria-hidden="true">{{ exercise.initials }}</span>
+              }
+              <span class="text">
+                <span class="name" dir="auto">{{ exercise.name }}</span>
+                <span class="detail">{{ exercise.detail }}</span>
+              </span>
+              <span class="grip" aria-hidden="true"><app-icon name="grip" /></span>
+            </li>
+          }
+        </ul>
+      } @else {
+        <ul class="items" role="list">
+          @for (exercise of shown(); track exercise.id) {
+            <li>
+              <button
+                class="lib-item pick"
+                type="button"
+                [attr.aria-label]="addLabel(exercise)"
+                (click)="pickExercise.emit(exercise)"
+              >
+                @if (thumb(exercise); as src) {
+                  <img
+                    class="tile"
+                    [src]="src"
+                    alt=""
+                    width="40"
+                    height="40"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                } @else {
+                  <span class="tile" aria-hidden="true">{{ exercise.initials }}</span>
+                }
+                <span class="text">
+                  <span class="name" dir="auto">{{ exercise.name }}</span>
+                  <span class="detail">{{ exercise.detail }}</span>
+                </span>
+                @if (added().has(exercise.id)) {
+                  <span class="added" aria-hidden="true"
+                    ><app-icon name="check-circle" /><span i18n>Added</span></span
+                  >
+                } @else {
+                  <span class="add" aria-hidden="true"><app-icon name="plus" /></span>
+                }
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+}

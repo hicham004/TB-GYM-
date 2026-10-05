@@ -1,565 +1,413 @@
-<!-- Programs and Exercises are the two pages of the Training section; the sidebar links to this
-     one, so the library is reached from here. Links, not tabs. -->
-<app-section-nav class="section-links" label="Training sections" i18n-label [links]="sections" />
+<div class="builder">
+  <a class="back" routerLink="/training/programs">
+    <app-icon class="back-icon" name="chevron-right" />
+    <span i18n>All programs</span>
+  </a>
+  <h1 class="tb-visually-hidden" #heading tabindex="-1">{{ pageTitle() }}</h1>
 
-<section class="page-heading">
-  <div>
-    <p class="eyebrow" i18n>Training</p>
-    <h1 i18n>Program builder</h1>
-    <p>
-      {{ templates().length }} / {{ templateTotal() }} <span i18n>programs</span> &middot;
-      {{ exercises().length }} <span i18n>exercises</span>
-    </p>
-  </div>
-  <div class="button-group">
-    <button class="secondary-button" type="button" (click)="newTemplate()" i18n>New program</button>
-    <button class="primary-button" type="button" [disabled]="busy()" (click)="saveProgram()">
-      @if (draft().templateId) {
-        <span i18n>Save changes</span>
-      } @else {
-        <span i18n>Create program</span>
-      }
-    </button>
-  </div>
-</section>
-
-@if (error()) {
-  <p class="form-error" role="alert">{{ error() }}</p>
-}
-@if (notice()) {
-  <p class="form-success" role="status">{{ notice() }}</p>
-}
-
-<div class="builder-layout">
-  <aside
-    class="template-rail"
-    [class.empty]="templates().length === 0"
-    aria-label="Programs"
-    i18n-aria-label
-  >
-    <h2 i18n>Programs</h2>
-    @if (loading()) {
-      <p class="muted" i18n>Loading...</p>
-    } @else if (templates().length === 0) {
-      <p class="muted" i18n>No programs yet.</p>
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="6" />
+      </div>
     }
-    @for (template of templates(); track template.id) {
-      <div class="template-entry">
-        <strong>{{ template.name }}</strong>
-        <span>v{{ template.currentVersionNumber }}</span>
-        <div class="version-list">
-          @for (version of template.versions; track version.id) {
+    @case ('missing') {
+      <div class="panel pad stack">
+        <h2 class="panel-title" i18n>This program isn’t here</h2>
+        <p i18n>
+          It may have been opened from an old link, or it belongs to another coaching space.
+        </p>
+        <a appButton routerLink="/training/programs" i18n>Back to your programs</a>
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>The program could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="retryProgram()" i18n>
+          Try again
+        </button>
+      </div>
+    }
+    @default {
+      @let program = draft();
+      <section class="identity" aria-label="Program details" i18n-aria-label>
+        <div class="names">
+          <input
+            class="name-input"
+            autocomplete="off"
+            [(ngModel)]="program.name"
+            (ngModelChange)="touched()"
+            maxlength="160"
+            placeholder="Name this program"
+            i18n-placeholder
+            aria-label="Program name"
+            i18n-aria-label
+            dir="auto"
+          />
+          <textarea
+            class="description-input"
+            autocomplete="off"
+            rows="1"
+            [(ngModel)]="program.description"
+            (ngModelChange)="touched()"
+            maxlength="2000"
+            placeholder="Add a short description for your team (optional)"
+            i18n-placeholder
+            aria-label="Description"
+            i18n-aria-label
+            dir="auto"
+          ></textarea>
+        </div>
+        <div class="save">
+          <p class="status" [class.unsaved]="dirty()" role="status">{{ statusLine() }}</p>
+          <div class="save-buttons">
+            @if (template()) {
+              <button appButton type="button" variant="text" (click)="openHistory()" i18n>
+                Versions
+              </button>
+            }
             <button
+              appButton
               type="button"
-              [class.active]="draft().sourceVersionId === version.id"
-              [disabled]="busy()"
-              (click)="openVersion(version.id)"
+              variant="outlined"
+              [disabled]="!canSaveDraft()"
+              [loading]="saving() === 'draft'"
+              (click)="save(false)"
             >
-              <span>v{{ version.versionNumber }}</span>
-              @if (version.isPublished) {
-                <small i18n>Published</small>
+              @if (saving() === 'draft') {
+                <span i18n>Saving…</span>
               } @else {
-                <small i18n>Draft</small>
+                <span i18n>Save draft</span>
               }
             </button>
-          }
-        </div>
-      </div>
-    }
-    @if (templates().length < templateTotal()) {
-      <button
-        class="quiet-button compact"
-        type="button"
-        [disabled]="busy()"
-        (click)="loadMoreTemplates()"
-        i18n
-      >
-        Load more programs
-      </button>
-    }
-  </aside>
-
-  <section class="editor" aria-label="Program editor" i18n-aria-label>
-    <div class="program-fields">
-      <label>
-        <span i18n>Program name</span>
-        <input [(ngModel)]="draft().name" maxlength="160" />
-      </label>
-      <label class="description-field">
-        <span i18n>Description</span>
-        <input [(ngModel)]="draft().description" maxlength="2000" />
-      </label>
-      <label class="check-field">
-        <input type="checkbox" [(ngModel)]="draft().publish" />
-        <span i18n>Publish</span>
-      </label>
-    </div>
-
-    <div class="bulk-toolbar">
-      <div class="button-group">
-        <button class="secondary-button compact" type="button" (click)="addWeek()" i18n>
-          Add week
-        </button>
-        <button
-          class="quiet-button compact"
-          type="button"
-          [disabled]="selectedWeeks().size === 0"
-          (click)="copySelectedWeeks()"
-          i18n
-        >
-          Duplicate selected weeks
-        </button>
-        <button
-          class="quiet-button compact"
-          type="button"
-          [disabled]="selectedSessions().size === 0"
-          (click)="copySelectedSessions()"
-          i18n
-        >
-          Copy selected sessions
-        </button>
-      </div>
-      <span>{{ draft().weeks.length }} <span i18n>weeks</span></span>
-    </div>
-
-    @for (week of draft().weeks; track week.key; let weekIndex = $index) {
-      <article
-        class="week-band"
-        draggable="true"
-        (dragstart)="weekDragStart(weekIndex)"
-        (dragover)="$event.preventDefault()"
-        (drop)="weekDrop(weekIndex)"
-      >
-        <header class="week-heading">
-          <label class="select-row">
-            <input
-              type="checkbox"
-              [checked]="selectedWeeks().has(week.key)"
-              (change)="toggleWeek(week.key, $event)"
-            />
-            <strong i18n>Week {{ weekIndex + 1 }}</strong>
-          </label>
-          <input
-            class="week-label"
-            [(ngModel)]="week.label"
-            maxlength="120"
-            aria-label="Week label"
-            i18n-aria-label
-          />
-          <label class="check-field publish-check">
-            <input type="checkbox" [(ngModel)]="week.isPublished" />
-            <span i18n>Published</span>
-          </label>
-          <div class="icon-actions">
             <button
+              appButton
               type="button"
-              title="Move week up"
-              i18n-title
-              aria-label="Move week up"
-              i18n-aria-label
-              [disabled]="weekIndex === 0"
-              (click)="moveWeek(weekIndex, -1)"
+              [disabled]="!canPublish()"
+              [loading]="saving() === 'publish'"
+              (click)="save(true)"
             >
-              &#8593;
-            </button>
-            <button
-              type="button"
-              title="Move week down"
-              i18n-title
-              aria-label="Move week down"
-              i18n-aria-label
-              [disabled]="weekIndex === draft().weeks.length - 1"
-              (click)="moveWeek(weekIndex, 1)"
-            >
-              &#8595;
-            </button>
-            <button
-              type="button"
-              title="Duplicate week"
-              i18n-title
-              aria-label="Duplicate week"
-              i18n-aria-label
-              (click)="copyWeek(weekIndex)"
-            >
-              &#10697;
-            </button>
-            <button
-              class="danger-icon"
-              type="button"
-              title="Delete week"
-              i18n-title
-              aria-label="Delete week"
-              i18n-aria-label
-              [disabled]="draft().weeks.length === 1"
-              (click)="removeWeek(weekIndex)"
-            >
-              &times;
+              @if (saving() === 'publish') {
+                <span i18n>Publishing…</span>
+              } @else {
+                <span i18n>Publish</span>
+              }
             </button>
           </div>
-        </header>
+        </div>
+      </section>
 
-        <div class="week-tools">
-          <button
-            class="secondary-button compact"
-            type="button"
-            (click)="addSession(weekIndex)"
-            i18n
-          >
-            Add session
-          </button>
-          @if (savedSessions().length > 0) {
-            <label class="reuse-picker">
-              <span i18n>Reuse saved session</span>
-              <select (change)="reuseSession(weekIndex, $event)">
-                <option value="" i18n>Select...</option>
-                @for (saved of savedSessions(); track saved.id) {
-                  <option [value]="saved.id">{{ saved.name }}</option>
-                }
-              </select>
-            </label>
+      @if (olderLine(); as line) {
+        <p class="older" dir="auto">{{ line }}</p>
+      }
+      @if (problem(); as issue) {
+        <div class="alert" role="alert">
+          <p dir="auto">{{ issue.message }}</p>
+          @if (issue.sessionKey) {
+            <button appButton type="button" variant="outlined" (click)="openProblem()" i18n>
+              Open the session
+            </button>
           }
         </div>
+      }
+      @if (conflict()) {
+        <div class="alert" role="alert">
+          <p i18n>
+            Someone saved this program while you were working on it, so your changes were not saved.
+          </p>
+          <button appButton type="button" variant="outlined" (click)="openNewest()" i18n>
+            Open the newest version
+          </button>
+        </div>
+      }
+      @if (saveError(); as message) {
+        <div class="alert" role="alert">
+          <p dir="auto">{{ message }}</p>
+        </div>
+      }
 
-        @if (week.sessions.length === 0) {
-          <p class="inline-empty" i18n>No sessions in this week.</p>
+      <div class="workspace" [class.with-library]="libraryOpen()">
+        @if (libraryOpen()) {
+          <aside class="library panel" aria-labelledby="library-title">
+            <div class="library-head">
+              <h2 id="library-title" class="panel-title" i18n>Exercises</h2>
+              <a class="manage" routerLink="/training/exercises" i18n>Manage</a>
+            </div>
+            <app-program-library
+              mode="drag"
+              [exercises]="exercises()"
+              [saved]="saved()"
+              [thumbs]="thumbs()"
+              [state]="libraryState()"
+              [connectedTo]="dropIds()"
+              (retry)="loadLibrary()"
+            />
+          </aside>
         }
 
-        @for (session of week.sessions; track session.key; let sessionIndex = $index) {
-          <section
-            class="session-row"
-            draggable="true"
-            (dragstart)="sessionDragStart(weekIndex, sessionIndex); $event.stopPropagation()"
-            (dragover)="$event.preventDefault()"
-            (drop)="sessionDrop(weekIndex, sessionIndex); $event.stopPropagation()"
-          >
-            <div class="session-heading">
-              <label class="select-row">
-                <input
-                  type="checkbox"
-                  [checked]="selectedSessions().has(session.key)"
-                  (change)="toggleSession(session.key, $event)"
-                />
-                <span class="session-number">{{ sessionIndex + 1 }}</span>
-              </label>
-              <label class="session-name">
-                <span i18n>Session</span>
-                <input [(ngModel)]="session.name" maxlength="160" />
-              </label>
-              <label class="day-field">
-                <span i18n>Day</span>
-                <select [(ngModel)]="session.dayOffset">
-                  <option [ngValue]="0" i18n>Day 1</option>
-                  <option [ngValue]="1" i18n>Day 2</option>
-                  <option [ngValue]="2" i18n>Day 3</option>
-                  <option [ngValue]="3" i18n>Day 4</option>
-                  <option [ngValue]="4" i18n>Day 5</option>
-                  <option [ngValue]="5" i18n>Day 6</option>
-                  <option [ngValue]="6" i18n>Day 7</option>
-                </select>
-              </label>
-              <div class="icon-actions">
-                <button
-                  type="button"
-                  title="Move session up"
-                  i18n-title
-                  aria-label="Move session up"
-                  i18n-aria-label
-                  [disabled]="sessionIndex === 0"
-                  (click)="moveSession(weekIndex, sessionIndex, -1)"
-                >
-                  &#8593;
-                </button>
-                <button
-                  type="button"
-                  title="Move session down"
-                  i18n-title
-                  aria-label="Move session down"
-                  i18n-aria-label
-                  [disabled]="sessionIndex === week.sessions.length - 1"
-                  (click)="moveSession(weekIndex, sessionIndex, 1)"
-                >
-                  &#8595;
-                </button>
-                <button
-                  type="button"
-                  title="Copy session"
-                  i18n-title
-                  aria-label="Copy session"
-                  i18n-aria-label
-                  (click)="copySession(weekIndex, sessionIndex)"
-                >
-                  &#10697;
-                </button>
-                <button
-                  class="danger-icon"
-                  type="button"
-                  title="Delete session"
-                  i18n-title
-                  aria-label="Delete session"
-                  i18n-aria-label
-                  (click)="removeSession(weekIndex, sessionIndex)"
-                >
-                  &times;
-                </button>
-              </div>
-            </div>
-
-            <div class="session-meta">
-              <label>
-                <span i18n>Coach notes</span>
-                <input [(ngModel)]="session.coachNotes" maxlength="2000" />
-              </label>
+        <section class="plan" aria-labelledby="weeks-title">
+          <div class="plan-tools">
+            <h2 id="weeks-title" class="panel-title">{{ counts() }}</h2>
+            <div class="plan-buttons">
               <button
-                class="quiet-button compact"
+                appButton
+                class="library-toggle"
                 type="button"
-                [disabled]="!session.sourceId || busy()"
-                (click)="saveSession(session)"
-                i18n
+                variant="text"
+                [attr.aria-expanded]="libraryOpen()"
+                (click)="libraryOpen.set(!libraryOpen())"
               >
-                Save session
+                @if (libraryOpen()) {
+                  <span i18n>Hide exercises</span>
+                } @else {
+                  <span i18n>Show exercises</span>
+                }
+              </button>
+              <button appButton type="button" variant="outlined" (click)="addWeek()">
+                <app-icon name="plus" />
+                <span i18n>Add week</span>
               </button>
             </div>
+          </div>
 
-            <div class="exercise-add">
-              <select
-                aria-label="Add exercise"
-                i18n-aria-label
-                (change)="addExercise(weekIndex, sessionIndex, $event)"
+          @if (grid().length > 1) {
+            <!-- A phone shows one week at a time; wider, every week is on the page. -->
+            <fieldset class="week-chips">
+              <legend class="tb-visually-hidden" i18n>Week to show</legend>
+              @for (row of grid(); track row.key) {
+                <label class="week-chip">
+                  <input
+                    class="tb-visually-hidden"
+                    type="radio"
+                    name="phone-week"
+                    [checked]="row.key === shownWeek()"
+                    [attr.aria-label]="row.title"
+                    (change)="phoneWeek.set(row.key)"
+                  />
+                  <span aria-hidden="true">{{ row.number }}</span>
+                </label>
+              }
+            </fieldset>
+          }
+
+          <div class="weeks" cdkScrollable [style.--day-columns]="columns()">
+            @for (row of grid(); track row.key) {
+              <section
+                class="week"
+                [class.phone-hidden]="row.key !== shownWeek()"
+                [attr.aria-label]="row.title"
+                [attr.data-week]="row.key"
+                tabindex="-1"
               >
-                <option value="" i18n>Add exercise...</option>
-                @for (exerciseOption of exercises(); track exerciseOption.id) {
-                  <option [value]="exerciseOption.id">{{ exerciseOption.name }}</option>
-                }
-              </select>
-            </div>
-
-            @for (exercise of session.exercises; track exercise.key; let exerciseIndex = $index) {
-              <div class="exercise-row">
-                <div class="exercise-heading">
-                  <strong>{{ exerciseIndex + 1 }}. {{ exerciseName(exercise.exerciseId) }}</strong>
-                  <div class="icon-actions">
-                    <button
-                      type="button"
-                      title="Move exercise up"
-                      i18n-title
-                      aria-label="Move exercise up"
-                      i18n-aria-label
-                      [disabled]="exerciseIndex === 0"
-                      (click)="moveExercise(weekIndex, sessionIndex, exerciseIndex, -1)"
-                    >
-                      &#8593;
-                    </button>
-                    <button
-                      type="button"
-                      title="Move exercise down"
-                      i18n-title
-                      aria-label="Move exercise down"
-                      i18n-aria-label
-                      [disabled]="exerciseIndex === session.exercises.length - 1"
-                      (click)="moveExercise(weekIndex, sessionIndex, exerciseIndex, 1)"
-                    >
-                      &#8595;
-                    </button>
-                    <button
-                      class="danger-icon"
-                      type="button"
-                      title="Remove exercise"
-                      i18n-title
-                      aria-label="Remove exercise"
-                      i18n-aria-label
-                      (click)="removeExercise(weekIndex, sessionIndex, exerciseIndex)"
-                    >
-                      &times;
-                    </button>
-                  </div>
-                </div>
-
-                <div class="prescription-options">
-                  <label class="check-field">
+                <header class="week-head">
+                  <span class="week-number" aria-hidden="true">{{ row.number }}</span>
+                  <input
+                    class="week-label"
+                    autocomplete="off"
+                    [(ngModel)]="row.week.label"
+                    (ngModelChange)="touched()"
+                    maxlength="120"
+                    [placeholder]="row.title"
+                    [attr.aria-label]="row.labelName"
+                    dir="auto"
+                  />
+                  <app-checkbox class="shared" [label]="sharedLabel">
                     <input
                       type="checkbox"
-                      [(ngModel)]="exercise.isMainLift"
-                      (change)="mainLiftChanged(exercise)"
+                      appControl
+                      [(ngModel)]="row.week.isPublished"
+                      (ngModelChange)="touched()"
                     />
-                    <span i18n>Main lift</span>
-                  </label>
-                  <label>
-                    <span i18n>Client modification</span>
-                    <select
-                      [(ngModel)]="exercise.modificationPolicy"
-                      [disabled]="exercise.isMainLift"
-                    >
-                      <option value="Locked" i18n>Locked</option>
-                      <option value="CoachApprovedSwap" i18n>Approved swap</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span i18n>Coach notes</span>
-                    <input [(ngModel)]="exercise.coachNotes" maxlength="2000" />
-                  </label>
-                  @if (exercise.modificationPolicy === 'CoachApprovedSwap') {
-                    <label>
-                      <span i18n>Approved alternatives</span>
-                      <select multiple [(ngModel)]="exercise.approvedAlternativeExerciseIds">
-                        @for (alternative of exercises(); track alternative.id) {
-                          @if (alternative.id !== exercise.exerciseId) {
-                            <option [value]="alternative.id">{{ alternative.name }}</option>
-                          }
-                        }
-                      </select>
-                    </label>
-                  }
-                </div>
+                  </app-checkbox>
+                  <app-menu
+                    icon="more"
+                    [label]="row.menuLabel"
+                    [items]="row.menu"
+                    (chosen)="onWeekAction(row.key, $event)"
+                  />
+                </header>
 
-                <div class="set-table" role="table" aria-label="Set prescriptions" i18n-aria-label>
-                  <div class="set-header" role="row">
-                    <span i18n>Set</span>
-                    <span i18n>Type</span>
-                    <span i18n>Reps</span>
-                    <span i18n>Load model</span>
-                    <span i18n>Target</span>
-                    <span i18n>RPE/RIR</span>
-                    <span i18n>Rest</span>
-                    <span></span>
-                  </div>
-                  @for (set of exercise.sets; track set.key; let setIndex = $index) {
-                    <div class="set-line" role="row">
-                      <strong>{{ setIndex + 1 }}</strong>
-                      <select [(ngModel)]="set.setType" aria-label="Set type" i18n-aria-label>
-                        @for (type of setTypes; track type) {
-                          <option [value]="type">{{ setTypeLabel(type) }}</option>
-                        }
-                      </select>
-                      <div class="joined-inputs">
-                        <input
-                          type="number"
-                          min="1"
-                          max="100"
-                          [(ngModel)]="set.repetitionsMinimum"
-                          aria-label="Minimum repetitions"
-                          i18n-aria-label
-                        />
-                        <input
-                          type="number"
-                          min="1"
-                          max="100"
-                          [(ngModel)]="set.repetitionsMaximum"
-                          aria-label="Maximum repetitions"
-                          i18n-aria-label
-                        />
-                      </div>
-                      <select [(ngModel)]="set.loadStrategy" aria-label="Load type" i18n-aria-label>
-                        @for (strategy of loadStrategies; track strategy) {
-                          <option [value]="strategy">{{ loadStrategyLabel(strategy) }}</option>
-                        }
-                      </select>
-                      <label class="inline-field">
-                        <span>{{ loadValueLabel(set) }}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.25"
-                          [(ngModel)]="set.loadValue"
-                          [disabled]="
-                            set.loadStrategy === 'None' || set.loadStrategy === 'RpeBasedEpley'
-                          "
-                        />
-                      </label>
-                      <div class="joined-inputs exertion-input">
-                        <select
-                          [ngModel]="set.exertionDisplayPreference"
-                          (ngModelChange)="exertionPreferenceChanged(set, $event)"
-                          aria-label="Exertion scale"
-                          i18n-aria-label
+                <div class="days">
+                  @for (cell of row.days; track cell.day) {
+                    <div
+                      class="day"
+                      [class.rest]="cell.sessions.length === 0"
+                      cdkDropList
+                      [id]="cell.listId"
+                      [cdkDropListConnectedTo]="dropIds()"
+                      [cdkDropListData]="cell.target"
+                      [cdkDropListEnterPredicate]="canEnter"
+                      (cdkDropListDropped)="dropped($event)"
+                    >
+                      <span class="day-label">{{ cell.label }}</span>
+                      @for (session of cell.sessions; track session.key) {
+                        <article
+                          class="session-card"
+                          cdkDrag
+                          [cdkDragData]="session.drag"
+                          cdkDragPreviewClass="tb-drag-preview"
                         >
-                          <option value="Rpe">RPE</option>
-                          <option value="Rir">RIR</option>
-                        </select>
-                        <input
-                          type="number"
-                          [attr.min]="set.exertionDisplayPreference === 'Rpe' ? 5 : 0"
-                          [attr.max]="set.exertionDisplayPreference === 'Rpe' ? 10 : 5"
-                          step="0.5"
-                          [(ngModel)]="set.exertionTarget"
-                          aria-label="Exertion target"
-                          i18n-aria-label
-                        />
-                      </div>
-                      <input
-                        type="number"
-                        min="0"
-                        max="3600"
-                        step="15"
-                        [(ngModel)]="set.restSeconds"
-                        aria-label="Rest seconds"
-                        i18n-aria-label
-                      />
-                      <div class="icon-actions">
+                          <!-- Small while it moves: a full card left behind would stretch
+                               every day it passes and push the weeks below out of reach. -->
+                          <div *cdkDragPlaceholder class="session-placeholder"></div>
+                          <div *cdkDragPreview class="session-preview">
+                            <span class="session-preview-name" dir="auto">{{ session.name }}</span>
+                            <span class="session-preview-count">{{ session.countLabel }}</span>
+                          </div>
+                          <div class="session-head">
+                            <span class="session-grip" cdkDragHandle aria-hidden="true">
+                              <app-icon name="grip" />
+                            </span>
+                            <button
+                              class="session-name"
+                              type="button"
+                              dir="auto"
+                              (click)="openSession(session.ref)"
+                            >
+                              {{ session.name }}
+                            </button>
+                            <app-menu
+                              icon="more"
+                              [label]="session.menuLabel"
+                              [items]="session.menu"
+                              (chosen)="onSessionAction(session.ref, $event)"
+                            />
+                          </div>
+                          <ol
+                            class="exercise-list"
+                            cdkDropList
+                            [id]="session.listId"
+                            [cdkDropListConnectedTo]="dropIds()"
+                            [cdkDropListData]="session.target"
+                            [cdkDropListEnterPredicate]="canEnter"
+                            (cdkDropListDropped)="dropped($event)"
+                          >
+                            @for (exercise of session.exercises; track exercise.key) {
+                              <li
+                                class="exercise-row"
+                                cdkDrag
+                                [cdkDragData]="exercise.drag"
+                                [cdkDragStartDelay]="dragDelay"
+                                cdkDragPreviewClass="tb-drag-preview"
+                              >
+                                <span class="exercise-name" dir="auto">
+                                  {{ exercise.name }}
+                                  @if (exercise.isMainLift) {
+                                    <span class="main-lift" i18n>Main</span>
+                                  }
+                                </span>
+                                <span class="exercise-line">{{ exercise.line }}</span>
+                              </li>
+                            } @empty {
+                              <li class="drop-hint" i18n>Drop exercises here</li>
+                            }
+                          </ol>
+                          <button
+                            class="add-exercise"
+                            type="button"
+                            [attr.aria-label]="session.addLabel"
+                            (click)="openPicker({ kind: 'session', ref: session.ref })"
+                          >
+                            <app-icon name="plus" />
+                            <span i18n>Exercise</span>
+                          </button>
+                        </article>
+                      }
+                      @if (cell.sessions.length === 0) {
+                        <span class="rest-word" i18n>Rest</span>
                         <button
+                          class="add-day"
                           type="button"
-                          title="Copy set"
-                          i18n-title
-                          aria-label="Copy set"
-                          i18n-aria-label
-                          (click)="copySet(exercise, set)"
+                          [attr.aria-label]="cell.addLabel"
+                          (click)="openPicker({ kind: 'day', at: cell.at })"
                         >
-                          &#10697;
+                          <app-icon name="plus" />
                         </button>
-                        <button
-                          class="danger-icon"
-                          type="button"
-                          title="Remove set"
-                          i18n-title
-                          aria-label="Remove set"
-                          i18n-aria-label
-                          [disabled]="exercise.sets.length === 1"
-                          (click)="removeSet(exercise, setIndex)"
-                        >
-                          &times;
-                        </button>
-                      </div>
-                    </div>
-                    <div class="set-details">
-                      <label>
-                        <span i18n>Unit</span>
-                        <select [(ngModel)]="set.loadUnit">
-                          <option value="Kilogram">kg</option>
-                          <option value="Pound">lb</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span i18n>Manual load override</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.25"
-                          [(ngModel)]="set.manualLoadOverride"
-                        />
-                      </label>
-                      <label>
-                        <span i18n>Tempo</span>
-                        <input [(ngModel)]="set.tempo" maxlength="40" placeholder="3-1-1-0" />
-                      </label>
-                      <label>
-                        <span i18n>Set note</span>
-                        <input [(ngModel)]="set.coachNotes" maxlength="1000" />
-                      </label>
+                      }
                     </div>
                   }
                 </div>
-                <button
-                  class="quiet-button compact add-set"
-                  type="button"
-                  (click)="addSet(exercise)"
-                  i18n
-                >
-                  Add set
-                </button>
-              </div>
+              </section>
             }
-          </section>
-        }
-      </article>
+          </div>
+        </section>
+      </div>
     }
-  </section>
+  }
 </div>
+
+<ng-template #sessionSheet let-sheet>
+  @if (editingSession(); as session) {
+    <app-program-session-editor
+      [session]="session"
+      [weekNumber]="editingWeekNumber()"
+      [library]="exercises()"
+      [revision]="revision()"
+      [canSaveToLibrary]="!!session.sourceId && !dirty()"
+      [savingToLibrary]="savingSession()"
+      (edited)="touched()"
+      (addExercise)="addToEditing()"
+      (remove)="deleteEditing(sheet)"
+      (removeExercise)="removeFromEditing($event)"
+      (saveToLibrary)="saveToLibrary(session)"
+      (done)="sheet.close()"
+    />
+  } @else {
+    <p i18n>This session is no longer in the program.</p>
+  }
+</ng-template>
+
+<ng-template #pickerSheet let-sheet>
+  <div class="picker">
+    <app-program-library
+      mode="pick"
+      [exercises]="exercises()"
+      [saved]="saved()"
+      [thumbs]="thumbs()"
+      [state]="libraryState()"
+      [offerSaved]="picking()?.kind === 'day'"
+      [added]="addedInSheet()"
+      (pickExercise)="pickExercise($event)"
+      (pickSaved)="pickSaved($event)"
+      (retry)="loadLibrary()"
+    />
+    <p class="tb-visually-hidden" role="status">{{ announcement() }}</p>
+    <div class="sheet-footer">
+      <button appButton type="button" (click)="sheet.close()" i18n>Done</button>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #historySheet let-sheet>
+  <div class="history">
+    @if (dirty()) {
+      <p class="history-warning" i18n>
+        Opening another version leaves your unsaved changes behind.
+      </p>
+    }
+    <ol class="history-list" role="list">
+      @for (row of historyRows(); track row.id; let first = $first) {
+        <li class="history-row">
+          <div class="history-copy">
+            <span class="history-title">{{ row.title }}</span>
+            <span class="history-date">{{ row.date }}</span>
+          </div>
+          <app-status-pill [label]="row.state" [tone]="row.isPublished ? 'success' : 'neutral'" />
+          @if (row.isOpen) {
+            <span class="open-now" i18n>Open now</span>
+          } @else {
+            <a
+              appButton
+              variant="outlined"
+              [routerLink]="['/training/programs', templateId()]"
+              [queryParams]="first ? null : { version: row.id }"
+              (click)="sheet.close()"
+              i18n
+              >Open</a
+            >
+          }
+        </li>
+      }
+    </ol>
+  </div>
+</ng-template>

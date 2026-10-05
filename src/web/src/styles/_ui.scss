@@ -95,6 +95,14 @@
   white-space: nowrap;
 }
 
+// The copy that follows the pointer while something is dragged (CDK drag and drop, the program
+// builder). The CDK places it on <body>, outside any component's styles.
+.tb-drag-preview {
+  box-shadow: var(--tb-shadow-overlay);
+  cursor: grabbing;
+  opacity: 0.96;
+}
+
 // ----------------------------------------------------------------------------------------------
 // Buttons (Action/Button 46:3) and icon buttons (Action/Icon button 101:164)
 // ----------------------------------------------------------------------------------------------

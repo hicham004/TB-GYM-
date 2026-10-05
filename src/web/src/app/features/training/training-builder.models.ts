@@ -40,6 +40,8 @@ export interface DraftSession {
 export interface DraftExercise {
   key: string;
   exerciseId: string;
+  /** The library name when it was added or read; shown on the builder's grid. */
+  exerciseName: string;
   isMainLift: boolean;
   modificationPolicy: PrescriptionModificationPolicy;
   coachNotes: string;
@@ -103,10 +105,15 @@ export function emptySession(dayOffset: number): DraftSession {
   };
 }
 
-export function emptyExercise(exerciseId: string, isMainLift = false): DraftExercise {
+export function emptyExercise(
+  exerciseId: string,
+  isMainLift = false,
+  exerciseName = '',
+): DraftExercise {
   return {
     key: key(),
     exerciseId,
+    exerciseName,
     isMainLift,
     modificationPolicy: isMainLift ? 'Locked' : 'CoachApprovedSwap',
     coachNotes: '',
@@ -281,6 +288,7 @@ function sessionFromView(
     exercises: session.exercises.map((exercise) => ({
       key: key(),
       exerciseId: exercise.exerciseId,
+      exerciseName: exercise.exerciseName,
       isMainLift: exercise.isMainLift,
       modificationPolicy: exercise.modificationPolicy,
       coachNotes: exercise.coachNotes ?? '',

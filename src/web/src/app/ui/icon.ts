@@ -150,6 +150,20 @@ const GLYPHS = {
       'M13.5 13.5L17.25 17.25M15.25 9C15.25 12.452 12.452 15.25 9 15.25C5.548 15.25 2.75 12.452' +
       ' 2.75 9C2.75 5.548 5.548 2.75 9 2.75C12.452 2.75 15.25 5.548 15.25 9Z',
   },
+  // The program builder (R4.1): a "more" menu and a drag handle, as small rings the stroke fills.
+  more: {
+    size: 20,
+    path:
+      'M5.5 10A1 1 0 1 1 3.5 10A1 1 0 1 1 5.5 10ZM11 10A1 1 0 1 1 9 10A1 1 0 1 1 11 10Z' +
+      'M16.5 10A1 1 0 1 1 14.5 10A1 1 0 1 1 16.5 10Z',
+  },
+  grip: {
+    size: 20,
+    path:
+      'M8.5 5A1 1 0 1 1 6.5 5A1 1 0 1 1 8.5 5ZM13.5 5A1 1 0 1 1 11.5 5A1 1 0 1 1 13.5 5Z' +
+      'M8.5 10A1 1 0 1 1 6.5 10A1 1 0 1 1 8.5 10ZM13.5 10A1 1 0 1 1 11.5 10A1 1 0 1 1 13.5 10Z' +
+      'M8.5 15A1 1 0 1 1 6.5 15A1 1 0 1 1 8.5 15ZM13.5 15A1 1 0 1 1 11.5 15A1 1 0 1 1 13.5 15Z',
+  },
 } as const satisfies Record<string, { size: number; path: string }>;
 
 export type IconName = keyof typeof GLYPHS;

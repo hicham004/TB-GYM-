@@ -5415,6 +5415,32 @@ export type CreateProgramTemplateResponses = {
 export type CreateProgramTemplateResponse =
   CreateProgramTemplateResponses[keyof CreateProgramTemplateResponses];
 
+export type GetProgramTemplateData = {
+  body?: never;
+  path: {
+    templateId: string;
+  };
+  query?: never;
+  url: '/api/training/templates/{templateId}';
+};
+
+export type GetProgramTemplateErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetProgramTemplateResponses = {
+  /**
+   * OK
+   */
+  200: ProgramTemplateSummary;
+};
+
+export type GetProgramTemplateResponse =
+  GetProgramTemplateResponses[keyof GetProgramTemplateResponses];
+
 export type GetProgramTemplateVersionData = {
   body?: never;
   path: {

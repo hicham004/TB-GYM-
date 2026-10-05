@@ -70,7 +70,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R3.5b | **Coach Messages** (C6): search and filters (unread, waiting for a reply) over every conversation, the client's plan and last workout beside the thread | §2, plus backend tests | Done · 2026-10-04 · fe6aa5e |
 | R3.5c | **Saved replies** (C6): a coach's own short replies, kept on the server and dropped into the composer | §2, plus backend tests | Done · 2026-10-04 · 039e121 |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Open, not blocking · 2026-10-05: the owner will demo later and said to carry on with R4 |
-| R4.1 | **Program builder** (C4), part 1: library panel, week grid, drag and drop | §2 | To do |
+| R4.1 | **Program builder** (C4), part 1: library panel, week grid, drag and drop | §2 | Done · 2026-10-05 |
 | R4.2 | **Program builder**, part 2: inline editing, autosave, unsaved-changes guard, publish preview | §2 | To do |
 | R4.3 | **Check-in review** (C5) | §2 | To do |
 | R4.4 | **Nutrition library and meal-plan builder** (C7) | §2 | To do |
@@ -219,7 +219,10 @@ of the implemented R1.3 screens before production rollout.
   (+0.4 kB, the list's filter and search parameters in `ApiClient`); `messages.scss` is 7.5 kB, the
   client column's own styles living in its component. R3.5c measured 538.3 kB, and the Angular 22.2.1
   upgrade (2026-10-04, which cleared the router and `piscina` audit advisories) 539.2 kB: +0.9 kB of
-  framework code.
+  framework code. R4.1 measured 541.3 kB (+2.1 kB): two icon glyphs, the drag preview rule, and CDK
+  helpers that drag and drop shares with the overlay code already loaded at start-up (about 1.6 kB
+  in the shared chunk). The builder, drag and drop included, is a lazy chunk; its week stylesheet,
+  `program-week.scss`, is 6.8 kB against the 5 kB warning.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -291,6 +294,22 @@ of the implemented R1.3 screens before production rollout.
 - **Header extras (from R3.3b).** The header shows initials until there is a profile photo source,
   and the owner sees "Coached by …" only for a team member's client. A "Last active" line beside the
   plan is possible: the new overview read already returns it.
+- **Program builder, left for later (from R4.1).**
+  - Leaving the builder with unsaved changes still loses them; the guard is R4.2.
+  - A new exercise starts with one set of 5 reps, as before. Sets are edited in the session sheet
+    until R4.2 makes them inline.
+  - Approved swaps offer the exercise's alternatives from the library plus any approved before. The
+    old screen's multi-select could approve any exercise; an "approve another" picker would bring
+    that back.
+  - "Add to saved sessions" copies the session as last saved, so it waits for a save with nothing
+    unsaved.
+  - With five or more training days beside the library, a week scrolls sideways; "Hide exercises"
+    gives the grid the page.
+  - On a phone, a session moves to another week only through a wide screen (there is no "Move to
+    week" in its menu).
+  - The Atlas demo has no exercise pictures, so its library shows initials (see "Demo data gaps").
+  - `ui/menu.ts` (`UiMenu`) is the kit's menu now. The client page's `ClientActions` could move to
+    it.
 
 ---
 
@@ -687,6 +706,25 @@ limited to the coach's assigned clients.
     of what the client will see.
 - Removes: the empty form at the top, the checkbox-per-row bulk actions and the `<select>` to add
   an exercise.
+- Built in R4.1:
+  - `/training/programs` lists the programs as cards ("Ready to assign" or "Draft", weeks, last
+    change) with New program. `/training/programs/:templateId` (or `new`) is the builder. One small
+    read, `GET /api/training/templates/{templateId}`, reopens a program with its versions and the
+    token its next save carries.
+  - Beside the grid sits the exercise library: search, movement chips, the first picture of each
+    exercise (initials otherwise) and the coach's saved sessions.
+  - Each week is a row of seven days with a name, "Shared with client" and a menu (duplicate, move,
+    delete with Undo). A rest day is a narrow dashed column.
+  - Drags (CDK, lists connected by id): exercises from the library or another session into a
+    session; a session to another day or week; a saved session onto a day; an exercise onto a rest
+    day starts a session there.
+  - The keyboard and phone way: + on a rest day or a session opens an add sheet, and each card's
+    menu offers Edit, Copy (to the next free day), Add to saved sessions and Delete.
+  - Sets × reps × load are edited in the session sheet with kit fields until R4.2 makes them inline.
+  - Save draft and Publish make a new version; Versions opens earlier ones. A save that lost a race
+    says so and offers the newest version.
+  - A phone shows one week at a time behind week chips.
+  - Follows dark mode. Screenshots on the Atlas demo: `docs/design/r41-*.png`.
 
 **C5. Check-in review**
 - Job: "Review and reply in under two minutes."

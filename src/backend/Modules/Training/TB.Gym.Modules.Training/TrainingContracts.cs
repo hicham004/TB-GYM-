@@ -7,6 +7,11 @@ public interface ITrainingApplicationService
         int take,
         CancellationToken cancellationToken);
 
+    /// <summary>One program with its versions, newest first, as the list shows it; null when absent.</summary>
+    Task<ProgramTemplateSummary?> GetTemplateAsync(
+        Guid templateId,
+        CancellationToken cancellationToken);
+
     Task<ProgramTemplateVersionView?> GetTemplateVersionAsync(
         Guid templateVersionId,
         CancellationToken cancellationToken);

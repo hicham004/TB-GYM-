@@ -27,6 +27,18 @@ public static class TrainingEndpoints
             .WithName("ListProgramTemplates")
             .Produces<ProgramTemplatePage>();
 
+        coach.MapGet("/templates/{templateId:guid}", async (
+            Guid templateId,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var template = await service.GetTemplateAsync(templateId, cancellationToken);
+            return template is null ? Results.NotFound() : Results.Ok(template);
+        })
+        .WithName("GetProgramTemplate")
+        .Produces<ProgramTemplateSummary>()
+        .Produces(StatusCodes.Status404NotFound);
+
         coach.MapGet("/template-versions/{templateVersionId:guid}", async (
             Guid templateVersionId,
             ITrainingApplicationService service,

@@ -1,0 +1,315 @@
+@let current = session();
+<div class="editor">
+  <div class="basics">
+    <app-field label="Session name" i18n-label>
+      <input
+        appControl
+        [(ngModel)]="current.name"
+        (ngModelChange)="changed()"
+        maxlength="160"
+        dir="auto"
+      />
+    </app-field>
+    <app-segmented-control
+      label="Day of the week"
+      i18n-label
+      [options]="dayOptions"
+      [selected]="day()"
+      (selectedChange)="setDay($event)"
+    />
+    <app-field
+      label="Notes for the client"
+      i18n-label
+      help="Shown with this session in the client's program."
+      i18n-help
+    >
+      <textarea
+        appControl
+        rows="2"
+        [(ngModel)]="current.coachNotes"
+        (ngModelChange)="changed()"
+        maxlength="2000"
+        dir="auto"
+      ></textarea>
+    </app-field>
+  </div>
+
+  <h3 class="section-title" i18n>Exercises</h3>
+  @if (current.exercises.length === 0) {
+    <p class="empty" i18n>No exercises yet. Add one, or drag one in from the library.</p>
+  }
+  @for (exercise of current.exercises; track exercise.key; let index = $index) {
+    <section class="exercise" [attr.aria-label]="exerciseTitle(exercise, index)">
+      <header class="exercise-head">
+        <div class="exercise-copy">
+          <h4 dir="auto">{{ exerciseTitle(exercise, index) }}</h4>
+          <p class="exercise-line">{{ summary(exercise) }}</p>
+        </div>
+        <div class="row-tools">
+          <button
+            appIconButton
+            type="button"
+            [label]="moveUpLabel(exercise)"
+            [disabled]="index === 0"
+            (click)="moveExercise(index, -1)"
+          >
+            <app-icon class="up" name="chevron-down" />
+          </button>
+          <button
+            appIconButton
+            type="button"
+            [label]="moveDownLabel(exercise)"
+            [disabled]="index === current.exercises.length - 1"
+            (click)="moveExercise(index, 1)"
+          >
+            <app-icon name="chevron-down" />
+          </button>
+          <button
+            appIconButton
+            type="button"
+            [label]="removeLabel(exercise)"
+            (click)="removeExercise.emit(exercise.key)"
+          >
+            <app-icon name="close" />
+          </button>
+        </div>
+      </header>
+
+      <div class="rules">
+        <app-checkbox label="Main lift: always done as written" i18n-label>
+          <input
+            type="checkbox"
+            appControl
+            [checked]="exercise.isMainLift"
+            (change)="mainLiftChanged(exercise, $any($event.target).checked)"
+          />
+        </app-checkbox>
+        @if (!exercise.isMainLift) {
+          <app-checkbox label="The client may swap it for an approved exercise" i18n-label>
+            <input
+              type="checkbox"
+              appControl
+              [checked]="exercise.modificationPolicy === 'CoachApprovedSwap'"
+              (change)="swapAllowedChanged(exercise, $any($event.target).checked)"
+            />
+          </app-checkbox>
+          @if (exercise.modificationPolicy === 'CoachApprovedSwap') {
+            @let options = swapOptions(exercise);
+            @if (options.length > 0) {
+              <fieldset class="swaps">
+                <legend i18n>Approved swaps</legend>
+                @for (option of options; track option.id) {
+                  <app-checkbox [label]="option.name">
+                    <input
+                      type="checkbox"
+                      appControl
+                      [checked]="isApproved(exercise, option.id)"
+                      (change)="toggleSwap(exercise, option.id, $any($event.target).checked)"
+                    />
+                  </app-checkbox>
+                }
+              </fieldset>
+            } @else {
+              <p class="hint" i18n>
+                This exercise has no alternatives in your library yet. Add them on the exercise.
+              </p>
+            }
+          }
+        }
+        <app-field label="Note for the client" i18n-label density="compact">
+          <input
+            appControl
+            [(ngModel)]="exercise.coachNotes"
+            (ngModelChange)="changed()"
+            maxlength="2000"
+            dir="auto"
+          />
+        </app-field>
+      </div>
+
+      <ol class="sets" role="list">
+        @for (set of exercise.sets; track set.key; let setIndex = $index) {
+          <li class="set">
+            <fieldset>
+              <legend class="set-title">
+                <span i18n>Set {{ setIndex + 1 }}</span>
+              </legend>
+              <div class="set-grid">
+                <app-field label="Type" i18n-label density="compact">
+                  <select appControl [(ngModel)]="set.setType" (ngModelChange)="changed()">
+                    @for (type of setTypes; track type) {
+                      <option [value]="type">{{ setTypeLabel(type) }}</option>
+                    }
+                  </select>
+                </app-field>
+                <app-field label="Reps from" i18n-label density="compact">
+                  <input
+                    appControl
+                    type="number"
+                    min="1"
+                    max="100"
+                    inputmode="numeric"
+                    [(ngModel)]="set.repetitionsMinimum"
+                    (ngModelChange)="changed()"
+                  />
+                </app-field>
+                <app-field label="Reps to" i18n-label density="compact">
+                  <input
+                    appControl
+                    type="number"
+                    min="1"
+                    max="100"
+                    inputmode="numeric"
+                    [(ngModel)]="set.repetitionsMaximum"
+                    (ngModelChange)="changed()"
+                  />
+                </app-field>
+                <app-field class="span-2" label="Load from" i18n-label density="compact">
+                  <select appControl [(ngModel)]="set.loadStrategy" (ngModelChange)="changed()">
+                    @for (strategy of loadStrategies; track strategy) {
+                      <option [value]="strategy">{{ loadStrategyLabel(strategy) }}</option>
+                    }
+                  </select>
+                </app-field>
+                @if (hasLoadValue(set)) {
+                  <app-field [label]="loadLabel(set)" density="compact">
+                    <input
+                      appControl
+                      type="number"
+                      min="0"
+                      step="0.25"
+                      inputmode="decimal"
+                      [(ngModel)]="set.loadValue"
+                      (ngModelChange)="changed()"
+                    />
+                  </app-field>
+                }
+                @if (set.loadStrategy !== 'None') {
+                  <app-field label="Unit" i18n-label density="compact">
+                    <select appControl [(ngModel)]="set.loadUnit" (ngModelChange)="changed()">
+                      <option value="Kilogram">kg</option>
+                      <option value="Pound">lb</option>
+                    </select>
+                  </app-field>
+                }
+                <app-field label="Effort" i18n-label density="compact">
+                  <select
+                    appControl
+                    [ngModel]="set.exertionDisplayPreference"
+                    (ngModelChange)="effortChanged(set, $event)"
+                  >
+                    <option value="Rpe">RPE</option>
+                    <option value="Rir">RIR</option>
+                  </select>
+                </app-field>
+                <app-field label="Target" i18n-label density="compact">
+                  <input
+                    appControl
+                    type="number"
+                    step="0.5"
+                    inputmode="decimal"
+                    [attr.min]="set.exertionDisplayPreference === 'Rpe' ? 5 : 0"
+                    [attr.max]="set.exertionDisplayPreference === 'Rpe' ? 10 : 5"
+                    [(ngModel)]="set.exertionTarget"
+                    (ngModelChange)="changed()"
+                  />
+                </app-field>
+                <app-field label="Rest (seconds)" i18n-label density="compact">
+                  <input
+                    appControl
+                    type="number"
+                    min="0"
+                    max="3600"
+                    step="15"
+                    inputmode="numeric"
+                    [(ngModel)]="set.restSeconds"
+                    (ngModelChange)="changed()"
+                  />
+                </app-field>
+                <app-field label="Tempo" i18n-label density="compact">
+                  <input
+                    appControl
+                    [(ngModel)]="set.tempo"
+                    (ngModelChange)="changed()"
+                    maxlength="40"
+                    placeholder="3-1-1-0"
+                  />
+                </app-field>
+                @if (
+                  set.loadStrategy === 'PercentageWorkingMax' ||
+                  set.loadStrategy === 'RpeBasedEpley'
+                ) {
+                  <app-field
+                    label="Fixed load instead"
+                    i18n-label
+                    density="compact"
+                    help="Wins over the calculated load."
+                    i18n-help
+                  >
+                    <input
+                      appControl
+                      type="number"
+                      min="0"
+                      step="0.25"
+                      inputmode="decimal"
+                      [(ngModel)]="set.manualLoadOverride"
+                      (ngModelChange)="changed()"
+                    />
+                  </app-field>
+                }
+                <app-field class="wide" label="Set note" i18n-label density="compact">
+                  <input
+                    appControl
+                    [(ngModel)]="set.coachNotes"
+                    (ngModelChange)="changed()"
+                    maxlength="1000"
+                    dir="auto"
+                  />
+                </app-field>
+              </div>
+              <button
+                appIconButton
+                class="remove-set"
+                type="button"
+                [label]="removeSetLabel(setIndex)"
+                [disabled]="exercise.sets.length === 1"
+                (click)="removeSet(exercise, setIndex)"
+              >
+                <app-icon name="close" />
+              </button>
+            </fieldset>
+          </li>
+        }
+      </ol>
+      <button appButton type="button" variant="text" (click)="addSet(exercise)">
+        <app-icon name="plus" />
+        <span i18n>Add a set like the last</span>
+      </button>
+    </section>
+  }
+
+  <div class="footer">
+    <button appButton type="button" variant="outlined" (click)="addExercise.emit()">
+      <app-icon name="plus" />
+      <span i18n>Add exercise</span>
+    </button>
+    <div class="footer-end">
+      <button appButton type="button" variant="text" class="danger" (click)="remove.emit()" i18n>
+        Delete session
+      </button>
+      @if (canSaveToLibrary()) {
+        <button
+          appButton
+          type="button"
+          variant="text"
+          [loading]="savingToLibrary()"
+          (click)="saveToLibrary.emit()"
+          i18n
+        >
+          Save to saved sessions
+        </button>
+      }
+      <button appButton type="button" (click)="done.emit()" i18n>Done</button>
+    </div>
+  </div>
+</div>

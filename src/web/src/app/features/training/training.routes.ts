@@ -1,11 +1,21 @@
 import { Routes } from '@angular/router';
 import { clientGuard, coachGuard } from '../../core/auth/auth.guards';
+import { REDESIGNED } from '../../core/theme/redesigned-route';
 
 export const trainingRoutes: Routes = [
   {
     path: 'programs',
     canActivate: [coachGuard],
+    title: $localize`Programs | TB Gym`,
+    data: REDESIGNED,
+    loadComponent: () => import('./program-list').then((module) => module.ProgramList),
+  },
+  {
+    // `new` opens an empty program; one route for both, so saving a new program keeps the page.
+    path: 'programs/:templateId',
+    canActivate: [coachGuard],
     title: $localize`Program builder | TB Gym`,
+    data: REDESIGNED,
     loadComponent: () => import('./program-builder').then((module) => module.ProgramBuilder),
   },
   {

@@ -1,0 +1,416 @@
+import { describe, expect, it } from 'vitest';
+import type {
+  ExerciseView,
+  ProgramTemplateSummary,
+  SavedSessionView,
+} from '../../core/api/generated';
+import {
+  accepts,
+  applyDrop,
+  copySession,
+  daySessions,
+  draftProblem,
+  duplicateWeekAfter,
+  exerciseSummary,
+  filterLibrary,
+  gridColumns,
+  libraryChips,
+  libraryExercise,
+  type LibraryExercise,
+  moveWeek,
+  programCard,
+  removeWeek,
+  versionRows,
+  versionToOpen,
+} from './program-builder.models';
+import {
+  type DraftSession,
+  emptyExercise,
+  emptyProgram,
+  emptySession,
+  emptySet,
+  emptyWeek,
+  type ProgramDraft,
+} from './training-builder.models';
+
+function exerciseView(overrides: Partial<ExerciseView> = {}): ExerciseView {
+  return {
+    id: 'squat',
+    name: 'Back squat',
+    instructions: null,
+    equipment: 'Barbell',
+    movementPattern: 'Squat',
+    classification: 'Strength',
+    isArchived: false,
+    muscles: [{ muscle: 'Quadriceps', role: 'Primary' }],
+    tags: ['competition'],
+    alternatives: [{ exerciseId: 'safety-bar', exerciseName: 'Safety-bar squat', note: null }],
+    mediaAssetIds: [],
+    version: 1,
+    ...overrides,
+  } as ExerciseView;
+}
+
+const squat: LibraryExercise = libraryExercise(exerciseView());
+const row: LibraryExercise = libraryExercise(
+  exerciseView({
+    id: 'row',
+    name: 'Chest-supported row',
+    equipment: 'Dumbbell',
+    movementPattern: 'HorizontalPull',
+    alternatives: [],
+    mediaAssetIds: ['media-1', 'media-2'],
+  }),
+);
+
+function session(name: string, day: number, exercises: string[] = []): DraftSession {
+  const value = emptySession(day);
+  value.name = name;
+  value.exercises = exercises.map((id) => emptyExercise(id, false, id));
+  return value;
+}
+
+/** Week 1: Lower A on day 1 (squat, row), Upper A on day 3 (row). Week 2: Lower B on day 1. */
+function program(): ProgramDraft {
+  const draft = emptyProgram();
+  draft.name = 'Strength base';
+  draft.weeks[0].sessions = [
+    session('Lower A', 0, ['squat', 'row']),
+    session('Upper A', 2, ['row']),
+  ];
+  const second = emptyWeek(2);
+  second.sessions = [session('Lower B', 0, ['squat'])];
+  draft.weeks.push(second);
+  return draft;
+}
+
+const names = (draft: ProgramDraft, week = 0) =>
+  draft.weeks[week].sessions.map((item) => `${item.name}@${item.dayOffset}`);
+
+describe('program builder grid', () => {
+  it('gives room to days that hold a session in any week and keeps rest days narrow', () => {
+    const columns = gridColumns(program()).split(' minmax');
+    expect(columns).toHaveLength(7);
+    expect(gridColumns(program())).toBe(
+      [0, 1, 2, 3, 4, 5, 6]
+        .map((day) => (day === 0 || day === 2 ? 'minmax(9rem, 1fr)' : 'minmax(4.25rem, 0.4fr)'))
+        .join(' '),
+    );
+  });
+
+  it('sums an exercise up in one line, from its working sets', () => {
+    const exercise = emptyExercise('squat');
+    const warmUp = { ...emptySet(), setType: 'WarmUp' as const, loadStrategy: 'Direct' as const };
+    warmUp.repetitionsMinimum = warmUp.repetitionsMaximum = 3;
+    warmUp.loadValue = 40;
+    const working = {
+      ...emptySet(),
+      repetitionsMinimum: 5,
+      repetitionsMaximum: 5,
+      loadStrategy: 'PercentageWorkingMax' as const,
+      loadValue: 75,
+      exertionTarget: 7,
+    };
+    exercise.sets = [warmUp, working, { ...working }, { ...working }];
+    expect(exerciseSummary(exercise)).toBe('4 sets · 75% · RPE 7');
+
+    exercise.sets = [working, { ...working }, { ...working }];
+    expect(exerciseSummary(exercise)).toBe('3 × 5 · 75% · RPE 7');
+
+    const range = { ...emptySet(), repetitionsMinimum: 8, repetitionsMaximum: 10 };
+    range.loadStrategy = 'Direct';
+    range.loadValue = 60;
+    range.exertionDisplayPreference = 'Rir';
+    range.exertionTarget = 2;
+    exercise.sets = [range, { ...range }];
+    expect(exerciseSummary(exercise)).toBe('2 × 8–10 · 60 kg · RIR 2');
+  });
+});
+
+describe('program builder drops', () => {
+  it('takes exercises into sessions, sessions onto days, and an exercise onto an empty day only', () => {
+    const ref = { weekKey: 'w', sessionKey: 's' };
+    const at = { weekKey: 'w', day: 3 };
+    const library = { kind: 'library' as const, exercise: squat };
+    const moving = { kind: 'exercise' as const, ref: { ...ref, exerciseKey: 'e' } };
+    const sessionItem = { kind: 'session' as const, ref };
+
+    expect(accepts(library, { kind: 'session', ref })).toBe(true);
+    expect(accepts(moving, { kind: 'session', ref })).toBe(true);
+    expect(accepts(sessionItem, { kind: 'session', ref })).toBe(false);
+    expect(accepts(sessionItem, { kind: 'day', at, empty: false })).toBe(true);
+    expect(accepts(library, { kind: 'day', at, empty: false })).toBe(false);
+    expect(accepts(library, { kind: 'day', at, empty: true })).toBe(true);
+    expect(accepts(moving, { kind: 'day', at, empty: true })).toBe(true);
+  });
+
+  it('adds a library exercise where it is dropped, with the swaps the library approves', () => {
+    const draft = program();
+    const lower = { weekKey: draft.weeks[0].key, sessionKey: draft.weeks[0].sessions[0].key };
+
+    const next = applyDrop(
+      draft,
+      { kind: 'library', exercise: squat },
+      { kind: 'session', ref: lower },
+      1,
+      'Training day',
+    );
+
+    const exercises = next.weeks[0].sessions[0].exercises;
+    expect(exercises.map((item) => item.exerciseId)).toEqual(['squat', 'squat', 'row']);
+    expect(exercises[1].exerciseName).toBe('Back squat');
+    expect(exercises[1].approvedAlternativeExerciseIds).toEqual(['safety-bar']);
+    expect(draft.weeks[0].sessions[0].exercises).toHaveLength(2);
+  });
+
+  it('moves an exercise within a session and between sessions', () => {
+    const draft = program();
+    const week = draft.weeks[0];
+    const lower = { weekKey: week.key, sessionKey: week.sessions[0].key };
+    const upper = { weekKey: week.key, sessionKey: week.sessions[1].key };
+    const squatKey = week.sessions[0].exercises[0].key;
+
+    const reordered = applyDrop(
+      draft,
+      { kind: 'exercise', ref: { ...lower, exerciseKey: squatKey } },
+      { kind: 'session', ref: lower },
+      1,
+      'Training day',
+    );
+    expect(reordered.weeks[0].sessions[0].exercises.map((item) => item.exerciseId)).toEqual([
+      'row',
+      'squat',
+    ]);
+
+    const moved = applyDrop(
+      draft,
+      { kind: 'exercise', ref: { ...lower, exerciseKey: squatKey } },
+      { kind: 'session', ref: upper },
+      0,
+      'Training day',
+    );
+    expect(moved.weeks[0].sessions[0].exercises.map((item) => item.exerciseId)).toEqual(['row']);
+    expect(moved.weeks[0].sessions[1].exercises.map((item) => item.exerciseId)).toEqual([
+      'squat',
+      'row',
+    ]);
+  });
+
+  it('starts a session on an empty day from an exercise, and refuses a day that has one', () => {
+    const draft = program();
+    const week = draft.weeks[0];
+
+    const started = applyDrop(
+      draft,
+      { kind: 'library', exercise: row },
+      { kind: 'day', at: { weekKey: week.key, day: 4 }, empty: true },
+      0,
+      'Training day',
+    );
+    expect(names(started)).toEqual(['Lower A@0', 'Upper A@2', 'Training day@4']);
+    expect(started.weeks[0].sessions[2].exercises[0].exerciseName).toBe('Chest-supported row');
+
+    const refused = applyDrop(
+      draft,
+      { kind: 'library', exercise: row },
+      { kind: 'day', at: { weekKey: week.key, day: 0 }, empty: false },
+      0,
+      'Training day',
+    );
+    expect(refused).toBe(draft);
+  });
+
+  it('moves a session to another day and week, keeping each week in day order', () => {
+    const draft = program();
+    const upper = { weekKey: draft.weeks[0].key, sessionKey: draft.weeks[0].sessions[1].key };
+
+    const earlier = applyDrop(
+      draft,
+      { kind: 'session', ref: upper },
+      { kind: 'day', at: { weekKey: draft.weeks[0].key, day: 0 }, empty: false },
+      0,
+      'Training day',
+    );
+    expect(names(earlier)).toEqual(['Upper A@0', 'Lower A@0']);
+
+    const otherWeek = applyDrop(
+      draft,
+      { kind: 'session', ref: upper },
+      { kind: 'day', at: { weekKey: draft.weeks[1].key, day: 5 }, empty: true },
+      0,
+      'Training day',
+    );
+    expect(names(otherWeek)).toEqual(['Lower A@0']);
+    expect(names(otherWeek, 1)).toEqual(['Lower B@0', 'Upper A@5']);
+  });
+
+  it('drops a fresh copy of a saved session, never the saved one itself', () => {
+    const draft = program();
+    const savedSession = {
+      id: 'saved-1',
+      name: 'Conditioning',
+      sourceTemplateVersionId: 'version-1',
+      sourceTemplateSessionId: 'session-1',
+      session: {
+        id: 'session-1',
+        position: 1,
+        dayOffset: 0,
+        scheduledDate: null,
+        name: 'Conditioning',
+        coachNotes: null,
+        hasStarted: false,
+        isCompleted: false,
+        workoutExecutionId: null,
+        exercises: [],
+      },
+    } as SavedSessionView;
+
+    const next = applyDrop(
+      draft,
+      { kind: 'saved', saved: savedSession },
+      { kind: 'day', at: { weekKey: draft.weeks[0].key, day: 6 }, empty: true },
+      0,
+      'Training day',
+    );
+    const added = next.weeks[0].sessions[2];
+    expect(added.name).toBe('Conditioning');
+    expect(added.dayOffset).toBe(6);
+    expect(added.sourceId).toBeNull();
+  });
+});
+
+describe('program builder menus', () => {
+  it('copies a session to the next free day, or beside it when the week is full', () => {
+    const draft = program();
+    const lower = { weekKey: draft.weeks[0].key, sessionKey: draft.weeks[0].sessions[0].key };
+
+    const copied = copySession(draft, lower);
+    expect(names(copied.draft)).toEqual(['Lower A@0', 'Lower A@1', 'Upper A@2']);
+    expect(copied.sessionKey).not.toBe(lower.sessionKey);
+
+    const full = emptyProgram();
+    full.weeks[0].sessions = [0, 1, 2, 3, 4, 5, 6].map((day) => session(`S${day}`, day));
+    const last = { weekKey: full.weeks[0].key, sessionKey: full.weeks[0].sessions[6].key };
+    expect(daySessions(copySession(full, last).draft.weeks[0], 6)).toHaveLength(2);
+  });
+
+  it('numbers default week labels by place and keeps a label the coach wrote', () => {
+    const draft = program();
+    draft.weeks[1].label = 'Deload';
+
+    const duplicated = duplicateWeekAfter(draft, draft.weeks[0].key);
+    expect(duplicated.weeks.map((week) => week.label)).toEqual(['Week 1', 'Week 2', 'Deload']);
+    expect(duplicated.weeks[1].sessions[0].key).not.toBe(draft.weeks[0].sessions[0].key);
+
+    const moved = moveWeek(duplicated, duplicated.weeks[2].key, -1);
+    expect(moved.weeks.map((week) => week.label)).toEqual(['Week 1', 'Deload', 'Week 3']);
+
+    const single = emptyProgram();
+    expect(removeWeek(single, single.weeks[0].key)).toBe(single);
+  });
+});
+
+describe('program builder save checks', () => {
+  it('says where the first problem is', () => {
+    const draft = program();
+    draft.name = ' ';
+    expect(draftProblem(draft)?.message).toBe('Give the program a name.');
+
+    draft.name = 'Strength base';
+    const second = draft.weeks[1].sessions[0];
+    second.exercises[0].sets[0].exertionTarget = 11;
+    expect(draftProblem(draft)).toEqual({
+      weekKey: draft.weeks[1].key,
+      sessionKey: second.key,
+      message: 'Week 2, Lower B: RPE must be between 5 and 10 in 0.5 steps.',
+    });
+
+    second.exercises[0].sets[0].exertionTarget = 8;
+    second.name = '';
+    expect(draftProblem(draft)?.message).toBe('Week 2, Day 1: give the session a name.');
+  });
+});
+
+describe('program builder library', () => {
+  it('describes an exercise and finds it ignoring case and accents', () => {
+    expect(squat).toMatchObject({
+      detail: 'Barbell · Squat',
+      group: 'squat',
+      initials: 'BS',
+      mediaId: null,
+    });
+    expect(row.mediaId).toBe('media-1');
+
+    const presse = libraryExercise(exerciseView({ id: 'press', name: 'Développé couché' }));
+    const items = [squat, row, presse];
+    expect(filterLibrary(items, 'DEVELOPPE', 'all').map((item) => item.id)).toEqual(['press']);
+    expect(filterLibrary(items, 'dumbbell', 'all').map((item) => item.id)).toEqual(['row']);
+    expect(filterLibrary(items, '', 'pull').map((item) => item.id)).toEqual(['row']);
+  });
+
+  it('offers a chip only for the movements the library has', () => {
+    expect(libraryChips([squat, row]).map((chip) => `${chip.label} ${chip.count}`)).toEqual([
+      'All 2',
+      'Squat 1',
+      'Pull 1',
+    ]);
+  });
+});
+
+describe('program list and versions', () => {
+  const template = {
+    id: 'template-1',
+    name: 'Strength base',
+    currentVersionNumber: 3,
+    isArchived: false,
+    version: 7,
+    versions: [
+      {
+        id: 'v3',
+        versionNumber: 3,
+        name: 'Strength base',
+        isPublished: false,
+        weekCount: 4,
+        createdAtUtc: '2026-10-03T09:00:00Z',
+      },
+      {
+        id: 'v2',
+        versionNumber: 2,
+        name: 'Strength base',
+        isPublished: true,
+        weekCount: 4,
+        createdAtUtc: '2026-09-28T09:00:00Z',
+      },
+    ],
+  } as ProgramTemplateSummary;
+
+  it('shows a program that can be assigned, with newer changes not published yet', () => {
+    expect(programCard(template, 'en-US')).toEqual({
+      id: 'template-1',
+      name: 'Strength base',
+      weeks: '4 weeks',
+      status: 'Ready to assign',
+      tone: 'success',
+      note: 'Newest changes not published',
+      changed: 'Changed Sat 3 Oct',
+    });
+    const draftOnly = { ...template, versions: [template.versions[0]] };
+    expect(programCard(draftOnly, 'en-US')).toMatchObject({
+      status: 'Draft',
+      tone: 'neutral',
+      note: null,
+    });
+  });
+
+  it('opens the newest version unless the address names an older one of this program', () => {
+    expect(versionToOpen(template, null)).toBe('v3');
+    expect(versionToOpen(template, 'v2')).toBe('v2');
+    expect(versionToOpen(template, 'another-programs-version')).toBe('v3');
+    expect(
+      versionRows(template, 'v2', 'en-US').map((item) => [item.title, item.state, item.isOpen]),
+    ).toEqual([
+      ['Version 3', 'Draft', false],
+      ['Version 2', 'Published', true],
+    ]);
+  });
+});

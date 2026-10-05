@@ -463,11 +463,12 @@ export class ApiClient {
     classification?: Phase3Contracts.ExerciseClassification;
     tag?: string;
     includeArchived?: boolean;
+    skip?: number;
   }): Observable<Phase3Contracts.ExerciseSearchResult> {
     // 100 is the most the server returns (it clamps `take` to 1-100); asking for more only made the
     // request claim a page size it never received. Callers compare `items.length` with `total`.
     const parameters = Object.fromEntries(
-      Object.entries({ ...query, skip: 0, take: 100 }).filter(
+      Object.entries({ skip: 0, ...query, take: 100 }).filter(
         ([, value]) => value !== undefined && value !== '',
       ),
     );

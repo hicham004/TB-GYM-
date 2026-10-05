@@ -48,6 +48,25 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
+        var items = await SummarizeTemplatesAsync(templates, cancellationToken);
+        return new ProgramTemplatePage(total, skip, take, items);
+    }
+
+    public async Task<ProgramTemplateSummary?> GetTemplateAsync(
+        Guid templateId,
+        CancellationToken cancellationToken)
+    {
+        var template = await dbContext.ProgramTemplates.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == templateId, cancellationToken);
+        return template is null
+            ? null
+            : (await SummarizeTemplatesAsync([template], cancellationToken)).Single();
+    }
+
+    private async Task<ProgramTemplateSummary[]> SummarizeTemplatesAsync(
+        IReadOnlyList<ProgramTemplate> templates,
+        CancellationToken cancellationToken)
+    {
         var templateIds = templates.Select(item => item.Id).ToArray();
         var versions = await dbContext.ProgramTemplateVersions.AsNoTracking()
             .Where(item => templateIds.Contains(item.TemplateId))
@@ -55,7 +74,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
             .OrderByDescending(item => item.VersionNumber)
             .ToListAsync(cancellationToken);
         var byTemplate = versions.ToLookup(item => item.TemplateId);
-        var items = templates.Select(item => new ProgramTemplateSummary(
+        return templates.Select(item => new ProgramTemplateSummary(
             item.Id,
             item.Name,
             item.CurrentVersionNumber,
@@ -68,7 +87,6 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
                 version.IsPublished,
                 version.Weeks.Count,
                 version.CreatedAtUtc)).ToArray())).ToArray();
-        return new ProgramTemplatePage(total, skip, take, items);
     }
 
     public async Task<ProgramTemplateVersionView?> GetTemplateVersionAsync(
