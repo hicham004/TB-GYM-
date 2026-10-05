@@ -69,7 +69,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R3.5a | **Coach brand settings** (§3.1): a look or own colours and a logo, with the backend setting and logo upload, drawn for the coach's staff and clients | §2, plus backend tests | Done · 2026-10-04 · a37645d |
 | R3.5b | **Coach Messages** (C6): search and filters (unread, waiting for a reply) over every conversation, the client's plan and last workout beside the thread | §2, plus backend tests | Done · 2026-10-04 · fe6aa5e |
 | R3.5c | **Saved replies** (C6): a coach's own short replies, kept on the server and dropped into the composer | §2, plus backend tests | Done · 2026-10-04 · 039e121 |
-| R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Gate |
+| R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Open, not blocking · 2026-10-05: the owner will demo later and said to carry on with R4 |
 | R4.1 | **Program builder** (C4), part 1: library panel, week grid, drag and drop | §2 | To do |
 | R4.2 | **Program builder**, part 2: inline editing, autosave, unsaved-changes guard, publish preview | §2 | To do |
 | R4.3 | **Check-in review** (C5) | §2 | To do |
@@ -95,8 +95,11 @@ of the implemented R1.3 screens before production rollout.
   shows exercise and set counts. Add a real planned duration to the training contract before showing
   an estimate; do not infer minutes from set count.
 - **Demo freshness.** Dates are relative to the day the command runs, so the data ages. Rebuild it
-  (drop the development database, run `.\scripts\demo-workspace.ps1`) before every screenshot review
-  or demo.
+  before every screenshot review or demo. Since 2026-10-04 (owner's decision for R3.6) the demo has its
+  own database, `tbgym_demo` in the Docker PostgreSQL, because the development database `tbgym` holds
+  the owner's own accounts: never drop `tbgym`. Set `$env:POSTGRES_DB = 'tbgym_demo'` in the terminal
+  before `.\scripts\demo-workspace.ps1` and `.\scripts\run-api.ps1`; to rebuild, first run
+  `docker compose exec postgres dropdb -U tbgym --force --if-exists tbgym_demo`.
 - **Progress photo demo assets (R2.3).** The protected photo timeline and comparison work with
   granted thumbnails; the Atlas demo still needs two consented, licensed photos of the same pose
   before that section can be photographed with real demo data.
