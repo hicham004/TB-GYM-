@@ -216,6 +216,23 @@ describe('a client’s Service & access', () => {
     expect(context.plans()).toBe(renewed);
     // The page now shows the renewal it made.
     expect(textOf(host.querySelector('.eyebrow'))).toBe('Starts Tue 13 Oct');
+    expect(textOf(host.querySelector('.payment-context'))).toBe(
+      'Online Coaching · 13 Oct 2026 – 4 Jan 2027',
+    );
+    expect(all(host, '.payment-amount').map(textOf)).toEqual(['USD 150']);
+
+    // Opening the original plan still shows its own receipt and price after renewal.
+    all(host, '.row')
+      .find((row) => textOf(row).includes('Tue 21 Jul'))!
+      .click();
+    await settle(harness.fixture);
+    expect(textOf(host.querySelector('.payment-context'))).toBe(
+      'Online Coaching · Tue 21 Jul – Mon 12 Oct',
+    );
+    expect(all(host, '.payment-amount').map(textOf)).toEqual(['USD 330']);
+    expect(textOf(host)).toContain(
+      'Renewing starts a separate plan and keeps these payments here.',
+    );
   });
 
   it('opens the renewal the Overview asked for once, then takes it out of the address', async () => {

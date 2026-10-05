@@ -175,7 +175,9 @@ export function serviceWriteError(error: unknown, fallback: string, name: string
   const { code, text } = serverText(error);
   switch (code) {
     case 'entitlement_overlap':
-      return $localize`${name}:name: already has a plan that includes the same things on some of those dates. Start after it ends, or cancel it first.`;
+      return text && text.includes(' from ') && text.includes(' to ')
+        ? text
+        : $localize`${name}:name: already has a plan that includes the same things on some of those dates. Start after it ends, or cancel it first.`;
     case 'concurrency_conflict':
       return $localize`This was changed somewhere else since you opened it. The page has been reloaded: check it, then try again.`;
     case 'idempotency_key_reused':

@@ -504,6 +504,29 @@ internal sealed partial class TrainingApplicationService
                 item.EndDateExclusive > start,
             cancellationToken);
 
+    private async Task<TrainingCommandResult> PrimaryOverlapConflictAsync(
+        Guid clientProfileId, DateOnly start, DateOnly endExclusive, Guid? excludedId,
+        CancellationToken cancellationToken)
+    {
+        var overlap = await dbContext.TrainingMesocycles.AsNoTracking()
+            .Where(item => item.ClientProfileId == clientProfileId && item.Kind == MesocycleKind.Primary &&
+                           item.BlocksPrimaryOverlap && item.Id != excludedId && item.StartDate < endExclusive &&
+                           start < item.EndDateExclusive)
+            .OrderBy(item => item.StartDate).ThenBy(item => item.Id)
+            .Select(item => new { item.Name, item.StartDate, item.EndDateExclusive })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (overlap is null)
+        {
+            return Conflict("mesocycle_overlap", "Another program already covers some of these dates. Reload the client to check its dates.");
+        }
+
+        var name = await dbContext.ClientProfiles.AsNoTracking()
+            .Where(item => item.Id == clientProfileId).Select(item => item.FirstName).SingleAsync(cancellationToken);
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        return Conflict("mesocycle_overlap",
+            $"{name} already has {overlap.Name} from {overlap.StartDate.ToString("ddd d MMM yyyy", culture)} to {overlap.EndDateExclusive.AddDays(-1).ToString("ddd d MMM yyyy", culture)}. Start on {overlap.EndDateExclusive.ToString("ddd d MMM yyyy", culture)} or later, or cancel that program first.");
+    }
+
     private async Task<bool> IsSameAssignmentAsync(
         TrainingMesocycle existing,
         Guid clientProfileId,

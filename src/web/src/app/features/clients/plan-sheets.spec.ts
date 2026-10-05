@@ -90,7 +90,7 @@ describe('Start a plan', () => {
     pick(host, 'o-4');
     await settle(fixture);
     expect(textOf(host.querySelector('[role="status"]'))).toBe(
-      'Maya’s Online Coaching already covers some of that until Mon 12 Oct. Start on Tue 13 Oct or later.',
+      'Maya already has Online Coaching from Tue 21 Jul 2026 to Mon 12 Oct 2026. Start on Tue 13 Oct 2026 or later.',
     );
     expect(textOf(host)).toContain('Maya can use it once USD 120 is paid.');
 
@@ -149,7 +149,11 @@ describe('Start a plan', () => {
   it('keeps a refusal on screen in coach words, and retries with the same key', async () => {
     const refusal = new HttpErrorResponse({
       status: 409,
-      error: { code: 'entitlement_overlap', message: 'overlapping coverage' },
+      error: {
+        code: 'entitlement_overlap',
+        message:
+          'Maya already has Online Coaching from Tue 21 Jul 2026 to Mon 12 Oct 2026. Choose dates after it ends.',
+      },
     });
     const assignProduct = vi
       .fn()
@@ -162,7 +166,7 @@ describe('Start a plan', () => {
     await settle(fixture);
 
     expect(textOf(host.querySelector('.problem-text'))).toBe(
-      'Maya already has a plan that includes the same things on some of those dates. Start after it ends, or cancel it first.',
+      'Maya already has Online Coaching from Tue 21 Jul 2026 to Mon 12 Oct 2026. Choose dates after it ends.',
     );
     expect(closed).not.toHaveBeenCalled();
 

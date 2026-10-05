@@ -32,7 +32,7 @@ public sealed class Phase2CommercialDomainTests
             Guid.NewGuid(),
             Now);
 
-        offer.SetAvailability(false);
+        offer.SetAvailability(false, []);
         product.Update("Premium Coaching 2027", "Changed catalog copy", false);
 
         Assert.AreEqual("Premium Coaching", enrollment.ProductNameSnapshot);
@@ -42,6 +42,66 @@ public sealed class Phase2CommercialDomainTests
         CollectionAssert.AreEquivalent(
             new[] { CoachingFeature.Training, CoachingFeature.Nutrition },
             enrollment.Entitlements.Select(item => item.Feature).ToArray());
+    }
+
+    [TestMethod]
+    public void ActiveOfferSlotUsesProductDurationUnitAndCurrencyRatherThanPriceOrFeatures()
+    {
+        var product = CoachingProduct.Create(TenantId, "Premium Coaching", null);
+        var existing = CreateOffer(product, 250m, "USD", new OfferFeatureDefinition(CoachingFeature.Training));
+        var duplicate = CreateOffer(product, 350m, "usd", new OfferFeatureDefinition(CoachingFeature.Nutrition));
+        Assert.ThrowsExactly<ActiveOfferSlotConflictException>(() => duplicate.EnsureActiveSlotAvailable([existing]));
+
+        duplicate.SetAvailability(false, []);
+        Assert.ThrowsExactly<ActiveOfferSlotConflictException>(() => duplicate.SetAvailability(true, [existing]));
+        Assert.IsFalse(duplicate.IsActive);
+        existing.SetAvailability(false, []);
+        duplicate.SetAvailability(true, [existing]);
+        Assert.IsTrue(duplicate.IsActive);
+
+        var anotherCurrency = CreateOffer(product, 250m, "LBP", new OfferFeatureDefinition(CoachingFeature.Training));
+        anotherCurrency.EnsureActiveSlotAvailable([duplicate]);
+        var days = ProductOffer.CreateFixedDuration(TenantId, product.Id, "8 days", 8, OfferDurationUnit.Day, 250m, "USD",
+            [new OfferFeatureDefinition(CoachingFeature.Training)]);
+        days.EnsureActiveSlotAvailable([duplicate]);
+        var otherProduct = CoachingProduct.Create(TenantId, "Separate product", null);
+        CreateOffer(otherProduct, 250m, "USD", new OfferFeatureDefinition(CoachingFeature.Training))
+            .EnsureActiveSlotAvailable([duplicate]);
+        var anotherTenant = ProductOffer.CreateFixedDuration(Guid.NewGuid(), product.Id, "8 weeks", 8,
+            OfferDurationUnit.Week, 250m, "USD", [new OfferFeatureDefinition(CoachingFeature.Training)]);
+        anotherTenant.EnsureActiveSlotAvailable([duplicate]);
+    }
+
+    [TestMethod]
+    public void ChangingPriceCopiesTermsAndLeavesEnrollmentPriceAndCommandHistoryIntact()
+    {
+        var product = CoachingProduct.Create(TenantId, "Premium Coaching", null);
+        var source = CreateOffer(product, 250m, "USD",
+            new OfferFeatureDefinition(CoachingFeature.Training, true),
+            new OfferFeatureDefinition(CoachingFeature.Nutrition));
+        var enrollment = ClientEnrollment.Assign(TenantId, ClientId, product, source,
+            new DateOnly(2026, 8, 24), Guid.NewGuid(), Now);
+        var replacement = source.CreatePriceReplacement(275.125m);
+        var command = OfferPriceChange.Record(source, replacement, 7, Guid.NewGuid());
+        source.SetAvailability(false, []);
+        replacement.EnsureActiveSlotAvailable([source]);
+
+        Assert.AreNotEqual(source.Id, replacement.Id);
+        Assert.AreEqual(250m, enrollment.PriceAmount);
+        Assert.AreEqual(250m, source.PriceAmount);
+        Assert.AreEqual(275.13m, replacement.PriceAmount);
+        Assert.AreEqual(source.Label, replacement.Label);
+        Assert.AreEqual(source.DurationCount, replacement.DurationCount);
+        Assert.AreEqual(source.DurationUnit, replacement.DurationUnit);
+        Assert.AreEqual(source.PriceCurrency, replacement.PriceCurrency);
+        CollectionAssert.AreEqual(source.Entitlements.Select(item => (item.Feature, item.AllowsConcurrentCoverage)).ToArray(),
+            replacement.Entitlements.Select(item => (item.Feature, item.AllowsConcurrentCoverage)).ToArray());
+        Assert.IsTrue(command.Matches(source.Id, 275.125m, 7));
+        Assert.IsFalse(command.Matches(source.Id, 275m, 7));
+        Assert.IsFalse(command.Matches(source.Id, 275.125m, 8));
+        Assert.IsFalse(command.Matches(Guid.NewGuid(), 275.125m, 7));
+        Assert.ThrowsExactly<InvalidOperationException>(() => source.CreatePriceReplacement(300m));
+        Assert.ThrowsExactly<ArgumentException>(() => replacement.CreatePriceReplacement(275.13m));
     }
 
     [TestMethod]

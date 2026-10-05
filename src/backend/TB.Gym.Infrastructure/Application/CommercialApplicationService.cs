@@ -108,7 +108,9 @@ internal sealed class CommercialApplicationService(
         try
         {
             var currency = await ResolveCurrencyAsync(request.PriceCurrency, cancellationToken);
-            dbContext.ProductOffers.Add(CreateOffer(product, request, currency));
+            var offer = CreateOffer(product, request, currency);
+            offer.EnsureActiveSlotAvailable(await ActiveOffersAsync(product.Id, cancellationToken));
+            dbContext.ProductOffers.Add(offer);
             await dbContext.SaveChangesAsync(cancellationToken);
             return new CommercialCommandResult(
                 CommercialCommandStatus.Success,
@@ -117,6 +119,14 @@ internal sealed class CommercialApplicationService(
         catch (ArgumentException exception)
         {
             return Invalid("offer", exception.Message);
+        }
+        catch (ActiveOfferSlotConflictException)
+        {
+            return ActiveOfferConflict();
+        }
+        catch (DbUpdateException exception) when (IsActiveOfferSlotViolation(exception))
+        {
+            return ActiveOfferConflict();
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
@@ -140,7 +150,9 @@ internal sealed class CommercialApplicationService(
         try
         {
             dbContext.Entry(offer).Property(item => item.Version).OriginalValue = request.Version;
-            offer.SetAvailability(request.IsActive);
+            offer.SetAvailability(
+                request.IsActive,
+                request.IsActive ? await ActiveOffersAsync(offer.ProductId, cancellationToken) : []);
             await dbContext.SaveChangesAsync(cancellationToken);
             return new CommercialCommandResult(
                 CommercialCommandStatus.Success,
@@ -150,7 +162,146 @@ internal sealed class CommercialApplicationService(
         {
             return Conflict("concurrency_conflict", "The offer was changed by another request.");
         }
+        catch (ActiveOfferSlotConflictException)
+        {
+            return ActiveOfferConflict();
+        }
+        catch (DbUpdateException exception) when (IsActiveOfferSlotViolation(exception))
+        {
+            return ActiveOfferConflict();
+        }
     }
+
+    public async Task<CommercialCommandResult> ChangeOfferPriceAsync(
+        Guid offerId,
+        ChangeProductOfferPriceRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.IdempotencyKey == Guid.Empty)
+        {
+            return Invalid("idempotencyKey", "A non-empty idempotency key is required.");
+        }
+
+        decimal price;
+        try
+        {
+            price = MoneyRules.NormalizeAmount(request.PriceAmount, allowZero: true);
+        }
+        catch (ArgumentException exception)
+        {
+            return Invalid("priceAmount", exception.Message);
+        }
+
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            dbContext.ChangeTracker.Clear();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                // A price change and a restore serialize on the source's version. Re-read the
+                // command after the lock so an identical simultaneous retry returns its winner.
+                await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT 1 FROM subscriptions.\"ProductOffers\" WHERE \"TenantId\" = {tenantContext.TenantId} AND \"Id\" = {offerId} FOR UPDATE",
+                    cancellationToken);
+                var prior = await dbContext.OfferPriceChanges.AsNoTracking()
+                    .SingleOrDefaultAsync(item => item.IdempotencyKey == request.IdempotencyKey, cancellationToken);
+                if (prior is not null)
+                {
+                    return await PriceChangeReplayAsync(prior, offerId, price, request.Version, cancellationToken);
+                }
+
+                var source = await dbContext.ProductOffers.Include(item => item.Entitlements)
+                    .SingleOrDefaultAsync(item => item.Id == offerId, cancellationToken);
+                if (source is null)
+                {
+                    return NotFound();
+                }
+
+                if (source.Version != request.Version)
+                {
+                    return Conflict("concurrency_conflict", "This price option changed since you opened it. Reload the product and try again.");
+                }
+
+                var replacement = source.CreatePriceReplacement(price);
+                replacement.EnsureActiveSlotAvailable(
+                    (await ActiveOffersAsync(source.ProductId, cancellationToken)).Where(item => item.Id != source.Id));
+                source.SetAvailability(false, []);
+                // Release the unique slot before inserting its replacement, inside one transaction.
+                await dbContext.SaveChangesAsync(cancellationToken);
+                dbContext.ProductOffers.Add(replacement);
+                dbContext.OfferPriceChanges.Add(OfferPriceChange.Record(
+                    source, replacement, request.Version, request.IdempotencyKey));
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return new CommercialCommandResult(
+                    CommercialCommandStatus.Success,
+                    Product: await LoadProductAsync(source.ProductId, cancellationToken));
+            }
+            catch (ArgumentException exception)
+            {
+                return Invalid("priceAmount", exception.Message);
+            }
+            catch (ActiveOfferSlotConflictException)
+            {
+                return ActiveOfferConflict();
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Invalid("offer", exception.Message);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict("concurrency_conflict", "This price option changed since you opened it. Reload the product and try again.");
+            }
+            catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                await transaction.DisposeAsync();
+                dbContext.ChangeTracker.Clear();
+                var prior = await dbContext.OfferPriceChanges.AsNoTracking()
+                    .SingleOrDefaultAsync(item => item.IdempotencyKey == request.IdempotencyKey, cancellationToken);
+                if (prior is not null)
+                {
+                    return await PriceChangeReplayAsync(prior, offerId, price, request.Version, cancellationToken);
+                }
+
+                return IsActiveOfferSlotViolation(exception)
+                    ? ActiveOfferConflict()
+                    : Conflict("offer_conflict", "The price change conflicts with an earlier request. Reload the product and try again.");
+            }
+        });
+    }
+
+    private async Task<CommercialCommandResult> PriceChangeReplayAsync(
+        OfferPriceChange prior, Guid sourceOfferId, decimal price, uint version, CancellationToken cancellationToken)
+    {
+        if (!prior.Matches(sourceOfferId, price, version))
+        {
+            return Conflict("idempotency_key_reused", "This price-change key was already used for another request.");
+        }
+
+        var productId = await dbContext.ProductOffers.AsNoTracking()
+            .Where(item => item.Id == prior.ReplacementOfferId)
+            .Select(item => item.ProductId).SingleAsync(cancellationToken);
+        return new CommercialCommandResult(
+            CommercialCommandStatus.Success, Product: await LoadProductAsync(productId, cancellationToken));
+    }
+
+    private Task<List<ProductOffer>> ActiveOffersAsync(Guid productId, CancellationToken cancellationToken) =>
+        dbContext.ProductOffers.AsNoTracking()
+            .Where(item => item.ProductId == productId && item.IsActive)
+            .ToListAsync(cancellationToken);
+
+    private static CommercialCommandResult ActiveOfferConflict() =>
+        Conflict("active_offer_slot_conflict", new ActiveOfferSlotConflictException().Message);
+
+    private static bool IsActiveOfferSlotViolation(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: DatabaseConstraintNames.OneActiveOfferPerDurationAndCurrency,
+        };
 
     public async Task<ClientCommercialOverview?> GetClientOverviewAsync(
         Guid clientProfileId,
@@ -480,20 +631,11 @@ internal sealed class CommercialApplicationService(
                 .Where(item => !item.AllowsConcurrentCoverage)
                 .Select(item => item.Feature)
                 .ToArray();
-            var overlaps = blockingFeatures.Length > 0 &&
-                await dbContext.EnrollmentEntitlements.AnyAsync(
-                    item =>
-                        item.ClientProfileId == clientProfileId &&
-                        item.BlocksOverlap &&
-                        blockingFeatures.Contains(item.Feature) &&
-                        item.StartDate < enrollment.EndDateExclusive &&
-                        startDate < item.EndDateExclusive,
-                    cancellationToken);
-            if (overlaps)
+            var overlap = await EnrollmentOverlapConflictAsync(
+                clientProfileId, blockingFeatures, startDate, enrollment.EndDateExclusive, cancellationToken);
+            if (overlap is not null)
             {
-                return Conflict(
-                    "entitlement_overlap",
-                    "This client already has overlapping coverage for at least one selected feature.");
+                return overlap;
             }
 
             dbContext.ClientEnrollments.Add(enrollment);
@@ -542,15 +684,49 @@ internal sealed class CommercialApplicationService(
                         "The assignment idempotency key was already used for another operation.");
             }
 
-            return IsExclusionViolation(exception)
-                ? Conflict(
-                    "entitlement_overlap",
-                    "Another request created overlapping coverage for at least one selected feature.")
-                : Conflict(
-                    "assignment_conflict",
-                    "The assignment was already created or conflicts with another request.");
+            if (IsExclusionViolation(exception))
+            {
+                var overlap = await EnrollmentOverlapConflictAsync(
+                    clientProfileId,
+                    offer.Entitlements.Where(item => !item.AllowsConcurrentCoverage).Select(item => item.Feature).ToArray(),
+                    startDate, offer.GetPeriod(startDate).EndExclusive, cancellationToken);
+                return overlap ?? Conflict("entitlement_overlap", "Another plan already covers some of these dates. Reload the client to check its dates.");
+            }
+
+            return Conflict("assignment_conflict", "The assignment was already created or conflicts with another request.");
         }
     }
+
+    private async Task<CommercialCommandResult?> EnrollmentOverlapConflictAsync(
+        Guid clientProfileId, CoachingFeature[] features, DateOnly start, DateOnly endExclusive,
+        CancellationToken cancellationToken)
+    {
+        if (features.Length == 0)
+        {
+            return null;
+        }
+
+        var overlap = await (
+            from entitlement in dbContext.EnrollmentEntitlements.AsNoTracking()
+            join enrollment in dbContext.ClientEnrollments.AsNoTracking() on entitlement.EnrollmentId equals enrollment.Id
+            where entitlement.ClientProfileId == clientProfileId && entitlement.BlocksOverlap &&
+                  features.Contains(entitlement.Feature) && entitlement.StartDate < endExclusive && start < entitlement.EndDateExclusive
+            orderby enrollment.StartDate, enrollment.Id
+            select new { enrollment.ProductNameSnapshot, enrollment.StartDate, enrollment.EndDateExclusive })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (overlap is null)
+        {
+            return null;
+        }
+
+        var name = await dbContext.ClientProfiles.AsNoTracking()
+            .Where(item => item.Id == clientProfileId).Select(item => item.FirstName).SingleAsync(cancellationToken);
+        return Conflict("entitlement_overlap",
+            $"{name} already has {overlap.ProductNameSnapshot} from {CoachDate(overlap.StartDate)} to {CoachDate(overlap.EndDateExclusive.AddDays(-1))}. Start on {CoachDate(overlap.EndDateExclusive)} or later, or cancel that plan first.");
+    }
+
+    private static string CoachDate(DateOnly date) =>
+        date.ToString("ddd d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
 
     private async Task<CommercialCommandResult> ChangeStatusAsync(
         Guid enrollmentId,

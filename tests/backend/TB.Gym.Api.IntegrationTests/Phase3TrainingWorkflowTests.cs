@@ -282,6 +282,10 @@ public sealed partial class Phase3TrainingWorkflowTests
             $"/api/training/clients/{clientId}/mesocycles",
             AssignmentRequest(enrollment.Id, template.Id, squat.Id, max.Id, 100m, Guid.NewGuid()));
         Assert.AreEqual(HttpStatusCode.Conflict, overlap.StatusCode);
+        var clash = await overlap.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.AreEqual("mesocycle_overlap", clash?["code"]);
+        Assert.StartsWith("Training already has Powerlifting Base from ", clash!["message"]);
+        Assert.Contains("Start on ", clash["message"]);
 
         var secondMax = await RecordWorkingMaxAsync(coach, clientId, squat.Id, 150m);
         Assert.AreNotEqual(max.Id, secondMax.Id);

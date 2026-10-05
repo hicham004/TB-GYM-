@@ -342,6 +342,15 @@ export class ApiClient {
       .pipe(map(toCoachingProduct));
   }
 
+  changeProductOfferPrice(
+    offerId: string,
+    request: Phase3Contracts.ChangeProductOfferPriceRequest,
+  ): Observable<CoachingProduct> {
+    return this.http
+      .post<ContractCoachingProductView>(`/api/commercial/offers/${offerId}/price-changes`, request)
+      .pipe(map(toCoachingProduct));
+  }
+
   /** The signed-in client's own access to each coaching feature in the selected workspace. */
   getOwnFeatureAccess(): Observable<FeatureAccessDecision[]> {
     return this.http

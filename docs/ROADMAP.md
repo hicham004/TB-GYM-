@@ -1034,6 +1034,11 @@ changed an API, schema or domain rule. The Figma file is retired as a source of 
 
 ## Commercial launch track (agreed 2026-09-22)
 
+Launch fixes requested 2026-10-05 come before the next redesign row.
+
+- F1 (done): one active price option per product, duration and currency, and Change price, which
+  replaces a price for new plans without touching earlier plans or payments (ADR 0034).
+
 Work follows this order; anything outside it needs the user's approval first.
 
 - Step 1, gym team support (complete, 2026-09-23): owner invites and removes coaches, one coach per

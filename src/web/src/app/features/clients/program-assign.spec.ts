@@ -352,7 +352,8 @@ describe('Assign program', () => {
       status: 409,
       error: {
         code: 'mesocycle_overlap',
-        message: 'The client already has an overlapping primary mesocycle.',
+        message:
+          'Maya already has Meso 1 from Mon 21 Sep 2026 to Sun 18 Oct 2026. Choose dates outside it.',
       },
     });
     const { fixture, host, closed } = await render({
@@ -365,7 +366,7 @@ describe('Assign program', () => {
     await settle(fixture);
 
     expect(textOf(host.querySelector('.problem-text'))).toBe(
-      'Maya already has a program on those dates. Choose other dates, or change the other program first.',
+      'Maya already has Meso 1 from Mon 21 Sep 2026 to Sun 18 Oct 2026. Choose dates outside it.',
     );
     expect(closed).not.toHaveBeenCalled();
   });

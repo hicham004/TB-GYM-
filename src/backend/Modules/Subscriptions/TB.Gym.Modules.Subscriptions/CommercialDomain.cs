@@ -146,7 +146,53 @@ public sealed class ProductOffer : TenantEntity
         return new SubscriptionPeriod(startDate, startDate.AddDays(days));
     }
 
-    public void SetAvailability(bool isActive) => IsActive = isActive;
+    public void EnsureActiveSlotAvailable(IEnumerable<ProductOffer> offers)
+    {
+        if (offers.Any(offer =>
+                offer.Id != Id && offer.IsActive &&
+                offer.TenantId == TenantId && offer.ProductId == ProductId &&
+                offer.DurationCount == DurationCount && offer.DurationUnit == DurationUnit &&
+                offer.PriceCurrency == PriceCurrency))
+        {
+            throw new ActiveOfferSlotConflictException();
+        }
+    }
+
+    public void SetAvailability(bool isActive, IEnumerable<ProductOffer> offers)
+    {
+        if (isActive)
+        {
+            EnsureActiveSlotAvailable(offers);
+        }
+
+        IsActive = isActive;
+    }
+
+    public ProductOffer CreatePriceReplacement(decimal amount)
+    {
+        if (!IsActive)
+        {
+            throw new InvalidOperationException("Only an active price option can have its price changed.");
+        }
+
+        var price = MoneyRules.NormalizeAmount(amount, allowZero: true);
+        if (price == PriceAmount)
+        {
+            throw new ArgumentException("Choose a different price for this option.", nameof(amount));
+        }
+
+        return CreateFixedDuration(
+            TenantId, ProductId, Label, DurationCount, DurationUnit, price, PriceCurrency,
+            entitlements.Select(item => new OfferFeatureDefinition(item.Feature, item.AllowsConcurrentCoverage)));
+    }
+}
+
+public sealed class ActiveOfferSlotConflictException : InvalidOperationException
+{
+    public ActiveOfferSlotConflictException()
+        : base("This product already has an active price option for that duration and currency. Change its price, or use a separate product for another price.")
+    {
+    }
 }
 
 public sealed class OfferEntitlement : TenantEntity

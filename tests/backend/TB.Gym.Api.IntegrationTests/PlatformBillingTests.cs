@@ -208,6 +208,17 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertReadOnlyAsync(await coach.PutAsJsonAsync(R42aDraftUrl(Guid.NewGuid()), new { version = 1 }));
         await AssertReadOnlyAsync(await coach.PostAsJsonAsync(R42aPublishUrl(Guid.NewGuid()), new { version = 1, replaceNewer = false }));
         await AssertStatusAsync(await coach.GetAsync(R42aDraftsUrl), HttpStatusCode.OK);
+        await RefreshCsrfAsync(coach);
+        await AssertReadOnlyAsync(await coach.PostAsJsonAsync(
+            $"/api/commercial/offers/{Guid.NewGuid()}/price-changes",
+            new { priceAmount = 275m, version = 1, idempotencyKey = Guid.NewGuid() }));
+        await RefreshCsrfAsync(owner);
+        await AssertReadOnlyAsync(await owner.PostAsJsonAsync(
+            $"/api/commercial/products/{Guid.NewGuid()}/offers",
+            new { label = "8 weeks", durationCount = 8, durationUnit = "Week", priceAmount = 275m, priceCurrency = "USD", features = Array.Empty<object>() }));
+        await RefreshCsrfAsync(coach);
+        await AssertReadOnlyAsync(await coach.PutAsJsonAsync(
+            $"/api/commercial/offers/{Guid.NewGuid()}/availability", new { isActive = true, version = 1 }));
         await AssertStatusAsync(await owner.GetAsync("/api/clients"), HttpStatusCode.OK);
         await AssertStatusAsync(await coach.GetAsync($"/api/clients/{clientId}"), HttpStatusCode.OK);
         Assert.IsTrue((await RequiredJsonAsync<BillingAccess>(await coach.GetAsync("/api/billing/access"))).IsReadOnly);

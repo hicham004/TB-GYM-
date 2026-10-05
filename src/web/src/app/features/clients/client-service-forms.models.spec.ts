@@ -192,4 +192,10 @@ describe('the server’s refusals, in coach words', () => {
     expect(say({ message: 'Something plain went wrong.' })).toBe('Something plain went wrong.');
     expect(serviceWriteError(new Error('offline'), 'Fallback.', 'Maya')).toBe('Fallback.');
   });
+
+  it('keeps the authorized server explanation of the plan and dates that clash', () => {
+    const message =
+      'Maya already has Online Coaching from Tue 21 Jul 2026 to Mon 12 Oct 2026. Start after it ends.';
+    expect(say({ code: 'entitlement_overlap', message }, 409)).toBe(message);
+  });
 });

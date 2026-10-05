@@ -1,4 +1,5 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -9,13 +10,17 @@ import {
   CoachingProduct,
   CreateProductOfferRequest,
   ProductCatalog,
+  ProductOffer,
 } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { Button } from '../../ui/button';
+import { Control, Field } from '../../ui/field';
+import { IntentIdempotencyKey } from '../training/training-assignment-state';
 
 @Component({
   selector: 'app-products',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, Button, Control, Field],
   templateUrl: './products.html',
   styleUrl: './products.scss',
 })
@@ -26,12 +31,21 @@ export class Products {
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
+  private readonly priceIntent = new IntentIdempotencyKey();
 
   protected readonly catalog = signal<ProductCatalog | null>(null);
   protected readonly loading = signal(false);
   protected readonly busy = signal(false);
   protected readonly createOpen = signal(false);
   protected readonly offerProductId = signal<string | null>(null);
+  protected readonly changingPrice = signal<{ productId: string; offer: ProductOffer } | null>(
+    null,
+  );
+  protected readonly priceErrors = signal<string[]>([]);
+  protected readonly newPriceLabel = $localize`New price`;
+  protected readonly priceForm = this.formBuilder.nonNullable.group({
+    priceAmount: [0, [Validators.required, Validators.min(0)]],
+  });
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
   protected readonly features: CoachingFeature[] = [
@@ -135,6 +149,8 @@ export class Products {
   }
 
   protected openOffer(product: CoachingProduct): void {
+    this.changingPrice.set(null);
+    this.clearMessages();
     this.offerProductId.set(product.id);
     this.offerForm.reset({
       offerLabel: '',
@@ -147,6 +163,66 @@ export class Products {
       checkIns: true,
       messaging: false,
       resourceLibrary: false,
+    });
+  }
+
+  protected openPriceChange(product: CoachingProduct, offer: ProductOffer): void {
+    this.offerProductId.set(null);
+    this.clearMessages();
+    this.priceErrors.set([]);
+    this.priceIntent.complete();
+    this.priceForm.reset({ priceAmount: offer.priceAmount });
+    this.changingPrice.set({ productId: product.id, offer });
+  }
+
+  protected priceDuration(offer: ProductOffer): string {
+    return offer.durationUnit === 'Week'
+      ? $localize`${offer.durationCount}:count: weeks`
+      : $localize`${offer.durationCount}:count: days`;
+  }
+
+  protected async changePrice(): Promise<void> {
+    if (this.busy()) return;
+    return this.scope.run('changePrice', async (owner) => {
+      const selected = this.changingPrice();
+      if (!selected) return;
+      const amount = this.priceForm.getRawValue().priceAmount;
+      if (this.priceForm.invalid || !Number.isFinite(amount)) {
+        this.priceErrors.set([$localize`Enter a price of zero or more.`]);
+        return;
+      }
+      if (Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
+        this.priceErrors.set([$localize`Use at most two decimals.`]);
+        return;
+      }
+      if (amount === selected.offer.priceAmount) {
+        this.priceErrors.set([$localize`Choose a different price for this option.`]);
+        return;
+      }
+      this.priceErrors.set([]);
+      const payload = {
+        offerId: selected.offer.id,
+        priceAmount: amount,
+        version: selected.offer.version,
+      };
+      await owner.wait(
+        this.run(
+          async () => {
+            await owner.wait(
+              firstValueFrom(
+                this.api.changeProductOfferPrice(selected.offer.id, {
+                  priceAmount: amount,
+                  version: selected.offer.version,
+                  idempotencyKey: this.priceIntent.forPayload(payload),
+                }),
+              ),
+            );
+            this.priceIntent.complete();
+            this.changingPrice.set(null);
+          },
+          $localize`Price changed for new plans. Existing clients keep their agreed price and payments.`,
+        ),
+      );
     });
   }
 
@@ -269,7 +345,7 @@ export class Products {
         this.notice.set(message);
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`The change could not be saved.`));
+        this.error.set(productWriteError(error));
       } finally {
         if (owner.current) {
           this.busy.set(false);
@@ -321,9 +397,22 @@ export class Products {
     this.busy.set(false);
     this.createOpen.set(false);
     this.offerProductId.set(null);
+    this.changingPrice.set(null);
+    this.priceErrors.set([]);
+    this.priceIntent.complete();
     this.error.set(null);
     this.notice.set(null);
     this.createForm.reset();
     this.offerForm.reset();
   }
+}
+
+function productWriteError(error: unknown): string {
+  if (error instanceof HttpErrorResponse) {
+    const body = error.error as { code?: string } | undefined;
+    if (body?.code === 'active_offer_slot_conflict') {
+      return $localize`This product already has an active price option for that duration and currency. Use Change price on it, retire it first, or create a separate product for another price.`;
+    }
+  }
+  return apiErrorMessage(error, $localize`The change could not be saved.`);
 }

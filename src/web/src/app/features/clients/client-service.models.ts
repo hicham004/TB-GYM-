@@ -66,6 +66,8 @@ export interface PlanCard {
   readonly includes: readonly string[];
   /** "USD 150 of 330 paid", "Paid in full" or "Free". */
   readonly paidText: string;
+  /** Identifies the dated purchase these receipts belong to, even after renewal. */
+  readonly paymentContext: string;
   /** How much of the price is paid, 0 to 100, for the bar. */
   readonly paidPercent: number;
   readonly payments: readonly PaymentLine[];
@@ -257,6 +259,7 @@ export function planCard(plan: ClientEnrollment, context: ServiceContext): PlanC
     facts,
     includes: featureLabels(plan.features),
     paidText,
+    paymentContext: `${plan.productName} · ${dateRange(plan.startDate, plan.lastActiveDate, context)}`,
     paidPercent: free
       ? 100
       : Math.max(0, Math.min(100, Math.round((plan.paidAmount / plan.priceAmount) * 100))),

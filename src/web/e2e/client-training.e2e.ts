@@ -654,3 +654,28 @@ for (const width of [390, 1440]) {
     await expect(page.locator('.week.current button.session').first()).toBeVisible();
   });
 }
+
+test.describe('program date conflicts', () => {
+  test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/training\//] } });
+  for (const width of [390, 1440]) {
+    test(`Assign program names the conflicting block at ${width}px`, async ({ page }) => {
+      const message =
+        'Maya already has Strength Base from Mon 21 Sep 2026 to Sun 25 Oct 2026. Start on Mon 26 Oct 2026 or later, or cancel that program first.';
+      await openTraining(page, width, 900, {
+        path: `/clients/${ID}/training?action=assign`,
+        opensSheet: true,
+        extra: {
+          [`POST /api/training/clients/${ID}/mesocycles`]: (route) =>
+            json(route, 409, { code: 'mesocycle_overlap', message }),
+        },
+      });
+      const sheet = page.getByRole('dialog', { name: 'Assign program' });
+      await sheet.getByLabel('Program', { exact: true }).selectOption('version-1');
+      await sheet.getByRole('button', { name: 'Assign program', exact: true }).click();
+      await expect(sheet.getByRole('alert')).toHaveText(message);
+      await expect(sheet).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+    });
+  }
+});

@@ -5,6 +5,12 @@ namespace TB.Gym.Infrastructure.Persistence;
 /// </summary>
 internal static class DatabaseConstraintNames
 {
+    public const string OneActiveOfferPerDurationAndCurrency =
+        "IX_ProductOffers_ActiveDurationCurrency";
+
+    public const string OneOfferPriceChangePerKey =
+        "IX_OfferPriceChanges_TenantId_IdempotencyKey";
+
     public const string OneCheckInResponsePerAssignment =
         "IX_CheckInResponses_TenantId_AssignmentId";
 

@@ -309,6 +309,30 @@ test('renewing opens on the plan’s own price option, the day after it ends', a
   await page.screenshot({ path: 'test-results/r34b-renew-1440.png' });
 });
 
+test('renewing preserves the earlier plan’s receipt under its own dates', async ({ page }) => {
+  await openService(page, 390, 900, {
+    plans: [ENDING, ENDING, WITH_RENEWAL],
+    extra: {
+      'POST /api/commercial/enrollments/e-1/renew': (route) => json(route, 200, unpaidRenewal()),
+    },
+  });
+  await page.locator('.hero-actions > button', { hasText: 'Renew plan' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Renew plan' });
+  await sheet.getByRole('button', { name: 'Renew plan' }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.locator('.payment-context')).toHaveText(
+    'Online Coaching · 13 Oct 2026 – 4 Jan 2027',
+  );
+  await expect(page.locator('.payment-amount')).toHaveText(['USD 150']);
+  await page.locator('.row', { hasText: 'Tue 21 Jul – Mon 12 Oct' }).click();
+  await expect(page.locator('.payment-context')).toHaveText(
+    'Online Coaching · Tue 21 Jul – Mon 12 Oct',
+  );
+  await expect(page.locator('.payment-amount')).toHaveText(['USD 330']);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+});
+
 test('Service & access follows dark mode', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await openService(page, 1440, 900, { plans: [WITH_RENEWAL] });
@@ -354,3 +378,27 @@ for (const width of [390, 1440]) {
     await expect(page.locator('.hero-actions > button')).toBeVisible();
   });
 }
+
+test.describe('plan date conflicts', () => {
+  test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/commercial\//] } });
+  for (const width of [390, 1440]) {
+    test(`Renew plan names the conflicting purchase at ${width}px`, async ({ page }) => {
+      const message =
+        'Maya already has Online Coaching from Tue 21 Jul 2026 to Mon 12 Oct 2026. Start on Tue 13 Oct 2026 or later, or cancel that plan first.';
+      await openService(page, width, 900, {
+        extra: {
+          'POST /api/commercial/enrollments/e-1/renew': (route) =>
+            json(route, 409, { code: 'entitlement_overlap', message }),
+        },
+      });
+      await page.locator('.hero-actions > button', { hasText: 'Renew plan' }).click();
+      const sheet = page.getByRole('dialog', { name: 'Renew plan' });
+      await sheet.getByLabel('First day').fill('2026-10-12');
+      await sheet.getByRole('button', { name: 'Renew plan', exact: true }).click();
+      await expect(sheet.getByRole('alert')).toHaveText(message);
+      await expect(sheet).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+    });
+  }
+});

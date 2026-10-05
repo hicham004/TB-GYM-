@@ -382,6 +382,12 @@ export type ChangePasswordRequest = {
   newPassword: string;
 };
 
+export type ChangeProductOfferPriceRequest = {
+  priceAmount: number | string;
+  version: number | string;
+  idempotencyKey: string;
+};
+
 export type CheckInAnswerChoiceView = {
   questionOptionId: string;
   order: number | string;
@@ -4914,6 +4920,43 @@ export type SetProductOfferAvailabilityResponses = {
 
 export type SetProductOfferAvailabilityResponse =
   SetProductOfferAvailabilityResponses[keyof SetProductOfferAvailabilityResponses];
+
+export type ChangeProductOfferPriceData = {
+  body: ChangeProductOfferPriceRequest;
+  path: {
+    offerId: string;
+  };
+  query?: never;
+  url: '/api/commercial/offers/{offerId}/price-changes';
+};
+
+export type ChangeProductOfferPriceErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ChangeProductOfferPriceError =
+  ChangeProductOfferPriceErrors[keyof ChangeProductOfferPriceErrors];
+
+export type ChangeProductOfferPriceResponses = {
+  /**
+   * OK
+   */
+  200: CoachingProductView;
+};
+
+export type ChangeProductOfferPriceResponse =
+  ChangeProductOfferPriceResponses[keyof ChangeProductOfferPriceResponses];
 
 export type GetClientCommercialOverviewData = {
   body?: never;

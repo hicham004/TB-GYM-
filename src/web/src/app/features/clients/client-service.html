@@ -81,6 +81,11 @@
             }
           </header>
           <div class="panel-body">
+            <p class="payment-context" dir="auto">{{ plan.paymentContext }}</p>
+            <p class="quiet payment-history-note" i18n>
+              Payments belong to this plan. Renewing starts a separate plan and keeps these payments
+              here.
+            </p>
             @if (plan.free) {
               <p class="quiet" i18n>This plan is free, so there is nothing to pay.</p>
             } @else {
@@ -124,6 +129,7 @@
             <h2 id="others-title" i18n>Other plans</h2>
           </header>
           <div class="panel-body">
+            <p class="quiet" i18n>Choose a plan to see its dates, price and payments.</p>
             @if (others().coming.length > 0) {
               <h3 class="caption group" i18n>Current and next</h3>
               <ul class="rows">

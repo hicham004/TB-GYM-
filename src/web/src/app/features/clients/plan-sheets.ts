@@ -393,7 +393,7 @@ export class PlanStart {
     if (!choice || !this.startDate()) return null;
     const other = overlappingPlan(choice, this.startDate(), this.plans(), this.today());
     return other
-      ? $localize`${this.firstName()}:name:’s ${other.productName}:plan: already covers some of that until ${shortDate(other.lastActiveDate, this.locale)}:date:. Start on ${shortDate(other.endDateExclusive, this.locale)}:next: or later.`
+      ? $localize`${this.firstName()}:name: already has ${other.productName}:plan: from ${formatDate(other.startDate, 'EEE d MMM y', this.locale)}:from: to ${formatDate(other.lastActiveDate, 'EEE d MMM y', this.locale)}:to:. Start on ${formatDate(other.endDateExclusive, 'EEE d MMM y', this.locale)}:next: or later.`
       : null;
   });
 
@@ -615,7 +615,7 @@ export class PlanPayment {
 
   protected readonly planLine = computed(() => {
     const plan = this.plan();
-    return $localize`${plan.name}:plan: · ${money(plan.price, plan.currency, this.locale)}:price:, from ${formatDate(plan.startDate, 'EEE d MMM', this.locale)}:date:`;
+    return $localize`${plan.paymentContext}:plan: · ${money(plan.price, plan.currency, this.locale)}:price:`;
   });
   protected readonly amountHelp = computed(
     () =>

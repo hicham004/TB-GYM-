@@ -25,6 +25,11 @@ public interface ICommercialApplicationService
         SetOfferAvailabilityRequest request,
         CancellationToken cancellationToken);
 
+    Task<CommercialCommandResult> ChangeOfferPriceAsync(
+        Guid offerId,
+        ChangeProductOfferPriceRequest request,
+        CancellationToken cancellationToken);
+
     Task<ClientCommercialOverview?> GetClientOverviewAsync(
         Guid clientProfileId,
         CancellationToken cancellationToken);
@@ -157,6 +162,8 @@ public sealed record OfferFeatureRequest(
     bool AllowsConcurrentCoverage = false);
 
 public sealed record SetOfferAvailabilityRequest(bool IsActive, uint Version);
+
+public sealed record ChangeProductOfferPriceRequest(decimal PriceAmount, uint Version, Guid IdempotencyKey);
 
 public sealed record AssignProductRequest(
     Guid OfferId,

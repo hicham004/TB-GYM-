@@ -55,6 +55,7 @@ async function render(api: Partial<ApiClient> = {}) {
           addProductOffer: vi.fn(() => of(offer({ id: 'offer-2' }))),
           updateCoachingProduct: vi.fn(() => of(product({ isActive: false }))),
           setOfferAvailability: vi.fn(() => of(offer({ isActive: false }))),
+          changeProductOfferPrice: vi.fn(() => of(product())),
           ...api,
         },
       },
@@ -274,5 +275,109 @@ describe('Products', () => {
       'Coaching products could not be loaded.',
     );
     expect(host.textContent).not.toContain('No products yet');
+  });
+
+  it('explains a duplicate price option beside the form and keeps the entry', async () => {
+    const duplicate = new HttpErrorResponse({
+      status: 409,
+      error: { code: 'active_offer_slot_conflict', message: 'Duplicate active offer slot.' },
+    });
+    const { fixture, host, api } = await render({
+      getProductCatalog: vi.fn(() => of(catalog([product()]))),
+      addProductOffer: vi.fn(() => throwError(() => duplicate)),
+    });
+    press(host, 'Add price option');
+    await settle(fixture);
+    fill(host, 'Name', 'Same duration');
+    fill(host, 'Duration', '12');
+    fill(host, 'Price', '500');
+    await settle(fixture);
+    press(host, 'Save price option');
+    await settle(fixture);
+
+    expect(api.addProductOffer).toHaveBeenCalled();
+    expect(host.querySelector('.inline-offer [role="alert"]')?.textContent).toContain(
+      'Use Change price',
+    );
+    expect(host.querySelector<HTMLInputElement>('[formControlName="priceAmount"]')?.value).toBe(
+      '500',
+    );
+    expect(host.querySelectorAll('[role="alert"]')).toHaveLength(1);
+  });
+
+  it('changes only the price, then keeps the retired option beside its replacement', async () => {
+    const updated = product({
+      offers: [offer({ isActive: false }), offer({ id: 'offer-2', priceAmount: 500 })],
+    });
+    const { fixture, host, api } = await render({
+      getProductCatalog: vi
+        .fn()
+        .mockReturnValueOnce(of(catalog([product()])))
+        .mockReturnValue(of(catalog([updated]))),
+      changeProductOfferPrice: vi.fn(() => of(updated)),
+    });
+    press(host, 'Change price');
+    await settle(fixture);
+    expect(host.querySelector('.price-change')?.textContent).toContain(
+      'Existing plans keep their price, dates and payments.',
+    );
+    fill(host, 'New price', '500');
+    await settle(fixture);
+    press(host, 'Confirm new price');
+    await settle(fixture);
+
+    expect(api.changeProductOfferPrice).toHaveBeenCalledWith('offer-1', {
+      priceAmount: 500,
+      version: 1,
+      idempotencyKey: expect.any(String),
+    });
+    expect(TestBed.inject(CsrfService).refresh).toHaveBeenCalled();
+    expect(host.querySelector('.price-change')).toBeNull();
+    expect(host.querySelectorAll('.offer-row')).toHaveLength(2);
+    expect(host.textContent).toContain('450 USD');
+    expect(host.textContent).toContain('500 USD');
+    expect(host.textContent).toContain('Existing clients keep their agreed price and payments.');
+  });
+
+  it('retries an uncertain price change with its key and uses a new key for changed money', async () => {
+    const changeProductOfferPrice = vi.fn<ApiClient['changeProductOfferPrice']>(() =>
+      throwError(() => new HttpErrorResponse({ status: 503 })),
+    );
+    const { fixture, host } = await render({
+      getProductCatalog: vi.fn(() => of(catalog([product()]))),
+      changeProductOfferPrice,
+    });
+    press(host, 'Change price');
+    await settle(fixture);
+    fill(host, 'New price', '500');
+    await settle(fixture);
+    press(host, 'Confirm new price');
+    await settle(fixture);
+    press(host, 'Confirm new price');
+    await settle(fixture);
+    const firstKey = changeProductOfferPrice.mock.calls[0][1].idempotencyKey;
+    expect(changeProductOfferPrice.mock.calls[1][1].idempotencyKey).toBe(firstKey);
+    fill(host, 'New price', '550');
+    await settle(fixture);
+    press(host, 'Confirm new price');
+    await settle(fixture);
+    expect(changeProductOfferPrice.mock.calls[2][1].idempotencyKey).not.toBe(firstKey);
+    expect(host.querySelector('.price-change [role="alert"]')?.textContent).toContain(
+      'could not be saved',
+    );
+  });
+
+  it('rejects fractional cents before changing the price', async () => {
+    const { fixture, host, api } = await render({
+      getProductCatalog: vi.fn(() => of(catalog([product()]))),
+    });
+    press(host, 'Change price');
+    await settle(fixture);
+    fill(host, 'New price', '450.001');
+    await settle(fixture);
+    press(host, 'Confirm new price');
+    await settle(fixture);
+    expect(api.changeProductOfferPrice).not.toHaveBeenCalled();
+    expect(host.querySelector('.price-change')?.textContent).toContain('Use at most two decimals.');
   });
 });

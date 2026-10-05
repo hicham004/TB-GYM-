@@ -4,8 +4,13 @@ using System.Globalization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using TB.Gym.Infrastructure.Persistence;
 
 namespace TB.Gym.Api.IntegrationTests;
 
@@ -212,6 +217,11 @@ public sealed class Phase2CommercialWorkflowTests
                 idempotencyKey = Guid.NewGuid(),
             });
         Assert.AreEqual(HttpStatusCode.Conflict, contradictory.StatusCode);
+        var clash = await contradictory.Content.ReadFromJsonAsync<CommercialError>();
+        Assert.AreEqual("entitlement_overlap", clash?.Code);
+        Assert.StartsWith("Commercial already has Premium Training from ", clash!.Message);
+        Assert.Contains(today.ToString("ddd d MMM yyyy", CultureInfo.InvariantCulture), clash.Message);
+        Assert.Contains(today.AddDays(55).ToString("ddd d MMM yyyy", CultureInfo.InvariantCulture), clash.Message);
 
         await RefreshCsrfAsync(coach);
         var renewalResponse = await coach.PostAsJsonAsync(
@@ -346,6 +356,11 @@ public sealed class Phase2CommercialWorkflowTests
         var responses = await Task.WhenAll(firstTask, secondTask);
         Assert.AreEqual(1, responses.Count(item => item.StatusCode == HttpStatusCode.OK));
         Assert.AreEqual(1, responses.Count(item => item.StatusCode == HttpStatusCode.Conflict));
+        var clash = await responses.Single(item => item.StatusCode == HttpStatusCode.Conflict)
+            .Content.ReadFromJsonAsync<CommercialError>();
+        Assert.AreEqual("entitlement_overlap", clash?.Code);
+        Assert.StartsWith("Commercial already has Training ", clash!.Message);
+        Assert.Contains(today.AddDays(55).ToString("ddd d MMM yyyy", CultureInfo.InvariantCulture), clash.Message);
 
         using var coachB = CreateClient();
         var workspaceB = await RegisterCoachAsync(
@@ -392,6 +407,280 @@ public sealed class Phase2CommercialWorkflowTests
         var accessB = await client.GetFromJsonAsync<AccessDecision[]>("/api/client-access/me");
         Assert.IsNotNull(accessB);
         AssertDecision(accessB, "Training", allowed: true, "Granted");
+    }
+
+    [TestMethod]
+    public async Task ActivePriceOptionsRejectDuplicatesAndRacesAndPermitRetiredSlots()
+    {
+        using var coach = CreateClient();
+        await RegisterCoachAsync(coach, "offers-coach@example.test", "Offers Coach", "Offers Gym");
+        var product = await CreateProductAsync(coach, "Online Coaching", 250m, "USD", "Training");
+        var source = product.Offers.Single();
+
+        await RefreshCsrfAsync(coach);
+        var duplicate = await coach.PostAsJsonAsync($"/api/commercial/products/{product.Id}/offers",
+            OfferRequest(8, 300m, " usd ", "Nutrition"));
+        await AssertCommercialConflictAsync(duplicate, "active_offer_slot_conflict");
+
+        await RefreshCsrfAsync(coach);
+        var otherCurrency = await coach.PostAsJsonAsync($"/api/commercial/products/{product.Id}/offers",
+            OfferRequest(8, 25_000_000m, "LBP", "Training"));
+        await AssertStatusAsync(otherCurrency, HttpStatusCode.OK);
+
+        await RefreshCsrfAsync(coach);
+        var race = await Task.WhenAll(
+            coach.PostAsJsonAsync($"/api/commercial/products/{product.Id}/offers", OfferRequest(12, 300m, "USD", "Training")),
+            coach.PostAsJsonAsync($"/api/commercial/products/{product.Id}/offers", OfferRequest(12, 350m, "USD", "Training")));
+        Assert.AreEqual(1, race.Count(item => item.StatusCode == HttpStatusCode.OK));
+        await AssertCommercialConflictAsync(race.Single(item => item.StatusCode == HttpStatusCode.Conflict), "active_offer_slot_conflict");
+
+        await RefreshCsrfAsync(coach);
+        var retirement = await coach.PutAsJsonAsync($"/api/commercial/offers/{source.Id}/availability",
+            new { isActive = false, source.Version });
+        await AssertStatusAsync(retirement, HttpStatusCode.OK);
+        var retired = (await retirement.Content.ReadFromJsonAsync<Product>())!.Offers.Single(item => item.Id == source.Id);
+
+        await RefreshCsrfAsync(coach);
+        var replacementResponse = await coach.PostAsJsonAsync($"/api/commercial/products/{product.Id}/offers",
+            OfferRequest(8, 300m, "USD", "Training"));
+        await AssertStatusAsync(replacementResponse, HttpStatusCode.OK);
+        await RefreshCsrfAsync(coach);
+        await AssertCommercialConflictAsync(await coach.PutAsJsonAsync($"/api/commercial/offers/{source.Id}/availability",
+            new { isActive = true, retired.Version }), "active_offer_slot_conflict");
+
+        // The invariant also protects direct SQL writers, independently of HTTP validation.
+        await using var connection = new NpgsqlConnection(RequiredDatabaseConnection);
+        await connection.OpenAsync();
+        await using var insert = connection.CreateCommand();
+        insert.CommandText = """
+            INSERT INTO subscriptions."ProductOffers"
+              ("Id", "TenantId", "ProductId", "Label", "BillingModel", "DurationCount", "DurationUnit", "PriceAmount", "PriceCurrency", "IsActive")
+            SELECT gen_random_uuid(), "TenantId", "ProductId", 'duplicate', "BillingModel", "DurationCount", "DurationUnit", 500, "PriceCurrency", true
+            FROM subscriptions."ProductOffers" WHERE "Id" = @id
+            """;
+        insert.Parameters.AddWithValue("id", source.Id);
+        var refused = await Assert.ThrowsExactlyAsync<PostgresException>(() => insert.ExecuteNonQueryAsync());
+        Assert.AreEqual(PostgresErrorCodes.UniqueViolation, refused.SqlState);
+        Assert.AreEqual("IX_ProductOffers_ActiveDurationCurrency", refused.ConstraintName);
+    }
+
+    [TestMethod]
+    public async Task ChangePriceIsAtomicIdempotentAndPreservesPurchasedTermsAndReceipts()
+    {
+        using var coach = CreateClient();
+        await RegisterCoachAsync(coach, "price-coach@example.test", "Price Coach", "Price Gym");
+        using var client = CreateClient();
+        var clientId = await InviteAndAcceptAsync(coach, client, "price-client@example.test", true);
+        var product = await CreateProductAsync(coach, "Online Coaching", 250m, "USD", "Training", "Nutrition");
+        var source = product.Offers.Single();
+        var enrollment = await AssignAsync(coach, clientId, source.Id, TenantToday(), Guid.NewGuid());
+        await RecordPaymentAsync(coach, enrollment.Id, 250m, "USD", Guid.NewGuid());
+        var commandKey = Guid.NewGuid();
+        var change = new { priceAmount = 275.125m, source.Version, idempotencyKey = commandKey };
+        await RefreshCsrfAsync(coach);
+        var responses = await Task.WhenAll(
+            coach.PostAsJsonAsync($"/api/commercial/offers/{source.Id}/price-changes", change),
+            coach.PostAsJsonAsync($"/api/commercial/offers/{source.Id}/price-changes", change));
+        foreach (var response in responses)
+        {
+            await AssertStatusAsync(response, HttpStatusCode.OK);
+        }
+
+        var changed = (await responses[0].Content.ReadFromJsonAsync<Product>())!;
+        Assert.HasCount(2, changed.Offers);
+        Assert.IsFalse(changed.Offers.Single(item => item.Id == source.Id).IsActive);
+        var replacement = changed.Offers.Single(item => item.IsActive);
+        Assert.AreEqual(275.13m, replacement.PriceAmount);
+        Assert.AreEqual(source.Label, replacement.Label);
+        Assert.AreEqual(source.DurationCount, replacement.DurationCount);
+        Assert.AreEqual(source.DurationUnit, replacement.DurationUnit);
+        Assert.AreEqual(source.PriceCurrency, replacement.PriceCurrency);
+        CollectionAssert.AreEqual(source.Features, replacement.Features);
+        Assert.AreEqual(replacement.Id, (await responses[1].Content.ReadFromJsonAsync<Product>())!.Offers.Single(item => item.IsActive).Id);
+        Assert.AreEqual(1L, await ScalarAsync("SELECT count(*) FROM subscriptions.\"OfferPriceChanges\""));
+
+        await RefreshCsrfAsync(coach);
+        await AssertStatusAsync(await coach.PostAsJsonAsync($"/api/commercial/offers/{source.Id}/price-changes",
+            new { priceAmount = 275.13m, source.Version, idempotencyKey = commandKey }), HttpStatusCode.OK);
+        await RefreshCsrfAsync(coach);
+        await AssertCommercialConflictAsync(await coach.PostAsJsonAsync($"/api/commercial/offers/{source.Id}/price-changes",
+            new { priceAmount = 280m, source.Version, idempotencyKey = commandKey }), "idempotency_key_reused");
+        await RefreshCsrfAsync(coach);
+        await AssertCommercialConflictAsync(await coach.PostAsJsonAsync($"/api/commercial/offers/{replacement.Id}/price-changes",
+            new { priceAmount = 280m, version = replacement.Version - 1, idempotencyKey = Guid.NewGuid() }), "concurrency_conflict");
+
+        var historical = (await GetOverviewAsync(coach, clientId)).Enrollments.Single(item => item.Id == enrollment.Id);
+        Assert.AreEqual(250m, historical.PriceAmount);
+        Assert.AreEqual(250m, historical.PaidAmount);
+        Assert.AreEqual("USD", historical.PriceCurrency);
+        Assert.HasCount(1, historical.Payments);
+        await RefreshCsrfAsync(coach);
+        var renewedResponse = await coach.PostAsJsonAsync($"/api/commercial/enrollments/{enrollment.Id}/renew",
+            new { offerId = replacement.Id, startDate = historical.EndDateExclusive, idempotencyKey = Guid.NewGuid() });
+        await AssertStatusAsync(renewedResponse, HttpStatusCode.OK);
+        var renewed = (await renewedResponse.Content.ReadFromJsonAsync<Enrollment>())!;
+        Assert.AreEqual(275.13m, renewed.PriceAmount);
+        Assert.AreEqual(0m, renewed.PaidAmount);
+        Assert.HasCount(0, renewed.Payments);
+        Assert.AreEqual(250m, (await GetOverviewAsync(coach, clientId)).Enrollments.Single(item => item.Id == enrollment.Id).PaidAmount);
+
+        await AssertPriceChangeLedgerRejectsMutationAsync();
+
+        await RefreshCsrfAsync(coach);
+        var priceRace = await Task.WhenAll(
+            coach.PostAsJsonAsync($"/api/commercial/offers/{replacement.Id}/price-changes",
+                new { priceAmount = 300m, replacement.Version, idempotencyKey = Guid.NewGuid() }),
+            coach.PostAsJsonAsync($"/api/commercial/offers/{replacement.Id}/price-changes",
+                new { priceAmount = 325m, replacement.Version, idempotencyKey = Guid.NewGuid() }));
+        Assert.AreEqual(1, priceRace.Count(item => item.StatusCode == HttpStatusCode.OK));
+        await AssertCommercialConflictAsync(priceRace.Single(item => item.StatusCode == HttpStatusCode.Conflict), "concurrency_conflict");
+        Assert.AreEqual(2L, await ScalarAsync("SELECT count(*) FROM subscriptions.\"OfferPriceChanges\""));
+        Assert.AreEqual(250m, (await GetOverviewAsync(coach, clientId)).Enrollments.Single(item => item.Id == enrollment.Id).PaidAmount);
+    }
+
+    [TestMethod]
+    public async Task ChangePriceRollbackAndTenantAuthorizationProtectTheSourceOffer()
+    {
+        using var coach = CreateClient();
+        var tenantId = await RegisterCoachAsync(coach, "price-safe-coach@example.test", "Price Safe Coach", "Price Safe Gym");
+        var product = await CreateProductAsync(coach, "Protected coaching", 250m, "USD", "Training");
+        var source = product.Offers.Single();
+        var url = $"/api/commercial/offers/{source.Id}/price-changes";
+        var request = new { priceAmount = 300m, source.Version, idempotencyKey = Guid.NewGuid() };
+        using var anonymous = CreateClient();
+        SetTenant(anonymous, tenantId);
+        await AssertStatusAsync(await anonymous.PostAsJsonAsync(url, request), HttpStatusCode.Unauthorized);
+        await RefreshCsrfAsync(coach);
+        coach.DefaultRequestHeaders.Remove("X-XSRF-TOKEN");
+        await AssertStatusAsync(await coach.PostAsJsonAsync(url, request), HttpStatusCode.BadRequest);
+
+        using var client = CreateClient();
+        await InviteAndAcceptAsync(coach, client, "price-safe-client@example.test", true);
+        await RefreshCsrfAsync(client);
+        await AssertStatusAsync(await client.PostAsJsonAsync(url, request), HttpStatusCode.Forbidden);
+
+        using var other = CreateClient();
+        var otherTenantId = await RegisterCoachAsync(other, "price-other-coach@example.test", "Other Coach", "Other Gym");
+        await RefreshCsrfAsync(other);
+        await AssertStatusAsync(await other.PostAsJsonAsync(url, request), HttpStatusCode.NotFound);
+        await RefreshCsrfAsync(other);
+        await AssertStatusAsync(await other.PostAsJsonAsync($"/api/commercial/products/{product.Id}/offers",
+            OfferRequest(12, 300m, "USD", "Training")), HttpStatusCode.NotFound);
+        await RefreshCsrfAsync(other);
+        await AssertStatusAsync(await other.PutAsJsonAsync($"/api/commercial/offers/{source.Id}/availability",
+            new { isActive = false, source.Version }), HttpStatusCode.NotFound);
+
+        await using (var connection = new NpgsqlConnection(RequiredDatabaseConnection))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO subscriptions."OfferPriceChanges"
+                  ("Id", "TenantId", "SourceOfferId", "ReplacementOfferId", "SourceVersion", "PriceAmount", "IdempotencyKey")
+                VALUES (gen_random_uuid(), @tenantId, @offerId, @offerId, 1, 300, gen_random_uuid())
+                """;
+            command.Parameters.AddWithValue("tenantId", otherTenantId);
+            command.Parameters.AddWithValue("offerId", source.Id);
+            var refused = await Assert.ThrowsExactlyAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+            Assert.AreEqual(PostgresErrorCodes.ForeignKeyViolation, refused.SqlState);
+        }
+
+        // Force the second save to fail after retirement. The transaction must restore the source.
+        await ExecuteCommercialSqlAsync("""
+            CREATE FUNCTION subscriptions.refuse_test_price_change() RETURNS trigger LANGUAGE plpgsql AS $f$
+            BEGIN RAISE EXCEPTION 'forced price-change failure' USING ERRCODE = '23505', CONSTRAINT = 'test_price_change_failure'; END;
+            $f$;
+            CREATE TRIGGER "TR_TestPriceChangeFailure" BEFORE INSERT ON subscriptions."OfferPriceChanges"
+            FOR EACH ROW EXECUTE FUNCTION subscriptions.refuse_test_price_change();
+            """);
+        try
+        {
+            await RefreshCsrfAsync(coach);
+            await AssertCommercialConflictAsync(await coach.PostAsJsonAsync(url, request), "offer_conflict");
+            var catalog = await coach.GetFromJsonAsync<Catalog>("/api/commercial/products");
+            var unchanged = catalog!.Products.Single(item => item.Id == product.Id);
+            Assert.HasCount(1, unchanged.Offers);
+            Assert.IsTrue(unchanged.Offers.Single().IsActive);
+            Assert.AreEqual(source.Version, unchanged.Offers.Single().Version);
+            Assert.AreEqual(0L, await ScalarAsync("SELECT count(*) FROM subscriptions.\"OfferPriceChanges\""));
+        }
+        finally
+        {
+            await ExecuteCommercialSqlAsync("""
+                DROP TRIGGER "TR_TestPriceChangeFailure" ON subscriptions."OfferPriceChanges";
+                DROP FUNCTION subscriptions.refuse_test_price_change();
+                """);
+        }
+
+        // A failed write did not spend its key, and retrying succeeds after the fault is removed.
+        await RefreshCsrfAsync(coach);
+        await AssertStatusAsync(await coach.PostAsJsonAsync(url, request), HttpStatusCode.OK);
+    }
+
+    [TestMethod]
+    public async Task ActiveOfferMigrationRefusesExistingDuplicatesWithoutChoosingOrRetiringOne()
+    {
+        using var coach = CreateClient();
+        await RegisterCoachAsync(coach, "migration-offer-coach@example.test", "Migration Coach", "Migration Gym");
+        var product = await CreateProductAsync(coach, "Historic options", 250m, "USD", "Training");
+        await using var scope = RequiredFactory.Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<GymDbContext>();
+        var migrations = context.Database.GetMigrations().ToArray();
+        var migration = migrations.Single(item => item.EndsWith("_ActiveOfferPriceOptions", StringComparison.Ordinal));
+        var previous = migrations[Array.IndexOf(migrations, migration) - 1];
+        var migrator = context.Database.GetInfrastructure().GetRequiredService<IMigrator>();
+        await migrator.MigrateAsync(previous);
+        await ExecuteCommercialSqlAsync("""
+            INSERT INTO subscriptions."ProductOffers"
+              ("Id", "TenantId", "ProductId", "Label", "BillingModel", "DurationCount", "DurationUnit", "PriceAmount", "PriceCurrency", "IsActive")
+            SELECT gen_random_uuid(), "TenantId", "ProductId", 'historic duplicate', "BillingModel", "DurationCount", "DurationUnit", 300, "PriceCurrency", true
+            FROM subscriptions."ProductOffers"
+            """);
+        var refused = await Assert.ThrowsExactlyAsync<PostgresException>(() => migrator.MigrateAsync(migration));
+        Assert.AreEqual(PostgresErrorCodes.UniqueViolation, refused.SqlState);
+        Assert.Contains("Review duplicates and retire unwanted options", refused.MessageText);
+        Assert.AreEqual(2L, await ScalarAsync("SELECT count(*) FROM subscriptions.\"ProductOffers\" WHERE \"IsActive\""));
+        Assert.IsFalse((await context.Database.GetAppliedMigrationsAsync()).Contains(migration));
+        // Remediation is a deliberate owner action; the migration itself never selects a winner.
+        await RefreshCsrfAsync(coach);
+        await AssertStatusAsync(await coach.PutAsJsonAsync($"/api/commercial/offers/{product.Offers.Single().Id}/availability",
+            new { isActive = false, product.Offers.Single().Version }), HttpStatusCode.OK);
+        await migrator.MigrateAsync(migration);
+        Assert.AreEqual(1L, await ScalarAsync("SELECT count(*) FROM subscriptions.\"ProductOffers\" WHERE \"IsActive\""));
+        Assert.AreEqual(2L, await ScalarAsync("SELECT count(*) FROM subscriptions.\"ProductOffers\""));
+    }
+
+    private static object OfferRequest(int weeks, decimal priceAmount, string priceCurrency, string feature) =>
+        new { label = $"{weeks} weeks", durationCount = weeks, durationUnit = "Week", priceAmount, priceCurrency,
+            features = new[] { new { feature, allowsConcurrentCoverage = false } } };
+
+    private static async Task AssertCommercialConflictAsync(HttpResponseMessage response, string code)
+    {
+        await AssertStatusAsync(response, HttpStatusCode.Conflict);
+        var error = await response.Content.ReadFromJsonAsync<CommercialError>();
+        Assert.AreEqual(code, error?.Code);
+    }
+
+    private async Task ExecuteCommercialSqlAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(RequiredDatabaseConnection);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task AssertPriceChangeLedgerRejectsMutationAsync()
+    {
+        await using var connection = new NpgsqlConnection(RequiredDatabaseConnection);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE subscriptions.\"OfferPriceChanges\" SET \"PriceAmount\" = 1";
+        var refused = await Assert.ThrowsExactlyAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        Assert.AreEqual("55000", refused.SqlState);
+        command.CommandText = "DELETE FROM subscriptions.\"OfferPriceChanges\"";
+        refused = await Assert.ThrowsExactlyAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        Assert.AreEqual("55000", refused.SqlState);
     }
 
     private HttpClient CreateClient() =>
@@ -663,7 +952,14 @@ public sealed class Phase2CommercialWorkflowTests
 
     private sealed record Product(Guid Id, ProductOffer[] Offers, uint Version);
 
-    private sealed record ProductOffer(Guid Id, decimal PriceAmount, string PriceCurrency, uint Version);
+    private sealed record ProductOffer(Guid Id, decimal PriceAmount, string PriceCurrency, uint Version,
+        bool IsActive, string Label, int DurationCount, string DurationUnit, OfferFeature[] Features);
+
+    private sealed record OfferFeature(string Feature, bool AllowsConcurrentCoverage);
+
+    private sealed record Catalog(Product[] Products);
+
+    private sealed record CommercialError(string Code, string Message);
 
     private sealed record CommercialOverview(
         bool IsRelationshipBlocked,

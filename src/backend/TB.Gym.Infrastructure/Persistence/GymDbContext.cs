@@ -91,6 +91,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<ProductOffer> ProductOffers => Set<ProductOffer>();
 
+    public DbSet<OfferPriceChange> OfferPriceChanges => Set<OfferPriceChange>();
+
     public DbSet<OfferEntitlement> OfferEntitlements => Set<OfferEntitlement>();
 
     public DbSet<ClientEnrollment> ClientEnrollments => Set<ClientEnrollment>();
@@ -911,6 +913,7 @@ public sealed partial class GymDbContext(
     private void ApplyPersistenceRules()
     {
         RejectAppendOnlyMutations<PaymentRecord>("Payment records are append-only.");
+        RejectAppendOnlyMutations<OfferPriceChange>("Price changes are append-only.");
         RejectAppendOnlyMutations<ClientRelationshipEvent>("Client relationship events are append-only.");
         RejectAppendOnlyMutations<ClientCoachAssignment>("Client coach assignment history is append-only.");
         RejectAppendOnlyMutations<LegalConsentAcceptance>("Legal consent acceptances are append-only.");

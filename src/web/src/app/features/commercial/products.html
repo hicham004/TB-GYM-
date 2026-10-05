@@ -9,7 +9,7 @@
   </button>
 </section>
 
-@if (error()) {
+@if (error() && !offerProductId() && !changingPrice()) {
   <p class="form-error" role="alert">{{ error() }}</p>
 }
 @if (notice()) {
@@ -119,12 +119,18 @@
               <button
                 class="secondary-button compact"
                 type="button"
+                [disabled]="busy()"
                 (click)="openOffer(product)"
                 i18n
               >
                 Add price option
               </button>
-              <button class="quiet-button compact" type="button" (click)="toggleProduct(product)">
+              <button
+                class="quiet-button compact"
+                type="button"
+                [disabled]="busy()"
+                (click)="toggleProduct(product)"
+              >
                 @if (product.isActive) {
                   <span i18n>Archive</span>
                 } @else {
@@ -153,20 +159,80 @@
                     <span>{{ featureLabel(feature.feature) }}</span>
                   }
                 </div>
-                <button
-                  class="quiet-button compact"
-                  type="button"
-                  (click)="toggleOffer(product, offer.id)"
-                >
+                <div class="offer-actions">
                   @if (offer.isActive) {
-                    <span i18n>Retire</span>
-                  } @else {
-                    <span i18n>Restore</span>
+                    <button
+                      appButton
+                      variant="outlined"
+                      type="button"
+                      [disabled]="busy()"
+                      (click)="openPriceChange(product, offer)"
+                      i18n
+                    >
+                      Change price
+                    </button>
                   }
-                </button>
+                  <button
+                    class="quiet-button compact"
+                    type="button"
+                    [disabled]="busy()"
+                    (click)="toggleOffer(product, offer.id)"
+                  >
+                    @if (offer.isActive) {
+                      <span i18n>Retire</span>
+                    } @else {
+                      <span i18n>Restore</span>
+                    }
+                  </button>
+                </div>
               </div>
             }
           </div>
+
+          @if (changingPrice(); as selected) {
+            @if (selected.productId === product.id) {
+              <form class="price-change" [formGroup]="priceForm" (ngSubmit)="changePrice()">
+                <div class="inline-offer-heading">
+                  <h3 i18n>Change price · {{ selected.offer.label }}</h3>
+                  <button
+                    appButton
+                    variant="text"
+                    type="button"
+                    [disabled]="busy()"
+                    (click)="changingPrice.set(null)"
+                    i18n
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p>{{ priceDuration(selected.offer) }} · {{ selected.offer.priceCurrency }}</p>
+                <p i18n>
+                  This replaces the price for new plans. Existing plans keep their price, dates and
+                  payments.
+                </p>
+                <app-field [label]="newPriceLabel" [errors]="priceErrors()">
+                  <input
+                    appControl
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputmode="decimal"
+                    formControlName="priceAmount"
+                  />
+                </app-field>
+                @if (error(); as message) {
+                  <p class="form-error" role="alert">{{ message }}</p>
+                }
+                <button appButton type="submit" [loading]="busy()">
+                  @if (busy()) {
+                    <ng-container i18n>Changing…</ng-container>
+                  } @else {
+                    <ng-container i18n>Confirm new price</ng-container>
+                  }
+                </button>
+              </form>
+            }
+          }
 
           @if (offerProductId() === product.id) {
             <form class="inline-offer" [formGroup]="offerForm" (ngSubmit)="addOffer()">
@@ -228,6 +294,13 @@
                   ></label
                 >
               </fieldset>
+              <p class="muted" i18n>
+                One active price option per duration and currency. To change an existing price, use
+                Change price above.
+              </p>
+              @if (error(); as message) {
+                <p class="form-error" role="alert">{{ message }}</p>
+              }
               <button class="primary-button compact" type="submit" [disabled]="busy()" i18n>
                 Save price option
               </button>

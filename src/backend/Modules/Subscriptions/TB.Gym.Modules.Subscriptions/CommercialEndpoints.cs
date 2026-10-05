@@ -89,6 +89,24 @@ public static class CommercialEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        coachGroup.MapPost("/offers/{offerId:guid}/price-changes", async (
+            Guid offerId,
+            ChangeProductOfferPriceRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ICommercialApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.ChangeOfferPriceAsync(offerId, request, cancellationToken));
+        })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("ChangeProductOfferPrice")
+        .Produces<CoachingProductView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status404NotFound);
+
         coachGroup.MapGet("/clients/{clientProfileId:guid}", async (
             Guid clientProfileId,
             ICommercialApplicationService service,

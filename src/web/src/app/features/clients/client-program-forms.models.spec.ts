@@ -342,6 +342,14 @@ describe('what the server answers', () => {
     expect(programWriteError(error, 'Failed.', 'Maya')).toContain('changed somewhere else');
   });
 
+  it('keeps the authorized server explanation of the program and dates that clash', () => {
+    const message =
+      'Maya already has Meso 1 from Mon 21 Sep 2026 to Sun 18 Oct 2026. Choose other dates.';
+    expect(programWriteError(conflict('mesocycle_overlap', message), 'Failed.', 'Maya')).toBe(
+      message,
+    );
+  });
+
   it('rewrites the known refusals about the plan, the dates, a workout and closing', () => {
     const say = (text: string) => programWriteError(invalid(text), 'Failed.', 'Maya');
 

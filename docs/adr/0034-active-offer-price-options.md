@@ -1,0 +1,31 @@
+# ADR 0034: One active price option per duration and currency
+
+Status: accepted, 2026-10-05
+
+## Decision
+
+A coaching product has at most one active `ProductOffer` for each exact duration count,
+duration unit and currency, regardless of price or included features. Separate products
+represent different prices sold concurrently for the same duration and currency. The domain
+checks addition and restoration; a tenant-scoped PostgreSQL partial unique index protects races.
+
+Change price accepts a new exact amount, the source offer's concurrency version and an
+idempotency key. It copies the source's duration, currency, label and features into a new
+immutable offer and retires the source in one transaction. An append-only `OfferPriceChange`
+binds the tenant's key to the source, its version and normalized amount. Identical retries
+reuse that replacement; a changed payload conflicts. Existing enrollments and payments retain
+their original snapshots and amounts (ADR 0005).
+
+Enrollment and primary-program overlap rules remain unchanged. Their refusals name the
+existing plan or program and its dates using only the already-authorized client's workspace.
+
+## Migration and recovery
+
+`ActiveOfferPriceOptions` adds the index and command history. It refuses to migrate when
+existing active options share a slot; it does not choose a winner or retire any option. Before
+retrying, the owner reviews each duplicate group and retires unwanted options through the
+existing availability operation. Enrollments remain attached to their original offers.
+
+The migration rolls back the new index and table only. A production rollback after price
+changes have been recorded requires preserving or exporting that append-only command history;
+prefer a forward fix so retry identities and the newly created offers stay auditable.

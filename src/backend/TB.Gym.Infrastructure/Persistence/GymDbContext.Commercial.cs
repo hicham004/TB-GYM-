@@ -33,6 +33,11 @@ public sealed partial class GymDbContext
             entity.Property(item => item.PriceAmount).HasPrecision(18, 2);
             entity.Property(item => item.PriceCurrency).HasMaxLength(3).IsFixedLength().IsRequired();
             entity.HasIndex(item => new { item.TenantId, item.ProductId, item.IsActive });
+            entity.HasIndex(item => new
+                { item.TenantId, item.ProductId, item.DurationCount, item.DurationUnit, item.PriceCurrency })
+                .IsUnique()
+                .HasFilter("\"IsActive\"")
+                .HasDatabaseName(DatabaseConstraintNames.OneActiveOfferPerDurationAndCurrency);
             entity.HasOne<CoachingProduct>()
                 .WithMany()
                 .HasForeignKey(item => new { item.TenantId, item.ProductId })
@@ -57,6 +62,28 @@ public sealed partial class GymDbContext
                     "CK_ProductOffers_PriceCurrency",
                     "\"PriceCurrency\" ~ '^[A-Z]{3}$'");
             });
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<OfferPriceChange>(entity =>
+        {
+            entity.ToTable("OfferPriceChanges", "subscriptions", table =>
+                table.HasCheckConstraint("CK_OfferPriceChanges_PriceAmount", "\"PriceAmount\" >= 0"));
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.PriceAmount).HasPrecision(18, 2);
+            entity.HasIndex(item => new { item.TenantId, item.IdempotencyKey })
+                .IsUnique()
+                .HasDatabaseName(DatabaseConstraintNames.OneOfferPriceChangePerKey);
+            entity.HasOne<ProductOffer>().WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.SourceOfferId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProductOffer>().WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ReplacementOfferId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
             ConfigureAuditable(entity);
         });
 

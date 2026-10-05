@@ -322,7 +322,9 @@ function serverText(error: unknown): { code: string | null; text: string | null 
 export function programWriteError(error: unknown, fallback: string, name: string): string {
   const { code, text } = serverText(error);
   if (code === 'mesocycle_overlap') {
-    return $localize`${name}:name: already has a program on those dates. Choose other dates, or change the other program first.`;
+    return text && text.includes(' from ') && text.includes(' to ')
+      ? text
+      : $localize`${name}:name: already has a program on those dates. Choose other dates, or change the other program first.`;
   }
   if (code === 'concurrency_conflict') {
     return $localize`This program was changed somewhere else since you opened it. It has been reloaded: check it, then try again.`;

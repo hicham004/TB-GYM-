@@ -342,7 +342,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
 
             if (await HasPrimaryOverlapAsync(clientProfileId, request.StartDate, endDate, null, cancellationToken))
             {
-                return Conflict("mesocycle_overlap", "The client already has an overlapping primary mesocycle.");
+                return await PrimaryOverlapConflictAsync(clientProfileId, request.StartDate, endDate, null, cancellationToken);
             }
 
             var timeZoneId = await dbContext.Tenants.AsNoTracking()
@@ -401,7 +401,12 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
         catch (DbUpdateException exception) when (IsExclusionViolation(exception))
         {
-            return Conflict("mesocycle_overlap", "The client already has an overlapping primary mesocycle.");
+            dbContext.ChangeTracker.Clear();
+            var version = await dbContext.ProgramTemplateVersions.AsNoTracking()
+                .Where(item => item.Id == request.TemplateVersionId)
+                .Select(item => (int?)item.Weeks.Count).SingleOrDefaultAsync(cancellationToken);
+            return await PrimaryOverlapConflictAsync(clientProfileId, request.StartDate,
+                request.StartDate.AddDays((version ?? 1) * 7), null, cancellationToken);
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
@@ -464,7 +469,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
                     mesocycle.Id,
                     cancellationToken))
             {
-                return Conflict("mesocycle_overlap", "The new dates overlap another primary mesocycle.");
+                return await PrimaryOverlapConflictAsync(mesocycle.ClientProfileId, request.StartDate, newEnd, mesocycle.Id, cancellationToken);
             }
 
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = request.Version;
@@ -478,7 +483,9 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
         catch (DbUpdateException exception) when (IsExclusionViolation(exception))
         {
-            return Conflict("mesocycle_overlap", "The new dates overlap another primary mesocycle.");
+            dbContext.ChangeTracker.Clear();
+            return await PrimaryOverlapConflictAsync(mesocycle.ClientProfileId, request.StartDate,
+                request.StartDate.AddDays(mesocycle.Weeks.Count * 7), mesocycle.Id, cancellationToken);
         }
     }
 

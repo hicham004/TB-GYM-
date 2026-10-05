@@ -151,6 +151,9 @@ nutrition assignments are not commercial entities and will reference an enrollme
 **SUB-002** An offer is an immutable set of billing model, duration, price, ISO currency, and
 coaching features. Editing price, currency, or duration creates another offer. Disabling an
 offer prevents new assignments but never changes historical enrollments.
+Within one product, only one active offer may occupy a duration count/unit and currency (ADR 0034).
+Change price atomically retires that option and adds an immutable replacement, with payload-bound
+idempotency; existing enrollments and receipts keep their original snapshots.
 
 **SUB-003** An enrollment is a dated client-specific snapshot of one offer in one tenant.
 Periods use `[startDate, endDateExclusive)`, so a four-week period starting July 27 ends

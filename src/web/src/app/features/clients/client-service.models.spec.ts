@@ -38,6 +38,7 @@ describe('the plan in front', () => {
     expect(card.payments).toEqual([
       { id: 'pay-1', date: 'Mon 20 Jul 2026', amount: 'USD 330', detail: 'Cash', note: null },
     ]);
+    expect(card.paymentContext).toBe('Online Coaching · Tue 21 Jul – Mon 12 Oct');
     expect(card).toMatchObject({ canPay: false, canPause: true, canCancel: true, over: false });
 
     const later = planCard(
@@ -63,6 +64,7 @@ describe('the plan in front', () => {
     expect(card.paidPercent).toBe(45);
     expect(card.balance).toBe(180);
     expect(card.payments[0].detail).toBe('Mobile wallet · ref WH-2231');
+    expect(card.paymentContext).toBe('Online Coaching · 13 Oct 2026 – 4 Jan 2027');
     // Not paid, so it cannot be paused yet; it can still be cancelled.
     expect(card).toMatchObject({ canPay: true, canPause: false, canCancel: true });
   });

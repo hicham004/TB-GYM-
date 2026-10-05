@@ -8405,6 +8405,69 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("OfferEntitlements", "subscriptions");
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.OfferPriceChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("PriceAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("ReplacementOfferId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceOfferId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("SourceVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OfferPriceChanges_TenantId_IdempotencyKey");
+
+                    b.HasIndex("TenantId", "ReplacementOfferId");
+
+                    b.HasIndex("TenantId", "SourceOfferId");
+
+                    b.ToTable("OfferPriceChanges", "subscriptions", t =>
+                        {
+                            t.HasCheckConstraint("CK_OfferPriceChanges_PriceAmount", "\"PriceAmount\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Subscriptions.PaymentRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8566,6 +8629,11 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId", "ProductId", "IsActive");
+
+                    b.HasIndex("TenantId", "ProductId", "DurationCount", "DurationUnit", "PriceCurrency")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductOffers_ActiveDurationCurrency")
+                        .HasFilter("\"IsActive\"");
 
                     b.ToTable("ProductOffers", "subscriptions", t =>
                         {
@@ -12236,6 +12304,23 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "OfferId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.OfferPriceChange", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Subscriptions.ProductOffer", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ReplacementOfferId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Subscriptions.ProductOffer", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SourceOfferId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
