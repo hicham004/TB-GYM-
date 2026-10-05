@@ -174,7 +174,7 @@ public static class DependencyInjection
             client.BaseAddress = new Uri(configured, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(20);
         });
-        services.AddSingleton<IAiMealDraftProvider, UnavailableAiMealDraftProvider>();
+        services.AddTbGymAnthropicMealDrafts(configuration);
         services.AddOptions<UsdaFoodDataCentralOptions>()
             .Bind(configuration.GetSection("Nutrition:UsdaFoodDataCentral"));
         services.AddScoped<IMediaApplicationService, MediaApplicationService>();

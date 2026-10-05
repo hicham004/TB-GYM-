@@ -3,6 +3,10 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
+    <!-- MIT-licensed, Anthropic-published. The official Claude SDK stays in Infrastructure behind
+         IAiMealDraftProvider; it supplies structured outputs and token usage without leaking SDK
+         types into nutrition rules. Pinning it keeps provider upgrades deliberate. -->
+    <PackageVersion Include="Anthropic" Version="12.53.0" />
     <!-- Apache-2.0, Amazon-published. The S3 client, referenced only by TB.Gym.Infrastructure so
          the provider vocabulary cannot reach a module. Cloudflare R2 speaks S3 and nothing else:
          SigV4 signing, multipart upload, ranged GET and the error shapes they return are the

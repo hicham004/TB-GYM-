@@ -157,9 +157,10 @@ Delivered: named/versioned BMR, occupation-and-steps PAL, TDEE, macro, Atwater a
 policies; structured EU14/US9 allergens; sourced preparation factors; versioned coach/label/
 USDA foods; immutable recipes and meal plans; enrollment-bound deep assignment snapshots;
 separate daily actuals; reviewed AI-draft state machine; paginated coach library and simple
-client logger. USDA FoodData Central is the only external nutrition source. The AI adapter is
-intentionally unavailable until a provider is selected and configured. Progress/bodyweight,
-AI provider selection, provider SDK integration, and production clinical approval are deferred.
+client logger. USDA FoodData Central is the only external nutrition source. The 2026-10-05 launch
+fix selects the optional Anthropic SDK adapter (ADR 0035), with local feedback, configuration
+availability, coach review and serialized request/cost reservations. A server key and positive
+workspace AI allowance are required; live provider verification and clinical approval remain open.
 
 ## Phase 5: Bodyweight and progress
 
@@ -1038,6 +1039,8 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
 
 - F1 (done): one active price option per product, duration and currency, and Change price, which
   replaces a price for new plans without touching earlier plans or payments (ADR 0034).
+- F2 (built; one live generation waits for the owner's API key): AI meal suggestions through the
+  Anthropic SDK, always reviewed by the coach (ADR 0035).
 
 Work follows this order; anything outside it needs the user's approval first.
 

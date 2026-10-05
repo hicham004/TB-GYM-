@@ -9,6 +9,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, field, fill, press, query, settle, tick } from '../../../testing/dom';
 import { NutritionLibrary } from './nutrition-library';
 import type {
+  AiMealDraft,
   FoodItem,
   MealPlanSummary,
   NutritionSettings,
@@ -123,6 +124,7 @@ async function render(api: Partial<ApiClient> = {}) {
           listRecipes: vi.fn(() => of({ total: 2, items: [PUBLISHED_RECIPE, DRAFT_RECIPE] })),
           listMealPlans: vi.fn(() => of({ total: 1, items: [DRAFT_PLAN] })),
           getNutritionSettings: vi.fn(() => of(SETTINGS)),
+          getAiMealDraftAvailability: vi.fn(() => of({ isConfigured: false })),
           createFood: vi.fn(() => of(undefined)),
           createRecipe: vi.fn(() => of(undefined)),
           publishRecipe: vi.fn(() => of(undefined)),
@@ -158,6 +160,110 @@ const recipeCards = (host: HTMLElement) => cardLists(host)[1];
 const planCards = (host: HTMLElement) => cardLists(host)[2];
 
 describe('NutritionLibrary', () => {
+  it('shows a readable suggestion and requires deliberate food and quantity review before approval', async () => {
+    const draft: AiMealDraft = {
+      id: 'ai-1',
+      status: 'AwaitingCoachReview',
+      model: 'test',
+      modelVersion: 'v1',
+      validatedDraftJson: JSON.stringify({
+        name: 'Oat bowl',
+        ingredients: [{ name: 'oats', quantity: 25, unit: 'g', uncertain: true }],
+      }),
+      uncertainFieldsJson: '["oats"]',
+      failureCode: null,
+      createdRecipeVersionId: null,
+    };
+    const review = vi.fn(() =>
+      of({ ...draft, status: 'Approved' as const, createdRecipeVersionId: 'recipe-new' }),
+    );
+    const { host, fixture } = await render({
+      getAiMealDraftAvailability: vi.fn(() => of({ isConfigured: true })),
+      generateAiMealDraft: vi.fn(() => of(draft)),
+      reviewAiMealDraft: review,
+    });
+    fill(host, 'Prompt', 'An oat breakfast');
+    press(host, 'Generate meal suggestion');
+    await settle(fixture);
+    expect(host.textContent).toContain('Ready for your review');
+    expect(host.textContent).toContain('Check this ingredient and amount');
+    expect(field(host, 'Food for ingredient 1').value).toBe('');
+    press(host, 'Approve into recipe draft');
+    await settle(fixture);
+    expect(review).not.toHaveBeenCalled();
+    fill(host, 'Coach-confirmed instructions', 'Mix and serve.');
+    fill(host, 'Food for ingredient 1', 'food-version-1');
+    await settle(fixture);
+    fill(host, 'Quantity for ingredient 1', '25');
+    await settle(fixture);
+    press(host, 'Approve into recipe draft');
+    await settle(fixture);
+    expect(review).toHaveBeenCalledWith(
+      'ai-1',
+      expect.objectContaining({
+        ingredientMappings: [
+          expect.objectContaining({
+            foodItemVersionId: 'food-version-1',
+            quantity: 25,
+            unit: 'Gram',
+            basis: 'AsSold',
+          }),
+        ],
+      }),
+    );
+    expect(host.textContent).toContain('Recipe draft created');
+    expect(host.textContent).not.toContain('Approve into recipe draft');
+  });
+
+  it('explains unavailable AI beside the disabled generate button without making a request', async () => {
+    const generate = vi.fn();
+    const { host } = await render({ generateAiMealDraft: generate });
+    expect(button(host, 'Generate meal suggestion').disabled).toBe(true);
+    expect(host.textContent).toContain("AI meal suggestions aren't set up yet");
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('shows and focuses an AI failure beside the button after refreshing antiforgery', async () => {
+    const generate = vi.fn(() =>
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 503,
+            error: {
+              code: 'ai_provider_timeout',
+              message: 'AI suggestions took too long. Try again later.',
+            },
+          }),
+      ),
+    );
+    const { host, fixture } = await render({
+      getAiMealDraftAvailability: vi.fn(() => of({ isConfigured: true })),
+      generateAiMealDraft: generate,
+    });
+    fill(host, 'Prompt', 'An oat breakfast');
+    press(host, 'Generate meal suggestion');
+    await settle(fixture);
+    const panel = host.querySelector('textarea[name="aiPrompt"]')!.closest('form')!;
+    const alert = query(panel, '[role="alert"]');
+    expect(alert.textContent).toContain('AI suggestions took too long');
+    expect(document.activeElement).toBe(alert);
+    expect(TestBed.inject(CsrfService).refresh).toHaveBeenCalled();
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'An oat breakfast' }));
+  });
+
+  it('keeps the library usable when AI availability fails and offers a local retry', async () => {
+    const health = vi.fn((): ReturnType<ApiClient['getAiMealDraftAvailability']> =>
+      throwError(() => new HttpErrorResponse({ status: 503 })),
+    );
+    const { host, fixture } = await render({ getAiMealDraftAvailability: health });
+    expect(host.textContent).toContain('Rolled oats');
+    expect(host.textContent).toContain('AI suggestions could not be checked');
+    expect(button(host, 'Checking AI suggestions…').disabled).toBe(true);
+    health.mockImplementation(() => of({ isConfigured: false }));
+    press(host, 'Check AI again');
+    await settle(fixture);
+    expect(host.textContent).toContain("AI meal suggestions aren't set up yet");
+  });
   afterEach(() => {
     TestBed.resetTestingModule();
   });

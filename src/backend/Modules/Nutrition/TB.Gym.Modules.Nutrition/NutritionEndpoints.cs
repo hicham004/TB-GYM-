@@ -12,6 +12,9 @@ public static class NutritionEndpoints
     {
         var coach = endpoints.MapGroup("/api/nutrition").RequireAuthorization(AuthorizationPolicies.TenantCoach).WithTags(NutritionModule.Name);
 
+        coach.MapGet("/ai-drafts/availability", (INutritionApplicationService service) => Results.Ok(service.GetAiAvailability()))
+            .WithName("GetAiMealDraftAvailability").Produces<AiMealDraftAvailabilityView>();
+
         coach.MapGet("/settings", async (INutritionApplicationService service, CancellationToken token) => Results.Ok(await service.GetSettingsAsync(token))).WithName("GetNutritionSettings").Produces<NutritionWorkspaceSettingsView>();
         coach.MapPut("/settings", async (UpdateNutritionSettingsRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {

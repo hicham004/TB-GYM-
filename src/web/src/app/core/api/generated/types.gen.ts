@@ -112,6 +112,10 @@ export type AiIngredientMappingRequest = {
   retentionFactorId?: null | string;
 };
 
+export type AiMealDraftAvailabilityView = {
+  isConfigured: boolean;
+};
+
 export type AiMealDraftView = {
   id: string;
   status: AiDraftStatus;
@@ -6532,6 +6536,23 @@ export type AddWorkoutNoteResponses = {
 };
 
 export type AddWorkoutNoteResponse = AddWorkoutNoteResponses[keyof AddWorkoutNoteResponses];
+
+export type GetAiMealDraftAvailabilityData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/nutrition/ai-drafts/availability';
+};
+
+export type GetAiMealDraftAvailabilityResponses = {
+  /**
+   * OK
+   */
+  200: AiMealDraftAvailabilityView;
+};
+
+export type GetAiMealDraftAvailabilityResponse =
+  GetAiMealDraftAvailabilityResponses[keyof GetAiMealDraftAvailabilityResponses];
 
 export type GetNutritionSettingsData = {
   body?: never;

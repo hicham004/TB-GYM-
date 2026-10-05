@@ -2,6 +2,7 @@ namespace TB.Gym.Modules.Nutrition;
 
 public interface INutritionApplicationService
 {
+    AiMealDraftAvailabilityView GetAiAvailability();
     Task<NutritionWorkspaceSettingsView> GetSettingsAsync(CancellationToken cancellationToken);
     Task<NutritionCommandResult> UpdateSettingsAsync(UpdateNutritionSettingsRequest request, CancellationToken cancellationToken);
     Task<FoodItemPage> ListFoodsAsync(string? query, int skip, int take, CancellationToken cancellationToken);
@@ -231,6 +232,8 @@ public sealed record ReverseNutritionCustomFoodRequest(uint DailyLogVersion);
 public sealed record CompleteNutritionLogRequest(uint Version);
 
 public sealed record GenerateAiMealDraftRequest(string Prompt, string PromptVersion, string Culture);
+
+public sealed record AiMealDraftAvailabilityView(bool IsConfigured);
 
 public sealed record AiIngredientMappingRequest(Guid FoodItemVersionId, decimal Quantity, FoodQuantityUnit Unit, PreparationBasis Basis, Guid? YieldFactorId = null, Guid? RetentionFactorId = null);
 

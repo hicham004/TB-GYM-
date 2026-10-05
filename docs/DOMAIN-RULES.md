@@ -471,6 +471,10 @@ unreported on that version, so it is never mistaken for a stated zero.
 schema, identify uncertain ingredients/units, pass domain validation, and be approved by the
 coach before entering the library. Provider failure produces a visible error and traceable
 operation, unlike the legacy placeholder endpoint.
+Anthropic Claude Sonnet 5.5 is the optional configured adapter (ADR 0035); no client profile is
+included in the request. Per-tenant monthly limits reserve a conservative USD cost before calling
+the provider. Known costs, including failed/invalid output, replace reservations; an ambiguous
+timeout retains its reservation. No automatic provider retry or automatic recipe approval occurs.
 
 **NUT-005** A meal plan contains ordered meal slots. Each slot may offer multiple recipe
 choices. The system distinguishes:

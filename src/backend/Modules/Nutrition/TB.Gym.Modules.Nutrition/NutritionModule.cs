@@ -48,10 +48,16 @@ public interface IAiMealDraftProvider
 {
     string ProviderKey { get; }
 
+    bool IsConfigured => true;
+
+    AiMealDraftCostEstimate EstimateMaximumCost(AiMealDraftProviderRequest request) => new(0m, "USD");
+
     Task<AiMealDraftProviderResult> GenerateAsync(
         AiMealDraftProviderRequest request,
         CancellationToken cancellationToken);
 }
+
+public sealed record AiMealDraftCostEstimate(decimal Amount, string Currency);
 
 public sealed record AiMealDraftProviderRequest(
     string Prompt,
@@ -66,7 +72,8 @@ public sealed record AiMealDraftProviderResult(
     string RawOutput,
     decimal CostAmount,
     string CostCurrency,
-    string? FailureCode = null);
+    string? FailureCode = null,
+    bool CostIsKnown = true);
 
 public sealed class NutritionModule : IModuleMarker
 {

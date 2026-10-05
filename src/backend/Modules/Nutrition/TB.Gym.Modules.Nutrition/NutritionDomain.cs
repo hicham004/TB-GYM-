@@ -1381,6 +1381,17 @@ public sealed class AiMealDraftOperation : TenantEntity
     public static AiMealDraftOperation Start(Guid tenantId, string promptVersion, string schemaVersion, string providerKey) =>
         new(tenantId, promptVersion, schemaVersion, providerKey);
 
+    public void RecordCost(decimal amount, string currency)
+    {
+        if (Status != AiDraftStatus.Pending)
+        {
+            throw new InvalidOperationException("Only a pending AI operation can record provider cost.");
+        }
+
+        CostAmount = decimal.Round(NutritionRules.NonNegative(amount, nameof(amount)), 4, MidpointRounding.ToPositiveInfinity);
+        CostCurrency = NutritionRules.RequiredText(currency, 3, nameof(currency)).ToUpperInvariant();
+    }
+
     public void Fail(string failureCode)
     {
         if (Status != AiDraftStatus.Pending)

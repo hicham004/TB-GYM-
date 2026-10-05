@@ -17,6 +17,20 @@
   display: grid;
   gap: 0.7rem;
   align-content: start;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.library-grid > *,
+.editor label,
+.editor input,
+.editor select,
+.editor textarea {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.editor button {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .editor label {
   display: grid;
@@ -60,7 +74,7 @@
 }
 .checks {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
   gap: 0.5rem 1rem;
   margin-block-start: 0.75rem;
 }

@@ -1,6 +1,16 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DecimalPipe } from '@angular/common';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  Injector,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormsModule, NgForm } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -49,6 +59,25 @@ interface MealSlotEditor {
   servings: number;
 }
 
+interface AiSuggestion {
+  name: string;
+  ingredients: { name: string; quantity: number; unit: string; uncertain: boolean }[];
+}
+
+interface AiIngredientEditor extends Omit<AiIngredientMappingRequest, 'quantity'> {
+  quantity: number;
+}
+
+function readAiSuggestion(draft: AiMealDraft | null): AiSuggestion | null {
+  if (!draft?.validatedDraftJson) return null;
+  try {
+    const parsed = JSON.parse(draft.validatedDraftJson) as AiSuggestion;
+    return typeof parsed.name === 'string' && Array.isArray(parsed.ingredients) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 @Component({
   selector: 'app-nutrition-library',
   imports: [DecimalPipe, FoodPicker, FormsModule],
@@ -59,6 +88,8 @@ export class NutritionLibrary {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly injector = inject(Injector);
+  private readonly aiFeedback = viewChild<ElementRef<HTMLElement>>('aiFeedback');
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
 
@@ -68,6 +99,11 @@ export class NutritionLibrary {
   protected readonly settings = signal<NutritionSettings | null>(null);
   protected readonly usda = signal<ProviderFoodSearch | null>(null);
   protected readonly aiDraft = signal<AiMealDraft | null>(null);
+  protected readonly aiConfigured = signal<boolean | null>(null);
+  protected readonly aiError = signal<string | null>(null);
+  protected readonly aiNotice = signal<string | null>(null);
+  protected readonly aiGenerating = signal(false);
+  protected readonly aiSuggestion = computed(() => readAiSuggestion(this.aiDraft()));
   protected readonly recipeLines = signal<RecipeLineEditor[]>([]);
   protected readonly mealSlots = signal<MealSlotEditor[]>([]);
   protected readonly foodAllergens = signal<Set<AllergenCode>>(new Set());
@@ -117,7 +153,7 @@ export class NutritionLibrary {
   protected aiRecipeName = '';
   protected aiInstructions = '';
   protected aiServings = 1;
-  protected aiMappings: AiIngredientMappingRequest[] = [];
+  protected aiMappings: AiIngredientEditor[] = [];
 
   protected readonly allergens = ALLERGEN_LABELS;
 
@@ -430,36 +466,50 @@ export class NutritionLibrary {
   }
 
   protected async generateAi(): Promise<void> {
+    if (this.aiConfigured() !== true || this.busy()) return;
+    if (!this.aiPrompt.trim() || this.aiPrompt.length > 6000) {
+      this.aiError.set($localize`Describe the meal in 1–6,000 characters.`);
+      this.focusAiFeedback();
+      return;
+    }
+
     return this.scope.run('generateAi', async (owner) => {
-      await owner.wait(
-        this.run(
-          async () => {
-            const draft = await owner.wait(
-              firstValueFrom(
-                this.api.generateAiMealDraft({
-                  prompt: this.aiPrompt,
-                  promptVersion: 'coach-ui-v1',
-                  culture: 'en-LB',
-                }),
-              ),
-            );
-            this.aiDraft.set(draft);
-            const count = this.aiIngredientCount(draft);
-            const food = this.foods()[0];
-            this.aiMappings = food
-              ? Array.from({ length: count }, () => ({
-                  foodItemVersionId: food.versionId,
-                  quantity: food.basisQuantity,
-                  unit: food.basisUnit,
-                  basis: food.preparationBasis,
-                  yieldFactorId: null,
-                  retentionFactorId: null,
-                }))
-              : [];
-          },
-          $localize`AI draft generated for coach review.`,
-        ),
-      );
+      this.aiGenerating.set(true);
+      this.aiDraft.set(null);
+      this.aiMappings = [];
+      try {
+        await owner.wait(
+          this.run(
+            async () => {
+              const draft = await owner.wait(
+                firstValueFrom(
+                  this.api.generateAiMealDraft({
+                    prompt: this.aiPrompt,
+                    promptVersion: 'coach-ui-v1',
+                    culture: 'en-LB',
+                  }),
+                ),
+              );
+              this.aiDraft.set(draft);
+              const count = this.aiIngredientCount(draft);
+              this.aiRecipeName = this.aiSuggestion()?.name ?? '';
+              this.aiInstructions = '';
+              this.aiMappings = Array.from({ length: count }, () => ({
+                foodItemVersionId: '',
+                quantity: 0,
+                unit: 'Gram',
+                basis: 'AsSold',
+                yieldFactorId: null,
+                retentionFactorId: null,
+              }));
+            },
+            $localize`AI draft generated for coach review.`,
+            'ai',
+          ),
+        );
+      } finally {
+        if (owner.current) this.aiGenerating.set(false);
+      }
     });
   }
 
@@ -486,12 +536,30 @@ export class NutritionLibrary {
             );
           },
           $localize`AI draft rejected.`,
+          'ai',
         ),
       );
     });
   }
 
   protected async approveAi(): Promise<void> {
+    if (
+      !this.aiRecipeName.trim() ||
+      !this.aiInstructions.trim() ||
+      this.aiServings <= 0 ||
+      this.aiMappings.length === 0 ||
+      this.aiMappings.some(
+        (mapping) =>
+          !mapping.foodItemVersionId || !Number.isFinite(mapping.quantity) || mapping.quantity <= 0,
+      )
+    ) {
+      this.aiError.set(
+        $localize`Confirm the recipe name, instructions and servings, then choose a food and quantity for every ingredient.`,
+      );
+      this.focusAiFeedback();
+      return;
+    }
+
     return this.scope.run('approveAi', async (owner) => {
       const draft = this.aiDraft();
       if (!draft) return;
@@ -515,6 +583,7 @@ export class NutritionLibrary {
             await owner.wait(this.reloadRecipes());
           },
           $localize`AI draft approved into a coach-reviewed recipe draft.`,
+          'ai',
         ),
       );
     });
@@ -562,6 +631,7 @@ export class NutritionLibrary {
         this.recipes.set(recipes.items);
         this.mealPlans.set(plans.items);
         this.settings.set(settings);
+        await owner.wait(this.checkAiAvailability());
       } catch (error) {
         if (!owner.current) return;
         this.error.set(apiErrorMessage(error, $localize`Nutrition library could not be loaded.`));
@@ -596,20 +666,47 @@ export class NutritionLibrary {
     this.error.set(message);
   }
 
-  private async run(action: () => Promise<void>, success: string): Promise<void> {
+  protected async checkAiAvailability(): Promise<void> {
+    return this.scope.run('aiAvailability', async (owner) => {
+      this.aiConfigured.set(null);
+      this.aiError.set(null);
+      try {
+        const result = await owner.wait(firstValueFrom(this.api.getAiMealDraftAvailability()));
+        this.aiConfigured.set(result.isConfigured);
+      } catch {
+        if (!owner.current) return;
+        this.aiError.set(
+          $localize`AI suggestions could not be checked. Try checking again, or create the recipe yourself.`,
+        );
+      }
+    });
+  }
+
+  private focusAiFeedback(): void {
+    afterNextRender(() => this.aiFeedback()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  private async run(
+    action: () => Promise<void>,
+    success: string,
+    feedback: 'page' | 'ai' = 'page',
+  ): Promise<void> {
     return this.scope.run('run', async (owner) => {
+      const errorMessage = feedback === 'ai' ? this.aiError : this.error;
+      const noticeMessage = feedback === 'ai' ? this.aiNotice : this.notice;
       this.busy.set(true);
-      this.error.set(null);
-      this.notice.set(null);
+      errorMessage.set(null);
+      noticeMessage.set(null);
       try {
         await owner.wait(this.csrf.refresh());
         await owner.wait(action());
-        this.notice.set(success);
+        noticeMessage.set(success);
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(
+        errorMessage.set(
           apiErrorMessage(error, $localize`The nutrition operation could not be completed.`),
         );
+        if (feedback === 'ai') this.focusAiFeedback();
       } finally {
         if (owner.current) {
           this.busy.set(false);
@@ -626,6 +723,10 @@ export class NutritionLibrary {
     this.settings.set(null);
     this.usda.set(null);
     this.aiDraft.set(null);
+    this.aiConfigured.set(null);
+    this.aiError.set(null);
+    this.aiNotice.set(null);
+    this.aiGenerating.set(false);
     this.recipeLines.set([]);
     this.mealSlots.set([]);
     this.foodAllergens.set(new Set());

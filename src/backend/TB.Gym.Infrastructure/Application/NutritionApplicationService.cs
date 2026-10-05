@@ -22,6 +22,8 @@ internal sealed class NutritionApplicationService(
     private const string AiSchemaVersion = "meal-draft-v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    public AiMealDraftAvailabilityView GetAiAvailability() => new(aiMealDraftProvider.IsConfigured);
+
     private static bool IsDailyLogStartRace(DbUpdateException exception) =>
         exception.InnerException is PostgresException
         {
@@ -43,6 +45,22 @@ internal sealed class NutritionApplicationService(
     }
 
     public async Task<NutritionCommandResult> UpdateSettingsAsync(UpdateNutritionSettingsRequest request, CancellationToken cancellationToken)
+    {
+        return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            await LockAiBudgetAsync(cancellationToken);
+            var result = await UpdateSettingsCoreAsync(request, cancellationToken);
+            if (result.Status == NutritionCommandStatus.Success)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+
+            return result;
+        });
+    }
+
+    private async Task<NutritionCommandResult> UpdateSettingsCoreAsync(UpdateNutritionSettingsRequest request, CancellationToken cancellationToken)
     {
         var settings = await dbContext.NutritionWorkspaceSettings.SingleOrDefaultAsync(cancellationToken);
         if (settings is null)
@@ -920,61 +938,123 @@ internal sealed class NutritionApplicationService(
 
     public async Task<NutritionCommandResult> GenerateAiDraftAsync(GenerateAiMealDraftRequest request, CancellationToken cancellationToken)
     {
-        var settings = await GetOrCreateSettingsEntityAsync(cancellationToken);
-        var usage = await GetCurrentAiUsageAsync(cancellationToken);
-        if (settings.AiMonthlyRequestLimit == 0 || usage.Count >= settings.AiMonthlyRequestLimit || usage.Cost >= settings.AiMonthlyCostLimit)
+        if (string.IsNullOrWhiteSpace(request.Prompt) || request.Prompt.Length > 6_000 || string.IsNullOrWhiteSpace(request.Culture) || request.Culture.Length > 100)
         {
-            return Conflict("ai_usage_limit", "This workspace's configured AI meal-draft usage or cost limit has been reached.");
+            return Invalid("prompt", "Describe a meal in 1–6,000 characters and choose a valid language. Leave out personal and health information.");
         }
 
-        AiMealDraftOperation operation;
+        var providerRequest = new AiMealDraftProviderRequest(request.Prompt.Trim(), request.PromptVersion, AiSchemaVersion, request.Culture.Trim());
+        var estimate = aiMealDraftProvider.EstimateMaximumCost(providerRequest);
+        AiMealDraftOperation? operation = null;
+        NutritionCommandResult? refusal = null;
         try
         {
-            operation = AiMealDraftOperation.Start(tenantContext.TenantId, request.PromptVersion, AiSchemaVersion, aiMealDraftProvider.ProviderKey);
-            dbContext.AiMealDraftOperations.Add(operation);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                dbContext.ChangeTracker.Clear();
+                await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+                await LockAiBudgetAsync(cancellationToken);
+                var settings = await GetOrCreateSettingsEntityAsync(cancellationToken);
+                var usage = await GetCurrentAiUsageAsync(cancellationToken);
+                var reservedCost = decimal.Round(estimate.Amount, 4, MidpointRounding.ToPositiveInfinity);
+                if (reservedCost < 0m || !string.Equals(estimate.Currency, settings.AiCostCurrency, StringComparison.OrdinalIgnoreCase))
+                {
+                    refusal = Conflict("ai_cost_currency", "AI suggestions are billed in USD. Set the AI budget currency to USD before generating a draft.");
+                    return;
+                }
+
+                if (aiMealDraftProvider.IsConfigured && (settings.AiMonthlyRequestLimit == 0 || usage.Count >= settings.AiMonthlyRequestLimit || usage.Cost >= settings.AiMonthlyCostLimit || usage.Cost + reservedCost > settings.AiMonthlyCostLimit))
+                {
+                    refusal = Conflict("ai_usage_limit", "This workspace has reached its AI allowance, or the remaining budget cannot cover this suggestion. Ask the workspace owner to check AI limits.");
+                    return;
+                }
+
+                operation = AiMealDraftOperation.Start(tenantContext.TenantId, request.PromptVersion, AiSchemaVersion, aiMealDraftProvider.ProviderKey);
+                // Commit a conservative reservation before making a billed call. Concurrent requests
+                // count pending operations; an ambiguous timeout keeps the reservation.
+                operation.RecordCost(reservedCost, estimate.Currency);
+                dbContext.AiMealDraftOperations.Add(operation);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            });
         }
         catch (ArgumentException exception)
         {
             return Invalid("aiDraft", exception.Message);
         }
 
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
+        var recordedOperation = operation ?? throw new InvalidOperationException("AI budget reservation was not recorded.");
         AiMealDraftProviderResult providerResult;
         try
         {
-            providerResult = await aiMealDraftProvider.GenerateAsync(new AiMealDraftProviderRequest(request.Prompt, request.PromptVersion, AiSchemaVersion, request.Culture), cancellationToken);
+            providerResult = await aiMealDraftProvider.GenerateAsync(providerRequest, cancellationToken);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (OperationCanceledException)
         {
-            operation.Fail("provider_failure");
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.ProviderUnavailable, AiDraft: ToAiDraftView(operation), Code: "ai_provider_failure", Message: "The AI provider failed. The operation was recorded and no recipe was created.");
+            recordedOperation.Fail("ai_provider_timeout");
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+            return new NutritionCommandResult(NutritionCommandStatus.ProviderUnavailable, AiDraft: ToAiDraftView(recordedOperation), Code: "ai_provider_timeout", Message: "AI suggestions took too long. No recipe was created. Try again later.");
+        }
+        catch (Exception)
+        {
+            recordedOperation.Fail("provider_failure");
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+            return new NutritionCommandResult(NutritionCommandStatus.ProviderUnavailable, AiDraft: ToAiDraftView(recordedOperation), Code: "ai_provider_failure", Message: "AI suggestions are temporarily unavailable. No recipe was created. Try again later.");
+        }
+
+        if (providerResult.CostIsKnown)
+        {
+            if (providerResult.CostAmount < 0m || !string.Equals(providerResult.CostCurrency, estimate.Currency, StringComparison.OrdinalIgnoreCase))
+            {
+                recordedOperation.Fail("provider_cost_invalid");
+                await dbContext.SaveChangesAsync(CancellationToken.None);
+                return Conflict("ai_cost_limit", "AI suggestions returned an invalid cost. No recipe was created.");
+            }
+
+            recordedOperation.RecordCost(providerResult.CostAmount, providerResult.CostCurrency);
         }
 
         if (!providerResult.IsSuccess)
         {
-            operation.Fail(providerResult.FailureCode ?? "provider_failure");
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.ProviderUnavailable, AiDraft: ToAiDraftView(operation), Code: providerResult.FailureCode, Message: "The AI provider did not produce a meal draft. The failure was recorded.");
+            recordedOperation.Fail(providerResult.FailureCode ?? "provider_failure");
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+            var code = providerResult.FailureCode ?? "ai_provider_failure";
+            var message = code == "ai_provider_not_configured"
+                ? "AI meal suggestions aren't set up yet. You can still create recipes yourself."
+                : "AI suggestions could not produce a draft. No recipe was created. Try again later or create the recipe yourself.";
+            return new NutritionCommandResult(NutritionCommandStatus.ProviderUnavailable, AiDraft: ToAiDraftView(recordedOperation), Code: code, Message: message);
         }
 
-        if (!string.Equals(providerResult.CostCurrency, settings.AiCostCurrency, StringComparison.OrdinalIgnoreCase) || usage.Cost + providerResult.CostAmount > settings.AiMonthlyCostLimit)
+        if (estimate.Amount > 0m && recordedOperation.CostAmount > decimal.Round(estimate.Amount, 4, MidpointRounding.ToPositiveInfinity))
         {
-            operation.Fail("cost_limit");
-            await dbContext.SaveChangesAsync(cancellationToken);
+            recordedOperation.Fail("cost_limit");
+            await dbContext.SaveChangesAsync(CancellationToken.None);
             return Conflict("ai_cost_limit", "The provider result would exceed the workspace AI cost policy; no draft was accepted.");
         }
 
         if (!TryValidateAiSchema(providerResult.RawOutput, out var validatedJson, out var uncertainJson))
         {
-            operation.Fail("schema_invalid");
-            await dbContext.SaveChangesAsync(cancellationToken);
+            recordedOperation.Fail("schema_invalid");
+            await dbContext.SaveChangesAsync(CancellationToken.None);
             return Invalid("aiDraft", "The AI response failed the enforced meal-draft schema and was not persisted as a draft or nutrition fact.");
         }
 
-        operation.AcceptValidatedDraft(providerResult.Model, providerResult.ModelVersion, validatedJson!, uncertainJson!, providerResult.CostAmount, providerResult.CostCurrency);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return new NutritionCommandResult(NutritionCommandStatus.Success, AiDraft: ToAiDraftView(operation));
+        recordedOperation.AcceptValidatedDraft(providerResult.Model, providerResult.ModelVersion, validatedJson!, uncertainJson!, recordedOperation.CostAmount, recordedOperation.CostCurrency);
+        await dbContext.SaveChangesAsync(CancellationToken.None);
+        return new NutritionCommandResult(NutritionCommandStatus.Success, AiDraft: ToAiDraftView(recordedOperation));
+    }
+
+    private Task<int> LockAiBudgetAsync(CancellationToken cancellationToken)
+    {
+        var lockScope = "nutrition-ai-budget:" + tenantContext.TenantId;
+        return dbContext.Database.ExecuteSqlAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({lockScope}, 0))",
+            cancellationToken);
     }
 
     public async Task<NutritionCommandResult> ReviewAiDraftAsync(Guid operationId, ReviewAiMealDraftRequest request, CancellationToken cancellationToken)
@@ -1249,11 +1329,16 @@ internal sealed class NutritionApplicationService(
     {
         validatedJson = null;
         uncertainJson = null;
+        if (rawOutput.Length > 100_000)
+        {
+            return false;
+        }
+
         try
         {
             using var document = JsonDocument.Parse(rawOutput);
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(nameElement.GetString()) || !root.TryGetProperty("ingredients", out var ingredientsElement) || ingredientsElement.ValueKind != JsonValueKind.Array)
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(nameElement.GetString()) || nameElement.GetString()!.Length > 200 || !root.TryGetProperty("ingredients", out var ingredientsElement) || ingredientsElement.ValueKind != JsonValueKind.Array)
             {
                 return false;
             }
@@ -1261,7 +1346,7 @@ internal sealed class NutritionApplicationService(
             var ingredients = new List<ValidatedAiIngredient>();
             foreach (var element in ingredientsElement.EnumerateArray())
             {
-                if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty("name", out var ingredientName) || ingredientName.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(ingredientName.GetString()) || !element.TryGetProperty("quantity", out var quantity) || quantity.ValueKind != JsonValueKind.Number || !quantity.TryGetDecimal(out var value) || value <= 0m || !element.TryGetProperty("unit", out var unit) || unit.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(unit.GetString()) || !element.TryGetProperty("uncertain", out var uncertain) || uncertain.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty("name", out var ingredientName) || ingredientName.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(ingredientName.GetString()) || ingredientName.GetString()!.Length > 200 || !element.TryGetProperty("quantity", out var quantity) || quantity.ValueKind != JsonValueKind.Number || !quantity.TryGetDecimal(out var value) || value is <= 0m or > 100_000m || !element.TryGetProperty("unit", out var unit) || unit.ValueKind != JsonValueKind.String || unit.GetString() is not ("g" or "ml" or "serving") || !element.TryGetProperty("uncertain", out var uncertain) || uncertain.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
                 {
                     return false;
                 }

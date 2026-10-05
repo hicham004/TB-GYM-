@@ -862,6 +862,12 @@ export class ApiClient {
       .pipe(map(mapNutritionSettings));
   }
 
+  getAiMealDraftAvailability() {
+    return this.http
+      .get<Phase3Contracts.AiMealDraftAvailabilityView>('/api/nutrition/ai-drafts/availability')
+      .pipe(map((value) => ({ isConfigured: value.isConfigured === true })));
+  }
+
   updateNutritionSettings(request: Phase3Contracts.UpdateNutritionSettingsRequest) {
     return this.http
       .put<Phase3Contracts.NutritionWorkspaceSettingsView>('/api/nutrition/settings', request)

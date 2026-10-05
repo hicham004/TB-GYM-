@@ -485,17 +485,79 @@
       <form class="editor" (ngSubmit)="generateAi()">
         <label
           ><span i18n>Prompt</span
-          ><textarea [(ngModel)]="aiPrompt" name="aiPrompt" required></textarea></label
-        ><button class="primary-button" [disabled]="busy()" i18n>Generate reviewed draft</button>
+          ><textarea
+            [(ngModel)]="aiPrompt"
+            name="aiPrompt"
+            required
+            maxlength="6000"
+            aria-describedby="ai-prompt-help"
+          ></textarea>
+        </label>
+        <p id="ai-prompt-help" class="muted" i18n>
+          Describe a general meal. Leave out clients' names, personal details and health
+          information.
+        </p>
+        @if (aiConfigured() === false) {
+          <p class="muted" i18n>
+            AI meal suggestions aren't set up yet. You can still create recipes yourself.
+          </p>
+        }
+        <button
+          class="primary-button"
+          [disabled]="busy() || aiConfigured() !== true"
+          [attr.aria-busy]="aiGenerating()"
+        >
+          @if (aiGenerating()) {
+            <span i18n>Generating suggestion…</span>
+          } @else if (aiConfigured() === null) {
+            <span i18n>Checking AI suggestions…</span>
+          } @else {
+            <span i18n>Generate meal suggestion</span>
+          }
+        </button>
+        @if (aiError(); as message) {
+          <p #aiFeedback class="error" role="alert" tabindex="-1">{{ message }}</p>
+          @if (aiConfigured() === null) {
+            <button type="button" (click)="checkAiAvailability()" i18n>Check AI again</button>
+          }
+        }
+        @if (aiNotice(); as message) {
+          <p role="status">{{ message }}</p>
+        }
       </form>
       @if (aiDraft(); as draft) {
         <div class="result">
-          <strong>{{ draft.status }}</strong>
-          @if (draft.failureCode) {
-            <span>{{ draft.failureCode }}</span>
+          @switch (draft.status) {
+            @case ('AwaitingCoachReview') {
+              <strong i18n>Ready for your review</strong>
+            }
+            @case ('Approved') {
+              <strong i18n>Recipe draft created</strong>
+            }
+            @case ('Rejected') {
+              <strong i18n>Suggestion rejected</strong>
+            }
+            @case ('Failed') {
+              <strong i18n>No suggestion was created</strong>
+            }
+            @case ('Pending') {
+              <strong i18n>Preparing suggestion…</strong>
+            }
           }
-          @if (draft.validatedDraftJson) {
-            <pre>{{ draft.validatedDraftJson }}</pre>
+          @if (aiSuggestion(); as suggestion) {
+            <h3>{{ suggestion.name }}</h3>
+            <ul>
+              @for (ingredient of suggestion.ingredients; track $index) {
+                <li>
+                  {{ ingredient.name }} · {{ ingredient.quantity | number }} {{ ingredient.unit }}
+                  @if (ingredient.uncertain) {
+                    <span i18n>· Check this ingredient and amount</span>
+                  }
+                </li>
+              }
+            </ul>
+          }
+          @if (draft.status === 'AwaitingCoachReview') {
             <form class="editor" (ngSubmit)="approveAi()">
               <label
                 ><span i18n>Coach-confirmed recipe name</span
@@ -519,11 +581,25 @@
                     (ngModelChange)="updateAiMappingFood($index, $event)"
                     [name]="'aiFood' + $index"
                   >
+                    <option value="" i18n>Choose a reviewed food</option>
                     @for (food of foods(); track food.versionId) {
                       <option [value]="food.versionId">{{ food.name }}</option>
                     }
                   </select></label
                 >
+                <label
+                  ><span i18n>Quantity for ingredient {{ $index + 1 }}</span>
+                  <input
+                    type="number"
+                    min="0.0001"
+                    max="100000"
+                    step="any"
+                    [(ngModel)]="mapping.quantity"
+                    [name]="'aiQuantity' + $index"
+                    required
+                  />
+                  <span>{{ unitLabel(mapping.unit) }} · {{ preparationLabel(mapping.basis) }}</span>
+                </label>
               }
               <div class="inline">
                 <button class="primary-button" [disabled]="busy()" i18n>

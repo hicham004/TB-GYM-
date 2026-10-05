@@ -145,7 +145,9 @@ public sealed partial class Phase3TrainingWorkflowTests
                 services.RemoveAll<IClock>();
                 services.RemoveAll<IAiMealDraftProvider>();
                 services.AddSingleton<IClock>(clock);
-                services.AddSingleton<IAiMealDraftProvider, InvalidSchemaAiMealDraftProvider>();
+                services.AddSingleton<IAiMealDraftProvider>(TestContext.TestName?.StartsWith("F2", StringComparison.Ordinal) == true
+                    ? launchAiProvider
+                    : new InvalidSchemaAiMealDraftProvider());
                 if (realUsdaProvider)
                 {
                     // Only USDA's socket is replaced: the composed provider parses real FoodData

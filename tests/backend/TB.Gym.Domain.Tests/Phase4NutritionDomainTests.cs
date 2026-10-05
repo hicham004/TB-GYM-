@@ -6,6 +6,26 @@ namespace TB.Gym.Domain.Tests;
 public sealed class Phase4NutritionDomainTests
 {
     [TestMethod]
+    public void AiCostReservationRoundsUpAndSurvivesFailure()
+    {
+        var operation = AiMealDraftOperation.Start(Guid.NewGuid(), "coach-v1", "meal-draft-v1", "test");
+        operation.RecordCost(0.00001m, "USD");
+        Assert.AreEqual(0.0001m, operation.CostAmount);
+        operation.RecordCost(0.025m, "USD");
+        operation.Fail("schema_invalid");
+        Assert.AreEqual(0.025m, operation.CostAmount);
+        Assert.ThrowsExactly<InvalidOperationException>(() => operation.RecordCost(0m, "USD"));
+    }
+
+    [TestMethod]
+    public void AiCostRejectsNegativeValuesAndKeepsReviewGate()
+    {
+        var operation = AiMealDraftOperation.Start(Guid.NewGuid(), "coach-v1", "meal-draft-v1", "test");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => operation.RecordCost(-1m, "USD"));
+        Assert.ThrowsExactly<InvalidOperationException>(() => operation.Review(true, Guid.NewGuid(), DateTimeOffset.UtcNow));
+    }
+
+    [TestMethod]
     public void MifflinStJeorMatchesFixedReferenceCase()
     {
         var result = new MifflinStJeorBmrStrategy().Estimate(new BmrInput(80m, 180m, 30, FormulaSex.Male));

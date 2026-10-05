@@ -70,6 +70,14 @@ Without progress photos a 4 GB server is enough (about half the price; see `.env
 
 ## 3. Afterwards
 
+Optional AI meal suggestions: set `TB_GYM_AI_ENABLED=true` and `TB_GYM_ANTHROPIC_API_KEY` in the
+server's secret `.env`; keep the key out of git, browser code and logs. The API maps these to
+`Nutrition__Anthropic__Enabled` and `Nutrition__Anthropic__ApiKey`. Direct deployments can use those
+environment variables or the `Nutrition:Anthropic` configuration section. Defaults are
+`claude-sonnet-5-5`, 2,048 output tokens, a 45-second timeout and five-minute prompt caching when
+eligible. Set a positive monthly request limit and USD cost limit in Nutrition defaults, restart
+the API, and test one suggestion through coach review. Leaving AI disabled displays a setup message.
+
 - **Update**: `cd /opt/tbgym && tb exec backup backup.sh && git pull && tb up -d --build`.
 - **Server lost**: new server, point the DNS record at it, and repeat Deploy step 1 **up to
   `nano .env`** (paste `.env` from the password manager). Then start only the database,

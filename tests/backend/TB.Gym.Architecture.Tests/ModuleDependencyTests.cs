@@ -47,6 +47,23 @@ public sealed class ModuleDependencyTests
         }
     }
 
+    [TestMethod]
+    public void TheClaudeSdkStaysBehindTheOwnedNutritionPort()
+    {
+        foreach (var assembly in ModuleAssemblies.Append(typeof(TB.Gym.SharedKernel.IClock).Assembly))
+        {
+            Assert.IsFalse(
+                assembly.GetReferencedAssemblies().Any(reference => reference.Name?.StartsWith("Anthropic", StringComparison.Ordinal) == true),
+                $"{assembly.GetName().Name} references the Claude SDK outside Infrastructure.");
+        }
+
+        var infrastructure = LoadInfrastructureAssembly();
+        Assert.Contains("Anthropic", infrastructure.GetReferencedAssemblies().Select(reference => reference.Name).ToArray());
+        var adapter = infrastructure.GetTypes().Single(type => type.Name == "AnthropicAiMealDraftProvider");
+        Assert.IsFalse(adapter.IsPublic);
+        Assert.IsTrue(typeof(TB.Gym.Modules.Nutrition.IAiMealDraftProvider).IsAssignableFrom(adapter));
+    }
+
     /// <summary>
     /// The Worker is a second composition root of the same monolith, so it may reference
     /// Infrastructure and the modules. What would make it a service instead of a composition root is

@@ -173,6 +173,8 @@ internal sealed class UnavailableAiMealDraftProvider : IAiMealDraftProvider
 {
     public string ProviderKey => "Unavailable";
 
+    public bool IsConfigured => false;
+
     public Task<AiMealDraftProviderResult> GenerateAsync(AiMealDraftProviderRequest request, CancellationToken cancellationToken) =>
         Task.FromResult(new AiMealDraftProviderResult(false, string.Empty, string.Empty, string.Empty, 0m, "USD", "ai_provider_not_configured"));
 }
