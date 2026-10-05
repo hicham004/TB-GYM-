@@ -215,6 +215,12 @@ h1 {
   margin: 0;
 }
 
+.alert-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 // ---------- the library beside the grid ----------
 
 .workspace {
@@ -347,4 +353,22 @@ h1 {
   font-weight: 600;
   min-inline-size: 4.5rem;
   text-align: center;
+}
+
+.preview-footer {
+  align-items: center;
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  margin-block-start: 1rem;
+  padding-block-start: 1rem;
+}
+.preview-error {
+  background: var(--tb-danger-soft);
+  border-radius: var(--tb-radius-card-small);
+  color: var(--tb-ink);
+  margin-block-start: 0.75rem;
+  padding: 0.75rem;
 }

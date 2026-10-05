@@ -1,0 +1,201 @@
+@let current = exercise();
+<ol class="sets" role="list" [attr.aria-label]="current.exerciseName">
+  @for (set of current.sets; track set.key; let index = $index) {
+    <li class="set" [attr.data-set-key]="set.key">
+      <div class="set-head">
+        <button
+          class="set-toggle"
+          type="button"
+          [attr.aria-expanded]="isOpen(set)"
+          [attr.aria-controls]="'set-fields-' + set.key"
+          (click)="choose(set)"
+        >
+          <span class="set-number" i18n>Set {{ index + 1 }}</span>
+          <span class="set-summary">{{ typeLabel(set.setType) }} · {{ summary(set) }}</span>
+          <app-icon name="chevron-down" [class.up]="isOpen(set)" />
+        </button>
+        <button
+          appIconButton
+          type="button"
+          [label]="removeLabel(index)"
+          [disabled]="current.sets.length === 1"
+          (click)="remove(index)"
+        >
+          <app-icon name="close" />
+        </button>
+      </div>
+      @if (isOpen(set)) {
+        <div class="set-fields" [id]="'set-fields-' + set.key" (focusout)="check(set)">
+          <div class="choices">
+            <app-menu
+              [label]="typeLabel(set.setType)"
+              [items]="typeItems"
+              align="start"
+              (chosen)="typeChanged(set, $event)"
+            />
+            <app-menu
+              [label]="strategyLabel(set.loadStrategy)"
+              [items]="loadItems"
+              align="start"
+              (chosen)="strategyChanged(set, $event)"
+            />
+          </div>
+          <div class="numbers">
+            <app-field
+              [errors]="errors(set, 'repetitionsMinimum')"
+              label="Reps from"
+              i18n-label
+              density="compact"
+              ><input
+                appControl
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                inputmode="numeric"
+                [(ngModel)]="set.repetitionsMinimum"
+                (ngModelChange)="changed()"
+            /></app-field>
+            <app-field
+              [errors]="errors(set, 'repetitionsMaximum')"
+              label="Reps to"
+              i18n-label
+              density="compact"
+              ><input
+                appControl
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                inputmode="numeric"
+                [(ngModel)]="set.repetitionsMaximum"
+                (ngModelChange)="changed()"
+            /></app-field>
+            @if (set.loadStrategy === 'Direct' || set.loadStrategy === 'PercentageWorkingMax') {
+              <app-field
+                [errors]="
+                  errors(
+                    set,
+                    set.loadStrategy === 'Direct' && set.manualLoadOverride !== null
+                      ? 'manualLoadOverride'
+                      : 'loadValue'
+                  )
+                "
+                [label]="loadLabel(set)"
+                density="compact"
+                ><input
+                  appControl
+                  type="number"
+                  min="0"
+                  [max]="set.loadStrategy === 'Direct' ? 2000 : 150"
+                  step="0.25"
+                  inputmode="decimal"
+                  [ngModel]="loadValue(set)"
+                  (ngModelChange)="loadValueChanged(set, $event)"
+              /></app-field>
+            }
+            <app-field
+              [errors]="errors(set, 'exertionTarget')"
+              [label]="effortLabel(set)"
+              density="compact"
+              ><input
+                appControl
+                type="number"
+                step="0.5"
+                inputmode="decimal"
+                [min]="set.exertionDisplayPreference === 'Rpe' ? 5 : 0"
+                [max]="set.exertionDisplayPreference === 'Rpe' ? 10 : 5"
+                [(ngModel)]="set.exertionTarget"
+                (ngModelChange)="changed()"
+            /></app-field>
+          </div>
+          <div class="choices">
+            @if (set.loadStrategy !== 'None') {
+              <app-menu
+                [label]="unitLabel(set)"
+                [items]="unitItems"
+                align="start"
+                (chosen)="unitChanged(set, $event)"
+              />
+            }
+            <app-menu
+              [label]="effortChoice(set)"
+              [items]="effortItems"
+              align="start"
+              (chosen)="effortChanged(set, $event)"
+            />
+          </div>
+          <details class="more">
+            <summary i18n>Rest, tempo &amp; notes</summary>
+            <div class="numbers">
+              <app-field
+                [errors]="errors(set, 'restSeconds')"
+                label="Rest (seconds)"
+                i18n-label
+                density="compact"
+                ><input
+                  appControl
+                  type="number"
+                  min="0"
+                  max="3600"
+                  step="1"
+                  inputmode="numeric"
+                  [(ngModel)]="set.restSeconds"
+                  (ngModelChange)="changed()"
+              /></app-field>
+              <app-field label="Tempo" i18n-label density="compact"
+                ><input
+                  appControl
+                  maxlength="32"
+                  [(ngModel)]="set.tempo"
+                  (ngModelChange)="changed()"
+              /></app-field>
+              @if (
+                set.loadStrategy === 'PercentageWorkingMax' || set.loadStrategy === 'RpeBasedEpley'
+              ) {
+                <app-field
+                  [errors]="errors(set, 'manualLoadOverride')"
+                  class="wide"
+                  label="Fixed load instead"
+                  i18n-label
+                  density="compact"
+                  help="Wins over the calculated load, in the selected unit."
+                  i18n-help
+                  ><input
+                    appControl
+                    type="number"
+                    min="0"
+                    max="2000"
+                    step="0.25"
+                    inputmode="decimal"
+                    [(ngModel)]="set.manualLoadOverride"
+                    (ngModelChange)="changed()"
+                /></app-field>
+              }
+              <app-field class="wide" label="Set note" i18n-label density="compact"
+                ><input
+                  appControl
+                  maxlength="1000"
+                  dir="auto"
+                  [(ngModel)]="set.coachNotes"
+                  (ngModelChange)="changed()"
+              /></app-field>
+            </div>
+          </details>
+        </div>
+      }
+    </li>
+  }
+</ol>
+<button
+  appButton
+  type="button"
+  variant="text"
+  [disabled]="current.sets.length >= 20"
+  (click)="add()"
+>
+  <app-icon name="plus" /><span i18n>Add a set like the last</span>
+</button>
+@if (current.sets.length >= 20) {
+  <p class="limit" i18n>An exercise holds up to 20 sets.</p>
+}

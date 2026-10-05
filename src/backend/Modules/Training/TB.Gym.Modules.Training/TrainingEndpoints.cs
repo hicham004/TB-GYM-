@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using TB.Gym.SharedKernel;
 
@@ -8,6 +9,9 @@ namespace TB.Gym.Modules.Training;
 
 public static class TrainingEndpoints
 {
+    /// <summary>A draft as the builder sends it, with room for the nulls it writes out in full.</summary>
+    private const long MaximumDraftRequestBytes = ProgramDraftShape.MaximumContentLength * 3L;
+
     public static IEndpointRouteBuilder MapTrainingModule(this IEndpointRouteBuilder endpoints)
     {
         var coach = endpoints
@@ -81,6 +85,8 @@ public static class TrainingEndpoints
         .Produces<ProgramTemplateVersionView>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
+
+        MapProgramDrafts(coach);
 
         coach.MapGet("/saved-sessions", async (
             ITrainingApplicationService service,
@@ -497,6 +503,101 @@ public static class TrainingEndpoints
         return endpoints;
     }
 
+    /// <summary>
+    /// A coach's working copies of programs in the builder (TRN-024): each person reads and writes only
+    /// their own, and a draft becomes a version only through publish.
+    /// </summary>
+    private static void MapProgramDrafts(RouteGroupBuilder coach)
+    {
+        coach.MapGet("/program-drafts", async (
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListProgramDraftsAsync(cancellationToken)))
+            .WithName("ListProgramDrafts")
+            .Produces<ProgramDraftSummary[]>();
+
+        coach.MapGet("/program-drafts/{draftId:guid}", async (
+            Guid draftId,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var draft = await service.GetProgramDraftAsync(draftId, cancellationToken);
+            return draft is null ? Results.NotFound() : Results.Ok(draft);
+        })
+        .WithName("GetProgramDraft")
+        .Produces<ProgramDraftView>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        coach.MapPost("/program-drafts", async (
+            CreateProgramDraftRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.CreateProgramDraftAsync(request, cancellationToken));
+        })
+        .WithName("CreateProgramDraft")
+        .WithMetadata(new RequestSizeLimitAttribute(MaximumDraftRequestBytes))
+        .Produces<ProgramDraftSaveView>()
+        .ProducesValidationProblem()
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        coach.MapPut("/program-drafts/{draftId:guid}", async (
+            Guid draftId,
+            SaveProgramDraftRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.SaveProgramDraftAsync(draftId, request, cancellationToken));
+        })
+        .WithName("SaveProgramDraft")
+        .WithMetadata(new RequestSizeLimitAttribute(MaximumDraftRequestBytes))
+        .Produces<ProgramDraftSaveView>()
+        .ProducesValidationProblem()
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        coach.MapPost("/program-drafts/{draftId:guid}/discard", async (
+            Guid draftId,
+            DiscardProgramDraftRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var result = await service.DiscardProgramDraftAsync(draftId, request, cancellationToken);
+            return result.Status == TrainingCommandStatus.Success ? Results.NoContent() : ToResult(result);
+        })
+        .WithName("DiscardProgramDraft")
+        .Produces(StatusCodes.Status204NoContent)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        coach.MapPost("/program-drafts/{draftId:guid}/publish", async (
+            Guid draftId,
+            PublishProgramDraftRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.PublishProgramDraftAsync(draftId, request, cancellationToken));
+        })
+        .WithName("PublishProgramDraft")
+        .Produces<ProgramTemplateVersionView>()
+        .ProducesValidationProblem()
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+    }
+
     private static IResult ToResult(TrainingCommandResult result) =>
         result.Status switch
         {
@@ -505,6 +606,7 @@ public static class TrainingEndpoints
                 result.Mesocycle ??
                 (object?)result.SavedSession ??
                 (object?)result.SetSave ??
+                (object?)result.Draft ??
                 result.WorkoutExecution),
             TrainingCommandStatus.NotFound => Results.NotFound(),
             TrainingCommandStatus.Forbidden => Results.Forbid(),

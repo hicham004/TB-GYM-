@@ -1,0 +1,84 @@
+<div class="preview">
+  <p class="explanation" i18n>
+    Check the sessions and prescriptions before publishing. Clients already on this program keep
+    their own copy.
+  </p>
+  <div class="client-view" aria-label="Client preview" i18n-aria-label>
+    <div class="hero">
+      <p i18n>Your program</p>
+      <h3 dir="auto">{{ program().name }}</h3>
+      <span i18n>{{ program().weeks.length }} weeks</span>
+    </div>
+    <app-segmented-control
+      label="Week to preview"
+      i18n-label
+      [options]="options()"
+      [selected]="selected()"
+      (selectedChange)="selected.set($event)"
+    />
+    @if (week().isPublished) {
+      @for (session of sessions(); track session.key; let first = $first) {
+        <details class="session" [open]="first">
+          <summary>
+            <span class="day" i18n>Day {{ session.dayOffset + 1 }}</span
+            ><strong dir="auto">{{ session.name }}</strong
+            ><app-icon name="chevron-down" />
+          </summary>
+          <div class="session-body">
+            @if (session.coachNotes.trim()) {
+              <p class="note" dir="auto">{{ session.coachNotes }}</p>
+            }
+            @for (exercise of session.exercises; track exercise.key; let index = $index) {
+              <section class="exercise">
+                <h4>
+                  <span class="number">{{ index + 1 }}</span
+                  ><bdi dir="auto">{{ exercise.exerciseName }}</bdi>
+                </h4>
+                @if (exercise.coachNotes.trim()) {
+                  <p class="note" dir="auto">{{ exercise.coachNotes }}</p>
+                }
+                <ol class="sets">
+                  @for (set of exercise.sets; track set.key; let setIndex = $index) {
+                    <li>
+                      <div class="prescription">
+                        <b i18n>Set {{ setIndex + 1 }}</b
+                        ><span>{{ typeLabel(set.setType) }}</span>
+                      </div>
+                      <p class="target">{{ summary(set) }}</p>
+                      @if (set.restSeconds !== null) {
+                        <span class="meta" i18n>Rest {{ set.restSeconds }} seconds</span>
+                      }
+                      @if (set.tempo.trim()) {
+                        <span class="meta" i18n>Tempo {{ set.tempo }}</span>
+                      }
+                      @if (set.coachNotes.trim()) {
+                        <p class="note" dir="auto">{{ set.coachNotes }}</p>
+                      }
+                    </li>
+                  }
+                </ol>
+                @if (
+                  !exercise.isMainLift &&
+                  exercise.modificationPolicy === 'CoachApprovedSwap' &&
+                  exercise.approvedAlternativeExerciseIds.length > 0
+                ) {
+                  <p class="swaps" i18n>Approved swaps: {{ swaps(exercise) }}</p>
+                }
+              </section>
+            } @empty {
+              <p class="note" i18n>No exercises in this session.</p>
+            }
+          </div>
+        </details>
+      } @empty {
+        <p class="empty" i18n>No sessions this week.</p>
+      }
+    } @else {
+      <p class="empty" i18n>Your coach hasn’t shared this week yet</p>
+    }
+  </div>
+  <p class="explanation" i18n>
+    Shared weeks open from the program’s start date. Loads based on a training max are calculated
+    for each client when you assign it.
+  </p>
+</div>

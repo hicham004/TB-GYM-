@@ -1,4 +1,4 @@
-<div class="builder">
+<div class="builder" [attr.inert]="publishing() ? '' : null">
   <a class="back" routerLink="/training/programs">
     <app-icon class="back-icon" name="chevron-right" />
     <span i18n>All programs</span>
@@ -59,8 +59,15 @@
           ></textarea>
         </div>
         <div class="save">
-          <p class="status" [class.unsaved]="dirty()" role="status">{{ statusLine() }}</p>
+          <p class="status" [class.unsaved]="troubled()">{{ statusLine() }}</p>
+          <!-- Autosave runs at every pause, so only a failure (and its recovery) is announced. -->
+          <p class="tb-visually-hidden" role="status">{{ liveStatus() }}</p>
           <div class="save-buttons">
+            @if (canDiscard()) {
+              <button appButton type="button" variant="text" (click)="discard()" i18n>
+                Discard changes
+              </button>
+            }
             @if (template()) {
               <button appButton type="button" variant="text" (click)="openHistory()" i18n>
                 Versions
@@ -69,25 +76,11 @@
             <button
               appButton
               type="button"
-              variant="outlined"
-              [disabled]="!canSaveDraft()"
-              [loading]="saving() === 'draft'"
-              (click)="save(false)"
-            >
-              @if (saving() === 'draft') {
-                <span i18n>Saving…</span>
-              } @else {
-                <span i18n>Save draft</span>
-              }
-            </button>
-            <button
-              appButton
-              type="button"
               [disabled]="!canPublish()"
-              [loading]="saving() === 'publish'"
-              (click)="save(true)"
+              [loading]="publishing()"
+              (click)="openPreview()"
             >
-              @if (saving() === 'publish') {
+              @if (publishing()) {
                 <span i18n>Publishing…</span>
               } @else {
                 <span i18n>Publish</span>
@@ -100,24 +93,51 @@
       @if (olderLine(); as line) {
         <p class="older" dir="auto">{{ line }}</p>
       }
+      @if (behindLine(); as line) {
+        <p class="older" dir="auto">{{ line }}</p>
+      }
       @if (problem(); as issue) {
         <div class="alert" role="alert">
           <p dir="auto">{{ issue.message }}</p>
           @if (issue.sessionKey) {
-            <button appButton type="button" variant="outlined" (click)="openProblem()" i18n>
-              Open the session
+            <button appButton type="button" variant="outlined" (click)="openProblem()">
+              @if (issue.setKey) {
+                <span i18n>Fix the set</span>
+              } @else {
+                <span i18n>Open the session</span>
+              }
             </button>
           }
         </div>
       }
-      @if (conflict()) {
+      @if (newerVersion(); as message) {
         <div class="alert" role="alert">
-          <p i18n>
-            Someone saved this program while you were working on it, so your changes were not saved.
-          </p>
-          <button appButton type="button" variant="outlined" (click)="openNewest()" i18n>
-            Open the newest version
-          </button>
+          <p dir="auto">{{ message }}</p>
+          <div class="alert-buttons">
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="publishing()"
+              (click)="openPreview(true)"
+              i18n
+            >
+              Publish mine as the newest
+            </button>
+            <button appButton type="button" variant="text" (click)="discard()" i18n>
+              Discard mine
+            </button>
+          </div>
+        </div>
+      }
+      @if (saveProblem(); as trouble) {
+        <div class="alert" role="alert">
+          <p dir="auto">{{ trouble.message }}</p>
+          @if (trouble.kind === 'stale') {
+            <button appButton type="button" variant="outlined" (click)="reloadLatest()" i18n>
+              Reload
+            </button>
+          }
         </div>
       }
       @if (saveError(); as message) {
@@ -163,7 +183,13 @@
                   <span i18n>Show exercises</span>
                 }
               </button>
-              <button appButton type="button" variant="outlined" (click)="addWeek()">
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                [disabled]="draft().weeks.length >= maxWeeks"
+                (click)="addWeek()"
+              >
                 <app-icon name="plus" />
                 <span i18n>Add week</span>
               </button>
@@ -290,13 +316,44 @@
                                 [cdkDragStartDelay]="dragDelay"
                                 cdkDragPreviewClass="tb-drag-preview"
                               >
-                                <span class="exercise-name" dir="auto">
-                                  {{ exercise.name }}
-                                  @if (exercise.isMainLift) {
-                                    <span class="main-lift" i18n>Main</span>
-                                  }
-                                </span>
-                                <span class="exercise-line">{{ exercise.line }}</span>
+                                <div class="exercise-heading">
+                                  <span class="exercise-grip" cdkDragHandle aria-hidden="true"
+                                    ><app-icon name="grip"
+                                  /></span>
+                                  <span class="exercise-name" dir="auto">
+                                    {{ exercise.name }}
+                                    @if (exercise.isMainLift) {
+                                      <span class="main-lift" i18n>Main</span>
+                                    }
+                                  </span>
+                                </div>
+                                <button
+                                  class="prescription-toggle exercise-line"
+                                  type="button"
+                                  [attr.aria-label]="exercise.editLabel"
+                                  [attr.aria-expanded]="inlineEditing() === exercise.key"
+                                  [attr.aria-controls]="'inline-' + exercise.key"
+                                  (click)="editSets(exercise.key)"
+                                >
+                                  {{ exercise.line }} <app-icon name="chevron-down" />
+                                </button>
+                                @if (inlineEditing() === exercise.key) {
+                                  <div class="inline-sets" [id]="'inline-' + exercise.key">
+                                    <app-program-sets-editor
+                                      [exercise]="exercise.draft"
+                                      [revision]="revision()"
+                                      (edited)="touched()"
+                                    /><button
+                                      appButton
+                                      variant="text"
+                                      type="button"
+                                      (click)="editSets(exercise.key)"
+                                      i18n
+                                    >
+                                      Done editing sets
+                                    </button>
+                                  </div>
+                                }
                               </li>
                             } @empty {
                               <li class="drop-hint" i18n>Drop exercises here</li>
@@ -343,7 +400,7 @@
       [weekNumber]="editingWeekNumber()"
       [library]="exercises()"
       [revision]="revision()"
-      [canSaveToLibrary]="!!session.sourceId && !dirty()"
+      [canSaveToLibrary]="!!session.sourceId && !hasDraft() && !unsaved()"
       [savingToLibrary]="savingSession()"
       (edited)="touched()"
       (addExercise)="addToEditing()"
@@ -380,9 +437,9 @@
 
 <ng-template #historySheet let-sheet>
   <div class="history">
-    @if (dirty()) {
+    @if (canDiscard()) {
       <p class="history-warning" i18n>
-        Opening another version leaves your unsaved changes behind.
+        Opening another version discards your changes that are not published.
       </p>
     }
     <ol class="history-list" role="list">
@@ -393,21 +450,69 @@
             <span class="history-date">{{ row.date }}</span>
           </div>
           <app-status-pill [label]="row.state" [tone]="row.isPublished ? 'success' : 'neutral'" />
-          @if (row.isOpen) {
+          @if (row.isOpen && !canDiscard()) {
             <span class="open-now" i18n>Open now</span>
           } @else {
-            <a
+            <button
               appButton
+              type="button"
               variant="outlined"
-              [routerLink]="['/training/programs', templateId()]"
-              [queryParams]="first ? null : { version: row.id }"
-              (click)="sheet.close()"
+              [attr.aria-label]="row.openLabel"
+              (click)="openOtherVersion(first ? null : row.id, sheet)"
               i18n
-              >Open</a
             >
+              Open
+            </button>
           }
         </li>
       }
     </ol>
   </div>
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #previewSheet let-sheet>
+  @if (preview(); as program) {
+    <app-program-publish-preview [program]="program" [library]="exercises()" />
+    @if (newerVersion(); as message) {
+      <p class="preview-error" role="alert">{{ message }}</p>
+    }
+    @if (saveError(); as message) {
+      <p class="preview-error" role="alert">{{ message }}</p>
+    }
+    @if (saveProblem(); as trouble) {
+      <p class="preview-error" role="alert">{{ trouble.message }}</p>
+    }
+    <div class="preview-footer">
+      <button
+        appButton
+        variant="outlined"
+        type="button"
+        [disabled]="publishing()"
+        (click)="sheet.close()"
+        i18n
+      >
+        Back to editing
+      </button>
+      <button appButton type="button" [loading]="publishing()" (click)="publish(!!newerVersion())">
+        @if (publishing()) {
+          <span i18n>Publishing…</span>
+        } @else if (newerVersion()) {
+          <span i18n>Publish mine as the newest</span>
+        } @else {
+          <span i18n>Publish program</span>
+        }
+      </button>
+    </div>
+  }
 </ng-template>

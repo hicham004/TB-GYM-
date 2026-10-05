@@ -1,7 +1,19 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page, Route } from '@playwright/test';
-import type { SaveProgramTemplateRequest } from '../src/app/core/api/generated';
-import { LIBRARY, templateSummary, versionView } from '../src/testing/program-builder-fixtures';
+import type {
+  CreateProgramDraftRequest,
+  ProgramDraftContent,
+  ProgramTemplateVersionView,
+  PublishProgramDraftRequest,
+  SaveProgramDraftRequest,
+} from '../src/app/core/api/generated';
+import {
+  draftSummary,
+  LIBRARY,
+  saveView,
+  templateSummary,
+  versionView,
+} from '../src/testing/program-builder-fixtures';
 import {
   COACH_MEMBERSHIP,
   expect,
@@ -13,21 +25,31 @@ import {
 } from './support';
 
 /**
- * The program builder (C4, R4.1) in a real browser: Lea, a coach, opens "Strength base" (two weeks,
- * Lower A on day 1 and Upper A on day 3), drags with a real mouse, and saves. The API is answered by
- * the shared fixtures; every save is captured so the test can read what would have been sent.
+ * The program builder (C4, R4.1 and R4.2a) in a real browser: Lea, a coach, opens "Strength base"
+ * (two weeks, Lower A on day 1 and Upper A on day 3), drags with a real mouse, and her changes keep
+ * themselves as her draft before she publishes. The API is answered by the shared fixtures; every
+ * draft save and publish is captured so the test can read what would have been sent.
  */
-interface Saved {
-  bodies: SaveProgramTemplateRequest[];
+interface Sent {
+  /** The program as each autosave sent it, oldest first. */
+  contents: ProgramDraftContent[];
+  started: CreateProgramDraftRequest[];
+  published: PublishProgramDraftRequest[];
 }
 
 async function openBuilder(
   page: Page,
   width: number,
   height: number,
-  options: { url?: string; colorScheme?: 'light' | 'dark' } = {},
-): Promise<Saved> {
-  const saved: Saved = { bodies: [] };
+  options: {
+    url?: string;
+    colorScheme?: 'light' | 'dark';
+    offline?: boolean;
+    program?: ProgramTemplateVersionView;
+  } = {},
+): Promise<Sent> {
+  const sent: Sent = { contents: [], started: [], published: [] };
+  let version = 1;
   await page.emulateMedia({ colorScheme: options.colorScheme ?? 'light' });
   await page.setViewportSize({ width, height });
   await mockSession(page, {
@@ -35,26 +57,40 @@ async function openBuilder(
     extra: {
       'GET /api/training/templates': (route: Route) =>
         json(route, 200, { items: [templateSummary()], total: 1, skip: 0, take: 100 }),
+      'GET /api/training/program-drafts': (route: Route) => json(route, 200, []),
       'GET /api/training/templates/template-1': (route: Route) =>
         json(route, 200, templateSummary()),
       'GET /api/training/template-versions/version-2': (route: Route) =>
-        json(route, 200, versionView()),
+        json(route, 200, options.program ?? versionView()),
       'GET /api/exercises': (route: Route) =>
         json(route, 200, { items: LIBRARY, total: LIBRARY.length }),
       'GET /api/training/saved-sessions': (route: Route) => json(route, 200, []),
       'POST /api/media/access': (route: Route) => json(route, 200, { items: [] }),
-      'POST /api/training/templates/template-1/versions': (route: Route) => {
-        saved.bodies.push(route.request().postDataJSON() as SaveProgramTemplateRequest);
+      'POST /api/training/program-drafts': (route: Route) => {
+        if (options.offline) return route.abort('internetdisconnected');
+        const body = route.request().postDataJSON() as CreateProgramDraftRequest;
+        sent.started.push(body);
+        sent.contents.push(body.content);
+        return json(route, 200, saveView('draft-1', version));
+      },
+      'PUT /api/training/program-drafts/draft-1': (route: Route) => {
+        const body = route.request().postDataJSON() as SaveProgramDraftRequest;
+        expect(body.version).toBe(version);
+        sent.contents.push(body.content);
+        return json(route, 200, saveView('draft-1', ++version));
+      },
+      'POST /api/training/program-drafts/draft-1/publish': (route: Route) => {
+        sent.published.push(route.request().postDataJSON() as PublishProgramDraftRequest);
         return json(route, 200, versionView({ id: 'version-3', versionNumber: 3 }));
       },
       'GET /api/training/template-versions/version-3': (route: Route) =>
-        json(route, 200, versionView({ id: 'version-3', versionNumber: 3, isPublished: false })),
+        json(route, 200, versionView({ id: 'version-3', versionNumber: 3 })),
     },
   });
   await page.goto(options.url ?? '/training/programs/template-1');
   await expect(page.locator('.session-card').first()).toBeVisible();
   await waitForFonts(page);
-  return saved;
+  return sent;
 }
 
 async function axe(page: Page) {
@@ -86,7 +122,9 @@ async function drag(page: Page, from: Locator, to: Locator) {
 
 const week = (page: Page, index: number) => page.locator('section.week').nth(index);
 
-test('Programs at 390px and 1440px lists every program as a card', async ({ page }) => {
+test('Programs at 390px and 1440px lists every program as a card, the coach’s new ones first', async ({
+  page,
+}) => {
   for (const [width, height] of [
     [390, 844],
     [1440, 900],
@@ -97,6 +135,10 @@ test('Programs at 390px and 1440px lists every program as a card', async ({ page
       extra: {
         'GET /api/training/templates': (route: Route) =>
           json(route, 200, { items: [templateSummary()], total: 1, skip: 0, take: 100 }),
+        'GET /api/training/program-drafts': (route: Route) =>
+          json(route, 200, [
+            draftSummary({ id: 'draft-new', templateId: null, name: 'Hypertrophy block' }),
+          ]),
       },
     });
     await page.goto('/training/programs');
@@ -105,30 +147,54 @@ test('Programs at 390px and 1440px lists every program as a card', async ({ page
       'href',
       '/training/programs/template-1',
     );
+    await expect(page.getByRole('link', { name: 'Hypertrophy block' })).toHaveAttribute(
+      'href',
+      '/training/programs/new?draft=draft-new',
+    );
+    await expect(page.locator('.card').first()).toContainText(
+      'Only you can see it until you publish it',
+    );
     await expectNoHorizontalOverflow(page);
     await axe(page);
   }
 });
 
-test('the builder takes drags from the library and between days, and saves them', async ({
+test('the builder takes drags, keeps them as the coach’s draft, and publishes it', async ({
   page,
 }) => {
-  const saved = await openBuilder(page, 1440, 900);
+  const sent = await openBuilder(page, 1440, 900);
   const first = week(page, 0);
   const lower = first.locator('.session-card', { hasText: 'Lower A' });
 
-  // An exercise from the library into Lower A, between its two exercises.
+  // An exercise from the library into Lower A, then reorder it by its grip.
   await drag(
     page,
     page.locator('app-program-library .lib-item', { hasText: 'Goblet squat' }),
-    lower.locator('.exercise-row').nth(1),
+    lower.locator('.exercise-row').nth(1).locator('.exercise-heading'),
+  );
+  await expect(lower.locator('.exercise-name')).toHaveText([
+    /Back squat/,
+    'Romanian deadlift',
+    'Goblet squat',
+  ]);
+  // A moment after the drop the change is the coach's own draft on the server.
+  await expect(page.locator('.status')).toHaveText(/^Saved at \d\d:\d\d, not published yet$/);
+  expect(sent.started).toHaveLength(1);
+  expect(sent.started[0]).toMatchObject({
+    templateId: 'template-1',
+    sourceVersionId: 'version-2',
+    templateVersionNumber: 2,
+  });
+  await drag(
+    page,
+    lower.locator('.exercise-row').nth(2).locator('.exercise-grip'),
+    lower.locator('.exercise-row').nth(1).locator('.exercise-heading'),
   );
   await expect(lower.locator('.exercise-name')).toHaveText([
     /Back squat/,
     'Goblet squat',
     'Romanian deadlift',
   ]);
-  await expect(page.locator('.status')).toHaveText('Unsaved changes');
 
   // Upper A from day 3 onto day 5, a rest day.
   await drag(
@@ -148,15 +214,13 @@ test('the builder takes drags from the library and between days, and saves them'
   await expect(first.locator('.day').nth(1).locator('.exercise-name')).toHaveText(
     'Chest-supported row',
   );
+  await expect(page.locator('.status')).toHaveText(/^Saved at/);
   await axe(page);
 
-  await page.getByRole('button', { name: 'Save draft' }).click();
-  await expect(page.getByText('Draft saved. Publish it when it is ready to assign.')).toBeVisible();
-  const body = saved.bodies[0];
-  expect(body.publish).toBe(false);
-  expect(body.templateVersion).toBe(41);
+  // The newest content the server holds is what the grid shows.
+  const content = sent.contents.at(-1)!;
   expect(
-    body.weeks[0].sessions.map((session) => [
+    content.weeks[0].sessions.map((session) => [
       session.name,
       session.dayOffset,
       session.exercises.map((exercise) => exercise.exerciseId),
@@ -166,7 +230,50 @@ test('the builder takes drags from the library and between days, and saves them'
     ['Training day', 1, ['row']],
     ['Upper A', 4, ['bench']],
   ]);
-  expect(body.weeks[1].sessions.map((session) => session.dayOffset)).toEqual([0, 2]);
+  expect(content.weeks[1].sessions.map((session) => session.dayOffset)).toEqual([0, 2]);
+
+  await page.getByRole('button', { name: 'Publish' }).click();
+  const preview = page.getByRole('dialog', { name: 'Preview before publishing' });
+  await expect(preview).toBeVisible();
+  expect(sent.published).toEqual([]);
+  await preview.getByRole('button', { name: 'Publish program', exact: true }).click();
+  await expect(
+    page.getByText('Published. Clients already on this program keep their own copy.'),
+  ).toBeVisible();
+  expect(sent.published).toEqual([{ version: sent.contents.length, replaceNewer: false }]);
+});
+
+test.describe('with no connection', () => {
+  // The browser logs each refused draft save itself. Anything else — an Angular ERROR from a
+  // rejection nobody handled, or an uncaught page error — still fails through the guard.
+  test.use({
+    allowedConsoleErrors: {
+      patterns: [/status of 401 .*\/api\/auth\/me/, /ERR_INTERNET_DISCONNECTED .*program-drafts/],
+    },
+  });
+
+  test('leaving with changes that cannot be saved asks first, and staying keeps them', async ({
+    page,
+  }) => {
+    await openBuilder(page, 1440, 900, { offline: true });
+
+    await page.getByRole('textbox', { name: 'Program name' }).fill('Strength base, heavier');
+    await expect(page.locator('.status')).toHaveText('Not saved yet. Trying again…');
+
+    await page.getByRole('link', { name: 'All programs' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Leave without saving?' });
+    await expect(dialog).toBeVisible();
+    await axe(page);
+    await dialog.getByRole('button', { name: 'Stay' }).click();
+    await expect(page).toHaveURL(/\/training\/programs\/template-1$/);
+    await expect(page.getByRole('textbox', { name: 'Program name' })).toHaveValue(
+      'Strength base, heavier',
+    );
+
+    await page.getByRole('link', { name: 'All programs' }).click();
+    await dialog.getByRole('button', { name: 'Leave without saving' }).click();
+    await expect(page.getByRole('heading', { name: 'Programs', level: 1 })).toBeVisible();
+  });
 });
 
 test('a phone shows one week at a time and adds through the sheet', async ({ page }) => {
@@ -217,4 +324,89 @@ test('a session’s menu works from the keyboard', async ({ page }) => {
   // A copy lands on the next free day, and focus is back on the menu's button.
   await expect(first.locator('.day').nth(1).locator('.session-name')).toHaveText('Lower A');
   await expect(first.getByRole('button', { name: 'More for Lower A' }).first()).toBeFocused();
+});
+
+for (const width of [390, 1440]) {
+  test(`inline sets at ${width}px autosave exact values and preview before publishing`, async ({
+    page,
+  }) => {
+    const sent = await openBuilder(page, width, 900);
+    const exercise = week(page, 0).locator('.exercise-row').first();
+    await exercise.getByRole('button', { name: 'Edit sets for Back squat' }).click();
+    const inline = exercise.locator('.inline-sets');
+    await inline.getByRole('spinbutton', { name: 'Reps from', exact: true }).fill('3');
+    await inline.getByRole('spinbutton', { name: 'Reps to', exact: true }).fill('6');
+    await inline.getByRole('spinbutton', { name: '% of training max', exact: true }).fill('82.5');
+    await inline.getByRole('button', { name: 'Effort: RPE', exact: true }).click();
+    await inline.getByRole('button', { name: 'RIR', exact: true }).click();
+    await inline.getByRole('spinbutton', { name: 'RIR target', exact: true }).fill('2');
+    await expect(page.locator('.status')).toHaveText(/^Saved at/);
+    const sets = sent.contents.at(-1)!.weeks[0].sessions[0].exercises[0].sets;
+    expect(sets[0]).toMatchObject({
+      repetitionsMinimum: 3,
+      repetitionsMaximum: 6,
+      percentageWorkingMax: 82.5,
+      targetRir: 2,
+      targetRpe: null,
+    });
+    expect(sets[1]).toMatchObject({
+      repetitionsMinimum: 5,
+      percentageWorkingMax: 75,
+      targetRpe: 7,
+    });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+
+    await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    const preview = page.getByRole('dialog', { name: 'Preview before publishing' });
+    await expect(preview).toContainText('3–6 · 82.5% of training max · RIR 2');
+    expect(sent.published).toEqual([]);
+    await axe(page);
+    await preview.getByRole('button', { name: 'Back to editing' }).click();
+    await expect(inline.getByRole('spinbutton', { name: 'RIR target', exact: true })).toHaveValue(
+      '2',
+    );
+    await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    await preview.getByRole('button', { name: 'Publish program', exact: true }).click();
+    await expect(
+      page.getByText('Published. Clients already on this program keep their own copy.'),
+    ).toBeVisible();
+    expect(sent.published).toHaveLength(1);
+  });
+}
+
+test('a dark preview hides unshared content and reflows at 200% text in RTL', async ({ page }) => {
+  const program = versionView();
+  program.weeks[0].isPublished = false;
+  program.weeks[0].sessions[0].name = 'Not shared session';
+  await openBuilder(page, 390, 844, { colorScheme: 'dark', program });
+  await week(page, 0).getByRole('button', { name: 'Edit sets for Back squat' }).click();
+  await page.evaluate(() => {
+    document.documentElement.dir = 'rtl';
+    document.documentElement.style.fontSize = '200%';
+  });
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.evaluate(() => {
+    document.documentElement.dir = 'ltr';
+    document.documentElement.style.fontSize = '';
+  });
+  await page.getByRole('textbox', { name: 'Program name' }).fill('Strength base, reviewed');
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  const preview = page.getByRole('dialog', { name: 'Preview before publishing' });
+  await expect(preview).toContainText('Your coach hasn’t shared this week yet');
+  await expect(preview.getByText('Not shared session')).toHaveCount(0);
+  await preview.getByRole('radio', { name: 'Week 2', exact: true }).check();
+  await expect(preview).toContainText('75% of training max');
+  await page.evaluate(() => {
+    document.documentElement.dir = 'rtl';
+    document.documentElement.style.fontSize = '200%';
+  });
+  await expectNoHorizontalOverflow(page);
+  const body = page.locator('.tb-modal__body');
+  expect(await body.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+    true,
+  );
+  await axe(page);
 });

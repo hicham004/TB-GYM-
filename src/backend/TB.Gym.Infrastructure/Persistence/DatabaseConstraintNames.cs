@@ -18,6 +18,13 @@ internal static class DatabaseConstraintNames
     public const string OneRenewalRequestPerWindow =
         "EX_RenewalRequests_OnePerWindow";
 
+    /// <summary>
+    /// One working copy per person and program (TRN-024). A second tab that starts one loses the race
+    /// and is told to reload, to continue the one already stored.
+    /// </summary>
+    public const string OneProgramDraftPerPersonAndProgram =
+        "IX_ProgramDrafts_TenantId_OwnerUserId_TemplateId";
+
     public const string OneProgressPhotoPerDateAndPose =
         "IX_ProgressPhotos_TenantId_ClientProfileId_PhotoDate_Pose";
 

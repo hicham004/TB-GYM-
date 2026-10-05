@@ -170,6 +170,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<SavedSessionTemplate> SavedSessionTemplates => Set<SavedSessionTemplate>();
 
+    public DbSet<ProgramDraft> ProgramDrafts => Set<ProgramDraft>();
+
     public DbSet<TrainingMesocycle> TrainingMesocycles => Set<TrainingMesocycle>();
 
     public DbSet<MesocycleLifecycleEvent> MesocycleLifecycleEvents => Set<MesocycleLifecycleEvent>();

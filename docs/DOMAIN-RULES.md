@@ -386,6 +386,22 @@ reason, so the page can say from when the client sees it. The client's own reads
 A lapsed, paused or cancelled plan with nothing booked, a blocked relationship and a former client
 close it.
 
+**TRN-024** Program working drafts v1 (R4.2a, decided by the owner 2026-10-05, ADR 0033). The program
+builder keeps a coach's changes on the server as they work, as a `ProgramDraft`: one per person and
+program, plus at most 20 programs not published yet per person, each belonging to an Owner's or
+Coach's membership in that workspace. Nobody else reads or changes it, the workspace owner included,
+and it never reaches a client. Its content is a save's shape with values unchecked (an unnamed
+session, reps of 0), bounded only by a version's limits: 1 to 52 weeks, 14 sessions a week on days 1
+to 7, 40 exercises a session, 20 sets an exercise, the same text lengths, no NUL character, and
+2,000,000 characters in all. Every save carries the version it read, so a second tab or device is told
+to reload instead of overwriting; a second draft of the same program is refused. Only Publish makes a
+version (`Save draft` is gone): it checks the draft as any save is checked (TRN-005), creates the
+program's next version published (or the program and its version 1) and deletes the draft in one
+transaction. When a version was published after the draft began, Publish asks first; publishing anyway
+makes the draft the newest version and keeps the other in history (versions are immutable, ADR 0007).
+Discard deletes the draft and leaves the program as last published. Drafts are staff writes, so an
+unpaid workspace keeps them readable but not writable (ADR 0028).
+
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated

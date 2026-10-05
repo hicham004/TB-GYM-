@@ -74,6 +74,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
             .OrderByDescending(item => item.VersionNumber)
             .ToListAsync(cancellationToken);
         var byTemplate = versions.ToLookup(item => item.TemplateId);
+        var drafts = await OwnDraftsByProgramAsync(templateIds, cancellationToken);
         return templates.Select(item => new ProgramTemplateSummary(
             item.Id,
             item.Name,
@@ -86,7 +87,8 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
                 version.NameSnapshot,
                 version.IsPublished,
                 version.Weeks.Count,
-                version.CreatedAtUtc)).ToArray())).ToArray();
+                version.CreatedAtUtc)).ToArray(),
+            drafts.GetValueOrDefault(item.Id))).ToArray();
     }
 
     public async Task<ProgramTemplateVersionView?> GetTemplateVersionAsync(

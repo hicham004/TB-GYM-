@@ -202,6 +202,12 @@ public sealed partial class Phase3TrainingWorkflowTests
         await RefreshCsrfAsync(coach);
         await AssertReadOnlyAsync(await coach.PostAsJsonAsync(R35cRepliesUrl, new { title = "Hi", body = "Hello" }));
         await AssertStatusAsync(await coach.GetAsync(R35cRepliesUrl), HttpStatusCode.OK);
+        // Program drafts too (R4.2a): kept ones can still be read, not started, saved or published.
+        await RefreshCsrfAsync(coach);
+        await AssertReadOnlyAsync(await coach.PostAsJsonAsync(R42aDraftsUrl, new { content = new { name = "Plan", weeks = Array.Empty<object>() } }));
+        await AssertReadOnlyAsync(await coach.PutAsJsonAsync(R42aDraftUrl(Guid.NewGuid()), new { version = 1 }));
+        await AssertReadOnlyAsync(await coach.PostAsJsonAsync(R42aPublishUrl(Guid.NewGuid()), new { version = 1, replaceNewer = false }));
+        await AssertStatusAsync(await coach.GetAsync(R42aDraftsUrl), HttpStatusCode.OK);
         await AssertStatusAsync(await owner.GetAsync("/api/clients"), HttpStatusCode.OK);
         await AssertStatusAsync(await coach.GetAsync($"/api/clients/{clientId}"), HttpStatusCode.OK);
         Assert.IsTrue((await RequiredJsonAsync<BillingAccess>(await coach.GetAsync("/api/billing/access"))).IsReadOnly);

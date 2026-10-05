@@ -9350,6 +9350,84 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Training.ProgramDraft", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("StartedAtVersionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<int>("WeekCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "SourceVersionId");
+
+                    b.HasIndex("TenantId", "TemplateId");
+
+                    b.HasIndex("TenantId", "OwnerUserId", "TemplateId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProgramDrafts_TenantId_OwnerUserId_TemplateId")
+                        .HasFilter("\"TemplateId\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "OwnerUserId", "UpdatedAtUtc");
+
+                    b.ToTable("ProgramDrafts", "training", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProgramDrafts_Program", "(\"TemplateId\" IS NULL AND \"SourceVersionId\" IS NULL AND \"StartedAtVersionNumber\" = 0) OR (\"TemplateId\" IS NOT NULL AND \"SourceVersionId\" IS NOT NULL AND \"StartedAtVersionNumber\" >= 1)");
+
+                            t.HasCheckConstraint("CK_ProgramDrafts_WeekCount", "\"WeekCount\" BETWEEN 1 AND 52");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Training.ProgramTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12328,6 +12406,34 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Training.ProgramDraft", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "OwnerUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Training.ProgramTemplateVersion", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SourceVersionId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Training.ProgramTemplate", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "TemplateId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Training.ProgramTemplateExercise", b =>

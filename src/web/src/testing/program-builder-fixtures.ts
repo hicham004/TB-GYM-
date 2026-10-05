@@ -1,6 +1,9 @@
 import type {
   ExercisePrescriptionView,
   ExerciseView,
+  ProgramDraftSaveView,
+  ProgramDraftSummary,
+  ProgramDraftView,
   ProgramTemplateSummary,
   ProgramTemplateVersionView,
   SetPrescriptionView,
@@ -154,6 +157,84 @@ export function templateSummary(
     ],
     ...overrides,
   };
+}
+
+/**
+ * The coach's draft of Strength base (R4.2a): week 1 only, Lower A renamed "Lower A, heavier" with
+ * one back-squat set of 3 reps at 80%, as the server keeps a draft (a save's shape).
+ */
+export function draftView(overrides: Partial<ProgramDraftView> = {}): ProgramDraftView {
+  return {
+    id: 'draft-1',
+    templateId: 'template-1',
+    sourceVersionId: 'version-2',
+    startedAtVersionNumber: 2,
+    updatedAtUtc: '2026-10-04T15:30:00Z',
+    version: 7,
+    content: {
+      name: 'Strength base',
+      description: 'Three days a week around the big lifts.',
+      weeks: [
+        {
+          label: 'Week 1',
+          isPublished: true,
+          sessions: [
+            {
+              name: 'Lower A, heavier',
+              dayOffset: 0,
+              coachNotes: null,
+              exercises: [
+                {
+                  exerciseId: 'squat',
+                  position: 1,
+                  isMainLift: true,
+                  modificationPolicy: 'Locked',
+                  coachNotes: null,
+                  approvedAlternativeExerciseIds: [],
+                  sets: [
+                    {
+                      position: 1,
+                      setType: 'Normal',
+                      repetitionsMinimum: 3,
+                      repetitionsMaximum: 3,
+                      loadStrategy: 'PercentageWorkingMax',
+                      directLoad: null,
+                      loadUnit: 'Kilogram',
+                      percentageWorkingMax: 80,
+                      targetRpe: 8,
+                      targetRir: null,
+                      exertionDisplayPreference: 'Rpe',
+                      restSeconds: 180,
+                      tempo: null,
+                      coachNotes: null,
+                      manualLoadOverride: null,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    exercises: [{ id: 'squat', name: 'Back squat', isArchived: false }],
+    ...overrides,
+  };
+}
+
+export function draftSummary(overrides: Partial<ProgramDraftSummary> = {}): ProgramDraftSummary {
+  return {
+    id: 'draft-1',
+    templateId: 'template-1',
+    name: 'Strength base',
+    weekCount: 1,
+    updatedAtUtc: '2026-10-04T15:30:00Z',
+    ...overrides,
+  };
+}
+
+export function saveView(id = 'draft-1', version = 8): ProgramDraftSaveView {
+  return { id, version, updatedAtUtc: '2026-10-05T09:15:00Z' };
 }
 
 export function exercise(

@@ -252,6 +252,8 @@ describe('App', () => {
       (candidate) => candidate.textContent?.trim() === 'Sign out',
     );
     signOut?.click();
+    // Signing out first asks any open editor (none here) whether its work is saved.
+    await new Promise((resolve) => setTimeout(resolve));
 
     expect(clear).toHaveBeenCalled();
     expect(clearMessages).toHaveBeenCalled();

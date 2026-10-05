@@ -16,6 +16,13 @@ export interface ModalOptions {
   title: string;
   direction?: ModalDirection;
   closeLabel?: string;
+  /** A field selector when an error needs correction; otherwise focus the heading. */
+  initialFocus?: string;
+  /**
+   * False keeps the modal open while the address changes. A leave confirmation needs it: the
+   * browser's Back button changes the address before the page is asked whether it may go.
+   */
+  closeOnNavigation?: boolean;
 }
 
 export interface ModalData {

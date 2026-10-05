@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { UnsavedWork } from '../forms/unsaved-work';
 import { MessageUnreadStore } from '../messaging/message-unread.store';
 import { NotificationStore } from '../notifications/notification.store';
 import { TenantStore } from '../tenancy/tenant.store';
@@ -38,12 +39,37 @@ function setup() {
 describe('SessionActions', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('selects the workspace before landing on its home page', () => {
+  it('selects the workspace before landing on its home page', async () => {
     const { actions, order } = setup();
 
-    actions.switchWorkspace('tenant-2');
+    await actions.switchWorkspace('tenant-2');
 
     expect(order).toEqual(['select tenant-2', 'navigate /']);
+  });
+
+  it('asks an open editor first, and changes nothing while it keeps its work', async () => {
+    const { actions, order } = setup();
+    const canLeave = vi.fn(async () => {
+      order.push('ask editor');
+      return false;
+    });
+    const remove = TestBed.inject(UnsavedWork).register({ canLeave });
+
+    await actions.switchWorkspace('tenant-2');
+    await actions.signOut();
+    expect(order).toEqual(['ask editor', 'ask editor']);
+
+    canLeave.mockImplementation(async () => {
+      order.push('ask editor');
+      return true;
+    });
+    await actions.switchWorkspace('tenant-2');
+    expect(order.slice(2)).toEqual(['ask editor', 'select tenant-2', 'navigate /']);
+
+    remove();
+    order.length = 0;
+    await actions.signOut();
+    expect(order[0]).toBe('clear notifications');
   });
 
   it('clears both unread counts before signing out, then goes to sign-in', async () => {

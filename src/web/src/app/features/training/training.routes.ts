@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { clientGuard, coachGuard } from '../../core/auth/auth.guards';
+import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { REDESIGNED } from '../../core/theme/redesigned-route';
 
 export const trainingRoutes: Routes = [
@@ -11,9 +12,11 @@ export const trainingRoutes: Routes = [
     loadComponent: () => import('./program-list').then((module) => module.ProgramList),
   },
   {
-    // `new` opens an empty program; one route for both, so saving a new program keeps the page.
+    // `new` opens an empty program (`?draft=` reopens one not published yet); one route for both,
+    // so publishing a new program keeps the page.
     path: 'programs/:templateId',
     canActivate: [coachGuard],
+    canDeactivate: [confirmBeforeLeaving],
     title: $localize`Program builder | TB Gym`,
     data: REDESIGNED,
     loadComponent: () => import('./program-builder').then((module) => module.ProgramBuilder),

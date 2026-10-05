@@ -12,7 +12,7 @@ import {
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
-import type { ProgramTemplateSummary } from '../../core/api/generated';
+import type { ProgramDraftSummary, ProgramTemplateSummary } from '../../core/api/generated';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button, ButtonLink } from '../../ui/button';
@@ -21,7 +21,8 @@ import { Icon } from '../../ui/icon';
 import { SectionNav } from '../../ui/section-nav';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
-import { programCard } from './program-builder.models';
+import { ProgramBuilderApi } from './program-builder-api';
+import { draftCard, programCard } from './program-builder.models';
 import { numeric } from './training-builder.models';
 
 /**
@@ -36,6 +37,7 @@ import { numeric } from './training-builder.models';
 })
 export class ProgramList {
   private readonly api = inject(ApiClient);
+  private readonly programApi = inject(ProgramBuilderApi);
   private readonly tenants = inject(TenantStore);
   private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
@@ -49,14 +51,17 @@ export class ProgramList {
   protected readonly loadingLabel = $localize`Loading your programs…`;
 
   private readonly templates = signal<ProgramTemplateSummary[]>([]);
+  /** The coach's new programs not published yet (TRN-024); changes to saved ones ride their card. */
+  private readonly newDrafts = signal<ProgramDraftSummary[]>([]);
   private readonly total = signal(0);
   protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly loadingMore = signal(false);
   protected readonly moreFailed = signal(false);
 
-  protected readonly cards = computed(() =>
-    this.templates().map((template) => programCard(template, this.locale)),
-  );
+  protected readonly cards = computed(() => [
+    ...this.newDrafts().map((draft) => draftCard(draft, this.locale)),
+    ...this.templates().map((template) => programCard(template, this.locale)),
+  ]);
   protected readonly hasMore = computed(() => this.templates().length < this.total());
   protected readonly summary = computed(() => {
     const count = this.total();
@@ -74,6 +79,7 @@ export class ProgramList {
     this.scope.onReset(() => {
       this.loadedTenantId = null;
       this.templates.set([]);
+      this.newDrafts.set([]);
       this.total.set(0);
       this.state.set('loading');
     });
@@ -93,8 +99,14 @@ export class ProgramList {
     return this.scope.run('load', async (owner) => {
       this.state.set('loading');
       try {
-        const page = await owner.wait(firstValueFrom(this.api.listProgramTemplates(0, 100)));
+        const [page, drafts] = await owner.wait(
+          Promise.all([
+            firstValueFrom(this.api.listProgramTemplates(0, 100)),
+            firstValueFrom(this.programApi.listDrafts()),
+          ]),
+        );
         this.templates.set(page.items);
+        this.newDrafts.set(drafts.filter((draft) => draft.templateId === null));
         this.total.set(numeric(page.total));
         this.state.set('ready');
       } catch {

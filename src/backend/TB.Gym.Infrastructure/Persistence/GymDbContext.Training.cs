@@ -5,6 +5,7 @@ using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
+using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Training;
 
 namespace TB.Gym.Infrastructure.Persistence;
@@ -155,6 +156,48 @@ public sealed partial class GymDbContext
             entity.HasOne<ProgramTemplateSession>()
                 .WithMany()
                 .HasForeignKey(item => new { item.TenantId, item.SourceTemplateSessionId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            ConfigureTenantEntity(entity);
+        });
+
+        // A coach's working copy of a program (TRN-024): one per person and program, plus programs
+        // not published yet, each belonging to a membership of its workspace.
+        builder.Entity<ProgramDraft>(entity =>
+        {
+            entity.ToTable("ProgramDrafts", "training", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_ProgramDrafts_Program",
+                    "(\"TemplateId\" IS NULL AND \"SourceVersionId\" IS NULL AND \"StartedAtVersionNumber\" = 0) OR " +
+                    "(\"TemplateId\" IS NOT NULL AND \"SourceVersionId\" IS NOT NULL AND \"StartedAtVersionNumber\" >= 1)");
+                table.HasCheckConstraint("CK_ProgramDrafts_WeekCount", "\"WeekCount\" BETWEEN 1 AND 52");
+            });
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(160).IsRequired();
+            entity.Property(item => item.ContentJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(item => new { item.TenantId, item.OwnerUserId, item.TemplateId })
+                .IsUnique()
+                .HasFilter("\"TemplateId\" IS NOT NULL")
+                .HasDatabaseName(DatabaseConstraintNames.OneProgramDraftPerPersonAndProgram);
+            entity.HasIndex(item => new { item.TenantId, item.OwnerUserId, item.UpdatedAtUtc });
+            entity.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(item => item.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.OwnerUserId })
+                .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProgramTemplate>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.TemplateId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProgramTemplateVersion>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.SourceVersionId })
                 .HasPrincipalKey(item => new { item.TenantId, item.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             ConfigureTenantEntity(entity);

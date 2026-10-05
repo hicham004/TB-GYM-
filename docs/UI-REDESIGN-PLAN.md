@@ -71,7 +71,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R3.5c | **Saved replies** (C6): a coach's own short replies, kept on the server and dropped into the composer | §2, plus backend tests | Done · 2026-10-04 · 039e121 |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Open, not blocking · 2026-10-05: the owner will demo later and said to carry on with R4 |
 | R4.1 | **Program builder** (C4), part 1: library panel, week grid, drag and drop | §2 | Done · 2026-10-05 |
-| R4.2 | **Program builder**, part 2: inline editing, autosave, unsaved-changes guard, publish preview | §2 | To do |
+| R4.2a | **Program builder**, part 2a: autosave to the coach's own draft on the server, and the unsaved-changes guard (Save draft goes; Publish makes the version) | §2, plus backend tests | Done · 2026-10-05 |
+| R4.2b | **Program builder**, part 2b: inline sets × reps × load / RPE editing on the grid, and the publish preview | §2 | Done · 2026-10-05 |
 | R4.3 | **Check-in review** (C5) | §2 | To do |
 | R4.4 | **Nutrition library and meal-plan builder** (C7) | §2 | To do |
 | R5.1 | **Products** (C8), **Exercise library** (C10), notifications | §2 | To do |
@@ -222,7 +223,10 @@ of the implemented R1.3 screens before production rollout.
   framework code. R4.1 measured 541.3 kB (+2.1 kB): two icon glyphs, the drag preview rule, and CDK
   helpers that drag and drop shares with the overlay code already loaded at start-up (about 1.6 kB
   in the shared chunk). The builder, drag and drop included, is a lazy chunk; its week stylesheet,
-  `program-week.scss`, is 6.8 kB against the 5 kB warning.
+  `program-week.scss`, is 6.8 kB against the 5 kB warning. R4.2a measured 541.7 kB (+0.4 kB):
+  `UnsavedWork`, which the workspace switch and sign-out ask before acting; the drafts, autosave and
+  the confirmation dialog stay in the builder's lazy chunk. R4.2b keeps the initial bundle at
+  541.7 kB; inline editing and preview stay lazy, with `program-week.scss` now 7.3 kB.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -246,9 +250,10 @@ of the implemented R1.3 screens before production rollout.
   and its state, never what the client answered (CHK-012). Showing the answers beside the previous
   check-in's is C5 (R4.3).
 - **An unsaved coach note (from R3.3b).** A refresh or closed tab asks first, but moving to another
-  section discards a note being edited, because the kit has no leave-confirmation dialog yet. The
-  same dialog serves the intake form, C4 and C7 (§9), and the Brand page (R3.5a), which also only
-  asks before a refresh or a closed tab.
+  section discards a note being edited. R4.2a built the kit's leave confirmation for C4 (`UiConfirm`
+  in a Dialog, the `confirmBeforeLeaving` route guard and `UnsavedWork` for a workspace switch or
+  sign-out); the coach note, the intake form, C7 (§9) and the Brand page (R3.5a), which also only asks
+  before a refresh or a closed tab, can use it.
 - **Numbers in right-to-left (from R3.3b).** With English text in an RTL layout "60 kg × 5" and
   "2 of 5" reorder their pieces, as they already do on Today and Clients. Settle it with the
   translation work (locale number formatting, isolating each figure).
@@ -295,14 +300,11 @@ of the implemented R1.3 screens before production rollout.
   and the owner sees "Coached by …" only for a team member's client. A "Last active" line beside the
   plan is possible: the new overview read already returns it.
 - **Program builder, left for later (from R4.1).**
-  - Leaving the builder with unsaved changes still loses them; the guard is R4.2.
-  - A new exercise starts with one set of 5 reps, as before. Sets are edited in the session sheet
-    until R4.2 makes them inline.
   - Approved swaps offer the exercise's alternatives from the library plus any approved before. The
     old screen's multi-select could approve any exercise; an "approve another" picker would bring
     that back.
-  - "Add to saved sessions" copies the session as last saved, so it waits for a save with nothing
-    unsaved.
+  - "Add to saved sessions" copies the session from a saved version, so since R4.2a it waits for
+    Publish ("Publish the program first").
   - With five or more training days beside the library, a week scrolls sideways; "Hide exercises"
     gives the grid the page.
   - On a phone, a session moves to another week only through a wide screen (there is no "Move to
@@ -310,6 +312,15 @@ of the implemented R1.3 screens before production rollout.
   - The Atlas demo has no exercise pictures, so its library shows initials (see "Demo data gaps").
   - `ui/menu.ts` (`UiMenu`) is the kit's menu now. The client page's `ClientActions` could move to
     it.
+- **Program drafts, left for later (from R4.2a).**
+  - Programs' summary line ("4 programs, 4 ready to assign") counts saved programs only, not the
+    coach's new drafts listed above them.
+  - A card keeps the program's published name while the coach's draft renames it; the draft's name
+    shows once it is published.
+  - Drafts of a coach who left a workspace stay with their ended membership, unseen. A sweep could
+    remove them, and new-program drafts untouched for months, if storage ever matters.
+  - The leave confirmation (`UiConfirm`, `confirmBeforeLeaving`, `UnsavedWork`) is ready for the other
+    editors that still lose work on navigation: the coach note, Brand, the intake form and C7.
 
 ---
 
@@ -720,11 +731,41 @@ limited to the coach's assigned clients.
     day starts a session there.
   - The keyboard and phone way: + on a rest day or a session opens an add sheet, and each card's
     menu offers Edit, Copy (to the next free day), Add to saved sessions and Delete.
-  - Sets × reps × load are edited in the session sheet with kit fields until R4.2 makes them inline.
+  - Sets × reps × load initially used the session sheet; R4.2b adds editing on the grid.
   - Save draft and Publish make a new version; Versions opens earlier ones. A save that lost a race
     says so and offers the newest version.
   - A phone shows one week at a time behind week chips.
   - Follows dark mode. Screenshots on the Atlas demo: `docs/design/r41-*.png`.
+- Built in R4.2a (the owner chose a draft on the server and no Save draft; ADR 0033, TRN-024):
+  - Changes keep themselves: a moment after the coach stops typing or dragging (at most 8 seconds
+    behind), the program goes to their own draft on the server, which follows them to any device and
+    nobody else sees. The line beside Publish says "Saving…", then "Saved at 14:32, not published
+    yet" ("Saved on Sun 4 Oct, …" for an older one); "Not saved yet. Trying again…" and "Not saved"
+    are the warm cases. A screen reader hears only a failure and the save that ends it.
+  - Opening a program with a draft opens the draft, saying so when a version was published since.
+    Publish stores anything unsent, then turns the draft into the next version; when someone published
+    in between it asks first ("Publish mine as the newest" or "Discard mine"). Discard changes asks,
+    then brings back the program as last published. Opening another version from Versions asks before
+    discarding.
+  - A new program is a draft at `/training/programs/new?draft=…` from its first change, and Programs
+    lists it first as "Draft · Only you can see it until you publish it"; a program with the coach's
+    changes says "Your changes are not published yet".
+  - Leaving sends what is unsent first and asks only when that fails ("Leave without saving?", the kit's
+    new `UiConfirm` in a Dialog that stays open on Back). A refresh or closed tab gets the browser's
+    warning, a hidden tab sends at once, and a workspace switch or sign-out asks the open editor first
+    (`UnsavedWork`). Another tab that saved later is named, and Reload shows its version.
+  - Screenshots on the Atlas demo: `docs/design/r42a-*.png`.
+- Built in R4.2b:
+  - Each exercise's prescription opens inline on the grid. Sets keep their individual reps, load,
+    unit, RPE/RIR, rest, tempo and notes; Add a set copies the last one, up to 20. The same editor
+    and kit menus serve the session sheet. Invalid fields explain the rule, and Publish opens and
+    focuses the first correction. Every edit uses the existing private-draft autosave.
+  - Publish first opens a read-only week preview with every set and client note. Unshared weeks
+    hide their content; the internal description stays private. Dates and calculated client loads
+    wait for assignment. Only the confirmation publishes an immutable version; Back to editing
+    keeps the draft, and clients already assigned keep their snapshots.
+  - Screenshots on the Atlas demo: `docs/design/r42b-inline-{390,1440}.png` and
+    `docs/design/r42b-preview-{390,1440}.png`.
 
 **C5. Check-in review**
 - Job: "Review and reply in under two minutes."

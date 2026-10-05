@@ -25,6 +25,35 @@ public interface ITrainingApplicationService
         SaveProgramTemplateRequest request,
         CancellationToken cancellationToken);
 
+    /// <summary>The caller's own program drafts in this workspace, newest change first (TRN-024).</summary>
+    Task<IReadOnlyList<ProgramDraftSummary>> ListProgramDraftsAsync(CancellationToken cancellationToken);
+
+    /// <summary>One of the caller's own drafts with its content; null for anyone else's or none.</summary>
+    Task<ProgramDraftView?> GetProgramDraftAsync(Guid draftId, CancellationToken cancellationToken);
+
+    Task<TrainingCommandResult> CreateProgramDraftAsync(
+        CreateProgramDraftRequest request,
+        CancellationToken cancellationToken);
+
+    Task<TrainingCommandResult> SaveProgramDraftAsync(
+        Guid draftId,
+        SaveProgramDraftRequest request,
+        CancellationToken cancellationToken);
+
+    Task<TrainingCommandResult> DiscardProgramDraftAsync(
+        Guid draftId,
+        DiscardProgramDraftRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Checks the draft as any save is checked, creates the program's next version (or the program
+    /// and its first version) published, and removes the draft, in one transaction.
+    /// </summary>
+    Task<TrainingCommandResult> PublishProgramDraftAsync(
+        Guid draftId,
+        PublishProgramDraftRequest request,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<SavedSessionView>> ListSavedSessionsAsync(CancellationToken cancellationToken);
 
     Task<TrainingCommandResult> SaveSessionAsync(
@@ -157,13 +186,15 @@ public sealed record ProgramTemplatePage(
     int Take,
     IReadOnlyList<ProgramTemplateSummary> Items);
 
+/// <param name="Draft">The caller's own unpublished changes to this program, if any (TRN-024).</param>
 public sealed record ProgramTemplateSummary(
     Guid Id,
     string Name,
     int CurrentVersionNumber,
     bool IsArchived,
     uint Version,
-    IReadOnlyList<ProgramTemplateVersionSummary> Versions);
+    IReadOnlyList<ProgramTemplateVersionSummary> Versions,
+    ProgramDraftSummary? Draft = null);
 
 public sealed record ProgramTemplateVersionSummary(
     Guid Id,
@@ -225,6 +256,71 @@ public sealed record SetPrescriptionRequest(
     string? Tempo,
     string? CoachNotes,
     decimal? ManualLoadOverride = null);
+
+/// <summary>
+/// The builder's program as it stands mid-edit (TRN-024): the shape of a save, whose values are
+/// checked only when it is published.
+/// </summary>
+public sealed record ProgramDraftContent(
+    string Name,
+    string? Description,
+    IReadOnlyList<TrainingWeekRequest> Weeks);
+
+/// <param name="TemplateId">The program it changes; null for a new program.</param>
+/// <param name="SourceVersionId">The version the builder opened; null for a new program.</param>
+/// <param name="TemplateVersionNumber">The program's newest version number when the builder read it.</param>
+public sealed record CreateProgramDraftRequest(
+    Guid? TemplateId,
+    Guid? SourceVersionId,
+    int? TemplateVersionNumber,
+    ProgramDraftContent Content);
+
+public sealed record SaveProgramDraftRequest(ProgramDraftContent Content, uint Version);
+
+public sealed record DiscardProgramDraftRequest(uint Version);
+
+/// <param name="ReplaceNewer">
+/// Publish even though someone published a version after this draft began; theirs stays in the
+/// program's versions.
+/// </param>
+public sealed record PublishProgramDraftRequest(uint Version, bool ReplaceNewer);
+
+public sealed record ProgramDraftSummary(
+    Guid Id,
+    Guid? TemplateId,
+    string Name,
+    int WeekCount,
+    DateTimeOffset UpdatedAtUtc);
+
+/// <param name="Exercises">Every exercise the content names, archived ones included, for its names.</param>
+public sealed record ProgramDraftView(
+    Guid Id,
+    Guid? TemplateId,
+    Guid? SourceVersionId,
+    int StartedAtVersionNumber,
+    DateTimeOffset UpdatedAtUtc,
+    uint Version,
+    ProgramDraftContent Content,
+    IReadOnlyList<ProgramDraftExerciseView> Exercises);
+
+public sealed record ProgramDraftExerciseView(Guid Id, string Name, bool IsArchived);
+
+/// <summary>What a draft save answers: small, since the builder already holds the content.</summary>
+public sealed record ProgramDraftSaveView(Guid Id, DateTimeOffset UpdatedAtUtc, uint Version);
+
+public static class ProgramDraftConflictCodes
+{
+    /// <summary>The caller already has a draft of this program, made in another tab or device.</summary>
+    public const string AlreadyExists = "program_draft_exists";
+
+    public const string LimitReached = "program_draft_limit";
+
+    /// <summary>The draft was changed or removed in another tab or device since this one read it.</summary>
+    public const string Stale = "program_draft_stale";
+
+    /// <summary>Someone published a version of the program after this draft began.</summary>
+    public const string NewerVersionPublished = "newer_version_published";
+}
 
 public sealed record SavedSessionView(
     Guid Id,
@@ -763,7 +859,8 @@ public sealed record TrainingCommandResult(
     WorkoutSetSaveView? SetSave = null,
     IReadOnlyDictionary<string, string[]>? Errors = null,
     string? Code = null,
-    string? Message = null);
+    string? Message = null,
+    ProgramDraftSaveView? Draft = null);
 
 public enum TrainingCommandStatus
 {

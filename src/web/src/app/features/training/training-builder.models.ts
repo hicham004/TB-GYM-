@@ -1,6 +1,8 @@
 import type {
   ExertionDisplayPreference,
   PrescriptionModificationPolicy,
+  ProgramDraftContent,
+  ProgramDraftView,
   ProgramTemplateVersionView,
   SaveProgramTemplateRequest,
   SavedSessionView,
@@ -223,6 +225,75 @@ export function toProgramRequest(draft: ProgramDraft): SaveProgramTemplateReques
       label: nullableText(week.label),
       isPublished: week.isPublished,
       sessions: week.sessions.map(toTrainingSessionRequest),
+    })),
+  };
+}
+
+/**
+ * The program as the server keeps it mid-edit (TRN-024): the shape of a save, whose values are
+ * checked only when it is published, so a half-typed number travels as it is.
+ */
+export function toDraftContent(draft: ProgramDraft): ProgramDraftContent {
+  const { name, description, weeks } = toProgramRequest(draft);
+  return { name, description, weeks };
+}
+
+/**
+ * A draft read back from the server. Exercise names come from the workspace's library as it is now;
+ * an exercise it no longer has keeps an empty name, and publishing says so.
+ */
+export function draftFromContent(view: ProgramDraftView): ProgramDraft {
+  const names = new Map(view.exercises.map((exercise) => [exercise.id, exercise.name]));
+  const content = view.content;
+  return {
+    templateId: view.templateId,
+    sourceVersion: null,
+    sourceVersionId: view.sourceVersionId,
+    name: content.name,
+    description: content.description ?? '',
+    publish: false,
+    weeks: content.weeks.map((week) => ({
+      key: key(),
+      sourceId: null,
+      label: week.label ?? '',
+      isPublished: week.isPublished,
+      sessions: week.sessions.map((session) => ({
+        key: key(),
+        sourceId: null,
+        name: session.name,
+        dayOffset: numeric(session.dayOffset),
+        coachNotes: session.coachNotes ?? '',
+        exercises: session.exercises.map((exercise) => ({
+          key: key(),
+          exerciseId: exercise.exerciseId,
+          exerciseName: names.get(exercise.exerciseId) ?? '',
+          isMainLift: exercise.isMainLift,
+          modificationPolicy: exercise.modificationPolicy,
+          coachNotes: exercise.coachNotes ?? '',
+          approvedAlternativeExerciseIds: [...exercise.approvedAlternativeExerciseIds],
+          sets: exercise.sets.map((set) => ({
+            key: key(),
+            setType: set.setType,
+            repetitionsMinimum: nullableNumeric(set.repetitionsMinimum ?? null),
+            repetitionsMaximum: nullableNumeric(set.repetitionsMaximum ?? null),
+            loadStrategy: set.loadStrategy,
+            loadValue:
+              set.loadStrategy === 'Direct'
+                ? nullableNumeric(set.directLoad ?? null)
+                : nullableNumeric(set.percentageWorkingMax ?? null),
+            loadUnit: set.loadUnit ?? 'Kilogram',
+            exertionDisplayPreference: set.exertionDisplayPreference,
+            exertionTarget:
+              set.exertionDisplayPreference === 'Rir'
+                ? nullableNumeric(set.targetRir ?? null)
+                : nullableNumeric(set.targetRpe ?? null),
+            restSeconds: nullableNumeric(set.restSeconds ?? null),
+            tempo: set.tempo ?? '',
+            coachNotes: set.coachNotes ?? '',
+            manualLoadOverride: nullableNumeric(set.manualLoadOverride ?? null),
+          })),
+        })),
+      })),
     })),
   };
 }

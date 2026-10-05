@@ -139,7 +139,7 @@ export class ClientAccount {
   }
 
   protected chooseWorkspace(tenantId: string): void {
-    this.session.switchWorkspace(tenantId);
+    void this.session.switchWorkspace(tenantId);
   }
 
   protected async signOut(): Promise<void> {

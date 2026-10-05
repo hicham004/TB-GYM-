@@ -2,6 +2,7 @@ import { formatDate } from '@angular/common';
 import type {
   ExerciseView,
   MovementPattern,
+  ProgramDraftSummary,
   ProgramTemplateSummary,
   SavedSessionView,
 } from '../../core/api/generated';
@@ -70,11 +71,15 @@ export function trainingDays(draft: ProgramDraft): ReadonlySet<number> {
  * The grid's columns, the same for every week so the days line up down the page. A day that holds
  * a session somewhere is wide enough for exercise names; a rest day everywhere is a narrow column.
  */
-export function gridColumns(draft: ProgramDraft): string {
+export function gridColumns(draft: ProgramDraft, editingDay: number | null = null): string {
   const used = trainingDays(draft);
-  return DAYS.map((day) => (used.has(day) ? 'minmax(9rem, 1fr)' : 'minmax(4.25rem, 0.4fr)')).join(
-    ' ',
-  );
+  return DAYS.map((day) =>
+    day === editingDay
+      ? 'minmax(20rem, 1.8fr)'
+      : used.has(day)
+        ? 'minmax(9rem, 1fr)'
+        : 'minmax(4.25rem, 0.4fr)',
+  ).join(' ');
 }
 
 /**
@@ -93,12 +98,15 @@ export function exerciseSummary(exercise: DraftExercise): string {
 
   const working = sets.filter((set) => set.setType !== 'WarmUp');
   const pool = working.length > 0 ? working : sets;
+  const override = pool.find((set) => set.manualLoadOverride !== null);
   const loaded = pool.find(
     (set) =>
       (set.loadStrategy === 'PercentageWorkingMax' || set.loadStrategy === 'Direct') &&
       set.loadValue !== null,
   );
-  if (loaded?.loadStrategy === 'PercentageWorkingMax') {
+  if (override) {
+    parts.push(`${override.manualLoadOverride} ${override.loadUnit === 'Pound' ? 'lb' : 'kg'}`);
+  } else if (loaded?.loadStrategy === 'PercentageWorkingMax') {
     parts.push(`${loaded.loadValue}%`);
   } else if (loaded?.loadStrategy === 'Direct') {
     parts.push(`${loaded.loadValue} ${loaded.loadUnit === 'Pound' ? 'lb' : 'kg'}`);
@@ -111,6 +119,27 @@ export function exerciseSummary(exercise: DraftExercise): string {
         ? `RIR ${effort.exertionTarget}`
         : `RPE ${effort.exertionTarget}`,
     );
+  }
+  return parts.join(' · ');
+}
+
+/** Every set's exact prescription, including a coach's override; a preview never guesses a load. */
+export function setSummary(set: DraftSet): string {
+  const parts = [sharedReps([set]) ?? $localize`Reps not prescribed`];
+  const unit = set.loadUnit === 'Pound' ? 'lb' : 'kg';
+  if (set.manualLoadOverride !== null) {
+    parts.push($localize`${set.manualLoadOverride}:load: ${unit}:unit: fixed load`);
+  } else if (set.loadStrategy === 'Direct' && set.loadValue !== null) {
+    parts.push(`${set.loadValue} ${unit}`);
+  } else if (set.loadStrategy === 'PercentageWorkingMax' && set.loadValue !== null) {
+    parts.push($localize`${set.loadValue}:percentage:% of training max`);
+  } else if (set.loadStrategy === 'RpeBasedEpley') {
+    parts.push($localize`Load from training max & effort`);
+  } else {
+    parts.push($localize`No prescribed load`);
+  }
+  if (set.exertionTarget !== null) {
+    parts.push(`${set.exertionDisplayPreference === 'Rir' ? 'RIR' : 'RPE'} ${set.exertionTarget}`);
   }
   return parts.join(' · ');
 }
@@ -460,6 +489,8 @@ export interface DraftProblem {
   message: string;
   weekKey?: string;
   sessionKey?: string;
+  exerciseKey?: string;
+  setKey?: string;
 }
 
 export function draftProblem(draft: ProgramDraft): DraftProblem | null {
@@ -489,7 +520,12 @@ export function draftProblem(draft: ProgramDraft): DraftProblem | null {
         for (const set of exercise.sets) {
           const problem = setProblem(set);
           if (problem) {
-            return { ...where, message: `${place}: ${problem}` };
+            return {
+              ...where,
+              exerciseKey: exercise.key,
+              setKey: set.key,
+              message: `${place}: ${problem}`,
+            };
           }
         }
       }
@@ -499,59 +535,103 @@ export function draftProblem(draft: ProgramDraft): DraftProblem | null {
 }
 
 /** The same limits the server checks (TRN-005, TRN-016 and the RPE rules), in coach words. */
-function setProblem(set: DraftSet): string | null {
-  const reps = [set.repetitionsMinimum, set.repetitionsMaximum];
-  if (reps.some((value) => value !== null && (value < 1 || value > 100))) {
-    return $localize`reps must be between 1 and 100.`;
+export function setProblem(set: DraftSet): string | null {
+  return setIssue(set)?.message ?? null;
+}
+
+export interface SetIssue {
+  field:
+    | 'repetitionsMinimum'
+    | 'repetitionsMaximum'
+    | 'restSeconds'
+    | 'exertionTarget'
+    | 'manualLoadOverride'
+    | 'loadValue';
+  message: string;
+}
+
+/** Identifies the field as well as the rule, so both editors explain and focus the same problem. */
+export function setIssue(set: DraftSet): SetIssue | null {
+  for (const field of ['repetitionsMinimum', 'repetitionsMaximum'] as const) {
+    const value = set[field];
+    if (value !== null && (value < 1 || value > 100))
+      return { field, message: $localize`reps must be between 1 and 100.` };
+    if (value !== null && !Number.isInteger(value))
+      return { field, message: $localize`reps must be whole numbers.` };
   }
   if (
     set.repetitionsMinimum !== null &&
     set.repetitionsMaximum !== null &&
     set.repetitionsMinimum > set.repetitionsMaximum
   ) {
-    return $localize`the lowest reps can’t be more than the highest.`;
+    return {
+      field: 'repetitionsMinimum',
+      message: $localize`the lowest reps can’t be more than the highest.`,
+    };
   }
-  if (set.restSeconds !== null && (set.restSeconds < 0 || set.restSeconds > 3600)) {
-    return $localize`rest must be between 0 and 3600 seconds.`;
-  }
+  if (set.restSeconds !== null && (set.restSeconds < 0 || set.restSeconds > 3600))
+    return { field: 'restSeconds', message: $localize`rest must be between 0 and 3600 seconds.` };
+  if (set.restSeconds !== null && !Number.isInteger(set.restSeconds))
+    return { field: 'restSeconds', message: $localize`rest must be a whole number of seconds.` };
   if (set.exertionTarget !== null) {
     const rpe = set.exertionDisplayPreference === 'Rpe';
     const [minimum, maximum] = rpe ? [5, 10] : [0, 5];
     if (
       set.exertionTarget < minimum ||
       set.exertionTarget > maximum ||
-      set.exertionTarget * 2 !== Math.trunc(set.exertionTarget * 2)
+      !Number.isInteger(set.exertionTarget * 2)
     ) {
-      return rpe
-        ? $localize`RPE must be between 5 and 10 in 0.5 steps.`
-        : $localize`RIR must be between 0 and 5 in 0.5 steps.`;
+      return {
+        field: 'exertionTarget',
+        message: rpe
+          ? $localize`RPE must be between 5 and 10 in 0.5 steps.`
+          : $localize`RIR must be between 0 and 5 in 0.5 steps.`,
+      };
     }
+  }
+  // The server builds a direct prescription from an override before checking a calculated load.
+  if (set.manualLoadOverride !== null) {
+    return set.manualLoadOverride <= 0 ||
+      set.manualLoadOverride > 2000 ||
+      set.loadStrategy === 'None'
+      ? {
+          field: 'manualLoadOverride',
+          message: $localize`a fixed load must be more than 0 and at most 2000, with a load unit.`,
+        }
+      : null;
   }
   if (
     set.loadStrategy === 'Direct' &&
     (set.loadValue === null || set.loadValue <= 0 || set.loadValue > 2000)
-  ) {
-    return $localize`a set load must be more than 0 and at most 2000.`;
-  }
+  )
+    return {
+      field: 'loadValue',
+      message: $localize`a set load must be more than 0 and at most 2000.`,
+    };
   if (
     set.loadStrategy === 'PercentageWorkingMax' &&
     (set.loadValue === null || set.loadValue <= 0 || set.loadValue > 150)
-  ) {
-    return $localize`a percentage of the training max must be more than 0 and at most 150.`;
-  }
+  )
+    return {
+      field: 'loadValue',
+      message: $localize`a percentage of the training max must be more than 0 and at most 150.`,
+    };
   if (set.loadStrategy === 'RpeBasedEpley') {
-    if (set.exertionTarget === null || set.repetitionsMaximum === null) {
-      return $localize`a load from RPE needs the highest reps and an RPE or RIR target.`;
-    }
+    if (set.exertionTarget === null || set.repetitionsMaximum === null)
+      return {
+        field: set.exertionTarget === null ? 'exertionTarget' : 'repetitionsMaximum',
+        message: $localize`a load from RPE needs the highest reps and an RPE or RIR target.`,
+      };
     const rir =
       set.exertionDisplayPreference === 'Rir' ? set.exertionTarget : 10 - set.exertionTarget;
-    if (set.repetitionsMaximum + rir > 12) {
-      return $localize`for a load from RPE, the highest reps plus RIR can’t be more than 12.`;
-    }
+    if (set.repetitionsMaximum + rir > 12)
+      return {
+        field: 'repetitionsMaximum',
+        message: $localize`for a load from RPE, the highest reps plus RIR can’t be more than 12.`,
+      };
   }
   return null;
 }
-
 // ---------- the exercise library panel ----------
 
 export type LibraryGroup = 'all' | 'squat' | 'hinge' | 'push' | 'pull' | 'single' | 'other';
@@ -671,35 +751,67 @@ export function filterLibrary(
 export interface ProgramCard {
   id: string;
   name: string;
+  /** Where the card opens: the program, or a new program's draft. */
+  link: readonly string[];
+  query: Record<string, string> | null;
   weeks: string;
   status: string;
   tone: 'success' | 'neutral';
-  /** Set when the newest version is a draft but an older one can be assigned. */
+  /** Changes not published yet: the coach's own draft, or a newest version that is a draft. */
   note: string | null;
   changed: string;
+}
+
+function weeksText(weeks: number): string {
+  return weeks === 1 ? $localize`1 week` : $localize`${weeks}:count: weeks`;
 }
 
 export function programCard(template: ProgramTemplateSummary, locale: string): ProgramCard {
   const latest = template.versions[0];
   const weeks = latest ? numeric(latest.weekCount) : 0;
   const assignable = template.versions.some((version) => version.isPublished);
+  const draft = template.draft ?? null;
   return {
     id: template.id,
     name: template.name,
-    weeks: weeks === 1 ? $localize`1 week` : $localize`${weeks}:count: weeks`,
+    link: ['/training/programs', template.id],
+    query: null,
+    weeks: weeksText(draft ? numeric(draft.weekCount) : weeks),
     status: assignable ? $localize`Ready to assign` : $localize`Draft`,
     tone: assignable ? 'success' : 'neutral',
-    note:
-      assignable && latest && !latest.isPublished ? $localize`Newest changes not published` : null,
-    changed: latest
-      ? $localize`Changed ${formatDate(latest.createdAtUtc, 'EEE d MMM', locale)}:date:`
-      : '',
+    note: draft
+      ? $localize`Your changes are not published yet`
+      : assignable && latest && !latest.isPublished
+        ? $localize`Newest changes not published`
+        : null,
+    changed: draft
+      ? $localize`Changed ${formatDate(draft.updatedAtUtc, 'EEE d MMM', locale)}:date:`
+      : latest
+        ? $localize`Changed ${formatDate(latest.createdAtUtc, 'EEE d MMM', locale)}:date:`
+        : '',
+  };
+}
+
+/** A new program kept as its coach's draft (TRN-024): theirs alone until it is published. */
+export function draftCard(draft: ProgramDraftSummary, locale: string): ProgramCard {
+  return {
+    id: draft.id,
+    name: draft.name.trim() || $localize`Untitled program`,
+    link: ['/training/programs', 'new'],
+    query: { draft: draft.id },
+    weeks: weeksText(numeric(draft.weekCount)),
+    status: $localize`Draft`,
+    tone: 'neutral',
+    note: $localize`Only you can see it until you publish it`,
+    changed: $localize`Changed ${formatDate(draft.updatedAtUtc, 'EEE d MMM', locale)}:date:`,
   };
 }
 
 export interface VersionRow {
   id: string;
   title: string;
+  /** "Open version 2", so each row's button says which version it opens. */
+  openLabel: string;
   state: string;
   isPublished: boolean;
   date: string;
@@ -715,6 +827,7 @@ export function versionRows(
   return template.versions.map((version) => ({
     id: version.id,
     title: $localize`Version ${numeric(version.versionNumber)}:number:`,
+    openLabel: $localize`Open version ${numeric(version.versionNumber)}:number:`,
     state: version.isPublished ? $localize`Published` : $localize`Draft`,
     isPublished: version.isPublished,
     date: formatDate(version.createdAtUtc, 'EEE d MMM, HH:mm', locale),

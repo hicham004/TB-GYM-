@@ -31,7 +31,7 @@ export class UiSheet {
       role: 'dialog',
       ariaModal: true,
       ariaLabelledBy: data.titleId,
-      autoFocus: 'first-heading',
+      autoFocus: options.initialFocus ?? 'first-heading',
       restoreFocus: true,
       hasBackdrop: true,
       backdropClass: 'tb-modal-backdrop',

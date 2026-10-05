@@ -125,7 +125,7 @@ export class App implements OnInit {
    */
   protected switchWorkspace(tenantId: string | null): void {
     this.menuOpen.set(false);
-    this.session.switchWorkspace(tenantId);
+    void this.session.switchWorkspace(tenantId);
   }
 
   protected async logout(): Promise<void> {

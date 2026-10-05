@@ -52,7 +52,7 @@
               </div>
               <h2 class="card-name" dir="auto">
                 <!-- The whole card is the link (a stretched link), named by the program. -->
-                <a class="stretched" [routerLink]="['/training/programs', card.id]">{{
+                <a class="stretched" [routerLink]="card.link" [queryParams]="card.query">{{
                   card.name
                 }}</a>
               </h2>

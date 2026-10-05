@@ -1358,6 +1358,13 @@ export type CreateProductOfferRequest = {
   features: Array<OfferFeatureRequest>;
 };
 
+export type CreateProgramDraftRequest = {
+  templateId: null | string;
+  sourceVersionId: null | string;
+  templateVersionNumber: null | number | string;
+  content: ProgramDraftContent;
+};
+
 export type CreateRecipeRequest = {
   name: string;
   instructions: string;
@@ -1513,6 +1520,10 @@ export type DeleteSavedReplyRequest = {
 export type DeriveCheckInDraftRequest = {
   sourceVersionId: string;
   formVersion: number | string;
+};
+
+export type DiscardProgramDraftRequest = {
+  version: number | string;
 };
 
 export type EditMessageRequest = {
@@ -2327,6 +2338,43 @@ export type ProductOfferView = {
   version: number | string;
 };
 
+export type ProgramDraftContent = {
+  name: string;
+  description: null | string;
+  weeks: Array<TrainingWeekRequest>;
+};
+
+export type ProgramDraftExerciseView = {
+  id: string;
+  name: string;
+  isArchived: boolean;
+};
+
+export type ProgramDraftSaveView = {
+  id: string;
+  updatedAtUtc: string;
+  version: number | string;
+};
+
+export type ProgramDraftSummary = {
+  id: string;
+  templateId: null | string;
+  name: string;
+  weekCount: number | string;
+  updatedAtUtc: string;
+};
+
+export type ProgramDraftView = {
+  id: string;
+  templateId: null | string;
+  sourceVersionId: null | string;
+  startedAtVersionNumber: number | string;
+  updatedAtUtc: string;
+  version: number | string;
+  content: ProgramDraftContent;
+  exercises: Array<ProgramDraftExerciseView>;
+};
+
 export type ProgramTemplatePage = {
   total: number | string;
   skip: number | string;
@@ -2341,6 +2389,7 @@ export type ProgramTemplateSummary = {
   isArchived: boolean;
   version: number | string;
   versions: Array<ProgramTemplateVersionSummary>;
+  draft?: null | ProgramDraftSummary;
 };
 
 export type ProgramTemplateVersionSummary = {
@@ -2465,6 +2514,11 @@ export type PublishPricePlanRequest = {
   graceDays: number | string;
   expectedCurrentVersion: number | string;
   note: null | string;
+};
+
+export type PublishProgramDraftRequest = {
+  version: number | string;
+  replaceNewer: boolean;
 };
 
 export type RealtimeAcknowledgementResult = {
@@ -2730,6 +2784,11 @@ export type SavedSessionView = {
   sourceTemplateVersionId: string;
   sourceTemplateSessionId: string;
   session: TrainingSessionView;
+};
+
+export type SaveProgramDraftRequest = {
+  content: ProgramDraftContent;
+  version: number | string;
 };
 
 export type SaveProgramTemplateRequest = {
@@ -5499,6 +5558,185 @@ export type AddProgramTemplateVersionResponses = {
 
 export type AddProgramTemplateVersionResponse =
   AddProgramTemplateVersionResponses[keyof AddProgramTemplateVersionResponses];
+
+export type ListProgramDraftsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/training/program-drafts';
+};
+
+export type ListProgramDraftsResponses = {
+  /**
+   * OK
+   */
+  200: Array<ProgramDraftSummary>;
+};
+
+export type ListProgramDraftsResponse =
+  ListProgramDraftsResponses[keyof ListProgramDraftsResponses];
+
+export type CreateProgramDraftData = {
+  body: CreateProgramDraftRequest;
+  path?: never;
+  query?: never;
+  url: '/api/training/program-drafts';
+};
+
+export type CreateProgramDraftErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CreateProgramDraftError = CreateProgramDraftErrors[keyof CreateProgramDraftErrors];
+
+export type CreateProgramDraftResponses = {
+  /**
+   * OK
+   */
+  200: ProgramDraftSaveView;
+};
+
+export type CreateProgramDraftResponse =
+  CreateProgramDraftResponses[keyof CreateProgramDraftResponses];
+
+export type GetProgramDraftData = {
+  body?: never;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/training/program-drafts/{draftId}';
+};
+
+export type GetProgramDraftErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetProgramDraftResponses = {
+  /**
+   * OK
+   */
+  200: ProgramDraftView;
+};
+
+export type GetProgramDraftResponse = GetProgramDraftResponses[keyof GetProgramDraftResponses];
+
+export type SaveProgramDraftData = {
+  body: SaveProgramDraftRequest;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/training/program-drafts/{draftId}';
+};
+
+export type SaveProgramDraftErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SaveProgramDraftError = SaveProgramDraftErrors[keyof SaveProgramDraftErrors];
+
+export type SaveProgramDraftResponses = {
+  /**
+   * OK
+   */
+  200: ProgramDraftSaveView;
+};
+
+export type SaveProgramDraftResponse = SaveProgramDraftResponses[keyof SaveProgramDraftResponses];
+
+export type DiscardProgramDraftData = {
+  body: DiscardProgramDraftRequest;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/training/program-drafts/{draftId}/discard';
+};
+
+export type DiscardProgramDraftErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type DiscardProgramDraftError = DiscardProgramDraftErrors[keyof DiscardProgramDraftErrors];
+
+export type DiscardProgramDraftResponses = {
+  /**
+   * No Content
+   */
+  204: void;
+};
+
+export type DiscardProgramDraftResponse =
+  DiscardProgramDraftResponses[keyof DiscardProgramDraftResponses];
+
+export type PublishProgramDraftData = {
+  body: PublishProgramDraftRequest;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/training/program-drafts/{draftId}/publish';
+};
+
+export type PublishProgramDraftErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PublishProgramDraftError = PublishProgramDraftErrors[keyof PublishProgramDraftErrors];
+
+export type PublishProgramDraftResponses = {
+  /**
+   * OK
+   */
+  200: ProgramTemplateVersionView;
+};
+
+export type PublishProgramDraftResponse =
+  PublishProgramDraftResponses[keyof PublishProgramDraftResponses];
 
 export type ListSavedTrainingSessionsData = {
   body?: never;

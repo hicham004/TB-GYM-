@@ -12,25 +12,31 @@ import {
   draftProblem,
   duplicateWeekAfter,
   exerciseSummary,
+  setSummary,
+  setIssue,
   filterLibrary,
   gridColumns,
   libraryChips,
   libraryExercise,
   type LibraryExercise,
   moveWeek,
+  draftCard,
   programCard,
   removeWeek,
   versionRows,
   versionToOpen,
 } from './program-builder.models';
+import { draftSummary, draftView } from '../../../testing/program-builder-fixtures';
 import {
   type DraftSession,
+  draftFromContent,
   emptyExercise,
   emptyProgram,
   emptySession,
   emptySet,
   emptyWeek,
   type ProgramDraft,
+  toDraftContent,
 } from './training-builder.models';
 
 function exerciseView(overrides: Partial<ExerciseView> = {}): ExerciseView {
@@ -88,6 +94,40 @@ const names = (draft: ProgramDraft, week = 0) =>
   draft.weeks[week].sessions.map((item) => `${item.name}@${item.dayOffset}`);
 
 describe('program builder grid', () => {
+  it('widens the day being edited while keeping the same aligned columns across weeks', () => {
+    expect(gridColumns(program(), 0).split('minmax(20rem, 1.8fr)')).toHaveLength(2);
+  });
+
+  it('describes exact per-set targets and preserves a fixed override’s unit', () => {
+    const set = {
+      ...emptySet(),
+      loadStrategy: 'PercentageWorkingMax' as const,
+      loadValue: 75,
+      repetitionsMinimum: 3,
+      repetitionsMaximum: 6,
+      exertionTarget: 8,
+    };
+    expect(setSummary(set)).toBe('3–6 · 75% of training max · RPE 8');
+    expect(setSummary({ ...set, manualLoadOverride: 80, loadUnit: 'Pound' })).toBe(
+      '3–6 · 80 lb fixed load · RPE 8',
+    );
+    expect(setSummary({ ...set, loadStrategy: 'RpeBasedEpley' })).toBe(
+      '3–6 · Load from training max & effort · RPE 8',
+    );
+  });
+
+  it('lets a fixed coach load win over a calculated target while still validating its effort', () => {
+    const set = {
+      ...emptySet(),
+      loadStrategy: 'RpeBasedEpley' as const,
+      repetitionsMaximum: 20,
+      exertionTarget: 8,
+      manualLoadOverride: 80,
+    };
+    expect(setIssue(set)).toBeNull();
+    expect(setIssue({ ...set, manualLoadOverride: 0 })?.field).toBe('manualLoadOverride');
+    expect(setIssue({ ...set, exertionTarget: 11 })?.field).toBe('exertionTarget');
+  });
   it('gives room to days that hold a session in any week and keeps rest days narrow', () => {
     const columns = gridColumns(program()).split(' minmax');
     expect(columns).toHaveLength(7);
@@ -322,6 +362,8 @@ describe('program builder save checks', () => {
     expect(draftProblem(draft)).toEqual({
       weekKey: draft.weeks[1].key,
       sessionKey: second.key,
+      exerciseKey: second.exercises[0].key,
+      setKey: second.exercises[0].sets[0].key,
       message: 'Week 2, Lower B: RPE must be between 5 and 10 in 0.5 steps.',
     });
 
@@ -388,6 +430,8 @@ describe('program list and versions', () => {
     expect(programCard(template, 'en-US')).toEqual({
       id: 'template-1',
       name: 'Strength base',
+      link: ['/training/programs', 'template-1'],
+      query: null,
       weeks: '4 weeks',
       status: 'Ready to assign',
       tone: 'success',
@@ -402,15 +446,97 @@ describe('program list and versions', () => {
     });
   });
 
+  it('shows the coach’s own changes on their program’s card, by their own length and date', () => {
+    const changed = { ...template, draft: draftSummary({ weekCount: 6 }) };
+    expect(programCard(changed, 'en-US')).toMatchObject({
+      weeks: '6 weeks',
+      note: 'Your changes are not published yet',
+      changed: 'Changed Sun 4 Oct',
+    });
+  });
+
+  it('shows a new program not published yet as the coach’s own, opening its draft', () => {
+    expect(draftCard(draftSummary({ id: 'd-9', templateId: null, name: ' ' }), 'en-US')).toEqual({
+      id: 'd-9',
+      name: 'Untitled program',
+      link: ['/training/programs', 'new'],
+      query: { draft: 'd-9' },
+      weeks: '1 week',
+      status: 'Draft',
+      tone: 'neutral',
+      note: 'Only you can see it until you publish it',
+      changed: 'Changed Sun 4 Oct',
+    });
+  });
+
   it('opens the newest version unless the address names an older one of this program', () => {
     expect(versionToOpen(template, null)).toBe('v3');
     expect(versionToOpen(template, 'v2')).toBe('v2');
     expect(versionToOpen(template, 'another-programs-version')).toBe('v3');
     expect(
-      versionRows(template, 'v2', 'en-US').map((item) => [item.title, item.state, item.isOpen]),
+      versionRows(template, 'v2', 'en-US').map((item) => [
+        item.title,
+        item.openLabel,
+        item.state,
+        item.isOpen,
+      ]),
     ).toEqual([
-      ['Version 3', 'Draft', false],
-      ['Version 2', 'Published', true],
+      ['Version 3', 'Open version 3', 'Draft', false],
+      ['Version 2', 'Open version 2', 'Published', true],
     ]);
+  });
+});
+
+describe('program drafts', () => {
+  it('keeps what the coach typed mid-edit and reads it back the same, names from the library', () => {
+    const draft = draftFromContent(draftView());
+    const week = draft.weeks[0];
+    const squat = week.sessions[0].exercises[0];
+    expect([draft.templateId, draft.sourceVersionId, draft.name]).toEqual([
+      'template-1',
+      'version-2',
+      'Strength base',
+    ]);
+    expect([week.label, week.sessions[0].name, squat.exerciseName]).toEqual([
+      'Week 1',
+      'Lower A, heavier',
+      'Back squat',
+    ]);
+    expect(squat.sets[0]).toMatchObject({
+      repetitionsMinimum: 3,
+      loadStrategy: 'PercentageWorkingMax',
+      loadValue: 80,
+      exertionTarget: 8,
+      restSeconds: 180,
+      tempo: '',
+    });
+
+    // Half-typed values travel as they are: the server checks them only on Publish.
+    squat.sets[0].repetitionsMinimum = 0;
+    week.sessions[0].name = '';
+    const content = toDraftContent(draft);
+    expect(content.weeks[0].sessions[0].name).toBe('');
+    expect(content.weeks[0].sessions[0].exercises[0].sets[0].repetitionsMinimum).toBe(0);
+    expect(Object.keys(content)).toEqual(['name', 'description', 'weeks']);
+
+    const again = draftFromContent(draftView({ content }));
+    expect(again.weeks[0].sessions[0].exercises[0].sets[0]).toMatchObject({
+      repetitionsMinimum: 0,
+      loadValue: 80,
+    });
+  });
+
+  it('reads an RIR target back as RIR, and an exercise the library no longer has without a name', () => {
+    const view = draftView();
+    const set = view.content.weeks[0].sessions[0].exercises[0].sets[0];
+    view.content.weeks[0].sessions[0].exercises[0].sets[0] = {
+      ...set,
+      exertionDisplayPreference: 'Rir',
+      targetRpe: null,
+      targetRir: 2,
+    };
+    view.exercises = [];
+    const exercise = draftFromContent(view).weeks[0].sessions[0].exercises[0];
+    expect([exercise.exerciseName, exercise.sets[0].exertionTarget]).toEqual(['', 2]);
   });
 });

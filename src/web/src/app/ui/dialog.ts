@@ -29,7 +29,7 @@ export class UiDialog {
       role: 'dialog',
       ariaModal: true,
       ariaLabelledBy: data.titleId,
-      autoFocus: 'first-heading',
+      autoFocus: options.initialFocus ?? 'first-heading',
       restoreFocus: true,
       hasBackdrop: true,
       backdropClass: 'tb-modal-backdrop',
@@ -37,7 +37,7 @@ export class UiDialog {
       direction: modalDirection(this.document, options.direction),
       width: 'min(28rem, calc(100vw - 2rem))',
       maxHeight: 'calc(100dvh - 2rem)',
-      closeOnNavigation: true,
+      closeOnNavigation: options.closeOnNavigation ?? true,
     });
   }
 }

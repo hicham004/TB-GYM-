@@ -1089,7 +1089,8 @@ Phase 2. See ADR 0005 and ADR 0006.
 
 ```text
 Exercise Library + coach media
-  -> immutable ProgramTemplateVersion
+  -> the coach's own ProgramDraft (autosaved, unchecked shape; TRN-024)
+  -> Publish: immutable ProgramTemplateVersion
   -> assignment command + one Training enrollment + explicit start/time zone
   -> deep TrainingMesocycle snapshot + WorkingMaxSnapshots
   -> date-derived Planned/Active or audited Completed/Cancelled lifecycle
@@ -1104,6 +1105,17 @@ different historical layers. Progression is a reviewed, hashed append operation,
 strength changes never rewrite a captured program. A completed workout remains available in
 the dated client view on its scheduled day so terminal mesocycle state does not erase the
 just-completed prescription/performance comparison. See ADR 0007.
+
+R4.2a adds `training."ProgramDrafts"` (ADR 0033): one working copy per person and program, plus
+programs not published yet, each tied to its owner's membership. The builder writes it a moment
+after each change, carrying the row version so two tabs never overwrite each other; its content is
+JSON with only its shape checked. Publish runs the same checks as any save, creates the next version
+and deletes the draft in one transaction. Drafts are private to their owner, never reach a client,
+and are blocked like any staff write while the workspace is read-only.
+
+R4.2b shares `ProgramSetsEditor` between the grid and session sheet. Publish previews a read-only
+copy of the draft's client-visible prescriptions; only confirmation calls the draft publish API.
+The preview hides unshared weeks and leaves dates and calculated loads to assignment.
 
 ## 14. Phase 6A check-in flow
 
