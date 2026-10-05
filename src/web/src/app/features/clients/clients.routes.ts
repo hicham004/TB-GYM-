@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { REDESIGNED } from '../../core/theme/redesigned-route';
 
 const sections = () => import('./client-workspace-sections');
@@ -6,8 +7,8 @@ const sections = () => import('./client-workspace-sections');
 export const clientRoutes: Routes = [
   {
     // The two lists are rebuilt on brand v2 (R3.3a) and follow light or dark. In a client's record
-    // below the Overview and Progress are too (R3.3b), Training (R3.4a) and Service & access
-    // (R3.4b); the other sections stay light.
+    // below the Overview and Progress are too (R3.3b), Training (R3.4a), Service & access (R3.4b)
+    // and Check-ins with each check-in's review (R4.3); the other sections stay light.
     path: '',
     title: $localize`Clients | TB Gym`,
     data: REDESIGNED,
@@ -47,7 +48,18 @@ export const clientRoutes: Routes = [
       {
         path: 'checkins',
         title: $localize`Client check-ins | TB Gym`,
-        loadComponent: () => sections().then((module) => module.ClientCheckInsSection),
+        data: REDESIGNED,
+        loadComponent: () => import('./client-checkins').then((module) => module.ClientCheckIns),
+      },
+      {
+        // One check-in under review (C5). Its reply box is the page's action, so the header's
+        // Message steps back (`replyOnPage`), and an unsent reply is asked about before leaving.
+        path: 'checkins/:assignmentId',
+        title: $localize`Check-in review | TB Gym`,
+        data: { ...REDESIGNED, replyOnPage: true },
+        canDeactivate: [confirmBeforeLeaving],
+        loadComponent: () =>
+          import('./client-checkin-review').then((module) => module.ClientCheckInReview),
       },
       {
         path: 'progress',

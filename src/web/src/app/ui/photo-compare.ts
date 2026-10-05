@@ -60,6 +60,15 @@ import { Component, input, signal } from '@angular/core';
         margin-block-start: 0.6rem;
         font-size: 0.75rem;
       }
+      /* The dates restate what the legacy global "label > span" rule sets (a fixed light-only
+         colour, a block box and a margin), which failed contrast on dark (seen in R4.3). */
+      .control span {
+        color: var(--tb-muted, #4f6057);
+        display: inline;
+        font-size: inherit;
+        font-weight: 600;
+        margin: 0;
+      }
       input {
         flex: 1;
         accent-color: var(--tb-accent-ink, #153d33);

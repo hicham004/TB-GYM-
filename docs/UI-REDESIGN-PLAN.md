@@ -71,9 +71,9 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R3.5c | **Saved replies** (C6): a coach's own short replies, kept on the server and dropped into the composer | §2, plus backend tests | Done · 2026-10-04 · 039e121 |
 | R3.6 | 🚦 **Demo to the founding coaches** (the owner's step) | The owner reports back | Open, not blocking · 2026-10-05: the owner will demo later and said to carry on with R4 |
 | R4.1 | **Program builder** (C4), part 1: library panel, week grid, drag and drop | §2 | Done · 2026-10-05 |
-| R4.2a | **Program builder**, part 2a: autosave to the coach's own draft on the server, and the unsaved-changes guard (Save draft goes; Publish makes the version) | §2, plus backend tests | Done · 2026-10-05 |
-| R4.2b | **Program builder**, part 2b: inline sets × reps × load / RPE editing on the grid, and the publish preview | §2 | Done · 2026-10-05 |
-| R4.3 | **Check-in review** (C5) | §2 | To do |
+| R4.2a | **Program builder**, part 2a: autosave to the coach's own draft on the server, and the unsaved-changes guard (Save draft goes; Publish makes the version) | §2, plus backend tests | Done · 2026-10-05 · e51143f |
+| R4.2b | **Program builder**, part 2b: inline sets × reps × load / RPE editing on the grid, and the publish preview | §2 | Done · 2026-10-05 · e51143f |
+| R4.3 | **Check-in review** (C5) | §2 | Done · 2026-10-05 |
 | R4.4 | **Nutrition library and meal-plan builder** (C7) | §2 | To do |
 | R5.1 | **Products** (C8), **Exercise library** (C10), notifications | §2 | To do |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
@@ -136,8 +136,9 @@ of the implemented R1.3 screens before production rollout.
   R0.2 changed about 250 source strings. Run `npm run i18n:extract` before any translation work.
 - **Check-in photos (from R2.4c).** The check-in's photo step saves ordinary progress photos dated
   today; nothing links them to the check-in record, because ADR 0016 defers check-in file uploads.
-  C5 review (R4.3) can show a client's photos by date. Attaching photos to a check-in, or letting a
-  coach turn the photo step off per form, needs an owner decision and backend work.
+  Since R4.3 the review shows the client's progress photos by the day they were taken, up to the day
+  the check-in was sent. Attaching photos to a check-in, or letting a coach turn the photo step off
+  per form, needs an owner decision and backend work.
 - **Client "today" (from R2.4c).** The check-ins page shows plain due dates ("Due Sun 4 Oct"), not
   "Due today" or "Overdue", because only the training API returns the workspace's date to a client.
   A small own-workspace date read would allow relative wording without trusting the phone's clock.
@@ -226,7 +227,9 @@ of the implemented R1.3 screens before production rollout.
   `program-week.scss`, is 6.8 kB against the 5 kB warning. R4.2a measured 541.7 kB (+0.4 kB):
   `UnsavedWork`, which the workspace switch and sign-out ask before acting; the drafts, autosave and
   the confirmation dialog stay in the builder's lazy chunk. R4.2b keeps the initial bundle at
-  541.7 kB; inline editing and preview stay lazy, with `program-week.scss` now 7.3 kB.
+  541.7 kB; inline editing and preview stay lazy, with `program-week.scss` now 7.3 kB. R4.3 keeps it
+  at 541.7 kB too: the check-in list and review are lazy (the review's chunk is about 39 kB, saved
+  replies included), and both stylesheets stay under the 5 kB warning.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -246,9 +249,6 @@ of the implemented R1.3 screens before production rollout.
   client's Progress can be marked `REDESIGNED` after one dark screenshot pass (see "Client dark
   mode"). Its "Personal records" list shows all 12 at once; the coach's does too, and both could
   show five with "Show all".
-- **Check-in answers on the profile (from R3.3b).** The Check-in card says when the latest was sent
-  and its state, never what the client answered (CHK-012). Showing the answers beside the previous
-  check-in's is C5 (R4.3).
 - **An unsaved coach note (from R3.3b).** A refresh or closed tab asks first, but moving to another
   section discards a note being edited. R4.2a built the kit's leave confirmation for C4 (`UiConfirm`
   in a Dialog, the `confirmBeforeLeaving` route guard and `UnsavedWork` for a workspace switch or
@@ -286,7 +286,9 @@ of the implemented R1.3 screens before production rollout.
   native `<dialog>` forms, now inside the new page's rows; move them to the kit Dialog with the rest.
 - **The legacy `label > span` rule (seen in R3.4b).** `styles.scss` still gives any span straight
   inside a label a fixed colour (`#344149`), size, weight and margin, which is wrong on dark and on the
-  new sheets; R3.4b's price cards restate each property. Remove it once the last legacy form is gone.
+  new sheets; R3.4b's price cards restate each property. R4.3 found it in the kit's `PhotoCompare`
+  too: its two date labels failed contrast on dark until the kit restated them. Remove the rule once
+  the last legacy form is gone.
 - **The brand outside the app (from R3.5a).** Sign-in, accepting an invitation, emails and notifications
   are still TB Gym's: a person signs in before any workspace is known. Branding the invitation page and
   emails would need the workspace on those requests; not planned.
@@ -321,6 +323,33 @@ of the implemented R1.3 screens before production rollout.
     remove them, and new-program drafts untouched for months, if storage ever matters.
   - The leave confirmation (`UiConfirm`, `confirmBeforeLeaving`, `UnsavedWork`) is ready for the other
     editors that still lose work on navigation: the coach note, Brand, the intake form and C7.
+- **Check-in review, left for later (from R4.3).**
+  - Assigning a check-in still happens on the older Client check-ins screen (`/checkins/clients`),
+    which also keeps its older way to read and compare. An Assign sheet on the client's Check-ins
+    would let that screen go; C5 never specified assigning.
+  - After Mark reviewed the coach goes back by hand. A "next check-in to review" step, from Today's
+    queue, would make a Monday of reviews faster.
+  - The reply in the chat carries no link back to the check-in it answers.
+  - An owner's reply goes into the owner's own chat with the client, as the header's Message does:
+    a conversation belongs to one coach and one client.
+  - Comparing more than two check-ins, or one question over time, stays deferred (roadmap 6A), and
+    would need a decision about what a series of answers may imply (CHK-012).
+- **Progress photo compare order (seen in R4.3).** On Progress the slider's "before" side shows the
+  newest photo and "after" the oldest: the dashboard sends its previews oldest first and
+  `progress-dashboard.ts` takes them the other way round. The labels carry the right dates, so nothing
+  is misreported, but the sides are swapped. A one-line fix in that file.
+- **Progression when duplicating a week (owner question, 2026-10-05).** The owner's partner first
+  asked for loads based on 1RM that rise when a week is duplicated. Today a set's load can be a fixed
+  weight, a percentage of the client's training max (worked out into each client's kilograms at
+  assignment, STR-002 and STR-005) or an RPE target; the builder's Duplicate week copies a week
+  exactly; and an assigned program's Build next block raises the RPE by a step in each copied week,
+  after a preview (STR-006). "Add 2.5 kg, or 2.5 %, each week" does not exist: it is a new progression
+  transform, which the roadmap defers and AGENTS.md wants named, versioned and previewed. Claude's
+  recommendation: a "Duplicate with progression" choice on the builder's week menu that raises each
+  percentage of training max (or each fixed weight) by a chosen step and shows the new week before it
+  is added. The published version then holds plain numbers, so programs already assigned keep their
+  snapshots. Needs the owner's go and the partner's exact rule (per week or per block, kilograms or
+  percent, rounding).
 
 ---
 
@@ -771,6 +800,37 @@ limited to the coach's assigned clients.
 - Job: "Review and reply in under two minutes."
 - Shows: answers side by side with the previous check-in (changes highlighted), a photo compare,
   the weight trend, a reply composer with saved templates, and "Mark reviewed".
+- Built in R4.3, web only, on the existing check-in, progress and messaging endpoints:
+  - A client's **Check-ins** section lists what needs review first, then what is not sent yet ("Due
+    Tue 6 Oct", Overdue, Started), then what was reviewed ("Sent Wed 23 Sep · 1 day late · reviewed
+    Thu 24 Sep"). A sent check-in opens its review; an unsent one has nothing to read (CHK-013). Assign
+    a check-in still opens the older check-in screen.
+  - The review (`/clients/:clientId/checkins/:assignmentId`) keeps the client's header. Today's
+    Review, the Overview's Check-in card, Needs you and the feed open it straight away when they name
+    one check-in.
+  - Top: the form's name, "Sent Mon 5 Oct · Due Sun 4 Oct · 1 day late", and Needs review or
+    "Reviewed Mon 5 Oct by you".
+  - The answers sit beside the same form's previous check-in (the server's comparison, CHK-010):
+    "This time" and that day, a scale as "8 out of 10" with a meter, and a plain **Changed** on the
+    ones that differ, under "5 answers are different from Sun 27 Sep". The mark is equality only: no
+    arrows, amounts or good and bad colours (CHK-012). A re-worded question shows last time's wording,
+    a new one says New question, and one not asked this time says so. Compare with another reads it
+    beside an older one; the first check-in of a form stands alone.
+  - Beside them: the weight in the 12 weeks to the day it was sent (the latest weekly average, the
+    change on the week before, a line) and that period's progress photos by pose, the newest against
+    the newest up to the earlier check-in, in the before/after slider. Each photo is labelled by the
+    day it was taken and never called the check-in's (ADR 0016).
+  - The reply goes into the coach's chat with the client, with Saved replies; a check-in has no
+    comments of its own (the roadmap defers them). One filled button: Mark reviewed, which becomes
+    Send and mark reviewed once a reply is written (the reply goes first, and a failed send marks
+    nothing), with Send only beside it; after review it is Send reply. The header's Message is
+    outlined on this page. A plan without messaging gets a line instead of the box. An unsent reply is
+    asked about before leaving, a workspace switch or a sign-out (R4.2a's `UiConfirm`).
+  - Closed check-ins say why and read nothing (CHK-011); a missing one says it isn't here.
+  - A phone shows the cards in reading order: answers, weight, photos, reply. Both screens follow dark
+    mode. Screenshots on the Atlas demo: `docs/design/r43-*.png`. The demo has no progress photos,
+    so the slider is shown by the mocked Playwright run, with placeholder pictures:
+    `docs/design/r43-photos-mocked-1440.png`.
 
 **C6. Messages**
 - Job: "It's a chat."

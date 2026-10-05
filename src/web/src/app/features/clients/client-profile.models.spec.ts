@@ -75,8 +75,8 @@ describe('what needs the coach on a client’s page', () => {
       tag: 'Check-in',
       action: {
         label: 'Review',
-        link: '/checkins/clients',
-        queryParams: { clientId: MAYA.clientProfileId, assignmentId: 'assignment-9' },
+        link: `/clients/${MAYA.clientProfileId}/checkins/assignment-9`,
+        queryParams: null,
       },
     });
     expect(list[1]).toMatchObject({
@@ -101,9 +101,10 @@ describe('what needs the coach on a client’s page', () => {
 
   it('says one unread message and several check-ins in the right number', () => {
     const [one] = rows({ count: 1, subjectId: 'assignment-1' });
-    expect(one.action.queryParams).toEqual({
-      clientId: MAYA.clientProfileId,
-      assignmentId: 'assignment-1',
+    expect(one.action).toEqual({
+      label: 'Review',
+      link: `/clients/${MAYA.clientProfileId}/checkins/assignment-1`,
+      queryParams: null,
     });
 
     const [many] = needRows(
@@ -444,8 +445,8 @@ describe('the check-in card (workflow facts only, CHK-012)', () => {
       next: { text: 'Next one due Thu 8 Oct', late: false },
       action: {
         label: 'Review',
-        link: '/checkins/clients',
-        queryParams: { clientId: MAYA.clientProfileId, assignmentId: 'new' },
+        link: `/clients/${MAYA.clientProfileId}/checkins/new`,
+        queryParams: null,
       },
     });
   });

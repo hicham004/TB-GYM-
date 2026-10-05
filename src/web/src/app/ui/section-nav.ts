@@ -4,6 +4,8 @@ import { IsActiveMatchOptions, RouterLink, RouterLinkActive } from '@angular/rou
 export interface SectionLink {
   readonly label: string;
   readonly link: string;
+  /** Also marks the link current on the pages below it, such as one check-in under Check-ins. */
+  readonly includesChildren?: boolean;
 }
 
 /**
@@ -24,7 +26,7 @@ export interface SectionLink {
             <a
               [routerLink]="item.link"
               routerLinkActive="current"
-              [routerLinkActiveOptions]="matchOptions"
+              [routerLinkActiveOptions]="item.includesChildren ? childMatchOptions : matchOptions"
               ariaCurrentWhenActive="page"
               >{{ item.label }}</a
             >
@@ -95,6 +97,11 @@ export class SectionNav {
     queryParams: 'ignored',
     matrixParams: 'ignored',
     fragment: 'ignored',
+  };
+
+  protected readonly childMatchOptions: IsActiveMatchOptions = {
+    ...this.matchOptions,
+    paths: 'subset',
   };
 
   /** Names the navigation region, for example "Training sections". */

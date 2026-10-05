@@ -1,19 +1,11 @@
-import { DatePipe } from '@angular/common';
-import { Component, computed, effect, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { Component, inject, signal } from '@angular/core';
 import { ApiClient } from '../../core/api/api-client';
-import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
 import type {
   CompleteClientOnboardingRequest,
   UpdateClientIntakeRequest,
 } from '../../core/api/api.models';
-import type { CheckInAssignmentListItem } from '../../core/api/generated';
-import { clientCheckInDenialMessage, onboardingStatusLabel } from '../../core/i18n/display-labels';
-import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { TenantStore } from '../../core/tenancy/tenant.store';
-import { ButtonLink, Button } from '../../ui/button';
-import { StatusLabel, type StatusMarker, type StatusTone } from '../../ui/status-label';
+import { onboardingStatusLabel } from '../../core/i18n/display-labels';
+import { StatusLabel } from '../../ui/status-label';
 import { ClientNutrition } from '../nutrition/client-nutrition';
 import { ProgressDashboardView } from '../progress/progress-dashboard';
 import { ProgressView } from '../progress/progress-view';
@@ -24,8 +16,8 @@ import { ClientWorkspaceContext } from './client-workspace.context';
 
 /**
  * The sections of a client's record other than the Overview. Training, Progress and Service & access
- * are rebuilt (R3.3b, R3.4); Nutrition and the intake render the existing screens unchanged, and
- * Check-ins is a short list that opens the existing review screen. Each is its own route under
+ * are rebuilt (R3.3b, R3.4); Nutrition and the intake render the existing screens unchanged.
+ * Check-ins and each check-in's review have their own files (R4.3). Each is its own route under
  * `/clients/:clientId`.
  */
 
@@ -218,119 +210,5 @@ export class ClientIntakeSection {
       () => this.api.completeClientOnboarding(this.context.clientId(), request),
       $localize`Client onboarding completed.`,
     );
-  }
-}
-
-interface CheckInRow {
-  item: CheckInAssignmentListItem;
-  status: { label: string; tone: StatusTone; marker: StatusMarker };
-  /** Opens the existing review screen on this check-in, or null while nothing was submitted. */
-  canOpen: boolean;
-}
-
-/**
- * This client's check-ins, newest due first, each with its workflow state. Reading, reviewing and
- * comparing answers stay on the Client check-ins screen, which this links into.
- */
-@Component({
-  selector: 'app-client-checkins-section',
-  imports: [Button, ButtonLink, DatePipe, RouterLink, StatusLabel],
-  templateUrl: './client-checkins-section.html',
-  styleUrl: './client-checkins-section.scss',
-})
-export class ClientCheckInsSection {
-  private readonly api = inject(ApiClient);
-  private readonly tenants = inject(TenantStore);
-  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
-  private loadedKey: string | null = null;
-
-  protected readonly context = inject(ClientWorkspaceContext);
-  protected readonly pageSize = 50;
-  protected readonly items = signal<CheckInAssignmentListItem[]>([]);
-  protected readonly total = signal(0);
-  protected readonly loading = signal(false);
-  protected readonly error = signal<string | null>(null);
-  protected readonly denial = signal<string | null>(null);
-
-  protected readonly rows = computed<CheckInRow[]>(() => {
-    const today = this.context.workspace()?.currentDate ?? null;
-    return this.items().map((item) => ({
-      item,
-      status: checkInStatus(item, today),
-      canOpen: item.response !== null && item.response.status !== 'Draft',
-    }));
-  });
-
-  constructor() {
-    this.scope.onReset(() => this.reset());
-    effect(() => {
-      this.scope.epoch();
-      const tenantId = this.tenants.selectedTenantId();
-      const clientId = this.context.clientId();
-      const key =
-        tenantId && clientId && !this.context.isFormer() ? `${tenantId}:${clientId}` : null;
-      if (key && key !== this.loadedKey) {
-        this.loadedKey = key;
-        void this.load();
-      }
-    });
-  }
-
-  protected async load(): Promise<void> {
-    return this.scope.run('load', async (owner) => {
-      this.loading.set(true);
-      this.error.set(null);
-      this.denial.set(null);
-      try {
-        const list = await owner.wait(
-          firstValueFrom(
-            this.api.listClientCheckInAssignments(this.context.clientId(), 0, this.pageSize),
-          ),
-        );
-        this.items.set(list.items);
-        this.total.set(Number(list.total));
-      } catch (error) {
-        if (!owner.current) return;
-        const reason = featureAccessReason(error);
-        if (reason !== null) {
-          this.denial.set(clientCheckInDenialMessage(reason));
-        } else {
-          this.error.set(
-            apiErrorMessage(error, $localize`This client’s check-ins could not be loaded.`),
-          );
-        }
-      } finally {
-        if (owner.current) this.loading.set(false);
-      }
-    });
-  }
-
-  private reset(): void {
-    this.loadedKey = null;
-    this.items.set([]);
-    this.total.set(0);
-    this.loading.set(false);
-    this.error.set(null);
-    this.denial.set(null);
-  }
-}
-
-/** The workflow state only; it never reads or rates an answer (CHK-012). */
-export function checkInStatus(
-  item: CheckInAssignmentListItem,
-  today: string | null,
-): { label: string; tone: StatusTone; marker: StatusMarker } {
-  switch (item.response?.status) {
-    case 'Submitted':
-      return { label: $localize`Needs review`, tone: 'danger', marker: 'dot' };
-    case 'Reviewed':
-      return { label: $localize`Reviewed`, tone: 'success', marker: 'check' };
-    default:
-      if (today !== null && item.assignment.dueDate < today) {
-        return { label: $localize`Overdue`, tone: 'warning', marker: 'dot' };
-      }
-      return item.response?.status === 'Draft'
-        ? { label: $localize`In progress`, tone: 'neutral', marker: 'dot' }
-        : { label: $localize`Not started`, tone: 'neutral', marker: 'dot' };
   }
 }

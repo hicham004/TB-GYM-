@@ -242,7 +242,7 @@ describe('ClientOverview', () => {
       Array.from(needs.querySelectorAll('.need-heading')).map((item) => item.textContent),
     ).toEqual(['Check-in ready to review', '2 unread messages']);
     expect(link(needs, 'Review').getAttribute('href')).toBe(
-      `/checkins/clients?clientId=${MAYA.clientProfileId}&assignmentId=assignment-9`,
+      `/clients/${MAYA.clientProfileId}/checkins/assignment-9`,
     );
     expect(link(needs, 'Reply').getAttribute('href')).toBe('/messages?conversation=conversation-4');
     // Rule 5: one primary action, the first. The other is outlined.
@@ -404,7 +404,7 @@ describe('ClientOverview', () => {
     const card = host.querySelector('.checkin')!;
     expect(said(card as HTMLElement)).toContain('Needs review');
     expect(link(card, 'Review').getAttribute('href')).toBe(
-      `/checkins/clients?clientId=${MAYA.clientProfileId}&assignmentId=new`,
+      `/clients/${MAYA.clientProfileId}/checkins/new`,
     );
     expect(link(card, 'Review').classList.contains('tb-button--filled')).toBe(false);
     expect(link(card, 'All check-ins').getAttribute('href')).toBe(

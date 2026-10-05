@@ -1167,6 +1167,16 @@ reply that arrives after the coach has moved on is discarded rather than shown u
 Due-date validation reads the workspace's own `currentDate` from `GET /api/workspace` rather than
 deriving today from the browser clock, which is a different calendar around midnight.
 
+R4.3 moves the coach's reading and review into the client's record (C5), on the same endpoints:
+`/clients/:clientId/checkins` lists them by workflow state and `/clients/:clientId/checkins/:assignmentId`
+is the review. It asks the comparison projection for this check-in beside the same form's previous
+one; the screen marks a row whose two answers differ, as equality only (CHK-010). The weight and
+progress photos beside it come from the progress dashboard for the 12 weeks up to the day it was
+sent, shown by their own dates because no file belongs to a check-in (ADR 0016). The reply is an
+ordinary message in the coach's conversation with the client, sent before the review when both are
+asked. `/checkins/clients` keeps assigning, and its older way to read and compare, until assigning
+moves into the record.
+
 See ADR 0017 for authoring and ADR 0016 for responses.
 
 ## 15. Phase 6B-1 notification flow

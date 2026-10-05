@@ -81,7 +81,7 @@ describe('Coach Today view model', () => {
         'Check-in',
         'review',
         'Review',
-        '/clients/c-maya/checkins',
+        '/clients/c-maya/checkins/a-maya',
         null,
       ],
       [
@@ -200,7 +200,7 @@ describe('Coach Today view model', () => {
     expect(rami.moreRecords).toBe(1);
     expect([rami.ago, rami.link]).toEqual(['35 minutes ago', '/clients/c-rami/training']);
     expect(maya.sentence).toBe('Maya Fakhoury sent a check-in: Weekly check-in');
-    expect(maya.link).toBe('/clients/c-maya/checkins');
+    expect(maya.link).toBe('/clients/c-maya/checkins/a-maya');
     expect([rita.records, rita.moreRecords, rita.ago]).toEqual([[], 0, 'yesterday']);
   });
 

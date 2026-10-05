@@ -167,7 +167,13 @@ export function attentionRow(
         detail: $localize`Sent ${ago(item.since, context)}:ago:`,
         tag: $localize`Check-in`,
         tone: 'review',
-        action: go($localize`Review`, `${clientPage}/checkins`),
+        // One waiting opens straight at its review; several open the client's list of check-ins.
+        action: go(
+          $localize`Review`,
+          item.subjectId && count <= 1
+            ? `${clientPage}/checkins/${item.subjectId}`
+            : `${clientPage}/checkins`,
+        ),
       };
     case 'UnreadMessages':
       return {
@@ -290,7 +296,8 @@ export function activityRow(item: CoachActivityItemView, context: CoachTodayCont
       : $localize`${name}:name: sent a check-in`,
     records: [],
     moreRecords: 0,
-    link: `${clientPage}/checkins`,
+    // The feed names one check-in, so it opens that check-in's review.
+    link: item.subjectId ? `${clientPage}/checkins/${item.subjectId}` : `${clientPage}/checkins`,
   };
 }
 

@@ -95,7 +95,7 @@ describe('CoachToday', () => {
       actions.slice(1).every((action) => action.classList.contains('tb-button--outlined')),
     ).toBe(true);
     expect(actions[0].textContent?.replace(/\s+/g, ' ').trim()).toBe('Review for Maya Fakhoury');
-    expect(actions[0].getAttribute('href')).toBe('/clients/c-maya/checkins');
+    expect(actions[0].getAttribute('href')).toBe('/clients/c-maya/checkins/a-maya');
     expect(actions[1].getAttribute('href')).toBe('/messages?conversation=conv-sara');
     expect(actions[2].getAttribute('href')).toBe('/clients/c-elie/service?renew=e-elie');
     expect(rows[0].textContent).toContain('Coached by Lea Khoury');

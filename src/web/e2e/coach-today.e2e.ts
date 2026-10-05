@@ -70,7 +70,7 @@ for (const [width, height] of [
     await expect(rows.first()).toContainText('Maya Fakhoury sent a check-in');
     await expect(page.getByRole('link', { name: 'Review for Maya Fakhoury' })).toHaveAttribute(
       'href',
-      '/clients/c-maya/checkins',
+      '/clients/c-maya/checkins/a-maya',
     );
     await expect(page.getByRole('link', { name: 'Reply for Sara Mansour' })).toHaveAttribute(
       'href',

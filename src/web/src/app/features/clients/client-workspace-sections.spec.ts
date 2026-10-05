@@ -1,17 +1,13 @@
 import { NO_ERRORS_SCHEMA, signal, type Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { HttpErrorResponse } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type { CoachClientDetails, WorkspaceDetails } from '../../core/api/api.models';
-import type { CheckInAssignmentListItem, CheckInResponseStatus } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { settle } from '../../../testing/dom';
 import {
-  ClientCheckInsSection,
   ClientIntakeSection,
   ClientServiceSection,
   ClientTrainingSection,
@@ -38,37 +34,6 @@ const FORMER = {
     departureKind: 'ReleasedByOwner',
   },
 } as CoachClientDetails;
-
-function item(
-  id: string,
-  dueDate: string,
-  status: CheckInResponseStatus | null,
-): CheckInAssignmentListItem {
-  return {
-    assignment: {
-      id,
-      formId: 'form-1',
-      formTitle: 'Weekly check-in',
-      formVersionId: 'v1',
-      formVersionNumber: 1,
-      clientProfileId: 'client-1',
-      dueDate,
-      assignedAtUtc: '2026-09-01T09:00:00Z',
-      assignedByUserId: 'coach-1',
-    },
-    response:
-      status === null
-        ? null
-        : {
-            responseId: `r-${id}`,
-            status,
-            submittedDate: status === 'Draft' ? null : dueDate,
-            submittedAtUtc: status === 'Draft' ? null : `${dueDate}T06:00:00Z`,
-            reviewedAtUtc: status === 'Reviewed' ? `${dueDate}T12:00:00Z` : null,
-            isLate: false,
-          },
-  };
-}
 
 async function render<T>(
   component: Type<T>,
@@ -138,52 +103,5 @@ describe('client record sections', () => {
 
     expect(host.querySelector('app-client-program')).not.toBeNull();
     expect(host.textContent).not.toContain('This is a former client.');
-  });
-
-  it('lists the check-ins with their workflow state and links each submission to its review', async () => {
-    const list = vi.fn(() =>
-      of({
-        clientProfileId: 'client-1',
-        total: 4,
-        items: [
-          item('due', '2026-09-27', null),
-          item('waiting', '2026-09-20', 'Submitted'),
-          item('overdue', '2026-09-18', 'Draft'),
-          item('done', '2026-09-13', 'Reviewed'),
-        ],
-      }),
-    );
-    const { host } = await render(ClientCheckInsSection, {
-      api: { listClientCheckInAssignments: list },
-      stubChildren: false,
-    });
-
-    expect(list).toHaveBeenCalledWith('client-1', 0, 50);
-    const rows = Array.from(host.querySelectorAll('tbody tr')).map((row) => row.textContent ?? '');
-    expect(rows[0]).toContain('Not started');
-    expect(rows[1]).toContain('Needs review');
-    expect(rows[2]).toContain('Overdue');
-    expect(rows[3]).toContain('Reviewed');
-
-    const links = Array.from(host.querySelectorAll('tbody a')).map((a) => a.getAttribute('href'));
-    expect(links).toEqual([
-      '/checkins/clients?clientId=client-1&assignmentId=waiting',
-      '/checkins/clients?clientId=client-1&assignmentId=done',
-    ]);
-    expect(host.querySelector('tbody a')?.textContent).toContain('Review');
-  });
-
-  it('says why check-ins are closed instead of showing an empty list', async () => {
-    const refused = new HttpErrorResponse({
-      status: 403,
-      error: { accessReason: 'NoEntitlement' },
-    });
-    const { host } = await render(ClientCheckInsSection, {
-      api: { listClientCheckInAssignments: vi.fn(() => throwError(() => refused)) },
-      stubChildren: false,
-    });
-
-    expect(host.textContent).toContain("Check-ins are not part of this client's current plan");
-    expect(host.textContent).not.toContain('No check-ins assigned yet.');
   });
 });

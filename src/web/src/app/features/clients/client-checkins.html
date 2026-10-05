@@ -1,0 +1,163 @@
+@if (context.isFormer()) {
+  <p class="muted" i18n>This is a former client. Their records are kept but are not shown here.</p>
+} @else {
+  <div class="checkins">
+    <header class="list-head">
+      <div>
+        <h2 i18n>Check-ins</h2>
+        <p class="muted" i18n>Answers come in here. Open one to read it beside the last.</p>
+      </div>
+      @if (state() !== 'denied') {
+        <a
+          appButton
+          variant="outlined"
+          routerLink="/checkins/clients"
+          [queryParams]="assignParams()"
+          i18n
+          >Assign a check-in</a
+        >
+      }
+    </header>
+
+    @switch (state()) {
+      @case ('loading') {
+        <section class="panel">
+          <div class="panel-body">
+            <app-skeleton [label]="loadingLabel" [lines]="3" />
+          </div>
+        </section>
+      }
+      @case ('denied') {
+        <section class="panel">
+          <div class="panel-body prose">
+            <p dir="auto">{{ closed() }}</p>
+            <a
+              appButton
+              variant="outlined"
+              [routerLink]="['/clients', context.clientId(), 'service']"
+              i18n
+              >Open Service &amp; access</a
+            >
+          </div>
+        </section>
+      }
+      @case ('error') {
+        <section class="panel">
+          <div class="panel-body load-failed">
+            <p role="alert">{{ error() }}</p>
+            <button appButton type="button" variant="outlined" (click)="load()" i18n>
+              Try again
+            </button>
+          </div>
+        </section>
+      }
+      @default {
+        @if (items().length === 0) {
+          <section class="panel">
+            <app-empty-state
+              heading="No check-ins yet"
+              i18n-heading
+              [description]="emptyDescription()"
+            >
+              <a
+                empty-state-action
+                appButton
+                routerLink="/checkins/clients"
+                [queryParams]="assignParams()"
+                i18n
+                >Assign a check-in</a
+              >
+            </app-empty-state>
+          </section>
+        } @else if (groups(); as group) {
+          @if (group.toReview.length > 0) {
+            <section class="panel" aria-labelledby="to-review-heading">
+              <header class="panel-head">
+                <h3 id="to-review-heading">
+                  <ng-container i18n>To review</ng-container>&ngsp;<span class="badge">{{
+                    group.toReview.length
+                  }}</span>
+                </h3>
+              </header>
+              <ng-container
+                [ngTemplateOutlet]="rows"
+                [ngTemplateOutletContext]="{ $implicit: group.toReview }"
+              />
+            </section>
+          }
+          @if (group.open.length > 0) {
+            <section class="panel" aria-labelledby="open-heading">
+              <header class="panel-head">
+                <h3 id="open-heading" i18n>Not sent yet</h3>
+              </header>
+              <ng-container
+                [ngTemplateOutlet]="rows"
+                [ngTemplateOutletContext]="{ $implicit: group.open }"
+              />
+            </section>
+          }
+          @if (group.reviewed.length > 0) {
+            <section class="panel" aria-labelledby="reviewed-heading">
+              <header class="panel-head">
+                <h3 id="reviewed-heading" i18n>Reviewed</h3>
+              </header>
+              <ng-container
+                [ngTemplateOutlet]="rows"
+                [ngTemplateOutletContext]="{ $implicit: group.reviewed }"
+              />
+            </section>
+          }
+          @if (total() > items().length) {
+            <div class="more">
+              <p class="muted" i18n>
+                Showing the latest <bdi>{{ items().length }}</bdi> of <bdi>{{ total() }}</bdi
+                >.
+              </p>
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                [loading]="loadingMore()"
+                (click)="loadMore()"
+                i18n
+              >
+                Show older check-ins
+              </button>
+              @if (moreError(); as message) {
+                <p class="more-error" role="alert">{{ message }}</p>
+              }
+            </div>
+          }
+        }
+      }
+    }
+  </div>
+}
+
+<ng-template #rows let-rows>
+  <ul class="rows" role="list">
+    @for (row of rows; track row.id) {
+      <li class="row" [class.openable]="row.canOpen">
+        <div class="row-copy">
+          @if (row.canOpen) {
+            <!-- The link covers the row; its name carries the line, which is drawn once below. -->
+            <a class="row-link" [routerLink]="['/clients', context.clientId(), 'checkins', row.id]">
+              <span dir="auto">{{ row.title }}</span>
+              <span class="tb-visually-hidden">, {{ row.line }}</span>
+            </a>
+            <p class="row-line" aria-hidden="true">{{ row.line }}</p>
+          } @else {
+            <p class="row-title" dir="auto">{{ row.title }}</p>
+            <p class="row-line">{{ row.line }}</p>
+          }
+        </div>
+        @if (row.pill; as pill) {
+          <app-status-pill [label]="pill.label" [tone]="pill.tone" />
+        }
+        @if (row.canOpen) {
+          <app-icon class="chevron" name="chevron-right" />
+        }
+      </li>
+    }
+  </ul>
+</ng-template>

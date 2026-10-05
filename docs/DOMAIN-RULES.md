@@ -1671,7 +1671,10 @@ touches an answer, and re-reviewing is refused.
 **CHK-010** Comparison is a read-side projection over two responses of one lineage, both `Submitted`
 or `Reviewed`. It aligns by `QuestionKey`, carries each side's own wording, and reports a question
 present in only one version as one-sided. A one-sided question is never dropped and never rendered as
-an empty answer on the side that never asked it.
+an empty answer on the side that never asked it. A screen may mark that the two answers to one
+question differ (R4.3). That is equality only (the same number, the same choices by their words, the
+same text give or take case and spacing): it never says by how much, in which direction, or whether
+the change is good, and nothing about it is stored.
 
 **CHK-011** Every check-in route that names a client evaluates `CoachingFeature.CheckIns` through
 `ICoachingFeatureAccessService`; coach routes inherit relationship blocking from the same decision.

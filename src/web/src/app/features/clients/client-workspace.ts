@@ -11,8 +11,9 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink, RouterOutlet } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
+import { filter, firstValueFrom, map } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { AuthStore } from '../../core/auth/auth.store';
@@ -61,8 +62,22 @@ export class ClientWorkspace {
   private loadedKey: string | null = null;
   private focusedHeading = false;
 
+  private readonly route = inject(ActivatedRoute);
+
   protected readonly context = inject(ClientWorkspaceContext);
-  protected readonly clientId = inject(ActivatedRoute).snapshot.paramMap.get('clientId') ?? '';
+  protected readonly clientId = this.route.snapshot.paramMap.get('clientId') ?? '';
+  /**
+   * A section whose own reply box is its action (a check-in's review) keeps the one filled button,
+   * so the header's Message is drawn outlined there (plan §2 rule 5). Read once each navigation
+   * ends: while this record is being built, the section below it is not activated yet.
+   */
+  protected readonly replyOnPage = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => this.route.firstChild?.snapshot?.data['replyOnPage'] === true),
+    ),
+    { initialValue: false },
+  );
   protected readonly profile = this.context.profile;
   protected readonly startingConversation = signal(false);
   /** The breadcrumb's last item until the record has loaded. */
@@ -221,7 +236,7 @@ export class ClientWorkspace {
           overview,
           { label: $localize`Training`, link: `${base}/training` },
           { label: $localize`Nutrition`, link: `${base}/nutrition` },
-          { label: $localize`Check-ins`, link: `${base}/checkins` },
+          { label: $localize`Check-ins`, link: `${base}/checkins`, includesChildren: true },
           progress,
           service,
         ];

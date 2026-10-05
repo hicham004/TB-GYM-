@@ -1,0 +1,485 @@
+@if (context.isFormer()) {
+  <p class="muted" i18n>This is a former client. Their records are kept but are not shown here.</p>
+} @else {
+  <div class="review">
+    <a class="back" [routerLink]="['/clients', context.clientId(), 'checkins']">
+      <app-icon class="back-icon" name="chevron-right" />
+      <span i18n>All check-ins</span>
+    </a>
+
+    @switch (state()) {
+      @case ('loading') {
+        <section class="panel">
+          <div class="panel-body">
+            <app-skeleton [label]="loadingLabel" [lines]="5" />
+          </div>
+        </section>
+      }
+      @case ('denied') {
+        <section class="panel" aria-labelledby="closed-heading">
+          <header class="panel-head">
+            <h2 id="closed-heading" #heading tabindex="-1" i18n>Check-ins are closed</h2>
+          </header>
+          <div class="panel-body prose">
+            <p dir="auto">{{ closedMessage() }}</p>
+            <a
+              appButton
+              variant="outlined"
+              [routerLink]="['/clients', context.clientId(), 'service']"
+              i18n
+              >Open Service &amp; access</a
+            >
+          </div>
+        </section>
+      }
+      @case ('missing') {
+        <section class="panel" aria-labelledby="missing-heading">
+          <header class="panel-head">
+            <h2 id="missing-heading" #heading tabindex="-1" i18n>This check-in isn’t here</h2>
+          </header>
+          <div class="panel-body prose">
+            <p i18n>The link may be old, or the check-in belongs to someone else.</p>
+            <a
+              appButton
+              variant="outlined"
+              [routerLink]="['/clients', context.clientId(), 'checkins']"
+              i18n
+              >See all check-ins</a
+            >
+          </div>
+        </section>
+      }
+      @case ('error') {
+        <section class="panel">
+          <div class="panel-body load-failed">
+            <p role="alert">{{ loadError() }}</p>
+            <button appButton type="button" variant="outlined" (click)="retry()" i18n>
+              Try again
+            </button>
+          </div>
+        </section>
+      }
+      @default {
+        @if (detail(); as checkIn) {
+          <header class="review-head">
+            <div class="title-block">
+              <h2 class="title" #heading tabindex="-1" dir="auto">
+                {{ checkIn.assignment.formTitle }}
+              </h2>
+              @if (facts(); as fact) {
+                @if (sentStage()) {
+                  <p class="facts-line">
+                    <span>{{ fact.headline }}</span
+                    >&ngsp;<span class="dot" aria-hidden="true">·</span>&ngsp;<span>{{
+                      fact.detail
+                    }}</span>
+                    @if (fact.late) {
+                      &ngsp;<span class="dot" aria-hidden="true">·</span>&ngsp;<span class="late">{{
+                        fact.late
+                      }}</span>
+                    }
+                  </p>
+                }
+                @if (fact.reviewed) {
+                  <p class="reviewed-line">
+                    <app-icon name="check-circle" />
+                    <span>{{ fact.reviewed }}</span>
+                  </p>
+                }
+              }
+            </div>
+            @if (facts(); as fact) {
+              <app-status-pill [label]="fact.pill.label" [tone]="fact.pill.tone" />
+            }
+          </header>
+
+          @if (!sentStage()) {
+            <section class="panel" aria-labelledby="unsent-heading">
+              <header class="panel-head">
+                <h3 id="unsent-heading">{{ facts()?.headline }}</h3>
+              </header>
+              <div class="panel-body prose">
+                <p dir="auto">{{ facts()?.detail }}</p>
+              </div>
+            </section>
+          } @else {
+            <div class="grid">
+              <div class="main">
+                <section class="panel answers" aria-labelledby="answers-heading">
+                  <header class="panel-head">
+                    <h3 id="answers-heading" i18n>Answers</h3>
+                    @if (earlier().length > 1) {
+                      <app-menu
+                        label="Compare with another"
+                        i18n-label
+                        [items]="compareItems()"
+                        (chosen)="compareWith($event)"
+                      />
+                    }
+                  </header>
+                  <div class="panel-body">
+                    <p class="answers-line" aria-live="polite">
+                      @if (earlier().length === 0) {
+                        <ng-container i18n
+                          >{{ firstName() }}’s first {{ checkIn.assignment.formTitle }}, so there is
+                          nothing earlier to read it beside.</ng-container
+                        >
+                      } @else {
+                        @switch (comparisonState()) {
+                          @case ('loading') {
+                            <ng-container i18n>Reading last time’s answers…</ng-container>
+                          }
+                          @case ('error') {
+                            <span class="warm" i18n>Last time’s answers could not be loaded.</span>
+                            <button
+                              appButton
+                              type="button"
+                              variant="text"
+                              (click)="loadComparison()"
+                              i18n
+                            >
+                              Try again
+                            </button>
+                          }
+                          @default {
+                            @if (changes() === 0) {
+                              <ng-container i18n
+                                >Every answer is the same as on {{ comparedLabel() }}.</ng-container
+                              >
+                            } @else if (changes() === 1) {
+                              <ng-container i18n
+                                >1 answer is different from {{ comparedLabel() }}.</ng-container
+                              >
+                            } @else {
+                              <ng-container i18n
+                                >{{ changes() }} answers are different from
+                                {{ comparedLabel() }}.</ng-container
+                              >
+                            }
+                          }
+                        }
+                      }
+                    </p>
+
+                    <ol class="rows" role="list">
+                      @for (row of rows(); track row.key) {
+                        <li
+                          class="row"
+                          [class.changed]="row.changed"
+                          [class.long]="row.long"
+                          [attr.data-presence]="row.presence"
+                        >
+                          <div class="question">
+                            <p class="prompt" dir="auto">{{ row.prompt }}</p>
+                            @if (row.changed) {
+                              <span class="tag tag-changed" i18n>Changed</span>
+                            } @else if (row.presence === 'new') {
+                              <span class="tag" i18n>New question</span>
+                            } @else if (row.presence === 'dropped') {
+                              <span class="tag" i18n>Not asked this time</span>
+                            }
+                          </div>
+                          @if (row.earlierPrompt; as wording) {
+                            <p class="reworded" dir="auto">
+                              <ng-container i18n>Last time it read:</ng-container>
+                              “{{ wording }}”
+                            </p>
+                          }
+                          <div
+                            class="pair"
+                            [class.short]="!row.long"
+                            [class.single]="!beside() || row.presence === 'new'"
+                          >
+                            @if (row.presence !== 'dropped') {
+                              <div class="answer now">
+                                @if (beside()) {
+                                  <p class="when" i18n>This time</p>
+                                }
+                                <ng-container
+                                  [ngTemplateOutlet]="cell"
+                                  [ngTemplateOutletContext]="{ $implicit: row.current }"
+                                />
+                              </div>
+                            }
+                            @if (beside() && row.presence !== 'new') {
+                              <div class="answer before">
+                                <p class="when">{{ comparedLabel() }}</p>
+                                <ng-container
+                                  [ngTemplateOutlet]="cell"
+                                  [ngTemplateOutletContext]="{ $implicit: row.earlier }"
+                                />
+                              </div>
+                            }
+                          </div>
+                        </li>
+                      }
+                    </ol>
+                  </div>
+                </section>
+
+                <section class="panel reply" aria-labelledby="reply-heading">
+                  <header class="panel-head">
+                    <h3 id="reply-heading">
+                      @if (stage() === 'waiting') {
+                        <ng-container i18n>Reply and mark reviewed</ng-container>
+                      } @else {
+                        <ng-container i18n>Reply to {{ firstName() }}</ng-container>
+                      }
+                    </h3>
+                  </header>
+                  <div class="panel-body">
+                    @if (canReply()) {
+                      <app-field
+                        [label]="replyLabel()"
+                        help="It goes to your chat with them. Nothing is sent until you choose to."
+                        i18n-help
+                        [errors]="attempt.shows('reply', issues()) ? issues() : null"
+                      >
+                        <textarea
+                          appControl
+                          #replyField
+                          name="reply"
+                          rows="4"
+                          dir="auto"
+                          [attr.maxlength]="maximumReply"
+                          [value]="reply()"
+                          (input)="reply.set($any($event.target).value)"
+                          (blur)="attempt.touch('reply')"
+                        ></textarea>
+                      </app-field>
+                    } @else if (replyClosed(); as note) {
+                      <p class="muted" dir="auto">{{ note }}</p>
+                    }
+
+                    <p class="summary" id="reply-summary" role="alert" tabindex="-1" #summary>
+                      @if (actionError(); as message) {
+                        {{ message }}
+                      } @else if (attempt.wasTried() && issues().length > 0) {
+                        <ng-container i18n>This reply cannot be sent yet:</ng-container
+                        >&ngsp;<span>{{ issues()[0] }}</span>
+                      }
+                    </p>
+
+                    @if (sent(); as done) {
+                      <p class="sent-note" role="status">
+                        <app-icon name="check-circle" />
+                        <span i18n>Sent to your chat with {{ firstName() }}.</span>&ngsp;<a
+                          class="panel-link"
+                          routerLink="/messages"
+                          [queryParams]="{ conversation: done.conversationId }"
+                          i18n
+                          >Open chat</a
+                        >
+                      </p>
+                    }
+
+                    @if (canReply() || action()) {
+                      <div class="reply-actions">
+                        @if (canReply()) {
+                          <button
+                            appButton
+                            type="button"
+                            variant="text"
+                            class="saved"
+                            aria-haspopup="dialog"
+                            (click)="openSavedReplies()"
+                            i18n
+                          >
+                            Saved replies
+                          </button>
+                        }
+                        @if (action(); as next) {
+                          @if (next === 'send-and-review') {
+                            <button
+                              appButton
+                              type="button"
+                              variant="text"
+                              [attr.aria-disabled]="busy() ? 'true' : null"
+                              (click)="sendOnly()"
+                              i18n
+                            >
+                              Send only
+                            </button>
+                          }
+                          <button
+                            appButton
+                            type="button"
+                            class="primary"
+                            aria-describedby="reply-summary"
+                            [loading]="busy()"
+                            (click)="act()"
+                          >
+                            @switch (next) {
+                              @case ('review') {
+                                <ng-container i18n>Mark reviewed</ng-container>
+                              }
+                              @case ('send-and-review') {
+                                <ng-container i18n>Send and mark reviewed</ng-container>
+                              }
+                              @case ('send') {
+                                <ng-container i18n>Send reply</ng-container>
+                              }
+                            }
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                </section>
+              </div>
+
+              <div class="rail">
+                <section class="panel weight" aria-labelledby="weight-heading">
+                  <header class="panel-head">
+                    <h3 id="weight-heading" i18n>Weight</h3>
+                    <p class="panel-span" i18n>{{ windowWeeks }} weeks to {{ sentDay() }}</p>
+                  </header>
+                  <div class="panel-body">
+                    @switch (dashboardState()) {
+                      @case ('error') {
+                        <div class="load-failed">
+                          <p role="alert" i18n>Weight and photos could not be loaded.</p>
+                          <button
+                            appButton
+                            type="button"
+                            variant="outlined"
+                            (click)="loadDashboard()"
+                            i18n
+                          >
+                            Try again
+                          </button>
+                        </div>
+                      }
+                      @case ('ready') {
+                        @if (weight(); as story) {
+                          <div class="weight-row">
+                            <div>
+                              <p class="figure">
+                                <strong>{{ story.value }}</strong
+                                >&ngsp;<span class="unit">{{ story.unit }}</span>
+                              </p>
+                              <p class="delta">{{ story.context }}</p>
+                            </div>
+                            <app-sparkline
+                              class="spark"
+                              [values]="story.values"
+                              [summary]="story.summary"
+                            />
+                          </div>
+                          @if (story.lastWeighed) {
+                            <p class="muted">{{ story.lastWeighed }}</p>
+                          }
+                        } @else {
+                          <p class="muted" i18n>
+                            No weigh-ins in the {{ windowWeeks }} weeks before this check-in.
+                          </p>
+                        }
+                      }
+                      @default {
+                        <app-skeleton [label]="loadingLabel" [lines]="2" />
+                      }
+                    }
+                  </div>
+                </section>
+
+                <section class="panel photos" aria-labelledby="photos-heading">
+                  <header class="panel-head">
+                    <h3 id="photos-heading" i18n>Progress photos</h3>
+                  </header>
+                  <div class="panel-body">
+                    @switch (dashboardState()) {
+                      @case ('error') {
+                        <p class="muted" i18n>Photos could not be loaded.</p>
+                      }
+                      @case ('ready') {
+                        @if (shownPose(); as shown) {
+                          @if (poseOptions().length > 1) {
+                            <app-segmented-control
+                              class="poses"
+                              label="Pose"
+                              i18n-label
+                              [options]="poseOptions()"
+                              [(selected)]="pose"
+                            />
+                          }
+                          @if (shown.earlier; as before) {
+                            <app-photo-compare
+                              [beforeSrc]="before.thumbnailUrl!"
+                              [afterSrc]="shown.latest.thumbnailUrl!"
+                              [beforeLabel]="photoDay(before.photoDate)"
+                              [afterLabel]="photoDay(shown.latest.photoDate)"
+                              [label]="compareLabel(shown)"
+                            />
+                          } @else {
+                            <figure class="single-photo">
+                              <img
+                                [src]="shown.latest.thumbnailUrl"
+                                [alt]="photoAlt(shown)"
+                                loading="lazy"
+                              />
+                              <figcaption>{{ photoDay(shown.latest.photoDate) }}</figcaption>
+                            </figure>
+                          }
+                          <p class="muted photo-note" i18n>
+                            From {{ firstName() }}’s progress photos, by the day each was taken.
+                          </p>
+                        } @else if (photosUnavailable()) {
+                          <p class="muted" i18n>
+                            The photos could not be shown right now. Reload the page to try again.
+                          </p>
+                        } @else {
+                          <p class="muted" i18n>
+                            No progress photos in the {{ windowWeeks }} weeks before this check-in.
+                            Photos {{ firstName() }} adds show here, by the day each was taken.
+                          </p>
+                        }
+                      }
+                      @default {
+                        <app-skeleton [label]="loadingLabel" [lines]="3" />
+                      }
+                    }
+                  </div>
+                </section>
+              </div>
+            </div>
+          }
+        }
+      }
+    }
+  </div>
+}
+
+<ng-template #cell let-cell>
+  @if (cell === null || cell.blank) {
+    <p class="blank" i18n>No answer</p>
+  } @else if (cell.scale; as scale) {
+    <p class="figure-answer">
+      <strong>{{ scale.value }}</strong>
+      @if (scale.maximum) {
+        &ngsp;<span class="of" i18n>out of {{ scale.maximum }}</span>
+      }
+    </p>
+    @if (scale.position !== null) {
+      <span class="meter" aria-hidden="true">
+        <span class="fill" [style.inline-size.%]="scale.position * 100"></span>
+      </span>
+    }
+  } @else {
+    <p class="text" dir="auto">{{ cell.text }}</p>
+  }
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #savedReplies>
+  <app-saved-replies [draft]="reply()" (use)="useSavedReply($event)" />
+</ng-template>

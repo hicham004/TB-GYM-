@@ -87,13 +87,13 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
             : $localize`Check-in ready to review`,
         detail:
           count > 1 ? $localize`The first was sent ${since}:ago:` : $localize`Sent ${since}:ago:`,
-        // One waiting opens straight at it; several open the list, where each can be reviewed.
+        // One waiting opens straight at its review; several open the list, where each can be read.
         action:
           item.subjectId && count <= 1
             ? {
                 label: $localize`Review`,
-                link: '/checkins/clients',
-                queryParams: { clientId: context.clientId, assignmentId: item.subjectId },
+                link: `${page}/checkins/${item.subjectId}`,
+                queryParams: null,
               }
             : { label: $localize`Review`, link: `${page}/checkins`, queryParams: null },
       };
@@ -538,8 +538,8 @@ export function checkInCard(
     action: needsReview
       ? {
           label: $localize`Review`,
-          link: '/checkins/clients',
-          queryParams: { clientId: context.clientId, assignmentId: latest.assignment.id },
+          link: `${page}/checkins/${latest.assignment.id}`,
+          queryParams: null,
         }
       : null,
   };
