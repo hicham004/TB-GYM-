@@ -240,9 +240,19 @@ public sealed partial class Phase3TrainingWorkflowTests
             starts.Single(response => response.StatusCode == HttpStatusCode.OK));
 
         // Two saves from the same read: one lands, and the other is refused rather than overwriting it.
+        // The token is refreshed once, before both: refreshing it inside each request rewrites the shared
+        // client's header while the other request is on its way, so either save could be sent without a
+        // valid token and neither would land.
+        await RefreshCsrfAsync(owner);
         var saves = await Task.WhenAll(
-            R42aPutAsync(owner, draft.Id, draft.Version, R42aContent(squat.Id, alternative.Id, targetRpe: 7m)),
-            R42aPutAsync(owner, draft.Id, draft.Version, R42aContent(squat.Id, alternative.Id, targetRpe: 9m)));
+            owner.PutAsJsonAsync(
+                R42aDraftUrl(draft.Id),
+                new SaveProgramDraftRequest(R42aContent(squat.Id, alternative.Id, targetRpe: 7m), draft.Version),
+                SliceReadJson),
+            owner.PutAsJsonAsync(
+                R42aDraftUrl(draft.Id),
+                new SaveProgramDraftRequest(R42aContent(squat.Id, alternative.Id, targetRpe: 9m), draft.Version),
+                SliceReadJson));
         CollectionAssert.AreEquivalent(R35cOneWins, saves.Select(response => response.StatusCode).ToArray());
         await R42aAssertConflictAsync(
             saves.Single(response => response.StatusCode == HttpStatusCode.Conflict),

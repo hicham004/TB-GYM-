@@ -49,6 +49,15 @@ public sealed record SetPrescriptionBlueprint(
     string? CalculationExplanation = null,
     bool IsManualLoadOverride = false);
 
+/// <summary>The load of one set worked out again after its program's training max changed (STR-002).</summary>
+public sealed record SetLoadCalculation(
+    Guid WorkingMaxSnapshotId,
+    decimal UnroundedRecommendedLoad,
+    decimal PrescribedLoad,
+    string StrategyKey,
+    string StrategyVersion,
+    string Explanation);
+
 public enum PrescriptionModificationPolicy
 {
     Locked = 1,

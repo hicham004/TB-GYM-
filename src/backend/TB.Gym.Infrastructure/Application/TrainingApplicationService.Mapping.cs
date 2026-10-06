@@ -399,12 +399,60 @@ internal sealed partial class TrainingApplicationService
             throw new ArgumentException("A selected strength-max source was not found in this workspace.");
         }
 
+        TrainingWeekBlueprint? weekOne = null;
+        if (selections.Any(item => item.WeekOneWeight is not null))
+        {
+            var blueprintWeeks = ToBlueprint(templateVersion).Weeks;
+            weekOne = blueprintWeeks.Count > 0 ? blueprintWeeks[0] : null;
+        }
+
+        var exerciseNames = templateVersion.Weeks
+            .SelectMany(item => item.Sessions)
+            .SelectMany(item => item.Exercises)
+            .GroupBy(item => item.ExerciseId)
+            .ToDictionary(group => group.Key, group => group.First().ExerciseNameSnapshot);
         var result = new Dictionary<Guid, MesocycleWorkingMaxSnapshot>();
         foreach (var selection in selections)
         {
             if (selection.Unit != request.LoadUnit)
             {
                 throw new ArgumentException("Working-max units must match the mesocycle load unit.");
+            }
+
+            if ((selection.Value is null) == (selection.WeekOneWeight is null))
+            {
+                throw new ArgumentException("Give each training max either a number or week 1's weight.");
+            }
+
+            if (selection.WeekOneWeight is { } weekOneWeight)
+            {
+                if (selection.StrengthMaxRecordId is not null)
+                {
+                    throw new ArgumentException("A max worked out from week 1's weight has no saved max behind it.");
+                }
+
+                var estimate = EstimateFromWeekOne(
+                    weekOne,
+                    selection.ExerciseId,
+                    exerciseNames.GetValueOrDefault(selection.ExerciseId, "This lift"),
+                    weekOneWeight,
+                    selection.Unit,
+                    out var anchor);
+                result.Add(selection.ExerciseId, MesocycleWorkingMaxSnapshot.CaptureFromWeekOneWeight(
+                    tenantContext.TenantId,
+                    mesocycleId,
+                    clientProfileId,
+                    selection.ExerciseId,
+                    estimate,
+                    weekOneWeight,
+                    anchor.Repetitions,
+                    anchor.Rpe,
+                    1,
+                    null,
+                    string.Create(
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        $"Assignment training max worked out from week 1's weight: {weekOneWeight:0.###} {UnitName(selection.Unit)} for {anchor.Repetitions} reps at RPE {anchor.Rpe:0.#}.")));
+                continue;
             }
 
             if (selection.StrengthMaxRecordId is { } sourceId)
@@ -423,7 +471,7 @@ internal sealed partial class TrainingApplicationService
                 clientProfileId,
                 selection.ExerciseId,
                 selection.StrengthMaxRecordId,
-                selection.Value,
+                selection.Value!.Value,
                 ToStrengthUnit(selection.Unit),
                 1,
                 null,
@@ -433,12 +481,28 @@ internal sealed partial class TrainingApplicationService
         return result;
     }
 
+    /// <summary>
+    /// The max in use for each lift of a program: the one in its chain that nothing supersedes (STR-002).
+    /// A replaced session and a program's next weeks are calculated from these.
+    /// </summary>
     private async Task<Dictionary<Guid, MesocycleWorkingMaxSnapshot>> LoadWorkingMaxDictionaryAsync(
         Guid mesocycleId,
         CancellationToken cancellationToken) =>
-        await dbContext.MesocycleWorkingMaxSnapshots.AsNoTracking()
-            .Where(item => item.MesocycleId == mesocycleId && item.EffectiveFromWeek == 1)
-            .ToDictionaryAsync(item => item.ExerciseId, cancellationToken);
+        CurrentWorkingMaxes(await dbContext.MesocycleWorkingMaxSnapshots.AsNoTracking()
+            .Where(item => item.MesocycleId == mesocycleId)
+            .ToListAsync(cancellationToken));
+
+    private static Dictionary<Guid, MesocycleWorkingMaxSnapshot> CurrentWorkingMaxes(
+        IReadOnlyCollection<MesocycleWorkingMaxSnapshot> snapshots)
+    {
+        var superseded = snapshots
+            .Where(item => item.SupersedesSnapshotId is not null)
+            .Select(item => item.SupersedesSnapshotId!.Value)
+            .ToHashSet();
+        return snapshots
+            .Where(item => !superseded.Contains(item.Id))
+            .ToDictionary(item => item.ExerciseId);
+    }
 
     private async Task<ProgramTemplateVersion?> LoadTemplateVersionAsync(
         Guid id,
@@ -556,20 +620,27 @@ internal sealed partial class TrainingApplicationService
             existing.Kind != request.Kind ||
             existing.LoadUnit != request.LoadUnit ||
             existing.LoadIncrement != decimal.Round(request.LoadIncrement, 3, MidpointRounding.AwayFromZero) ||
-            existing.LoadRoundingMode != request.LoadRoundingMode)
+            existing.LoadRoundingMode != request.LoadRoundingMode ||
+            (!string.IsNullOrWhiteSpace(request.Name) && existing.Name != request.Name.Trim()))
         {
             return false;
         }
 
+        // The first max of each lift is the assignment's own, even after later updates superseded it.
         var snapshots = await dbContext.MesocycleWorkingMaxSnapshots.AsNoTracking()
-            .Where(item => item.MesocycleId == existing.Id && item.EffectiveFromWeek == 1)
+            .Where(item => item.MesocycleId == existing.Id && item.SupersedesSnapshotId == null)
             .ToListAsync(cancellationToken);
         return snapshots.Count == request.WorkingMaxes.Count && request.WorkingMaxes.All(selection =>
             snapshots.Any(snapshot =>
                 snapshot.ExerciseId == selection.ExerciseId &&
                 snapshot.SourceMaxRecordId == selection.StrengthMaxRecordId &&
-                snapshot.Value == decimal.Round(selection.Value, 3, MidpointRounding.AwayFromZero) &&
-                snapshot.Unit == ToStrengthUnit(selection.Unit)));
+                snapshot.Unit == ToStrengthUnit(selection.Unit) &&
+                (selection.WeekOneWeight is { } weight
+                    ? snapshot.Source == WorkingMaxSource.WeekOneWeight &&
+                      snapshot.BasisLoad == decimal.Round(weight, 3, MidpointRounding.AwayFromZero)
+                    : selection.Value is { } value &&
+                      snapshot.Source != WorkingMaxSource.WeekOneWeight &&
+                      snapshot.Value == decimal.Round(value, 3, MidpointRounding.AwayFromZero))));
     }
 
     private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken)
@@ -723,7 +794,8 @@ internal sealed partial class TrainingApplicationService
                 ToTrainingUnit(item.Snapshot.Unit),
                 item.Snapshot.EffectiveFromWeek,
                 item.Snapshot.SupersedesSnapshotId,
-                item.Snapshot.Reason)).ToArray(),
+                item.Snapshot.Reason,
+                ToTrainingSource(item.Snapshot.Source))).ToArray(),
             mesocycle.Weeks.OrderBy(item => item.WeekNumber)
                 .Select(week => ToView(mesocycle, week, executionIds, clock.UtcNow)).ToArray(),
             lifecycle.Select(item => new MesocycleLifecycleEventView(

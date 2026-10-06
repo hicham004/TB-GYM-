@@ -16,11 +16,14 @@ import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { ClientProgramApi } from './client-program-api';
 import type { BlockCard } from './client-program.models';
 import {
   CANCEL_REASON_LIMIT,
   cancelReasonErrors,
   lastDayOf,
+  PROGRAM_NAME_LIMIT,
+  programNameErrors,
   programWriteError,
   rescheduleErrors,
 } from './client-program-forms.models';
@@ -73,6 +76,99 @@ const DIALOG_STYLES = `
     justify-content: flex-end;
   }
 `;
+
+// ------------------------------------------------------------------------------------------------
+
+/**
+ * Renaming changes only what the program is called (TRN-002). Where it came from and when it runs
+ * stay as they were, and the change is kept on its record.
+ */
+@Component({
+  selector: 'app-program-rename',
+  imports: [Button, Control, Field],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+      <p class="muted" dir="auto" i18n>
+        This changes what {{ firstName() }} and you call the program. Its dates, its weeks and what
+        it was built from stay as they are.
+      </p>
+      <app-field
+        [label]="nameLabel"
+        [errors]="attempt.shows('name', nameProblems()) ? nameProblems() : null"
+      >
+        <input
+          appControl
+          type="text"
+          [attr.maxlength]="limit"
+          [value]="name()"
+          (input)="name.set($any($event.target).value)"
+          (blur)="attempt.touch('name')"
+        />
+      </app-field>
+      @if (error(); as message) {
+        <p class="problem" role="alert">{{ message }}</p>
+      }
+      <div class="actions">
+        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+          Not now
+        </button>
+        <button appButton type="submit" [loading]="busy()">
+          @if (busy()) {
+            <ng-container i18n>Renaming…</ng-container>
+          } @else {
+            <ng-container i18n>Rename program</ng-container>
+          }
+        </button>
+      </div>
+    </form>
+  `,
+  styles: DIALOG_STYLES,
+})
+export class ProgramRename {
+  private readonly programApi = inject(ClientProgramApi);
+  private readonly csrf = inject(CsrfService);
+
+  readonly block = input.required<BlockCard>();
+  readonly firstName = input.required<string>();
+  /** True when the program was renamed. */
+  readonly closed = output<boolean>();
+
+  protected readonly attempt = new FormAttempt();
+  protected readonly busy = signal(false);
+  protected readonly error = signal<string | null>(null);
+  protected readonly limit = PROGRAM_NAME_LIMIT;
+  protected readonly nameLabel = $localize`Program name`;
+  /** Starts on the program's own name, and follows it if the program is reloaded. */
+  protected readonly name = linkedSignal(() => this.block().name);
+
+  protected readonly nameProblems = computed(() => programNameErrors(this.name()));
+
+  protected async submit(): Promise<void> {
+    if (this.busy()) return;
+    this.attempt.attempt();
+    if (this.nameProblems().length > 0) return;
+    const block = this.block();
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      await this.csrf.refresh();
+      await firstValueFrom(
+        this.programApi.renameProgram(block.id, {
+          name: this.name().trim(),
+          version: block.version,
+        }),
+      );
+      this.closed.emit(true);
+    } catch (error) {
+      this.error.set(
+        programWriteError(error, $localize`The program could not be renamed.`, this.firstName()),
+      );
+    } finally {
+      this.busy.set(false);
+    }
+  }
+}
 
 // ------------------------------------------------------------------------------------------------
 

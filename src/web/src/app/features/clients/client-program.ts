@@ -49,7 +49,14 @@ import { trainingClosed } from './client-profile.models';
 import { ClientTrainingTools } from './client-training-tools';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import { ProgramAssign } from './program-assign';
-import { ProgramCancel, ProgramComplete, ProgramReschedule } from './program-block-dialogs';
+import {
+  ProgramCancel,
+  ProgramComplete,
+  ProgramRename,
+  ProgramReschedule,
+} from './program-block-dialogs';
+import { ProgramMaxes } from './program-maxes';
+import { ProgramMaxesUpdate } from './program-maxes-update';
 import { ProgramNextBlock } from './program-next-block';
 import { ProgramSession } from './program-session';
 
@@ -72,7 +79,10 @@ import { ProgramSession } from './program-session';
     ProgramAssign,
     ProgramCancel,
     ProgramComplete,
+    ProgramMaxes,
+    ProgramMaxesUpdate,
     ProgramNextBlock,
+    ProgramRename,
     ProgramReschedule,
     ProgramSession,
     RouterLink,
@@ -110,6 +120,8 @@ export class ClientProgram {
 
   protected readonly assignSheet = viewChild.required<TemplateRef<unknown>>('assignSheet');
   protected readonly nextSheet = viewChild.required<TemplateRef<unknown>>('nextSheet');
+  protected readonly maxesSheet = viewChild.required<TemplateRef<unknown>>('maxesSheet');
+  protected readonly renameDialog = viewChild.required<TemplateRef<unknown>>('renameDialog');
   protected readonly sessionSheet = viewChild.required<TemplateRef<unknown>>('sessionSheet');
   protected readonly rescheduleDialog =
     viewChild.required<TemplateRef<unknown>>('rescheduleDialog');
@@ -309,6 +321,13 @@ export class ClientProgram {
     switch (action) {
       case 'assign':
         return this.openAssign();
+      case 'rename':
+        return this.open(
+          this.dialogs,
+          this.renameDialog(),
+          $localize`Rename program`,
+          () => $localize`The program was renamed.`,
+        );
       case 'next-block':
         return this.open(
           this.sheets,
@@ -355,6 +374,16 @@ export class ClientProgram {
         $localize`${assigned.name}:program: is assigned to ${this.firstName()}:name:. It starts ${formatDate(assigned.startDate, 'EEE d MMM', this.locale)}:date:.`,
       );
     });
+  }
+
+  /** The panel's one button: change the program's training maxes for the coming weeks (P2). */
+  protected openMaxesUpdate(): void {
+    this.open(
+      this.sheets,
+      this.maxesSheet(),
+      $localize`Update training maxes`,
+      () => $localize`Training maxes updated. The weeks still to come follow them.`,
+    );
   }
 
   protected openSession(week: WeekColumn, session: SessionCard): void {

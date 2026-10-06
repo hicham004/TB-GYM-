@@ -212,6 +212,25 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertStatusAsync(
             await P1PreviewAsync(coach, P1Request(new { label = "Week 1", isPublished = true, sessions = Array.Empty<object>() }, 1)),
             HttpStatusCode.OK);
+        // A program's maxes can be read and an update previewed, and the chart read backwards, while
+        // applying an update or renaming the program is staff work like any other write (P2).
+        var anyProgram = Guid.NewGuid();
+        await AssertStatusAsync(await coach.GetAsync(P2MaxesUrl(anyProgram)), HttpStatusCode.NotFound);
+        await AssertStatusAsync(
+            await P2PreviewAsync(coach, anyProgram, 1, P2Change(Guid.NewGuid(), value: 120m)),
+            HttpStatusCode.NotFound);
+        await RefreshCsrfAsync(coach);
+        await AssertStatusAsync(
+            await coach.PostAsJsonAsync(
+                "/api/strength/estimate-max-from-rpe",
+                new { load = 110m, repetitions = 5, rpe = 7m, unit = "Kilogram" }),
+            HttpStatusCode.OK);
+        await AssertReadOnlyAsync(await P2ApplyAsync(
+            coach, anyProgram, 1, [P2Change(Guid.NewGuid(), value: 120m)], null, new string('a', 64), Guid.NewGuid()));
+        await RefreshCsrfAsync(coach);
+        await AssertReadOnlyAsync(await coach.PutAsJsonAsync(
+            $"/api/training/mesocycles/{anyProgram}/name",
+            new { name = "Late name", version = 1 }));
         await RefreshCsrfAsync(coach);
         await AssertReadOnlyAsync(await coach.PostAsJsonAsync(
             $"/api/commercial/offers/{Guid.NewGuid()}/price-changes",
@@ -469,8 +488,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         "AdvanceOwnConversationReadCursor",
         "CreatePrivateMediaAccess",
         "CreatePrivateMediaAccessBatch",
+        "EstimateMaxFromRpeChart",
         "EstimateOneRepMax",
         "MarkOwnNotificationRead",
+        "PreviewTrainingMaxes",
         "PreviewTrainingProgression",
         "PreviewWeekProgression",
         "ResignFromTeam",

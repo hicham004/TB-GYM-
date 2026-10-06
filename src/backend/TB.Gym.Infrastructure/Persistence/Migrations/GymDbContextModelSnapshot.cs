@@ -7926,6 +7926,17 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("BasisLoad")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)");
+
+                    b.Property<int?>("BasisRepetitions")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("BasisRpe")
+                        .HasPrecision(3, 1)
+                        .HasColumnType("numeric(3,1)");
+
                     b.Property<Guid>("ClientProfileId")
                         .HasColumnType("uuid");
 
@@ -7939,6 +7950,14 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("EffectiveFromWeek")
                         .HasColumnType("integer");
+
+                    b.Property<string>("EstimateMethodKey")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("EstimateMethodVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
 
                     b.Property<Guid>("ExerciseId")
                         .HasColumnType("uuid");
@@ -7991,16 +8010,25 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "SourceMaxRecordId");
 
-                    b.HasIndex("TenantId", "SupersedesSnapshotId");
+                    b.HasIndex("TenantId", "SupersedesSnapshotId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WorkingMaxSnapshots_OneSuccessor")
+                        .HasFilter("\"SupersedesSnapshotId\" IS NOT NULL");
 
-                    b.HasIndex("TenantId", "MesocycleId", "ExerciseId", "EffectiveFromWeek")
-                        .IsUnique();
+                    b.HasIndex("TenantId", "MesocycleId", "ExerciseId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WorkingMaxSnapshots_OneRoot")
+                        .HasFilter("\"SupersedesSnapshotId\" IS NULL");
+
+                    b.HasIndex("TenantId", "MesocycleId", "ExerciseId", "EffectiveFromWeek");
 
                     b.ToTable("WorkingMaxSnapshots", "strength", t =>
                         {
                             t.HasCheckConstraint("CK_WorkingMaxSnapshots_EffectiveWeek", "\"EffectiveFromWeek\" >= 1 AND \"EffectiveFromWeek\" <= 52");
 
                             t.HasCheckConstraint("CK_WorkingMaxSnapshots_Value", "\"Value\" > 0 AND \"Value\" <= 2000");
+
+                            t.HasCheckConstraint("CK_WorkingMaxSnapshots_WeekOneBasis", "(\"BasisLoad\" IS NULL AND \"BasisRepetitions\" IS NULL AND \"BasisRpe\" IS NULL AND \"EstimateMethodKey\" IS NULL AND \"EstimateMethodVersion\" IS NULL) OR (\"BasisLoad\" > 0 AND \"BasisLoad\" <= 2000 AND \"BasisRepetitions\" >= 1 AND \"BasisRepetitions\" <= 100 AND \"BasisRpe\" >= 5 AND \"BasisRpe\" <= 10 AND \"EstimateMethodKey\" IS NOT NULL AND \"EstimateMethodVersion\" IS NOT NULL AND \"SourceMaxRecordId\" IS NULL)");
                         });
                 });
 
@@ -8091,6 +8119,88 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("MaxHistory", "strength", t =>
                         {
                             t.HasCheckConstraint("CK_StrengthMaxHistory_Value", "\"Value\" > 0 AND \"Value\" <= 2000");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Strength.WorkingMaxUpdate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("EffectiveFromWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LiftCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MesocycleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PreviewHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RequestFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("SessionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SetCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WorkingMaxUpdates_TenantId_IdempotencyKey");
+
+                    b.HasIndex("TenantId", "MesocycleId", "CreatedAtUtc");
+
+                    b.ToTable("WorkingMaxUpdates", "strength", t =>
+                        {
+                            t.HasCheckConstraint("CK_WorkingMaxUpdates_Counts", "\"EffectiveFromWeek\" >= 1 AND \"EffectiveFromWeek\" <= 52 AND \"LiftCount\" >= 1 AND \"SessionCount\" >= 0 AND \"SetCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_WorkingMaxUpdates_Hashes", "char_length(\"RequestFingerprint\") = 64 AND char_length(\"PreviewHash\") = 64");
                         });
                 });
 
@@ -12254,6 +12364,16 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "SourceWorkoutExecutionId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Strength.WorkingMaxUpdate", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Training.TrainingMesocycle", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "MesocycleId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Subscriptions.ClientEnrollment", b =>

@@ -121,6 +121,18 @@ internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenant
             "Population-level estimate only; individual response varies and the value is not physiologically exact.");
     }
 
+    public RpeChartMaxEstimateView EstimateFromRpeChart(EstimateRpeChartMaxRequest request)
+    {
+        var estimate = RpeChartMaxEstimator.Estimate(request.Load, request.Repetitions, request.Rpe, request.Unit);
+        return new RpeChartMaxEstimateView(
+            estimate.Value,
+            estimate.Unit,
+            estimate.Percent,
+            estimate.StrategyKey,
+            estimate.Version,
+            estimate.Explanation);
+    }
+
     private static (string MethodKey, string Version) ResolveMethod(RecordStrengthMaxRequest request)
     {
         if (request.Kind == StrengthMaxKind.EstimatedOneRepMax)

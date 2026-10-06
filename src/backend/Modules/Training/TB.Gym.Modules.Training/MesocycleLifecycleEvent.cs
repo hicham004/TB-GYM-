@@ -60,4 +60,7 @@ public enum MesocycleLifecycleEventType
     Assigned = 1,
     Cancelled = 2,
     Completed = 3,
+
+    /// <summary>The coach renamed the program (TRN-002); the status does not change.</summary>
+    Renamed = 4,
 }

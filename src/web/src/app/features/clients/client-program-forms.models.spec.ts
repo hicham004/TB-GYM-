@@ -17,10 +17,12 @@ import {
   maxRow,
   planChoices,
   programChoices,
+  programNameErrors,
   programWriteError,
   progressionErrors,
   rescheduleErrors,
   runSummary,
+  withMaxMode,
   type AssignmentValues,
 } from './client-program-forms.models';
 
@@ -110,8 +112,13 @@ describe('choosing a program', () => {
     ]);
 
     expect(choices).toEqual([
-      { versionId: 'fbr-2', label: 'Full Body Reset · 6 weeks', weekCount: 6 },
-      { versionId: 'ls-1', label: 'Lean & Strong · 1 week', weekCount: 1 },
+      {
+        versionId: 'fbr-2',
+        label: 'Full Body Reset · 6 weeks',
+        weekCount: 6,
+        name: 'Full Body Reset',
+      },
+      { versionId: 'ls-1', label: 'Lean & Strong · 1 week', weekCount: 1, name: 'Lean & Strong' },
     ]);
     // The version number is history, not a thing to choose between.
     expect(choices.map((choice) => choice.label).join()).not.toMatch(/v\d/);
@@ -189,9 +196,47 @@ describe('training maxes', () => {
 
   it('asks only for the exercises whose load is worked out from a max, each once', () => {
     expect(exercisesNeedingMax(version)).toEqual([
-      { exerciseId: 'squat', name: 'Back squat' },
-      { exerciseId: 'bench', name: 'Bench press' },
+      { exerciseId: 'squat', name: 'Back squat', anchor: null },
+      { exerciseId: 'bench', name: 'Bench press', anchor: null },
     ]);
+  });
+
+  it('tells which set week 1’s weight would be read from, when the chart covers one', () => {
+    const week = (sets: object[]) =>
+      ({
+        weeks: [
+          {
+            weekNumber: 1,
+            sessions: [
+              {
+                dayOffset: 0,
+                exercises: [{ exerciseId: 'squat', exerciseName: 'Back squat', position: 1, sets }],
+              },
+            ],
+          },
+        ],
+      }) as unknown as ProgramTemplateVersionView;
+    const set = (position: number, fields: object) => ({
+      position,
+      setType: 'Normal',
+      loadStrategy: 'RpeChart',
+      repetitionsMaximum: 5,
+      targetRpe: 7,
+      ...fields,
+    });
+
+    expect(exercisesNeedingMax(week([set(1, {})]))[0].anchor).toEqual({ repetitions: 5, rpe: 7 });
+    // A warm-up never counts, nor a set the chart does not cover: the next one does.
+    expect(
+      exercisesNeedingMax(
+        week([
+          set(1, { setType: 'WarmUp' }),
+          set(2, { targetRpe: 6 }),
+          set(3, { repetitionsMaximum: 3, targetRpe: 8.5 }),
+        ]),
+      )[0].anchor,
+    ).toEqual({ repetitions: 3, rpe: 8.5 });
+    expect(exercisesNeedingMax(week([set(1, { targetRpe: 6 })]))[0].anchor).toBeNull();
   });
 
   it('starts from the recorded training max in the unit, else any recorded max in it', () => {
@@ -203,6 +248,9 @@ describe('training maxes', () => {
       value: 100,
       unit: 'Kilogram',
       sourceRecordId: 'max-1',
+      mode: 'number',
+      weekOneWeight: null,
+      anchor: null,
     });
     const tested = recorded({ id: 'max-2', kind: 'TestedOneRepMax', value: 120 });
     expect(maxRow(need, [tested], 'Kilogram').value).toBe(120);
@@ -221,6 +269,9 @@ describe('training maxes', () => {
       value: null,
       unit: 'Pound',
       sourceRecordId: null,
+      mode: 'number',
+      weekOneWeight: null,
+      anchor: null,
     });
     // With a max in each unit, each unit finds its own and 100 kg is never read as 100 lb.
     expect(maxRow(need, [kilograms, pounds], 'Pound')).toMatchObject({ value: 220, unit: 'Pound' });
@@ -242,12 +293,56 @@ describe('assigning a program', () => {
         value: 100,
         unit: 'Kilogram',
         sourceRecordId: 'max-1',
+        mode: 'number',
+        weekOneWeight: null,
+        anchor: { repetitions: 5, rpe: 7 },
       },
     ],
   };
 
   it('accepts a complete assignment', () => {
     expect(assignmentErrors(values)).toEqual({});
+  });
+
+  it('works a max out from week 1’s weight when the coach chooses it, and sends only that', () => {
+    const fromWeekOne: AssignmentValues = {
+      ...values,
+      name: '  Peaking block  ',
+      maxes: [{ ...values.maxes[0], mode: 'weekOne', weekOneWeight: 110 }],
+    };
+
+    expect(assignmentErrors(fromWeekOne)).toEqual({});
+    expect(assignmentRequest(fromWeekOne).workingMaxes).toEqual([
+      {
+        exerciseId: 'squat',
+        strengthMaxRecordId: null,
+        value: null,
+        unit: 'Kilogram',
+        weekOneWeight: 110,
+      },
+    ]);
+    expect(assignmentRequest(fromWeekOne).name).toBe('Peaking block');
+    // The typed number is not sent beside it, and no name is sent when none was given.
+    expect(assignmentRequest(values)).not.toHaveProperty('name');
+    expect(
+      assignmentErrors({
+        ...fromWeekOne,
+        maxes: [{ ...fromWeekOne.maxes[0], weekOneWeight: null }],
+      }),
+    ).toEqual({ 'max:squat': ['Enter the weight for Back squat in week 1.'] });
+  });
+
+  it('keeps the program name within the limit and clears the other way when the mode changes', () => {
+    expect(assignmentErrors({ ...values, name: 'x'.repeat(161) })['name']).toEqual([
+      'Keep the name to 160 characters or fewer.',
+    ]);
+    expect(programNameErrors('')).toEqual(['Give the program a name.']);
+    expect(programNameErrors('x'.repeat(160))).toEqual([]);
+
+    const typed = { ...values.maxes[0], weekOneWeight: 99 };
+    expect(withMaxMode(typed, 'weekOne')).toMatchObject({ mode: 'weekOne', weekOneWeight: null });
+    // A lift whose week 1 has nothing the chart covers cannot be switched to it.
+    expect(withMaxMode({ ...typed, anchor: null }, 'weekOne').mode).toBe('number');
   });
 
   it('says what is missing, field by field', () => {
@@ -333,6 +428,28 @@ describe('what the server answers', () => {
 
     expect(programWriteError(error, 'Failed.', 'Maya')).toBe(
       'Maya already has a program on those dates. Choose other dates, or change the other program first.',
+    );
+  });
+
+  it('says a training max update went stale in plain words, not the engine’s', () => {
+    expect(
+      programWriteError(
+        conflict(
+          'training_maxes_preview_changed',
+          'The new weights no longer match the ones you reviewed. Preview them again before applying.',
+        ),
+        'Failed.',
+        'Maya',
+      ),
+    ).toBe('The new weights changed since you looked at them. Show them again, then update.');
+    expect(
+      programWriteError(
+        conflict('training_maxes_conflict', 'The program changed after this update was prepared.'),
+        'Failed.',
+        'Maya',
+      ),
+    ).toBe(
+      'This program changed since you opened this. Close it and open it again to see the latest, then try again.',
     );
   });
 

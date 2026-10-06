@@ -341,6 +341,12 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
                 return Invalid("kind", "Phase 3 supports primary mesocycles only.");
             }
 
+            var name = request.Name?.Trim();
+            if (name is { Length: > ProgramNameMaximumLength })
+            {
+                return Invalid("name", $"Keep the name to {ProgramNameMaximumLength} characters or fewer.");
+            }
+
             if (await HasPrimaryOverlapAsync(clientProfileId, request.StartDate, endDate, null, cancellationToken))
             {
                 return await PrimaryOverlapConflictAsync(clientProfileId, request.StartDate, endDate, null, cancellationToken);
@@ -368,7 +374,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
                 request.EnrollmentId,
                 templateVersion.TemplateId,
                 templateVersion.Id,
-                templateVersion.NameSnapshot,
+                string.IsNullOrEmpty(name) ? templateVersion.NameSnapshot : name,
                 request.StartDate,
                 timeZoneId,
                 request.Kind,

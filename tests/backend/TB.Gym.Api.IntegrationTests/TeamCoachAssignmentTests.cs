@@ -105,6 +105,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             $"/api/commercial/clients/{clientId}",
             $"/api/training/clients/{clientId}/mesocycles",
             $"/api/training/mesocycles/{block.Id}",
+            $"/api/training/mesocycles/{block.Id}/training-maxes",
             $"/api/training/clients/{clientId}/workouts/{execution.Id}",
             $"/api/training/clients/{clientId}/exercises/{resources.Exercise.Id}/history",
             $"/api/strength/clients/{clientId}/maxes",
@@ -136,6 +137,28 @@ public sealed partial class Phase3TrainingWorkflowTests
             HttpStatusCode.NotFound);
         await AssertStatusAsync(
             await coach.PutAsJsonAsync($"/api/training/mesocycles/{block.Id}/visibility", new { revealAllWeeks = true, version = 0u }),
+            HttpStatusCode.NotFound);
+        // The program's own maxes and its name (P2) are the assigned coach's too.
+        var notMine = new[] { P2Change(resources.Exercise.Id, value: 120m) };
+        await AssertStatusAsync(
+            await coach.PostAsJsonAsync(
+                $"/api/training/mesocycles/{block.Id}/training-maxes/preview",
+                new { mesocycleVersion = block.Version, changes = notMine }),
+            HttpStatusCode.NotFound);
+        await AssertStatusAsync(
+            await coach.PostAsJsonAsync(
+                $"/api/training/mesocycles/{block.Id}/training-maxes/apply",
+                new
+                {
+                    mesocycleVersion = block.Version,
+                    changes = notMine,
+                    reason = (string?)null,
+                    previewHash = new string('a', 64),
+                    idempotencyKey = Guid.NewGuid(),
+                }),
+            HttpStatusCode.NotFound);
+        await AssertStatusAsync(
+            await coach.PutAsJsonAsync($"/api/training/mesocycles/{block.Id}/name", new { name = "Not mine", version = block.Version }),
             HttpStatusCode.NotFound);
         await AssertStatusAsync(
             await coach.PostAsJsonAsync($"/api/training/workouts/{execution.Id}/notes", new { text = "not my client" }),

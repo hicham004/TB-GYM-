@@ -71,6 +71,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         // The record is readable and nothing about it changes, however the write reaches it.
         await AssertStatusAsync(await owner.GetAsync($"/api/clients/{clientId}"), HttpStatusCode.OK);
         await AssertStatusAsync(await owner.GetAsync($"/api/training/mesocycles/{block.Id}"), HttpStatusCode.OK);
+        await AssertStatusAsync(await owner.GetAsync(P2MaxesUrl(block.Id)), HttpStatusCode.OK);
         await RefreshCsrfAsync(owner);
         HttpResponseMessage[] refusals =
         [
@@ -81,6 +82,17 @@ public sealed partial class Phase3TrainingWorkflowTests
                 $"/api/progress/clients/{clientId}/bodyweight",
                 new { value = 80m, unit = "Kilogram", measurementDate = TenantToday() }),
             await owner.PutAsJsonAsync($"/api/training/mesocycles/{block.Id}/visibility", new { revealAllWeeks = true, version = block.Version }),
+            await owner.PostAsJsonAsync(
+                $"/api/training/mesocycles/{block.Id}/training-maxes/apply",
+                new
+                {
+                    mesocycleVersion = block.Version,
+                    changes = new[] { P2Change(resources.Exercise.Id, value: 120m) },
+                    reason = (string?)null,
+                    previewHash = new string('a', 64),
+                    idempotencyKey = Guid.NewGuid(),
+                }),
+            await owner.PutAsJsonAsync($"/api/training/mesocycles/{block.Id}/name", new { name = "Late name", version = block.Version }),
             await owner.PostAsJsonAsync(
                 $"/api/commercial/enrollments/{paid.Id}/payments",
                 new

@@ -260,9 +260,11 @@ against the database on every request, and never implied by any workspace role.
 client-specific snapshot with a reference to template/version provenance. Later template
 edits do not mutate an assigned mesocycle.
 
-**TRN-002** Assigned snapshots receive a stable per-client sequence/name such as `Meso 1`.
-Phase 3 does not expose rename; a later rename must not change sequence identity or source
-provenance.
+**TRN-002** An assigned program is called what its template is called, unless the coach names it when
+assigning it or renames it later (P2, ADR 0036). Renaming changes only the name and is kept on the
+program's record; where the program came from, when it runs and its plan never change, and a finished
+or cancelled program keeps its name. A per-client sequence such as `Meso 1` was planned and is not
+built: the name and the dates tell a client's programs apart.
 
 **TRN-003** The assigned snapshot belongs to one client and enrollment. Copying includes
 weeks, days, prescriptions, set overrides, notes intended as template content, visibility
@@ -415,6 +417,12 @@ above 0 and up to 150, a weight above 0 and up to 2,000, 52 weeks in a program, 
 chart set) refuses the whole preview and names the set. Nothing is kept until the coach's own draft is
 (TRN-024), and Publish checks the weeks like any save.
 
+**TRN-026** "From week 1's weight" (P2, ADR 0036) reads one set: the first working set of the lift in
+week 1, by day and then position, that names a repetition count and an RPE the RTS chart covers
+(STR-010). Warm-up sets never count. The set comes from the program's version before it is assigned
+and from the assigned program afterwards, where its weight is the prescribed one. When week 1 has no
+such set the server refuses and says so, and the coach types the max instead.
+
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated
@@ -474,9 +482,26 @@ top repetitions at the target RPE. The chart is the widely used Tuchscherer char
 half steps by 1 to 12 repetitions, locked by a reference test and cross-checked against Helms et
 al. (2016), Table 2. A set outside the chart is rejected with the reason and never extrapolated; for
 it the coach types a weight or uses another formula. The coach chooses the formula per program in
-the builder and at assignment, and RpeChart v1 is the default for new RPE-loaded sets. Every
-calculated load keeps an explanation with its numbers and its rounding ("RTS RPE chart v1: 5 reps at
-RPE 7 is 78.6% of 140 kg = 110.04 kg. Rounded to the nearest 2.5 kg: 110 kg.").
+the builder (P1; choosing it again at assignment is not built yet), and RpeChart v1 is the default for
+new RPE-loaded sets. Every calculated load keeps an explanation with its numbers and its rounding
+("RTS RPE chart v1: 5 reps at RPE 7 is 78.6% of 140 kg = 110.04 kg. Rounded to the nearest 2.5 kg:
+110 kg.").
+
+**STR-011** A program's training maxes (P2, ADR 0036). Each lift that works its weights out from a
+max has one chain of maxes in the program: the one chosen at assignment, then each update superseding
+the one before it, with where it came from (typed, a saved max, or worked out from week 1's weight,
+TRN-026), the week it applies from, the date and a reason. Reads show the max in use and the earlier
+ones. A max worked out from week 1's weight is that weight divided by the chart's percentage for the
+set's repetitions and RPE, to three decimals, in the program's unit (never converted), and keeps the
+set it came from. An update recalculates only sets that are calculated from the max (percentage, Epley
+curve or chart) in sessions that have not started and are not before today in the workspace; a typed
+weight and a manual override win, and started, finished and past sessions keep what they had. It goes
+through preview (every changed weight with its explanation), hash and apply with the program's
+version and an idempotency key bound to the request: a retry returns the first result, a changed
+request under the same key conflicts, a stale preview or version is refused, and two updates racing
+for the same max cannot both win (one first max per lift, one successor per max). Each update leaves
+an append-only record of its counts, hashes and reason. A finished or cancelled program keeps its
+maxes, and a released client's program is read-only (ADR 0027).
 
 ## 6. Nutrition, recipes, and calorie targets
 

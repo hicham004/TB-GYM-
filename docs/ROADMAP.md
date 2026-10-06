@@ -1044,9 +1044,10 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
   Anthropic SDK, always reviewed by the coach (ADR 0035).
 - Progression and training maxes, P1 to P4 (approved by the owner 2026-10-05, ADR 0036; they come
   before R4.4 in the redesign plan's table). P1: a week duplicated with RPE, reps, % and weight
-  steps, shown before it is added, and the RTS RPE chart as a load formula. P2: each assigned
-  program's own training maxes, updated for the coming weeks after a preview. P3: the next block and
-  a client's future weeks edited with the same steps. P4: exercise videos and notes in sessions.
+  steps, shown before it is added, and the RTS RPE chart as a load formula (built). P2: each assigned
+  program's own training maxes, updated for the coming weeks after a preview, a max worked out from
+  week 1's weight, and a program name set when assigning and changed later (built). P3: the next block
+  and a client's future weeks edited with the same steps. P4: exercise videos and notes in sessions.
 
 Work follows this order; anything outside it needs the user's approval first.
 

@@ -79,6 +79,27 @@ public static class StrengthEndpoints
             .Produces<OneRepMaxEstimateView>()
             .ProducesValidationProblem();
 
+        group.MapPost("/estimate-max-from-rpe", (
+            EstimateRpeChartMaxRequest request,
+            IStrengthApplicationService service) =>
+        {
+            try
+            {
+                return Results.Ok(service.EstimateFromRpeChart(request));
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["estimate"] = [exception.Message],
+                });
+            }
+        })
+            .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
+            .WithName("EstimateMaxFromRpeChart")
+            .Produces<RpeChartMaxEstimateView>()
+            .ProducesValidationProblem();
+
         return endpoints;
     }
 

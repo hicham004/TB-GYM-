@@ -46,44 +46,51 @@
             </div>
           </section>
         } @else if (card(); as block) {
-          <section class="panel hero" aria-labelledby="program-title">
-            <div class="hero-main">
-              <div class="hero-copy">
-                <p class="eyebrow">{{ block.eyebrow }}</p>
-                <h2 id="program-title" dir="auto">{{ block.name }}</h2>
-                <ul class="facts">
-                  @for (fact of block.facts; track fact.text) {
-                    <li [class.warm]="fact.warm" dir="auto">{{ fact.text }}</li>
+          <div class="top">
+            <section class="panel hero" aria-labelledby="program-title">
+              <div class="hero-main">
+                <div class="hero-copy">
+                  <p class="eyebrow">{{ block.eyebrow }}</p>
+                  <h2 id="program-title" dir="auto">{{ block.name }}</h2>
+                  <ul class="facts">
+                    @for (fact of block.facts; track fact.text) {
+                      <li [class.warm]="fact.warm" dir="auto">{{ fact.text }}</li>
+                    }
+                    @if (!block.terminal && !block.ended && bookedLine(); as line) {
+                      <li class="warm" dir="auto">{{ line }}</li>
+                    }
+                  </ul>
+                </div>
+                <div class="hero-actions">
+                  @if (needsProgram()) {
+                    <button appButton type="button" (click)="openAssign()" i18n>
+                      Assign program
+                    </button>
                   }
-                  @if (!block.terminal && !block.ended && bookedLine(); as line) {
-                    <li class="warm" dir="auto">{{ line }}</li>
+                  @if (menu().length > 0) {
+                    <app-client-actions
+                      [label]="actionsLabel"
+                      [items]="menu()"
+                      (chosen)="onAction($event)"
+                    />
                   }
-                </ul>
+                </div>
               </div>
-              <div class="hero-actions">
-                @if (needsProgram()) {
-                  <button appButton type="button" (click)="openAssign()" i18n>
-                    Assign program
-                  </button>
+              <ol class="bar" aria-label="How much of each week is done" i18n-aria-label>
+                @for (week of block.weeks; track week.id) {
+                  <li [class.current]="week.isCurrent">
+                    <span class="fill" [style.inline-size.%]="week.fill"></span>
+                    <span class="tb-visually-hidden">{{ week.title }}: {{ week.summary }}</span>
+                  </li>
                 }
-                @if (menu().length > 0) {
-                  <app-client-actions
-                    [label]="actionsLabel"
-                    [items]="menu()"
-                    (chosen)="onAction($event)"
-                  />
-                }
-              </div>
-            </div>
-            <ol class="bar" aria-label="How much of each week is done" i18n-aria-label>
-              @for (week of block.weeks; track week.id) {
-                <li [class.current]="week.isCurrent">
-                  <span class="fill" [style.inline-size.%]="week.fill"></span>
-                  <span class="tb-visually-hidden">{{ week.title }}: {{ week.summary }}</span>
-                </li>
-              }
-            </ol>
-          </section>
+              </ol>
+            </section>
+            <app-program-maxes
+              [block]="block"
+              [firstName]="firstName()"
+              (update)="openMaxesUpdate()"
+            />
+          </div>
 
           <section class="panel timeline" aria-labelledby="timeline-title">
             <header class="panel-head">
@@ -275,6 +282,23 @@
       [firstName]="firstName()"
       (closed)="sheet.close($event)"
     />
+  }
+</ng-template>
+
+<ng-template #maxesSheet let-sheet>
+  @if (card(); as block) {
+    <app-program-maxes-update
+      [blockId]="block.id"
+      [blockName]="block.name"
+      [firstName]="firstName()"
+      (closed)="sheet.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #renameDialog let-dialog>
+  @if (card(); as block) {
+    <app-program-rename [block]="block" [firstName]="firstName()" (closed)="dialog.close($event)" />
   }
 </ng-template>
 

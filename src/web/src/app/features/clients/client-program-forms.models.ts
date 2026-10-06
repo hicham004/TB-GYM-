@@ -13,6 +13,7 @@ import type {
 } from '../../core/api/generated';
 import { exerciseLines, type ExerciseLine } from './client-program.models';
 import { addDays } from './client-overview.models';
+import { weekOneAnchor, type WeekOneAnchor } from './program-maxes.models';
 
 /**
  * What the Training section's sheets and dialogs ask of a coach, and what they say back. These are
@@ -62,6 +63,8 @@ export interface ProgramChoice {
   readonly versionId: string;
   readonly label: string;
   readonly weekCount: number;
+  /** What the program is called, which a client's copy keeps unless the coach names it. */
+  readonly name: string;
 }
 
 /**
@@ -84,6 +87,7 @@ export function programChoices(templates: readonly ProgramTemplateSummary[]): Pr
           ? $localize`${template.name}:name: · 1 week`
           : $localize`${template.name}:name: · ${weeks}:weeks: weeks`,
       weekCount: weeks,
+      name: template.name,
     });
   }
   return choices.sort((a, b) => a.label.localeCompare(b.label));
@@ -131,15 +135,25 @@ export interface MaxRow {
   readonly unit: TrainingLoadUnit;
   /** The recorded max this value came from; null once the coach typed their own. */
   readonly sourceRecordId: string | null;
+  /** How the max is set: a number, or worked out from the weight of week 1's first set (P2). */
+  readonly mode: 'number' | 'weekOne';
+  /** The weight of week 1's first set, while `mode` is `weekOne`. */
+  readonly weekOneWeight: number | null;
+  /** The set that weight is for; null when the chart covers none of the lift's week 1 sets. */
+  readonly anchor: WeekOneAnchor | null;
+}
+
+export interface MaxNeed {
+  readonly exerciseId: string;
+  readonly name: string;
+  readonly anchor?: WeekOneAnchor | null;
 }
 
 /**
  * The exercises whose load is worked out from a training max: a share of it, or an effort target.
  * Only these need a number before the program can be assigned.
  */
-export function exercisesNeedingMax(
-  version: ProgramTemplateVersionView,
-): { exerciseId: string; name: string }[] {
+export function exercisesNeedingMax(version: ProgramTemplateVersionView): MaxNeed[] {
   const needed = new Map<string, string>();
   for (const week of version.weeks) {
     for (const session of week.sessions) {
@@ -157,12 +171,16 @@ export function exercisesNeedingMax(
       }
     }
   }
-  return [...needed].map(([exerciseId, name]) => ({ exerciseId, name }));
+  return [...needed].map(([exerciseId, name]) => ({
+    exerciseId,
+    name,
+    anchor: weekOneAnchor(version, exerciseId),
+  }));
 }
 
 /** The latest training max recorded in this unit, else the latest of any kind in it. */
 export function maxRow(
-  need: { exerciseId: string; name: string },
+  need: MaxNeed,
   history: readonly StrengthMaxView[],
   unit: TrainingLoadUnit,
 ): MaxRow {
@@ -176,7 +194,17 @@ export function maxRow(
     value: source ? Number(source.value) : null,
     unit,
     sourceRecordId: source?.id ?? null,
+    mode: 'number',
+    weekOneWeight: null,
+    anchor: need.anchor ?? null,
   };
+}
+
+/** Choosing how a max is set clears what the other way held, so only one is ever sent. */
+export function withMaxMode(row: MaxRow, mode: MaxRow['mode']): MaxRow {
+  return mode === row.mode || (mode === 'weekOne' && row.anchor === null)
+    ? row
+    : { ...row, mode, weekOneWeight: null };
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -191,6 +219,19 @@ export interface AssignmentValues {
   loadIncrement: number | null;
   loadRoundingMode: TrainingLoadRoundingMode;
   maxes: readonly MaxRow[];
+  /** What the client's copy is called; empty keeps the program's own name (TRN-002). */
+  name?: string;
+}
+
+export const PROGRAM_NAME_LIMIT = 160;
+
+export function programNameErrors(name: string): string[] {
+  const text = name.trim();
+  if (!text) return [$localize`Give the program a name.`];
+  if (text.length > PROGRAM_NAME_LIMIT) {
+    return [$localize`Keep the name to ${PROGRAM_NAME_LIMIT}:limit: characters or fewer.`];
+  }
+  return [];
 }
 
 /** Messages by field, only for the fields that are wrong. A max is `max:<exercise id>`. */
@@ -206,10 +247,18 @@ export function assignmentErrors(values: AssignmentValues): FieldMessages {
   if (values.loadIncrement === null || !(values.loadIncrement > 0)) {
     errors['loadIncrement'] = [$localize`Enter a number above 0, such as 2.5.`];
   }
+  if ((values.name ?? '').trim().length > PROGRAM_NAME_LIMIT) {
+    errors['name'] = [
+      $localize`Keep the name to ${PROGRAM_NAME_LIMIT}:limit: characters or fewer.`,
+    ];
+  }
   for (const row of values.maxes) {
-    if (row.value === null || !(row.value > 0)) {
+    const given = row.mode === 'weekOne' ? row.weekOneWeight : row.value;
+    if (given === null || !(given > 0)) {
       errors[`max:${row.exerciseId}`] = [
-        $localize`Enter the training max for ${row.name}:exercise:.`,
+        row.mode === 'weekOne'
+          ? $localize`Enter the weight for ${row.name}:exercise: in week 1.`
+          : $localize`Enter the training max for ${row.name}:exercise:.`,
       ];
     }
   }
@@ -220,6 +269,7 @@ export type AssignmentRequest = Omit<AssignMesocycleRequest, 'idempotencyKey'>;
 
 /** The request, without its idempotency key, which is bound to exactly this payload. */
 export function assignmentRequest(values: AssignmentValues): AssignmentRequest {
+  const name = (values.name ?? '').trim();
   return {
     enrollmentId: values.enrollmentId,
     templateVersionId: values.templateVersionId,
@@ -228,12 +278,23 @@ export function assignmentRequest(values: AssignmentValues): AssignmentRequest {
     loadUnit: values.loadUnit,
     loadIncrement: values.loadIncrement!,
     loadRoundingMode: values.loadRoundingMode,
-    workingMaxes: values.maxes.map((row) => ({
-      exerciseId: row.exerciseId,
-      strengthMaxRecordId: row.sourceRecordId,
-      value: row.value!,
-      unit: row.unit,
-    })),
+    workingMaxes: values.maxes.map((row) =>
+      row.mode === 'weekOne'
+        ? {
+            exerciseId: row.exerciseId,
+            strengthMaxRecordId: null,
+            value: null,
+            unit: row.unit,
+            weekOneWeight: row.weekOneWeight!,
+          }
+        : {
+            exerciseId: row.exerciseId,
+            strengthMaxRecordId: row.sourceRecordId,
+            value: row.value!,
+            unit: row.unit,
+          },
+    ),
+    ...(name ? { name } : {}),
   };
 }
 
@@ -330,6 +391,12 @@ export function programWriteError(error: unknown, fallback: string, name: string
   }
   if (code === 'concurrency_conflict') {
     return $localize`This program was changed somewhere else since you opened it. It has been reloaded: check it, then try again.`;
+  }
+  if (code === 'training_maxes_preview_changed') {
+    return $localize`The new weights changed since you looked at them. Show them again, then update.`;
+  }
+  if (code === 'training_maxes_conflict') {
+    return $localize`This program changed since you opened this. Close it and open it again to see the latest, then try again.`;
   }
   if (code === 'idempotency_conflict' || code === 'assignment_conflict') {
     return $localize`That clashes with another assignment. Reload the page and try again.`;

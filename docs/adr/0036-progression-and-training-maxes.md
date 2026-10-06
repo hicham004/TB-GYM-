@@ -14,9 +14,10 @@ follow, and the client's program can always be adjusted.
 
 1. **RpeChart v1** (STR-010) is a load formula beside WorkingMaxLoad v2: working max times the
    chart's percentage for the top reps at the target RPE. It covers RPE 6.5 to 10 and 1 to 12 reps;
-   anything outside is rejected, not extrapolated. The coach picks the formula per program (builder
-   and assignment); RpeChart is the default for new RPE-loaded sets. Every calculated load stores
-   its explanation with the numbers and the rounding.
+   anything outside is rejected, not extrapolated. The coach picks the formula per program in the
+   builder (choosing it again at assignment is a follow-up, not built in P1 or P2); RpeChart is the
+   default for new RPE-loaded sets. Every calculated load stores its explanation with the numbers and
+   the rounding.
 2. **Duplicate with progression, WeekStep v1** (TRN-025, step P1): the server calculates 1 to 12
    copies of a week with RPE, reps, % and fixed-weight steps. The coach reads them before they join
    the draft; they are plain numbers, so assigned programs keep their snapshots.
@@ -24,7 +25,12 @@ follow, and the client's program can always be adjusted.
    working-max snapshot with a reason, recalculates only sessions not started, and goes through
    preview, hash and apply with the concurrency token and an idempotency key. "From week 1's weight"
    estimates a max as load / chart % from the prescription only; adjusting from logged performance is
-   a separate, later strategy (STR-007), planned in P4 and not built.
+   a separate, later strategy (STR-007), planned in P4 and not built. As built in P2 (STR-011,
+   TRN-026): an update recalculates only sets calculated from the max, in sessions that have not
+   started and are not in the past; typed weights and manual overrides win; each lift keeps one chain
+   of maxes, so two updates racing for one max cannot both win; every update leaves an append-only
+   record; and the program can be named when assigned and renamed later without touching where it
+   came from or when it runs.
 4. **Editing and next block** (step P3): Build next block takes the same steps; future weeks are
    edited in the builder's grid through the coverage policy (TRN-014) with an audit record. Started
    and finished sessions stay locked.
@@ -58,6 +64,11 @@ history never rewritten.
 
 - The migration widens the two load-strategy check constraints. Rolling it back after a chart set
   exists would violate the old constraint, so a rollback is a forward fix.
+- The P2 migration swaps the working-max uniqueness (one max per lift and week) for a chain: one first
+  max per lift and one successor per max, and adds the update record with its own append-only trigger.
+  It stops with a plain message if a program already has two first maxes for a lift. Rolling it back
+  after a lift was updated twice from the same week would break the old index, so that is a forward
+  fix too.
 - The chart is versioned; any change to a cell is RpeChart v2, never an edit.
 - Sources: [Helms et al. 2016](https://pmc.ncbi.nlm.nih.gov/articles/PMC4961270/),
   [RTS: Customizing Your RPE Chart](https://store.reactivetrainingsystems.com/blogs/advanced-concepts/customizing-your-rpe-chart),

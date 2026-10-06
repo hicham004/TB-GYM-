@@ -261,6 +261,104 @@ const maxes = {
   ],
 };
 
+/** The running program's own training maxes (P2): the squat as recorded, the bench retested since. */
+function maxesView(overrides: Record<string, unknown> = {}) {
+  return {
+    mesocycleId: BLOCK,
+    version: 4,
+    loadUnit: 'Kilogram',
+    isClosed: false,
+    maxes: [
+      {
+        exerciseId: 'ex-squat',
+        exerciseName: 'Back Squat',
+        current: {
+          id: 'max-1',
+          value: 70,
+          unit: 'Kilogram',
+          source: 'SavedMax',
+          basis: null,
+          effectiveFromWeek: 1,
+          setOn: '2026-09-14',
+          reason: 'Assignment training max.',
+        },
+        weekOneSet: { repetitions: 5, rpe: 8, load: 55 },
+        earlier: [],
+      },
+      {
+        exerciseId: 'ex-bench',
+        exerciseName: 'Bench Press',
+        current: {
+          id: 'max-3',
+          value: 52.5,
+          unit: 'Kilogram',
+          source: 'Typed',
+          basis: null,
+          effectiveFromWeek: 3,
+          setOn: '2026-09-28',
+          reason: 'Retested on Mon 28 Sep.',
+        },
+        weekOneSet: null,
+        earlier: [
+          {
+            id: 'max-2',
+            value: 50,
+            unit: 'Kilogram',
+            source: 'SavedMax',
+            basis: null,
+            effectiveFromWeek: 1,
+            setOn: '2026-09-14',
+            reason: 'Assignment training max.',
+          },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+/** What changing the squat's max to 75 kg would do from week 3 on: four weights in two sessions. */
+const maxesPreview = {
+  previewHash: 'hash-1',
+  loadUnit: 'Kilogram',
+  effectiveFromWeek: 3,
+  lifts: [
+    {
+      exerciseId: 'ex-squat',
+      exerciseName: 'Back Squat',
+      previousValue: 70,
+      newValue: 75,
+      unit: 'Kilogram',
+      source: 'Typed',
+      basis: null,
+      explanation: 'Typed by the coach: 75 kg.',
+    },
+  ],
+  sets: [3, 4].flatMap((week) =>
+    [0, 1].map((position) => ({
+      setId: `set-${week}-${position}`,
+      weekNumber: week,
+      scheduledDate: week === 3 ? '2026-10-01' : '2026-10-08',
+      sessionId: `session-${week}`,
+      sessionName: 'Lower B',
+      exerciseId: 'ex-squat',
+      exerciseName: 'Back Squat',
+      setPosition: position,
+      repetitions: 5,
+      targetRpe: 8,
+      percentageWorkingMax: null,
+      previousLoad: 60,
+      newLoad: 65,
+      explanation:
+        'WorkingMaxLoad v2: 75 kg / (1 + (5 reps + 2 in reserve) / 30) = 60.811 kg. Rounded to the nearest 2.5 kg: 62.5 kg.',
+    })),
+  ),
+  changedSetCount: 4,
+  unchangedSetCount: 0,
+  sessionCount: 2,
+  keptSessionCount: 3,
+};
+
 type Handlers = Record<string, (route: Route) => unknown>;
 
 interface OpenOptions {
@@ -270,6 +368,8 @@ interface OpenOptions {
   /** The program reads in order; the last one repeats. */
   programs?: CoachClientProgramView[];
   enrollment?: Record<string, unknown>;
+  /** What the running program's training maxes read answers. */
+  maxes?: Record<string, unknown>;
   extra?: Handlers;
   requests?: { method: string; path: string; body: unknown }[];
 }
@@ -290,6 +390,20 @@ async function openTraining(page: Page, width: number, height: number, options: 
     'GET /api/training/templates': (route) => json(route, 200, templates),
     'GET /api/training/template-versions/version-1': (route) => json(route, 200, versionDetail),
     [`GET /api/strength/clients/${ID}/maxes`]: (route) => json(route, 200, maxes),
+    // Every program the coach can open reads its own training maxes (P2).
+    ...Object.fromEntries(
+      [...new Set(programs.flatMap((program) => program.blocks.map((block) => block.id)))].map(
+        (id) => [
+          `GET /api/training/mesocycles/${id}/training-maxes`,
+          (route: Route) =>
+            json(
+              route,
+              200,
+              id === BLOCK ? maxesView(options.maxes) : maxesView({ mesocycleId: id, maxes: [] }),
+            ),
+        ],
+      ),
+    ),
     ...options.extra,
   };
   if (options.requests) {
@@ -394,6 +508,7 @@ test('the Manage program menu opens on a key, moves with the arrows and closes o
   const items = page.locator('.hero-actions button.item');
   await expect(items.locator('.item-title')).toHaveText([
     'Assign program',
+    'Rename program',
     'Build next block',
     'Reschedule',
     'Open every shared week now',
@@ -404,8 +519,8 @@ test('the Manage program menu opens on a key, moves with the arrows and closes o
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();
   // What cannot be done says why, and does nothing when chosen.
-  await expect(items.nth(2)).toHaveAttribute('aria-disabled', 'true');
-  await expect(items.nth(2)).toContainText('Not possible once a workout has started');
+  await expect(items.nth(3)).toHaveAttribute('aria-disabled', 'true');
+  await expect(items.nth(3)).toContainText('Not possible once a workout has started');
   await axe(page);
   await page.screenshot({ path: 'test-results/r34a-training-menu-1440.png' });
 
@@ -652,6 +767,364 @@ for (const width of [390, 1440]) {
     await expectNoHorizontalOverflow(page);
     await expect(page.getByRole('button', { name: 'Manage program' })).toBeVisible();
     await expect(page.locator('.week.current button.session').first()).toBeVisible();
+  });
+}
+
+// ------------------------------------------------------------------------------------------------
+// P2: the program's own training maxes
+// ------------------------------------------------------------------------------------------------
+
+/** Week 1 of Phase 3 on the RTS chart: the squat's first working set is 5 reps at RPE 7. */
+const versionWithChart = {
+  ...versionDetail,
+  weeks: [
+    {
+      id: 'v1-w1',
+      weekNumber: 1,
+      sessions: [
+        {
+          id: 'v1-s1',
+          name: 'Lower A',
+          dayOffset: 0,
+          exercises: [
+            {
+              exerciseId: 'ex-squat',
+              exerciseName: 'Back Squat',
+              position: 1,
+              sets: [
+                {
+                  position: 1,
+                  setType: 'Normal',
+                  loadStrategy: 'RpeChart',
+                  repetitionsMaximum: 5,
+                  targetRpe: 7,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`the training maxes sit with the program at ${width}px and pass axe`, async ({ page }) => {
+    await openTraining(page, width, height);
+
+    const panel = page.locator('app-program-maxes');
+    await expect(panel.getByRole('heading', { name: 'Training maxes' })).toBeVisible();
+    await expect(panel.locator('.name')).toHaveText(['Back Squat', 'Bench Press']);
+    await expect(panel.locator('.value')).toHaveText(['70 kg', '52.5 kg']);
+    await expect(panel.locator('.source')).toHaveText([
+      'From Maya’s recorded max · Mon 14 Sep',
+      'Typed by you · Mon 28 Sep',
+    ]);
+    // The retested bench says how it moved and keeps the max it replaced, one tap away.
+    await expect(panel.locator('.lift').nth(1).locator('.detail')).toHaveText([
+      'Up 2.5 kg from 50 kg',
+      'Applies from week 3. Earlier weeks keep 50 kg.',
+    ]);
+    await expect(panel.locator('summary')).toHaveText('Earlier maxes 1');
+    await expect(
+      panel.getByRole('button', { name: 'Update maxes for the coming weeks' }),
+    ).toBeVisible();
+
+    const box = await panel.boundingBox();
+    const hero = await page.locator('.hero').boundingBox();
+    if (width >= 1024) {
+      // Wide: at the top right, level with the program's header.
+      expect(box!.x).toBeGreaterThan(hero!.x + hero!.width - 1);
+      expect(Math.abs(box!.y - hero!.y)).toBeLessThan(2);
+    } else {
+      // A phone: under the header, before the timeline.
+      expect(box!.y).toBeGreaterThan(hero!.y + hero!.height - 1);
+    }
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/p2-maxes-${width}.png`, fullPage: true });
+  });
+}
+
+test('a program that works no weight out from a max keeps the whole width', async ({ page }) => {
+  await openTraining(page, 1440, 900, { maxes: { maxes: [] } });
+
+  await expect(page.locator('app-program-maxes')).not.toHaveAttribute('data-filled');
+  await expect(page.locator('app-program-maxes section')).toHaveCount(0);
+  await expect(page.locator('.hero')).toBeVisible();
+});
+
+test('updating a max shows every new weight first, then sends what was reviewed', async ({
+  page,
+}) => {
+  const requests: { method: string; path: string; body: unknown }[] = [];
+  await openTraining(page, 1440, 900, {
+    requests,
+    programs: [coachProgram(), coachProgram()],
+    extra: {
+      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/preview`]: (route) =>
+        json(route, 200, maxesPreview),
+      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/apply`]: (route) =>
+        json(route, 200, { id: BLOCK }),
+    },
+  });
+
+  await page.getByRole('button', { name: 'Update maxes for the coming weeks' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Update training maxes' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator('legend')).toHaveText([
+    'Back Squat now 70 kg',
+    'Bench Press now 52.5 kg',
+  ]);
+  // Nothing is sent until a max has changed.
+  await sheet.getByRole('button', { name: 'Show the new weights' }).click();
+  await expect(sheet.getByRole('alert')).toHaveText('Change at least one training max.');
+  expect(requests).toEqual([]);
+
+  await sheet.getByLabel('New training max').first().fill('75');
+  await sheet.getByLabel('Why? (optional)').fill('Retested on Wednesday');
+  await sheet.getByRole('button', { name: 'Show the new weights' }).click();
+
+  await expect(sheet.locator('.lift-move')).toHaveText('70 kg to 75 kg');
+  await expect(sheet.locator('.strong')).toHaveText('4 weights change in 2 sessions.');
+  await expect(sheet).toContainText('The new max applies from week 3.');
+  await expect(sheet).toContainText(
+    '3 sessions have started or are already past, so they keep their weights.',
+  );
+  await expect(sheet.locator('.week-title')).toHaveText(['Week 3', 'Week 4']);
+  await expect(sheet.locator('.sets li').first()).toContainText('Set 1 · 5 reps · RPE 8');
+  await expect(sheet.locator('.sets li .to').first()).toHaveText('65 kg');
+  await expect(sheet.locator('.sets li .was').first()).toHaveText('was 60 kg');
+  await expect(sheet.locator('.sets li .delta').first()).toHaveText('+5 kg');
+  // The working-out is one tap away, in the server's words.
+  await sheet.locator('.how summary').first().click();
+  await expect(sheet.locator('.how p').first()).toContainText('60.811 kg');
+  expect(requests.map((request) => request.path)).toEqual([
+    `/api/training/mesocycles/${BLOCK}/training-maxes/preview`,
+  ]);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p2-maxes-update-1440.png', fullPage: true });
+
+  await sheet.getByRole('button', { name: 'Update maxes', exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+  expect(requests[0].body).toEqual({
+    mesocycleVersion: 4,
+    changes: [{ exerciseId: 'ex-squat', value: 75, weekOneWeight: null }],
+  });
+  expect(requests[1].body).toMatchObject({
+    mesocycleVersion: 4,
+    changes: [{ exerciseId: 'ex-squat', value: 75, weekOneWeight: null }],
+    reason: 'Retested on Wednesday',
+    previewHash: 'hash-1',
+    idempotencyKey: expect.any(String),
+  });
+  // The page says what happened, and reads the program and its maxes again.
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: 'Training maxes updated. The weeks still to come follow them.' }),
+  ).toBeVisible();
+});
+
+test.describe('a stale update', () => {
+  test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/training\//] } });
+  test('says the weights changed since they were looked at, and keeps the sheet open', async ({
+    page,
+  }) => {
+    await openTraining(page, 390, 844, {
+      extra: {
+        [`POST /api/training/mesocycles/${BLOCK}/training-maxes/preview`]: (route) =>
+          json(route, 200, maxesPreview),
+        [`POST /api/training/mesocycles/${BLOCK}/training-maxes/apply`]: (route) =>
+          json(route, 409, {
+            code: 'training_maxes_preview_changed',
+            message:
+              'The new weights no longer match the ones you reviewed. Preview them again before applying.',
+          }),
+      },
+    });
+    await page.getByRole('button', { name: 'Update maxes for the coming weeks' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Update training maxes' });
+    await sheet.getByLabel('New training max').first().fill('75');
+    await sheet.getByRole('button', { name: 'Show the new weights' }).click();
+    await sheet.getByRole('button', { name: 'Update maxes', exact: true }).click();
+
+    await expect(sheet.getByRole('alert')).toHaveText(
+      'The new weights changed since you looked at them. Show them again, then update.',
+    );
+    await expect(sheet).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+  });
+});
+
+test('renaming a program asks for the name, sends the version and reads the program again', async ({
+  page,
+}) => {
+  const requests: { method: string; path: string; body: unknown }[] = [];
+  await openTraining(page, 1440, 900, {
+    requests,
+    programs: [coachProgram(), coachProgram()],
+    extra: {
+      [`PUT /api/training/mesocycles/${BLOCK}/name`]: (route) => json(route, 200, { id: BLOCK }),
+    },
+  });
+
+  await page.getByRole('button', { name: 'Manage program' }).click();
+  await page.getByRole('button', { name: /^Rename program/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Rename program' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Program name')).toHaveValue('Lean & Strong · Phase 2');
+  await expect(dialog).toContainText(
+    'Its dates, its weeks and what it was built from stay as they are.',
+  );
+
+  await dialog.getByLabel('Program name').fill('   ');
+  await dialog.getByRole('button', { name: 'Rename program' }).click();
+  await expect(dialog.getByText('Give the program a name.')).toBeVisible();
+  expect(requests).toEqual([]);
+
+  await dialog.getByLabel('Program name').fill('Peaking block');
+  await axe(page);
+  await dialog.getByRole('button', { name: 'Rename program' }).click();
+
+  await expect(dialog).toHaveCount(0);
+  expect(requests).toEqual([
+    {
+      method: 'PUT',
+      path: `/api/training/mesocycles/${BLOCK}/name`,
+      body: { name: 'Peaking block', version: 4 },
+    },
+  ]);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'The program was renamed.' }),
+  ).toBeVisible();
+});
+
+test('Assign program can name the program and work a max out from week 1’s weight', async ({
+  page,
+}) => {
+  const requests: { method: string; path: string; body: unknown }[] = [];
+  await openTraining(page, 1440, 900, {
+    path: `/clients/${ID}/training?action=assign`,
+    opensSheet: true,
+    requests,
+    extra: {
+      'GET /api/training/template-versions/version-1': (route) =>
+        json(route, 200, versionWithChart),
+      'POST /api/strength/estimate-max-from-rpe': (route) =>
+        json(route, 200, {
+          value: 69.975,
+          unit: 'Kilogram',
+          percent: 78.6,
+          methodKey: 'RpeChart',
+          methodVersion: '1.0',
+          explanation:
+            'RTS RPE chart v1: 5 reps at RPE 7 is 78.6% of the max, so 55 kg / 78.6% = 69.975 kg.',
+        }),
+      [`POST /api/training/clients/${ID}/mesocycles`]: (route) =>
+        json(route, 200, { id: 'block-next', name: 'Peaking block', startDate: '2026-10-26' }),
+    },
+  });
+
+  const sheet = page.getByRole('dialog', { name: 'Assign program' });
+  await sheet
+    .getByLabel('Program', { exact: true })
+    .selectOption({ label: 'Lean & Strong · Phase 3 · 6 weeks' });
+  await expect(sheet.getByLabel('Program name (optional)')).toHaveAttribute(
+    'placeholder',
+    'Lean & Strong · Phase 3',
+  );
+  await sheet.getByLabel('Program name (optional)').fill('Peaking block');
+
+  // The squat can be typed, or worked out from the weight of week 1's first set.
+  await sheet.getByRole('radio', { name: 'From week 1’s weight' }).check();
+  await expect(sheet).toContainText(
+    'The weight of its first working set: 5 reps at RPE 7. The max is worked out from the RTS chart.',
+  );
+  await sheet.getByLabel('Back Squat in week 1', { exact: true }).fill('55');
+  await sheet.getByLabel('Back Squat in week 1', { exact: true }).press('Tab');
+  await expect(sheet.locator('.estimate')).toHaveText(
+    'RTS RPE chart v1: 5 reps at RPE 7 is 78.6% of the max, so 55 kg / 78.6% = 69.975 kg.',
+  );
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p2-assign-weekone-1440.png', fullPage: true });
+
+  await sheet.getByLabel('Start date', { exact: true }).fill('2026-10-26');
+  await sheet.getByRole('button', { name: 'Assign program', exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+  const assign = requests.find(
+    (request) => request.path === `/api/training/clients/${ID}/mesocycles`,
+  );
+  expect(assign!.body).toMatchObject({
+    name: 'Peaking block',
+    workingMaxes: [
+      {
+        exerciseId: 'ex-squat',
+        strengthMaxRecordId: null,
+        value: null,
+        unit: 'Kilogram',
+        weekOneWeight: 55,
+      },
+    ],
+  });
+});
+
+test('the training maxes follow dark mode and the update sheet passes axe in it', async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openTraining(page, 1440, 900, {
+    extra: {
+      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/preview`]: (route) =>
+        json(route, 200, maxesPreview),
+    },
+  });
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p2-maxes-dark-1440.png', fullPage: true });
+
+  await page.getByRole('button', { name: 'Update maxes for the coming weeks' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Update training maxes' });
+  await sheet.getByLabel('New training max').first().fill('75');
+  await sheet.getByRole('button', { name: 'Show the new weights' }).click();
+  await expect(sheet.locator('.preview')).toBeVisible();
+  await axe(page);
+});
+
+test('the training maxes read right to left', async ({ page }) => {
+  await openTraining(page, 1440, 900);
+  await useRtl(page);
+
+  await expect(page.locator('app-program-maxes .lift').first()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p2-maxes-rtl-1440.png', fullPage: true });
+});
+
+for (const width of [390, 1440]) {
+  test(`the training maxes and their update sheet reflow at 200% text at ${width}px`, async ({
+    page,
+  }) => {
+    await openTraining(page, width, 900, {
+      extra: {
+        [`POST /api/training/mesocycles/${BLOCK}/training-maxes/preview`]: (route) =>
+          json(route, 200, maxesPreview),
+      },
+    });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    await expect(page.locator('app-program-maxes .lift').first()).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+
+    await page.getByRole('button', { name: 'Update maxes for the coming weeks' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Update training maxes' });
+    await sheet.getByLabel('New training max').first().fill('75');
+    await sheet.getByRole('button', { name: 'Show the new weights' }).click();
+    await expect(sheet.locator('.preview')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
   });
 }
 

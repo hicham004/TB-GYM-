@@ -98,6 +98,55 @@ public sealed class RpeChartLoadStrategy : ILoadRecommendationStrategy
     }
 }
 
+/// <summary>The max that one set's weight implies on the RTS chart, with the numbers behind it.</summary>
+public sealed record RpeChartMaxEstimate(
+    decimal Value,
+    LoadUnit Unit,
+    decimal Percent,
+    string StrategyKey,
+    string Version,
+    string Explanation);
+
+/// <summary>
+/// "From week 1's weight" (RpeChart v1 read backwards, ADR 0036): a set of N repetitions at a target
+/// RPE is the chart's percentage of the max, so the max is the weight divided by that percentage. It
+/// uses the prescription only, never a logged performance (STR-007), and it rejects a set the chart
+/// does not cover instead of guessing. The value keeps three decimals, as every captured max does.
+/// </summary>
+public static class RpeChartMaxEstimator
+{
+    public static RpeChartMaxEstimate Estimate(decimal load, int repetitions, decimal rpe, LoadUnit unit)
+    {
+        if (!Enum.IsDefined(unit))
+        {
+            throw new ArgumentException("A load unit is required.", nameof(unit));
+        }
+
+        if (load is <= 0m or > 2_000m)
+        {
+            throw new ArgumentOutOfRangeException(nameof(load), "The weight must be more than 0 and at most 2,000.");
+        }
+
+        var percent = RtsRpeChart.PercentOfOneRepMax(repetitions, rpe);
+        var value = decimal.Round(load * 100m / percent, 3, MidpointRounding.AwayFromZero);
+        if (value > 2_000m)
+        {
+            throw new ArgumentOutOfRangeException(nameof(load), "That weight would make the training max more than 2,000.");
+        }
+
+        var unitName = StrengthUnits.Short(unit);
+        return new RpeChartMaxEstimate(
+            value,
+            unit,
+            percent,
+            RtsRpeChart.Key,
+            RtsRpeChart.CurrentVersion,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"RTS RPE chart v1: {repetitions} reps at RPE {rpe:0.#} is {percent:0.#}% of the max, so {load:0.###} {unitName} / {percent:0.#}% = {value:0.###} {unitName}."));
+    }
+}
+
 internal static class StrengthUnits
 {
     public static string Short(LoadUnit unit) => unit == LoadUnit.Pound ? "lb" : "kg";

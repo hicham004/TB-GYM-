@@ -322,6 +322,87 @@ public static class TrainingEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        coach.MapGet("/mesocycles/{mesocycleId:guid}/training-maxes", async (
+            Guid mesocycleId,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var view = await service.GetTrainingMaxesAsync(mesocycleId, cancellationToken);
+            return view is null ? Results.NotFound() : Results.Ok(view);
+        })
+        .WithName("GetTrainingMaxes")
+        .Produces<TrainingMaxesView>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        coach.MapPost("/mesocycles/{mesocycleId:guid}/training-maxes/preview", async (
+            Guid mesocycleId,
+            PreviewTrainingMaxesRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            try
+            {
+                var preview = await service.PreviewTrainingMaxesAsync(mesocycleId, request, cancellationToken);
+                return preview is null ? Results.NotFound() : Results.Ok(preview);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["maxes"] = [exception.Message],
+                });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new
+                {
+                    code = "training_maxes_conflict",
+                    message = exception.Message,
+                });
+            }
+        })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
+        .WithName("PreviewTrainingMaxes")
+        .Produces<TrainingMaxesPreviewView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status404NotFound);
+
+        coach.MapPost("/mesocycles/{mesocycleId:guid}/training-maxes/apply", async (
+            Guid mesocycleId,
+            ApplyTrainingMaxesRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.ApplyTrainingMaxesAsync(mesocycleId, request, cancellationToken));
+        })
+        .WithName("ApplyTrainingMaxes")
+        .Produces<TrainingMesocycleView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        coach.MapPut("/mesocycles/{mesocycleId:guid}/name", async (
+            Guid mesocycleId,
+            RenameMesocycleRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.RenameMesocycleAsync(mesocycleId, request, cancellationToken));
+        })
+        .WithName("RenameMesocycle")
+        .Produces<TrainingMesocycleView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
         coach.MapGet("/clients/{clientProfileId:guid}/exercises/{exerciseId:guid}/history", async (
             Guid clientProfileId,
             Guid exerciseId,

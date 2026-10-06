@@ -35,6 +35,7 @@ import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control
 import { Skeleton } from '../../ui/skeleton';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { unitLabel } from '../training/training-program.models';
+import { ClientProgramApi } from './client-program-api';
 import {
   assignmentErrors,
   assignmentRequest,
@@ -42,9 +43,11 @@ import {
   exercisesNeedingMax,
   maxRow,
   planChoices,
+  PROGRAM_NAME_LIMIT,
   programChoices,
   programWriteError,
   runSummary,
+  withMaxMode,
   type AssignmentValues,
   type MaxRow,
 } from './client-program-forms.models';
@@ -168,6 +171,22 @@ import {
               }
             }
 
+            <app-field
+              [label]="nameLabel"
+              [help]="nameHelp()"
+              [errors]="shows('name') ? errors()['name'] : null"
+            >
+              <input
+                appControl
+                type="text"
+                [attr.maxlength]="nameLimit"
+                [attr.placeholder]="chosen()?.name ?? null"
+                [value]="name()"
+                (input)="name.set($any($event.target).value)"
+                (blur)="attempt.touch('name')"
+              />
+            </app-field>
+
             <details class="loads">
               <summary>
                 <span class="loads-title" i18n>Load settings</span>
@@ -212,26 +231,63 @@ import {
                   changing a max later never changes it.
                 </p>
                 @for (row of maxes(); track row.exerciseId; let index = $index) {
-                  <app-field
-                    [label]="row.name"
-                    [help]="maxHelp(row)"
-                    [errors]="
-                      shows('max:' + row.exerciseId) ? errors()['max:' + row.exerciseId] : null
-                    "
-                  >
-                    <div class="value-unit">
-                      <input
-                        appControl
-                        type="number"
-                        min="0.01"
-                        step="0.25"
-                        [value]="row.value ?? ''"
-                        (input)="setMax(index, $any($event.target).valueAsNumber)"
-                        (blur)="attempt.touch('max:' + row.exerciseId)"
+                  <div class="max">
+                    @if (row.anchor) {
+                      <app-segmented-control
+                        [label]="howLabel(row)"
+                        [options]="howOptions"
+                        [selected]="row.mode"
+                        (selectedChange)="chooseMode(index, $event)"
                       />
-                      <span class="unit">{{ unitName(row.unit) }}</span>
-                    </div>
-                  </app-field>
+                    }
+                    @if (row.mode === 'weekOne') {
+                      <app-field
+                        [label]="weekOneLabel(row)"
+                        [help]="weekOneHelp(row)"
+                        [errors]="
+                          shows('max:' + row.exerciseId) ? errors()['max:' + row.exerciseId] : null
+                        "
+                      >
+                        <div class="value-unit">
+                          <input
+                            appControl
+                            type="number"
+                            min="0.01"
+                            step="0.25"
+                            [value]="row.weekOneWeight ?? ''"
+                            (input)="setWeekOneWeight(index, $any($event.target).valueAsNumber)"
+                            (change)="estimate(index)"
+                            (blur)="attempt.touch('max:' + row.exerciseId)"
+                          />
+                          <span class="unit">{{ unitName(row.unit) }}</span>
+                        </div>
+                      </app-field>
+                      @if (estimates()[row.exerciseId]; as worked) {
+                        <p class="estimate" dir="auto" aria-live="polite">{{ worked }}</p>
+                      }
+                    } @else {
+                      <app-field
+                        [label]="row.name"
+                        [help]="maxHelp(row)"
+                        [errors]="
+                          shows('max:' + row.exerciseId) ? errors()['max:' + row.exerciseId] : null
+                        "
+                      >
+                        <div class="value-unit">
+                          <input
+                            appControl
+                            type="number"
+                            min="0.01"
+                            step="0.25"
+                            [value]="row.value ?? ''"
+                            (input)="setMax(index, $any($event.target).valueAsNumber)"
+                            (blur)="attempt.touch('max:' + row.exerciseId)"
+                          />
+                          <span class="unit">{{ unitName(row.unit) }}</span>
+                        </div>
+                      </app-field>
+                    }
+                  </div>
                 }
               </fieldset>
             } @else if (versionLoading()) {
@@ -379,6 +435,20 @@ import {
       padding: 0;
     }
 
+    .max {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .estimate {
+      background: var(--tb-surface-2);
+      border-radius: var(--tb-radius-control);
+      color: var(--tb-muted);
+      font-size: 0.8125rem;
+      padding: 0.5rem 0.75rem;
+    }
+
     .value-unit {
       align-items: center;
       display: grid;
@@ -425,6 +495,7 @@ import {
 })
 export class ProgramAssign {
   private readonly api = inject(ApiClient);
+  private readonly programApi = inject(ClientProgramApi);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly locale = inject(LOCALE_ID);
@@ -454,6 +525,12 @@ export class ProgramAssign {
   protected readonly maxRecorded = $localize`Your recorded training max`;
   protected readonly maxTyped = $localize`Entered now`;
   protected readonly maxNone = $localize`Nothing recorded yet`;
+  protected readonly nameLabel = $localize`Program name (optional)`;
+  protected readonly nameLimit = PROGRAM_NAME_LIMIT;
+  protected readonly howOptions: SegmentOption[] = [
+    { value: 'number', label: $localize`Type it` },
+    { value: 'weekOne', label: $localize`From week 1’s weight` },
+  ];
   protected readonly unitOptions: SegmentOption[] = [
     { value: 'Kilogram', label: 'kg' },
     { value: 'Pound', label: 'lb' },
@@ -480,6 +557,10 @@ export class ProgramAssign {
   protected readonly increment = signal<number | null>(2.5);
   protected readonly rounding = signal<TrainingLoadRoundingMode>('Nearest');
   protected readonly maxes = signal<MaxRow[]>([]);
+  /** What the program's own name is replaced by in the client's copy; empty keeps it (TRN-002). */
+  protected readonly name = signal('');
+  /** The server's words for each lift worked out from week 1's weight, by exercise (STR-011). */
+  protected readonly estimates = signal<Record<string, string>>({});
 
   protected readonly plans = computed(() => planChoices(this.enrollments(), this.locale));
   protected readonly programs = computed(() => programChoices(this.templates()));
@@ -492,6 +573,7 @@ export class ProgramAssign {
     loadIncrement: this.increment(),
     loadRoundingMode: this.rounding(),
     maxes: this.maxes(),
+    name: this.name(),
   }));
 
   protected readonly errors = computed(() => assignmentErrors(this.values()));
@@ -500,9 +582,16 @@ export class ProgramAssign {
   private readonly plan = computed(() =>
     this.plans().find((item) => item.id === this.enrollmentId()),
   );
-  private readonly chosen = computed(() =>
+  protected readonly chosen = computed(() =>
     this.programs().find((item) => item.versionId === this.versionId()),
   );
+
+  protected readonly nameHelp = computed(() => {
+    const own = this.chosen()?.name;
+    return own
+      ? $localize`Leave it empty to keep “${own}:name:”. You can rename it later.`
+      : $localize`Leave it empty to keep the program’s own name. You can rename it later.`;
+  });
 
   protected readonly run = computed(() => {
     const program = this.chosen();
@@ -612,6 +701,7 @@ export class ProgramAssign {
     this.versionId.set(versionId);
     this.needs = [];
     this.maxes.set([]);
+    this.estimates.set({});
     if (!versionId) return;
     void this.scope.run('version', async (owner) => {
       this.versionLoading.set(true);
@@ -642,6 +732,7 @@ export class ProgramAssign {
     const unit: TrainingLoadUnit = value === 'Pound' ? 'Pound' : 'Kilogram';
     this.unit.set(unit);
     this.maxes.set(this.needs.map((need) => maxRow(need, this.history(), unit)));
+    this.estimates.set({});
   }
 
   protected setIncrement(value: number): void {
@@ -656,6 +747,72 @@ export class ProgramAssign {
           : row,
       ),
     );
+  }
+
+  // ---------- a max from week 1's weight (P2, STR-011) ----------
+
+  protected howLabel(row: MaxRow): string {
+    return $localize`How to set the max for ${row.name}:exercise:`;
+  }
+
+  protected weekOneLabel(row: MaxRow): string {
+    return $localize`${row.name}:exercise: in week 1`;
+  }
+
+  /** Which set the weight is for, so the coach types the weight of the right one. */
+  protected weekOneHelp(row: MaxRow): string {
+    const anchor = row.anchor;
+    return anchor
+      ? $localize`The weight of its first working set: ${anchor.repetitions}:reps: reps at RPE ${anchor.rpe}:rpe:. The max is worked out from the RTS chart.`
+      : '';
+  }
+
+  protected chooseMode(index: number, mode: string): void {
+    const next = mode === 'weekOne' ? 'weekOne' : 'number';
+    this.maxes.update((rows) =>
+      rows.map((row, position) => (position === index ? withMaxMode(row, next) : row)),
+    );
+    const row = this.maxes()[index];
+    this.estimates.update((now) => ({ ...now, [row.exerciseId]: '' }));
+  }
+
+  protected setWeekOneWeight(index: number, value: number): void {
+    const row = this.maxes()[index];
+    this.maxes.update((rows) =>
+      rows.map((item, position) =>
+        position === index ? { ...item, weekOneWeight: Number.isNaN(value) ? null : value } : item,
+      ),
+    );
+    // What was worked out belongs to the weight it was worked out from.
+    this.estimates.update((now) => ({ ...now, [row.exerciseId]: '' }));
+  }
+
+  /** Reads the weight backwards on the chart and shows the server's own sentence for it. */
+  protected estimate(index: number): Promise<void> {
+    const row = this.maxes()[index];
+    const anchor = row?.anchor;
+    const load = row?.weekOneWeight;
+    if (!row || !anchor || load === null || load === undefined || !(load > 0)) {
+      return Promise.resolve();
+    }
+    return this.scope.run(`estimate:${row.exerciseId}`, async (owner) => {
+      try {
+        const worked = await owner.wait(
+          firstValueFrom(
+            this.programApi.estimateMaxFromRpeChart({
+              load,
+              repetitions: anchor.repetitions,
+              rpe: anchor.rpe,
+              unit: row.unit,
+            }),
+          ),
+        );
+        this.estimates.update((now) => ({ ...now, [row.exerciseId]: worked.explanation }));
+      } catch {
+        // The weight is checked again when the program is assigned, with the reason in plain words.
+        if (owner.current) this.estimates.update((now) => ({ ...now, [row.exerciseId]: '' }));
+      }
+    });
   }
 
   protected async submit(): Promise<void> {

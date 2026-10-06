@@ -249,6 +249,63 @@ public sealed class TrainingMesocycle : TenantEntity
         RegisterMutation();
     }
 
+    /// <summary>
+    /// Renames the program (TRN-002). Where it came from and when it runs never change, and a finished or
+    /// cancelled program keeps its name with the rest of its history. Returns false when the name is the same.
+    /// </summary>
+    public bool Rename(string name)
+    {
+        EnsureNonTerminal();
+        var normalized = TrainingText.Required(name, 160, nameof(name));
+        if (string.Equals(normalized, Name, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        Name = normalized;
+        RegisterMutation();
+        return true;
+    }
+
+    /// <summary>
+    /// Stores the recalculated loads of sets whose program's training max changed (STR-002). A set of a
+    /// started session is refused, so started and finished programming stays as it was (TRN-004).
+    /// </summary>
+    public (int Sessions, int Sets) ApplyRecalculatedLoads(IReadOnlyDictionary<Guid, SetLoadCalculation> calculations)
+    {
+        EnsureNonTerminal();
+        ArgumentNullException.ThrowIfNull(calculations);
+        var sessions = new HashSet<Guid>();
+        var applied = 0;
+        foreach (var session in weeks.SelectMany(item => item.Sessions))
+        {
+            foreach (var set in session.Exercises.SelectMany(item => item.Sets))
+            {
+                if (!calculations.TryGetValue(set.Id, out var calculation))
+                {
+                    continue;
+                }
+
+                if (session.HasStarted)
+                {
+                    throw new InvalidOperationException("Started or completed programming is immutable.");
+                }
+
+                set.ApplyCalculation(calculation);
+                sessions.Add(session.Id);
+                applied++;
+            }
+        }
+
+        if (applied != calculations.Count)
+        {
+            throw new ArgumentException("Every recalculated set must belong to this mesocycle.", nameof(calculations));
+        }
+
+        RegisterMutation();
+        return (sessions.Count, applied);
+    }
+
     public void MarkSessionStarted(Guid sessionId)
     {
         EnsureNonTerminal();
@@ -704,6 +761,34 @@ public sealed class SetPrescription : TenantEntity
         Guid exercisePrescriptionId,
         SetPrescriptionBlueprint blueprint) =>
         new(tenantId, exercisePrescriptionId, blueprint);
+
+    /// <summary>
+    /// Stores a load worked out again from a changed training max. Only a set that is calculated from a
+    /// max takes one; a typed weight, and a manual override, always win.
+    /// </summary>
+    internal void ApplyCalculation(SetLoadCalculation calculation)
+    {
+        ArgumentNullException.ThrowIfNull(calculation);
+        if (LoadStrategy is not (TrainingLoadStrategy.PercentageWorkingMax or TrainingLoadStrategy.RpeBasedEpley
+            or TrainingLoadStrategy.RpeChart))
+        {
+            throw new InvalidOperationException("Only a set calculated from a training max takes a recalculated load.");
+        }
+
+        if (calculation.WorkingMaxSnapshotId == Guid.Empty ||
+            calculation.UnroundedRecommendedLoad <= 0m ||
+            calculation.PrescribedLoad is <= 0m or > 10_000m)
+        {
+            throw new ArgumentException("A recalculated load needs its training max and a positive load.", nameof(calculation));
+        }
+
+        WorkingMaxSnapshotId = calculation.WorkingMaxSnapshotId;
+        UnroundedRecommendedLoad = calculation.UnroundedRecommendedLoad;
+        PrescribedLoad = calculation.PrescribedLoad;
+        CalculationStrategyKey = TrainingText.Required(calculation.StrategyKey, 80, nameof(calculation));
+        CalculationStrategyVersion = TrainingText.Required(calculation.StrategyVersion, 40, nameof(calculation));
+        CalculationExplanation = TrainingText.Required(calculation.Explanation, 1_000, nameof(calculation));
+    }
 }
 
 public static class TrainingCalendarPolicy

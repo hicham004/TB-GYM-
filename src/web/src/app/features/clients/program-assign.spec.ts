@@ -9,7 +9,8 @@ import type { ClientEnrollment } from '../../core/api/api.models';
 import type { TrainingMesocycleView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, press, query, settle, tick } from '../../../testing/dom';
+import { field, fill, press, query, settle, tick } from '../../../testing/dom';
+import { ClientProgramApi } from './client-program-api';
 import { ProgramAssign } from './program-assign';
 
 function plan(overrides: Partial<ClientEnrollment> = {}): ClientEnrollment {
@@ -75,6 +76,47 @@ const version = {
   ],
 };
 
+/** The same program with the squat on the RTS chart: week 1's first working set is 5 reps at RPE 7. */
+const chartVersion = {
+  id: 'fbr-2',
+  weeks: [
+    {
+      weekNumber: 1,
+      sessions: [
+        {
+          dayOffset: 0,
+          exercises: [
+            {
+              exerciseId: 'squat',
+              exerciseName: 'Back squat',
+              position: 1,
+              sets: [
+                {
+                  position: 1,
+                  setType: 'Normal',
+                  loadStrategy: 'RpeChart',
+                  repetitionsMaximum: 5,
+                  targetRpe: 7,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const worked = {
+  value: 139.949,
+  unit: 'Kilogram',
+  percent: 78.6,
+  methodKey: 'RpeChart',
+  methodVersion: '1.0',
+  explanation:
+    'RTS RPE chart v1: 5 reps at RPE 7 is 78.6% of the max, so 110 kg / 78.6% = 139.949 kg.',
+};
+
 const recorded = {
   total: 1,
   items: [
@@ -98,6 +140,9 @@ const assigned = {
 interface Options {
   enrollments?: ClientEnrollment[];
   api?: Record<string, unknown>;
+  programApi?: Record<string, unknown>;
+  /** The program's published version, when a test needs sets the chart covers. */
+  version?: unknown;
   today?: string;
 }
 
@@ -105,9 +150,13 @@ async function render(options: Options = {}) {
   const api = {
     listProgramTemplates: vi.fn(() => of(templates)),
     listStrengthMaxes: vi.fn(() => of(recorded)),
-    getProgramTemplateVersion: vi.fn(() => of(version)),
+    getProgramTemplateVersion: vi.fn(() => of(options.version ?? version)),
     assignClientMesocycle: vi.fn(() => of(assigned)),
     ...options.api,
+  };
+  const programApi = {
+    estimateMaxFromRpeChart: vi.fn(() => of(worked)),
+    ...options.programApi,
   };
   const csrf = { refresh: vi.fn().mockResolvedValue(undefined) };
   TestBed.configureTestingModule({
@@ -115,6 +164,7 @@ async function render(options: Options = {}) {
     providers: [
       provideRouter([]),
       { provide: ApiClient, useValue: api },
+      { provide: ClientProgramApi, useValue: programApi },
       { provide: CsrfService, useValue: csrf },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
     ],
@@ -128,7 +178,7 @@ async function render(options: Options = {}) {
   fixture.componentInstance.closed.subscribe(closed);
   document.body.append(fixture.nativeElement);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api, csrf, closed };
+  return { fixture, host: fixture.nativeElement as HTMLElement, api, programApi, csrf, closed };
 }
 
 const textOf = (element: Element | null | undefined) =>
@@ -217,6 +267,108 @@ describe('Assign program', () => {
     await settle(fixture);
     expect(textOf(fieldset)).toContain('Nothing recorded yet');
     expect(textOf(fieldset)).not.toContain('Entered now');
+  });
+
+  it('names the program the coach assigns, or keeps its own name when left empty (P2)', async () => {
+    const { fixture, host, api } = await render();
+    fill(host, 'Program', 'fbr-2');
+    await settle(fixture);
+
+    const name = query<HTMLInputElement>(host, 'input[type="text"]');
+    expect(name.getAttribute('placeholder')).toBe('Full Body Reset');
+    expect(textOf(host)).toContain(
+      'Leave it empty to keep “Full Body Reset”. You can rename it later.',
+    );
+
+    press(host, 'Assign program');
+    await settle(fixture);
+    const calls = (api['assignClientMesocycle'] as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls[0][1]).not.toHaveProperty('name');
+
+    fill(host, 'Program name (optional)', '  Peaking block  ');
+    await settle(fixture);
+    press(host, 'Assign program');
+    await settle(fixture);
+
+    expect(calls[1][1]).toMatchObject({ name: 'Peaking block' });
+    // Another name is another request, so it gets its own key.
+    expect(calls[1][1].idempotencyKey).not.toBe(calls[0][1].idempotencyKey);
+  });
+
+  it('works a max out from the weight of week 1’s first set, and says how it was worked out (P2)', async () => {
+    const { fixture, host, api, programApi } = await render({ version: chartVersion });
+    fill(host, 'Program', 'fbr-2');
+    await settle(fixture);
+
+    // The coach can type a max, or choose to work it out from week 1: it names the set it reads.
+    tick(host, 'From week 1’s weight');
+    await settle(fixture);
+    expect(textOf(host.querySelector('fieldset.maxes'))).toContain(
+      'The weight of its first working set: 5 reps at RPE 7. The max is worked out from the RTS chart.',
+    );
+    expect(query<HTMLInputElement>(host, 'fieldset.maxes input[type="number"]').value).toBe('');
+
+    fill(host, 'Back squat in week 1', '110');
+    field(host, 'Back squat in week 1').dispatchEvent(new Event('change'));
+    await settle(fixture);
+
+    expect(programApi.estimateMaxFromRpeChart).toHaveBeenCalledWith({
+      load: 110,
+      repetitions: 5,
+      rpe: 7,
+      unit: 'Kilogram',
+    });
+    expect(textOf(host.querySelector('.estimate'))).toBe(worked.explanation);
+
+    press(host, 'Assign program');
+    await settle(fixture);
+
+    const calls = (api['assignClientMesocycle'] as ReturnType<typeof vi.fn>).mock.calls;
+    // Only week 1's weight is sent for the lift: no typed number, and no recorded max behind it.
+    expect(calls[0][1].workingMaxes).toEqual([
+      {
+        exerciseId: 'squat',
+        strengthMaxRecordId: null,
+        value: null,
+        unit: 'Kilogram',
+        weekOneWeight: 110,
+      },
+    ]);
+  });
+
+  it('asks for that weight when week 1’s weight is chosen, and forgets what was worked out when it changes', async () => {
+    const { fixture, host, api } = await render({ version: chartVersion });
+    fill(host, 'Program', 'fbr-2');
+    await settle(fixture);
+    tick(host, 'From week 1’s weight');
+    await settle(fixture);
+
+    press(host, 'Assign program');
+    await settle(fixture);
+
+    expect(api['assignClientMesocycle']).not.toHaveBeenCalled();
+    expect(textOf(host)).toContain('Enter the weight for Back squat in week 1.');
+
+    fill(host, 'Back squat in week 1', '110');
+    field(host, 'Back squat in week 1').dispatchEvent(new Event('change'));
+    await settle(fixture);
+    expect(host.querySelector('.estimate')).not.toBeNull();
+    fill(host, 'Back squat in week 1', '115');
+    await settle(fixture);
+    expect(host.querySelector('.estimate')).toBeNull();
+
+    // Going back to typing a number sends the recorded max again.
+    tick(host, 'Type it');
+    await settle(fixture);
+    expect(query<HTMLInputElement>(host, 'fieldset.maxes input[type="number"]').value).toBe('100');
+  });
+
+  it('offers no week 1 choice for a lift whose week 1 has nothing the chart covers (P2)', async () => {
+    const { fixture, host } = await render();
+    fill(host, 'Program', 'fbr-2');
+    await settle(fixture);
+
+    expect(host.querySelector('fieldset.maxes app-segmented-control')).toBeNull();
   });
 
   it('never carries a max across kilograms and pounds', async () => {

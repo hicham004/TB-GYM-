@@ -84,6 +84,22 @@
 
 // ---------- the program ----------
 
+// The program's header and, once the page is wide enough, its training maxes beside it (P2). The maxes
+// panel marks itself filled, so a program that works no weight out from a max keeps the full width.
+.top {
+  display: grid;
+  gap: 1.125rem;
+  grid-template-columns: minmax(0, 1fr);
+  min-inline-size: 0;
+}
+
+@container (min-width: 64rem) {
+  .top:has(app-program-maxes[data-filled]) {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) 22rem;
+  }
+}
+
 // Its menu opens over the card below, so the card must not clip it.
 .hero {
   overflow: visible;

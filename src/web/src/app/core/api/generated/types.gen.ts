@@ -156,6 +156,14 @@ export type ApplyProgressionRequest = {
   mesocycleVersion: number | string;
 };
 
+export type ApplyTrainingMaxesRequest = {
+  mesocycleVersion: number | string;
+  changes: Array<TrainingMaxChangeRequest>;
+  reason: null | string;
+  previewHash: string;
+  idempotencyKey: string;
+};
+
 export type AssignCheckInRequest = {
   formVersionId: string;
   dueDate: string;
@@ -171,6 +179,7 @@ export type AssignMesocycleRequest = {
   loadRoundingMode: TrainingLoadRoundingMode;
   workingMaxes: Array<WorkingMaxSelectionRequest>;
   idempotencyKey: string;
+  name?: null | string;
 };
 
 export type AssignNutritionPlanRequest = {
@@ -1565,6 +1574,13 @@ export type EstimateOneRepMaxRequest = {
   methodKey: string;
 };
 
+export type EstimateRpeChartMaxRequest = {
+  load: number | string;
+  repetitions: number | string;
+  rpe: number | string;
+  unit: LoadUnit;
+};
+
 export type ExerciseAlternativeOptionView = {
   exerciseId: string;
   name: string;
@@ -1963,7 +1979,7 @@ export type MediaSource = 'Upload' | 'ExternalEmbed';
 
 export type MesocycleKind = 'Primary' | 'Supplemental';
 
-export type MesocycleLifecycleEventType = 'Assigned' | 'Cancelled' | 'Completed';
+export type MesocycleLifecycleEventType = 'Assigned' | 'Cancelled' | 'Completed' | 'Renamed';
 
 export type MesocycleLifecycleEventView = {
   id: string;
@@ -2286,6 +2302,11 @@ export type PlatformPaymentView = {
 export type PreparationBasis = 'Raw' | 'Cooked' | 'AsSold' | 'Prepared';
 
 export type PrescriptionModificationPolicy = 'Locked' | 'CoachApprovedSwap';
+
+export type PreviewTrainingMaxesRequest = {
+  mesocycleVersion: number | string;
+  changes: Array<TrainingMaxChangeRequest>;
+};
 
 export type PreviewWeekProgressionRequest = {
   sourceWeek: TrainingWeekRequest;
@@ -2700,6 +2721,11 @@ export type RenameCheckInFormRequest = {
   version: number | string;
 };
 
+export type RenameMesocycleRequest = {
+  name: string;
+  version: number | string;
+};
+
 export type RenewalRequestView = {
   id: string;
   requestedOn: string;
@@ -2770,6 +2796,15 @@ export type ReviewAiMealDraftRequest = {
 
 export type RevokeClientInvitationRequest = {
   version: number | string;
+};
+
+export type RpeChartMaxEstimateView = {
+  value: number | string;
+  unit: LoadUnit;
+  percent: number | string;
+  methodKey: string;
+  methodVersion: string;
+  explanation: string;
 };
 
 export type SaveCheckInDraftRequest = {
@@ -2969,6 +3004,95 @@ export type TrainingLoadStrategy =
 
 export type TrainingLoadUnit = 'Kilogram' | 'Pound';
 
+export type TrainingMaxBasisView = {
+  load: number | string;
+  repetitions: number | string;
+  rpe: number | string;
+  methodKey: string;
+  methodVersion: string;
+};
+
+export type TrainingMaxChangeRequest = {
+  exerciseId: string;
+  value: null | number | string;
+  weekOneWeight: null | number | string;
+};
+
+export type TrainingMaxEntryView = {
+  id: string;
+  value: number | string;
+  unit: TrainingLoadUnit;
+  source: TrainingMaxSource;
+  basis: null | TrainingMaxBasisView;
+  effectiveFromWeek: number | string;
+  setOn: string;
+  reason: string;
+};
+
+export type TrainingMaxesPreviewView = {
+  previewHash: string;
+  loadUnit: TrainingLoadUnit;
+  effectiveFromWeek: number | string;
+  lifts: Array<TrainingMaxLiftChangeView>;
+  sets: Array<TrainingMaxSetChangeView>;
+  changedSetCount: number | string;
+  unchangedSetCount: number | string;
+  sessionCount: number | string;
+  keptSessionCount: number | string;
+};
+
+export type TrainingMaxesView = {
+  mesocycleId: string;
+  version: number | string;
+  loadUnit: TrainingLoadUnit;
+  isClosed: boolean;
+  maxes: Array<TrainingMaxView>;
+};
+
+export type TrainingMaxLiftChangeView = {
+  exerciseId: string;
+  exerciseName: string;
+  previousValue: number | string;
+  newValue: number | string;
+  unit: TrainingLoadUnit;
+  source: TrainingMaxSource;
+  basis: null | TrainingMaxBasisView;
+  explanation: string;
+};
+
+export type TrainingMaxSetChangeView = {
+  setId: string;
+  weekNumber: number | string;
+  scheduledDate: string;
+  sessionId: string;
+  sessionName: string;
+  exerciseId: string;
+  exerciseName: string;
+  setPosition: number | string;
+  repetitions: null | number | string;
+  targetRpe: null | number | string;
+  percentageWorkingMax: null | number | string;
+  previousLoad: null | number | string;
+  newLoad: number | string;
+  explanation: string;
+};
+
+export type TrainingMaxSource = 'Typed' | 'SavedMax' | 'WeekOneWeight';
+
+export type TrainingMaxView = {
+  exerciseId: string;
+  exerciseName: string;
+  current: TrainingMaxEntryView;
+  weekOneSet: null | TrainingMaxWeekOneSetView;
+  earlier: Array<TrainingMaxEntryView>;
+};
+
+export type TrainingMaxWeekOneSetView = {
+  repetitions: number | string;
+  rpe: number | string;
+  load: null | number | string;
+};
+
 export type TrainingMesocycleView = {
   id: string;
   clientProfileId: string;
@@ -3151,8 +3275,9 @@ export type WeightUnitRequest = {
 export type WorkingMaxSelectionRequest = {
   exerciseId: string;
   strengthMaxRecordId: null | string;
-  value: number | string;
+  value: null | number | string;
   unit: TrainingLoadUnit;
+  weekOneWeight?: null | number | string;
 };
 
 export type WorkingMaxSnapshotView = {
@@ -3165,6 +3290,7 @@ export type WorkingMaxSnapshotView = {
   effectiveFromWeek: number | string;
   supersedesSnapshotId: null | string;
   reason: string;
+  source: TrainingMaxSource;
 };
 
 export type WorkoutExecutionStatus = 'InProgress' | 'Completed';
@@ -5491,6 +5617,33 @@ export type EstimateOneRepMaxResponses = {
 export type EstimateOneRepMaxResponse =
   EstimateOneRepMaxResponses[keyof EstimateOneRepMaxResponses];
 
+export type EstimateMaxFromRpeChartData = {
+  body: EstimateRpeChartMaxRequest;
+  path?: never;
+  query?: never;
+  url: '/api/strength/estimate-max-from-rpe';
+};
+
+export type EstimateMaxFromRpeChartErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+};
+
+export type EstimateMaxFromRpeChartError =
+  EstimateMaxFromRpeChartErrors[keyof EstimateMaxFromRpeChartErrors];
+
+export type EstimateMaxFromRpeChartResponses = {
+  /**
+   * OK
+   */
+  200: RpeChartMaxEstimateView;
+};
+
+export type EstimateMaxFromRpeChartResponse =
+  EstimateMaxFromRpeChartResponses[keyof EstimateMaxFromRpeChartResponses];
+
 export type ListProgramTemplatesData = {
   body?: never;
   path?: never;
@@ -6214,6 +6367,131 @@ export type ApplyTrainingProgressionResponses = {
 
 export type ApplyTrainingProgressionResponse =
   ApplyTrainingProgressionResponses[keyof ApplyTrainingProgressionResponses];
+
+export type GetTrainingMaxesData = {
+  body?: never;
+  path: {
+    mesocycleId: string;
+  };
+  query?: never;
+  url: '/api/training/mesocycles/{mesocycleId}/training-maxes';
+};
+
+export type GetTrainingMaxesErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetTrainingMaxesResponses = {
+  /**
+   * OK
+   */
+  200: TrainingMaxesView;
+};
+
+export type GetTrainingMaxesResponse = GetTrainingMaxesResponses[keyof GetTrainingMaxesResponses];
+
+export type PreviewTrainingMaxesData = {
+  body: PreviewTrainingMaxesRequest;
+  path: {
+    mesocycleId: string;
+  };
+  query?: never;
+  url: '/api/training/mesocycles/{mesocycleId}/training-maxes/preview';
+};
+
+export type PreviewTrainingMaxesErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PreviewTrainingMaxesError =
+  PreviewTrainingMaxesErrors[keyof PreviewTrainingMaxesErrors];
+
+export type PreviewTrainingMaxesResponses = {
+  /**
+   * OK
+   */
+  200: TrainingMaxesPreviewView;
+};
+
+export type PreviewTrainingMaxesResponse =
+  PreviewTrainingMaxesResponses[keyof PreviewTrainingMaxesResponses];
+
+export type ApplyTrainingMaxesData = {
+  body: ApplyTrainingMaxesRequest;
+  path: {
+    mesocycleId: string;
+  };
+  query?: never;
+  url: '/api/training/mesocycles/{mesocycleId}/training-maxes/apply';
+};
+
+export type ApplyTrainingMaxesErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ApplyTrainingMaxesError = ApplyTrainingMaxesErrors[keyof ApplyTrainingMaxesErrors];
+
+export type ApplyTrainingMaxesResponses = {
+  /**
+   * OK
+   */
+  200: TrainingMesocycleView;
+};
+
+export type ApplyTrainingMaxesResponse =
+  ApplyTrainingMaxesResponses[keyof ApplyTrainingMaxesResponses];
+
+export type RenameMesocycleData = {
+  body: RenameMesocycleRequest;
+  path: {
+    mesocycleId: string;
+  };
+  query?: never;
+  url: '/api/training/mesocycles/{mesocycleId}/name';
+};
+
+export type RenameMesocycleErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RenameMesocycleError = RenameMesocycleErrors[keyof RenameMesocycleErrors];
+
+export type RenameMesocycleResponses = {
+  /**
+   * OK
+   */
+  200: TrainingMesocycleView;
+};
+
+export type RenameMesocycleResponse = RenameMesocycleResponses[keyof RenameMesocycleResponses];
 
 export type GetClientExerciseHistoryData = {
   body?: never;

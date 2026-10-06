@@ -122,6 +122,29 @@ public interface ITrainingApplicationService
         ApplyProgressionRequest request,
         CancellationToken cancellationToken);
 
+    /// <summary>A program's training maxes, the one in use for each lift and the ones before it (STR-002).</summary>
+    Task<TrainingMaxesView?> GetTrainingMaxesAsync(Guid mesocycleId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// What updating the maxes would change, calculated and not saved (STR-002, STR-009). Throws
+    /// <see cref="ArgumentException"/> for a request that is wrong and <see cref="InvalidOperationException"/>
+    /// when the program changed after the version the request carries.
+    /// </summary>
+    Task<TrainingMaxesPreviewView?> PreviewTrainingMaxesAsync(
+        Guid mesocycleId,
+        PreviewTrainingMaxesRequest request,
+        CancellationToken cancellationToken);
+
+    Task<TrainingCommandResult> ApplyTrainingMaxesAsync(
+        Guid mesocycleId,
+        ApplyTrainingMaxesRequest request,
+        CancellationToken cancellationToken);
+
+    Task<TrainingCommandResult> RenameMesocycleAsync(
+        Guid mesocycleId,
+        RenameMesocycleRequest request,
+        CancellationToken cancellationToken);
+
     Task<ExerciseHistoryPage?> GetExerciseHistoryAsync(
         Guid clientProfileId,
         Guid exerciseId,
@@ -343,6 +366,7 @@ public sealed record SaveSessionTemplateRequest(
     Guid SourceTemplateVersionId,
     Guid SourceTemplateSessionId);
 
+/// <param name="Name">The program's name for this client; the template's own name when left out (TRN-002).</param>
 public sealed record AssignMesocycleRequest(
     Guid EnrollmentId,
     Guid TemplateVersionId,
@@ -352,13 +376,20 @@ public sealed record AssignMesocycleRequest(
     decimal LoadIncrement,
     TrainingLoadRoundingMode LoadRoundingMode,
     IReadOnlyList<WorkingMaxSelectionRequest> WorkingMaxes,
-    Guid IdempotencyKey);
+    Guid IdempotencyKey,
+    string? Name = null);
 
+/// <summary>
+/// The training max for one exercise: a number the coach typed or picked from the client's saved maxes
+/// (<paramref name="Value"/>), or the weight of week 1's working set, from which the server works the
+/// max out on the RTS chart (<paramref name="WeekOneWeight"/>, STR-011). Exactly one of the two is given.
+/// </summary>
 public sealed record WorkingMaxSelectionRequest(
     Guid ExerciseId,
     Guid? StrengthMaxRecordId,
-    decimal Value,
-    TrainingLoadUnit Unit);
+    decimal? Value,
+    TrainingLoadUnit Unit,
+    decimal? WeekOneWeight = null);
 
 public sealed record MesocycleSummary(
     Guid Id,
@@ -410,7 +441,113 @@ public sealed record WorkingMaxSnapshotView(
     TrainingLoadUnit Unit,
     int EffectiveFromWeek,
     Guid? SupersedesSnapshotId,
+    string Reason,
+    TrainingMaxSource Source);
+
+/// <summary>Where a training max came from; the Strength module's source, in this module's words.</summary>
+public enum TrainingMaxSource
+{
+    Typed = 1,
+    SavedMax = 2,
+    WeekOneWeight = 3,
+}
+
+/// <summary>The week 1 set, weight and method a "from week 1's weight" max was worked out from.</summary>
+public sealed record TrainingMaxBasisView(
+    decimal Load,
+    int Repetitions,
+    decimal Rpe,
+    string MethodKey,
+    string MethodVersion);
+
+/// <summary>One training max as it was set: its value, source, the week it applies from and why.</summary>
+public sealed record TrainingMaxEntryView(
+    Guid Id,
+    decimal Value,
+    TrainingLoadUnit Unit,
+    TrainingMaxSource Source,
+    TrainingMaxBasisView? Basis,
+    int EffectiveFromWeek,
+    DateOnly SetOn,
     string Reason);
+
+/// <summary>The set of week 1 that "from week 1's weight" would read for a lift, and the weight it has now.</summary>
+public sealed record TrainingMaxWeekOneSetView(int Repetitions, decimal Rpe, decimal? Load);
+
+/// <summary>One lift's training max in use, the week 1 set it could be worked out from, and its earlier values.</summary>
+public sealed record TrainingMaxView(
+    Guid ExerciseId,
+    string ExerciseName,
+    TrainingMaxEntryView Current,
+    TrainingMaxWeekOneSetView? WeekOneSet,
+    IReadOnlyList<TrainingMaxEntryView> Earlier);
+
+/// <param name="IsClosed">True once the program is finished or cancelled; its maxes are then history.</param>
+public sealed record TrainingMaxesView(
+    Guid MesocycleId,
+    uint Version,
+    TrainingLoadUnit LoadUnit,
+    bool IsClosed,
+    IReadOnlyList<TrainingMaxView> Maxes);
+
+/// <summary>One lift's new max: a typed number, or the weight of week 1's set to work it out from (STR-011).</summary>
+public sealed record TrainingMaxChangeRequest(Guid ExerciseId, decimal? Value, decimal? WeekOneWeight);
+
+public sealed record PreviewTrainingMaxesRequest(
+    uint MesocycleVersion,
+    IReadOnlyList<TrainingMaxChangeRequest> Changes);
+
+/// <param name="Reason">Why, in the coach's words; recorded with the new maxes. Optional.</param>
+public sealed record ApplyTrainingMaxesRequest(
+    uint MesocycleVersion,
+    IReadOnlyList<TrainingMaxChangeRequest> Changes,
+    string? Reason,
+    string PreviewHash,
+    Guid IdempotencyKey);
+
+public sealed record RenameMesocycleRequest(string Name, uint Version);
+
+public sealed record TrainingMaxLiftChangeView(
+    Guid ExerciseId,
+    string ExerciseName,
+    decimal PreviousValue,
+    decimal NewValue,
+    TrainingLoadUnit Unit,
+    TrainingMaxSource Source,
+    TrainingMaxBasisView? Basis,
+    string Explanation);
+
+public sealed record TrainingMaxSetChangeView(
+    Guid SetId,
+    int WeekNumber,
+    DateOnly ScheduledDate,
+    Guid SessionId,
+    string SessionName,
+    Guid ExerciseId,
+    string ExerciseName,
+    int SetPosition,
+    int? Repetitions,
+    decimal? TargetRpe,
+    decimal? PercentageWorkingMax,
+    decimal? PreviousLoad,
+    decimal NewLoad,
+    string Explanation);
+
+/// <summary>
+/// What updating a program's training maxes would do. <paramref name="Sets"/> lists the sets whose weight
+/// changes, in the order they come up; sets only re-pointed to the new max with the same weight are counted,
+/// and sessions that are started or in the past are left as they were (TRN-004).
+/// </summary>
+public sealed record TrainingMaxesPreviewView(
+    string PreviewHash,
+    TrainingLoadUnit LoadUnit,
+    int EffectiveFromWeek,
+    IReadOnlyList<TrainingMaxLiftChangeView> Lifts,
+    IReadOnlyList<TrainingMaxSetChangeView> Sets,
+    int ChangedSetCount,
+    int UnchangedSetCount,
+    int SessionCount,
+    int KeptSessionCount);
 
 public sealed record TrainingWeekView(
     Guid Id,

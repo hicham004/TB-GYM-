@@ -253,13 +253,14 @@ describe('a program past its last day that never closed', () => {
 
     expect(items.map((item) => item.label)).toEqual([
       'Assign program',
+      'Rename program',
       'Close program',
       'Cancel program',
     ]);
     // Past its last day it closes as finished, the two missed sessions kept on record (TRN-013).
-    expect(items[1]).toMatchObject({ action: 'complete', hint: 'Missed sessions stay on record' });
-    expect(items[1].disabled).toBeFalsy();
+    expect(items[2]).toMatchObject({ action: 'complete', hint: 'Missed sessions stay on record' });
     expect(items[2].disabled).toBeFalsy();
+    expect(items[3].disabled).toBeFalsy();
   });
 });
 
@@ -325,25 +326,29 @@ describe('what a coach can do about a program', () => {
 
     expect(labels(items)).toEqual([
       'Assign program',
+      'Rename program',
       'Build next block',
       'Reschedule',
       'Open every shared week now',
       'Close program',
       'Cancel program',
     ]);
+    // The name is always the coach's to change, so renaming is never greyed out.
+    expect(items[1]).toMatchObject({ action: 'rename', hint: 'Change what it is called' });
+    expect(items[1].disabled).toBeFalsy();
     // Workouts were done, so the dates can no longer move; sessions remain, so it cannot be closed.
-    expect(items[2]).toMatchObject({
+    expect(items[3]).toMatchObject({
       action: 'reschedule',
       disabled: true,
       hint: 'Not possible once a workout has started',
     });
-    expect(items[4]).toMatchObject({
+    expect(items[5]).toMatchObject({
       action: 'complete',
       disabled: true,
       hint: 'Possible after its last day, Sun 25 Oct',
     });
-    expect(items[5].disabled).toBeFalsy();
-    expect(items[3].hint).toBe(
+    expect(items[6].disabled).toBeFalsy();
+    expect(items[4].hint).toBe(
       'Maya sees every shared week now, not only the ones that have started',
     );
   });
@@ -353,13 +358,14 @@ describe('what a coach can do about a program', () => {
 
     expect(labels(items)).toEqual([
       'Assign program',
+      'Rename program',
       'Build next block',
       'Reschedule',
       'Open every shared week now',
       'Cancel program',
     ]);
-    expect(items[2]).toMatchObject({ hint: 'Move the start date' });
-    expect(items[2].disabled).toBeFalsy();
+    expect(items[3]).toMatchObject({ hint: 'Move the start date' });
+    expect(items[3].disabled).toBeFalsy();
   });
 
   it('turns the weekly opening back on when every shared week is already open', () => {

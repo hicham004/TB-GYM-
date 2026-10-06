@@ -24,7 +24,7 @@ import {
   plannedBlock,
   runningBlock,
 } from '../../../testing/client-program-fixtures';
-import { press, settle } from '../../../testing/dom';
+import { press, settle, type } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ClientProgram } from './client-program';
 import { ClientWorkspaceContext } from './client-workspace.context';
@@ -57,16 +57,35 @@ interface Options {
   program?: CoachClientProgramView;
   /** Replaces the program read, to fail it or to answer differently the second time. */
   getProgram?: () => Observable<CoachClientProgramView>;
+  /** What the program's training maxes read answers; by default the program uses none. */
+  maxes?: unknown;
   enrollments?: ClientEnrollment[];
   featureAccess?: ClientCommercialOverview['featureAccess'];
   url?: string;
   api?: Record<string, unknown>;
+  programApi?: Record<string, unknown>;
 }
+
+const NO_MAXES = {
+  mesocycleId: 'block-lean',
+  version: 4,
+  loadUnit: 'Kilogram',
+  isClosed: false,
+  maxes: [],
+};
 
 async function render(options: Options = {}) {
   const getProgram = options.getProgram
     ? vi.fn(options.getProgram)
     : vi.fn(() => of(options.program ?? coachProgram()));
+  const programApi = {
+    getProgram,
+    getTrainingMaxes: vi.fn(() => of(options.maxes ?? NO_MAXES)),
+    previewTrainingMaxes: vi.fn(() => of({})),
+    applyTrainingMaxes: vi.fn(() => of({})),
+    renameProgram: vi.fn(() => of({})),
+    ...options.programApi,
+  };
   const api = {
     setMesocycleWeekPublished: vi.fn(() => of({})),
     updateMesocycleVisibility: vi.fn(() => of({})),
@@ -90,7 +109,7 @@ async function render(options: Options = {}) {
       provideRouter([{ path: 'clients/:clientId/training', component: ClientProgram }]),
       ClientWorkspaceContext,
       { provide: ApiClient, useValue: api },
-      { provide: ClientProgramApi, useValue: { getProgram } },
+      { provide: ClientProgramApi, useValue: programApi },
       { provide: CsrfService, useValue: csrf },
       {
         provide: TenantStore,
@@ -118,6 +137,7 @@ async function render(options: Options = {}) {
     csrf,
     context,
     getProgram,
+    programApi,
     router: TestBed.inject(Router),
   };
 }
@@ -498,23 +518,24 @@ describe('a client’s Training', () => {
       const items = all(host, 'app-client-actions .item');
       expect(items.map((item) => textOf(item.querySelector('.item-title')))).toEqual([
         'Assign program',
+        'Rename program',
         'Build next block',
         'Reschedule',
         'Open every shared week now',
         'Close program',
         'Cancel program',
       ]);
-      expect(items[2].getAttribute('aria-disabled')).toBe('true');
-      expect(textOf(items[2])).toContain('Not possible once a workout has started');
-      expect(items[4].getAttribute('aria-disabled')).toBe('true');
-      expect(items[5].getAttribute('aria-disabled')).toBeNull();
+      expect(items[3].getAttribute('aria-disabled')).toBe('true');
+      expect(textOf(items[3])).toContain('Not possible once a workout has started');
+      expect(items[5].getAttribute('aria-disabled')).toBe('true');
+      expect(items[6].getAttribute('aria-disabled')).toBeNull();
     });
 
     it('cancels a program only with a reason, then reads it again', async () => {
       const { harness, host, api, getProgram, context } = await render();
       press(host, 'Manage program');
       await settle(harness.fixture);
-      all(host, 'app-client-actions .item')[5].click();
+      all(host, 'app-client-actions .item')[6].click();
       await settle(harness.fixture);
 
       const cancel = dialog()!;
@@ -555,7 +576,7 @@ describe('a client’s Training', () => {
       });
       press(host, 'Manage program');
       await settle(harness.fixture);
-      all(host, 'app-client-actions .item')[5].click();
+      all(host, 'app-client-actions .item')[6].click();
       await settle(harness.fixture);
       const cancel = dialog()!;
       const reason = cancel.querySelector<HTMLTextAreaElement>('textarea')!;
@@ -579,8 +600,8 @@ describe('a client’s Training', () => {
       press(host, 'Manage program');
       await settle(harness.fixture);
       const items = all(host, 'app-client-actions .item');
-      expect(items[2].getAttribute('aria-disabled')).toBeNull();
-      items[2].click();
+      expect(items[3].getAttribute('aria-disabled')).toBeNull();
+      items[3].click();
       await settle(harness.fixture);
 
       const move = dialog()!;
@@ -606,7 +627,7 @@ describe('a client’s Training', () => {
       press(host, 'Manage program');
       await settle(harness.fixture);
 
-      all(host, 'app-client-actions .item')[3].click();
+      all(host, 'app-client-actions .item')[4].click();
       await settle(harness.fixture);
 
       expect(api['updateMesocycleVisibility']).toHaveBeenCalledWith('block-lean', {
@@ -614,6 +635,142 @@ describe('a client’s Training', () => {
         version: 4,
       });
       expect(context.notice()).toBe('Maya now sees every shared week.');
+    });
+  });
+
+  describe('the program’s training maxes (P2)', () => {
+    const maxes = {
+      mesocycleId: 'block-lean',
+      version: 4,
+      loadUnit: 'Kilogram',
+      isClosed: false,
+      maxes: [
+        {
+          exerciseId: 'squat',
+          exerciseName: 'Back squat',
+          current: {
+            id: 'max-1',
+            value: 100,
+            unit: 'Kilogram',
+            source: 'SavedMax',
+            basis: null,
+            effectiveFromWeek: 1,
+            setOn: '2026-09-14',
+            reason: 'Assignment training max.',
+          },
+          weekOneSet: { repetitions: 5, rpe: 8, load: 80 },
+          earlier: [],
+        },
+      ],
+    };
+    const emptyPreview = {
+      previewHash: 'hash-1',
+      loadUnit: 'Kilogram',
+      effectiveFromWeek: 1,
+      lifts: [],
+      sets: [],
+      changedSetCount: 0,
+      unchangedSetCount: 0,
+      sessionCount: 0,
+      keptSessionCount: 0,
+    };
+
+    it('shows them beside the program, and only when the program uses any', async () => {
+      const { host, programApi } = await render({ maxes });
+
+      expect(programApi.getTrainingMaxes).toHaveBeenCalledWith('block-lean');
+      const panel = host.querySelector('app-program-maxes')!;
+      expect(panel.hasAttribute('data-filled')).toBe(true);
+      expect(textOf(panel.querySelector('.name'))).toBe('Back squat');
+      expect(textOf(panel.querySelector('.value'))).toBe('100 kg');
+      expect(panel.closest('.top')).not.toBeNull();
+    });
+
+    it('leaves the page at full width for a program that works out no weight from a max', async () => {
+      const { host } = await render();
+
+      expect(host.querySelector('app-program-maxes')!.hasAttribute('data-filled')).toBe(false);
+      expect(host.querySelector('app-program-maxes section')).toBeNull();
+    });
+
+    it('opens the update sheet from the panel, and reads the program again once the maxes are updated', async () => {
+      const { harness, host, getProgram, programApi, context } = await render({
+        maxes,
+        programApi: { previewTrainingMaxes: vi.fn(() => of(emptyPreview)) },
+      });
+      press(host, 'Update maxes for the coming weeks');
+      await settle(harness.fixture);
+
+      const sheet = dialog()!;
+      expect(textOf(sheet.querySelector('h2'))).toBe('Update training maxes');
+      type(sheet, 'input[type="number"]', '120');
+      await settle(harness.fixture);
+      press(sheet, 'Show the new weights');
+      await settle(harness.fixture);
+      press(sheet, 'Update maxes');
+      await settle(harness.fixture);
+
+      expect(programApi.applyTrainingMaxes).toHaveBeenCalledWith(
+        'block-lean',
+        expect.objectContaining({ mesocycleVersion: 4, previewHash: 'hash-1' }),
+      );
+      expect(dialog()).toBeNull();
+      expect(getProgram).toHaveBeenCalledTimes(2);
+      expect(context.notice()).toBe('Training maxes updated. The weeks still to come follow them.');
+    });
+
+    it('offers no way to change the maxes of a program that is over', async () => {
+      const { host } = await render({
+        program: coachProgram([cancelledBlock()]),
+        maxes: { ...maxes, isClosed: true },
+      });
+
+      expect(textOf(host.querySelector('app-program-maxes .note'))).toBe(
+        'This program is over, so its maxes stay as they were.',
+      );
+      expect(host.querySelector('app-program-maxes button')).toBeNull();
+    });
+
+    it('renames the program from the Manage menu, and reads it again', async () => {
+      const { harness, host, getProgram, programApi, context } = await render();
+      press(host, 'Manage program');
+      await settle(harness.fixture);
+      all(host, 'app-client-actions .item')[1].click();
+      await settle(harness.fixture);
+
+      const rename = dialog()!;
+      expect(textOf(rename.querySelector('h2'))).toBe('Rename program');
+      const name = rename.querySelector<HTMLInputElement>('input[type="text"]')!;
+      expect(name.value).toBe('Lean & Strong · Phase 2');
+      type(rename, 'input[type="text"]', '  Peaking block  ');
+      await settle(harness.fixture);
+      press(rename, 'Rename program');
+      await settle(harness.fixture);
+
+      expect(programApi.renameProgram).toHaveBeenCalledWith('block-lean', {
+        name: 'Peaking block',
+        version: 4,
+      });
+      expect(dialog()).toBeNull();
+      expect(getProgram).toHaveBeenCalledTimes(2);
+      expect(context.notice()).toBe('The program was renamed.');
+    });
+
+    it('will not rename a program to nothing', async () => {
+      const { harness, host, programApi } = await render();
+      press(host, 'Manage program');
+      await settle(harness.fixture);
+      all(host, 'app-client-actions .item')[1].click();
+      await settle(harness.fixture);
+
+      const rename = dialog()!;
+      type(rename, 'input[type="text"]', '   ');
+      await settle(harness.fixture);
+      press(rename, 'Rename program');
+      await settle(harness.fixture);
+
+      expect(programApi.renameProgram).not.toHaveBeenCalled();
+      expect(textOf(rename)).toContain('Give the program a name.');
     });
   });
 

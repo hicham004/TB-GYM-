@@ -74,8 +74,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R4.2a | **Program builder**, part 2a: autosave to the coach's own draft on the server, and the unsaved-changes guard (Save draft goes; Publish makes the version) | §2, plus backend tests | Done · 2026-10-05 · e51143f |
 | R4.2b | **Program builder**, part 2b: inline sets × reps × load / RPE editing on the grid, and the publish preview | §2 | Done · 2026-10-05 · e51143f |
 | R4.3 | **Check-in review** (C5) | §2 | Done · 2026-10-05 |
-| P1 | **Progression, builder** (owner-approved 2026-10-05, ADR 0036): "Duplicate with progression" on a week's menu (1 to 12 copies; RPE, reps, % and weight steps; the new weeks are shown before they are added), the RTS RPE chart as a load formula, and the program's formula choice | §2, plus domain reference tests (the chart, the steps) and API tests | Done · 2026-10-06 |
-| P2 | **Progression, training maxes** (ADR 0036): a "Training maxes" panel at the top right of a client's program (each lift, value, source, date); "Update maxes for the coming weeks" with a preview of every changed weight; name or rename the program; weights from week 1's weight | §2, plus backend tests (superseding snapshot, stale preview, retry, other coach, released client) | To do |
+| P1 | **Progression, builder** (owner-approved 2026-10-05, ADR 0036): "Duplicate with progression" on a week's menu (1 to 12 copies; RPE, reps, % and weight steps; the new weeks are shown before they are added), the RTS RPE chart as a load formula, and the program's formula choice | §2, plus domain reference tests (the chart, the steps) and API tests | Done · 2026-10-06 · 3538285 |
+| P2 | **Progression, training maxes** (ADR 0036): a "Training maxes" panel at the top right of a client's program (each lift, value, source, date); "Update maxes for the coming weeks" with a preview of every changed weight; name or rename the program; weights from week 1's weight | §2, plus backend tests (superseding snapshot, stale preview, retry, other coach, released client) | Done · 2026-10-06 |
 | P3 | **Progression, editing and next block** (ADR 0036): Build next block takes the same steps and the program's formula; a client's future weeks are edited in the builder's grid through the coverage policy, with an audit record; started and finished sessions stay locked | §2, plus backend tests | To do |
 | P4 | **Session extras** (ADR 0036): an exercise video button in the builder, the session sheet and the client's workout player; coach and client notes visible both ways. Plan only for adjusting next week from logged performance, then ask the owner | §2 | To do |
 | R4.4 | **Nutrition library and meal-plan builder** (C7) | §2 | To do |
@@ -348,6 +348,13 @@ of the implemented R1.3 screens before production rollout.
   a program is assigned (P2 shows them, with their explanation); the RTS chart stops at RPE 6.5, so an
   RPE 6 set needs a typed weight or the Epley curve, and covering RPE 5 to 6 would need a new chart
   version and the owner's decision.
+- **Training maxes (from P2, built 2026-10-06; screenshots `docs/design/p2-*.png`).** The panel sits
+  beside the program's header from 64 rem of page width and under it on a phone; the sheet that
+  updates the maxes shows every changed weight first (ADR 0036). Left for later: (1) choosing the load
+  formula again at assignment (decision 2 of ADR 0036 asks for it; today the formula is chosen in the
+  builder, then the program is assigned); (2) on a wide page the header is shorter than the panel, so
+  there is a gap under it, which a later step could fill (for example with the next sessions); (3) the
+  per-client sequence "Meso 1" of TRN-002 was never built, so programs are told apart by name and date.
 
 ---
 

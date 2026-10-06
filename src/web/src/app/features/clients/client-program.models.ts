@@ -426,7 +426,14 @@ export function otherBlocks(
 // ------------------------------------------------------------------------------------------------
 
 export type ProgramActionId =
-  'assign' | 'next-block' | 'reschedule' | 'reveal-all' | 'reveal-weekly' | 'complete' | 'cancel';
+  | 'assign'
+  | 'rename'
+  | 'next-block'
+  | 'reschedule'
+  | 'reveal-all'
+  | 'reveal-weekly'
+  | 'complete'
+  | 'cancel';
 
 /**
  * What a coach can do about the block in front of them. Which ones are offered only follows the
@@ -446,6 +453,13 @@ export function programMenu(
     });
   }
   if (!block || block.terminal) return items;
+
+  // The name is the one thing about a running program that is always the coach's to change (TRN-002).
+  items.push({
+    label: $localize`Rename program`,
+    hint: $localize`Change what it is called`,
+    action: 'rename',
+  });
 
   // A program past its last day can only be closed, or replaced by another.
   if (!block.ended) {

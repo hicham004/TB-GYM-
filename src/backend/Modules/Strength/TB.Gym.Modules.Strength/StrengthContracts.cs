@@ -15,6 +15,8 @@ public interface IStrengthApplicationService
         CancellationToken cancellationToken);
 
     OneRepMaxEstimateView Estimate(EstimateOneRepMaxRequest request);
+
+    RpeChartMaxEstimateView EstimateFromRpeChart(EstimateRpeChartMaxRequest request);
 }
 
 public sealed record StrengthMaxView(
@@ -59,6 +61,17 @@ public sealed record OneRepMaxEstimateView(
     string MethodKey,
     string MethodVersion,
     string Qualification);
+
+/// <summary>What week 1's weight implies as a training max, read backwards from the RTS chart (STR-011).</summary>
+public sealed record EstimateRpeChartMaxRequest(decimal Load, int Repetitions, decimal Rpe, LoadUnit Unit);
+
+public sealed record RpeChartMaxEstimateView(
+    decimal Value,
+    LoadUnit Unit,
+    decimal Percent,
+    string MethodKey,
+    string MethodVersion,
+    string Explanation);
 
 public sealed record StrengthCommandResult(
     StrengthCommandStatus Status,
