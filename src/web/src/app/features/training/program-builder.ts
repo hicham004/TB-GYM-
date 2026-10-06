@@ -37,6 +37,7 @@ import type {
   ProgramDraftView,
   ProgramTemplateSummary,
   SavedSessionView,
+  WeekProgressionPreviewView,
 } from '../../core/api/generated';
 import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
@@ -69,27 +70,35 @@ import {
   type DraftProblem,
   draftProblem,
   type DropTarget,
+  copiesThatFit,
   duplicateWeekAfter,
   exerciseSummary,
   findSession,
   gridColumns,
+  insertProgression,
   insertSavedSession,
   libraryExercise,
   type LibraryExercise,
   moveWeek,
+  outsideChartCount,
+  programFormula,
   removeExercise,
   removeSession,
   removeWeek,
   resortDays,
+  rpeLoadedSetCount,
+  type RpeFormula,
   type SessionRef,
   startSessionWith,
   versionRows,
   versionToOpen,
+  withProgramFormula,
 } from './program-builder.models';
 import { type LibraryThumbs, ProgramLibrary } from './program-library';
 import { ProgramSessionEditor } from './program-session-editor';
 import { ProgramSetsEditor } from './program-sets-editor';
 import { ProgramPublishPreview } from './program-publish-preview';
+import { ProgramWeekProgression } from './program-week-progression';
 import {
   type DraftSession,
   type DraftExercise,
@@ -206,6 +215,7 @@ const LEAVE_WAIT_MS = 8000;
     ProgramSessionEditor,
     ProgramSetsEditor,
     ProgramPublishPreview,
+    ProgramWeekProgression,
     RouterLink,
     Skeleton,
     StatusPill,
@@ -244,6 +254,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
   protected readonly historySheet = viewChild.required<TemplateRef<unknown>>('historySheet');
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private readonly previewSheet = viewChild.required<TemplateRef<unknown>>('previewSheet');
+  private readonly progressionSheet = viewChild.required<TemplateRef<unknown>>('progressionSheet');
   private readonly setEditors = viewChildren(ProgramSetsEditor);
   private previewRef: Closable | null = null;
   private libraryTenant: string | null = null;
@@ -367,6 +378,36 @@ export class ProgramBuilder implements HoldsUnsavedWork {
       sessions === 1 ? $localize`1 session` : $localize`${sessions}:count: sessions`;
     return `${weekText} · ${sessionText}`;
   });
+
+  /** The week whose "Duplicate with progression" sheet is open (TRN-025). */
+  protected readonly progressing = signal<string | null>(null);
+  /** The formula the program's RPE-loaded sets use (STR-010); null while no set uses one. */
+  protected readonly formula = computed(() => {
+    this.revision();
+    return programFormula(this.draft());
+  });
+  protected readonly formulaLabel = computed(() => {
+    const formula = this.formula();
+    const name =
+      formula === 'RpeChart'
+        ? $localize`RTS chart`
+        : formula === 'RpeBasedEpley'
+          ? $localize`Epley curve`
+          : $localize`mixed`;
+    return $localize`Weights from RPE: ${name}:formula:`;
+  });
+  protected readonly formulaItems: UiMenuItem[] = [
+    {
+      label: $localize`RTS chart (recommended)`,
+      hint: $localize`RPE 6.5 to 10, 1 to 12 reps`,
+      action: 'RpeChart',
+    },
+    {
+      label: $localize`Epley curve`,
+      hint: $localize`Any RPE from 5, reps plus RIR up to 12`,
+      action: 'RpeBasedEpley',
+    },
+  ];
 
   private readonly openVersion = computed(
     () => this.template()?.versions.find((version) => version.id === this.openVersionId()) ?? null,
@@ -707,6 +748,9 @@ export class ProgramBuilder implements HoldsUnsavedWork {
         this.commit(duplicateWeekAfter(before, weekKey));
         this.focusWeek(this.draft().weeks[index + 1]?.key);
         return;
+      case 'progress':
+        this.openProgression(weekKey);
+        return;
       case 'up':
         this.commit(moveWeek(before, weekKey, -1));
         this.focusWeek(weekKey);
@@ -751,6 +795,59 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     this.commit(removeSession(before, ref));
     this.focusWeek(ref.weekKey);
     this.offerUndo($localize`${name}:session: deleted.`, before);
+  }
+
+  private openProgression(weekKey: string): void {
+    this.progressing.set(weekKey);
+    const sheet = this.sheets.open(this.progressionSheet(), {
+      title: $localize`Duplicate with progression`,
+      closeLabel: this.closeLabel,
+    });
+    sheet.closed.subscribe(() => this.progressing.set(null));
+  }
+
+  /** The weeks the coach has read join the draft after their source, with an Undo for all of them. */
+  protected addProgression(
+    weekKey: string,
+    preview: WeekProgressionPreviewView,
+    sheet: Closable,
+  ): void {
+    const before = this.draft();
+    const next = insertProgression(before, weekKey, preview);
+    if (next === before) return;
+    const source = before.weeks.findIndex((week) => week.key === weekKey);
+    sheet.close();
+    this.commit(next);
+    this.focusWeek(next.weeks[source + 1]?.key);
+    const count = preview.weeks.length;
+    this.offerUndo(
+      count === 1
+        ? $localize`1 week added after week ${source + 1}:number:.`
+        : $localize`${count}:count: weeks added after week ${source + 1}:number:.`,
+      before,
+    );
+  }
+
+  /** The program's RPE-loaded sets all move to the chosen formula; Undo puts them back. */
+  protected chooseFormula(action: string): void {
+    const formula: RpeFormula | null =
+      action === 'RpeChart' || action === 'RpeBasedEpley' ? action : null;
+    const before = this.draft();
+    if (!formula || programFormula(before) === formula) return;
+    const count = rpeLoadedSetCount(before);
+    const next = withProgramFormula(before, formula);
+    this.commit(next);
+    const outside = formula === 'RpeChart' ? outsideChartCount(next) : 0;
+    const name = formula === 'RpeChart' ? $localize`the RTS chart` : $localize`the Epley curve`;
+    const message =
+      count === 1
+        ? $localize`1 set now takes its weight from ${name}:formula:.`
+        : $localize`${count}:count: sets now take their weight from ${name}:formula:.`;
+    const warning =
+      outside === 1
+        ? $localize`1 of them is outside the chart: type a weight or use the Epley curve for it.`
+        : $localize`${outside}:count: of them are outside the chart: type a weight or use the Epley curve for those.`;
+    this.offerUndo(outside > 0 ? `${message} ${warning}` : message, before);
   }
 
   private offerUndo(message: string, before: ProgramDraft): void {
@@ -1222,6 +1319,15 @@ export class ProgramBuilder implements HoldsUnsavedWork {
             disabled: draft.weeks.length >= this.maxWeeks,
             hint:
               draft.weeks.length >= this.maxWeeks
+                ? $localize`A program holds up to ${this.maxWeeks}:count: weeks.`
+                : undefined,
+          },
+          {
+            label: $localize`Duplicate with progression…`,
+            action: 'progress',
+            disabled: copiesThatFit(draft) === 0,
+            hint:
+              copiesThatFit(draft) === 0
                 ? $localize`A program holds up to ${this.maxWeeks}:count: weeks.`
                 : undefined,
           },

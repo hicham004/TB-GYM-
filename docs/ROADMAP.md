@@ -125,10 +125,11 @@ coach-to-client message handoff, and read-only workout review. It preserves the 
 schema and invariants; RPE remains canonical and choosing a preferred client effort-input scale is
 deferred. See `docs/CLOSED-BETA-SLICE-1.md` for bounded-read and verification evidence.
 
-Explicitly deferred: supplemental mesocycles, intentional future working-max rebase,
-completion correction, arbitrary edits to started sessions, more progression transforms,
-large analytics/PR dashboards, a production object-store/scanner/CDN adapter, and media
-retention/purge jobs. Configurable local workspace quota enforcement is delivered; provider-
+Explicitly deferred: supplemental mesocycles, completion correction, arbitrary edits to started
+sessions, large analytics/PR dashboards, a production object-store/scanner/CDN adapter, and media
+retention/purge jobs. (The owner lifted two deferrals on 2026-10-05, more progression transforms
+and an intentional future working-max rebase: steps P1 to P4 under the commercial launch track,
+ADR 0036.) Configurable local workspace quota enforcement is delivered; provider-
 level quota accounting and physical purge are not.
 
 ## Phase 4: Nutrition and meal planning
@@ -1041,6 +1042,11 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
   replaces a price for new plans without touching earlier plans or payments (ADR 0034).
 - F2 (built; one live generation waits for the owner's API key): AI meal suggestions through the
   Anthropic SDK, always reviewed by the coach (ADR 0035).
+- Progression and training maxes, P1 to P4 (approved by the owner 2026-10-05, ADR 0036; they come
+  before R4.4 in the redesign plan's table). P1: a week duplicated with RPE, reps, % and weight
+  steps, shown before it is added, and the RTS RPE chart as a load formula. P2: each assigned
+  program's own training maxes, updated for the coming weeks after a preview. P3: the next block and
+  a client's future weeks edited with the same steps. P4: exercise videos and notes in sessions.
 
 Work follows this order; anything outside it needs the user's approval first.
 

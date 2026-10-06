@@ -96,6 +96,7 @@
             }
             <app-field
               [errors]="errors(set, 'exertionTarget')"
+              [help]="effortHelp(set)"
               [label]="effortLabel(set)"
               density="compact"
               ><input
@@ -151,7 +152,9 @@
                   (ngModelChange)="changed()"
               /></app-field>
               @if (
-                set.loadStrategy === 'PercentageWorkingMax' || set.loadStrategy === 'RpeBasedEpley'
+                set.loadStrategy === 'PercentageWorkingMax' ||
+                set.loadStrategy === 'RpeChart' ||
+                set.loadStrategy === 'RpeBasedEpley'
               ) {
                 <app-field
                   [errors]="errors(set, 'manualLoadOverride')"

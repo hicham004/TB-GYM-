@@ -208,6 +208,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertReadOnlyAsync(await coach.PutAsJsonAsync(R42aDraftUrl(Guid.NewGuid()), new { version = 1 }));
         await AssertReadOnlyAsync(await coach.PostAsJsonAsync(R42aPublishUrl(Guid.NewGuid()), new { version = 1, replaceNewer = false }));
         await AssertStatusAsync(await coach.GetAsync(R42aDraftsUrl), HttpStatusCode.OK);
+        // Previewing a week's copies saves nothing, so it is a read sent as POST and stays open (P1).
+        await AssertStatusAsync(
+            await P1PreviewAsync(coach, P1Request(new { label = "Week 1", isPublished = true, sessions = Array.Empty<object>() }, 1)),
+            HttpStatusCode.OK);
         await RefreshCsrfAsync(coach);
         await AssertReadOnlyAsync(await coach.PostAsJsonAsync(
             $"/api/commercial/offers/{Guid.NewGuid()}/price-changes",
@@ -468,6 +472,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         "EstimateOneRepMax",
         "MarkOwnNotificationRead",
         "PreviewTrainingProgression",
+        "PreviewWeekProgression",
         "ResignFromTeam",
         "UpdateOwnNotificationPreferences",
     ];

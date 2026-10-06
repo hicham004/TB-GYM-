@@ -74,6 +74,10 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R4.2a | **Program builder**, part 2a: autosave to the coach's own draft on the server, and the unsaved-changes guard (Save draft goes; Publish makes the version) | §2, plus backend tests | Done · 2026-10-05 · e51143f |
 | R4.2b | **Program builder**, part 2b: inline sets × reps × load / RPE editing on the grid, and the publish preview | §2 | Done · 2026-10-05 · e51143f |
 | R4.3 | **Check-in review** (C5) | §2 | Done · 2026-10-05 |
+| P1 | **Progression, builder** (owner-approved 2026-10-05, ADR 0036): "Duplicate with progression" on a week's menu (1 to 12 copies; RPE, reps, % and weight steps; the new weeks are shown before they are added), the RTS RPE chart as a load formula, and the program's formula choice | §2, plus domain reference tests (the chart, the steps) and API tests | Done · 2026-10-06 |
+| P2 | **Progression, training maxes** (ADR 0036): a "Training maxes" panel at the top right of a client's program (each lift, value, source, date); "Update maxes for the coming weeks" with a preview of every changed weight; name or rename the program; weights from week 1's weight | §2, plus backend tests (superseding snapshot, stale preview, retry, other coach, released client) | To do |
+| P3 | **Progression, editing and next block** (ADR 0036): Build next block takes the same steps and the program's formula; a client's future weeks are edited in the builder's grid through the coverage policy, with an audit record; started and finished sessions stay locked | §2, plus backend tests | To do |
+| P4 | **Session extras** (ADR 0036): an exercise video button in the builder, the session sheet and the client's workout player; coach and client notes visible both ways. Plan only for adjusting next week from logged performance, then ask the owner | §2 | To do |
 | R4.4 | **Nutrition library and meal-plan builder** (C7) | §2 | To do |
 | R5.1 | **Products** (C8), **Exercise library** (C10), notifications | §2 | To do |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
@@ -338,18 +342,12 @@ of the implemented R1.3 screens before production rollout.
   newest photo and "after" the oldest: the dashboard sends its previews oldest first and
   `progress-dashboard.ts` takes them the other way round. The labels carry the right dates, so nothing
   is misreported, but the sides are swapped. A one-line fix in that file.
-- **Progression when duplicating a week (owner question, 2026-10-05).** The owner's partner first
-  asked for loads based on 1RM that rise when a week is duplicated. Today a set's load can be a fixed
-  weight, a percentage of the client's training max (worked out into each client's kilograms at
-  assignment, STR-002 and STR-005) or an RPE target; the builder's Duplicate week copies a week
-  exactly; and an assigned program's Build next block raises the RPE by a step in each copied week,
-  after a preview (STR-006). "Add 2.5 kg, or 2.5 %, each week" does not exist: it is a new progression
-  transform, which the roadmap defers and AGENTS.md wants named, versioned and previewed. Claude's
-  recommendation: a "Duplicate with progression" choice on the builder's week menu that raises each
-  percentage of training max (or each fixed weight) by a chosen step and shows the new week before it
-  is added. The published version then holds plain numbers, so programs already assigned keep their
-  snapshots. Needs the owner's go and the partner's exact rule (per week or per block, kilograms or
-  percent, rounding).
+- **Progression when duplicating a week (decided 2026-10-05).** The owner approved it: steps P1 to P4
+  above and ADR 0036. The first built is the builder's "Duplicate with progression" (P1). Left for
+  later from P1: the weeks a coach adds are plain numbers, so weights from a max are worked out when
+  a program is assigned (P2 shows them, with their explanation); the RTS chart stops at RPE 6.5, so an
+  RPE 6 set needs a typed weight or the Epley curve, and covering RPE 5 to 6 would need a new chart
+  version and the owner's decision.
 
 ---
 

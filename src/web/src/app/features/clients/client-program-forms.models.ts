@@ -147,7 +147,9 @@ export function exercisesNeedingMax(
         if (
           exercise.sets.some(
             (set) =>
-              set.loadStrategy === 'PercentageWorkingMax' || set.loadStrategy === 'RpeBasedEpley',
+              set.loadStrategy === 'PercentageWorkingMax' ||
+              set.loadStrategy === 'RpeBasedEpley' ||
+              set.loadStrategy === 'RpeChart',
           )
         ) {
           needed.set(exercise.exerciseId, exercise.exerciseName);

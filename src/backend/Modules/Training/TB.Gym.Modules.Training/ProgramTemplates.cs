@@ -470,7 +470,8 @@ internal static class SetPrescriptionRules
                 break;
             case TrainingLoadStrategy.PercentageWorkingMax when source.PercentageWorkingMax is > 0m and <= 150m && source.LoadUnit is not null:
                 break;
-            case TrainingLoadStrategy.RpeBasedEpley when source.TargetRpe is not null && source.RepetitionsMaximum is not null && source.LoadUnit is not null:
+            case TrainingLoadStrategy.RpeBasedEpley or TrainingLoadStrategy.RpeChart
+                when source.TargetRpe is not null && source.RepetitionsMaximum is not null && source.LoadUnit is not null:
                 break;
             default:
                 throw new ArgumentException("The selected load strategy is missing required fields.", nameof(source));

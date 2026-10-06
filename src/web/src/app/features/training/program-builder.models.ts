@@ -2,9 +2,12 @@ import { formatDate } from '@angular/common';
 import type {
   ExerciseView,
   MovementPattern,
+  PreviewWeekProgressionRequest,
   ProgramDraftSummary,
   ProgramTemplateSummary,
   SavedSessionView,
+  TrainingLoadStrategy,
+  WeekProgressionPreviewView,
 } from '../../core/api/generated';
 import { exerciseEquipmentLabel, movementPatternLabel } from '../../core/i18n/display-labels';
 import {
@@ -20,6 +23,8 @@ import {
   numeric,
   ProgramDraft,
   sessionFromSaved,
+  toWeekRequest,
+  weekFromRequest,
 } from './training-builder.models';
 
 /**
@@ -133,6 +138,8 @@ export function setSummary(set: DraftSet): string {
     parts.push(`${set.loadValue} ${unit}`);
   } else if (set.loadStrategy === 'PercentageWorkingMax' && set.loadValue !== null) {
     parts.push($localize`${set.loadValue}:percentage:% of training max`);
+  } else if (set.loadStrategy === 'RpeChart') {
+    parts.push($localize`Load from RTS chart & effort`);
   } else if (set.loadStrategy === 'RpeBasedEpley') {
     parts.push($localize`Load from training max & effort`);
   } else {
@@ -393,6 +400,109 @@ export function duplicateWeekAfter(draft: ProgramDraft, weekKey: string): Progra
   return next;
 }
 
+// ---------- duplicate with progression (TRN-025) ----------
+
+/** What each copy moves by, per week: the copy N weeks on moves N times as far. */
+export interface ProgressionSteps {
+  rpe: number;
+  reps: number;
+  percentage: number;
+  load: number;
+}
+
+export const NO_STEPS: Readonly<ProgressionSteps> = { rpe: 0, reps: 0, percentage: 0, load: 0 };
+export const MAX_COPIES = 12;
+export const MAX_WEEKS = 52;
+
+/** How many copies still fit in the program, up to the most a preview makes. */
+export function copiesThatFit(draft: ProgramDraft): number {
+  return Math.max(0, Math.min(MAX_COPIES, MAX_WEEKS - draft.weeks.length));
+}
+
+/** The request the server previews: the week as the draft holds it, typing not yet saved included. */
+export function progressionRequest(
+  draft: ProgramDraft,
+  weekKey: string,
+  copies: number,
+  steps: ProgressionSteps,
+): PreviewWeekProgressionRequest | null {
+  const week = findWeek(draft, weekKey);
+  if (!week) return null;
+  return {
+    sourceWeek: toWeekRequest(week),
+    copies,
+    steps: {
+      rpeStep: steps.rpe,
+      repetitionsStep: steps.reps,
+      percentageStep: steps.percentage,
+      loadStep: steps.load,
+    },
+    weeksInProgram: draft.weeks.length,
+  };
+}
+
+/** How many of a week's sets each step would move, so the form can say what a step does here. */
+export interface ProgressionReach {
+  rpe: number;
+  reps: number;
+  percentage: number;
+  load: number;
+  /** The unit of the fixed weights the load step moves: 'kg', 'lb', or both. */
+  unit: string | null;
+}
+
+export function progressionReach(week: DraftWeek): ProgressionReach {
+  const sets = week.sessions
+    .flatMap((session) => session.exercises)
+    .flatMap((exercise) => exercise.sets)
+    .filter((set) => set.setType !== 'WarmUp');
+  const fixed = sets.filter(
+    (set) =>
+      set.manualLoadOverride !== null || (set.loadStrategy === 'Direct' && set.loadValue !== null),
+  );
+  const units = new Set(fixed.map((set) => (set.loadUnit === 'Pound' ? 'lb' : 'kg')));
+  return {
+    rpe: sets.filter((set) => set.exertionTarget !== null).length,
+    reps: sets.filter((set) => set.repetitionsMinimum !== null || set.repetitionsMaximum !== null)
+      .length,
+    percentage: sets.filter(
+      (set) => set.loadStrategy === 'PercentageWorkingMax' && set.loadValue !== null,
+    ).length,
+    load: fixed.length,
+    unit: units.size === 0 ? null : [...units].sort().join(' / '),
+  };
+}
+
+/** The previewed copies straight after their source week, as the builder holds them. */
+export function insertProgression(
+  draft: ProgramDraft,
+  weekKey: string,
+  preview: WeekProgressionPreviewView,
+): ProgramDraft {
+  const index = draft.weeks.findIndex((week) => week.key === weekKey);
+  if (index < 0 || draft.weeks.length + preview.weeks.length > MAX_WEEKS) {
+    return draft;
+  }
+  const next = copy(draft);
+  const names = new Map(
+    next.weeks.flatMap((week) =>
+      week.sessions.flatMap((session) =>
+        session.exercises.map((exercise) => [exercise.exerciseId, exercise.exerciseName] as const),
+      ),
+    ),
+  );
+  const source = next.weeks[index].label.trim();
+  const copies = preview.weeks.map((week, step) => {
+    const made = weekFromRequest(week, names);
+    // "Week 3" labels are renumbered below; a label the coach wrote gets its place in the run.
+    made.label = !source || DEFAULT_WEEK_LABEL.test(source) ? source : `${source} ${step + 2}`;
+    return made;
+  });
+  next.weeks.splice(index + 1, 0, ...copies);
+  renumberWeeks(next);
+  return next;
+}
+
 /** The last week stays: a program has at least one. */
 export function removeWeek(draft: ProgramDraft, weekKey: string): ProgramDraft {
   if (draft.weeks.length <= 1) {
@@ -616,21 +726,90 @@ export function setIssue(set: DraftSet): SetIssue | null {
       field: 'loadValue',
       message: $localize`a percentage of the training max must be more than 0 and at most 150.`,
     };
-  if (set.loadStrategy === 'RpeBasedEpley') {
+  if (set.loadStrategy === 'RpeBasedEpley' || set.loadStrategy === 'RpeChart') {
     if (set.exertionTarget === null || set.repetitionsMaximum === null)
       return {
         field: set.exertionTarget === null ? 'exertionTarget' : 'repetitionsMaximum',
         message: $localize`a load from RPE needs the highest reps and an RPE or RIR target.`,
       };
-    const rir =
-      set.exertionDisplayPreference === 'Rir' ? set.exertionTarget : 10 - set.exertionTarget;
-    if (set.repetitionsMaximum + rir > 12)
+    const rpe =
+      set.exertionDisplayPreference === 'Rpe' ? set.exertionTarget : 10 - set.exertionTarget;
+    if (set.loadStrategy === 'RpeChart') {
+      // The same range as the server's RTS chart (STR-010), shown early; the server decides.
+      if (rpe < RPE_CHART.minimumRpe)
+        return {
+          field: 'exertionTarget',
+          message: $localize`the RTS chart starts at RPE 6.5 (RIR 3.5). For this set type a weight or use the Epley curve.`,
+        };
+      if (set.repetitionsMaximum > RPE_CHART.maximumReps)
+        return {
+          field: 'repetitionsMaximum',
+          message: $localize`the RTS chart covers up to 12 reps. For this set type a weight or use the Epley curve.`,
+        };
+    } else if (set.repetitionsMaximum + (10 - rpe) > 12)
       return {
         field: 'repetitionsMaximum',
         message: $localize`for a load from RPE, the highest reps plus RIR can’t be more than 12.`,
       };
   }
   return null;
+}
+
+// ---------- RPE formulas (STR-010) ----------
+
+/**
+ * What the RTS RPE chart covers, copied from the server's `RtsRpeChart` only to warn while the coach
+ * types. The server decides when the program is published or assigned.
+ */
+export const RPE_CHART = { minimumRpe: 6.5, maximumRpe: 10, maximumReps: 12 } as const;
+
+export type RpeFormula = Extract<TrainingLoadStrategy, 'RpeChart' | 'RpeBasedEpley'>;
+
+export const RPE_FORMULAS: readonly RpeFormula[] = ['RpeChart', 'RpeBasedEpley'];
+
+export function isRpeLoaded(set: DraftSet): boolean {
+  return set.loadStrategy === 'RpeChart' || set.loadStrategy === 'RpeBasedEpley';
+}
+
+function everySet(draft: ProgramDraft): DraftSet[] {
+  return draft.weeks.flatMap((week) =>
+    week.sessions.flatMap((session) => session.exercises.flatMap((exercise) => exercise.sets)),
+  );
+}
+
+export function rpeLoadedSetCount(draft: ProgramDraft): number {
+  return everySet(draft).filter(isRpeLoaded).length;
+}
+
+/** The formula the program's RPE-loaded sets use; 'mixed' when they disagree, null when none does. */
+export function programFormula(draft: ProgramDraft): RpeFormula | 'mixed' | null {
+  const used = new Set(
+    everySet(draft)
+      .filter(isRpeLoaded)
+      .map((set) => set.loadStrategy),
+  );
+  if (used.size === 0) return null;
+  if (used.size > 1) return 'mixed';
+  return used.has('RpeChart') ? 'RpeChart' : 'RpeBasedEpley';
+}
+
+/** RTS-chart sets the chart cannot cover (RPE under 6.5 or over 12 reps): they need a weight or the Epley curve. */
+export function outsideChartCount(draft: ProgramDraft): number {
+  return everySet(draft).filter((set) => {
+    if (set.loadStrategy !== 'RpeChart' || set.exertionTarget === null) return false;
+    const rpe =
+      set.exertionDisplayPreference === 'Rpe' ? set.exertionTarget : 10 - set.exertionTarget;
+    return rpe < RPE_CHART.minimumRpe || (set.repetitionsMaximum ?? 0) > RPE_CHART.maximumReps;
+  }).length;
+}
+
+/** Every RPE-loaded set in the draft moves to one formula; the weights are worked out at assignment. */
+export function withProgramFormula(draft: ProgramDraft, formula: RpeFormula): ProgramDraft {
+  const next = copy(draft);
+  for (const set of everySet(next)) {
+    if (isRpeLoaded(set)) set.loadStrategy = formula;
+  }
+  return next;
 }
 // ---------- the exercise library panel ----------
 

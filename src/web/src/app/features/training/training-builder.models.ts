@@ -10,6 +10,7 @@ import type {
   TrainingLoadUnit,
   TrainingSessionRequest,
   TrainingSetType,
+  TrainingWeekRequest,
 } from '../../core/api/generated';
 
 export interface ProgramDraft {
@@ -221,11 +222,15 @@ export function toProgramRequest(draft: ProgramDraft): SaveProgramTemplateReques
     description: nullableText(draft.description),
     publish: draft.publish,
     templateVersion: draft.sourceVersion,
-    weeks: draft.weeks.map((week) => ({
-      label: nullableText(week.label),
-      isPublished: week.isPublished,
-      sessions: week.sessions.map(toTrainingSessionRequest),
-    })),
+    weeks: draft.weeks.map(toWeekRequest),
+  };
+}
+
+export function toWeekRequest(week: DraftWeek): TrainingWeekRequest {
+  return {
+    label: nullableText(week.label),
+    isPublished: week.isPublished,
+    sessions: week.sessions.map(toTrainingSessionRequest),
   };
 }
 
@@ -252,46 +257,57 @@ export function draftFromContent(view: ProgramDraftView): ProgramDraft {
     name: content.name,
     description: content.description ?? '',
     publish: false,
-    weeks: content.weeks.map((week) => ({
+    weeks: content.weeks.map((week) => weekFromRequest(week, names)),
+  };
+}
+
+/**
+ * A week in a save's shape (a draft read back, or the copies a progression preview returns) as the
+ * builder holds it. A name the library no longer has stays empty.
+ */
+export function weekFromRequest(
+  week: TrainingWeekRequest,
+  names: ReadonlyMap<string, string>,
+): DraftWeek {
+  return {
+    key: key(),
+    sourceId: null,
+    label: week.label ?? '',
+    isPublished: week.isPublished,
+    sessions: week.sessions.map((session) => ({
       key: key(),
       sourceId: null,
-      label: week.label ?? '',
-      isPublished: week.isPublished,
-      sessions: week.sessions.map((session) => ({
+      name: session.name,
+      dayOffset: numeric(session.dayOffset),
+      coachNotes: session.coachNotes ?? '',
+      exercises: session.exercises.map((exercise) => ({
         key: key(),
-        sourceId: null,
-        name: session.name,
-        dayOffset: numeric(session.dayOffset),
-        coachNotes: session.coachNotes ?? '',
-        exercises: session.exercises.map((exercise) => ({
+        exerciseId: exercise.exerciseId,
+        exerciseName: names.get(exercise.exerciseId) ?? '',
+        isMainLift: exercise.isMainLift,
+        modificationPolicy: exercise.modificationPolicy,
+        coachNotes: exercise.coachNotes ?? '',
+        approvedAlternativeExerciseIds: [...exercise.approvedAlternativeExerciseIds],
+        sets: exercise.sets.map((set) => ({
           key: key(),
-          exerciseId: exercise.exerciseId,
-          exerciseName: names.get(exercise.exerciseId) ?? '',
-          isMainLift: exercise.isMainLift,
-          modificationPolicy: exercise.modificationPolicy,
-          coachNotes: exercise.coachNotes ?? '',
-          approvedAlternativeExerciseIds: [...exercise.approvedAlternativeExerciseIds],
-          sets: exercise.sets.map((set) => ({
-            key: key(),
-            setType: set.setType,
-            repetitionsMinimum: nullableNumeric(set.repetitionsMinimum ?? null),
-            repetitionsMaximum: nullableNumeric(set.repetitionsMaximum ?? null),
-            loadStrategy: set.loadStrategy,
-            loadValue:
-              set.loadStrategy === 'Direct'
-                ? nullableNumeric(set.directLoad ?? null)
-                : nullableNumeric(set.percentageWorkingMax ?? null),
-            loadUnit: set.loadUnit ?? 'Kilogram',
-            exertionDisplayPreference: set.exertionDisplayPreference,
-            exertionTarget:
-              set.exertionDisplayPreference === 'Rir'
-                ? nullableNumeric(set.targetRir ?? null)
-                : nullableNumeric(set.targetRpe ?? null),
-            restSeconds: nullableNumeric(set.restSeconds ?? null),
-            tempo: set.tempo ?? '',
-            coachNotes: set.coachNotes ?? '',
-            manualLoadOverride: nullableNumeric(set.manualLoadOverride ?? null),
-          })),
+          setType: set.setType,
+          repetitionsMinimum: nullableNumeric(set.repetitionsMinimum ?? null),
+          repetitionsMaximum: nullableNumeric(set.repetitionsMaximum ?? null),
+          loadStrategy: set.loadStrategy,
+          loadValue:
+            set.loadStrategy === 'Direct'
+              ? nullableNumeric(set.directLoad ?? null)
+              : nullableNumeric(set.percentageWorkingMax ?? null),
+          loadUnit: set.loadUnit ?? 'Kilogram',
+          exertionDisplayPreference: set.exertionDisplayPreference,
+          exertionTarget:
+            set.exertionDisplayPreference === 'Rir'
+              ? nullableNumeric(set.targetRir ?? null)
+              : nullableNumeric(set.targetRpe ?? null),
+          restSeconds: nullableNumeric(set.restSeconds ?? null),
+          tempo: set.tempo ?? '',
+          coachNotes: set.coachNotes ?? '',
+          manualLoadOverride: nullableNumeric(set.manualLoadOverride ?? null),
         })),
       })),
     })),

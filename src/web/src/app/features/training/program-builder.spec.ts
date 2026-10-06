@@ -9,10 +9,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
   CreateProgramDraftRequest,
+  PreviewWeekProgressionRequest,
   ProgramDraftSaveView,
   ProgramDraftView,
   ProgramTemplateSummary,
   ProgramTemplateVersionView,
+  WeekProgressionPreviewView,
 } from '../../core/api/generated';
 import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
@@ -24,7 +26,10 @@ import {
   draftSummary,
   draftView,
   LIBRARY,
+  prescription,
   saveView,
+  sessionView,
+  setView,
   templateSummary,
   versionView,
 } from '../../../testing/program-builder-fixtures';
@@ -46,6 +51,29 @@ interface DraftCalls {
   saveDraft: () => Observable<ProgramDraftSaveView>;
   discardDraft: () => Observable<void>;
   publishDraft: () => Observable<ProgramTemplateVersionView>;
+}
+
+/** The copies of a week the server would calculate: each a half RPE point on from the one before. */
+function previewCopies(
+  request: PreviewWeekProgressionRequest,
+): Observable<WeekProgressionPreviewView> {
+  return of({
+    transformKey: 'WeekStep',
+    transformVersion: '1.0',
+    weeks: Array.from({ length: Number(request.copies) }, (_, index) => ({
+      ...request.sourceWeek,
+      sessions: request.sourceWeek.sessions.map((session) => ({
+        ...session,
+        exercises: session.exercises.map((exercise) => ({
+          ...exercise,
+          sets: exercise.sets.map((set) => ({
+            ...set,
+            targetRpe: set.targetRpe == null ? null : Number(set.targetRpe) + 0.5 * (index + 1),
+          })),
+        })),
+      })),
+    })),
+  });
 }
 
 interface Options {
@@ -100,6 +128,7 @@ async function render(options: Options = {}) {
         (() => of(versionView({ id: 'version-3', versionNumber: 3, isPublished: true }))),
     ),
     listDrafts: vi.fn(() => of([])),
+    previewWeekProgression: vi.fn(previewCopies),
   };
   const csrf = { refresh: vi.fn().mockResolvedValue(undefined) };
   const toast = { show: vi.fn(() => ({ dismiss: vi.fn() })) };
@@ -751,6 +780,123 @@ describe('the program builder', () => {
     options.action.run();
     await settle(harness.fixture);
     expect(all(host, 'section.week')).toHaveLength(3);
+  });
+
+  it('adds weeks from "Duplicate with progression" once the coach has read them, with one undo', async () => {
+    const { host, harness, programApi, toast } = await render();
+
+    named(host, 'More for week 1').click();
+    await settle(harness.fixture);
+    named(host, 'Duplicate with progression…').click();
+    const open = await dialogNamed(harness.fixture, 'Duplicate with progression');
+    fill(open, 'Copies', '2');
+    await settle(harness.fixture);
+    press(open, 'Show the new weeks');
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+
+    expect(programApi.previewWeekProgression).toHaveBeenCalledOnce();
+    const [request] = programApi.previewWeekProgression.mock.calls[0] as unknown as [
+      PreviewWeekProgressionRequest,
+    ];
+    expect([request.copies, request.weeksInProgram]).toEqual([2, 2]);
+    expect(request.sourceWeek.sessions.map((session) => session.name)).toEqual([
+      'Lower A',
+      'Upper A',
+    ]);
+    // Reading the weeks adds nothing; the program still has its two.
+    expect(all(host, 'section.week')).toHaveLength(2);
+
+    press(open, 'Add 2 weeks');
+    await settle(harness.fixture);
+
+    expect(all(host, 'section.week')).toHaveLength(4);
+    expect(all(host, '.week-label').map((input) => (input as HTMLInputElement).value)).toEqual([
+      'Week 1',
+      'Week 2',
+      'Week 3',
+      'Week 4',
+    ]);
+    // The fixture's back squat is 75% for 5 at RPE 7, so the first copy asks RPE 7.5.
+    expect(textOf(all(all(host, 'section.week')[1], '.session-card')[0])).toContain('RPE 7.5');
+    expect(textOf(all(all(host, 'section.week')[2], '.session-card')[0])).toContain('RPE 8');
+    const [message, options] = toast.show.mock.lastCall as unknown as [
+      string,
+      { action: { label: string; run: () => void } },
+    ];
+    expect(message).toBe('2 weeks added after week 1.');
+    options.action.run();
+    await settle(harness.fixture);
+    expect(all(host, 'section.week')).toHaveLength(2);
+  });
+
+  it('keeps the menu entry out of reach once the program holds 52 weeks', async () => {
+    const full = versionView({
+      weeks: Array.from({ length: 52 }, (_, index) => ({
+        ...versionView().weeks[0],
+        id: `week-${index + 1}`,
+        weekNumber: index + 1,
+        label: `Week ${index + 1}`,
+      })),
+    });
+    const { host, harness } = await render({ versions: { 'version-2': full } });
+
+    named(host, 'More for week 1').click();
+    await settle(harness.fixture);
+
+    const entry = all(host, 'button').find((candidate) =>
+      textOf(candidate).startsWith('Duplicate with progression'),
+    ) as HTMLButtonElement;
+    // A disabled menu item stays listed and focusable, and says why.
+    expect(entry.getAttribute('aria-disabled')).toBe('true');
+    expect(textOf(entry)).toContain('A program holds up to 52 weeks.');
+  });
+
+  it('moves every RPE-loaded set to the formula the coach picks and says what is outside the chart', async () => {
+    const rpeWeek = {
+      ...versionView().weeks[0],
+      sessions: [
+        sessionView('lower-1', 'Lower A', 0, [
+          prescription('squat', 'Back squat', {
+            isMainLift: true,
+            sets: [
+              setView({ loadStrategy: 'RpeChart', percentageWorkingMax: null, targetRpe: 7 }),
+              setView({ loadStrategy: 'RpeChart', percentageWorkingMax: null, targetRpe: 6 }),
+            ],
+          }),
+        ]),
+      ],
+    };
+    const { host, harness, toast } = await render({
+      versions: { 'version-2': versionView({ weeks: [rpeWeek] }) },
+    });
+    const lastToast = () =>
+      toast.show.mock.lastCall as unknown as [string, { action: { run: () => void } }];
+    const chooseFormula = async (formula: string) => {
+      const trigger = all(host, 'button').find((candidate) =>
+        textOf(candidate).startsWith('Weights from RPE:'),
+      ) as HTMLButtonElement;
+      trigger.click();
+      await settle(harness.fixture);
+      (
+        all(host, 'ul.panel button').find((item) => textOf(item).startsWith(formula)) as HTMLElement
+      ).click();
+      await settle(harness.fixture);
+    };
+
+    named(host, 'Weights from RPE: RTS chart');
+    await chooseFormula('Epley curve');
+    expect(lastToast()[0]).toBe('2 sets now take their weight from the Epley curve.');
+    named(host, 'Weights from RPE: Epley curve');
+
+    // Back to the chart: the set at RPE 6 is outside it, and the coach is told.
+    await chooseFormula('RTS chart');
+    expect(lastToast()[0]).toBe(
+      '2 sets now take their weight from the RTS chart. 1 of them is outside the chart: type a weight or use the Epley curve for it.',
+    );
+    lastToast()[1].action.run();
+    await settle(harness.fixture);
+    named(host, 'Weights from RPE: Epley curve');
   });
 
   it('says a program that is not there is not there', async () => {

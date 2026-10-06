@@ -244,6 +244,32 @@ public static class TrainingEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        coach.MapPost("/week-progression/preview", async (
+            PreviewWeekProgressionRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            try
+            {
+                return Results.Ok(await service.PreviewWeekProgressionAsync(request, cancellationToken));
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["progression"] = [exception.Message],
+                });
+            }
+        })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
+        .WithMetadata(new RequestSizeLimitAttribute(MaximumDraftRequestBytes))
+        .WithName("PreviewWeekProgression")
+        .Produces<WeekProgressionPreviewView>()
+        .ProducesValidationProblem();
+
         coach.MapPost("/mesocycles/{mesocycleId:guid}/progression/preview", async (
             Guid mesocycleId,
             ProgressionPreviewRequest request,

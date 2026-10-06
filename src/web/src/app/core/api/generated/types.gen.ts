@@ -2287,6 +2287,13 @@ export type PreparationBasis = 'Raw' | 'Cooked' | 'AsSold' | 'Prepared';
 
 export type PrescriptionModificationPolicy = 'Locked' | 'CoachApprovedSwap';
 
+export type PreviewWeekProgressionRequest = {
+  sourceWeek: TrainingWeekRequest;
+  copies: number | string;
+  steps: WeekProgressionSteps;
+  weeksInProgram: number | string;
+};
+
 export type PreviousExercisePerformanceView = {
   date: string;
   bestLoad: null | number | string;
@@ -2957,7 +2964,8 @@ export type TodayTrainingCoverageView = {
 
 export type TrainingLoadRoundingMode = 'Nearest' | 'Down' | 'Up';
 
-export type TrainingLoadStrategy = 'None' | 'Direct' | 'PercentageWorkingMax' | 'RpeBasedEpley';
+export type TrainingLoadStrategy =
+  'None' | 'Direct' | 'PercentageWorkingMax' | 'RpeBasedEpley' | 'RpeChart';
 
 export type TrainingLoadUnit = 'Kilogram' | 'Pound';
 
@@ -3121,6 +3129,19 @@ export type VoidInvoiceRequest = {
 export type VoidInvoiceResponse = {
   voided: PlatformInvoiceView;
   reissued: null | PlatformInvoiceView;
+};
+
+export type WeekProgressionPreviewView = {
+  transformKey: string;
+  transformVersion: string;
+  weeks: Array<TrainingWeekRequest>;
+};
+
+export type WeekProgressionSteps = {
+  rpeStep: number | string;
+  repetitionsStep: number | string;
+  percentageStep: number | string;
+  loadStep: number | string;
 };
 
 export type WeightUnitRequest = {
@@ -6100,6 +6121,33 @@ export type ReplaceFutureTrainingSessionResponses = {
 
 export type ReplaceFutureTrainingSessionResponse =
   ReplaceFutureTrainingSessionResponses[keyof ReplaceFutureTrainingSessionResponses];
+
+export type PreviewWeekProgressionData = {
+  body: PreviewWeekProgressionRequest;
+  path?: never;
+  query?: never;
+  url: '/api/training/week-progression/preview';
+};
+
+export type PreviewWeekProgressionErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+};
+
+export type PreviewWeekProgressionError =
+  PreviewWeekProgressionErrors[keyof PreviewWeekProgressionErrors];
+
+export type PreviewWeekProgressionResponses = {
+  /**
+   * OK
+   */
+  200: WeekProgressionPreviewView;
+};
+
+export type PreviewWeekProgressionResponse =
+  PreviewWeekProgressionResponses[keyof PreviewWeekProgressionResponses];
 
 export type PreviewTrainingProgressionData = {
   body: ProgressionPreviewRequest;

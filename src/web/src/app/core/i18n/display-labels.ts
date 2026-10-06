@@ -135,7 +135,8 @@ export function trainingLoadStrategyLabel(value: TrainingLoadStrategy): string {
     None: $localize`No prescribed load`,
     Direct: $localize`Direct load`,
     PercentageWorkingMax: $localize`% training max`,
-    RpeBasedEpley: $localize`RPE recommendation`,
+    RpeBasedEpley: $localize`RPE · Epley curve`,
+    RpeChart: $localize`RPE · RTS chart`,
   };
   return labels[value];
 }

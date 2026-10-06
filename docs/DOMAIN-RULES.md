@@ -405,6 +405,16 @@ makes the draft the newest version and keeps the other in history (versions are 
 Discard deletes the draft and leaves the program as last published. Drafts are staff writes, so an
 unpaid workspace keeps them readable but not writable (ADR 0028).
 
+**TRN-025** Duplicate with progression v1 (`WeekStep`, P1, decided 2026-10-05, ADR 0036). The builder
+can copy one week 1 to 12 times, each copy a further step from the source in RPE (-2 to +2 in half
+steps), repetitions, percentage of training max and fixed weight. The server calculates the copies and
+the coach reads them before they are added to the draft. They hold plain numbers, so programs already
+assigned keep their snapshots. Warm-up sets stay as they are, a typed weight moves with the
+fixed-weight step, and a result outside a set's limits (RPE 5 to 10, reps 1 to 100, a percentage
+above 0 and up to 150, a weight above 0 and up to 2,000, 52 weeks in a program, the chart's range for a
+chart set) refuses the whole preview and names the set. Nothing is kept until the coach's own draft is
+(TRN-024), and Publish checks the weeks like any save.
+
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated
@@ -412,8 +422,12 @@ unpaid workspace keeps them readable but not writable (ADR 0028).
 workout, and note. Recording a new value appends history; update/delete is prohibited.
 
 **STR-002** Assignment snapshots exactly one working max for every exercise using calculated
-loading. Later global strength records never rewrite prescriptions. Intentional rebasing of
-future work is deferred and must create a superseding working-max snapshot with audit reason.
+loading. Later global strength records never rewrite prescriptions. Intentional rebasing was
+approved on 2026-10-05 (P2, ADR 0036): a coach may supersede a program's working max. That creates
+a new snapshot that names the one it supersedes, the week it applies from and a reason, recalculates
+only the sessions not started (TRN-004), and always goes through preview, hash and apply with the
+concurrency token and an idempotency key (STR-009). Earlier snapshots, and started or finished
+sessions with their loads, are never rewritten.
 
 **STR-003** RPE and RIR are related but not two independently authoritative fields. In common
 resistance-training usage, RPE 10 roughly means 0 RIR, RPE 9 roughly 1 RIR, and so on, but
@@ -438,6 +452,8 @@ the preview hash and concurrency token. Manual load overrides are retained and w
 
 **STR-007** Phase 3 calculated loads use only the captured mesocycle working max. Calculation
 from week-1 performed load is a different future strategy and is never mixed implicitly.
+Estimating a max from week 1's prescribed fixed weight (P2, ADR 0036) uses the prescription alone;
+adjusting from logged performance stays a separate, later strategy.
 
 **STR-008** A recommendation and its rounding are separate. Rounding is configured per
 mesocycle with unit, positive increment, and Nearest/Down/Up mode. Phase 3 does not silently
@@ -448,7 +464,19 @@ increment, round up deliberately, use a manual override, or explicitly prescribe
 **STR-009** Every progression strategy, not only RPE progression v1, follows
 `Preview -> hash/concurrency check -> Apply`. No bulk transform persists before the coach
 reviews the preview, and apply rechecks enrollment coverage server-side through the TRN-014
-policy.
+policy. The builder's copies of a week (TRN-025) are the one exception: they belong to the coach's
+own draft, which is not persistent until Publish, so the preview is the review and Publish is the
+check.
+
+**STR-010** RpeChart v1 (decided 2026-10-05, ADR 0036) is a named, versioned load formula beside
+WorkingMaxLoad v2: the working max times the percentage that the RTS chart gives for the prescribed
+top repetitions at the target RPE. The chart is the widely used Tuchscherer chart, RPE 6.5 to 10 in
+half steps by 1 to 12 repetitions, locked by a reference test and cross-checked against Helms et
+al. (2016), Table 2. A set outside the chart is rejected with the reason and never extrapolated; for
+it the coach types a weight or uses another formula. The coach chooses the formula per program in
+the builder and at assignment, and RpeChart v1 is the default for new RPE-loaded sets. Every
+calculated load keeps an explanation with its numbers and its rounding ("RTS RPE chart v1: 5 reps at
+RPE 7 is 78.6% of 140 kg = 110.04 kg. Rounded to the nearest 2.5 kg: 110 kg.").
 
 ## 6. Nutrition, recipes, and calorie targets
 
@@ -1616,7 +1644,7 @@ Decisions still required for later phases and production launch:
    intellectual property?
 6. Before expanding training, decide completion-correction policy, historical access after
    entitlement expiry, supplemental-program rules, default plate policies, and whether/when
-   future prescriptions may be intentionally rebased.
+   future prescriptions may be intentionally rebased (decided on 2026-10-05, STR-002).
 7. Choose production object storage, malware scanning, private delivery/CDN, retention, and
    quota providers before accepting real coach uploads in production. Decided and implemented:
    ADR 0024 selects a private EU Cloudflare R2 bucket and a private ClamAV daemon, and keeps

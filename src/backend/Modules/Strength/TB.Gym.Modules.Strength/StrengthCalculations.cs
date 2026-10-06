@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace TB.Gym.Modules.Strength;
 
 public readonly record struct ExertionTarget
@@ -147,7 +149,7 @@ public sealed class StrengthLoadRecommendationStrategy : ILoadRecommendationStra
             input.Unit,
             StrategyKey,
             Version,
-            BuildExplanation(input));
+            BuildExplanation(input, raw));
     }
 
     private static decimal RecommendFromRpe(LoadRecommendationInput input)
@@ -180,18 +182,37 @@ public sealed class StrengthLoadRecommendationStrategy : ILoadRecommendationStra
             ? value.Value
             : throw new ArgumentOutOfRangeException(nameof(value), "Working-max percentage must be between 0 and 150.");
 
-    private static string BuildExplanation(LoadRecommendationInput input) =>
-        input.Strategy switch
+    private static string BuildExplanation(LoadRecommendationInput input, decimal raw)
+    {
+        var culture = CultureInfo.InvariantCulture;
+        var unit = StrengthUnits.Short(input.Unit);
+        return input.Strategy switch
         {
             PrescriptionLoadStrategy.Direct => "Coach-prescribed direct load.",
-            PrescriptionLoadStrategy.PercentageWorkingMax =>
-                $"{input.PercentageWorkingMax:0.###}% of the captured working max.",
-            _ => "WorkingMaxLoad v2 scales the captured coach-selected working max with an inverse Epley-shaped curve using prescribed reps plus RIR. It does not estimate or imply a true 1RM.",
+            PrescriptionLoadStrategy.PercentageWorkingMax => string.Create(culture,
+                $"{input.PercentageWorkingMax:0.###}% of the training max {input.WorkingMax:0.###} {unit} = {raw:0.###} {unit}."),
+            _ => string.Create(culture,
+                $"WorkingMaxLoad v2: {input.WorkingMax:0.###} {unit} / (1 + ({input.Repetitions} reps + {10m - input.TargetRpe:0.#} in reserve) / 30) = {raw:0.###} {unit}. It scales the training max with an Epley-shaped curve and does not estimate or imply a true 1RM."),
         };
+    }
 }
 
 public sealed record LoadRoundingPolicy(LoadUnit Unit, decimal Increment, LoadRoundingMode Mode)
 {
+    /// <summary>The rounding step in plain words, for the explanation kept with each calculated load.</summary>
+    public string Describe(decimal rounded)
+    {
+        var unit = StrengthUnits.Short(Unit);
+        var how = Mode switch
+        {
+            LoadRoundingMode.Down => "down to a multiple of",
+            LoadRoundingMode.Up => "up to a multiple of",
+            _ => "to the nearest",
+        };
+        return string.Create(CultureInfo.InvariantCulture,
+            $"Rounded {how} {Increment:0.###} {unit}: {rounded:0.###} {unit}.");
+    }
+
     public decimal Round(decimal unrounded)
     {
         if (!Enum.IsDefined(Unit) || !Enum.IsDefined(Mode) || Increment is <= 0m or > 50m)
@@ -223,6 +244,7 @@ public enum PrescriptionLoadStrategy
     Direct = 1,
     PercentageWorkingMax = 2,
     RpeBasedEpley = 3,
+    RpeChart = 4,
 }
 
 public enum LoadRoundingMode

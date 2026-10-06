@@ -47,6 +47,7 @@ export class ProgramSetsEditor {
     'None',
     'Direct',
     'PercentageWorkingMax',
+    'RpeChart',
     'RpeBasedEpley',
   ] as const;
   protected readonly typeItems = this.setTypes.map((action) => ({
@@ -75,6 +76,14 @@ export class ProgramSetsEditor {
 
   protected effortLabel(set: DraftSet): string {
     return set.exertionDisplayPreference === 'Rpe' ? $localize`RPE target` : $localize`RIR target`;
+  }
+
+  /** A chart set says what the chart covers, where the coach types the effort it needs. */
+  protected effortHelp(set: DraftSet): string | null {
+    if (set.loadStrategy !== 'RpeChart') return null;
+    return set.exertionDisplayPreference === 'Rpe'
+      ? $localize`RTS chart: RPE 6.5 to 10, up to 12 reps`
+      : $localize`RTS chart: RIR 0 to 3.5, up to 12 reps`;
   }
 
   protected unitLabel(set: DraftSet): string {

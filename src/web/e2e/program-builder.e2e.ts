@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page, Route } from '@playwright/test';
 import type {
   CreateProgramDraftRequest,
+  PreviewWeekProgressionRequest,
   ProgramDraftContent,
   ProgramTemplateVersionView,
   PublishProgramDraftRequest,
@@ -35,6 +36,42 @@ interface Sent {
   contents: ProgramDraftContent[];
   started: CreateProgramDraftRequest[];
   published: PublishProgramDraftRequest[];
+  /** Each "Duplicate with progression" preview the coach asked for. */
+  previews: PreviewWeekProgressionRequest[];
+}
+
+/** The copies the server would calculate: copy N is N steps from the source week. */
+function steppedWeeks(request: PreviewWeekProgressionRequest) {
+  const steps = request.steps;
+  return Array.from({ length: Number(request.copies) }, (_, index) => {
+    const k = index + 1;
+    return {
+      ...request.sourceWeek,
+      sessions: request.sourceWeek.sessions.map((session) => ({
+        ...session,
+        exercises: session.exercises.map((exercise) => ({
+          ...exercise,
+          sets: exercise.sets.map((set) => ({
+            ...set,
+            targetRpe:
+              set.targetRpe == null ? null : Number(set.targetRpe) + Number(steps.rpeStep) * k,
+            repetitionsMinimum:
+              set.repetitionsMinimum == null
+                ? null
+                : Number(set.repetitionsMinimum) + Number(steps.repetitionsStep) * k,
+            repetitionsMaximum:
+              set.repetitionsMaximum == null
+                ? null
+                : Number(set.repetitionsMaximum) + Number(steps.repetitionsStep) * k,
+            percentageWorkingMax:
+              set.percentageWorkingMax == null
+                ? null
+                : Number(set.percentageWorkingMax) + Number(steps.percentageStep) * k,
+          })),
+        })),
+      })),
+    };
+  });
 }
 
 async function openBuilder(
@@ -46,9 +83,11 @@ async function openBuilder(
     colorScheme?: 'light' | 'dark';
     offline?: boolean;
     program?: ProgramTemplateVersionView;
+    /** Makes every progression preview answer 400 with this reason. */
+    previewRefusal?: string;
   } = {},
 ): Promise<Sent> {
-  const sent: Sent = { contents: [], started: [], published: [] };
+  const sent: Sent = { contents: [], started: [], published: [], previews: [] };
   let version = 1;
   await page.emulateMedia({ colorScheme: options.colorScheme ?? 'light' });
   await page.setViewportSize({ width, height });
@@ -66,6 +105,21 @@ async function openBuilder(
         json(route, 200, { items: LIBRARY, total: LIBRARY.length }),
       'GET /api/training/saved-sessions': (route: Route) => json(route, 200, []),
       'POST /api/media/access': (route: Route) => json(route, 200, { items: [] }),
+      'POST /api/training/week-progression/preview': (route: Route) => {
+        const body = route.request().postDataJSON() as PreviewWeekProgressionRequest;
+        sent.previews.push(body);
+        if (options.previewRefusal) {
+          return json(route, 400, {
+            title: 'One or more validation errors occurred.',
+            errors: { progression: [options.previewRefusal] },
+          });
+        }
+        return json(route, 200, {
+          transformKey: 'WeekStep',
+          transformVersion: '1.0',
+          weeks: steppedWeeks(body),
+        });
+      },
       'POST /api/training/program-drafts': (route: Route) => {
         if (options.offline) return route.abort('internetdisconnected');
         const body = route.request().postDataJSON() as CreateProgramDraftRequest;
@@ -409,4 +463,136 @@ test('a dark preview hides unshared content and reflows at 200% text in RTL', as
     true,
   );
   await axe(page);
+});
+
+async function openProgression(page: Page) {
+  await week(page, 0).getByRole('button', { name: 'More for week 1' }).click();
+  await page.getByRole('button', { name: 'Duplicate with progression…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Duplicate with progression' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+for (const width of [390, 1440]) {
+  test(`Duplicate with progression at ${width}px shows the weeks first, then adds them to the draft`, async ({
+    page,
+  }) => {
+    const sent = await openBuilder(page, width, 900);
+    const dialog = await openProgression(page);
+
+    await dialog.getByRole('spinbutton', { name: 'Copies' }).fill('3');
+    await dialog.getByRole('spinbutton', { name: '% of training max a week' }).fill('2.5');
+    await expect(dialog.getByText('No set in this week has a fixed weight.')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+
+    await dialog.getByRole('button', { name: 'Show the new weeks' }).click();
+    await expect(
+      dialog.getByRole('heading', { name: '3 new weeks after week 1', level: 3 }),
+    ).toBeVisible();
+    expect(sent.previews).toHaveLength(1);
+    expect(sent.previews[0]).toMatchObject({
+      copies: 3,
+      steps: { rpeStep: 0.5, repetitionsStep: 0, percentageStep: 2.5, loadStep: 0 },
+      weeksInProgram: 2,
+    });
+    await expect(dialog).toContainText('3 × 5 · 77.5% of training max · RPE 7.5');
+    await expect(dialog).toContainText('3 × 5 · 82.5% of training max · RPE 8.5');
+    // Reading the weeks adds nothing to the draft.
+    await expect(page.locator('section.week')).toHaveCount(2);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/p1-progression-${width}.png` });
+
+    await dialog.getByRole('button', { name: 'Add 3 weeks' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('section.week')).toHaveCount(5);
+    await expect(page.locator('.status')).toHaveText(/^Saved at/);
+    const weeks = sent.contents.at(-1)!.weeks;
+    expect(weeks).toHaveLength(5);
+    expect(weeks[1].sessions[0].exercises[0].sets[0]).toMatchObject({
+      targetRpe: 7.5,
+      percentageWorkingMax: 77.5,
+    });
+    expect(weeks[3].sessions[0].exercises[0].sets[0]).toMatchObject({
+      targetRpe: 8.5,
+      percentageWorkingMax: 82.5,
+    });
+    // The original second week is now the fifth, and keeps its own values.
+    expect(weeks[4].sessions[0].exercises[0].sets[0]).toMatchObject({
+      targetRpe: 7,
+      percentageWorkingMax: 75,
+    });
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+  });
+}
+
+test.describe('a refused progression', () => {
+  test.use({
+    allowedConsoleErrors: { patterns: [/status of 400 .*\/api\/training\/week-progression/] },
+  });
+
+  test('says why beside the button and adds nothing', async ({ page }) => {
+    const reason =
+      'Copy 3, Lower A, Back squat, set 1: RPE would be 10.5, and RPE runs from 5 to 10. Use a smaller step or fewer copies.';
+    await openBuilder(page, 390, 844, { previewRefusal: reason });
+    const dialog = await openProgression(page);
+
+    await dialog.getByRole('button', { name: 'Show the new weeks' }).click();
+
+    const alert = dialog.getByRole('alert');
+    await expect(alert).toHaveText(reason);
+    await expect(alert).toBeFocused();
+    await expect(dialog.getByRole('button', { name: 'Add the weeks' })).toBeDisabled();
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+  });
+});
+
+test('the progression sheet passes axe in dark mode and reflows at 200% text in RTL', async ({
+  page,
+}) => {
+  await openBuilder(page, 390, 844, { colorScheme: 'dark' });
+  const dialog = await openProgression(page);
+  await dialog.getByRole('button', { name: 'Show the new weeks' }).click();
+  await expect(dialog.getByRole('heading', { name: /new weeks after week 1/ })).toBeVisible();
+  await axe(page);
+
+  await page.evaluate(() => {
+    document.documentElement.dir = 'rtl';
+    document.documentElement.style.fontSize = '200%';
+  });
+  await expectNoHorizontalOverflow(page);
+  const body = page.locator('.tb-modal__body');
+  expect(await body.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+    true,
+  );
+  await expect(dialog.getByRole('button', { name: /^Add \d+ weeks$/ })).toBeVisible();
+  await axe(page);
+});
+
+test('the program picks one formula for loads from RPE, and every set follows it', async ({
+  page,
+}) => {
+  const program = versionView();
+  for (const set of program.weeks[0].sessions[0].exercises[0].sets) {
+    set.loadStrategy = 'RpeChart';
+    set.percentageWorkingMax = null;
+  }
+  const sent = await openBuilder(page, 1440, 900, { program });
+
+  const menu = page.getByRole('button', { name: 'Weights from RPE: RTS chart' });
+  await menu.click();
+  await expect(page.getByRole('button', { name: /^RTS chart \(recommended\)/ })).toBeVisible();
+  await axe(page);
+  await page.getByRole('button', { name: /^Epley curve/ }).click();
+
+  await expect(page.getByRole('button', { name: 'Weights from RPE: Epley curve' })).toBeVisible();
+  await expect(page.locator('.status')).toHaveText(/^Saved at/);
+  const strategies = sent.contents
+    .at(-1)!
+    .weeks[0].sessions[0].exercises[0].sets.map((set) => set.loadStrategy);
+  expect(strategies).toEqual(['RpeBasedEpley', 'RpeBasedEpley', 'RpeBasedEpley']);
+  await expectNoHorizontalOverflow(page);
 });

@@ -1,0 +1,111 @@
+:host {
+  display: grid;
+  gap: 1rem;
+  min-inline-size: 0;
+}
+.progression {
+  display: grid;
+  gap: 1rem;
+}
+.intro,
+.note,
+.stale {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.fields {
+  display: grid;
+  gap: 0.875rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.problem {
+  background: var(--tb-danger-soft);
+  border-radius: var(--tb-radius-card-small);
+  color: var(--tb-ink);
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 0.75rem;
+}
+.problem:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+.stale {
+  background: var(--tb-surface-2);
+  border-radius: var(--tb-radius-card-small);
+  padding: 0.75rem;
+}
+.result {
+  display: grid;
+  gap: 0.875rem;
+}
+.result h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+.week {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card-small);
+  padding: 0.875rem;
+}
+.week h4 {
+  font-size: 0.9375rem;
+  margin: 0 0 0.5rem;
+}
+.session + .session {
+  margin-block-start: 0.75rem;
+}
+.session-name {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  margin: 0 0 0.25rem;
+  overflow-wrap: anywhere;
+}
+.exercises {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.exercises li {
+  display: grid;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+.exercise-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.sets {
+  display: grid;
+  gap: 0.125rem;
+}
+.set {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.set.changed {
+  color: var(--tb-ink);
+  font-weight: 600;
+}
+.footer {
+  align-items: center;
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  padding-block-start: 1rem;
+}

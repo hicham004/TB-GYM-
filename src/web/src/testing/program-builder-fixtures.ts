@@ -233,8 +233,9 @@ export function draftSummary(overrides: Partial<ProgramDraftSummary> = {}): Prog
   };
 }
 
+/** A save that just happened: the status line reads "Saved at 14:32" only for the day it is read on. */
 export function saveView(id = 'draft-1', version = 8): ProgramDraftSaveView {
-  return { id, version, updatedAtUtc: '2026-10-05T09:15:00Z' };
+  return { id, version, updatedAtUtc: new Date().toISOString() };
 }
 
 export function exercise(

@@ -8,8 +8,10 @@ import type {
   ProgramDraftView,
   ProgramTemplateSummary,
   ProgramTemplateVersionView,
+  PreviewWeekProgressionRequest,
   PublishProgramDraftRequest,
   SaveProgramDraftRequest,
+  WeekProgressionPreviewView,
 } from '../../core/api/generated';
 
 /**
@@ -45,6 +47,19 @@ export class ProgramBuilderApi {
 
   discardDraft(draftId: string, version: number): Observable<void> {
     return this.http.post<void>(`/api/training/program-drafts/${draftId}/discard`, { version });
+  }
+
+  /**
+   * The copies of one week that "Duplicate with progression" would add (TRN-025). The server does the
+   * arithmetic and saves nothing; the builder adds the weeks to the draft after the coach has read them.
+   */
+  previewWeekProgression(
+    request: PreviewWeekProgressionRequest,
+  ): Observable<WeekProgressionPreviewView> {
+    return this.http.post<WeekProgressionPreviewView>(
+      '/api/training/week-progression/preview',
+      request,
+    );
   }
 
   /** The draft becomes the program's next version, published, and is removed. */

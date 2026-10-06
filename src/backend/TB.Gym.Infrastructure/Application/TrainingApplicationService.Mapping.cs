@@ -116,6 +116,16 @@ internal sealed partial class TrainingApplicationService
                 IsManualLoadOverride: true);
         }
 
+        if (request.LoadStrategy == TrainingLoadStrategy.RpeChart &&
+            request.RepetitionsMaximum is { } chartRepetitions &&
+            targetRpe is { } chartRpe &&
+            !RtsRpeChart.Covers(chartRepetitions, chartRpe))
+        {
+            // The chart is never extrapolated (STR-010): the set must use a typed weight or another formula.
+            throw new ArgumentException(
+                $"{chartRepetitions} reps at RPE {chartRpe:0.#} is outside the chart. {RtsRpeChart.CoverageMessage}");
+        }
+
         return new SetPrescriptionBlueprint(
             request.Position,
             request.SetType,
@@ -327,24 +337,29 @@ internal sealed partial class TrainingApplicationService
         {
             TrainingLoadStrategy.PercentageWorkingMax => PrescriptionLoadStrategy.PercentageWorkingMax,
             TrainingLoadStrategy.RpeBasedEpley => PrescriptionLoadStrategy.RpeBasedEpley,
+            TrainingLoadStrategy.RpeChart => PrescriptionLoadStrategy.RpeChart,
             _ => throw new ArgumentOutOfRangeException(nameof(set)),
         };
-        var recommendation = loadRecommendation.Recommend(new LoadRecommendationInput(
+        var input = new LoadRecommendationInput(
             strategy,
             null,
             set.PercentageWorkingMax,
             workingMax.Value,
             set.RepetitionsMaximum,
             set.TargetRpe,
-            ToStrengthUnit(loadUnit)));
+            ToStrengthUnit(loadUnit));
+        var recommendation = strategy == PrescriptionLoadStrategy.RpeChart
+            ? rpeChartRecommendation.Recommend(input)
+            : loadRecommendation.Recommend(input);
+        var prescribed = roundingPolicy.Round(recommendation.Value);
         return set with
         {
             WorkingMaxSnapshotId = workingMax.Id,
             UnroundedRecommendedLoad = recommendation.Value,
-            PrescribedLoad = roundingPolicy.Round(recommendation.Value),
+            PrescribedLoad = prescribed,
             CalculationStrategyKey = recommendation.StrategyKey,
             CalculationStrategyVersion = recommendation.StrategyVersion,
-            CalculationExplanation = recommendation.Explanation,
+            CalculationExplanation = $"{recommendation.Explanation} {roundingPolicy.Describe(prescribed)}",
         };
     }
 
@@ -360,7 +375,8 @@ internal sealed partial class TrainingApplicationService
             .SelectMany(item => item.Sessions)
             .SelectMany(item => item.Exercises)
             .Where(item => item.Sets.Any(set =>
-                set.LoadStrategy is TrainingLoadStrategy.PercentageWorkingMax or TrainingLoadStrategy.RpeBasedEpley))
+                set.LoadStrategy is TrainingLoadStrategy.PercentageWorkingMax or TrainingLoadStrategy.RpeBasedEpley
+                    or TrainingLoadStrategy.RpeChart))
             .Select(item => item.ExerciseId)
             .Distinct()
             .ToHashSet();

@@ -169,6 +169,14 @@
           <div class="plan-tools">
             <h2 id="weeks-title" class="panel-title">{{ counts() }}</h2>
             <div class="plan-buttons">
+              @if (formula()) {
+                <app-menu
+                  [label]="formulaLabel()"
+                  [items]="formulaItems"
+                  align="start"
+                  (chosen)="chooseFormula($event)"
+                />
+              }
               <button
                 appButton
                 class="library-toggle"
@@ -514,5 +522,16 @@
         }
       </button>
     </div>
+  }
+</ng-template>
+
+<ng-template #progressionSheet let-sheet>
+  @if (progressing(); as weekKey) {
+    <app-program-week-progression
+      [draft]="draft()"
+      [weekKey]="weekKey"
+      (added)="addProgression(weekKey, $event, sheet)"
+      (cancelled)="sheet.close()"
+    />
   }
 </ng-template>

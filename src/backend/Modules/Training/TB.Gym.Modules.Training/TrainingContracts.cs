@@ -103,6 +103,15 @@ public interface ITrainingApplicationService
         ReplaceTrainingSessionRequest request,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The builder's "Duplicate with progression" (TRN-025): the copies of one week the coach would
+    /// add, calculated but not saved. Nothing is persisted; the coach adds the weeks to their own
+    /// draft after reading them, and Publish checks them like any save.
+    /// </summary>
+    Task<WeekProgressionPreviewView> PreviewWeekProgressionAsync(
+        PreviewWeekProgressionRequest request,
+        CancellationToken cancellationToken);
+
     Task<ProgressionPreviewView?> PreviewProgressionAsync(
         Guid mesocycleId,
         ProgressionPreviewRequest request,
@@ -471,6 +480,20 @@ public sealed record CancelMesocycleRequest(string Reason, uint Version);
 public sealed record CompleteMesocycleRequest(uint Version);
 
 public sealed record ReplaceTrainingSessionRequest(TrainingSessionRequest Session, uint Version);
+
+/// <param name="SourceWeek">The week as the builder holds it, values as typed.</param>
+/// <param name="Copies">1 to 12 copies, each moved a further step from the source.</param>
+/// <param name="WeeksInProgram">How many weeks the program has now, so the 52-week limit is checked.</param>
+public sealed record PreviewWeekProgressionRequest(
+    TrainingWeekRequest SourceWeek,
+    int Copies,
+    WeekProgressionSteps Steps,
+    int WeeksInProgram);
+
+public sealed record WeekProgressionPreviewView(
+    string TransformKey,
+    string TransformVersion,
+    IReadOnlyList<TrainingWeekRequest> Weeks);
 
 public sealed record ProgressionPreviewRequest(
     IReadOnlyList<Guid> SourceWeekIds,

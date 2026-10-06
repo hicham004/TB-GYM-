@@ -71,6 +71,7 @@ public enum TrainingLoadStrategy
     Direct = 2,
     PercentageWorkingMax = 3,
     RpeBasedEpley = 4,
+    RpeChart = 5,
 }
 
 public enum TrainingLoadUnit
