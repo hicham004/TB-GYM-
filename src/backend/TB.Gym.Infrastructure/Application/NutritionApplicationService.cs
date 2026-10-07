@@ -291,21 +291,29 @@ internal sealed partial class NutritionApplicationService(
         var recipes = await source.OrderBy(item => item.Name).Skip(skip).Take(take)
             .Include(item => item.Versions).ThenInclude(item => item.Allergens)
             .AsSplitQuery().ToListAsync(cancellationToken);
-        return new RecipePage(total, skip, take, recipes.Select(recipe => publishedOnly
-            ? ToRecipeSummary(recipe, recipe.Versions.Where(version => version.Status == PublicationStatus.Published).MaxBy(version => version.Revision)!)
-            : ToRecipeSummary(recipe)).ToArray());
+        return new RecipePage(total, skip, take, recipes.Select(recipe =>
+        {
+            var published = recipe.Versions.Where(version => version.Status == PublicationStatus.Published).MaxBy(version => version.Revision);
+            return ToRecipeSummary(recipe, publishedOnly ? published! : recipe.Versions.MaxBy(version => version.Revision)!, published?.Id);
+        }).ToArray());
     }
 
     public async Task<NutritionCommandResult> CreateRecipeAsync(CreateRecipeRequest request, CancellationToken cancellationToken)
     {
         try
         {
+            await EnsureRecipePhotoAsync(request.PhotoMediaAssetId, null, cancellationToken);
             var ingredientInputs = await BuildRecipeIngredientsAsync(request.Ingredients, cancellationToken);
             var recipe = Recipe.Create(tenantContext.TenantId, request.Name);
-            var version = recipe.AddDraft(request.Instructions, request.Servings, ingredientInputs);
+            var version = recipe.AddDraft(request.Instructions, request.Servings, ingredientInputs, request.PhotoMediaAssetId);
+            if (request.Publish)
+            {
+                version.Publish(clock.UtcNow, RequireUserId());
+            }
+
             dbContext.Recipes.Add(recipe);
             await dbContext.SaveChangesAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, Recipe: ToRecipeSummary(recipe, version));
+            return new NutritionCommandResult(NutritionCommandStatus.Success, Recipe: ToRecipeSummary(recipe, version, request.Publish ? version.Id : null));
         }
         catch (NutritionInputException exception)
         {
@@ -325,13 +333,38 @@ internal sealed partial class NutritionApplicationService(
             return NotFound();
         }
 
+        // The editor names the revision it opened, so a save made since then in another tab or by
+        // another coach is reported rather than silently replaced as the newest version.
+        if (request.BaseRevision is { } baseRevision && baseRevision != recipe.CurrentRevision)
+        {
+            return RecipeChanged();
+        }
+
         try
         {
+            await EnsureRecipePhotoAsync(request.PhotoMediaAssetId, recipe.Id, cancellationToken);
             var ingredientInputs = await BuildRecipeIngredientsAsync(request.Ingredients, cancellationToken);
-            var version = recipe.AddDraft(request.Instructions, request.Servings, ingredientInputs);
+            if (request.Name is not null)
+            {
+                recipe.Rename(request.Name);
+            }
+
+            var version = recipe.AddDraft(request.Instructions, request.Servings, ingredientInputs, request.PhotoMediaAssetId);
+            if (request.Publish)
+            {
+                version.Publish(clock.UtcNow, RequireUserId());
+            }
+
             dbContext.RecipeVersions.Add(version);
             await dbContext.SaveChangesAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, Recipe: ToRecipeSummary(recipe, version));
+            var publishedVersionId = request.Publish
+                ? version.Id
+                : await dbContext.RecipeVersions.AsNoTracking()
+                    .Where(item => item.RecipeId == recipe.Id && item.Status == PublicationStatus.Published)
+                    .OrderByDescending(item => item.Revision)
+                    .Select(item => (Guid?)item.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            return new NutritionCommandResult(NutritionCommandStatus.Success, Recipe: ToRecipeSummary(recipe, version, publishedVersionId));
         }
         catch (NutritionInputException exception)
         {
@@ -344,6 +377,10 @@ internal sealed partial class NutritionApplicationService(
         catch (DbUpdateConcurrencyException)
         {
             return Conflict("recipe_version_conflict", "The recipe was versioned by another request.");
+        }
+        catch (DbUpdateException exception) when (IsRecipeRevisionRace(exception))
+        {
+            return RecipeChanged();
         }
     }
 
@@ -360,7 +397,7 @@ internal sealed partial class NutritionApplicationService(
             version.Publish(clock.UtcNow, RequireUserId());
             await dbContext.SaveChangesAsync(cancellationToken);
             var recipe = await dbContext.Recipes.AsNoTracking().SingleAsync(item => item.Id == version.RecipeId, cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, Recipe: ToRecipeSummary(recipe, version));
+            return new NutritionCommandResult(NutritionCommandStatus.Success, Recipe: ToRecipeSummary(recipe, version, version.Id));
         }
         catch (InvalidOperationException exception)
         {
@@ -1095,22 +1132,30 @@ internal sealed partial class NutritionApplicationService(
             return Invalid("review", "Approval requires an awaiting-review draft plus coach-confirmed recipe name, instructions, servings, and ingredient mappings.");
         }
 
-        var expectedIngredientCount = JsonSerializer.Deserialize<ValidatedAiDraft>(operation.ValidatedDraftJson, JsonOptions)?.Ingredients.Count ?? 0;
-        if (expectedIngredientCount == 0 || request.IngredientMappings.Count != expectedIngredientCount)
+        // Every saved line is a food the coach chose (NUT-004). The coach may drop a suggested
+        // ingredient or add one, as when matching any imported recipe; the operation keeps the
+        // suggestion it was given beside the recipe version it became.
+        if (request.IngredientMappings.Count == 0)
         {
-            return Invalid("ingredientMappings", "Map every AI-suggested ingredient to one reviewed canonical food version before approval.");
+            return Invalid("ingredientMappings", "Choose a food for at least one ingredient before saving the recipe.");
         }
 
         try
         {
+            await EnsureRecipePhotoAsync(request.PhotoMediaAssetId, null, cancellationToken);
             var ingredientRequests = request.IngredientMappings.Select(item => new RecipeIngredientRequest(item.FoodItemVersionId, item.Quantity, item.Unit, item.Basis, item.YieldFactorId, item.RetentionFactorId)).ToArray();
             var inputs = await BuildRecipeIngredientsAsync(ingredientRequests, cancellationToken);
             var recipe = Recipe.Create(tenantContext.TenantId, request.RecipeName);
-            var version = recipe.AddDraft(request.Instructions, request.Servings.Value, inputs);
+            var version = recipe.AddDraft(request.Instructions, request.Servings.Value, inputs, request.PhotoMediaAssetId);
+            if (request.Publish)
+            {
+                version.Publish(clock.UtcNow, RequireUserId());
+            }
+
             dbContext.Recipes.Add(recipe);
             operation.Review(true, RequireUserId(), clock.UtcNow);
             await dbContext.SaveChangesAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, AiDraft: ToAiDraftView(operation, version.Id));
+            return new NutritionCommandResult(NutritionCommandStatus.Success, AiDraft: ToAiDraftView(operation, version.Id, recipe.Id));
         }
         catch (NutritionInputException exception)
         {
@@ -1317,10 +1362,11 @@ internal sealed partial class NutritionApplicationService(
     private static MacroOverrideView ToMacroOverrideView(MacroOverrideAudit item) =>
         new(item.Id, item.CalculationSnapshotId, item.ProteinGrams, item.FatGrams, item.CarbohydrateGrams, item.Reason, item.ActorUserId);
 
-    private static RecipeSummary ToRecipeSummary(Recipe item) => ToRecipeSummary(item, item.Versions.OrderByDescending(version => version.Revision).First());
+    private static RecipeSummary ToRecipeSummary(Recipe item, RecipeVersion version, Guid? publishedVersionId) =>
+        new(item.Id, version.Id, version.Revision, item.Name, version.Status, version.Servings, version.Calories, version.ProteinGrams, version.CarbohydrateGrams, version.FatGrams, version.Allergens.Select(allergen => allergen.Code).Order().ToArray(), version.PhotoMediaAssetId, publishedVersionId);
 
-    private static RecipeSummary ToRecipeSummary(Recipe item, RecipeVersion version) =>
-        new(item.Id, version.Id, version.Revision, item.Name, version.Status, version.Servings, version.Calories, version.ProteinGrams, version.CarbohydrateGrams, version.FatGrams, version.Allergens.Select(allergen => allergen.Code).Order().ToArray());
+    private static NutritionCommandResult RecipeChanged() =>
+        Conflict("recipe_changed", "This recipe was saved again after you opened it. Reload it to see the newer version.");
 
     private static MealPlanTemplateSummary ToMealPlanSummary(MealPlanTemplate item, MealPlanTemplateVersion version, MealPlanDraftSummary? draft = null) =>
         new(
@@ -1341,8 +1387,8 @@ internal sealed partial class NutritionApplicationService(
     private static NutritionCalculationView ToCalculationView(NutritionCalculationSnapshot item, IReadOnlyList<string> warnings) =>
         new(item.Id, item.BmrMethodKey, item.BmrMethodVersion, item.BmrEstimate, item.ActivityModelKey, item.ActivityModelVersion, item.ActivityModelPal, item.TdeeMethodKey, item.TdeeMethodVersion, item.TdeeEstimate, item.CoachGoalAdjustment, item.CalorieTarget, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams, item.EnergyPolicyKey, item.EnergyPolicyVersion, warnings);
 
-    private static AiMealDraftView ToAiDraftView(AiMealDraftOperation item, Guid? recipeVersionId = null) =>
-        new(item.Id, item.Status, item.PromptVersion, item.SchemaVersion, item.ProviderKey, item.Model, item.ModelVersion, item.ValidatedDraftJson, item.UncertainFieldsJson, item.FailureCode, item.CostAmount, item.CostCurrency, recipeVersionId);
+    private static AiMealDraftView ToAiDraftView(AiMealDraftOperation item, Guid? recipeVersionId = null, Guid? recipeId = null) =>
+        new(item.Id, item.Status, item.PromptVersion, item.SchemaVersion, item.ProviderKey, item.Model, item.ModelVersion, item.ValidatedDraftJson, item.UncertainFieldsJson, item.FailureCode, item.CostAmount, item.CostCurrency, recipeVersionId, recipeId);
 
     private static string BuildProvenance(FoodItem food, FoodItemVersion version) =>
         $"{food.Provenance}; {version.SourceAttribution}; record version {version.SourceRecordVersion}";

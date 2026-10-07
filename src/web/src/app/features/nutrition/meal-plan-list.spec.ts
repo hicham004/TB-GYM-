@@ -89,7 +89,7 @@ describe('Meal plans', () => {
     expect(textOf(host.querySelector('.split-text'))).toBe('Protein 30% · Carbs 40% · Fat 30%');
     expect(host.querySelector('.card a')?.getAttribute('href')).toBe('/nutrition/plans/plan-1');
     expect(host.querySelector('a[href="/nutrition/plans/new"]')).not.toBeNull();
-    expect(host.querySelector('nav a[href="/nutrition/library"]')).not.toBeNull();
+    expect(host.querySelector('nav a[href="/nutrition/recipes"]')).not.toBeNull();
   });
 
   it('puts the coach’s own new plans first, and marks a plan with changes not published', async () => {

@@ -37,6 +37,11 @@ public sealed class MediaAsset : TenantEntity
             throw new ArgumentException("A workspace logo must be an image.");
         }
 
+        if (purpose == MediaPurpose.RecipePhoto && kind != MediaKind.Image)
+        {
+            throw new ArgumentException("A recipe photo must be an image.");
+        }
+
         OwnerUserId = ownerUserId;
         Title = MediaText.Required(title, 200, nameof(title));
         Kind = kind;
@@ -504,6 +509,12 @@ public enum MediaPurpose
     /// every active member of the workspace while it is the current logo.
     /// </summary>
     WorkspaceLogo = 3,
+
+    /// <summary>
+    /// A recipe's cover photo (MED-014): uploaded by the workspace's staff, re-encoded with a
+    /// thumbnail like a progress photo, and readable by the workspace's staff only.
+    /// </summary>
+    RecipePhoto = 4,
 }
 
 public enum MediaKind

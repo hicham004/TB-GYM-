@@ -133,6 +133,9 @@ public sealed partial class GymDbContext
             entity.HasIndex(item => new { item.TenantId, item.RecipeId, item.Revision }).IsUnique();
             entity.HasMany(item => item.Ingredients).WithOne().HasForeignKey(item => new { item.TenantId, item.RecipeVersionId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(item => item.Allergens).WithOne().HasForeignKey(item => new { item.TenantId, item.RecipeVersionId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
+            // A version's photo is a media asset of this same workspace (MED-014): the key pairs the
+            // workspace with the asset, so no version can point at another workspace's upload.
+            entity.HasOne<MediaAsset>().WithMany().HasForeignKey(item => new { item.TenantId, item.PhotoMediaAssetId }).HasPrincipalKey(asset => new { asset.TenantId, asset.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint("CK_RecipeVersions_Macros", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0"));
             ConfigureTenantEntity(entity);
         });

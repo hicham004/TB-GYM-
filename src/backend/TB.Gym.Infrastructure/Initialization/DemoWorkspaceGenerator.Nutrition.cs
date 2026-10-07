@@ -8,14 +8,14 @@ internal sealed partial class DemoWorkspaceGenerator
     private async Task BuildMealPlanAsync()
     {
         // Fictional coach-authored values are confined to the development demo.
-        var foods = new (string Key, string Name, decimal Protein, decimal Carbs, decimal Fat, PreparationBasis Basis)[]
+        var foods = new (string Key, string Name, decimal Protein, decimal Carbs, decimal Fat, PreparationBasis Basis, AllergenCode[] Allergens)[]
         {
-            ("yogurt", "Greek yogurt", 10m, 4m, 2m, PreparationBasis.AsSold),
-            ("oats", "Rolled oats", 13m, 68m, 7m, PreparationBasis.AsSold),
-            ("banana", "Banana", 1m, 23m, 0m, PreparationBasis.Raw),
-            ("chicken", "Grilled chicken breast", 31m, 0m, 4m, PreparationBasis.Cooked),
-            ("rice", "Cooked rice", 3m, 28m, 0m, PreparationBasis.Cooked),
-            ("egg", "Boiled egg", 13m, 1m, 11m, PreparationBasis.Cooked),
+            ("yogurt", "Greek yogurt", 10m, 4m, 2m, PreparationBasis.AsSold, [AllergenCode.Milk]),
+            ("oats", "Rolled oats", 13m, 68m, 7m, PreparationBasis.AsSold, [AllergenCode.GlutenCereals]),
+            ("banana", "Banana", 1m, 23m, 0m, PreparationBasis.Raw, []),
+            ("chicken", "Grilled chicken breast", 31m, 0m, 4m, PreparationBasis.Cooked, []),
+            ("rice", "Cooked rice", 3m, 28m, 0m, PreparationBasis.Cooked, []),
+            ("egg", "Boiled egg", 13m, 1m, 11m, PreparationBasis.Cooked, [AllergenCode.Eggs]),
         };
         var versions = new Dictionary<string, (Guid Id, PreparationBasis Basis)>();
         foreach (var food in foods)
@@ -25,27 +25,52 @@ internal sealed partial class DemoWorkspaceGenerator
                     food.Name, FoodProvenance.CoachAuthored, null, null, null,
                     new AddFoodVersionRequest(100m, FoodQuantityUnit.Gram, food.Basis,
                         food.Protein, food.Carbs, food.Fat, 0m, 0m, 0m, null,
-                        "Atlas Performance fictional demo values", "demo-v1", [])), token));
+                        "Atlas Performance fictional demo values", "demo-v1", food.Allergens)), token));
             var created = Require(result.Food, result.Status == NutritionCommandStatus.Success, $"demo food {food.Name}", result);
             versions[food.Key] = (created.CurrentVersion.Id, food.Basis);
         }
 
-        async Task<Guid> RecipeAsync(string name, params (string Key, decimal Grams)[] ingredients)
+        // Each recipe is saved and published in one step, as the recipe editor does (R4.4b).
+        async Task<Guid> RecipeAsync(string name, string method, bool publish, params (string Key, decimal Grams)[] ingredients)
         {
             var lines = ingredients.Select(item => new RecipeIngredientRequest(
                 versions[item.Key].Id, item.Grams, FoodQuantityUnit.Gram, versions[item.Key].Basis)).ToArray();
             var created = await As<INutritionApplicationService, NutritionCommandResult>(OwnerActor,
-                (service, token) => service.CreateRecipeAsync(new CreateRecipeRequest(name, "Atlas demo meal.", 1m, lines), token));
-            var draft = Require(created.Recipe, created.Status == NutritionCommandStatus.Success, $"demo recipe {name}", created);
-            var published = await As<INutritionApplicationService, NutritionCommandResult>(OwnerActor,
-                (service, token) => service.PublishRecipeVersionAsync(draft.VersionId, token));
-            return Require(published.Recipe, published.Status == NutritionCommandStatus.Success, $"publish {name}", published).VersionId;
+                (service, token) => service.CreateRecipeAsync(new CreateRecipeRequest(name, method, 1m, lines, Publish: publish), token));
+            return Require(created.Recipe, created.Status == NutritionCommandStatus.Success, $"demo recipe {name}", created).VersionId;
         }
 
-        var breakfast = await RecipeAsync("Yogurt, oats & banana", ("yogurt", 250m), ("oats", 60m), ("banana", 100m));
-        var lunch = await RecipeAsync("Grilled chicken & rice", ("chicken", 170m), ("rice", 220m));
-        var snack = await RecipeAsync("Yogurt & banana", ("yogurt", 200m), ("banana", 120m));
-        var alternative = await RecipeAsync("Egg & rice bowl", ("egg", 160m), ("rice", 180m));
+        var breakfast = await RecipeAsync(
+            "Yogurt, oats & banana",
+            "Spoon the yogurt into a bowl, stir in the oats and leave them five minutes to soften. Slice the banana on top.",
+            true,
+            ("yogurt", 250m), ("oats", 60m), ("banana", 100m));
+        var lunch = await RecipeAsync(
+            "Grilled chicken & rice",
+            "Season the chicken with salt, pepper and lemon, grill it four to five minutes a side and let it rest. Slice it over the warm rice.",
+            true,
+            ("chicken", 170m), ("rice", 220m));
+        var snack = await RecipeAsync(
+            "Yogurt & banana",
+            "Slice the banana into the yogurt. Eat it within the hour, or the banana browns.",
+            true,
+            ("yogurt", 200m), ("banana", 120m));
+        var alternative = await RecipeAsync(
+            "Egg & rice bowl",
+            "Peel and halve the eggs and lay them over the warm rice. A pinch of salt and chilli flakes finishes it.",
+            true,
+            ("egg", 160m), ("rice", 180m));
+        // Two more for the recipe library, not in the plan: one ready, one still a draft.
+        await RecipeAsync(
+            "Chicken shawarma bowl",
+            "Toss the sliced chicken with shawarma spices and sear it hot. Serve it on the rice with a spoon of yogurt thinned with lemon.",
+            true,
+            ("chicken", 180m), ("rice", 200m), ("yogurt", 60m));
+        await RecipeAsync(
+            "Banana oat pancakes",
+            "Mash the banana, beat in the eggs and the oats, and cook small pancakes in a dry non-stick pan, two minutes a side.",
+            false,
+            ("banana", 120m), ("egg", 100m), ("oats", 50m));
         const int dayCount = 7;
         var slots = Enumerable.Range(0, dayCount).SelectMany(day => new[]
         {

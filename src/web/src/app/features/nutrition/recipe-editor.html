@@ -1,0 +1,427 @@
+<div class="editor" [attr.inert]="saving() ? '' : null">
+  <a class="back" routerLink="/nutrition/recipes">
+    <app-icon class="back-icon" name="chevron-right" />
+    <span i18n>All recipes</span>
+  </a>
+
+  @switch (state()) {
+    @case ('loading') {
+      <h1 class="tb-visually-hidden" #heading tabindex="-1">{{ pageTitle() }}</h1>
+      <div class="card pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="6" />
+      </div>
+    }
+    @case ('missing') {
+      <div class="card pad stack">
+        <h1 class="missing-title" #heading tabindex="-1" i18n>This recipe isn’t here</h1>
+        <p i18n>
+          It may have been opened from an old link, or it belongs to another coaching space.
+        </p>
+        <a appButton routerLink="/nutrition/recipes" i18n>Back to your recipes</a>
+      </div>
+    }
+    @case ('error') {
+      <div class="card pad load-failed">
+        <h1 class="tb-visually-hidden" #heading tabindex="-1">{{ pageTitle() }}</h1>
+        <p role="alert" i18n>The recipe could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="retry()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @let current = draft();
+      <header class="identity">
+        <div class="names">
+          <h1 class="tb-visually-hidden" #heading tabindex="-1">{{ pageTitle() }}</h1>
+          <app-field
+            class="name-field"
+            label="Recipe name"
+            i18n-label
+            [hideLabel]="true"
+            [errors]="errorsFor('name')"
+          >
+            <input
+              appControl
+              id="recipe-name"
+              class="name-input"
+              autocomplete="off"
+              [maxlength]="maxName"
+              placeholder="Name this recipe"
+              i18n-placeholder
+              dir="auto"
+              [ngModel]="current.name"
+              (ngModelChange)="change({ name: $event })"
+            />
+          </app-field>
+          <p class="standing">
+            <app-status-pill [label]="standing().label" [tone]="standing().tone" />
+            <span>{{ standingNote() }}</span>
+          </p>
+        </div>
+        <div class="actions">
+          <app-menu
+            label="More save options"
+            i18n-label
+            icon="more"
+            [items]="moreItems()"
+            (chosen)="chosen($event)"
+          />
+          <button
+            appButton
+            type="button"
+            [disabled]="nothingToPublish()"
+            [loading]="saving() === 'publish'"
+            (click)="save('publish')"
+          >
+            @if (saving() === 'publish') {
+              <span i18n>Publishing…</span>
+            } @else if (detail() && !dirty() && detail()!.latest.status === 'Draft') {
+              <span i18n>Publish</span>
+            } @else if (detail()?.publishedVersionId) {
+              <span i18n>Publish changes</span>
+            } @else {
+              <span i18n>Publish</span>
+            }
+          </button>
+        </div>
+      </header>
+
+      <p class="tb-visually-hidden" role="status">{{ announced() }}</p>
+      @if (stale()) {
+        <div class="banner warn" role="alert">
+          <p i18n>
+            This recipe was saved again after you opened it, perhaps in another tab. Reload to see
+            the newest version; the changes made here are not kept.
+          </p>
+          <button appButton type="button" variant="outlined" (click)="reloadNewest()" i18n>
+            Reload recipe
+          </button>
+        </div>
+      }
+      @if (problem(); as shown) {
+        <p class="banner danger" role="alert">{{ shown.message }}</p>
+      } @else if (saveError(); as message) {
+        <p class="banner danger" role="alert">{{ message }}</p>
+      }
+
+      <div class="layout">
+        <div class="main">
+          @if (isNew()) {
+            <section class="card ai" aria-labelledby="ai-title">
+              <div class="ai-head">
+                <div>
+                  <h2 id="ai-title" class="card-title" i18n>Start from a description</h2>
+                  @if (aiConfigured() === null) {
+                    <p class="muted" i18n>Checking whether AI suggestions are set up…</p>
+                  } @else if (aiConfigured() === false) {
+                    <p class="muted" i18n>
+                      AI suggestions aren’t set up for this coaching space yet. You can write the
+                      recipe yourself below.
+                    </p>
+                  } @else {
+                    <p class="muted" i18n>
+                      Describe a meal and get its ingredients to start from. You match each one to a
+                      real food before anything is saved.
+                    </p>
+                  }
+                </div>
+                @if (aiConfigured() && !aiOpen()) {
+                  <button
+                    appButton
+                    type="button"
+                    variant="outlined"
+                    (click)="aiOpen.set(true)"
+                    i18n
+                  >
+                    Describe a meal
+                  </button>
+                }
+              </div>
+              @if (aiOpen()) {
+                <app-field
+                  label="The meal, in a sentence or two"
+                  i18n-label
+                  help="Leave out anything about a client: their name, health or allergies."
+                  i18n-help
+                >
+                  <textarea
+                    appControl
+                    rows="3"
+                    [maxlength]="aiPromptMax"
+                    [ngModel]="aiPrompt()"
+                    (ngModelChange)="aiPrompt.set($event)"
+                    placeholder="Chicken shawarma bowl with rice, pickles and garlic sauce…"
+                    i18n-placeholder
+                  ></textarea>
+                </app-field>
+                @if (aiError(); as message) {
+                  <!-- Said where the coach asked, and focused, so the failure is never missed (ADR 0035). -->
+                  <p class="line-error" role="alert" tabindex="-1" #aiFeedback>{{ message }}</p>
+                }
+                <div class="row-actions">
+                  <button appButton type="button" variant="text" (click)="aiOpen.set(false)" i18n>
+                    Cancel
+                  </button>
+                  <button appButton type="button" [loading]="aiBusy()" (click)="suggest()">
+                    @if (aiBusy()) {
+                      <span i18n>Suggesting…</span>
+                    } @else {
+                      <span i18n>Suggest ingredients</span>
+                    }
+                  </button>
+                </div>
+              }
+            </section>
+          }
+
+          <section class="card" aria-labelledby="ingredients-title">
+            <div class="section-head">
+              <h2 id="ingredients-title" class="card-title" i18n>Ingredients</h2>
+              <app-field
+                class="servings"
+                label="Servings it makes"
+                i18n-label
+                density="compact"
+                [errors]="errorsFor('servings')"
+              >
+                <input
+                  appControl
+                  id="recipe-servings"
+                  type="number"
+                  inputmode="decimal"
+                  min="0.25"
+                  step="any"
+                  [value]="current.servings ?? ''"
+                  (input)="servingsTyped($any($event.target).value)"
+                />
+              </app-field>
+            </div>
+
+            @if (unmatched() > 0) {
+              <div class="banner info">
+                <p i18n>
+                  Choose a food for each suggested ingredient, or remove it. Amounts in grams carry
+                  over; check them against the food you choose.
+                </p>
+                <button appButton type="button" variant="text" (click)="dropSuggestion()" i18n>
+                  Remove the suggestions left
+                </button>
+              </div>
+            }
+
+            @if (current.lines.length) {
+              <ul class="lines" role="list">
+                @for (line of current.lines; track line.key) {
+                  <li class="line" [class.unmatched]="!line.food">
+                    @if (line.food; as food) {
+                      <div class="line-food">
+                        <span class="line-name" dir="auto">{{ food.name }}</span>
+                        <span class="line-detail">{{ lineDetail(line) }}</span>
+                        @if (line.suggestion; as suggestion) {
+                          <span class="line-suggested" [class.uncertain]="suggestion.uncertain">
+                            {{ suggestionText(line) }}
+                            @if (suggestion.uncertain) {
+                              &ngsp;<span i18n>(check this amount)</span>
+                            }
+                          </span>
+                        }
+                      </div>
+                      <app-field
+                        class="amount"
+                        [label]="amountLabel(food.name)"
+                        [hideLabel]="true"
+                        density="compact"
+                        [errors]="errorsFor('lines', line.key)"
+                      >
+                        <span class="amount-box">
+                          <input
+                            appControl
+                            [id]="'amount-' + line.key"
+                            type="number"
+                            inputmode="decimal"
+                            min="0"
+                            step="any"
+                            [value]="line.quantity ?? ''"
+                            (input)="quantityTyped(line, $any($event.target).value)"
+                          />
+                          <span class="unit">{{ unitWord(food.unit) }}</span>
+                        </span>
+                      </app-field>
+                      <span class="line-kcal">{{ lineKcal(line) }}</span>
+                    } @else {
+                      <div class="line-food wide">
+                        <span class="line-suggested" [class.uncertain]="line.suggestion?.uncertain">
+                          {{ suggestionText(line) }}
+                        </span>
+                        <app-recipe-food-search
+                          [inputId]="'match-' + line.key"
+                          [initialQuery]="line.suggestion?.name ?? ''"
+                          [label]="matchLabel(line)"
+                          (picked)="matchFood(line, $event)"
+                        />
+                        @if (errorsFor('lines', line.key); as errors) {
+                          <p class="line-error">{{ errors[0] }}</p>
+                        }
+                      </div>
+                    }
+                    <button
+                      appIconButton
+                      type="button"
+                      class="remove"
+                      [label]="removeLabel(line)"
+                      (click)="removeLine(line)"
+                    >
+                      <app-icon name="close" />
+                    </button>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="muted empty-lines" i18n>
+                Search for each ingredient below. Your foods come first, then USDA’s.
+              </p>
+            }
+            <div class="add">
+              <app-recipe-food-search
+                inputId="add-ingredient"
+                label="Add an ingredient"
+                i18n-label
+                (picked)="addFood($event)"
+              />
+              @if (errorsFor('lines'); as errors) {
+                <p class="line-error">{{ errors[0] }}</p>
+              }
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="method-title">
+            <h2 id="method-title" class="card-title" i18n>Method</h2>
+            <app-field
+              label="How to make it"
+              i18n-label
+              [hideLabel]="true"
+              [errors]="errorsFor('instructions')"
+            >
+              <textarea
+                appControl
+                id="recipe-instructions"
+                rows="6"
+                [maxlength]="maxInstructions"
+                dir="auto"
+                placeholder="1. Cook the rice. 2. Grill the chicken…"
+                i18n-placeholder
+                [ngModel]="current.instructions"
+                (ngModelChange)="change({ instructions: $event })"
+              ></textarea>
+            </app-field>
+          </section>
+        </div>
+
+        <aside class="side">
+          <section class="card photo-card" aria-labelledby="photo-title">
+            <h2 id="photo-title" class="tb-visually-hidden" i18n>Photo</h2>
+            <div class="photo" [class.empty]="!photoUrl()">
+              @if (photoUrl(); as src) {
+                <img [src]="src" alt="Photo of the recipe" i18n-alt width="640" height="480" />
+              } @else {
+                <app-icon name="camera" />
+                <span class="muted" i18n>A photo makes the recipe easy to spot.</span>
+              }
+            </div>
+            <div class="photo-actions">
+              <label class="tb-button tb-button--outlined file-button" [class.busy]="photoBusy()">
+                <input
+                  class="file"
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  [disabled]="photoBusy()"
+                  (change)="photoChosen($event)"
+                />
+                <!-- Text, not spans: the legacy "label > span" rule would recolour a span here. -->
+                @if (photoBusy()) {
+                  <ng-container i18n>Uploading…</ng-container>
+                } @else if (photoUrl()) {
+                  <ng-container i18n>Change photo</ng-container>
+                } @else {
+                  <ng-container i18n>Add a photo</ng-container>
+                }
+              </label>
+              @if (photoUrl() && !photoBusy()) {
+                <button appButton type="button" variant="text" (click)="removePhoto()" i18n>
+                  Remove
+                </button>
+              }
+            </div>
+            @if (photoError(); as message) {
+              <p class="line-error" role="alert">{{ message }}</p>
+            }
+          </section>
+
+          <section class="card totals" #totalsCard aria-labelledby="totals-title">
+            <h2 id="totals-title" class="card-title" i18n>One serving</h2>
+            @if (!counted()) {
+              <p class="muted" i18n>
+                Add ingredients and their amounts, and one serving’s calories and macros appear
+                here.
+              </p>
+            } @else if (serving(); as one) {
+              <p class="big">{{ kcalText(one.calories) }}</p>
+              @if (split(); as shares) {
+                <span class="split-bar" aria-hidden="true">
+                  <span class="protein" [style.flex-grow]="shares.protein"></span>
+                  <span class="carbs" [style.flex-grow]="shares.carbs"></span>
+                  <span class="fat" [style.flex-grow]="shares.fat"></span>
+                </span>
+              }
+              <dl class="macros">
+                <div class="macro protein">
+                  <dt i18n>Protein</dt>
+                  <dd>{{ gramsText(one.protein) }}</dd>
+                </div>
+                <div class="macro carbs">
+                  <dt i18n>Carbs</dt>
+                  <dd>{{ gramsText(one.carbs) }}</dd>
+                </div>
+                <div class="macro fat">
+                  <dt i18n>Fat</dt>
+                  <dd>{{ gramsText(one.fat) }}</dd>
+                </div>
+              </dl>
+              <p class="muted small">{{ wholeRecipe() }}</p>
+            } @else {
+              <p class="muted" i18n>Say how many servings it makes to see one serving.</p>
+            }
+            @if (allergens(); as contains) {
+              <p class="allergens">{{ contains }}</p>
+              <p class="muted small" i18n>
+                As declared on its foods, which may be incomplete. Check before you rely on it.
+              </p>
+            }
+            <p class="muted small" i18n>
+              Worked out from each ingredient as you type; saved exactly by the server.
+            </p>
+          </section>
+        </aside>
+      </div>
+
+      <!-- On a phone the serving and Publish stay in reach at the bottom. -->
+      <!-- A visual shortcut only: the same numbers are in the One serving card, read in its place. -->
+      @if (counted() && !totalsInView() && serving(); as one) {
+        <div class="dock" aria-hidden="true">
+          <span class="dock-kcal">{{ kcalText(one.calories) }}</span>
+          <span class="dock-macros">{{ dockMacros() }}</span>
+        </div>
+      }
+    }
+  }
+</div>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

@@ -34,3 +34,11 @@ Availability is an authenticated coach read exposing only a configured boolean. 
 explains setup beside the button; failures there are announced and focused. Configuration contains
 the server key only. The adapter is verified with HTTP fakes; a real-key generation remains an
 operational check before enabling it for coaches. The full nutrition redesign remains R4.4.
+
+## Amended in R4.4b (2026-10-07)
+
+Suggestions moved into New recipe. The coach matches each suggested ingredient to a food, as in any
+recipe importer (MyFitnessPal's matches each line and lets the user change or drop it), and may drop
+suggested ingredients or add others; approval needs at least one line rather than exactly one per
+suggestion. Every saved line is still a food version the coach chose, approval may publish in the
+same save, and the operation keeps the suggestion beside the recipe it became (NUT-004).

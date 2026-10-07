@@ -1,0 +1,94 @@
+<div class="search" [class.open]="open()">
+  <app-icon name="search" />
+  <input
+    #box
+    type="text"
+    role="combobox"
+    autocomplete="off"
+    aria-autocomplete="list"
+    [id]="inputId()"
+    [value]="query()"
+    [attr.aria-label]="label()"
+    [attr.aria-expanded]="open() && options().length > 0"
+    [attr.aria-controls]="listId()"
+    [attr.aria-activedescendant]="activeId()"
+    placeholder="Search your foods and USDA"
+    i18n-placeholder
+    enterkeyhint="search"
+    (input)="typed($any($event.target).value)"
+    (keydown)="keydown($event)"
+    (focus)="focused()"
+    (click)="focused()"
+    (blur)="adding() ? null : close()"
+  />
+  @if (open()) {
+    <div class="popup">
+      <!-- An empty listbox is not a list of anything, so it is drawn only with options in it. -->
+      @if (options().length) {
+        <div role="listbox" class="list" [id]="listId()" aria-label="Foods" i18n-aria-label>
+          @if (ownOptions().length) {
+            <div role="group" [attr.aria-labelledby]="listId() + '-own'">
+              <div class="group" [id]="listId() + '-own'" i18n>Your foods</div>
+              @for (option of ownOptions(); track option.key; let index = $index) {
+                <div
+                  role="option"
+                  class="option"
+                  [id]="optionId(index)"
+                  [attr.aria-selected]="index === active()"
+                  [class.active]="index === active()"
+                  (mousedown)="$event.preventDefault(); choose(option)"
+                  (mouseenter)="active.set(index)"
+                >
+                  <span class="name" dir="auto">{{ option.food.name }}</span>
+                  <span class="detail">{{ measure(option.food) }}</span>
+                </div>
+              }
+            </div>
+          }
+          @if (usdaOptions().length) {
+            <div role="group" [attr.aria-labelledby]="listId() + '-usda'">
+              <div class="group" [id]="listId() + '-usda'" i18n>From USDA, added to your foods</div>
+              @for (option of usdaOptions(); track option.key; let offset = $index) {
+                @let index = ownOptions().length + offset;
+                <div
+                  role="option"
+                  class="option"
+                  [id]="optionId(index)"
+                  [attr.aria-selected]="index === active()"
+                  [class.active]="index === active()"
+                  (mousedown)="$event.preventDefault(); choose(option)"
+                  (mouseenter)="active.set(index)"
+                >
+                  <span class="name" dir="auto">{{ option.name }}</span>
+                  <span class="detail">
+                    @if (adding() === option.key) {
+                      <span i18n>Adding…</span>
+                    } @else {
+                      <span i18n>USDA</span>
+                    }
+                  </span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+      @if (problem(); as message) {
+        <p class="note error" role="alert">{{ message }}</p>
+      } @else if (searching() && options().length === 0) {
+        <p class="note" role="status" i18n>Searching…</p>
+      } @else if (options().length === 0) {
+        <p class="note" role="status">
+          @if (query().trim()) {
+            <span i18n>No food matches “{{ query().trim() }}”.</span>
+          } @else {
+            <span i18n>Type a food, like “chicken breast”.</span>
+          }
+        </p>
+      }
+      @if (usdaNote(); as note) {
+        <p class="note">{{ note }}</p>
+      }
+    </div>
+  }
+</div>

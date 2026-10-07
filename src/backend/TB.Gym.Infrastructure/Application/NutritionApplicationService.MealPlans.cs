@@ -509,9 +509,15 @@ internal sealed partial class NutritionApplicationService
         var recipes = await dbContext.Recipes.AsNoTracking()
             .Where(recipe => recipeIds.Contains(recipe.Id))
             .ToDictionaryAsync(recipe => recipe.Id, cancellationToken);
+        var newestPublished = (await dbContext.RecipeVersions.AsNoTracking()
+                .Where(version => recipeIds.Contains(version.RecipeId) && version.Status == PublicationStatus.Published)
+                .Select(version => new { version.RecipeId, version.Id, version.Revision })
+                .ToListAsync(cancellationToken))
+            .GroupBy(version => version.RecipeId)
+            .ToDictionary(group => group.Key, group => group.MaxBy(version => version.Revision)!.Id);
         return versions
             .Where(version => recipes.ContainsKey(version.RecipeId))
-            .Select(version => ToRecipeSummary(recipes[version.RecipeId], version))
+            .Select(version => ToRecipeSummary(recipes[version.RecipeId], version, newestPublished.TryGetValue(version.RecipeId, out var published) ? published : null))
             .OrderBy(summary => summary.Name, StringComparer.Ordinal)
             .ToArray();
     }

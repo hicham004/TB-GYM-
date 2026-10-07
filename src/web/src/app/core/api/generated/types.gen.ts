@@ -68,6 +68,10 @@ export type AddRecipeVersionRequest = {
   instructions: string;
   servings: number | string;
   ingredients: Array<RecipeIngredientRequest>;
+  name?: null | string;
+  photoMediaAssetId?: null | string;
+  publish?: boolean;
+  baseRevision?: null | number | string;
 };
 
 export type AddWorkoutNoteRequest = {
@@ -130,6 +134,7 @@ export type AiMealDraftView = {
   costAmount: number | string;
   costCurrency: string;
   createdRecipeVersionId: null | string;
+  createdRecipeId?: null | string;
 };
 
 export type AllergenCode =
@@ -1406,6 +1411,8 @@ export type CreateRecipeRequest = {
   instructions: string;
   servings: number | string;
   ingredients: Array<RecipeIngredientRequest>;
+  photoMediaAssetId?: null | string;
+  publish?: boolean;
 };
 
 export type CreateSavedReplyRequest = {
@@ -2779,6 +2786,14 @@ export type ReassignClientCoachRequest = {
   version: number | string;
 };
 
+export type RecipeDetail = {
+  id: string;
+  name: string;
+  currentRevision: number | string;
+  publishedVersionId: null | string;
+  latest: RecipeVersionView;
+};
+
 export type RecipeIngredientRequest = {
   foodItemVersionId: string;
   quantity: number | string;
@@ -2786,6 +2801,23 @@ export type RecipeIngredientRequest = {
   basis: PreparationBasis;
   yieldFactorId?: null | string;
   retentionFactorId?: null | string;
+};
+
+export type RecipeIngredientView = {
+  foodItemId: string;
+  foodItemVersionId: string;
+  foodName: string;
+  foodProvenance: FoodProvenance;
+  quantity: number | string;
+  unit: FoodQuantityUnit;
+  basis: PreparationBasis;
+  calories: number | string;
+  proteinGrams: number | string;
+  carbohydrateGrams: number | string;
+  fatGrams: number | string;
+  declaredAllergens: Array<AllergenCode>;
+  yieldFactorId: null | string;
+  retentionFactorId: null | string;
 };
 
 export type RecipePage = {
@@ -2807,6 +2839,24 @@ export type RecipeSummary = {
   carbohydrateGrams: number | string;
   fatGrams: number | string;
   declaredAllergens: Array<AllergenCode>;
+  photoMediaAssetId?: null | string;
+  publishedVersionId?: null | string;
+};
+
+export type RecipeVersionView = {
+  id: string;
+  revision: number | string;
+  status: PublicationStatus;
+  publishedAtUtc: null | string;
+  instructions: string;
+  servings: number | string;
+  calories: number | string;
+  proteinGrams: number | string;
+  carbohydrateGrams: number | string;
+  fatGrams: number | string;
+  photoMediaAssetId: null | string;
+  declaredAllergens: Array<AllergenCode>;
+  ingredients: Array<RecipeIngredientView>;
 };
 
 export type RecordBodyMeasurementRequest = {
@@ -2981,6 +3031,8 @@ export type ReviewAiMealDraftRequest = {
   instructions: null | string;
   servings: null | number | string;
   ingredientMappings: Array<AiIngredientMappingRequest>;
+  photoMediaAssetId?: null | string;
+  publish?: boolean;
 };
 
 export type RevokeClientInvitationRequest = {
@@ -7418,6 +7470,31 @@ export type CreateRecipeResponses = {
 
 export type CreateRecipeResponse = CreateRecipeResponses[keyof CreateRecipeResponses];
 
+export type GetRecipeData = {
+  body?: never;
+  path: {
+    recipeId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/recipes/{recipeId}';
+};
+
+export type GetRecipeErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetRecipeResponses = {
+  /**
+   * OK
+   */
+  200: RecipeDetail;
+};
+
+export type GetRecipeResponse = GetRecipeResponses[keyof GetRecipeResponses];
+
 export type AddRecipeVersionData = {
   body: AddRecipeVersionRequest;
   path: {
@@ -7436,6 +7513,10 @@ export type AddRecipeVersionErrors = {
    * Not Found
    */
   404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
 };
 
 export type AddRecipeVersionError = AddRecipeVersionErrors[keyof AddRecipeVersionErrors];
@@ -10073,6 +10154,36 @@ export type DeleteMediaAssetResponses = {
 };
 
 export type DeleteMediaAssetResponse = DeleteMediaAssetResponses[keyof DeleteMediaAssetResponses];
+
+export type UploadRecipePhotoData = {
+  body: IFormFile;
+  path?: never;
+  query?: never;
+  url: '/api/media/recipe-photo';
+};
+
+export type UploadRecipePhotoErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Too Many Requests
+   */
+  429: unknown;
+};
+
+export type UploadRecipePhotoError = UploadRecipePhotoErrors[keyof UploadRecipePhotoErrors];
+
+export type UploadRecipePhotoResponses = {
+  /**
+   * OK
+   */
+  200: MediaAssetView;
+};
+
+export type UploadRecipePhotoResponse =
+  UploadRecipePhotoResponses[keyof UploadRecipePhotoResponses];
 
 export type CreatePrivateMediaAccessData = {
   body?: never;

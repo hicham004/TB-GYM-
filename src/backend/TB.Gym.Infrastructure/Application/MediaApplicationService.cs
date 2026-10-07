@@ -103,11 +103,12 @@ internal sealed class MediaApplicationService(
                     "The workspace media-storage allowance is full.");
             }
 
-            // A progress photo and a logo can only ever be images, so cap the accepted stream at
-            // their own limit rather than streaming up to the video limit before rejecting it.
+            // A progress photo, a logo and a recipe photo can only ever be images, so cap the
+            // accepted stream at their own limit rather than streaming up to the video limit before
+            // rejecting it.
             var acceptedBytes = purpose switch
             {
-                MediaPurpose.ProgressPhoto => MediaUploadPolicy.MaximumImageBytes,
+                MediaPurpose.ProgressPhoto or MediaPurpose.RecipePhoto => MediaUploadPolicy.MaximumImageBytes,
                 MediaPurpose.WorkspaceLogo => MediaLogoPolicy.MaximumBytes,
                 _ => MediaUploadPolicy.MaximumVideoBytes,
             };
@@ -160,7 +161,7 @@ internal sealed class MediaApplicationService(
 
             var validation = MediaUploadPolicy.Validate(fileName, contentType, stored.Length, stored.Signature);
             ProgressPhotoRendition? rendition = null;
-            if (purpose is MediaPurpose.ProgressPhoto or MediaPurpose.WorkspaceLogo)
+            if (purpose is MediaPurpose.ProgressPhoto or MediaPurpose.WorkspaceLogo or MediaPurpose.RecipePhoto)
             {
                 using var decodeLease = uploadConcurrencyGate.TryEnterProgressPhotoDecode();
                 if (decodeLease is null)
@@ -173,12 +174,14 @@ internal sealed class MediaApplicationService(
                 // thumbnail from those same sanitised pixels. The ingest stream stayed bounded
                 // above, the original object is deleted, and both sets of stored bytes are
                 // re-validated and scanned below, so no protection is skipped.
-                // A logo is re-encoded the same way (MED-013), fitted small and with no thumbnail.
+                // A logo is re-encoded the same way (MED-013), fitted small and with no thumbnail; a
+                // recipe photo exactly like a progress photo (MED-014), so its card loads the thumbnail.
                 rendition = purpose == MediaPurpose.WorkspaceLogo
                     ? await SanitizeLogoAsync(stored, validation, ingestObjects, cancellationToken)
                     : await SanitizeProgressPhotoAsync(
                         stored,
                         validation,
+                        purpose,
                         clientProfileId,
                         ingestObjects,
                         cancellationToken);
@@ -187,9 +190,12 @@ internal sealed class MediaApplicationService(
                     await CleanupIngestObjectsAsync(ingestObjects);
                     return Invalid(
                         "file",
-                        purpose == MediaPurpose.WorkspaceLogo
-                            ? "The logo could not be processed as a valid image."
-                            : "The progress photo could not be processed as a valid image.");
+                        purpose switch
+                        {
+                            MediaPurpose.WorkspaceLogo => "The logo could not be processed as a valid image.",
+                            MediaPurpose.RecipePhoto => "The recipe photo could not be processed as a valid image.",
+                            _ => "The progress photo could not be processed as a valid image.",
+                        });
                 }
 
                 if (!await CleanupIngestObjectAsync(originalReservation))
@@ -898,6 +904,13 @@ internal sealed class MediaApplicationService(
         }
 
         var role = await ActiveMembershipRoleAsync(userId, cancellationToken);
+        if (purpose == MediaPurpose.RecipePhoto)
+        {
+            // Recipe photos belong to the staff's shared recipe library (MED-014, LIB-001); a client
+            // never reaches one, even while a recipe is in their plan.
+            return role is TenantRole.Owner or TenantRole.Coach;
+        }
+
         if (purpose == MediaPurpose.WorkspaceLogo)
         {
             // The logo is how the workspace looks to its own members (MED-013): every active member
@@ -974,14 +987,15 @@ internal sealed class MediaApplicationService(
     }
 
     /// <summary>
-    /// Re-encodes a stored progress photo without metadata, renders its thumbnail from the same
-    /// decoded pixels, and stores both under new keys. Returns null when the bytes cannot be
+    /// Re-encodes a stored progress photo (or recipe photo) without metadata, renders its thumbnail
+    /// from the same decoded pixels, and stores both under new keys. Returns null when the bytes cannot be
     /// decoded, or when either output no longer passes the same signature and size validation as
     /// the original, in which case nothing it stored is left behind.
     /// </summary>
     private async Task<ProgressPhotoRendition?> SanitizeProgressPhotoAsync(
         StoredObject stored,
         MediaFileValidation validation,
+        MediaPurpose purpose,
         Guid? clientProfileId,
         ICollection<MediaIngestObject> ingestObjects,
         CancellationToken cancellationToken)
@@ -1011,7 +1025,7 @@ internal sealed class MediaApplicationService(
                 produced.Image,
                 validation.VerifiedContentType,
                 validation.MaximumBytes,
-                MediaPurpose.ProgressPhoto,
+                purpose,
                 clientProfileId,
                 ingestObjects,
                 cancellationToken);
@@ -1026,7 +1040,7 @@ internal sealed class MediaApplicationService(
                 produced.Thumbnail,
                 MediaThumbnailPolicy.ContentType,
                 MediaUploadPolicy.MaximumImageBytes,
-                MediaPurpose.ProgressPhoto,
+                purpose,
                 clientProfileId,
                 ingestObjects,
                 cancellationToken);

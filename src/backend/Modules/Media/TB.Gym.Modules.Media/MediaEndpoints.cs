@@ -17,6 +17,7 @@ public static class MediaEndpoints
 {
     private const long MaximumMultipartRequestBytes = MediaUploadPolicy.MaximumVideoBytes + (1024 * 1024);
     private const long MaximumLogoRequestBytes = MediaLogoPolicy.MaximumBytes + (1024 * 1024);
+    private const long MaximumImageRequestBytes = MediaUploadPolicy.MaximumImageBytes + (1024 * 1024);
 
     public static IEndpointRouteBuilder MapMediaModule(this IEndpointRouteBuilder endpoints)
     {
@@ -105,6 +106,26 @@ public static class MediaEndpoints
         .Produces(StatusCodes.Status429TooManyRequests)
         .RequireRateLimiting(RateLimitPolicies.MediaUpload)
         .WithMetadata(new RequestSizeLimitAttribute(MaximumLogoRequestBytes));
+
+        // A recipe's cover photo (MED-014) belongs to the shared recipe library, so any of the
+        // workspace's staff uploads one. It is only ever an image, held to the image limit.
+        coach.MapPost("/recipe-photo", async (
+            HttpRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IMediaApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return await StreamUploadAsync(request, service, cancellationToken, MediaPurpose.RecipePhoto);
+        })
+        .WithName("UploadRecipePhoto")
+        .Accepts<IFormFile>("multipart/form-data")
+        .Produces<MediaAssetView>()
+        .ProducesValidationProblem()
+        .Produces(StatusCodes.Status429TooManyRequests)
+        .RequireRateLimiting(RateLimitPolicies.MediaUpload)
+        .WithMetadata(new RequestSizeLimitAttribute(MaximumImageRequestBytes));
 
         var member = endpoints
             .MapGroup("/api/media")
@@ -380,8 +401,13 @@ public static class MediaEndpoints
         CancellationToken cancellationToken,
         MediaPurpose purpose = MediaPurpose.ExerciseMedia)
     {
-        var isLogo = purpose == MediaPurpose.WorkspaceLogo;
-        if (request.ContentLength > (isLogo ? MaximumLogoRequestBytes : MaximumMultipartRequestBytes) ||
+        var (requestLimit, bodyLimit) = purpose switch
+        {
+            MediaPurpose.WorkspaceLogo => (MaximumLogoRequestBytes, MediaLogoPolicy.MaximumBytes),
+            MediaPurpose.RecipePhoto => (MaximumImageRequestBytes, MediaUploadPolicy.MaximumImageBytes),
+            _ => (MaximumMultipartRequestBytes, MediaUploadPolicy.MaximumVideoBytes),
+        };
+        if (request.ContentLength > requestLimit ||
             !MediaTypeHeaderValue.TryParse(request.ContentType, out var mediaType) ||
             !string.Equals(mediaType.MediaType.Value, "multipart/form-data", StringComparison.OrdinalIgnoreCase))
         {
@@ -398,7 +424,7 @@ public static class MediaEndpoints
         {
             var reader = new MultipartReader(boundary, request.Body)
             {
-                BodyLengthLimit = isLogo ? MediaLogoPolicy.MaximumBytes : MediaUploadPolicy.MaximumVideoBytes,
+                BodyLengthLimit = bodyLimit,
             };
             string? title = null;
             while (await reader.ReadNextSectionAsync(cancellationToken) is { } section)

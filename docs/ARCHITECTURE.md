@@ -133,6 +133,10 @@ Infrastructure owns EF persistence and the USDA FoodData Central HTTP adapter. S
 `docs/adr/0008-nutrition-engine-v1.md`. R4.4a adds `nutrition."MealPlanDrafts"` (NUT-013), the
 meal-plan builder's working copies, shaped and guarded exactly as the program builder's (ADR 0033):
 Publish turns one into the next `MealPlanTemplateVersion`, already published, in one transaction.
+R4.4b gives each `RecipeVersion` an optional cover photo, `PhotoMediaAssetId`, a Media asset of the
+same workspace by composite key (MED-014). Media owns the upload (`POST /api/media/recipe-photo`, new
+`RecipePhoto` purpose) and the staff-only read; Infrastructure checks the photo when a version is
+saved, as it checks the workspace logo. A recipe save can publish in the same transaction.
 
 Progress Phase 5A extends the Phase 1 `BodyweightObservation` rather than introducing another
 profile weight. It stores canonical kilograms plus the entered value/unit, keeps one current

@@ -548,6 +548,12 @@ manual override with actor/reason. Raw and cooked weights are not interchangeabl
 **NUT-002** Recipe totals derive from ingredient lines under one calculation policy. The
 recipe records yield/servings and preparation instructions. A manual total cannot silently
 diverge from its ingredients; an override is explicit, versioned, and attributable.
+The recipe editor (R4.4b) shows each serving's totals as amounts are typed by scaling each line's
+food in proportion; the server works every saved line out again, and its result is what is kept.
+Every save is a new version, optionally published in the same transaction. A save names the
+newest revision the editor opened, and a later save since then is refused (`recipe_changed`),
+not overwritten. Renaming a recipe changes the library's name only; meal-plan versions and
+client plans keep the name they copied.
 
 **NUT-003** Direct recipe import uses a licensed/authorized nutrition or recipe provider,
 structured data, or user-supplied URL where terms permit. Generic Google scraping is not a
@@ -564,6 +570,10 @@ Anthropic Claude Sonnet 5.5 is the optional configured adapter (ADR 0035); no cl
 included in the request. Per-tenant monthly limits reserve a conservative USD cost before calling
 the provider. Known costs, including failed/invalid output, replace reservations; an ambiguous
 timeout retains its reservation. No automatic provider retry or automatic recipe approval occurs.
+Since R4.4b the suggestion starts the recipe editor: the coach chooses a food for each suggested
+ingredient, and may drop one or add others, as when matching any imported recipe. Approval saves
+the lines the coach chose (at least one), each a food version of the workspace; the operation keeps
+the suggestion beside the recipe version it became.
 
 **NUT-005** A meal plan contains ordered meal slots. Each slot may offer multiple recipe
 choices. The system distinguishes:
@@ -1536,6 +1546,16 @@ member of the workspace may read the current logo; only the owner may read one n
 Saving the brand tombstones every other ready logo upload on the delete retention (MED-008). A logo is
 never exercise media: the coach library lists, attaches and deletes exercise media only, and that
 delete answers a logo or a progress photo as unknown (a photo leaves only through PRG-007).
+
+**MED-014** A recipe photo (R4.4b) is a media asset with its own purpose: an image only (PNG or
+JPEG, at most 15 MB), uploaded by the workspace's staff, scanned like every upload, and re-encoded
+with a thumbnail exactly like a progress photo, so cards load the thumbnail. Only the workspace's
+staff read one; a client never does, even for a recipe in their plan. A recipe version may name a
+photo its saver uploaded, or one an earlier version of that recipe already has, so a second coach's
+edit keeps the photo; nothing else, and never another workspace's upload (composite key). The
+photo belongs to the version, so a published version keeps the photo it was published with. The
+coach library neither lists nor deletes recipe photos. Uploads no version names stay until a
+retention decision (plan follow-up).
 
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and

@@ -1,0 +1,134 @@
+<section class="recipes" aria-labelledby="recipes-heading">
+  <header class="top">
+    <div class="intro">
+      <h1 id="recipes-heading" #heading tabindex="-1" i18n>Recipes</h1>
+      @if (summary(); as line) {
+        <p class="lede">{{ line }}</p>
+      } @else {
+        <p class="lede" i18n>Write a recipe once, then use it in every meal plan.</p>
+      }
+    </div>
+    <a appButton routerLink="/nutrition/recipes/new">
+      <app-icon name="plus" />
+      <span i18n>New recipe</span>
+    </a>
+  </header>
+
+  <app-section-nav label="Nutrition sections" i18n-label [links]="sections" />
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>Your recipes could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (recipesEmpty()) {
+        <app-empty-state
+          class="panel"
+          heading="No recipes yet"
+          description="Add the ingredients and their amounts, and each serving's calories and macros add up as you type. Published recipes go straight into your meal plans."
+          i18n-heading
+          i18n-description
+        >
+          <a appButton empty-state-action routerLink="/nutrition/recipes/new" i18n
+            >Write your first recipe</a
+          >
+        </app-empty-state>
+      } @else {
+        <div class="search">
+          <app-icon name="search" />
+          <input
+            type="search"
+            [value]="search()"
+            (input)="typed($any($event.target).value)"
+            placeholder="Search recipes…"
+            i18n-placeholder
+            autocomplete="off"
+            aria-label="Search recipes"
+            i18n-aria-label
+            enterkeyhint="search"
+          />
+        </div>
+        @if (cards().length === 0) {
+          <div class="panel pad load-failed">
+            <p role="status" i18n>No recipes match “{{ searched() }}”.</p>
+            <button appButton type="button" variant="text" (click)="clearSearch()" i18n>
+              Show all recipes
+            </button>
+          </div>
+        } @else {
+          <ul class="cards" role="list">
+            @for (card of cards(); track card.id) {
+              <li class="card">
+                <div class="photo" aria-hidden="true">
+                  @if (card.thumbnail; as src) {
+                    <img
+                      [src]="src"
+                      alt=""
+                      width="480"
+                      height="300"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  } @else {
+                    <span class="initials">{{ card.initials }}</span>
+                  }
+                </div>
+                <div class="body">
+                  @if (card.status; as status) {
+                    <app-status-pill class="pill" [label]="status.label" [tone]="status.tone" />
+                  }
+                  <h2 class="card-name" dir="auto">
+                    <!-- The whole card is the link (a stretched link), named by the recipe. -->
+                    <a class="stretched" [routerLink]="['/nutrition/recipes', card.id]">{{
+                      card.name
+                    }}</a>
+                  </h2>
+                  <p class="kcal">{{ card.kcal }}</p>
+                  @if (card.split; as split) {
+                    <span class="split-bar" aria-hidden="true">
+                      <span class="protein" [style.flex-grow]="split.protein"></span>
+                      <span class="carbs" [style.flex-grow]="split.carbs"></span>
+                      <span class="fat" [style.flex-grow]="split.fat"></span>
+                    </span>
+                  }
+                  <p class="macros">{{ card.macros }}</p>
+                  <p class="meta">
+                    <span>{{ card.servings }}</span>
+                    @if (card.allergens) {
+                      &ngsp;<span class="allergens">{{ card.allergens }}</span>
+                    }
+                  </p>
+                </div>
+              </li>
+            }
+          </ul>
+          @if (hasMore()) {
+            <div class="more">
+              @if (moreFailed()) {
+                <p role="alert" i18n>More recipes could not be loaded.</p>
+              }
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                [loading]="loadingMore()"
+                (click)="loadMore()"
+                i18n
+              >
+                Show more recipes
+              </button>
+            </div>
+          }
+        }
+      }
+    }
+  }
+</section>

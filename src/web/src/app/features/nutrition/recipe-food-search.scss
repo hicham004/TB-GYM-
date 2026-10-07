@@ -1,0 +1,100 @@
+// The ingredient search (R4.4b): one box, the coach's foods then USDA's in a popup under it.
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+.search {
+  align-items: center;
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line-strong);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-muted);
+  display: flex;
+  gap: 0.5rem;
+  padding: 0 0.75rem;
+  position: relative;
+
+  &:focus-within {
+    outline: 2px solid var(--tb-focus);
+    outline-offset: 1px;
+  }
+
+  input {
+    background: transparent;
+    block-size: 2.625rem;
+    border: 0;
+    color: var(--tb-ink);
+    flex: 1;
+    font: inherit;
+    min-inline-size: 0;
+    outline: none;
+  }
+}
+
+.popup {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line-strong);
+  border-radius: var(--tb-radius-card-small);
+  box-shadow: var(--tb-shadow-overlay);
+  inset-block-start: calc(100% + 0.25rem);
+  inset-inline: 0;
+  max-block-size: min(22rem, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  position: absolute;
+  z-index: 20;
+}
+
+.list {
+  padding: 0.25rem;
+}
+
+.group {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.5rem 0.625rem 0.25rem;
+  text-transform: uppercase;
+}
+
+.option {
+  border-radius: calc(var(--tb-radius-card-small) - 2px);
+  cursor: pointer;
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.5rem 0.625rem;
+}
+
+.option.active {
+  background: var(--tb-surface-2);
+}
+
+.name {
+  color: var(--tb-ink);
+  overflow-wrap: break-word;
+}
+
+.detail {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+}
+
+.note.error {
+  color: var(--tb-danger);
+}
+
+@media (forced-colors: active) {
+  .option.active {
+    outline: 2px solid Highlight;
+  }
+}

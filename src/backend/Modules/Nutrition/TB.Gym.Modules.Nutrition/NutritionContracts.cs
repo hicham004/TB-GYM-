@@ -17,6 +17,7 @@ public interface INutritionApplicationService
     /// meal plan may hold (the meal-plan builder's recipe panel).
     /// </param>
     Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, bool publishedOnly, CancellationToken cancellationToken);
+    Task<RecipeDetail?> GetRecipeAsync(Guid recipeId, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CreateRecipeAsync(CreateRecipeRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> AddRecipeVersionAsync(Guid recipeId, AddRecipeVersionRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> PublishRecipeVersionAsync(Guid recipeVersionId, CancellationToken cancellationToken);
@@ -157,11 +158,90 @@ public sealed record RecipeIngredientRequest(
     Guid? YieldFactorId = null,
     Guid? RetentionFactorId = null);
 
-public sealed record CreateRecipeRequest(string Name, string Instructions, decimal Servings, IReadOnlyList<RecipeIngredientRequest> Ingredients);
+/// <param name="PhotoMediaAssetId">A recipe photo of this workspace the caller uploaded (MED-014).</param>
+/// <param name="Publish">Publishes the first version in the same save, ready for meal plans.</param>
+public sealed record CreateRecipeRequest(
+    string Name,
+    string Instructions,
+    decimal Servings,
+    IReadOnlyList<RecipeIngredientRequest> Ingredients,
+    Guid? PhotoMediaAssetId = null,
+    bool Publish = false);
 
-public sealed record AddRecipeVersionRequest(string Instructions, decimal Servings, IReadOnlyList<RecipeIngredientRequest> Ingredients);
+/// <param name="Name">A new name for the recipe, or null to keep it.</param>
+/// <param name="PhotoMediaAssetId">
+/// The new version's photo: the caller's own upload or a photo an earlier version of this recipe has.
+/// </param>
+/// <param name="Publish">Publishes the new version in the same save.</param>
+/// <param name="BaseRevision">
+/// The newest revision the editor opened; another save since then is a conflict, not overwritten.
+/// </param>
+public sealed record AddRecipeVersionRequest(
+    string Instructions,
+    decimal Servings,
+    IReadOnlyList<RecipeIngredientRequest> Ingredients,
+    string? Name = null,
+    Guid? PhotoMediaAssetId = null,
+    bool Publish = false,
+    int? BaseRevision = null);
 
-public sealed record RecipeSummary(Guid Id, Guid VersionId, int Revision, string Name, PublicationStatus Status, decimal Servings, decimal Calories, decimal ProteinGrams, decimal CarbohydrateGrams, decimal FatGrams, IReadOnlyList<AllergenCode> DeclaredAllergens);
+/// <summary>A recipe at one of its versions, totals for the whole recipe.</summary>
+/// <param name="PublishedVersionId">The newest published version, or null while none is published.</param>
+public sealed record RecipeSummary(
+    Guid Id,
+    Guid VersionId,
+    int Revision,
+    string Name,
+    PublicationStatus Status,
+    decimal Servings,
+    decimal Calories,
+    decimal ProteinGrams,
+    decimal CarbohydrateGrams,
+    decimal FatGrams,
+    IReadOnlyList<AllergenCode> DeclaredAllergens,
+    Guid? PhotoMediaAssetId = null,
+    Guid? PublishedVersionId = null);
+
+/// <summary>One recipe for its editor (R4.4b): its newest version in full.</summary>
+public sealed record RecipeDetail(
+    Guid Id,
+    string Name,
+    int CurrentRevision,
+    Guid? PublishedVersionId,
+    RecipeVersionView Latest);
+
+/// <summary>A recipe version with its ingredient lines; totals are for the whole recipe.</summary>
+public sealed record RecipeVersionView(
+    Guid Id,
+    int Revision,
+    PublicationStatus Status,
+    DateTimeOffset? PublishedAtUtc,
+    string Instructions,
+    decimal Servings,
+    decimal Calories,
+    decimal ProteinGrams,
+    decimal CarbohydrateGrams,
+    decimal FatGrams,
+    Guid? PhotoMediaAssetId,
+    IReadOnlyList<AllergenCode> DeclaredAllergens,
+    IReadOnlyList<RecipeIngredientView> Ingredients);
+
+/// <summary>An ingredient line as saved: its food version, amount and what that amount holds.</summary>
+public sealed record RecipeIngredientView(
+    Guid FoodItemId,
+    Guid FoodItemVersionId,
+    string FoodName,
+    FoodProvenance FoodProvenance,
+    decimal Quantity,
+    FoodQuantityUnit Unit,
+    PreparationBasis Basis,
+    decimal Calories,
+    decimal ProteinGrams,
+    decimal CarbohydrateGrams,
+    decimal FatGrams,
+    IReadOnlyList<AllergenCode> DeclaredAllergens,
+    Guid? YieldFactorId,
+    Guid? RetentionFactorId);
 
 public sealed record RecipePage(int Total, int Skip, int Take, IReadOnlyList<RecipeSummary> Items);
 
@@ -368,9 +448,22 @@ public sealed record AiMealDraftAvailabilityView(bool IsConfigured);
 
 public sealed record AiIngredientMappingRequest(Guid FoodItemVersionId, decimal Quantity, FoodQuantityUnit Unit, PreparationBasis Basis, Guid? YieldFactorId = null, Guid? RetentionFactorId = null);
 
-public sealed record ReviewAiMealDraftRequest(bool Approved, string Reason, string? RecipeName, string? Instructions, decimal? Servings, IReadOnlyList<AiIngredientMappingRequest> IngredientMappings);
+/// <param name="IngredientMappings">
+/// The recipe's lines as the coach saves them, each a food the coach chose; the coach may drop a
+/// suggested ingredient or add one (NUT-004).
+/// </param>
+public sealed record ReviewAiMealDraftRequest(
+    bool Approved,
+    string Reason,
+    string? RecipeName,
+    string? Instructions,
+    decimal? Servings,
+    IReadOnlyList<AiIngredientMappingRequest> IngredientMappings,
+    Guid? PhotoMediaAssetId = null,
+    bool Publish = false);
 
-public sealed record AiMealDraftView(Guid Id, AiDraftStatus Status, string PromptVersion, string SchemaVersion, string ProviderKey, string? Model, string? ModelVersion, string? ValidatedDraftJson, string? UncertainFieldsJson, string? FailureCode, decimal CostAmount, string CostCurrency, Guid? CreatedRecipeVersionId);
+/// <param name="CreatedRecipeId">The recipe an approval saved, so the editor can open it.</param>
+public sealed record AiMealDraftView(Guid Id, AiDraftStatus Status, string PromptVersion, string SchemaVersion, string ProviderKey, string? Model, string? ModelVersion, string? ValidatedDraftJson, string? UncertainFieldsJson, string? FailureCode, decimal CostAmount, string CostCurrency, Guid? CreatedRecipeVersionId, Guid? CreatedRecipeId = null);
 
 public sealed record NutritionCommandResult(
     NutritionCommandStatus Status,

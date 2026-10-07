@@ -22,6 +22,7 @@ import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { numeric } from '../training/training-builder.models';
 import { MealPlanApi } from './meal-plan-api';
+import { NUTRITION_SECTIONS } from './nutrition-sections';
 import { draftPlanCard, planCard } from './meal-plan-builder.models';
 
 /**
@@ -42,10 +43,7 @@ export class MealPlanList {
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private loadedTenantId: string | null = null;
 
-  protected readonly sections = [
-    { label: $localize`Meal plans`, link: '/nutrition/plans' },
-    { label: $localize`Recipes and foods`, link: '/nutrition/library' },
-  ];
+  protected readonly sections = NUTRITION_SECTIONS;
   protected readonly loadingLabel = $localize`Loading your meal plans…`;
 
   private readonly plans = signal<MealPlanTemplateSummary[]>([]);

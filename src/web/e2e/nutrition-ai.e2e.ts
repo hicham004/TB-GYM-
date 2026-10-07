@@ -11,6 +11,10 @@ import {
 
 test.use({ allowedConsoleErrors: { patterns: [/status of 503 .*\/api\/nutrition\/ai-drafts/] } });
 
+/**
+ * AI suggestions inside New recipe (ADR 0035, R4.4b): when they are not set up the card says so where
+ * they would be; when the provider fails, the failure is said beside the button and focused.
+ */
 for (const width of [390, 1440]) {
   test(`AI configuration and local failure at ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -21,18 +25,6 @@ for (const width of [390, 1440]) {
         csrfReads++;
         return json(route, 200, { token: 'csrf-test' });
       },
-      'GET /api/nutrition/foods': (route) => json(route, 200, { total: 0, items: [] }),
-      'GET /api/nutrition/recipes': (route) => json(route, 200, { total: 0, items: [] }),
-      'GET /api/nutrition/settings': (route) =>
-        json(route, 200, {
-          energyPolicyKey: 'AtwaterSpecific',
-          energyPolicyVersion: 'v1',
-          providerCalorieTolerance: 5,
-          aiMonthlyRequestLimit: 10,
-          aiMonthlyCostLimit: 20,
-          aiCostCurrency: 'USD',
-          version: 1,
-        }),
       'GET /api/nutrition/ai-drafts/availability': (route) =>
         json(route, 200, { isConfigured: configured }),
       'POST /api/nutrition/ai-drafts': (route) => {
@@ -43,24 +35,22 @@ for (const width of [390, 1440]) {
         });
       },
     });
-    await page.goto('/nutrition/library');
-    const button = page.getByRole('button', { name: 'Generate meal suggestion', exact: true });
-    await expect(button).toBeDisabled();
-    await expect(
-      page.getByText("AI meal suggestions aren't set up yet.", { exact: false }),
-    ).toBeVisible();
+    await page.goto('/nutrition/recipes/new');
+    const card = page.locator('section.ai');
+    await expect(card).toContainText('AI suggestions aren’t set up for this coaching space yet.');
+    await expect(card.getByRole('button')).toHaveCount(0);
     configured = true;
     await page.reload();
-    await expect(button).toBeEnabled();
-    await page.getByLabel('Prompt', { exact: true }).fill('A breakfast with oats');
-    await button.click();
-    const alert = page.getByRole('alert');
+    await card.getByRole('button', { name: 'Describe a meal' }).click();
+    await page.getByLabel('The meal, in a sentence or two').fill('A breakfast with oats');
+    await card.getByRole('button', { name: 'Suggest ingredients' }).click();
+    const alert = card.getByRole('alert');
     await expect(alert).toContainText('AI suggestions took too long');
     await expect(alert).toBeFocused();
     await waitForFonts(page);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await expectNoHorizontalOverflow(page);
-    await page.screenshot({ path: `../../docs/design/f2-ai-${width}.png`, fullPage: true });
+    await page.screenshot({ path: `../../docs/design/r44b-ai-${width}.png`, fullPage: true });
     await page.emulateMedia({ colorScheme: 'dark' });
     await useRtl(page);
     await page.addStyleTag({ content: 'html { font-size: 200%; }' });

@@ -22,9 +22,25 @@ export const nutritionRoutes: Routes = [
     loadComponent: () => import('./meal-plan-builder').then((module) => module.MealPlanBuilder),
   },
   {
+    path: 'recipes',
+    canActivate: [coachGuard],
+    title: $localize`Recipes | TB Gym`,
+    data: REDESIGNED,
+    loadComponent: () => import('./recipe-list').then((module) => module.RecipeList),
+  },
+  {
+    // `new` opens an empty recipe; the first save moves the address to the recipe's own.
+    path: 'recipes/:recipeId',
+    canActivate: [coachGuard],
+    canDeactivate: [confirmBeforeLeaving],
+    title: $localize`Recipe | TB Gym`,
+    data: REDESIGNED,
+    loadComponent: () => import('./recipe-editor').then((module) => module.RecipeEditor),
+  },
+  {
     path: 'library',
     canActivate: [coachGuard],
-    title: $localize`Recipes and foods | TB Gym`,
+    title: $localize`Foods | TB Gym`,
     loadComponent: () => import('./nutrition-library').then((module) => module.NutritionLibrary),
   },
   {

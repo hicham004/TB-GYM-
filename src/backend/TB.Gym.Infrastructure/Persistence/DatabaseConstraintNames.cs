@@ -56,6 +56,13 @@ internal static class DatabaseConstraintNames
     public const string OneMealPlanDraftPerPersonAndPlan =
         "IX_MealPlanDrafts_TenantId_OwnerUserId_MealPlanTemplateId";
 
+    /// <summary>
+    /// One recipe version per revision: two saves of a recipe racing for the same next revision
+    /// (R4.4b) leave the second told to reload.
+    /// </summary>
+    public const string OneRecipeVersionPerRevision =
+        "IX_RecipeVersions_TenantId_RecipeId_Revision";
+
     public const string OneProgressPhotoPerDateAndPose =
         "IX_ProgressPhotos_TenantId_ClientProfileId_PhotoDate_Pose";
 

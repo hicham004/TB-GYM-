@@ -430,9 +430,21 @@ public sealed class Recipe : TenantEntity
 
     public static Recipe Create(Guid tenantId, string name) => new(tenantId, name);
 
-    public RecipeVersion AddDraft(string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredients)
+    /// <summary>
+    /// Renames the recipe for the library. Meal-plan versions and client plans keep the name they
+    /// copied when they were made (NUT-006), so a rename never rewrites what a client was given.
+    /// </summary>
+    public void Rename(string name)
     {
-        var draft = RecipeVersion.Create(TenantId, Id, ++CurrentRevision, instructions, servings, ingredients);
+        Name = NutritionRules.RequiredText(name, 300, nameof(name));
+        NormalizedName = Name.ToUpperInvariant();
+    }
+
+    public RecipeVersion AddDraft(string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredients, Guid? photoMediaAssetId = null)
+    {
+        // The revision moves only once the version is valid, so a refused save leaves it as it was.
+        var draft = RecipeVersion.Create(TenantId, Id, CurrentRevision + 1, instructions, servings, ingredients, photoMediaAssetId);
+        CurrentRevision = draft.Revision;
         versions.Add(draft);
         return draft;
     }
@@ -462,10 +474,16 @@ public sealed class RecipeVersion : TenantEntity
     {
     }
 
-    private RecipeVersion(Guid tenantId, Guid recipeId, int revision, string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredientInputs)
+    private RecipeVersion(Guid tenantId, Guid recipeId, int revision, string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredientInputs, Guid? photoMediaAssetId)
         : base(tenantId)
     {
+        if (photoMediaAssetId == Guid.Empty)
+        {
+            throw new ArgumentException("A recipe photo must name its media asset.", nameof(photoMediaAssetId));
+        }
+
         RecipeId = recipeId;
+        PhotoMediaAssetId = photoMediaAssetId;
         Revision = revision;
         Instructions = NutritionRules.RequiredText(instructions, 20_000, nameof(instructions));
         Servings = NutritionRules.Positive(servings, 10_000m, nameof(servings));
@@ -504,6 +522,12 @@ public sealed class RecipeVersion : TenantEntity
 
     public string Instructions { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// The version's cover photo (MED-014), a recipe photo of this workspace. It belongs to the
+    /// version, so a published version keeps the photo it was published with.
+    /// </summary>
+    public Guid? PhotoMediaAssetId { get; private set; }
+
     public decimal Servings { get; private set; }
 
     public decimal Calories { get; private set; }
@@ -530,8 +554,8 @@ public sealed class RecipeVersion : TenantEntity
         PublishedByUserId = userId;
     }
 
-    internal static RecipeVersion Create(Guid tenantId, Guid recipeId, int revision, string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredients) =>
-        new(tenantId, recipeId, revision, instructions, servings, ingredients);
+    internal static RecipeVersion Create(Guid tenantId, Guid recipeId, int revision, string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredients, Guid? photoMediaAssetId = null) =>
+        new(tenantId, recipeId, revision, instructions, servings, ingredients, photoMediaAssetId);
 }
 
 public sealed class RecipeIngredient : TenantEntity

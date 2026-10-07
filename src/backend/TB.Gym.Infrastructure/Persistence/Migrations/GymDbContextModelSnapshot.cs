@@ -6904,6 +6904,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20000)
                         .HasColumnType("character varying(20000)");
 
+                    b.Property<Guid?>("PhotoMediaAssetId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("ProteinGrams")
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
@@ -6947,6 +6950,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PhotoMediaAssetId");
 
                     b.HasIndex("TenantId", "RecipeId", "Revision")
                         .IsUnique();
@@ -12331,6 +12336,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.RecipeVersion", b =>
                 {
+                    b.HasOne("TB.Gym.Modules.Media.MediaAsset", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PhotoMediaAssetId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("TB.Gym.Modules.Nutrition.Recipe", null)
                         .WithMany("Versions")
                         .HasForeignKey("TenantId", "RecipeId")

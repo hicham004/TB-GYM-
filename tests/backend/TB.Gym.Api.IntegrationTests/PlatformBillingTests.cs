@@ -216,6 +216,11 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertReadOnlyAsync(await coach.PostAsJsonAsync(R44aDiscardUrl(Guid.NewGuid()), new { version = 1 }));
         await AssertStatusAsync(await coach.GetAsync(R44aDraftsUrl), HttpStatusCode.OK);
         await AssertStatusAsync(await coach.GetAsync(R44aPlanUrl(Guid.NewGuid())), HttpStatusCode.NotFound);
+        // Recipes (R4.4b): no new photo or version, while a recipe stays readable.
+        await AssertReadOnlyAsync(await R44bPostPhotoAsync(coach));
+        await RefreshCsrfAsync(coach);
+        await AssertReadOnlyAsync(await coach.PostAsJsonAsync(R44bVersionsUrl(Guid.NewGuid()), new { instructions = "x", servings = 1m, ingredients = Array.Empty<object>() }));
+        await AssertStatusAsync(await coach.GetAsync(R44bRecipeUrl(Guid.NewGuid())), HttpStatusCode.NotFound);
         // Previewing a week's copies saves nothing, so it is a read sent as POST and stays open (P1).
         await AssertStatusAsync(
             await P1PreviewAsync(coach, P1Request(new { label = "Week 1", isPublished = true, sessions = Array.Empty<object>() }, 1)),

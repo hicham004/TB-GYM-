@@ -79,8 +79,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | P3a | **Progression, next block** (ADR 0036): Build next block takes the builder's four steps (RPE, reps, % of the max, weight) and each set's own formula, and shows the new weeks with their weights before adding them | §2, plus backend tests (each step and formula, limits, stale preview, coverage, race, other coach, released client) | Done · 2026-10-07 · f0f0bb9 |
 | P3b | **Progression, editing** (ADR 0036): a client's future weeks are edited in the builder's grid through the coverage policy, with an audit record; started and finished sessions stay locked | §2, plus backend tests | Done · 2026-10-07 · f0f0bb9 |
 | P4a | **Session extras** (ADR 0036): an exercise video button in the builder, the session sheet and the client's workout player; coach and client notes visible both ways | §2 | Done · 2026-10-07 · f0f0bb9 |
-| R4.4a | **Meal plans** (C7, part 1): the plans as cards, and the meal-plan builder: days side by side with each day's total against the daily target, recipes dragged into meals, options per meal, the coach's server draft (NUT-013) and Publish | §2, plus backend tests | Done · 2026-10-07 |
-| R4.4b | **Recipes** (C7, part 2): recipe cards with macro bars, the recipe editor (ingredients from a food search, totals per serving as they are typed, publish), the AI suggestion inside New recipe, and recipe photos | §2, plus backend tests | To do |
+| R4.4a | **Meal plans** (C7, part 1): the plans as cards, and the meal-plan builder: days side by side with each day's total against the daily target, recipes dragged into meals, options per meal, the coach's server draft (NUT-013) and Publish | §2, plus backend tests | Done · 2026-10-07 · 4556bd2 |
+| R4.4b | **Recipes** (C7, part 2): recipe cards with macro bars, the recipe editor (ingredients from a food search, totals per serving as they are typed, publish), the AI suggestion inside New recipe, and recipe photos | §2, plus backend tests | Built, not committed · 2026-10-07 |
 | R4.4c | **Foods** (C7, part 3): one clean search over the coach's own foods and USDA (database codes behind a details toggle), adding your own food, and the calculation defaults moved to Settings; the older Recipes and foods page goes | §2 | To do |
 | P4b | **Adjusting next week from logged performance** (ADR 0036, decided 2026-10-07): the Training maxes panel suggests a new max from the best logged set of the week (1 to 8 reps at RPE 7 to 10), and the coach applies it through the existing preview; never automatic | §2, plus domain reference tests (which sets count, the estimate) and API tests (other coach, released client, kg and lb kept apart) | To do |
 | R5.1 | **Products** (C8), **Exercise library** (C10), notifications, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only) | §2 | To do |
@@ -244,7 +244,9 @@ of the implemented R1.3 screens before production rollout.
   stylesheet is under the 5 kB warning. P4a measured 542.33 kB (+0.2 kB, the `play` glyph in the shared
   icon set); `ExerciseDemo` loads with the lazy pages that use it. R4.4a keeps it at 542.33 kB: the meal-plan
   builder is its own lazy chunk (about 82 kB), and its two stylesheets warn as the program builder's do
-  (`meal-plan-builder.scss` 5.6 kB, `meal-plan-days.scss` 7.4 kB; the error is at 8 kB).
+  (`meal-plan-builder.scss` 5.6 kB, `meal-plan-days.scss` 7.4 kB; the error is at 8 kB). R4.4b measures
+  542.23 kB: the recipe pages are lazy chunks (the editor about 50 kB), the old library page shrank, and
+  `recipe-editor.scss` warns at 6.3 kB.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -420,6 +422,22 @@ of the implemented R1.3 screens before production rollout.
   recipe dragged over the meals of a day leaves a thin line, not a slot, where it would land: a full slot
   opening in each meal it passed pushed the strip under the day out from under the pointer (found in the
   live pass). (9) The Atlas demo has one meal plan; a second (a cut, say) would show the list better.
+- **Recipes, left for later (from R4.4b, built 2026-10-07; screenshots `docs/design/r44b-*.png`).**
+  Decided by Claude for the owner after looking at Everfit, Trainerize, That Clean Life and
+  MyFitnessPal: a recipe is saved as a draft or published (Everfit's model, and ours already), only a
+  published one goes into meal plans, and a photo is one cover per recipe. Open for the owner: (1)
+  **clients do not see a recipe's ingredients, method or photo** (their day shows the name and
+  numbers only); Everfit and That Clean Life show the whole recipe. It needs the assignment snapshot
+  (NUT-006) to copy them, a client read and MED-014 widened to the snapshot; recommended as its own
+  step before R5. (2) A meal plan keeps the recipe version it was published with: after a recipe is
+  republished, the meal-plan builder could offer "Use the newest version" per recipe (today the coach
+  drags it in again). (3) Recipe photos no version names (uploaded, then not saved) are kept and
+  counted in the storage allowance until a retention rule is decided (MED-014). (4) No prep or cook
+  time, meal categories, tags or step photos (Everfit has them); no household units (cups,
+  tablespoons, pieces), since amounts are only in the food's own unit (ADR 0008, no implicit unit
+  conversion). (5) No Versions list in the editor (the server keeps every version). (6) USDA search
+  needs the server's data.gov key; without it the ingredient search lists the coach's own foods and
+  says USDA is not available. (7) The demo's recipes have no photos (none are licensed for it).
 
 ---
 
@@ -948,6 +966,21 @@ limited to the coach's assigned clients.
   duplicates it, uses it for every day, clears it or deletes it, each with Undo. A phone shows one day at
   a time from a row of day chips. Changes keep themselves as the coach's draft (NUT-013, as the program
   builder's do); Publish makes the next version; Versions lists them.
+- Built in R4.4b: **Recipes** (`/nutrition/recipes`) shows the recipes as cards (a row each on a
+  phone): the cover photo's thumbnail or the recipe's initials, one serving's calories, a
+  protein/carbs/fat bar with the grams, the servings, the allergens its foods declare, and "Draft" or
+  "Changes not published"; a server search over every recipe. The editor (`/nutrition/recipes/:id`,
+  `new`) has the name, servings, ingredient lines (each line's food, source, macros, amount in the
+  food's own unit and calories), a search that lists the coach's foods and then USDA's (a USDA pick is
+  copied into the foods first; database codes stay hidden), the method, a cover photo, and a "One
+  serving" card that adds up as amounts are typed, with the whole recipe and the allergens "as
+  declared on its foods". Publish is the action (Publish changes on a published recipe, disabled
+  when nothing changed); Save as draft sits in the menu beside it. A save from an editor opened
+  before someone else's save is refused with Reload recipe. New recipe can start from a description
+  (AI, ADR 0035): the suggestion fills the name and lines that each wait for a food, suggested grams
+  carry over, and a failure is said and focused beside the button. Leaving with changes asks first.
+  On a phone a bar keeps one serving's numbers in sight once its card scrolls away. The older page
+  is now **Foods**, without its recipe form or AI section.
 
 **C8. Products**
 - The heading becomes "Plans you sell": cards with price, duration and icons for the included

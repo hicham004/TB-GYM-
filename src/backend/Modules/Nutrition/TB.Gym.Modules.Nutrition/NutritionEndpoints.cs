@@ -67,6 +67,11 @@ public static class NutritionEndpoints
             var page = Page(skip, take);
             return Results.Ok(await service.ListRecipesAsync(query, page.Skip, page.Take, published == true, token));
         }).WithName("ListRecipes").Produces<RecipePage>();
+        coach.MapGet("/recipes/{recipeId:guid}", async (Guid recipeId, INutritionApplicationService service, CancellationToken token) =>
+        {
+            var recipe = await service.GetRecipeAsync(recipeId, token);
+            return recipe is null ? Results.NotFound() : Results.Ok(recipe);
+        }).WithName("GetRecipe").Produces<RecipeDetail>().Produces(StatusCodes.Status404NotFound);
         coach.MapPost("/recipes", async (CreateRecipeRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
             await antiforgery.ValidateRequestAsync(context);
@@ -76,7 +81,7 @@ public static class NutritionEndpoints
         {
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.AddRecipeVersionAsync(recipeId, request, token));
-        }).WithName("AddRecipeVersion").Produces<RecipeSummary>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound);
+        }).WithName("AddRecipeVersion").Produces<RecipeSummary>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
         coach.MapPost("/recipe-versions/{recipeVersionId:guid}/publish", async (Guid recipeVersionId, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
             await antiforgery.ValidateRequestAsync(context);
