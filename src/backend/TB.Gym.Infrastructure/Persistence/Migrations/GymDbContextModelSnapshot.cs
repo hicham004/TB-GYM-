@@ -6170,6 +6170,84 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Nutrition.MealPlanDraft", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DayCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("MealPlanTemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("StartedAtRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "MealPlanTemplateId");
+
+                    b.HasIndex("TenantId", "SourceVersionId");
+
+                    b.HasIndex("TenantId", "OwnerUserId", "MealPlanTemplateId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MealPlanDrafts_TenantId_OwnerUserId_MealPlanTemplateId")
+                        .HasFilter("\"MealPlanTemplateId\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "OwnerUserId", "UpdatedAtUtc");
+
+                    b.ToTable("MealPlanDrafts", "nutrition", t =>
+                        {
+                            t.HasCheckConstraint("CK_MealPlanDrafts_DayCount", "\"DayCount\" BETWEEN 1 AND 365");
+
+                            t.HasCheckConstraint("CK_MealPlanDrafts_Plan", "(\"MealPlanTemplateId\" IS NULL AND \"SourceVersionId\" IS NULL AND \"StartedAtRevision\" = 0) OR (\"MealPlanTemplateId\" IS NOT NULL AND \"SourceVersionId\" IS NOT NULL AND \"StartedAtRevision\" >= 1)");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.MealPlanSlot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12143,6 +12221,34 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Nutrition.MealPlanDraft", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Nutrition.MealPlanTemplate", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "MealPlanTemplateId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "OwnerUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Nutrition.MealPlanTemplateVersion", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SourceVersionId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.MealPlanSlot", b =>

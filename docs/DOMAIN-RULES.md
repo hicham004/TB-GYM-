@@ -495,7 +495,9 @@ longer moves a warm-up set.
 **STR-007** Phase 3 calculated loads use only the captured mesocycle working max. Calculation
 from week-1 performed load is a different future strategy and is never mixed implicitly.
 Estimating a max from week 1's prescribed fixed weight (P2, ADR 0036) uses the prescription alone;
-adjusting from logged performance stays a separate, later strategy.
+adjusting from logged performance stays a separate, later strategy. As decided for P4b (ADR 0036, not
+built): it only suggests a max, from the week's best logged working set of 1 to 8 reps at RPE 7 to 10,
+and a coach applies it through the max update's preview (STR-011); it never changes a max on its own.
 
 **STR-008** A recommendation and its rounding are separate. Rounding is configured per
 mesocycle with unit, positive increment, and Nearest/Down/Up mode. Phase 3 does not silently
@@ -638,6 +640,20 @@ meal snapshot. It contributes to consumed totals only. Its tenant-scoped entry i
 cannot be added after the day is completed (ADR 0032).
 A mistaken extra-food entry can be reversed once before day completion. The original entry and its
 actor/time-stamped reversal remain in history; consumed totals exclude the reversed entry.
+
+**NUT-013** Meal-plan working drafts (R4.4a, ADR 0033). The meal-plan builder keeps each coach's
+changes as a `MealPlanDraft` on the server: one per person and plan, plus up to 20 new plans per
+person not published yet. Only its owner reads or writes it, the workspace owner included, and it
+never reaches a client. It holds the plan as the builder has it (a name, the daily targets, each day's
+meals with their recipe options and servings) with values unchecked, bounded only by a version's
+shape (1 to 365 days, 30 meals a day, 100 options a meal) and a total size. Each save carries the row
+version, so a second tab is told to reload instead of overwriting. Publish checks every rule a version
+has (a name, daily calories above 0, a meal on every day, every meal named with at least one recipe
+published in this workspace, servings above 0), works out each option's macros from its servings
+(NUT-005), creates the next version already published, renames the plan when its name changed, and
+removes the draft, in one transaction; it asks first when someone published after the draft began. A
+meal's options are equal choices: the builder's day total uses their average, as NUT-005 allows for
+planning, never as what the client ate.
 
 ## 7. Bodyweight and progress
 

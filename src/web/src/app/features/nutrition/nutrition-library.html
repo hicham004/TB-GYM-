@@ -1,11 +1,11 @@
 <section class="page-heading">
   <div>
-    <h1 i18n>Nutrition library</h1>
-    <p i18n>
-      Build foods, turn them into recipes, and combine recipes into meal plans you can reuse.
-    </p>
+    <h1 i18n>Recipes and foods</h1>
+    <p i18n>Build foods and turn them into recipes. Your meal plans are made of these recipes.</p>
   </div>
 </section>
+<!-- Meal plans and Recipes and foods are the two pages of Nutrition; the sidebar links to Meal plans. -->
+<app-section-nav label="Nutrition sections" i18n-label [links]="sections" />
 @if (error() || notice()) {
   <div class="toast">
     @if (error()) {
@@ -316,120 +316,11 @@
 
     <section class="surface-section">
       <h2 i18n>Meal plans</h2>
-      <form class="editor" #planForm="ngForm" (ngSubmit)="createMealPlan(planForm)">
-        <label
-          ><span i18n>Plan name</span
-          ><input
-            [(ngModel)]="planName"
-            #planNameControl="ngModel"
-            name="planName"
-            required
-            [attr.aria-invalid]="planNameControl.invalid && planNameControl.touched"
-        /></label>
-        <div class="field-row">
-          <label
-            ><span i18n>Days</span
-            ><input type="number" min="1" max="365" [(ngModel)]="planDayCount" name="days" /></label
-          ><label
-            ><span i18n>Daily calories</span
-            ><input
-              type="number"
-              min="1"
-              [(ngModel)]="planTargetCalories"
-              name="targetCals" /></label
-          ><label
-            ><span i18n>Protein (g)</span
-            ><input type="number" min="0" [(ngModel)]="planTargetProtein" name="targetP" /></label
-          ><label
-            ><span i18n>Carbohydrate (g)</span
-            ><input
-              type="number"
-              min="0"
-              [(ngModel)]="planTargetCarbohydrate"
-              name="targetC" /></label
-          ><label
-            ><span i18n>Fat (g)</span
-            ><input type="number" min="0" [(ngModel)]="planTargetFat" name="targetF"
-          /></label>
-        </div>
-        @for (slot of mealSlots(); track $index) {
-          <div class="line-editor slot-editor">
-            <label
-              ><span i18n>Day</span
-              ><input
-                type="number"
-                min="1"
-                [max]="planDayCount"
-                [ngModel]="slot.dayOffset + 1"
-                (ngModelChange)="setSlotDay(slot, $event)"
-                [name]="'day' + $index" /></label
-            ><label
-              ><span i18n>Meal name</span
-              ><input [(ngModel)]="slot.name" [name]="'slotName' + $index" /></label
-            ><label
-              ><span i18n>Recipe</span
-              ><select [(ngModel)]="slot.recipeVersionId" [name]="'recipe' + $index">
-                @for (recipe of recipes(); track recipe.versionId) {
-                  @if (recipe.status === 'Published') {
-                    <option [value]="recipe.versionId">{{ recipe.name }}</option>
-                  }
-                }
-              </select></label
-            ><label
-              ><span i18n>Servings</span
-              ><input
-                type="number"
-                min="0.01"
-                step="0.01"
-                [(ngModel)]="slot.servings"
-                [name]="'servings' + $index" /></label
-            ><button type="button" class="secondary-button" (click)="removeMealSlot($index)" i18n>
-              Remove
-            </button>
-          </div>
-        }
-        <div class="inline">
-          <button
-            type="button"
-            class="secondary-button"
-            [disabled]="!hasPublishedRecipe()"
-            (click)="addMealSlot()"
-            i18n
-          >
-            Add meal slot</button
-          ><button class="primary-button" [disabled]="busy() || !mealSlots().length" i18n>
-            Create plan draft
-          </button>
-        </div>
-        @if (!hasPublishedRecipe()) {
-          <p class="hint" i18n>
-            Publish a recipe first. Only published recipes can go into a meal plan.
-          </p>
-        } @else if (!mealSlots().length) {
-          <p class="hint" i18n>Add at least one meal to create a plan.</p>
-        }
-      </form>
-      <div class="cards">
-        @for (plan of mealPlans(); track plan.versionId) {
-          <article>
-            <strong>{{ plan.name }} v{{ plan.revision }}</strong
-            ><span
-              >{{ plan.dayCount }} days · {{ plan.slotCount }} slots ·
-              {{ plan.targetCalories | number: '1.0-0' }} kcal target</span
-            ><span>{{ plan.status }}</span>
-            @if (plan.status === 'Draft') {
-              <button
-                type="button"
-                class="secondary-button"
-                (click)="publishPlan(plan.versionId)"
-                i18n
-              >
-                Publish and lock
-              </button>
-            }
-          </article>
-        }
-      </div>
+      <p class="muted" i18n>
+        Meal plans have their own builder now: days side by side, recipes dragged into meals, and
+        every day measured against its target. Only published recipes can go into a meal plan.
+      </p>
+      <a class="primary-button plans-link" routerLink="/nutrition/plans" i18n>Open meal plans</a>
     </section>
 
     <section class="surface-section">

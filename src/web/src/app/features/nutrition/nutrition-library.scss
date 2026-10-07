@@ -143,9 +143,6 @@
   gap: 0.5rem;
   align-items: end;
 }
-.slot-editor {
-  grid-template-columns: 4.5rem minmax(0, 1fr) minmax(0, 1.5fr) 5.5rem auto;
-}
 .line-editor label span {
   font-size: 0.85rem;
 }
@@ -153,6 +150,11 @@
   display: grid;
   gap: 0.3rem;
   min-inline-size: 0;
+}
+.plans-link {
+  display: inline-flex;
+  margin-block-start: 0.75rem;
+  text-decoration: none;
 }
 .result {
   display: grid;
@@ -210,7 +212,6 @@ pre {
 }
 @media (max-width: 40rem) {
   .line-editor,
-  .slot-editor,
   .food-cards article {
     grid-template-columns: 1fr;
   }

@@ -1,0 +1,205 @@
+// One meal in a sheet (C7, R4.4a). Brand v2 tokens only.
+:host {
+  display: block;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.basics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.quick-name {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line-strong);
+  border-radius: 999px;
+  color: var(--tb-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  min-block-size: 2rem;
+  padding: 0.125rem 0.75rem;
+}
+
+.quick-name:hover {
+  border-color: var(--tb-ink);
+}
+
+.quick-name[aria-pressed='true'] {
+  background: var(--tb-brand);
+  border-color: var(--tb-brand);
+  color: var(--tb-on-brand);
+  font-weight: 700;
+}
+
+.quick-name:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.options-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.section-title {
+  color: var(--tb-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.25rem 0 0;
+}
+
+.empty,
+.hint {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.option {
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card-small);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  position: relative;
+}
+
+.or {
+  background: var(--tb-surface);
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  inset-block-start: -0.625rem;
+  inset-inline-start: 0.75rem;
+  letter-spacing: 0.06em;
+  padding-inline: 0.375rem;
+  position: absolute;
+  text-transform: uppercase;
+}
+
+.option-body {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.625rem;
+}
+
+.tile {
+  align-items: center;
+  background: var(--tb-accent-soft);
+  block-size: 2.5rem;
+  border-radius: 8px;
+  color: var(--tb-accent-ink);
+  display: inline-flex;
+  flex: none;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  inline-size: 2.5rem;
+  justify-content: center;
+}
+
+.option-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+
+.option-name {
+  color: var(--tb-ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.option-line {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.option-warning {
+  color: var(--tb-danger);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.servings {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.servings app-field {
+  inline-size: 6rem;
+}
+
+.servings-word {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin-inline-start: -0.375rem;
+}
+
+.amount {
+  color: var(--tb-ink);
+  flex: 1 1 12rem;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.total {
+  background: var(--tb-surface-2);
+  border-radius: var(--tb-radius-card-small);
+  color: var(--tb-ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+}
+
+.footer {
+  align-items: center;
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  padding-block-start: 0.875rem;
+}
+
+.footer-end {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+}
+
+.danger {
+  color: var(--tb-danger);
+}

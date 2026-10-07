@@ -23,7 +23,6 @@ for (const width of [390, 1440]) {
       },
       'GET /api/nutrition/foods': (route) => json(route, 200, { total: 0, items: [] }),
       'GET /api/nutrition/recipes': (route) => json(route, 200, { total: 0, items: [] }),
-      'GET /api/nutrition/meal-plans': (route) => json(route, 200, { total: 0, items: [] }),
       'GET /api/nutrition/settings': (route) =>
         json(route, 200, {
           energyPolicyKey: 'AtwaterSpecific',
@@ -44,7 +43,7 @@ for (const width of [390, 1440]) {
         });
       },
     });
-    await page.goto('/nutrition');
+    await page.goto('/nutrition/library');
     const button = page.getByRole('button', { name: 'Generate meal suggestion', exact: true });
     await expect(button).toBeDisabled();
     await expect(

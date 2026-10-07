@@ -130,7 +130,9 @@ DailyNutritionLog`. Publishing locks library versions; assignment deep-copies th
 plan graph and calculation snapshot reference; actual consumption is stored separately.
 The module owns calculation, preparation-basis, allergen, AI-review, and coverage policy.
 Infrastructure owns EF persistence and the USDA FoodData Central HTTP adapter. See
-`docs/adr/0008-nutrition-engine-v1.md`.
+`docs/adr/0008-nutrition-engine-v1.md`. R4.4a adds `nutrition."MealPlanDrafts"` (NUT-013), the
+meal-plan builder's working copies, shaped and guarded exactly as the program builder's (ADR 0033):
+Publish turns one into the next `MealPlanTemplateVersion`, already published, in one transaction.
 
 Progress Phase 5A extends the Phase 1 `BodyweightObservation` rather than introducing another
 profile weight. It stores canonical kilograms plus the entered value/unit, keeps one current

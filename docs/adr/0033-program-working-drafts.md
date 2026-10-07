@@ -43,3 +43,12 @@ Rejected:
   published.
 - A departed coach's drafts stay with their ended membership and are never shown. Sweeping old drafts
   is a later job if they ever matter.
+
+## Extended to meal plans (R4.4a, 2026-10-07)
+
+The meal-plan builder (plan C7) follows this decision for the same reason: every meal-plan save creates
+an immutable version (ADR 0008). `MealPlanDraft` (NUT-013), owned by the Nutrition module, mirrors
+`ProgramDraft`: one per person and plan, 20 new plans per person, values unchecked, the row version on
+every save, and Publish in one transaction that asks first about a newer version. The old library's
+"Create plan draft" and "Publish and lock" for meal plans go; a version the old screen saved as a draft
+stays in history, and the builder opens it and publishes it as the next version.

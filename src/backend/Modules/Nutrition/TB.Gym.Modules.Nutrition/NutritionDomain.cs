@@ -730,6 +730,16 @@ public sealed class MealPlanTemplate : TenantEntity
 
     public static MealPlanTemplate Create(Guid tenantId, string name) => new(tenantId, name);
 
+    /// <summary>
+    /// The plan's name, as Publish carries it from the builder (NUT-013). Versions hold no name, so
+    /// every version is listed under the new one; assigned plans are snapshots and keep their content.
+    /// </summary>
+    public void Rename(string name)
+    {
+        Name = NutritionRules.RequiredText(name, 300, nameof(name));
+        NormalizedName = Name.ToUpperInvariant();
+    }
+
     public MealPlanTemplateVersion AddDraft(int dayCount, decimal targetCalories, decimal targetProtein, decimal targetCarbohydrate, decimal targetFat, IEnumerable<MealSlotInput> slots)
     {
         var version = MealPlanTemplateVersion.Create(TenantId, Id, ++CurrentRevision, dayCount, targetCalories, targetProtein, targetCarbohydrate, targetFat, slots);

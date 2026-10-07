@@ -1050,7 +1050,8 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
   block with the same four steps and each set's own formula (built). P3b: a client's future weeks edited
   in the builder's grid, reviewed and applied in one sitting (built). P4a: exercise demos on the coach's
   grids and session sheet, and coach and client workout notes both ways (built). P4b: adjusting next week
-  from logged performance, planned in ADR 0036 and waiting for the owner.
+  from logged performance, decided in ADR 0036 on 2026-10-07 (a suggestion from the week's best logged
+  set that the coach applies), built right after the nutrition builder (R4.4).
 
 Work follows this order; anything outside it needs the user's approval first.
 

@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
@@ -8,13 +9,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, field, fill, press, query, settle, tick } from '../../../testing/dom';
 import { NutritionLibrary } from './nutrition-library';
-import type {
-  AiMealDraft,
-  FoodItem,
-  MealPlanSummary,
-  NutritionSettings,
-  RecipeSummary,
-} from './nutrition.models';
+import type { AiMealDraft, FoodItem, NutritionSettings, RecipeSummary } from './nutrition.models';
 
 const FOOD: FoodItem = {
   id: 'food-1',
@@ -92,17 +87,6 @@ const DRAFT_RECIPE: RecipeSummary = {
   status: 'Draft',
 };
 
-const DRAFT_PLAN: MealPlanSummary = {
-  id: 'plan-1',
-  versionId: 'plan-version-1',
-  revision: 1,
-  name: 'Balanced 2400',
-  dayCount: 7,
-  status: 'Draft',
-  targetCalories: 2400,
-  slotCount: 4,
-};
-
 const SETTINGS: NutritionSettings = {
   energyPolicyKey: 'AtwaterSpecific',
   energyPolicyVersion: 'v1',
@@ -122,20 +106,18 @@ async function render(api: Partial<ApiClient> = {}) {
         useValue: {
           listFoods: vi.fn(() => of({ total: 1, items: [FOOD] })),
           listRecipes: vi.fn(() => of({ total: 2, items: [PUBLISHED_RECIPE, DRAFT_RECIPE] })),
-          listMealPlans: vi.fn(() => of({ total: 1, items: [DRAFT_PLAN] })),
           getNutritionSettings: vi.fn(() => of(SETTINGS)),
           getAiMealDraftAvailability: vi.fn(() => of({ isConfigured: false })),
           createFood: vi.fn(() => of(undefined)),
           createRecipe: vi.fn(() => of(undefined)),
           publishRecipe: vi.fn(() => of(undefined)),
-          createMealPlan: vi.fn(() => of(undefined)),
-          publishMealPlan: vi.fn(() => of(undefined)),
           updateNutritionSettings: vi.fn(() => of({ ...SETTINGS, version: 4 })),
           ...api,
         },
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      provideRouter([]),
     ],
   }).compileComponents();
 
@@ -145,21 +127,28 @@ async function render(api: Partial<ApiClient> = {}) {
 }
 
 /**
- * The library stacks five authoring panels on one screen, and several reuse the same captions
- * ("Protein (g)" belongs to both a food and a plan). Each test drives one panel, so it addresses
- * the panel first and the control within it.
+ * The library stacks four authoring panels on one screen, and several reuse the same captions. Each
+ * test drives one panel, so it addresses the panel first and the control within it.
  */
 const panels = (host: HTMLElement) => Array.from(host.querySelectorAll('form.editor'));
 const foodPanel = (host: HTMLElement) => panels(host)[0];
 const recipePanel = (host: HTMLElement) => panels(host)[1];
-const planPanel = (host: HTMLElement) => panels(host)[2];
-const policyPanel = (host: HTMLElement) => panels(host)[3];
+const policyPanel = (host: HTMLElement) => panels(host)[2];
 
 const cardLists = (host: HTMLElement) => Array.from(host.querySelectorAll('.cards'));
 const recipeCards = (host: HTMLElement) => cardLists(host)[1];
-const planCards = (host: HTMLElement) => cardLists(host)[2];
 
 describe('NutritionLibrary', () => {
+  /** Meal plans moved to their own builder (R4.4a); the library says where, and makes none itself. */
+  it('sends the coach to the meal-plan builder instead of building plans here', async () => {
+    const { host } = await render();
+
+    const link = query<HTMLAnchorElement>(host, 'a.plans-link');
+    expect(link.getAttribute('href')).toBe('/nutrition/plans');
+    expect(host.textContent).not.toContain('Create plan draft');
+    expect(host.querySelector('nav a[href="/nutrition/plans"]')).not.toBeNull();
+  });
+
   it('shows a readable suggestion and requires deliberate food and quantity review before approval', async () => {
     const draft: AiMealDraft = {
       id: 'ai-1',
@@ -376,102 +365,11 @@ describe('NutritionLibrary', () => {
     expect(host.textContent).toContain('Recipe published. It can no longer be edited.');
   });
 
-  /**
-   * A meal plan's slots reference published recipe versions, and each slot becomes a choice the
-   * client picks between. The targets and slots must be the ones the coach set.
-   */
-  it('creates a meal-plan draft from the slots added', async () => {
-    const { fixture, host, api } = await render();
-
-    expect(button(host, 'Create plan draft').disabled).toBe(true);
-
-    const plan = planPanel(host);
-    fill(plan, 'Plan name', 'Balanced 2400');
-    fill(plan, 'Days', '7');
-    fill(plan, 'Daily calories', '2400');
-    fill(plan, 'Protein (g)', '180');
-    fill(plan, 'Carbohydrate (g)', '240');
-    fill(plan, 'Fat (g)', '70');
-    press(host, 'Add meal slot');
-    await settle(fixture);
-
-    expect(button(host, 'Create plan draft').disabled).toBe(false);
-    press(host, 'Create plan draft');
-    await settle(fixture);
-
-    expect(api.createMealPlan).toHaveBeenCalledWith({
-      name: 'Balanced 2400',
-      dayCount: 7,
-      targetCalories: 2400,
-      targetProteinGrams: 180,
-      targetCarbohydrateGrams: 240,
-      targetFatGrams: 70,
-      slots: [
-        {
-          dayOffset: 0,
-          order: 0,
-          name: 'Meal 1',
-          // Only a published recipe version may be referenced.
-          choices: [{ recipeVersionId: 'recipe-version-1', servings: 1 }],
-        },
-      ],
-    });
-    expect(host.textContent).toContain('Meal-plan draft created');
-  });
-
-  /** A draft recipe is not assignable to a client, so a slot may never point at one. */
-  it('offers only published recipes as meal-slot choices', async () => {
-    const { fixture, host } = await render();
-
-    press(host, 'Add meal slot');
-    await settle(fixture);
-
-    const options = Array.from(
-      query<HTMLSelectElement>(planPanel(host), '.line-editor select').options,
-    ).map((option) => option.value);
-    expect(options).toEqual(['recipe-version-1']);
-  });
-
-  /** A button that silently did nothing left the coach guessing; it now says what is missing. */
-  it('explains that a recipe must be published before it can go into a meal plan', async () => {
-    const { host, api } = await render({
-      listRecipes: vi.fn(() => of({ total: 1, items: [DRAFT_RECIPE] })),
-    });
-
-    expect(button(host, 'Add meal slot').disabled).toBe(true);
-    expect(planPanel(host).textContent).toContain('Publish a recipe first.');
-    expect(planPanel(host).querySelector('.line-editor')).toBeNull();
-    expect(button(host, 'Create plan draft').disabled).toBe(true);
-    expect(api.createMealPlan).not.toHaveBeenCalled();
-  });
-
   it('explains that a food is needed before a recipe can use one', async () => {
     const { host } = await render({ listFoods: vi.fn(() => of({ total: 0, items: [] })) });
 
     expect(button(host, 'Add ingredient').disabled).toBe(true);
     expect(recipePanel(host).textContent).toContain('Add or import a food above first');
-  });
-
-  /** Days are shown from 1, the way a coach counts them, and stored from 0. */
-  it('counts a meal’s day from 1 and saves it from 0', async () => {
-    const { fixture, host, api } = await render();
-
-    const plan = planPanel(host);
-    fill(plan, 'Plan name', 'Week');
-    fill(plan, 'Days', '7');
-    press(host, 'Add meal slot');
-    await settle(fixture);
-
-    const day = field(planPanel(host), 'Day');
-    expect(day.value).toBe('1');
-    fill(planPanel(host), 'Day', '3');
-    await settle(fixture);
-    press(host, 'Create plan draft');
-    await settle(fixture);
-
-    expect(api.createMealPlan).toHaveBeenCalledWith(
-      expect.objectContaining({ slots: [expect.objectContaining({ dayOffset: 2 })] }),
-    );
   });
 
   /**
@@ -575,16 +473,6 @@ describe('NutritionLibrary', () => {
     await settle(fixture);
 
     expect(host.querySelector('[role="alert"]')).toBeNull();
-  });
-
-  it('publishes a draft meal plan and locks it', async () => {
-    const { fixture, host, api } = await render();
-
-    press(planCards(host), 'Publish and lock');
-    await settle(fixture);
-
-    expect(api.publishMealPlan).toHaveBeenCalledWith('plan-version-1');
-    expect(host.textContent).toContain('Meal plan published. It can no longer be edited.');
   });
 
   /** The policy carries a version, so a concurrent edit conflicts rather than being overwritten. */

@@ -262,6 +262,48 @@ public sealed partial class GymDbContext
             entity.ToTable(table => table.HasCheckConstraint("CK_MealPlanChoices_NonNegative", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0"));
             ConfigureTenantEntity(entity);
         });
+
+        // A coach's working copy of a meal plan (NUT-013): one per person and plan, plus plans not
+        // published yet, each belonging to a membership of its workspace.
+        builder.Entity<MealPlanDraft>(entity =>
+        {
+            entity.ToTable("MealPlanDrafts", "nutrition", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_MealPlanDrafts_Plan",
+                    "(\"MealPlanTemplateId\" IS NULL AND \"SourceVersionId\" IS NULL AND \"StartedAtRevision\" = 0) OR " +
+                    "(\"MealPlanTemplateId\" IS NOT NULL AND \"SourceVersionId\" IS NOT NULL AND \"StartedAtRevision\" >= 1)");
+                table.HasCheckConstraint("CK_MealPlanDrafts_DayCount", "\"DayCount\" BETWEEN 1 AND 365");
+            });
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(300).IsRequired();
+            entity.Property(item => item.ContentJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(item => new { item.TenantId, item.OwnerUserId, item.MealPlanTemplateId })
+                .IsUnique()
+                .HasFilter("\"MealPlanTemplateId\" IS NOT NULL")
+                .HasDatabaseName(DatabaseConstraintNames.OneMealPlanDraftPerPersonAndPlan);
+            entity.HasIndex(item => new { item.TenantId, item.OwnerUserId, item.UpdatedAtUtc });
+            entity.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(item => item.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.OwnerUserId })
+                .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<MealPlanTemplate>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.MealPlanTemplateId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<MealPlanTemplateVersion>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.SourceVersionId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            ConfigureTenantEntity(entity);
+        });
     }
 
     private void ConfigureAssignedPlansAndLogs(ModelBuilder builder)

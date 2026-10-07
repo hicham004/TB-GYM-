@@ -1368,6 +1368,13 @@ export type CreateMacroOverrideRequest = {
   reason: string;
 };
 
+export type CreateMealPlanDraftRequest = {
+  mealPlanTemplateId: null | string;
+  sourceVersionId: null | string;
+  templateRevision: null | number | string;
+  content: MealPlanDraftContent;
+};
+
 export type CreateMealPlanRequest = {
   name: string;
   dayCount: number | string;
@@ -1549,6 +1556,10 @@ export type DeleteSavedReplyRequest = {
 export type DeriveCheckInDraftRequest = {
   sourceVersionId: string;
   formVersion: number | string;
+};
+
+export type DiscardMealPlanDraftRequest = {
+  version: number | string;
 };
 
 export type DiscardProgramDraftRequest = {
@@ -1912,11 +1923,62 @@ export type MealPlanChoiceRequest = {
   servings: number | string;
 };
 
+export type MealPlanDraftContent = {
+  name: null | string;
+  targetCalories: null | number | string;
+  targetProteinGrams: null | number | string;
+  targetCarbohydrateGrams: null | number | string;
+  targetFatGrams: null | number | string;
+  days: null | Array<MealPlanDraftDay>;
+};
+
+export type MealPlanDraftDay = {
+  meals: null | Array<MealPlanDraftMeal>;
+};
+
+export type MealPlanDraftMeal = {
+  name: null | string;
+  choices: null | Array<MealPlanChoiceRequest>;
+};
+
+export type MealPlanDraftSaveView = {
+  id: string;
+  updatedAtUtc: string;
+  version: number | string;
+};
+
+export type MealPlanDraftSummary = {
+  id: string;
+  mealPlanTemplateId: null | string;
+  name: string;
+  dayCount: number | string;
+  updatedAtUtc: string;
+};
+
+export type MealPlanDraftView = {
+  id: string;
+  mealPlanTemplateId: null | string;
+  sourceVersionId: null | string;
+  startedAtRevision: number | string;
+  updatedAtUtc: string;
+  version: number | string;
+  content: MealPlanDraftContent;
+  recipes: Array<RecipeSummary>;
+};
+
 export type MealPlanSlotRequest = {
   dayOffset: number | string;
   order: number | string;
   name: string;
   choices: Array<MealPlanChoiceRequest>;
+};
+
+export type MealPlanTemplateDetail = {
+  id: string;
+  name: string;
+  currentRevision: number | string;
+  versions: Array<MealPlanVersionSummary>;
+  draft: null | MealPlanDraftSummary;
 };
 
 export type MealPlanTemplatePage = {
@@ -1935,6 +1997,53 @@ export type MealPlanTemplateSummary = {
   status: PublicationStatus;
   targetCalories: number | string;
   slotCount: number | string;
+  targetProteinGrams?: number | string;
+  targetCarbohydrateGrams?: number | string;
+  targetFatGrams?: number | string;
+  changedAtUtc?: null | string;
+  draft?: null | MealPlanDraftSummary;
+};
+
+export type MealPlanVersionChoiceView = {
+  recipeVersionId: string;
+  recipeName: string;
+  servings: number | string;
+  calories: number | string;
+  proteinGrams: number | string;
+  carbohydrateGrams: number | string;
+  fatGrams: number | string;
+};
+
+export type MealPlanVersionSlotView = {
+  dayOffset: number | string;
+  order: number | string;
+  name: string;
+  choices: Array<MealPlanVersionChoiceView>;
+};
+
+export type MealPlanVersionSummary = {
+  id: string;
+  revision: number | string;
+  status: PublicationStatus;
+  createdAtUtc: string;
+  publishedAtUtc: null | string;
+  dayCount: number | string;
+  targetCalories: number | string;
+  slotCount: number | string;
+};
+
+export type MealPlanVersionView = {
+  id: string;
+  mealPlanTemplateId: string;
+  revision: number | string;
+  status: PublicationStatus;
+  dayCount: number | string;
+  targetCalories: number | string;
+  targetProteinGrams: number | string;
+  targetCarbohydrateGrams: number | string;
+  targetFatGrams: number | string;
+  slots: Array<MealPlanVersionSlotView>;
+  recipes: Array<RecipeSummary>;
 };
 
 export type MeasurementType = 'Waist' | 'Chest' | 'Hips' | 'Thigh' | 'Arm' | 'BodyFatPercentage';
@@ -2616,6 +2725,11 @@ export type PublicInvitationDetails = {
   kind?: InvitationKind;
 };
 
+export type PublishMealPlanDraftRequest = {
+  version: number | string;
+  replaceNewer: boolean;
+};
+
 export type PublishPricePlanRequest = {
   seatPrice: number | string;
   includedClientsPerSeat: number | string;
@@ -2911,6 +3025,11 @@ export type SavedSessionView = {
   sourceTemplateVersionId: string;
   sourceTemplateSessionId: string;
   session: TrainingSessionView;
+};
+
+export type SaveMealPlanDraftRequest = {
+  content: MealPlanDraftContent;
+  version: number | string;
 };
 
 export type SaveProgramDraftRequest = {
@@ -7260,6 +7379,7 @@ export type ListRecipesData = {
     query?: string;
     skip?: number | string;
     take?: number | string;
+    published?: boolean;
   };
   url: '/api/nutrition/recipes';
 };
@@ -7466,6 +7586,240 @@ export type PublishMealPlanTemplateVersionResponses = {
 
 export type PublishMealPlanTemplateVersionResponse =
   PublishMealPlanTemplateVersionResponses[keyof PublishMealPlanTemplateVersionResponses];
+
+export type GetMealPlanTemplateData = {
+  body?: never;
+  path: {
+    mealPlanTemplateId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/meal-plans/{mealPlanTemplateId}';
+};
+
+export type GetMealPlanTemplateErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetMealPlanTemplateResponses = {
+  /**
+   * OK
+   */
+  200: MealPlanTemplateDetail;
+};
+
+export type GetMealPlanTemplateResponse =
+  GetMealPlanTemplateResponses[keyof GetMealPlanTemplateResponses];
+
+export type GetMealPlanTemplateVersionData = {
+  body?: never;
+  path: {
+    mealPlanVersionId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/meal-plan-versions/{mealPlanVersionId}';
+};
+
+export type GetMealPlanTemplateVersionErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetMealPlanTemplateVersionResponses = {
+  /**
+   * OK
+   */
+  200: MealPlanVersionView;
+};
+
+export type GetMealPlanTemplateVersionResponse =
+  GetMealPlanTemplateVersionResponses[keyof GetMealPlanTemplateVersionResponses];
+
+export type ListMealPlanDraftsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/nutrition/meal-plan-drafts';
+};
+
+export type ListMealPlanDraftsResponses = {
+  /**
+   * OK
+   */
+  200: Array<MealPlanDraftSummary>;
+};
+
+export type ListMealPlanDraftsResponse =
+  ListMealPlanDraftsResponses[keyof ListMealPlanDraftsResponses];
+
+export type CreateMealPlanDraftData = {
+  body: CreateMealPlanDraftRequest;
+  path?: never;
+  query?: never;
+  url: '/api/nutrition/meal-plan-drafts';
+};
+
+export type CreateMealPlanDraftErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CreateMealPlanDraftError = CreateMealPlanDraftErrors[keyof CreateMealPlanDraftErrors];
+
+export type CreateMealPlanDraftResponses = {
+  /**
+   * OK
+   */
+  200: MealPlanDraftSaveView;
+};
+
+export type CreateMealPlanDraftResponse =
+  CreateMealPlanDraftResponses[keyof CreateMealPlanDraftResponses];
+
+export type GetMealPlanDraftData = {
+  body?: never;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/meal-plan-drafts/{draftId}';
+};
+
+export type GetMealPlanDraftErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetMealPlanDraftResponses = {
+  /**
+   * OK
+   */
+  200: MealPlanDraftView;
+};
+
+export type GetMealPlanDraftResponse = GetMealPlanDraftResponses[keyof GetMealPlanDraftResponses];
+
+export type SaveMealPlanDraftData = {
+  body: SaveMealPlanDraftRequest;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/meal-plan-drafts/{draftId}';
+};
+
+export type SaveMealPlanDraftErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SaveMealPlanDraftError = SaveMealPlanDraftErrors[keyof SaveMealPlanDraftErrors];
+
+export type SaveMealPlanDraftResponses = {
+  /**
+   * OK
+   */
+  200: MealPlanDraftSaveView;
+};
+
+export type SaveMealPlanDraftResponse =
+  SaveMealPlanDraftResponses[keyof SaveMealPlanDraftResponses];
+
+export type DiscardMealPlanDraftData = {
+  body: DiscardMealPlanDraftRequest;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/meal-plan-drafts/{draftId}/discard';
+};
+
+export type DiscardMealPlanDraftErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type DiscardMealPlanDraftError =
+  DiscardMealPlanDraftErrors[keyof DiscardMealPlanDraftErrors];
+
+export type DiscardMealPlanDraftResponses = {
+  /**
+   * No Content
+   */
+  204: void;
+};
+
+export type DiscardMealPlanDraftResponse =
+  DiscardMealPlanDraftResponses[keyof DiscardMealPlanDraftResponses];
+
+export type PublishMealPlanDraftData = {
+  body: PublishMealPlanDraftRequest;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/meal-plan-drafts/{draftId}/publish';
+};
+
+export type PublishMealPlanDraftErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PublishMealPlanDraftError =
+  PublishMealPlanDraftErrors[keyof PublishMealPlanDraftErrors];
+
+export type PublishMealPlanDraftResponses = {
+  /**
+   * OK
+   */
+  200: MealPlanTemplateSummary;
+};
+
+export type PublishMealPlanDraftResponse =
+  PublishMealPlanDraftResponses[keyof PublishMealPlanDraftResponses];
 
 export type CalculateClientNutritionTargetsData = {
   body: CalculateNutritionTargetsRequest;

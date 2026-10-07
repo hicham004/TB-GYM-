@@ -1,0 +1,106 @@
+<section class="plans" aria-labelledby="plans-heading">
+  <header class="top">
+    <div class="intro">
+      <h1 id="plans-heading" #heading tabindex="-1" i18n>Meal plans</h1>
+      @if (summary(); as line) {
+        <p class="lede" dir="auto">{{ line }}</p>
+      } @else {
+        <p class="lede" i18n>Build a plan once, then assign it to any client.</p>
+      }
+    </div>
+    <a appButton routerLink="/nutrition/plans/new">
+      <app-icon name="plus" />
+      <span i18n>New meal plan</span>
+    </a>
+  </header>
+
+  <!-- Meal plans and Recipes and foods are the two pages of Nutrition; the sidebar links to this one. -->
+  <app-section-nav label="Nutrition sections" i18n-label [links]="sections" />
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>Your meal plans could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (cards().length === 0) {
+        <app-empty-state
+          class="panel"
+          heading="No meal plans yet"
+          description="Lay out the days, drop recipes into the meals and watch each day against its target. Then assign the plan to your clients; each gets their own copy."
+          i18n-heading
+          i18n-description
+        >
+          <a appButton empty-state-action routerLink="/nutrition/plans/new" i18n
+            >Build your first meal plan</a
+          >
+        </app-empty-state>
+      } @else {
+        <ul class="cards" role="list">
+          @for (card of cards(); track card.id) {
+            <li class="card">
+              <div class="card-top">
+                <app-status-pill [label]="card.status" [tone]="card.tone" />
+              </div>
+              <div class="card-title">
+                <h2 class="card-name" dir="auto">
+                  <!-- The whole card is the link (a stretched link), named by the plan. -->
+                  <a class="stretched" [routerLink]="card.link" [queryParams]="card.query">{{
+                    card.name
+                  }}</a>
+                </h2>
+                <p class="days">{{ card.days }}</p>
+              </div>
+              @if (card.target) {
+                <div class="target">
+                  <span class="kcal">{{ card.target }}</span>
+                  @if (card.split; as split) {
+                    <span class="split-bar" aria-hidden="true">
+                      <span class="protein" [style.flex-grow]="split.protein"></span>
+                      <span class="carbs" [style.flex-grow]="split.carbs"></span>
+                      <span class="fat" [style.flex-grow]="split.fat"></span>
+                    </span>
+                    <span class="split-text" i18n
+                      >Protein {{ split.protein }}% · Carbs {{ split.carbs }}% · Fat
+                      {{ split.fat }}%</span
+                    >
+                  }
+                </div>
+              }
+              <p class="card-meta">
+                @if (card.note) {
+                  <span class="note">{{ card.note }}</span>
+                }
+                <span>{{ card.changed }}</span>
+              </p>
+            </li>
+          }
+        </ul>
+        @if (hasMore()) {
+          <div class="more">
+            @if (moreFailed()) {
+              <p role="alert" i18n>More meal plans could not be loaded.</p>
+            }
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="loadingMore()"
+              (click)="loadMore()"
+              i18n
+            >
+              Show more meal plans
+            </button>
+          </div>
+        }
+      }
+    }
+  }
+</section>

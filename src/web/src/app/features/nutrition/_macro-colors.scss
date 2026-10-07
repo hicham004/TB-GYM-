@@ -1,0 +1,36 @@
+// Protein, carbs and fat, drawn the same way on every nutrition page of the coach. The colours are
+// theme tokens that keep their contrast in light and dark; every bar also says its shares in text,
+// so colour is never the only way to read it.
+$protein: var(--tb-accent-ink);
+$carbs: var(--tb-info);
+$fat: var(--tb-warm-ink);
+
+@mixin bar($height: 0.5rem) {
+  background: var(--tb-surface-2);
+  block-size: $height;
+  border-radius: 999px;
+  display: flex;
+  gap: 2px;
+  inline-size: 100%;
+  overflow: hidden;
+
+  .protein {
+    background: $protein;
+  }
+
+  .carbs {
+    background: $carbs;
+  }
+
+  .fat {
+    background: $fat;
+  }
+
+  @media (forced-colors: active) {
+    border: 1px solid CanvasText;
+
+    > span {
+      background: CanvasText;
+    }
+  }
+}

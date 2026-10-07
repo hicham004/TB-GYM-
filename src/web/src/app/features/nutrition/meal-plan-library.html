@@ -1,0 +1,113 @@
+<div class="filters" [class.sticky]="mode() === 'pick'">
+  <div class="search">
+    <app-icon name="search" />
+    <input
+      type="search"
+      [value]="search()"
+      (input)="search.set($any($event.target).value)"
+      placeholder="Search recipes…"
+      i18n-placeholder
+      autocomplete="off"
+      aria-label="Search recipes"
+      i18n-aria-label
+      enterkeyhint="search"
+    />
+  </div>
+</div>
+
+@switch (state()) {
+  @case ('loading') {
+    <app-skeleton [label]="loadingLabel" [lines]="5" [avatar]="true" />
+  }
+  @case ('error') {
+    <div class="note">
+      <p role="alert" i18n>Your recipes could not be loaded.</p>
+      <button appButton type="button" variant="outlined" (click)="retry.emit()" i18n>
+        Try again
+      </button>
+    </div>
+  }
+  @default {
+    @if (recipes().length === 0) {
+      <div class="note">
+        <p i18n>
+          No published recipes yet. A meal plan is made of recipes: add yours once, then use them in
+          every plan.
+        </p>
+        <a class="link" routerLink="/nutrition/library" i18n>Add recipes</a>
+      </div>
+    } @else if (rows().length === 0) {
+      <div class="note">
+        <p role="status">{{ noMatch() }}</p>
+        <button appButton type="button" variant="text" (click)="search.set('')" i18n>
+          Show all recipes
+        </button>
+      </div>
+    } @else if (mode() === 'drag') {
+      <p class="help" i18n>Drag a recipe onto a meal, or under a day to start a meal.</p>
+      <ul
+        class="items"
+        role="list"
+        cdkDropList
+        cdkDropListSortingDisabled
+        [cdkDropListConnectedTo]="connectedTo()"
+        [cdkDropListEnterPredicate]="never"
+      >
+        @for (row of rows(); track row.recipe.versionId) {
+          <li
+            class="lib-item"
+            cdkDrag
+            [cdkDragData]="row.drag"
+            [cdkDragStartDelay]="dragDelay"
+            cdkDragPreviewClass="tb-drag-preview"
+          >
+            <div *cdkDragPlaceholder class="drop-slot"></div>
+            <span class="tile" aria-hidden="true">{{ row.recipe.initials }}</span>
+            <span class="text">
+              <span class="name" dir="auto">{{ row.recipe.name }}</span
+              >&ngsp; <span class="detail">{{ row.kcal }}</span
+              >&ngsp;
+              <span class="detail">{{ row.macros }}</span>
+              @if (row.split; as split) {
+                <span class="mini-bar" aria-hidden="true">
+                  <span class="protein" [style.flex-grow]="split.protein"></span>
+                  <span class="carbs" [style.flex-grow]="split.carbs"></span>
+                  <span class="fat" [style.flex-grow]="split.fat"></span>
+                </span>
+              }
+            </span>
+            <span class="grip" aria-hidden="true"><app-icon name="grip" /></span>
+          </li>
+        }
+      </ul>
+    } @else {
+      <ul class="items" role="list">
+        @for (row of rows(); track row.recipe.versionId) {
+          <li>
+            <button
+              class="lib-item pick"
+              type="button"
+              [attr.aria-label]="added().has(row.recipe.versionId) ? row.inMealLabel : row.addLabel"
+              [disabled]="added().has(row.recipe.versionId)"
+              (click)="pickRecipe.emit(row.recipe)"
+            >
+              <span class="tile" aria-hidden="true">{{ row.recipe.initials }}</span>
+              <span class="text">
+                <span class="name" dir="auto">{{ row.recipe.name }}</span
+                >&ngsp;
+                <span class="detail">{{ row.kcal }} · {{ row.macros }}</span>
+              </span>
+              @if (added().has(row.recipe.versionId)) {
+                <span class="added" aria-hidden="true"
+                  ><app-icon name="check-circle" /><span i18n>In this meal</span></span
+                >
+              } @else {
+                <span class="add" aria-hidden="true"><app-icon name="plus" /></span>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  }
+}

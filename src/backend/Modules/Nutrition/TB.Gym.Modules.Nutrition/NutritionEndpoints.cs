@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using TB.Gym.SharedKernel;
 
@@ -8,6 +9,9 @@ namespace TB.Gym.Modules.Nutrition;
 
 public static class NutritionEndpoints
 {
+    /// <summary>A draft as the builder sends it, with room for the nulls it writes out in full.</summary>
+    private const long MaximumDraftRequestBytes = MealPlanDraftShape.MaximumContentLength * 3L;
+
     public static IEndpointRouteBuilder MapNutritionModule(this IEndpointRouteBuilder endpoints)
     {
         var coach = endpoints.MapGroup("/api/nutrition").RequireAuthorization(AuthorizationPolicies.TenantCoach).WithTags(NutritionModule.Name);
@@ -58,10 +62,10 @@ public static class NutritionEndpoints
             return ToResult(await service.CreateCookingFactorAsync(request, token));
         }).WithName("CreateCookingFactor").Produces<CookingFactorView>().ProducesValidationProblem();
 
-        coach.MapGet("/recipes", async (string? query, int? skip, int? take, INutritionApplicationService service, CancellationToken token) =>
+        coach.MapGet("/recipes", async (string? query, int? skip, int? take, bool? published, INutritionApplicationService service, CancellationToken token) =>
         {
             var page = Page(skip, take);
-            return Results.Ok(await service.ListRecipesAsync(query, page.Skip, page.Take, token));
+            return Results.Ok(await service.ListRecipesAsync(query, page.Skip, page.Take, published == true, token));
         }).WithName("ListRecipes").Produces<RecipePage>();
         coach.MapPost("/recipes", async (CreateRecipeRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
@@ -99,6 +103,50 @@ public static class NutritionEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.PublishMealPlanVersionAsync(mealPlanVersionId, token));
         }).WithName("PublishMealPlanTemplateVersion").Produces<MealPlanTemplateSummary>().ProducesProblem(StatusCodes.Status409Conflict);
+
+        coach.MapGet("/meal-plans/{mealPlanTemplateId:guid}", async (Guid mealPlanTemplateId, INutritionApplicationService service, CancellationToken token) =>
+        {
+            var plan = await service.GetMealPlanAsync(mealPlanTemplateId, token);
+            return plan is null ? Results.NotFound() : Results.Ok(plan);
+        }).WithName("GetMealPlanTemplate").Produces<MealPlanTemplateDetail>().Produces(StatusCodes.Status404NotFound);
+        coach.MapGet("/meal-plan-versions/{mealPlanVersionId:guid}", async (Guid mealPlanVersionId, INutritionApplicationService service, CancellationToken token) =>
+        {
+            var version = await service.GetMealPlanVersionAsync(mealPlanVersionId, token);
+            return version is null ? Results.NotFound() : Results.Ok(version);
+        }).WithName("GetMealPlanTemplateVersion").Produces<MealPlanVersionView>().Produces(StatusCodes.Status404NotFound);
+
+        // The meal-plan builder's working copies (NUT-013, R4.4a), as the program builder keeps them.
+        coach.MapGet("/meal-plan-drafts", async (INutritionApplicationService service, CancellationToken token) =>
+            Results.Ok(await service.ListMealPlanDraftsAsync(token)))
+            .WithName("ListMealPlanDrafts").Produces<MealPlanDraftSummary[]>();
+        coach.MapGet("/meal-plan-drafts/{draftId:guid}", async (Guid draftId, INutritionApplicationService service, CancellationToken token) =>
+        {
+            var draft = await service.GetMealPlanDraftAsync(draftId, token);
+            return draft is null ? Results.NotFound() : Results.Ok(draft);
+        }).WithName("GetMealPlanDraft").Produces<MealPlanDraftView>().Produces(StatusCodes.Status404NotFound);
+        coach.MapPost("/meal-plan-drafts", async (CreateMealPlanDraftRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.CreateMealPlanDraftAsync(request, token));
+        }).WithName("CreateMealPlanDraft").WithMetadata(new RequestSizeLimitAttribute(MaximumDraftRequestBytes))
+            .Produces<MealPlanDraftSaveView>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
+        coach.MapPut("/meal-plan-drafts/{draftId:guid}", async (Guid draftId, SaveMealPlanDraftRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.SaveMealPlanDraftAsync(draftId, request, token));
+        }).WithName("SaveMealPlanDraft").WithMetadata(new RequestSizeLimitAttribute(MaximumDraftRequestBytes))
+            .Produces<MealPlanDraftSaveView>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
+        coach.MapPost("/meal-plan-drafts/{draftId:guid}/discard", async (Guid draftId, DiscardMealPlanDraftRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var result = await service.DiscardMealPlanDraftAsync(draftId, request, token);
+            return result.Status == NutritionCommandStatus.Success ? Results.NoContent() : ToResult(result);
+        }).WithName("DiscardMealPlanDraft").Produces(StatusCodes.Status204NoContent).Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
+        coach.MapPost("/meal-plan-drafts/{draftId:guid}/publish", async (Guid draftId, PublishMealPlanDraftRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.PublishMealPlanDraftAsync(draftId, request, token));
+        }).WithName("PublishMealPlanDraft").Produces<MealPlanTemplateSummary>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
 
         coach.MapPost("/clients/{clientProfileId:guid}/calculations", async (Guid clientProfileId, CalculateNutritionTargetsRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
@@ -175,7 +223,7 @@ public static class NutritionEndpoints
 
     private static IResult ToResult(NutritionCommandResult result) => result.Status switch
     {
-        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingFactor ?? (object?)result.MacroOverride ?? result.ClientPlan ?? (object?)result.Day ?? result.AiDraft),
+        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingFactor ?? (object?)result.MacroOverride ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? result.MealPlanDraft),
         NutritionCommandStatus.NotFound => Results.NotFound(),
         NutritionCommandStatus.Forbidden => Results.Forbid(),
         NutritionCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),

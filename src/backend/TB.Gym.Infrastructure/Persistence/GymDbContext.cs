@@ -238,6 +238,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<MealPlanChoice> MealPlanChoices => Set<MealPlanChoice>();
 
+    public DbSet<MealPlanDraft> MealPlanDrafts => Set<MealPlanDraft>();
+
     public DbSet<ClientNutritionPlan> ClientNutritionPlans => Set<ClientNutritionPlan>();
 
     public DbSet<ClientNutritionPlanDay> ClientNutritionPlanDays => Set<ClientNutritionPlanDay>();

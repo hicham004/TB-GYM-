@@ -1,0 +1,548 @@
+<div class="builder" [attr.inert]="publishing() ? '' : null">
+  <a class="back" routerLink="/nutrition/plans">
+    <app-icon class="back-icon" name="chevron-right" />
+    <span i18n>All meal plans</span>
+  </a>
+  <h1 class="tb-visually-hidden" #heading tabindex="-1">{{ pageTitle() }}</h1>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="6" />
+      </div>
+    }
+    @case ('missing') {
+      <div class="panel pad stack">
+        <h2 class="panel-title" i18n>This meal plan isn’t here</h2>
+        <p i18n>
+          It may have been opened from an old link, or it belongs to another coaching space.
+        </p>
+        <a appButton routerLink="/nutrition/plans" i18n>Back to your meal plans</a>
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>The meal plan could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="retryPlan()" i18n>
+          Try again
+        </button>
+      </div>
+    }
+    @default {
+      @let current = plan();
+      <section class="identity" aria-label="Meal plan details" i18n-aria-label>
+        <div class="names">
+          <input
+            class="name-input"
+            autocomplete="off"
+            [(ngModel)]="current.name"
+            (ngModelChange)="touched()"
+            maxlength="300"
+            placeholder="Name this meal plan"
+            i18n-placeholder
+            aria-label="Meal plan name"
+            i18n-aria-label
+            dir="auto"
+          />
+          <p class="counts">{{ counts() }}</p>
+        </div>
+        <div class="save">
+          <p class="status" [class.unsaved]="troubled()">{{ statusLine() }}</p>
+          <!-- Autosave runs at every pause, so only a failure (and its recovery) is announced. -->
+          <p class="tb-visually-hidden" role="status">{{ liveStatus() }}</p>
+          <div class="save-buttons">
+            @if (canDiscard()) {
+              <button appButton type="button" variant="text" (click)="discard()" i18n>
+                Discard changes
+              </button>
+            }
+            @if (detail()) {
+              <button appButton type="button" variant="text" (click)="openHistory()" i18n>
+                Versions
+              </button>
+            }
+            <button
+              appButton
+              type="button"
+              [disabled]="!canPublish()"
+              [loading]="publishing()"
+              (click)="publish(!!newerVersion())"
+            >
+              @if (publishing()) {
+                <span i18n>Publishing…</span>
+              } @else {
+                <span i18n>Publish</span>
+              }
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="targets panel" aria-labelledby="targets-title">
+        <div class="targets-head">
+          <h2 id="targets-title" class="panel-title" i18n>Daily target</h2>
+          <p class="targets-help" i18n>Every day of the plan is measured against it.</p>
+        </div>
+        <div class="target-fields">
+          <app-field label="Calories (kcal)" i18n-label density="compact">
+            <input
+              appControl
+              type="number"
+              inputmode="numeric"
+              min="1"
+              max="100000"
+              step="10"
+              [ngModel]="current.targets.calories"
+              (ngModelChange)="setTarget('calories', $event)"
+            />
+          </app-field>
+          <app-field label="Protein (g)" i18n-label density="compact">
+            <input
+              appControl
+              type="number"
+              inputmode="numeric"
+              min="0"
+              step="1"
+              [ngModel]="current.targets.protein"
+              (ngModelChange)="setTarget('protein', $event)"
+            />
+          </app-field>
+          <app-field label="Carbs (g)" i18n-label density="compact">
+            <input
+              appControl
+              type="number"
+              inputmode="numeric"
+              min="0"
+              step="1"
+              [ngModel]="current.targets.carbs"
+              (ngModelChange)="setTarget('carbs', $event)"
+            />
+          </app-field>
+          <app-field label="Fat (g)" i18n-label density="compact">
+            <input
+              appControl
+              type="number"
+              inputmode="numeric"
+              min="0"
+              step="1"
+              [ngModel]="current.targets.fat"
+              (ngModelChange)="setTarget('fat', $event)"
+            />
+          </app-field>
+        </div>
+        @if (split(); as shares) {
+          <div class="split">
+            <span class="split-bar" aria-hidden="true">
+              <span class="protein" [style.flex-grow]="shares.protein"></span>
+              <span class="carbs" [style.flex-grow]="shares.carbs"></span>
+              <span class="fat" [style.flex-grow]="shares.fat"></span>
+            </span>
+            <!-- &ngsp; keeps a space between the shares, which Angular would drop between tags. -->
+            <p class="split-text">
+              <span class="share"
+                ><span class="key protein" aria-hidden="true"></span
+                ><ng-container i18n>Protein {{ shares.protein }}%</ng-container></span
+              >&ngsp;<span class="share"
+                ><span class="key carbs" aria-hidden="true"></span
+                ><ng-container i18n>Carbs {{ shares.carbs }}%</ng-container></span
+              >&ngsp;<span class="share"
+                ><span class="key fat" aria-hidden="true"></span
+                ><ng-container i18n>Fat {{ shares.fat }}%</ng-container></span
+              >
+            </p>
+            @if (splitWarning(); as warning) {
+              <p class="split-warning">{{ warning }}</p>
+            }
+          </div>
+        }
+      </section>
+
+      @if (olderLine(); as line) {
+        <p class="older" dir="auto">{{ line }}</p>
+      }
+      @if (behindLine(); as line) {
+        <p class="older" dir="auto">{{ line }}</p>
+      }
+      @if (problem(); as issue) {
+        <div class="alert" role="alert">
+          <p dir="auto">{{ issue.message }}</p>
+          @if (issue.focus === 'meal') {
+            <button appButton type="button" variant="outlined" (click)="showProblem()" i18n>
+              Open the meal
+            </button>
+          }
+        </div>
+      }
+      @if (newerVersion(); as message) {
+        <div class="alert" role="alert">
+          <p dir="auto">{{ message }}</p>
+          <div class="alert-buttons">
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="publishing()"
+              (click)="publish(true)"
+              i18n
+            >
+              Publish mine as the newest
+            </button>
+            <button appButton type="button" variant="text" (click)="discard()" i18n>
+              Discard mine
+            </button>
+          </div>
+        </div>
+      }
+      @if (saveProblem(); as trouble) {
+        <div class="alert" role="alert">
+          <p dir="auto">{{ trouble.message }}</p>
+          @if (trouble.kind === 'stale') {
+            <button appButton type="button" variant="outlined" (click)="reloadLatest()" i18n>
+              Reload
+            </button>
+          }
+        </div>
+      }
+      @if (saveError(); as message) {
+        <div class="alert" role="alert">
+          <p dir="auto">{{ message }}</p>
+        </div>
+      }
+
+      <div class="workspace" [class.with-library]="libraryOpen()">
+        @if (libraryOpen()) {
+          <aside class="library panel" aria-labelledby="library-title">
+            <div class="library-head">
+              <h2 id="library-title" class="panel-title" i18n>Recipes</h2>
+              <a class="manage" routerLink="/nutrition/library" i18n>Manage</a>
+            </div>
+            <app-meal-plan-library
+              mode="drag"
+              [recipes]="recipes()"
+              [state]="libraryState()"
+              [connectedTo]="dropIds()"
+              (retry)="loadLibrary()"
+            />
+          </aside>
+        }
+
+        <section class="plan" aria-labelledby="days-title">
+          <div class="plan-tools">
+            <h2 id="days-title" class="panel-title">{{ counts() }}</h2>
+            <div class="plan-buttons">
+              <button
+                appButton
+                class="library-toggle"
+                type="button"
+                variant="text"
+                [attr.aria-expanded]="libraryOpen()"
+                (click)="libraryOpen.set(!libraryOpen())"
+              >
+                @if (libraryOpen()) {
+                  <span i18n>Hide recipes</span>
+                } @else {
+                  <span i18n>Show recipes</span>
+                }
+              </button>
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                [disabled]="current.days.length >= maxDays"
+                (click)="addDay()"
+              >
+                <app-icon name="plus" />
+                <span i18n>Add day</span>
+              </button>
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                [disabled]="current.days.length >= maxDays"
+                (click)="addWeek()"
+              >
+                <app-icon name="plus" />
+                <span i18n>Add week</span>
+              </button>
+            </div>
+          </div>
+
+          @if (grid().length > 1) {
+            <!-- A phone shows one week at a time; wider, every week is on the page. -->
+            <fieldset class="week-chips">
+              <legend class="tb-visually-hidden" i18n>Week to show</legend>
+              @for (week of grid(); track week.key) {
+                <label class="week-chip">
+                  <input
+                    class="tb-visually-hidden"
+                    type="radio"
+                    name="phone-week"
+                    [checked]="week.key === shownWeek()"
+                    [attr.aria-label]="week.title"
+                    (change)="phoneWeek.set(week.key)"
+                  />
+                  <span aria-hidden="true">{{ week.number }}</span>
+                </label>
+              }
+            </fieldset>
+          }
+          <!-- A phone shows one day at a time: its meals are the whole screen. -->
+          <fieldset class="day-chips">
+            <legend class="tb-visually-hidden" i18n>Day to show</legend>
+            @for (cell of shownWeekDays(); track cell.key) {
+              <label class="day-chip" [attr.data-standing]="cell.standing">
+                <input
+                  class="tb-visually-hidden"
+                  type="radio"
+                  name="phone-day"
+                  [checked]="cell.key === shownDay()"
+                  [attr.aria-label]="cell.title"
+                  (change)="phoneDay.set(cell.key)"
+                />
+                <span aria-hidden="true">{{ cell.number }}</span>
+              </label>
+            }
+          </fieldset>
+
+          <div class="weeks" cdkScrollable>
+            @for (week of grid(); track week.key) {
+              <section
+                class="week"
+                [class.phone-hidden]="week.key !== shownWeek()"
+                [attr.aria-label]="week.title"
+              >
+                @if (grid().length > 1) {
+                  <h3 class="week-title">{{ week.title }}</h3>
+                }
+                <div class="days">
+                  @for (cell of week.days; track cell.key) {
+                    <section
+                      class="day"
+                      [class.phone-hidden]="cell.key !== shownDay()"
+                      [class.problem]="cell.isProblem"
+                      [attr.aria-label]="cell.title"
+                      [attr.data-day]="cell.key"
+                      tabindex="-1"
+                    >
+                      <header class="day-head">
+                        <span class="day-number">{{ cell.title }}</span>
+                        <app-menu
+                          icon="more"
+                          [label]="cell.menuLabel"
+                          [items]="cell.menu"
+                          (chosen)="onDayAction(cell.key, $event)"
+                        />
+                      </header>
+
+                      <div class="day-total" [attr.data-standing]="cell.standing">
+                        @if (cell.standing !== 'unset') {
+                          <svg class="day-ring" viewBox="0 0 40 40" aria-hidden="true">
+                            <circle class="ring-track" cx="20" cy="20" r="16" />
+                            <circle
+                              class="ring-fill"
+                              cx="20"
+                              cy="20"
+                              r="16"
+                              [attr.stroke-dasharray]="ring"
+                              [attr.stroke-dashoffset]="ringOffset(cell.fill)"
+                            />
+                          </svg>
+                        }
+                        <div class="day-numbers">
+                          <span class="day-kcal">{{ cell.kcal }}</span
+                          >&ngsp;
+                          @if (cell.against) {
+                            <span class="day-against">{{ cell.against }}</span>
+                          }
+                        </div>
+                        &ngsp;<span class="day-macros">{{ cell.macros }}</span>
+                      </div>
+
+                      <ol
+                        class="meal-list"
+                        cdkDropList
+                        [id]="cell.listId"
+                        [cdkDropListConnectedTo]="dropIds()"
+                        [cdkDropListData]="cell.target"
+                        [cdkDropListEnterPredicate]="canEnter"
+                        (cdkDropListDropped)="dropped($event)"
+                      >
+                        @for (meal of cell.meals; track meal.key) {
+                          <li
+                            class="meal-card"
+                            cdkDrag
+                            [cdkDragData]="meal.drag"
+                            [cdkDragStartDelay]="dragDelay"
+                            cdkDragPreviewClass="tb-drag-preview"
+                          >
+                            <!-- Small while it moves, so a long meal never stretches the days it passes. -->
+                            <div *cdkDragPlaceholder class="meal-placeholder"></div>
+                            <div *cdkDragPreview class="meal-preview">
+                              <span class="meal-preview-name" dir="auto">{{ meal.name }}</span>
+                              <span class="meal-preview-kcal">{{ meal.kcal }}</span>
+                            </div>
+                            <div class="meal-head">
+                              <span class="meal-grip" cdkDragHandle aria-hidden="true">
+                                <app-icon name="grip" />
+                              </span>
+                              <button
+                                class="meal-name"
+                                type="button"
+                                dir="auto"
+                                [attr.aria-label]="meal.openLabel"
+                                (click)="openMeal(meal.ref)"
+                              >
+                                {{ meal.name }}
+                              </button>
+                            </div>
+                            <ul
+                              class="option-list"
+                              cdkDropList
+                              [id]="meal.listId"
+                              [cdkDropListConnectedTo]="dropIds()"
+                              [cdkDropListData]="meal.target"
+                              [cdkDropListEnterPredicate]="canEnter"
+                              (cdkDropListDropped)="dropped($event)"
+                            >
+                              @for (option of meal.options; track option.key; let first = $first) {
+                                <!-- &ngsp; keeps the words apart for a screen reader. -->
+                                <li class="option-row" [class.missing]="option.missing">
+                                  @if (!first) {
+                                    <span class="option-or" i18n>or</span>&ngsp;
+                                  }
+                                  <span class="option-name" dir="auto">{{ option.name }}</span
+                                  >&ngsp;<span class="option-line">{{ option.line }}</span>
+                                </li>
+                              } @empty {
+                                <li class="drop-hint" i18n>Drop a recipe here</li>
+                              }
+                            </ul>
+                            <!-- The menu sits by the total, so the meal's name keeps the whole top row. -->
+                            <div class="meal-foot">
+                              <app-menu
+                                icon="more"
+                                align="start"
+                                [label]="meal.menuLabel"
+                                [items]="meal.menu"
+                                (chosen)="onMealAction(meal.ref, $event)"
+                              />
+                              <span class="meal-kcal">{{ meal.kcal }}</span>
+                            </div>
+                          </li>
+                        }
+                      </ol>
+
+                      <div
+                        class="new-meal"
+                        cdkDropList
+                        cdkDropListSortingDisabled
+                        [id]="cell.newMealId"
+                        [cdkDropListConnectedTo]="dropIds()"
+                        [cdkDropListData]="cell.newMealTarget"
+                        [cdkDropListEnterPredicate]="canEnter"
+                        (cdkDropListDropped)="dropped($event)"
+                      >
+                        <button
+                          class="add-meal"
+                          type="button"
+                          [attr.aria-label]="cell.addLabel"
+                          [disabled]="!canAddMealTo(cell.key)"
+                          (click)="openPicker({ kind: 'day', dayKey: cell.key })"
+                        >
+                          <app-icon name="plus" />
+                          <span i18n>Meal</span>
+                        </button>
+                      </div>
+                    </section>
+                  }
+                </div>
+              </section>
+            }
+          </div>
+        </section>
+      </div>
+    }
+  }
+</div>
+
+<ng-template #mealSheet let-sheet>
+  @if (editingMeal(); as meal) {
+    <app-meal-plan-meal-editor
+      [meal]="meal"
+      [dayNumber]="editingDayNumber()"
+      [book]="book()"
+      [revision]="revision()"
+      (edited)="touched()"
+      (addOption)="addToEditing()"
+      (removeOption)="removeFromEditing($event)"
+      (remove)="deleteEditing(sheet)"
+      (done)="sheet.close()"
+    />
+  } @else {
+    <p i18n>This meal is no longer in the plan.</p>
+  }
+</ng-template>
+
+<ng-template #pickerSheet let-sheet>
+  <div class="picker">
+    <app-meal-plan-library
+      mode="pick"
+      [recipes]="recipes()"
+      [state]="libraryState()"
+      [added]="pickedAlready()"
+      (pickRecipe)="pickRecipe($event)"
+      (retry)="loadLibrary()"
+    />
+    <div class="sheet-footer">
+      <button appButton type="button" variant="outlined" (click)="sheet.close()" i18n>
+        Cancel
+      </button>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #historySheet let-sheet>
+  <div class="history">
+    @if (canDiscard()) {
+      <p class="history-warning" i18n>
+        Opening another version discards your changes that are not published.
+      </p>
+    }
+    <ol class="history-list" role="list">
+      @for (row of historyRows(); track row.id; let first = $first) {
+        <li class="history-row">
+          <div class="history-copy">
+            <span class="history-title">{{ row.title }}</span>
+            <span class="history-date">{{ row.date }}</span>
+          </div>
+          <app-status-pill [label]="row.state" [tone]="row.isPublished ? 'success' : 'neutral'" />
+          @if (row.isOpen && !canDiscard()) {
+            <span class="open-now" i18n>Open now</span>
+          } @else {
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [attr.aria-label]="row.openLabel"
+              (click)="openOtherVersion(first ? null : row.id, sheet)"
+              i18n
+            >
+              Open
+            </button>
+          }
+        </li>
+      }
+    </ol>
+  </div>
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

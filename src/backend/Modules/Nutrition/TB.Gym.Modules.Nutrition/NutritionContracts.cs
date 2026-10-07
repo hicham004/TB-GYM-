@@ -12,7 +12,11 @@ public interface INutritionApplicationService
     Task<NutritionCommandResult> ImportUsdaFoodAsync(ImportUsdaFoodRequest request, CancellationToken cancellationToken);
     Task<CookingFactorPage> ListCookingFactorsAsync(int skip, int take, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CreateCookingFactorAsync(CreateCookingFactorRequest request, CancellationToken cancellationToken);
-    Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, CancellationToken cancellationToken);
+    /// <param name="publishedOnly">
+    /// Only recipes with a published version, each summarized at its newest published one: what a
+    /// meal plan may hold (the meal-plan builder's recipe panel).
+    /// </param>
+    Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, bool publishedOnly, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CreateRecipeAsync(CreateRecipeRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> AddRecipeVersionAsync(Guid recipeId, AddRecipeVersionRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> PublishRecipeVersionAsync(Guid recipeVersionId, CancellationToken cancellationToken);
@@ -20,6 +24,28 @@ public interface INutritionApplicationService
     Task<NutritionCommandResult> CreateMealPlanAsync(CreateMealPlanRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> AddMealPlanVersionAsync(Guid mealPlanTemplateId, AddMealPlanVersionRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> PublishMealPlanVersionAsync(Guid mealPlanVersionId, CancellationToken cancellationToken);
+
+    /// <summary>One meal plan with every version, newest first, and the caller's own draft of it.</summary>
+    Task<MealPlanTemplateDetail?> GetMealPlanAsync(Guid mealPlanTemplateId, CancellationToken cancellationToken);
+
+    /// <summary>One version's days and meals, with the recipes they name, for the builder.</summary>
+    Task<MealPlanVersionView?> GetMealPlanVersionAsync(Guid mealPlanVersionId, CancellationToken cancellationToken);
+
+    /// <summary>The caller's own meal-plan drafts in this workspace (NUT-013), newest change first.</summary>
+    Task<IReadOnlyList<MealPlanDraftSummary>> ListMealPlanDraftsAsync(CancellationToken cancellationToken);
+
+    /// <summary>One of the caller's own drafts with its content; null for anyone else's or none.</summary>
+    Task<MealPlanDraftView?> GetMealPlanDraftAsync(Guid draftId, CancellationToken cancellationToken);
+
+    Task<NutritionCommandResult> CreateMealPlanDraftAsync(CreateMealPlanDraftRequest request, CancellationToken cancellationToken);
+    Task<NutritionCommandResult> SaveMealPlanDraftAsync(Guid draftId, SaveMealPlanDraftRequest request, CancellationToken cancellationToken);
+    Task<NutritionCommandResult> DiscardMealPlanDraftAsync(Guid draftId, DiscardMealPlanDraftRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The draft becomes the plan's next version, published, and is removed, in one transaction; a
+    /// new plan is created by its first Publish.
+    /// </summary>
+    Task<NutritionCommandResult> PublishMealPlanDraftAsync(Guid draftId, PublishMealPlanDraftRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CalculateTargetsAsync(Guid clientProfileId, CalculateNutritionTargetsRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> OverrideMacrosAsync(Guid clientProfileId, Guid calculationSnapshotId, CreateMacroOverrideRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> ReplaceClientAllergensAsync(Guid clientProfileId, ReplaceClientAllergensRequest request, CancellationToken cancellationToken);
@@ -147,9 +173,114 @@ public sealed record CreateMealPlanRequest(string Name, int DayCount, decimal Ta
 
 public sealed record AddMealPlanVersionRequest(int DayCount, decimal TargetCalories, decimal TargetProteinGrams, decimal TargetCarbohydrateGrams, decimal TargetFatGrams, IReadOnlyList<MealPlanSlotRequest> Slots);
 
-public sealed record MealPlanTemplateSummary(Guid Id, Guid VersionId, int Revision, string Name, int DayCount, PublicationStatus Status, decimal TargetCalories, int SlotCount);
+/// <summary>
+/// A meal plan at its newest version. <paramref name="Draft"/> is the caller's own unpublished
+/// changes to it (NUT-013), and only on the list and detail reads.
+/// </summary>
+public sealed record MealPlanTemplateSummary(
+    Guid Id,
+    Guid VersionId,
+    int Revision,
+    string Name,
+    int DayCount,
+    PublicationStatus Status,
+    decimal TargetCalories,
+    int SlotCount,
+    decimal TargetProteinGrams = 0m,
+    decimal TargetCarbohydrateGrams = 0m,
+    decimal TargetFatGrams = 0m,
+    DateTimeOffset? ChangedAtUtc = null,
+    MealPlanDraftSummary? Draft = null);
 
 public sealed record MealPlanTemplatePage(int Total, int Skip, int Take, IReadOnlyList<MealPlanTemplateSummary> Items);
+
+public sealed record MealPlanTemplateDetail(
+    Guid Id,
+    string Name,
+    int CurrentRevision,
+    IReadOnlyList<MealPlanVersionSummary> Versions,
+    MealPlanDraftSummary? Draft);
+
+public sealed record MealPlanVersionSummary(
+    Guid Id,
+    int Revision,
+    PublicationStatus Status,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? PublishedAtUtc,
+    int DayCount,
+    decimal TargetCalories,
+    int SlotCount);
+
+/// <summary>
+/// A version as the builder opens it: the daily targets and every day's meals in order, each choice
+/// with the macros it was saved with, plus the recipes those choices name.
+/// </summary>
+public sealed record MealPlanVersionView(
+    Guid Id,
+    Guid MealPlanTemplateId,
+    int Revision,
+    PublicationStatus Status,
+    int DayCount,
+    decimal TargetCalories,
+    decimal TargetProteinGrams,
+    decimal TargetCarbohydrateGrams,
+    decimal TargetFatGrams,
+    IReadOnlyList<MealPlanVersionSlotView> Slots,
+    IReadOnlyList<RecipeSummary> Recipes);
+
+public sealed record MealPlanVersionSlotView(int DayOffset, int Order, string Name, IReadOnlyList<MealPlanVersionChoiceView> Choices);
+
+public sealed record MealPlanVersionChoiceView(
+    Guid RecipeVersionId,
+    string RecipeName,
+    decimal Servings,
+    decimal Calories,
+    decimal ProteinGrams,
+    decimal CarbohydrateGrams,
+    decimal FatGrams);
+
+/// <param name="MealPlanTemplateId">The plan it changes; null to start a new plan.</param>
+/// <param name="SourceVersionId">The version the builder opened; null for a new plan.</param>
+/// <param name="TemplateRevision">The plan's newest revision as the builder read it; null for a new plan.</param>
+public sealed record CreateMealPlanDraftRequest(
+    Guid? MealPlanTemplateId,
+    Guid? SourceVersionId,
+    int? TemplateRevision,
+    MealPlanDraftContent Content);
+
+public sealed record SaveMealPlanDraftRequest(MealPlanDraftContent Content, uint Version);
+
+public sealed record DiscardMealPlanDraftRequest(uint Version);
+
+/// <param name="ReplaceNewer">
+/// Publish even though someone published a version after this draft began; theirs stays in the
+/// plan's versions.
+/// </param>
+public sealed record PublishMealPlanDraftRequest(uint Version, bool ReplaceNewer);
+
+public sealed record MealPlanDraftSummary(
+    Guid Id,
+    Guid? MealPlanTemplateId,
+    string Name,
+    int DayCount,
+    DateTimeOffset UpdatedAtUtc);
+
+/// <param name="Recipes">
+/// The recipes the content names, from this workspace's library, in whatever state they are now; an
+/// id from anywhere else names nothing.
+/// </param>
+public sealed record MealPlanDraftView(
+    Guid Id,
+    Guid? MealPlanTemplateId,
+    Guid? SourceVersionId,
+    int StartedAtRevision,
+    DateTimeOffset UpdatedAtUtc,
+    uint Version,
+    MealPlanDraftContent Content,
+    IReadOnlyList<RecipeSummary> Recipes);
+
+/// <summary>What a draft save answers: small, since the builder already holds the content.</summary>
+public sealed record MealPlanDraftSaveView(Guid Id, DateTimeOffset UpdatedAtUtc, uint Version);
 
 public sealed record CalculateNutritionTargetsRequest(
     string BmrMethodKey,
@@ -253,6 +384,7 @@ public sealed record NutritionCommandResult(
     ClientNutritionPlanSummary? ClientPlan = null,
     ClientNutritionDayView? Day = null,
     AiMealDraftView? AiDraft = null,
+    MealPlanDraftSaveView? MealPlanDraft = null,
     IReadOnlyDictionary<string, string[]>? Errors = null,
     string? Code = null,
     string? Message = null);

@@ -60,7 +60,7 @@ export const COACH_NAVIGATION: readonly CoachNavigationGroup[] = [
         key: 'nutrition',
         label: $localize`Nutrition`,
         icon: 'nutrition',
-        link: '/nutrition/library',
+        link: '/nutrition/plans',
         section: ['/nutrition'],
       },
     ],

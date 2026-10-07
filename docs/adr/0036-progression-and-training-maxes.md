@@ -49,27 +49,46 @@ follow, and the client's program can always be adjusted.
    grid rows (the library's media) and in a client's session sheet (the snapshot the client was given,
    MED-002), opened through the usual short-lived grant; the coach's note on a client's workout from the
    session sheet, and every note on the client's finished-workout history (TRN-009). The workout player
-   already had both. P4b, adjusting next week from logged performance, is a plan for the owner below.
+   already had both. P4b, adjusting next week from logged performance, is decided below and not built.
 
-## Adjusting next week from logged performance (P4b, proposed, not built)
+## Adjusting next week from logged performance (P4b, decided 2026-10-07, not built)
 
-The owner asked for it to be planned, then asked about. The proposal, a separate strategy as STR-007 says:
+The owner asked for it to be planned, then left its three questions to Claude after research
+(2026-10-07). A separate strategy, as STR-007 says:
 
 - **What it reads.** For each lift with a training max in the program, the client's working sets of the
-  week just finished that logged reps and an RPE inside the RTS chart (RPE 6.5 to 10, 1 to 12 reps).
-  Each such set implies a max: load divided by the chart's percentage (STR-011 already does this for
-  week 1's prescription). The best implied max of the week is the estimate; warm-ups never count.
-- **What it does.** Nothing on its own. When the estimate differs from the max in use by more than one
-  rounding step, the Training maxes panel says so ("Logged sets suggest 65 kg for Back Squat, up from
-  62.5 kg") and offers the existing P2 update: preview every changed weight of the coming weeks, then
-  apply, with the source "Estimated from logged sets, week N" on the new max.
+  week just finished that logged 1 to 8 reps at RPE 7 to 10. That is where the chart matches Helms et al.
+  (below), and where people judge reps in reserve best: closer to failure and with fewer reps (Halperin et
+  al. 2022). Each such set implies a max: load divided by the chart's percentage (STR-011 already does
+  this for week 1's prescription). Warm-ups and sets without an RPE never count.
+- **Which set: the best of the week** (the highest implied max), not the average of the top two. Back-off
+  sets come after the top set and are tired by it (RTS drops their load by a set "fatigue percent" to reach
+  the same RPE again), so an average of two usually mixes a fresh set with a tired one and reads low.
+  Lifters also under-call their reps in reserve by about one rep on average (Halperin et al. 2022), which
+  already makes an RPE estimate lean low. And one set is something the coach can check by hand: the
+  suggestion names it ("from 55 kg × 5 at RPE 8 on Tue 13 Oct").
+- **What it does: a suggestion the coach applies, never automatic.** When the estimate differs from the
+  max in use by more than one rounding step, either way, the Training maxes panel says so ("Logged sets
+  suggest 65 kg for Back Squat, up from 62.5 kg") and offers the existing P2 update: preview every changed
+  weight of the coming weeks, then apply, with the source "Estimated from logged sets, week N" on the new
+  max. Why not automatic: the rules already forbid a silent rebase and let typed weights win (STR-011);
+  one day's estimate moves with sleep and fatigue, which a coach can read and a rule cannot; and the
+  products that adjust on their own either have no coach (Juggernaut AI, KeyLifts) or stop once a coach
+  sets the max (TrainHeroic keeps a tested or typed working max fixed). Everfit raises its 1RM on its
+  own, with no per-program max and no preview.
 - **What it never does.** Change a max without the coach, rewrite a week already started, mix kg and
   lb, or treat a set without an RPE as evidence.
+- **When: right after the nutrition builder (R4.4).** Founding coaches can already update maxes by hand
+  with the full preview (P2) and read every logged set on the session sheet (P4a), while the meal-plan
+  builder is the last coach builder still on an old screen.
 
-Questions for the owner, with the recommendation first: (1) a suggestion the coach applies (recommended)
-or an automatic adjustment; (2) the best set of the week (recommended) or the average of the top two;
-(3) build it next (P5, before R4.4) or after launch (recommended: after the nutrition builder, R4.4,
-since founding coaches can already update maxes by hand in P2).
+**Telling the client about changes** (the owner's open question from P3a, P3b and P4a, decided by Claude
+on the same day). TB Gym sends no training notices at all today, not even for a new program or a shared
+week, and the coaching apps notify on new workouts and programs rather than on edits (TrueCoach; Trainerize,
+whose users ask for more). So no notice is added for edits alone: training notices are built together in
+R5.1, in-app only. A client hears of a new program, a week shared, a change the coach applies to a week
+the client can already see (one notice per apply, naming the weeks, not their contents) and a coach's note
+on a workout ("Your coach left a note on Tuesday's workout", never the note's text).
 
 ## Where the chart comes from
 
@@ -106,6 +125,10 @@ history never rewritten.
   fix too.
 - The chart is versioned; any change to a cell is RpeChart v2, never an edit.
 - Sources: [Helms et al. 2016](https://pmc.ncbi.nlm.nih.gov/articles/PMC4961270/),
+  [Halperin et al. 2022, reps-to-failure prediction meta-analysis](https://sportrxiv.org/index.php/server/preprint/view/67),
+  [Trainerize client notices](https://ideas.abcfitness.com/forums/167887-coach-trainer-abc-trainerize/suggestions/45879544-notify-client-when-program-phase-or-workout-is-add),
+  [KeyLifts](https://keylifts.helpscoutdocs.com/article/26-training-max-auto-increase),
+  [TrainHeroic working maxes](https://support.trainheroic.com/hc/en-us/articles/18171015485837),
   [RTS: Customizing Your RPE Chart](https://store.reactivetrainingsystems.com/blogs/advanced-concepts/customizing-your-rpe-chart),
   [Everfit](https://help.everfit.io/en/articles/3060080-program-workouts-using-1rm-tracking-auto-progression),
   [TrainHeroic](https://support.trainheroic.com/hc/en-us/articles/18156690075917-Programming-with-Linear-Weight-Progression-or-Percentages),

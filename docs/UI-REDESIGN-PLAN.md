@@ -76,12 +76,14 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R4.3 | **Check-in review** (C5) | §2 | Done · 2026-10-05 |
 | P1 | **Progression, builder** (owner-approved 2026-10-05, ADR 0036): "Duplicate with progression" on a week's menu (1 to 12 copies; RPE, reps, % and weight steps; the new weeks are shown before they are added), the RTS RPE chart as a load formula, and the program's formula choice | §2, plus domain reference tests (the chart, the steps) and API tests | Done · 2026-10-06 · 3538285 |
 | P2 | **Progression, training maxes** (ADR 0036): a "Training maxes" panel at the top right of a client's program (each lift, value, source, date); "Update maxes for the coming weeks" with a preview of every changed weight; name or rename the program; weights from week 1's weight | §2, plus backend tests (superseding snapshot, stale preview, retry, other coach, released client) | Done · 2026-10-06 · a94b973 |
-| P3a | **Progression, next block** (ADR 0036): Build next block takes the builder's four steps (RPE, reps, % of the max, weight) and each set's own formula, and shows the new weeks with their weights before adding them | §2, plus backend tests (each step and formula, limits, stale preview, coverage, race, other coach, released client) | Done · 2026-10-07 |
-| P3b | **Progression, editing** (ADR 0036): a client's future weeks are edited in the builder's grid through the coverage policy, with an audit record; started and finished sessions stay locked | §2, plus backend tests | Done · 2026-10-07 |
-| P4a | **Session extras** (ADR 0036): an exercise video button in the builder, the session sheet and the client's workout player; coach and client notes visible both ways | §2 | Done · 2026-10-07 |
-| P4b | 🚦 **Adjusting next week from logged performance** (ADR 0036): planned, not built; the owner answers the three questions in the ADR first | The owner decides | Waiting for the owner |
-| R4.4 | **Nutrition library and meal-plan builder** (C7) | §2 | To do |
-| R5.1 | **Products** (C8), **Exercise library** (C10), notifications | §2 | To do |
+| P3a | **Progression, next block** (ADR 0036): Build next block takes the builder's four steps (RPE, reps, % of the max, weight) and each set's own formula, and shows the new weeks with their weights before adding them | §2, plus backend tests (each step and formula, limits, stale preview, coverage, race, other coach, released client) | Done · 2026-10-07 · f0f0bb9 |
+| P3b | **Progression, editing** (ADR 0036): a client's future weeks are edited in the builder's grid through the coverage policy, with an audit record; started and finished sessions stay locked | §2, plus backend tests | Done · 2026-10-07 · f0f0bb9 |
+| P4a | **Session extras** (ADR 0036): an exercise video button in the builder, the session sheet and the client's workout player; coach and client notes visible both ways | §2 | Done · 2026-10-07 · f0f0bb9 |
+| R4.4a | **Meal plans** (C7, part 1): the plans as cards, and the meal-plan builder: days side by side with each day's total against the daily target, recipes dragged into meals, options per meal, the coach's server draft (NUT-013) and Publish | §2, plus backend tests | Done · 2026-10-07 |
+| R4.4b | **Recipes** (C7, part 2): recipe cards with macro bars, the recipe editor (ingredients from a food search, totals per serving as they are typed, publish), the AI suggestion inside New recipe, and recipe photos | §2, plus backend tests | To do |
+| R4.4c | **Foods** (C7, part 3): one clean search over the coach's own foods and USDA (database codes behind a details toggle), adding your own food, and the calculation defaults moved to Settings; the older Recipes and foods page goes | §2 | To do |
+| P4b | **Adjusting next week from logged performance** (ADR 0036, decided 2026-10-07): the Training maxes panel suggests a new max from the best logged set of the week (1 to 8 reps at RPE 7 to 10), and the coach applies it through the existing preview; never automatic | §2, plus domain reference tests (which sets count, the estimate) and API tests (other coach, released client, kg and lb kept apart) | To do |
+| R5.1 | **Products** (C8), **Exercise library** (C10), notifications, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only) | §2 | To do |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
 | R5.3 | **Delete legacy CSS**, add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
@@ -240,7 +242,9 @@ of the implemented R1.3 screens before production rollout.
   lazy client-program chunk, and its inline styles are under the 5 kB warning). P3b keeps it at 542.13 kB:
   Edit weeks is its own lazy chunk (about 62 kB with the builder's grid pieces it reuses), and its own
   stylesheet is under the 5 kB warning. P4a measured 542.33 kB (+0.2 kB, the `play` glyph in the shared
-  icon set); `ExerciseDemo` loads with the lazy pages that use it.
+  icon set); `ExerciseDemo` loads with the lazy pages that use it. R4.4a keeps it at 542.33 kB: the meal-plan
+  builder is its own lazy chunk (about 82 kB), and its two stylesheets warn as the program builder's do
+  (`meal-plan-builder.scss` 5.6 kB, `meal-plan-days.scss` 7.4 kB; the error is at 8 kB).
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -369,7 +373,7 @@ of the implemented R1.3 screens before production rollout.
   keeps the one it has, as decision 1 of ADR 0036 says the coach picks it per program in the builder);
   (2) the new weeks are shared as their source week is, as before, so a coach who wants them private
   unshares them on the timeline; (3) a client is not told when a shared week changes, here or in the
-  session swap: that wants an owner decision on notifications (see P3b); (4) the old RPE-only wording
+  session swap: decided 2026-10-07, it comes with R5.1's training notices (ADR 0036); (4) the old RPE-only wording
   moved warm-up sets too, the builder's rule does not (TRN-025), so warm-ups now stay as they are;
   (5) a program only grows inside the plan it was assigned under (TRN-011), so on the Atlas demo, where
   every program ends with its plan, the sheet says "run past the end of the plan" for all but Sara
@@ -388,7 +392,7 @@ of the implemented R1.3 screens before production rollout.
   sessions; both share the models, sheets and stylesheets, and a shared grid component would remove the
   copy; (2) the library's "Add to saved sessions" and "Duplicate with progression" are not offered here
   (Build next block does the progression); (3) a client is still not told when a shared week changes, as
-  in P3a; (4) week labels that carry a number ("Week 4 · Heavy") are not renumbered when weeks move, as in
+  in P3a (R5.1); (4) week labels that carry a number ("Week 4 · Heavy") are not renumbered when weeks move, as in
   the builder; (5) a phone moves a session to another week only on a wide screen, as in the builder.
 - **Session extras (from P4a, built 2026-10-07; screenshots `docs/design/p4-*.png`).** Watch demo
   (`ExerciseDemo`, a new `play` icon) sits on the builder's and Edit weeks' exercise rows (the library's
@@ -398,9 +402,24 @@ of the implemented R1.3 screens before production rollout.
   workouts list every note ("You", "Your coach"). The player already had both. The kit's modal title bar
   is no longer a `<header>`, so two stacked modals no longer make two page banners (axe). Left for later:
   (1) the Atlas demo has no exercise media, so playback was checked with mocks and the grant test, not a
-  real video; (2) a client is not notified of a coach's workout note (notifications are a separate
-  decision); (3) the coach's workout view keeps its older look (plain "Target:"/"Actual:" lines and
+  real video; (2) a client is not notified of a coach's workout note (R5.1's training notices, ADR
+  0036); (3) the coach's workout view keeps its older look (plain "Target:"/"Actual:" lines and
   hand-built units); (4) the client sees notes on finished workouts in Training, not on Today after the day.
+- **Meal plans, left for later (from R4.4a, built 2026-10-07; screenshots `docs/design/r44a-*.png`).**
+  (1) A meal's recipes are equal options the client chooses between (NUT-005): a version stores no order
+  for them, so after Publish they come back in the order the server returns, and a day counts each meal's
+  options at their average ("≈ 1,792 kcal"). A "main option" would need an order column and an owner
+  decision. (2) Days are numbered, not weekdays: a plan runs from the day the coach picks when assigning
+  it, as many days as it holds, so a month is four weeks (Add week copies the last seven days). (3)
+  Assigning a plan stays in the client's older Nutrition section, which reads the same plans. (4) Publish
+  has no preview sheet: the grid with every day's total is the preview, and the checks run first, taking
+  the coach to the name, the targets, the day or the meal at fault. (5) A plan cannot be archived or
+  deleted, as before. (6) The recipe panel lists published recipes only; Manage opens the older Recipes
+  and foods page until R4.4b. (7) The old library's meal-plan form is gone; a version it saved as a draft
+  stays in the plan's Versions and is published from the builder as the next version (ADR 0033). (8) A
+  recipe dragged over the meals of a day leaves a thin line, not a slot, where it would land: a full slot
+  opening in each meal it passed pushed the strip under the day out from under the pointer (found in the
+  live pass). (9) The Atlas demo has one meal plan; a second (a cut, say) would show the list better.
 
 ---
 
@@ -916,6 +935,19 @@ limited to the coach's assigned clients.
 - A meal plan as a week grid with a daily macro target ring.
 - Food search with clean results: name, brand, calories and macros. Database codes (FDC IDs, "SR
   Legacy") stay hidden behind a details toggle.
+- Built in R4.4a: Nutrition opens on **Meal plans** (`/nutrition/plans`), cards with the plan's days,
+  meals a day, calorie target and a protein/carbs/fat bar, the coach's new plans first; Recipes and foods
+  (the older page) is the section's second link. The builder (`/nutrition/plans/:planId`, `new`) has the
+  daily target (calories and grams, their shares of the calories, and a note when the grams add up to
+  more or less than 5% off the calories), the published recipes beside the grid (per serving, with a macro
+  bar), and the days in weeks of seven: each day with a ring and its calories against the target ("308 kcal
+  under", "On target" within 5%), its meals as cards (name, each option and its servings, the meal's
+  calories) and a strip under it that adds a meal. A recipe dragged onto a meal becomes another option,
+  under a day a new meal (named after the day's next usual meal); meals move between days by their grip;
+  every drag has a button path (the meal sheet, the recipe sheet, each card's menu). A day's menu
+  duplicates it, uses it for every day, clears it or deletes it, each with Undo. A phone shows one day at
+  a time from a row of day chips. Changes keep themselves as the coach's draft (NUT-013, as the program
+  builder's do); Publish makes the next version; Versions lists them.
 
 **C8. Products**
 - The heading becomes "Plans you sell": cards with price, duration and icons for the included

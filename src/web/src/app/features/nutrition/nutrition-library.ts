@@ -12,6 +12,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule, NgForm } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
@@ -23,12 +24,12 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { SectionNav } from '../../ui/section-nav';
 import { FoodPicker } from './food-picker';
 import {
   AiMealDraft,
   ALLERGEN_LABELS,
   FoodItem,
-  MealPlanSummary,
   NutritionSettings,
   ProviderFoodSearch,
   preparationLabel,
@@ -51,14 +52,6 @@ interface RecipeLineEditor {
   basis: PreparationBasis;
 }
 
-interface MealSlotEditor {
-  dayOffset: number;
-  order: number;
-  name: string;
-  recipeVersionId: string;
-  servings: number;
-}
-
 interface AiSuggestion {
   name: string;
   ingredients: { name: string; quantity: number; unit: string; uncertain: boolean }[];
@@ -78,9 +71,14 @@ function readAiSuggestion(draft: AiMealDraft | null): AiSuggestion | null {
   }
 }
 
+/**
+ * Recipes and foods: the older library screen, kept for foods, recipes, AI meal suggestions and the
+ * calculation defaults until R4.4b and R4.4c rebuild them. Meal plans moved to their own builder
+ * (R4.4a, `/nutrition/plans`).
+ */
 @Component({
   selector: 'app-nutrition-library',
-  imports: [DecimalPipe, FoodPicker, FormsModule],
+  imports: [DecimalPipe, FoodPicker, FormsModule, RouterLink, SectionNav],
   templateUrl: './nutrition-library.html',
   styleUrl: './nutrition-library.scss',
 })
@@ -95,7 +93,6 @@ export class NutritionLibrary {
 
   protected readonly foods = signal<FoodItem[]>([]);
   protected readonly recipes = signal<RecipeSummary[]>([]);
-  protected readonly mealPlans = signal<MealPlanSummary[]>([]);
   protected readonly settings = signal<NutritionSettings | null>(null);
   protected readonly usda = signal<ProviderFoodSearch | null>(null);
   protected readonly aiDraft = signal<AiMealDraft | null>(null);
@@ -105,7 +102,6 @@ export class NutritionLibrary {
   protected readonly aiGenerating = signal(false);
   protected readonly aiSuggestion = computed(() => readAiSuggestion(this.aiDraft()));
   protected readonly recipeLines = signal<RecipeLineEditor[]>([]);
-  protected readonly mealSlots = signal<MealSlotEditor[]>([]);
   protected readonly foodAllergens = signal<Set<AllergenCode>>(new Set());
   protected readonly loading = signal(false);
   protected readonly busy = signal(false);
@@ -120,10 +116,10 @@ export class NutritionLibrary {
           .map((food) => food.externalId),
       ),
   );
-  /** Only a published recipe may go into a meal plan. */
-  protected readonly hasPublishedRecipe = computed(() =>
-    this.recipes().some((recipe) => recipe.status === 'Published'),
-  );
+  protected readonly sections = [
+    { label: $localize`Meal plans`, link: '/nutrition/plans' },
+    { label: $localize`Recipes and foods`, link: '/nutrition/library' },
+  ];
   protected readonly unitLabel = unitLabel;
   protected readonly preparationLabel = preparationLabel;
   protected readonly sourceLabel = sourceLabel;
@@ -143,12 +139,6 @@ export class NutritionLibrary {
   protected recipeName = '';
   protected recipeInstructions = '';
   protected recipeServings = 1;
-  protected planName = '';
-  protected planDayCount = 1;
-  protected planTargetCalories = 2000;
-  protected planTargetProtein = 150;
-  protected planTargetCarbohydrate = 220;
-  protected planTargetFat = 60;
   protected aiPrompt = '';
   protected aiRecipeName = '';
   protected aiInstructions = '';
@@ -183,12 +173,6 @@ export class NutritionLibrary {
   protected dismissMessage(): void {
     this.error.set(null);
     this.notice.set(null);
-  }
-
-  /** The day a coach reads counts from 1; the plan stores it counted from 0. */
-  protected setSlotDay(slot: MealSlotEditor, day: number | null): void {
-    const wanted = Math.trunc(Number(day)) || 1;
-    slot.dayOffset = Math.min(Math.max(wanted, 1), Math.max(this.planDayCount, 1)) - 1;
   }
 
   protected async createFood(form: NgForm): Promise<void> {
@@ -363,75 +347,6 @@ export class NutritionLibrary {
             await owner.wait(this.reloadRecipes());
           },
           $localize`Recipe published. It can no longer be edited.`,
-        ),
-      );
-    });
-  }
-
-  protected addMealSlot(): void {
-    const recipe = this.recipes().find((item) => item.status === 'Published');
-    if (!recipe) return;
-    this.mealSlots.update((items) => [
-      ...items,
-      {
-        dayOffset: 0,
-        order: items.length,
-        name: $localize`Meal ${items.length + 1}`,
-        recipeVersionId: recipe.versionId,
-        servings: 1,
-      },
-    ]);
-  }
-
-  protected removeMealSlot(index: number): void {
-    this.mealSlots.update((items) => items.filter((_, itemIndex) => itemIndex !== index));
-  }
-
-  protected async createMealPlan(form: NgForm): Promise<void> {
-    if (!this.planName.trim()) {
-      return this.refuse(form, $localize`Give the meal plan a name.`);
-    }
-
-    return this.scope.run('createMealPlan', async (owner) => {
-      await owner.wait(
-        this.run(
-          async () => {
-            await owner.wait(
-              firstValueFrom(
-                this.api.createMealPlan({
-                  name: this.planName,
-                  dayCount: this.planDayCount,
-                  targetCalories: this.planTargetCalories,
-                  targetProteinGrams: this.planTargetProtein,
-                  targetCarbohydrateGrams: this.planTargetCarbohydrate,
-                  targetFatGrams: this.planTargetFat,
-                  slots: this.mealSlots().map((slot) => ({
-                    dayOffset: slot.dayOffset,
-                    order: slot.order,
-                    name: slot.name,
-                    choices: [{ recipeVersionId: slot.recipeVersionId, servings: slot.servings }],
-                  })),
-                }),
-              ),
-            );
-            this.mealSlots.set([]);
-            await owner.wait(this.reloadPlans());
-          },
-          $localize`Meal-plan draft created with per-choice totals and alternative averages.`,
-        ),
-      );
-    });
-  }
-
-  protected async publishPlan(versionId: string): Promise<void> {
-    return this.scope.run('publishPlan', async (owner) => {
-      await owner.wait(
-        this.run(
-          async () => {
-            await owner.wait(firstValueFrom(this.api.publishMealPlan(versionId)));
-            await owner.wait(this.reloadPlans());
-          },
-          $localize`Meal plan published. It can no longer be edited.`,
         ),
       );
     });
@@ -619,17 +534,15 @@ export class NutritionLibrary {
       this.loading.set(true);
       this.error.set(null);
       try {
-        const [foods, recipes, plans, settings] = await owner.wait(
+        const [foods, recipes, settings] = await owner.wait(
           Promise.all([
             firstValueFrom(this.api.listFoods()),
             firstValueFrom(this.api.listRecipes()),
-            firstValueFrom(this.api.listMealPlans()),
             firstValueFrom(this.api.getNutritionSettings()),
           ]),
         );
         this.foods.set(foods.items);
         this.recipes.set(recipes.items);
-        this.mealPlans.set(plans.items);
         this.settings.set(settings);
         await owner.wait(this.checkAiAvailability());
       } catch (error) {
@@ -653,12 +566,6 @@ export class NutritionLibrary {
       this.recipes.set((await owner.wait(firstValueFrom(this.api.listRecipes()))).items);
     });
   }
-  private async reloadPlans(): Promise<void> {
-    return this.scope.run('reloadPlans', async (owner) => {
-      this.mealPlans.set((await owner.wait(firstValueFrom(this.api.listMealPlans()))).items);
-    });
-  }
-
   /** Stops a save the server would refuse, and highlights the empty boxes that caused it. */
   private refuse(form: NgForm, message: string): void {
     form.control.markAllAsTouched();
@@ -719,7 +626,6 @@ export class NutritionLibrary {
     this.loadedTenantId = null;
     this.foods.set([]);
     this.recipes.set([]);
-    this.mealPlans.set([]);
     this.settings.set(null);
     this.usda.set(null);
     this.aiDraft.set(null);
@@ -728,7 +634,6 @@ export class NutritionLibrary {
     this.aiNotice.set(null);
     this.aiGenerating.set(false);
     this.recipeLines.set([]);
-    this.mealSlots.set([]);
     this.foodAllergens.set(new Set());
     this.loading.set(false);
     this.busy.set(false);
@@ -749,12 +654,6 @@ export class NutritionLibrary {
     this.recipeName = '';
     this.recipeInstructions = '';
     this.recipeServings = 1;
-    this.planName = '';
-    this.planDayCount = 1;
-    this.planTargetCalories = 2000;
-    this.planTargetProtein = 150;
-    this.planTargetCarbohydrate = 220;
-    this.planTargetFat = 60;
     this.aiPrompt = '';
     this.aiRecipeName = '';
     this.aiInstructions = '';

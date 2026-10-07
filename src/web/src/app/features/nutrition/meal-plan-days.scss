@@ -1,0 +1,520 @@
+// The meal-plan builder's days (C7, R4.4a): a grid of days, each with its total against the daily
+// target and its meals, and where a drag can land. Kept apart from the page's own styles so each
+// stays under the component style budget. A dragged meal is copied outside this component while it
+// moves, so each is styled with one class.
+// ---------- the days ----------
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+.plan-tools {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+}
+
+.plan-tools .panel-title {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+// Only a phone chooses its week and its day.
+.week-chips,
+.day-chips {
+  border: 0;
+  display: none;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+
+.week-chip,
+.day-chip {
+  align-items: center;
+  background: var(--tb-surface);
+  block-size: 2.5rem;
+  border: 1px solid var(--tb-line-strong);
+  border-radius: 999px;
+  color: var(--tb-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  inline-size: 2.5rem;
+  justify-content: center;
+}
+
+// The legacy `label > span` rule in styles.scss would otherwise restyle the number.
+.week-chip > span,
+.day-chip > span {
+  color: inherit;
+  display: inline;
+  font-size: inherit;
+  font-weight: inherit;
+  margin: 0;
+}
+
+.week-chip:hover,
+.day-chip:hover {
+  border-color: var(--tb-ink);
+}
+
+.week-chip:has(input:checked),
+.day-chip:has(input:checked) {
+  background: var(--tb-brand);
+  border-color: var(--tb-brand);
+  color: var(--tb-on-brand);
+  font-weight: 700;
+}
+
+.week-chip:has(input:focus-visible),
+.day-chip:has(input:focus-visible) {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+// A week wider than the page scrolls sideways here, not the page.
+.weeks {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-block-end: 0.25rem;
+}
+
+.week {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  box-sizing: border-box;
+  min-inline-size: min-content;
+  padding: 0.75rem 0.875rem 0.875rem;
+}
+
+.week-title {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.625rem;
+  text-transform: uppercase;
+}
+
+.days {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(7, minmax(9.5rem, 1fr));
+}
+
+// Beside the recipes a week scrolls sideways anyway, so each day keeps room for its words.
+@container builder (min-width: 64rem) {
+  .workspace.with-library .days {
+    grid-template-columns: repeat(7, minmax(10.5rem, 1fr));
+  }
+}
+
+.day {
+  background: var(--tb-surface-2);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  outline: none;
+  padding: 0.5rem;
+}
+
+.day:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.day.problem {
+  border-color: var(--tb-danger);
+}
+
+.day-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.day-number {
+  color: var(--tb-ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding-inline-start: 0.25rem;
+  text-transform: uppercase;
+}
+
+// The ring and the day's calories side by side, the macros on a line of their own beneath.
+.day-total {
+  align-items: center;
+  background: var(--tb-surface);
+  border-radius: 8px;
+  column-gap: 0.375rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.375rem 0.5rem;
+  row-gap: 0.25rem;
+}
+
+.day-total:not(:has(.day-ring)) .day-numbers,
+.day-macros {
+  grid-column: 1 / -1;
+}
+
+.day-ring {
+  block-size: 2rem;
+  flex: none;
+  inline-size: 2rem;
+  transform: rotate(-90deg);
+}
+
+.ring-track,
+.ring-fill {
+  fill: none;
+  stroke-width: 5;
+}
+
+.ring-track {
+  stroke: var(--tb-surface-2);
+}
+
+.ring-fill {
+  stroke: var(--tb-accent-ink);
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--tb-duration) var(--tb-ease);
+}
+
+.day-total[data-standing='over'] .ring-fill {
+  stroke: var(--tb-warm-ink);
+}
+
+.day-numbers {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.day-kcal {
+  color: var(--tb-ink);
+  font-size: 0.875rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.day-against {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.day-total[data-standing='on'] .day-against {
+  color: var(--tb-success);
+}
+
+.day-total[data-standing='over'] .day-against,
+.day-total[data-standing='under'] .day-against {
+  color: var(--tb-warm-ink);
+}
+
+.day-macros {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+// ---------- the meals ----------
+
+.meal-list {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  list-style: none;
+  margin: 0;
+  min-block-size: 0.5rem;
+  padding: 0;
+}
+
+.meal-card {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: 10px;
+  box-shadow: var(--tb-shadow-card);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-inline-size: 0;
+  padding: 0.25rem 0.375rem 0.375rem;
+}
+
+.meal-head {
+  align-items: center;
+  display: flex;
+  gap: 0.125rem;
+}
+
+.meal-grip {
+  align-items: center;
+  block-size: 2.25rem;
+  color: var(--tb-muted);
+  cursor: grab;
+  display: inline-flex;
+  flex: none;
+  inline-size: 1rem;
+  justify-content: center;
+  touch-action: none;
+}
+
+.meal-name {
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--tb-ink);
+  cursor: pointer;
+  flex: 1;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  min-block-size: 2.25rem;
+  min-inline-size: 0;
+  overflow-wrap: break-word;
+  padding: 0.25rem;
+  text-align: start;
+}
+
+.meal-name:hover {
+  text-decoration: underline;
+}
+
+.meal-name:focus-visible,
+.add-meal:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 1px;
+}
+
+.option-list {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  min-block-size: 2.25rem;
+  padding: 0;
+}
+
+.option-row {
+  background: var(--tb-surface-2);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  padding: 0.3125rem 0.5rem;
+}
+
+.option-row.missing {
+  box-shadow: inset 3px 0 0 var(--tb-danger);
+}
+
+.option-or {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.option-name {
+  color: var(--tb-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+}
+
+.option-line {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.meal-foot {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.meal-kcal {
+  color: var(--tb-ink);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  padding-inline-end: 0.25rem;
+}
+
+.drop-hint {
+  align-items: center;
+  border: 1px dashed var(--tb-line-strong);
+  border-radius: 8px;
+  color: var(--tb-muted);
+  display: flex;
+  font-size: 0.75rem;
+  justify-content: center;
+  min-block-size: 2.25rem;
+  padding: 0.25rem;
+  text-align: center;
+}
+
+// Under each day, where a recipe dropped starts a new meal and the button adds one.
+.new-meal {
+  border: 1px dashed var(--tb-line-strong);
+  border-radius: 8px;
+  display: flex;
+  margin-block-start: auto;
+}
+
+.add-meal {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--tb-accent-ink);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 1;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  gap: 0.25rem;
+  justify-content: center;
+  min-block-size: 2.5rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.add-meal:hover:not(:disabled) {
+  background: var(--tb-surface);
+}
+
+.add-meal:disabled {
+  color: var(--tb-muted);
+  cursor: default;
+}
+
+// Where the dragged thing can land.
+.meal-list.cdk-drop-list-receiving,
+.option-list.cdk-drop-list-receiving,
+.new-meal.cdk-drop-list-receiving {
+  border-color: var(--tb-accent-ink);
+}
+
+.meal-list.cdk-drop-list-dragging,
+.option-list.cdk-drop-list-dragging,
+.new-meal.cdk-drop-list-dragging {
+  background: var(--tb-accent-soft);
+}
+
+// While a meal moves: a slim slot where it would land, and a small card under the pointer.
+.meal-placeholder {
+  background: var(--tb-accent-soft);
+  block-size: 2.75rem;
+  border: 1px dashed var(--tb-accent-ink);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+.meal-preview {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line-strong);
+  border-radius: 10px;
+  box-sizing: border-box;
+  color: var(--tb-ink);
+  display: flex;
+  flex-direction: column;
+  inline-size: 11rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.meal-preview-name {
+  font-size: 0.875rem;
+  font-weight: 700;
+  overflow-wrap: break-word;
+}
+
+.meal-preview-kcal {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+}
+
+.cdk-drop-list-dragging .meal-card:not(.cdk-drag-placeholder),
+.meal-card.cdk-drag-animating {
+  transition: transform var(--tb-duration) var(--tb-ease);
+}
+
+// ---------- a narrow page: one week, its days one under another ----------
+
+@container builder (max-width: 47.99rem) {
+  .week-chips,
+  .day-chips {
+    display: flex;
+  }
+
+  .day.phone-hidden {
+    display: none;
+  }
+
+  .week.phone-hidden {
+    display: none;
+  }
+
+  .week {
+    min-inline-size: 0;
+  }
+
+  .days {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-fill,
+  .cdk-drop-list-dragging .meal-card:not(.cdk-drag-placeholder),
+  .meal-card.cdk-drag-animating {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ring-track {
+    stroke: GrayText;
+  }
+
+  .ring-fill {
+    stroke: Highlight;
+  }
+}

@@ -1,0 +1,113 @@
+@let current = meal();
+<div class="editor">
+  <div class="basics">
+    <app-field label="Meal name" i18n-label>
+      <input
+        appControl
+        [(ngModel)]="current.name"
+        (ngModelChange)="changed()"
+        maxlength="200"
+        autocomplete="off"
+        dir="auto"
+      />
+    </app-field>
+    <div class="quick" role="group" aria-label="Common names" i18n-aria-label>
+      @for (name of quickNames; track name) {
+        <button
+          class="quick-name"
+          type="button"
+          [attr.aria-pressed]="current.name.trim() === name"
+          (click)="rename(name)"
+        >
+          {{ name }}
+        </button>
+      }
+    </div>
+  </div>
+
+  <div class="options-head">
+    <h3 class="section-title" i18n>Recipes</h3>
+    <p class="hint" i18n>
+      The client eats one of them. With more than one, the day counts their average.
+    </p>
+  </div>
+  @if (rows().length === 0) {
+    <p class="empty" i18n>No recipe yet. Add one, or drag one onto the meal from the recipes.</p>
+  }
+  <ul class="options" role="list">
+    @for (row of rows(); track row.choice.key; let first = $first) {
+      <li class="option">
+        @if (!first) {
+          <span class="or" i18n>or</span>
+        }
+        <div class="option-body">
+          <span class="tile" aria-hidden="true">{{ row.initials }}</span>
+          <div class="option-copy">
+            <span class="option-name" dir="auto">{{ row.name }}</span
+            >&ngsp;
+            @if (row.perServing) {
+              <span class="option-line">{{ row.perServing }}</span
+              >&ngsp;
+            }
+            @if (row.warning) {
+              <span class="option-warning">{{ row.warning }}</span>
+            }
+          </div>
+          <button
+            appIconButton
+            type="button"
+            [label]="row.removeLabel"
+            (click)="removeOption.emit(row.choice.key)"
+          >
+            <app-icon name="close" />
+          </button>
+        </div>
+        <div class="servings">
+          <app-field [label]="row.servingsLabel" density="compact" hideLabel>
+            <input
+              appControl
+              type="number"
+              inputmode="decimal"
+              min="0.25"
+              max="1000"
+              step="0.25"
+              [ngModel]="row.choice.servings"
+              (ngModelChange)="setServings(row.choice, $event)"
+            />
+          </app-field>
+          <span class="servings-word" aria-hidden="true" i18n>servings</span>
+          @if (row.amount) {
+            <span class="amount">{{ row.amount }}</span>
+          }
+        </div>
+      </li>
+    }
+  </ul>
+
+  @if (total(); as line) {
+    <p class="total">{{ line }}</p>
+  }
+
+  <div class="footer">
+    <button
+      appButton
+      type="button"
+      variant="outlined"
+      [disabled]="!canAddOption()"
+      (click)="addOption.emit()"
+    >
+      <app-icon name="plus" />
+      @if (rows().length === 0) {
+        <span i18n>Add a recipe</span>
+      } @else {
+        <span i18n>Add another option</span>
+      }
+    </button>
+    <div class="footer-end">
+      <button appButton type="button" variant="text" class="danger" (click)="remove.emit()" i18n>
+        Delete meal
+      </button>
+      <button appButton type="button" (click)="done.emit()" i18n>Done</button>
+    </div>
+  </div>
+</div>

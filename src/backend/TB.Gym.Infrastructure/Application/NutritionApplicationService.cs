@@ -10,7 +10,7 @@ using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
-internal sealed class NutritionApplicationService(
+internal sealed partial class NutritionApplicationService(
     GymDbContext dbContext,
     IClock clock,
     ICurrentUser currentUser,
@@ -273,7 +273,7 @@ internal sealed class NutritionApplicationService(
         }
     }
 
-    public async Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, CancellationToken cancellationToken)
+    public async Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, bool publishedOnly, CancellationToken cancellationToken)
     {
         var source = dbContext.Recipes.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(query))
@@ -282,11 +282,18 @@ internal sealed class NutritionApplicationService(
             source = source.Where(item => EF.Functions.ILike(item.Name, pattern));
         }
 
+        if (publishedOnly)
+        {
+            source = source.Where(item => item.Versions.Any(version => version.Status == PublicationStatus.Published));
+        }
+
         var total = await source.CountAsync(cancellationToken);
         var recipes = await source.OrderBy(item => item.Name).Skip(skip).Take(take)
             .Include(item => item.Versions).ThenInclude(item => item.Allergens)
             .AsSplitQuery().ToListAsync(cancellationToken);
-        return new RecipePage(total, skip, take, recipes.Select(ToRecipeSummary).ToArray());
+        return new RecipePage(total, skip, take, recipes.Select(recipe => publishedOnly
+            ? ToRecipeSummary(recipe, recipe.Versions.Where(version => version.Status == PublicationStatus.Published).MaxBy(version => version.Revision)!)
+            : ToRecipeSummary(recipe)).ToArray());
     }
 
     public async Task<NutritionCommandResult> CreateRecipeAsync(CreateRecipeRequest request, CancellationToken cancellationToken)
@@ -367,7 +374,11 @@ internal sealed class NutritionApplicationService(
         var templates = await dbContext.MealPlanTemplates.AsNoTracking().OrderBy(item => item.Name).Skip(skip).Take(take)
             .Include(item => item.Versions).ThenInclude(item => item.Slots)
             .AsSplitQuery().ToListAsync(cancellationToken);
-        return new MealPlanTemplatePage(total, skip, take, templates.Select(ToMealPlanSummary).ToArray());
+        var drafts = await OwnDraftsByPlanAsync(templates.Select(item => item.Id).ToArray(), cancellationToken);
+        return new MealPlanTemplatePage(total, skip, take, templates.Select(template => ToMealPlanSummary(
+            template,
+            template.Versions.MaxBy(version => version.Revision)!,
+            drafts.GetValueOrDefault(template.Id))).ToArray());
     }
 
     public async Task<NutritionCommandResult> CreateMealPlanAsync(CreateMealPlanRequest request, CancellationToken cancellationToken)
@@ -1311,10 +1322,21 @@ internal sealed class NutritionApplicationService(
     private static RecipeSummary ToRecipeSummary(Recipe item, RecipeVersion version) =>
         new(item.Id, version.Id, version.Revision, item.Name, version.Status, version.Servings, version.Calories, version.ProteinGrams, version.CarbohydrateGrams, version.FatGrams, version.Allergens.Select(allergen => allergen.Code).Order().ToArray());
 
-    private static MealPlanTemplateSummary ToMealPlanSummary(MealPlanTemplate item) => ToMealPlanSummary(item, item.Versions.OrderByDescending(version => version.Revision).First());
-
-    private static MealPlanTemplateSummary ToMealPlanSummary(MealPlanTemplate item, MealPlanTemplateVersion version) =>
-        new(item.Id, version.Id, version.Revision, item.Name, version.DayCount, version.Status, version.TargetCalories, version.Slots.Count);
+    private static MealPlanTemplateSummary ToMealPlanSummary(MealPlanTemplate item, MealPlanTemplateVersion version, MealPlanDraftSummary? draft = null) =>
+        new(
+            item.Id,
+            version.Id,
+            version.Revision,
+            item.Name,
+            version.DayCount,
+            version.Status,
+            version.TargetCalories,
+            version.Slots.Count,
+            version.TargetProteinGrams,
+            version.TargetCarbohydrateGrams,
+            version.TargetFatGrams,
+            version.PublishedAtUtc ?? version.CreatedAtUtc,
+            draft);
 
     private static NutritionCalculationView ToCalculationView(NutritionCalculationSnapshot item, IReadOnlyList<string> warnings) =>
         new(item.Id, item.BmrMethodKey, item.BmrMethodVersion, item.BmrEstimate, item.ActivityModelKey, item.ActivityModelVersion, item.ActivityModelPal, item.TdeeMethodKey, item.TdeeMethodVersion, item.TdeeEstimate, item.CoachGoalAdjustment, item.CalorieTarget, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams, item.EnergyPolicyKey, item.EnergyPolicyVersion, warnings);

@@ -49,6 +49,13 @@ internal static class DatabaseConstraintNames
     public const string OneProgramDraftPerPersonAndProgram =
         "IX_ProgramDrafts_TenantId_OwnerUserId_TemplateId";
 
+    /// <summary>
+    /// One working copy per person and meal plan (NUT-013), as for programs: a second tab that starts
+    /// one loses the race and is told to reload.
+    /// </summary>
+    public const string OneMealPlanDraftPerPersonAndPlan =
+        "IX_MealPlanDrafts_TenantId_OwnerUserId_MealPlanTemplateId";
+
     public const string OneProgressPhotoPerDateAndPose =
         "IX_ProgressPhotos_TenantId_ClientProfileId_PhotoDate_Pose";
 
