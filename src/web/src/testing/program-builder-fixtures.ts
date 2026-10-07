@@ -55,6 +55,7 @@ export function prescription(
     coachNotes: null,
     approvedAlternativeExerciseIds: [],
     sets: [setView(), setView(), setView()],
+    mediaAssetIds: [],
     ...overrides,
   };
 }

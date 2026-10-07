@@ -826,6 +826,8 @@ export interface LibraryExercise {
   alternativeIds: string[];
   /** The first picture or video the coach attached, if any. */
   mediaId: string | null;
+  /** Every picture and video attached, in order: the demos a coach can watch on the grid (P4). */
+  mediaIds: readonly string[];
   /** Name, equipment, pattern, muscles and tags, folded for search. */
   searchText: string;
 }
@@ -878,6 +880,7 @@ export function libraryExercise(view: ExerciseView): LibraryExercise {
       .join(''),
     alternativeIds: view.alternatives.map((item) => item.exerciseId),
     mediaId: view.mediaAssetIds[0] ?? null,
+    mediaIds: [...view.mediaAssetIds],
     searchText: fold(
       [view.name, equipment, pattern, ...view.tags, ...view.muscles.map((m) => m.muscle)].join(' '),
     ),

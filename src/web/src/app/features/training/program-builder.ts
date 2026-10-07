@@ -55,6 +55,7 @@ import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { UiToast } from '../../ui/toast';
+import { ExerciseDemo } from './exercise-demo';
 import { DraftAutosave, PROGRAM_AUTOSAVE_TIMING, type SaveOutcome } from './program-autosave';
 import { ProgramBuilderApi } from './program-builder-api';
 import {
@@ -142,6 +143,8 @@ interface ExerciseCell {
   line: string;
   isMainLift: boolean;
   drag: DragItem;
+  /** The library's demos of this exercise, for Watch demo (P4). */
+  media: readonly string[];
 }
 
 interface SessionCell {
@@ -209,6 +212,7 @@ const LEAVE_WAIT_MS = 8000;
     CdkScrollable,
     Checkbox,
     Control,
+    ExerciseDemo,
     FormsModule,
     Icon,
     ProgramLibrary,
@@ -305,6 +309,10 @@ export class ProgramBuilder implements HoldsUnsavedWork {
   protected readonly saved = signal<SavedSessionView[]>([]);
   protected readonly thumbs = signal<LibraryThumbs>(new Map());
   protected readonly libraryOpen = signal(true);
+  /** Each library exercise's demos, so a grid row can offer Watch demo (P4). */
+  private readonly libraryMedia = computed(
+    () => new Map(this.exercises().map((item) => [item.id, item.mediaIds] as const)),
+  );
   /** The week a phone shows; null until one is chosen, then the first. */
   protected readonly phoneWeek = signal<string | null>(null);
 
@@ -1395,6 +1403,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
         line: exerciseSummary(exercise),
         isMainLift: exercise.isMainLift,
         drag: { kind: 'exercise', ref: { ...ref, exerciseKey: exercise.key } },
+        media: this.libraryMedia().get(exercise.exerciseId) ?? [],
       })),
     };
   }

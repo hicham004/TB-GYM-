@@ -574,6 +574,32 @@ public sealed partial class GymDbContext
                 "\"PreviewHash\" ~ '^[0-9a-f]{64}$'"));
             ConfigureTenantEntity(entity);
         });
+
+        builder.Entity<ProgramEdit>(entity =>
+        {
+            entity.ToTable("ProgramEdits", "training");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.RuleKey).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.RuleVersion).HasMaxLength(40).IsRequired();
+            entity.Property(item => item.PreviewHash).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(item => item.ResultingEndDateExclusive).HasColumnType("date");
+            entity.Property(item => item.ChangesJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(item => new { item.TenantId, item.MesocycleId, item.PreviewHash }).IsUnique();
+            entity.HasIndex(item => new { item.TenantId, item.MesocycleId, item.CreatedAtUtc });
+            entity.HasOne<TrainingMesocycle>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.MesocycleId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_ProgramEdits_Hash", "\"PreviewHash\" ~ '^[0-9a-f]{64}$'");
+                table.HasCheckConstraint(
+                    "CK_ProgramEdits_Counts",
+                    "\"WeeksAdded\" >= 0 AND \"WeeksMoved\" >= 0 AND \"WeeksRemoved\" >= 0 AND \"SessionsAdded\" >= 0 AND \"SessionsEdited\" >= 0 AND \"SessionsMoved\" >= 0 AND \"SessionsRemoved\" >= 0 AND \"ResultingWeekCount\" >= 1 AND \"ResultingWeekCount\" <= 52");
+            });
+            ConfigureTenantEntity(entity);
+        });
     }
 
     private static void ConfigureTemplateSetProperties(

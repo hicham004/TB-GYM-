@@ -357,6 +357,46 @@ test('a phone shows one week at a time and adds through the sheet', async ({ pag
   await axe(page);
 });
 
+/** A one-pixel picture, so a demo opens without a media server. */
+const PIXEL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+test('an exercise with a demo offers it on the grid, and it opens in a sheet (P4)', async ({
+  page,
+}) => {
+  await openBuilder(page, 1440, 900);
+  const grants: string[] = [];
+  await page.route('**/api/media/media-row/access', (route: Route) => {
+    grants.push(route.request().method());
+    return json(route, 200, {
+      assetId: 'media-row',
+      kind: 'Image',
+      source: 'Upload',
+      contentType: 'image/png',
+      url: PIXEL,
+      expiresAtUtc: '2026-10-07T12:00:00Z',
+      downloadAllowed: true,
+    });
+  });
+
+  // Squat has no demo in the library; the row added from the library has one.
+  await expect(week(page, 0).getByRole('button', { name: /^Watch the .* demo$/ })).toHaveCount(0);
+  await week(page, 1).getByRole('button', { name: 'Add to week 2, day 2' }).click();
+  const add = page.getByRole('dialog', { name: 'Add to week 2, day 2' });
+  await add.getByRole('button', { name: 'Add Chest-supported row' }).click();
+  await add.getByRole('button', { name: 'Done' }).click();
+
+  await week(page, 1).getByRole('button', { name: 'Watch the Chest-supported row demo' }).click();
+  const demo = page.getByRole('dialog', { name: 'Chest-supported row' });
+  await expect(demo).toBeVisible();
+  await expect(demo.getByRole('img', { name: 'How to do Chest-supported row' })).toBeVisible();
+  expect(grants).toEqual(['POST']);
+  await axe(page);
+
+  await page.keyboard.press('Escape');
+  await expect(demo).toHaveCount(0);
+});
+
 test('the builder and its session sheet pass axe in dark mode', async ({ page }) => {
   await openBuilder(page, 1440, 900, { colorScheme: 'dark' });
   await axe(page);

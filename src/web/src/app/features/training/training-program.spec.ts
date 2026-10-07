@@ -151,6 +151,41 @@ describe('TrainingProgram', () => {
     expect(more()).toBeNull();
   });
 
+  it('shows the notes on a finished workout, the coach’s named as theirs', async () => {
+    const note = (id: string, authorRole: 'Coach' | 'Client', text: string) => ({
+      id,
+      exercisePerformanceId: null,
+      authorUserId: `${authorRole}-user`,
+      authorRole,
+      text,
+      createdAtUtc: '2026-09-28T18:00:00Z',
+    });
+    const { host, textOf } = await render({
+      getMyWorkoutHistory: vi.fn(() =>
+        of(
+          historyPage([
+            historyItem({
+              notes: [
+                note('n1', 'Client', 'Shoulder felt tight.'),
+                note('n2', 'Coach', 'Great depth. Warm the shoulder up longer next time.'),
+              ],
+            }),
+          ]),
+        ),
+      ),
+    });
+
+    const notes = [...host.querySelectorAll('.history-notes li')];
+    expect(notes.map((item) => textOf(item.querySelector('.note-from')))).toEqual([
+      'You',
+      'Your coach',
+    ]);
+    expect(textOf(notes[1].querySelector('.note-text'))).toBe(
+      'Great depth. Warm the shoulder up longer next time.',
+    );
+    expect(notes[1].classList.contains('coach')).toBe(true);
+  });
+
   it('names the program only on a workout from another one, and invites the first workout', async () => {
     const { host, spoken } = await render({
       getMyWorkoutHistory: vi.fn(() =>

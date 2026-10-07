@@ -41,6 +41,15 @@ export const clientRoutes: Routes = [
         loadComponent: () => sections().then((module) => module.ClientTrainingSection),
       },
       {
+        // The weeks still to come, in the builder's grid (P3b). Nothing is kept until the coach
+        // reviews and applies the edit, so leaving with changes asks first.
+        path: 'training/:mesocycleId/edit',
+        title: $localize`Edit weeks | TB Gym`,
+        data: REDESIGNED,
+        canDeactivate: [confirmBeforeLeaving],
+        loadComponent: () => import('./program-edit').then((module) => module.ProgramEditPage),
+      },
+      {
         path: 'nutrition',
         title: $localize`Client nutrition | TB Gym`,
         loadComponent: () => sections().then((module) => module.ClientNutritionSection),

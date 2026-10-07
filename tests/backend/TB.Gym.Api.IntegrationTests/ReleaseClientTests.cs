@@ -83,6 +83,19 @@ public sealed partial class Phase3TrainingWorkflowTests
                 new { value = 80m, unit = "Kilogram", measurementDate = TenantToday() }),
             await owner.PutAsJsonAsync($"/api/training/mesocycles/{block.Id}/visibility", new { revealAllWeeks = true, version = block.Version }),
             await owner.PostAsJsonAsync(
+                P3Url(block.Id, "apply"),
+                new
+                {
+                    sourceWeekIds = new[] { block.Weeks[0].Id },
+                    iterations = 1,
+                    rpeIncrement = 0.5m,
+                    previewHash = new string('a', 64),
+                    mesocycleVersion = block.Version,
+                }),
+            await owner.PostAsJsonAsync(
+                P3bUrl(block.Id, "apply"),
+                new { mesocycleVersion = block.Version, weeks = Array.Empty<object>(), previewHash = new string('a', 64) }),
+            await owner.PostAsJsonAsync(
                 $"/api/training/mesocycles/{block.Id}/training-maxes/apply",
                 new
                 {

@@ -9606,6 +9606,104 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Training.ProgramEdit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChangesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MesocycleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PreviewHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateOnly>("ResultingEndDateExclusive")
+                        .HasColumnType("date");
+
+                    b.Property<int>("ResultingWeekCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RuleKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("RuleVersion")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("SessionsAdded")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SessionsEdited")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SessionsMoved")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SessionsRemoved")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<int>("WeeksAdded")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WeeksMoved")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WeeksRemoved")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "MesocycleId", "CreatedAtUtc");
+
+                    b.HasIndex("TenantId", "MesocycleId", "PreviewHash")
+                        .IsUnique();
+
+                    b.ToTable("ProgramEdits", "training", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProgramEdits_Counts", "\"WeeksAdded\" >= 0 AND \"WeeksMoved\" >= 0 AND \"WeeksRemoved\" >= 0 AND \"SessionsAdded\" >= 0 AND \"SessionsEdited\" >= 0 AND \"SessionsMoved\" >= 0 AND \"SessionsRemoved\" >= 0 AND \"ResultingWeekCount\" >= 1 AND \"ResultingWeekCount\" <= 52");
+
+                            t.HasCheckConstraint("CK_ProgramEdits_Hash", "\"PreviewHash\" ~ '^[0-9a-f]{64}$'");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Training.ProgramTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12639,6 +12737,16 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "TemplateId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Training.ProgramEdit", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Training.TrainingMesocycle", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "MesocycleId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Training.ProgramTemplateExercise", b =>

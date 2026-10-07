@@ -210,6 +210,32 @@ button.week-row:focus-visible {
 .history-more {
   justify-self: start;
 }
+// Notes on a finished workout, the coach's first in the eye (P4).
+.history-notes {
+  display: grid;
+  gap: var(--space-4);
+  list-style: none;
+  margin: var(--space-8) 0 0;
+  padding: 0;
+}
+.history-notes li {
+  border-inline-start: 3px solid var(--tb-line-strong);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.875rem;
+  padding-inline-start: var(--space-8);
+}
+.history-notes li.coach {
+  border-inline-start-color: var(--tb-accent-ink);
+}
+.note-from {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.note-text {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
 .inline-state {
   align-items: center;
   display: flex;

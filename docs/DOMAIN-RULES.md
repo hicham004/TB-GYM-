@@ -296,6 +296,9 @@ a separately authorized/audited operation; direct update or delete is prohibited
 **TRN-009** Template/prescription coach notes are snapshotted separately from append-only
 workout notes. Workout notes carry author user, Coach/Client role, optional exercise-performance
 target, and server time. A client cannot mutate coach notes, and no workout note is overwritten.
+Since P4 the coach writes a workout note from the session sheet of the client's program, and the
+client's finished-workout history carries every note on each workout, so a coach's note reaches the
+client after the workout's day.
 
 **TRN-010** Prescription modification is explicit: `Locked` or `CoachApprovedSwap`. A main
 lift is always `Locked`. A permitted client swap must use an alternative captured at assignment,
@@ -423,6 +426,34 @@ week 1, by day and then position, that names a repetition count and an RPE the R
 and from the assigned program afterwards, where its weight is the prescribed one. When week 1 has no
 such set the server refuses and says so, and the coach types the max instead.
 
+**TRN-027** Build next block v2 (`WeekStep`, P3a, ADR 0036). A coach builds on an assigned program by
+choosing 1 to 12 of its weeks and 1 to 12 copies of each. The copies take the same four steps as the
+builder's (TRN-025), each copy a further step from its week, and run round by round: every chosen week
+once, then every chosen week again, after the program's last week. A new week is shared as its source
+week is. Unlike the builder's copies, these are calculated: after the numbers move, the server works each
+weight out again from the program's maxes in use (STR-011) with the set's own formula (STR-005, STR-010),
+rounds it by the program's rule (STR-008) and keeps the explanation. A typed or manual weight is moved
+only by the weight step, and no step moves a warm-up (a calculated warm-up weight is still worked out
+from the maxes in use, so it follows a max that was updated since its week was written). A result
+outside a set's limits, or outside what its formula covers, refuses the whole preview and names the week,
+the copy, the session, the exercise and the set. It follows preview, hash and apply with the program's
+version (STR-009); apply checks the training coverage of the resulting dates (TRN-014) and leaves an
+append-only record of the rule, its steps and the weeks it read and made.
+
+**TRN-028** Editing a client's weeks (`GridEdit` 1.0, P3b, ADR 0036). A coach edits an assigned program in
+the builder's grid and sends every week in order with its open sessions; a session is open while it has
+not started and its day is today or later in the workspace (as TRN-004 and STR-011 draw the line). Sessions
+that are not open are never sent and never change, and the weeks up to the last one holding such a
+session keep their place: their open sessions can change, they cannot move or go, and nothing new goes
+before them. Later weeks can be added, removed, moved and copied, up to 52, and a session can be added,
+changed, moved to another day or week (never to a day already gone) or removed. A session sent as stored
+keeps its row and its numbers; a new or changed one is worked out from the program's maxes in use with
+its set's own formula and rounding, as TRN-027 does. It follows preview, hash and apply with the
+program's version (STR-009); apply checks training coverage and primary overlap for the resulting dates
+(TRN-014), writes in one save, and leaves an append-only record with the rule, the counts, and every
+changed or removed session as it was before. An edit is reviewed and applied in one sitting: nothing is
+kept until it is applied (owner's question, decided 2026-10-06, ADR 0036).
+
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated
@@ -456,7 +487,10 @@ explanation and rejects unsupported inputs instead of fabricating precision.
 **STR-006** RPE progression v1 duplicates each selected source week for each requested
 iteration, applies `sourceRpe + increment * iteration`, and creates new prescriptions.
 Increment is -2 to +2 in 0.5 steps. Preview has no side effect; apply recomputes and requires
-the preview hash and concurrency token. Manual load overrides are retained and win.
+the preview hash and concurrency token. Manual load overrides are retained and win. Since P3a
+(TRN-027) Build next block takes all four WeekStep steps, of which the RPE increment is the first:
+new applications name `WeekStep` 1.0, earlier records still name `RpeStep`, and the effort step no
+longer moves a warm-up set.
 
 **STR-007** Phase 3 calculated loads use only the captured mesocycle working max. Calculation
 from week-1 performed load is a different future strategy and is never mixed implicitly.
@@ -1241,7 +1275,8 @@ size, uses generated object keys, and includes malware/content scanning before p
 
 **MED-002** Exercise media is associated with a versioned exercise and can be assigned into a
 program snapshot. Default clients see only assigned/permitted media. A coach may grant a
-client explicit full-library access per tenant.
+client explicit full-library access per tenant. Since P4 the coach's read of an assigned program
+names each exercise's snapshot media, so the coach watches the demo the client was given.
 
 **MED-003** Coaches may receive download controls while clients receive short-lived streaming
 URLs, but a web application cannot guarantee that viewable media is impossible to copy.

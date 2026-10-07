@@ -122,6 +122,22 @@ public interface ITrainingApplicationService
         ApplyProgressionRequest request,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// What editing a client's weeks in the builder's grid would do (TRN-028): the sessions and weeks added,
+    /// edited, moved or removed, every new weight, and whether the result stays inside the plan. Nothing is
+    /// saved. Throws <see cref="ArgumentException"/> for a grid the rule refuses and
+    /// <see cref="InvalidOperationException"/> when the program changed after the version the request carries.
+    /// </summary>
+    Task<ProgramEditPreviewView?> PreviewProgramEditAsync(
+        Guid mesocycleId,
+        PreviewProgramEditRequest request,
+        CancellationToken cancellationToken);
+
+    Task<TrainingCommandResult> ApplyProgramEditAsync(
+        Guid mesocycleId,
+        ApplyProgramEditRequest request,
+        CancellationToken cancellationToken);
+
     /// <summary>A program's training maxes, the one in use for each lift and the ones before it (STR-002).</summary>
     Task<TrainingMaxesView?> GetTrainingMaxesAsync(Guid mesocycleId, CancellationToken cancellationToken);
 
@@ -571,6 +587,10 @@ public sealed record TrainingSessionView(
     Guid? WorkoutExecutionId,
     IReadOnlyList<ExercisePrescriptionView> Exercises);
 
+/// <param name="MediaAssetIds">
+/// The exercise's demo media as the client was given it (MED-002), in display order; empty for a program
+/// template, whose media is the library's.
+/// </param>
 public sealed record ExercisePrescriptionView(
     Guid Id,
     Guid ExerciseId,
@@ -580,7 +600,8 @@ public sealed record ExercisePrescriptionView(
     PrescriptionModificationPolicy ModificationPolicy,
     string? CoachNotes,
     IReadOnlyList<Guid> ApprovedAlternativeExerciseIds,
-    IReadOnlyList<SetPrescriptionView> Sets);
+    IReadOnlyList<SetPrescriptionView> Sets,
+    IReadOnlyList<Guid> MediaAssetIds);
 
 public sealed record SetPrescriptionView(
     Guid Id,
@@ -632,18 +653,35 @@ public sealed record WeekProgressionPreviewView(
     string TransformVersion,
     IReadOnlyList<TrainingWeekRequest> Weeks);
 
+/// <summary>
+/// Build next block (STR-006, TRN-025): <paramref name="Iterations"/> copies of each chosen week, each a
+/// further step from its source. The four steps are WeekStep v1's; <paramref name="RpeIncrement"/> is the
+/// RPE step, kept under its first name, and the others may be left out (no change).
+/// </summary>
 public sealed record ProgressionPreviewRequest(
     IReadOnlyList<Guid> SourceWeekIds,
     int Iterations,
     decimal RpeIncrement,
-    uint MesocycleVersion);
+    uint MesocycleVersion,
+    int RepetitionsStep = 0,
+    decimal PercentageStep = 0m,
+    decimal LoadStep = 0m)
+{
+    public WeekProgressionSteps ToSteps() => new(RpeIncrement, RepetitionsStep, PercentageStep, LoadStep);
+}
 
 public sealed record ApplyProgressionRequest(
     IReadOnlyList<Guid> SourceWeekIds,
     int Iterations,
     decimal RpeIncrement,
     string PreviewHash,
-    uint MesocycleVersion);
+    uint MesocycleVersion,
+    int RepetitionsStep = 0,
+    decimal PercentageStep = 0m,
+    decimal LoadStep = 0m)
+{
+    public WeekProgressionSteps ToSteps() => new(RpeIncrement, RepetitionsStep, PercentageStep, LoadStep);
+}
 
 public sealed record ProgressionPreviewView(
     string PreviewHash,
@@ -654,6 +692,75 @@ public sealed record ProgressionPreviewView(
     bool IsInsideTrainingCoverage,
     string? CoverageMessage,
     IReadOnlyList<TrainingWeekView> GeneratedWeeks);
+
+/// <summary>
+/// One session as the grid sends it when a client's weeks are edited (TRN-028). Only sessions that are still
+/// open are sent; the others are never touched.
+/// </summary>
+/// <param name="SessionId">The stored session this one is; null for a session added in the grid.</param>
+public sealed record ProgramEditSessionRequest(Guid? SessionId, TrainingSessionRequest Session);
+
+/// <param name="WeekId">The stored week this one is; null for a week added in the grid.</param>
+public sealed record ProgramEditWeekRequest(
+    Guid? WeekId,
+    string? Label,
+    bool IsPublished,
+    IReadOnlyList<ProgramEditSessionRequest> Sessions);
+
+/// <summary>The program's weeks as the coach wants them, with the version they were read at.</summary>
+public sealed record PreviewProgramEditRequest(uint MesocycleVersion, IReadOnlyList<ProgramEditWeekRequest> Weeks);
+
+public sealed record ApplyProgramEditRequest(
+    uint MesocycleVersion,
+    IReadOnlyList<ProgramEditWeekRequest> Weeks,
+    string PreviewHash);
+
+/// <param name="WeekNumber">Where the session lands (where it was, for a removed one).</param>
+/// <param name="PreviousWeekNumber">Where an edited or moved session was, when its date changes.</param>
+/// <param name="WeekIsShared">Whether the client sees that week; an unshared week reaches nobody.</param>
+/// <param name="After">The session as it will be, weights worked out; null for a removed or moved-only session.</param>
+public sealed record ProgramEditSessionChangeView(
+    ProgramEditChangeKind Kind,
+    Guid? SessionId,
+    int WeekNumber,
+    DateOnly Date,
+    int? PreviousWeekNumber,
+    DateOnly? PreviousDate,
+    string Name,
+    bool WeekIsShared,
+    TrainingSessionView? After);
+
+public sealed record ProgramEditWeekChangeView(
+    ProgramEditChangeKind Kind,
+    int WeekNumber,
+    int? PreviousWeekNumber,
+    string? Label,
+    bool IsShared);
+
+/// <summary>
+/// What an edit would do (TRN-028). <paramref name="Problems"/> are reasons it cannot be applied, in plain
+/// words: the result leaving the plan, or colliding with another program of the client.
+/// </summary>
+public sealed record ProgramEditPreviewView(
+    string PreviewHash,
+    string RuleKey,
+    string RuleVersion,
+    DateOnly Today,
+    int FrozenWeekCount,
+    int ResultingWeekCount,
+    DateOnly CurrentEndDateExclusive,
+    DateOnly ResultingEndDateExclusive,
+    bool IsInsideTrainingCoverage,
+    IReadOnlyList<string> Problems,
+    int WeeksAdded,
+    int WeeksMoved,
+    int WeeksRemoved,
+    int SessionsAdded,
+    int SessionsEdited,
+    int SessionsMoved,
+    int SessionsRemoved,
+    IReadOnlyList<ProgramEditWeekChangeView> WeekChanges,
+    IReadOnlyList<ProgramEditSessionChangeView> SessionChanges);
 
 public sealed record ClientTrainingDayResult(
     bool IsAllowed,
@@ -921,6 +1028,10 @@ public sealed record ClientWorkoutHistoryPage(
     string PersonalRecordRuleKey,
     int PersonalRecordRuleVersion);
 
+/// <param name="Notes">
+/// The notes on the workout, the client's and the coach's, oldest first (TRN-009), so a coach's note on a
+/// finished workout reaches the client after its day (P4).
+/// </param>
 public sealed record ClientWorkoutHistoryItemView(
     Guid WorkoutExecutionId,
     string Name,
@@ -931,7 +1042,8 @@ public sealed record ClientWorkoutHistoryItemView(
     int CompletedSetCount,
     int TotalSetCount,
     IReadOnlyList<WorkoutVolumeView> Volume,
-    IReadOnlyList<WorkoutPersonalRecordView> PersonalRecords);
+    IReadOnlyList<WorkoutPersonalRecordView> PersonalRecords,
+    IReadOnlyList<WorkoutNoteView> Notes);
 
 public sealed record WorkoutVolumeView(TrainingLoadUnit Unit, decimal LoadTimesRepetitions);
 

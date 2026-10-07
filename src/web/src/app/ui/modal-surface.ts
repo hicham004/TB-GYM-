@@ -37,12 +37,13 @@ export interface ModalData {
   selector: 'app-modal-surface',
   imports: [IconButton, NgTemplateOutlet],
   template: `
-    <header class="tb-modal__header">
+    <!-- Not a <header>: a modal's title bar is no page banner, and two stacked modals would make two. -->
+    <div class="tb-modal__header">
       <h2 class="tb-modal__title" [id]="data.titleId">{{ data.title }}</h2>
       <button appIconButton type="button" [label]="data.closeLabel" (click)="dialogRef.close()">
         <span aria-hidden="true">&times;</span>
       </button>
-    </header>
+    </div>
     <div class="tb-modal__body">
       <ng-container
         [ngTemplateOutlet]="data.content"

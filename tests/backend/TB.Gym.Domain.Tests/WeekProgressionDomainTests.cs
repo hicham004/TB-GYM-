@@ -160,6 +160,21 @@ public sealed class WeekProgressionDomainTests
     }
 
     [TestMethod]
+    public void ARefusalNamesTheSourceWeekWhenSeveralAreCopied()
+    {
+        // Build next block copies several weeks, so a refusal says which week as well as which copy.
+        var refused = Assert.ThrowsExactly<ArgumentException>(() => WeekStepProgressionTransform.Generate(
+            SourceWeek(), new WeekProgressionSteps(0.5m, 0, 0m, 0m), 5, Names, "Week 3"));
+        StringAssert.StartsWith(refused.Message, "Week 3, copy 5, Upper A, Bench press, set 2");
+        StringAssert.Contains(refused.Message, "RPE would be 10.5");
+
+        // Without a source label the builder's wording is unchanged.
+        var builder = Assert.ThrowsExactly<ArgumentException>(() => WeekStepProgressionTransform.Generate(
+            SourceWeek(), new WeekProgressionSteps(0.5m, 0, 0m, 0m), 5, Names));
+        StringAssert.StartsWith(builder.Message, "Copy 5, Upper A");
+    }
+
+    [TestMethod]
     [DataRow(0.3, 0, 0.0, 0.0)]
     [DataRow(2.5, 0, 0.0, 0.0)]
     [DataRow(0.0, 21, 0.0, 0.0)]

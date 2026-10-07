@@ -294,6 +294,20 @@
                     }
                   </ul>
                 }
+                @if (item.notes.length > 0) {
+                  <ul class="history-notes">
+                    @for (note of item.notes; track note.id) {
+                      <li [class.coach]="note.fromCoach">
+                        @if (note.fromCoach) {
+                          <b class="note-from" i18n>Your coach</b>
+                        } @else {
+                          <b class="note-from" i18n>You</b>
+                        }
+                        <span class="note-text" dir="auto">{{ note.text }}</span>
+                      </li>
+                    }
+                  </ul>
+                }
               </li>
             }
           </ul>

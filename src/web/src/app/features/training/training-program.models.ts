@@ -75,6 +75,14 @@ export interface HistoryWorkout {
   readonly totalSets: number;
   readonly volume: readonly { readonly unit: TrainingLoadUnit; readonly amount: number }[];
   readonly records: readonly HistoryRecord[];
+  /** The notes on the workout, the coach's and the client's, oldest first (P4). */
+  readonly notes: readonly HistoryNote[];
+}
+
+export interface HistoryNote {
+  readonly id: string;
+  readonly fromCoach: boolean;
+  readonly text: string;
 }
 
 export interface WorkoutHistory {
@@ -168,6 +176,12 @@ export function mapWorkoutHistory(value: ClientWorkoutHistoryPage): WorkoutHisto
           reps: Number(record.repetitions),
           load: Number(record.load),
           unit: record.unit,
+        })),
+        // A history read from before notes were sent has none.
+        notes: (item.notes ?? []).map((note) => ({
+          id: note.id,
+          fromCoach: note.authorRole === 'Coach',
+          text: note.text,
         })),
       };
     }),

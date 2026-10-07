@@ -12,6 +12,14 @@ import {
 } from '../src/testing/client-program-fixtures';
 import { COACH_NOW, MAYA, OWNER_ID } from '../src/testing/coach-today-fixtures';
 import {
+  chartSet,
+  exerciseView,
+  leanProgram,
+  sessionView,
+  setView,
+  weekView,
+} from '../src/testing/mesocycle-fixtures';
+import {
   expect,
   expectNoHorizontalOverflow,
   json,
@@ -134,6 +142,7 @@ const blockDetail = {
               id: 'ex-1',
               exerciseName: 'Back Squat',
               coachNotes: null,
+              mediaAssetIds: ['squat-demo'],
               sets: [
                 { repetitionsMinimum: 5, repetitionsMaximum: 5, prescribedLoad: 60, targetRpe: 8 },
                 { repetitionsMinimum: 5, repetitionsMaximum: 5, prescribedLoad: 60, targetRpe: 8 },
@@ -510,6 +519,7 @@ test('the Manage program menu opens on a key, moves with the arrows and closes o
     'Assign program',
     'Rename program',
     'Build next block',
+    'Edit weeks',
     'Reschedule',
     'Open every shared week now',
     'Close program',
@@ -519,8 +529,8 @@ test('the Manage program menu opens on a key, moves with the arrows and closes o
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();
   // What cannot be done says why, and does nothing when chosen.
-  await expect(items.nth(3)).toHaveAttribute('aria-disabled', 'true');
-  await expect(items.nth(3)).toContainText('Not possible once a workout has started');
+  await expect(items.nth(4)).toHaveAttribute('aria-disabled', 'true');
+  await expect(items.nth(4)).toContainText('Not possible once a workout has started');
   await axe(page);
   await page.screenshot({ path: 'test-results/r34a-training-menu-1440.png' });
 
@@ -550,6 +560,43 @@ test('a session opens in a sheet that names it, holds focus and gives it back on
   await page.keyboard.press('Escape');
   await expect(sheet).toHaveCount(0);
   await expect(session).toBeFocused();
+});
+
+test('an exercise’s demo opens over the session sheet, as Maya was given it (P4)', async ({
+  page,
+}) => {
+  const pixel =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  await openTraining(page, 390, 844, {
+    extra: {
+      'POST /api/media/squat-demo/access': (route: Route) =>
+        json(route, 200, {
+          assetId: 'squat-demo',
+          kind: 'Image',
+          source: 'Upload',
+          contentType: 'image/png',
+          url: pixel,
+          expiresAtUtc: '2026-10-01T13:00:00Z',
+          downloadAllowed: true,
+        }),
+    },
+  });
+
+  await page.locator('.week.current button.session').nth(2).click();
+  const sheet = page.getByRole('dialog', { name: 'Lower B' });
+  // Only the exercise with a demo offers one.
+  await expect(sheet.getByRole('button', { name: 'Watch demo' })).toHaveCount(1);
+  await sheet.getByRole('button', { name: 'Watch demo' }).click();
+
+  const demo = page.getByRole('dialog', { name: 'Back Squat' });
+  await expect(demo.getByRole('img', { name: 'How to do Back Squat' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p4-session-demo-390.png' });
+
+  await page.keyboard.press('Escape');
+  await expect(demo).toHaveCount(0);
+  await expect(sheet).toBeVisible();
 });
 
 test('Assign program opens from the address, asks for a training max, and sends what was chosen', async ({
@@ -1151,4 +1198,381 @@ test.describe('program date conflicts', () => {
       await axe(page);
     });
   }
+});
+
+/** Weeks 7 to 9 of Maya's program, as Build next block previews them: each squat set a step further on. */
+const nextBlockPreview = {
+  previewHash: 'hash-next',
+  transformKey: 'WeekStep',
+  transformVersion: '1.0',
+  resultingWeekCount: 9,
+  resultingEndDateExclusive: '2026-11-16',
+  isInsideTrainingCoverage: true,
+  coverageMessage: null,
+  generatedWeeks: [7, 8, 9].map((number) =>
+    weekView(`next-${number}`, number, [
+      sessionView(`next-s${number}`, 'Lower A', [
+        exerciseView(`next-squat-${number}`, 'Back squat', [
+          setView({
+            position: 1,
+            setType: 'WarmUp',
+            loadStrategy: 'Direct',
+            loadUnit: 'Kilogram',
+            directLoad: 60,
+            prescribedLoad: 60,
+            targetRpe: 6,
+          }),
+          chartSet(2, {
+            repetitionsMinimum: 5 - (number - 6),
+            repetitionsMaximum: 5 - (number - 6),
+            prescribedLoad: 77.5 + (number - 6) * 2.5,
+            targetRpe: 7 + (number - 6) * 0.5,
+          }),
+        ]),
+      ]),
+    ]),
+  ),
+};
+
+function nextBlockOptions(requests?: { method: string; path: string; body: unknown }[]) {
+  return {
+    requests,
+    programs: [coachProgram(), coachProgram()],
+    extra: {
+      [`GET /api/training/mesocycles/${BLOCK}`]: (route: Route) => json(route, 200, leanProgram()),
+      [`POST /api/training/mesocycles/${BLOCK}/progression/preview`]: (route: Route) =>
+        json(route, 200, nextBlockPreview),
+      [`POST /api/training/mesocycles/${BLOCK}/progression/apply`]: (route: Route) =>
+        json(route, 200, { id: BLOCK }),
+    },
+  };
+}
+
+async function openNextBlock(page: Page) {
+  await page.getByRole('button', { name: 'Manage program' }).click();
+  await page.getByRole('button', { name: /^Build next block/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Build next block' });
+  await expect(sheet).toBeVisible();
+  return sheet;
+}
+
+test('Build next block takes the builder’s four steps, shows the new weeks first, then sends what was reviewed', async ({
+  page,
+}) => {
+  const requests: { method: string; path: string; body: unknown }[] = [];
+  await openTraining(page, 1440, 900, nextBlockOptions(requests));
+
+  const sheet = await openNextBlock(page);
+  // The last week is chosen; the steps start at half a point of effort and nothing else.
+  await expect(sheet.getByLabel('Week 6 · 19–25 Oct')).toBeChecked();
+  await expect(sheet.getByLabel('Copies of each week')).toHaveValue('3');
+  await expect(sheet.getByLabel('RPE a week')).toHaveValue('0.5');
+  await expect(sheet.getByLabel('Reps a week')).toHaveValue('0');
+  await expect(sheet.getByLabel('% of training max a week')).toHaveValue('0');
+  await expect(sheet.getByLabel('Weight a week (kg)')).toHaveValue('0');
+  // Each step says what it would move, and the formula the weights follow is named.
+  await expect(sheet.getByText('Sets moved: 2. Warm-ups stay as they are.')).toBeVisible();
+  await expect(sheet.getByText('Sets moved: 1, fixed or typed weights.')).toBeVisible();
+  await expect(
+    sheet.getByText(
+      'Weights come from this program’s training maxes. Where a weight follows an RPE, it uses the RTS chart, as it does now.',
+    ),
+  ).toBeVisible();
+
+  // A step the rules do not allow is said at the field, and nothing is sent.
+  await sheet.getByLabel('Reps a week').fill('25');
+  await sheet.getByRole('button', { name: 'Preview the new weeks' }).click();
+  await expect(sheet.getByText('Use a whole number from -20 to 20.')).toBeVisible();
+  await expect(sheet.getByLabel('Reps a week')).toBeFocused();
+  expect(requests).toEqual([]);
+
+  await sheet.getByLabel('Reps a week').fill('-1');
+  await sheet.getByRole('button', { name: 'Preview the new weeks' }).click();
+  await expect(sheet.locator('.preview-title')).toHaveText(['Week 7', 'Week 8', 'Week 9']);
+  await expect(sheet.locator('.preview-line')).toHaveText(
+    '3 new weeks. The program would end Sun 15 Nov 2026.',
+  );
+  // The set that moved reads heavier and says so; the warm-up is as it was.
+  const first = sheet.locator('.preview-week').first().locator('.set');
+  await expect(first).toHaveText(['5 reps · 60 kg · RPE 6', '4 reps · 80 kg · RPE 7.5 , changed']);
+  await expect(first.nth(1)).toHaveClass(/changed/);
+  await expect(first.nth(0)).not.toHaveClass(/changed/);
+  expect(requests.map((request) => request.path)).toEqual([
+    `/api/training/mesocycles/${BLOCK}/progression/preview`,
+  ]);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p3a-next-block-1440.png', fullPage: true });
+
+  await sheet.getByRole('button', { name: 'Add these weeks' }).click();
+  await expect(sheet).toHaveCount(0);
+  expect(requests[0].body).toEqual({
+    sourceWeekIds: [`${BLOCK}-week6`],
+    iterations: 3,
+    rpeIncrement: 0.5,
+    repetitionsStep: -1,
+    percentageStep: 0,
+    loadStep: 0,
+    mesocycleVersion: 4,
+  });
+  expect(requests[1].body).toEqual({ ...(requests[0].body as object), previewHash: 'hash-next' });
+  await expect(
+    page.getByRole('status').filter({ hasText: 'The new weeks are added to' }),
+  ).toBeVisible();
+});
+
+for (const width of [390, 1440]) {
+  test(`Build next block reflows at 200% text at ${width}px, preview included`, async ({
+    page,
+  }) => {
+    await openTraining(page, width, 900, nextBlockOptions());
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    const sheet = await openNextBlock(page);
+    await expectNoHorizontalOverflow(page);
+    await sheet.getByRole('button', { name: 'Preview the new weeks' }).click();
+    await expect(sheet.locator('.preview')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+}
+
+test('Build next block at phone width keeps its buttons in view and passes axe', async ({
+  page,
+}) => {
+  await openTraining(page, 390, 844, nextBlockOptions());
+
+  const sheet = await openNextBlock(page);
+  await sheet.getByRole('button', { name: 'Preview the new weeks' }).click();
+  await expect(sheet.locator('.preview')).toBeVisible();
+  await expect(sheet.getByRole('button', { name: 'Add these weeks' })).toBeInViewport();
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p3a-next-block-390.png', fullPage: true });
+});
+
+test('Build next block follows dark mode and reads right to left', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openTraining(page, 1440, 900, nextBlockOptions());
+
+  const sheet = await openNextBlock(page);
+  await sheet.getByRole('button', { name: 'Preview the new weeks' }).click();
+  await expect(sheet.locator('.preview')).toBeVisible();
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p3a-next-block-dark-1440.png', fullPage: true });
+
+  await useRtl(page);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+});
+
+/**
+ * Maya's program as Edit weeks reads it on Thu 1 Oct (P3b): one session a week on its first day, weeks 1
+ * and 2 done, week 3's session gone by, weeks 4 to 6 still to come.
+ */
+function editableBlock() {
+  const program = leanProgram();
+  const days = ['2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19'];
+  program.weeks.forEach((week, index) => {
+    const session = week.sessions[0];
+    session.scheduledDate = days[index];
+    if (index < 2) {
+      session.hasStarted = true;
+      session.isCompleted = true;
+    }
+  });
+  return program;
+}
+
+/** What the server says renaming week 4 and moving its squat set to 3 reps at RPE 8 does. */
+const editPreview = {
+  previewHash: 'hash-edit',
+  ruleKey: 'GridEdit',
+  ruleVersion: '1.0',
+  today: '2026-10-01',
+  frozenWeekCount: 3,
+  resultingWeekCount: 6,
+  currentEndDateExclusive: '2026-10-26',
+  resultingEndDateExclusive: '2026-10-26',
+  isInsideTrainingCoverage: true,
+  problems: [],
+  weeksAdded: 0,
+  weeksMoved: 0,
+  weeksRemoved: 0,
+  sessionsAdded: 0,
+  sessionsEdited: 1,
+  sessionsMoved: 0,
+  sessionsRemoved: 0,
+  weekChanges: [
+    { kind: 'Edited', weekNumber: 4, previousWeekNumber: 4, label: 'Heavy', isShared: true },
+  ],
+  sessionChanges: [
+    {
+      kind: 'Edited',
+      sessionId: 'block-lean-s4',
+      weekNumber: 4,
+      date: '2026-10-05',
+      previousWeekNumber: null,
+      previousDate: null,
+      name: 'Lower A',
+      weekIsShared: true,
+      after: sessionView('block-lean-s4', 'Lower A', [
+        exerciseView('squat-4', 'Back squat', [
+          chartSet(1, {
+            repetitionsMinimum: 3,
+            repetitionsMaximum: 3,
+            targetRpe: 8,
+            prescribedLoad: 87.5,
+          }),
+        ]),
+      ]),
+    },
+  ],
+};
+
+const EDIT_PATH = `/clients/${ID}/training/${BLOCK}/edit`;
+
+function editOptions(requests?: { method: string; path: string; body: unknown }[]) {
+  return {
+    requests,
+    path: EDIT_PATH,
+    extra: {
+      [`GET /api/training/mesocycles/${BLOCK}`]: (route: Route) =>
+        json(route, 200, editableBlock()),
+      'GET /api/exercises': (route: Route) => json(route, 200, { items: [], total: 0 }),
+      'GET /api/training/saved-sessions': (route: Route) => json(route, 200, []),
+      'POST /api/media/access': (route: Route) => json(route, 200, { items: [] }),
+      [`POST /api/training/mesocycles/${BLOCK}/edit/preview`]: (route: Route) =>
+        json(route, 200, editPreview),
+      [`POST /api/training/mesocycles/${BLOCK}/edit/apply`]: (route: Route) =>
+        json(route, 200, { ...editableBlock(), version: 5 }),
+    },
+  };
+}
+
+async function reviewRenamedWeek(page: Page) {
+  await expect(page.locator('#edit-title')).toHaveText('Edit weeks');
+  // A narrow page shows one week at a time.
+  const chip = page.locator('.week-chip', { hasText: '4' });
+  if (await chip.isVisible()) await chip.click();
+  await page.getByLabel('Name of week 4').fill('Heavy');
+  await page.getByRole('button', { name: 'Review changes' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Review changes' });
+  await expect(sheet).toBeVisible();
+  return sheet;
+}
+
+test('Edit weeks opens the weeks still to come in the builder’s grid and applies what was reviewed', async ({
+  page,
+}) => {
+  const requests: { method: string; path: string; body: unknown }[] = [];
+  await openTraining(page, 1440, 900, { ...editOptions(requests), path: undefined });
+
+  await page.getByRole('button', { name: 'Manage program' }).click();
+  await page.getByRole('button', { name: /^Edit weeks/ }).click();
+  await expect(page).toHaveURL(EDIT_PATH);
+  await expect(page).toHaveTitle('Edit weeks | TB Gym');
+  await expect(page.locator('.edit-runs')).toHaveText('6 weeks · Mon 14 Sep – Sun 25 Oct 2026');
+  // Weeks 1 to 3 hold what happened; weeks 4 to 6 can change.
+  await expect(page.locator('.locked-card app-status-pill')).toHaveText(['Done', 'Done', 'Past']);
+  await expect(page.locator('section.week .session-card')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Review changes' })).toBeDisabled();
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p3b-edit-1440.png', fullPage: true });
+
+  const sheet = await reviewRenamedWeek(page);
+  await expect(sheet.locator('.review-headline')).toHaveText(
+    '1 session changed · 1 week renamed or shared differently',
+  );
+  await expect(sheet.locator('.review-title')).toHaveText([
+    'Week 4 · Heavy',
+    'Week 4 · Mon 5 Oct · Lower A',
+  ]);
+  await expect(sheet.locator('.review-set')).toHaveText(['3 reps · 87.5 kg · RPE 8']);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p3b-review-1440.png' });
+
+  await sheet.getByRole('button', { name: 'Apply changes' }).click();
+  await expect(page).toHaveURL(`/clients/${ID}/training`);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'is updated. Maya sees the changes' }),
+  ).toBeVisible();
+  const preview = requests.find((request) => request.path.endsWith('/edit/preview'))!.body as {
+    mesocycleVersion: number;
+    weeks: { weekId: string; label: string | null; sessions: { sessionId: string }[] }[];
+  };
+  expect(preview.mesocycleVersion).toBe(4);
+  expect(preview.weeks.map((week) => [week.label, week.sessions.map((s) => s.sessionId)])).toEqual([
+    [null, []],
+    [null, []],
+    [null, []],
+    ['Heavy', ['block-lean-s4']],
+    [null, ['block-lean-s5']],
+    [null, ['block-lean-s6']],
+  ]);
+  expect(requests.find((request) => request.path.endsWith('/edit/apply'))!.body).toEqual({
+    ...preview,
+    previewHash: 'hash-edit',
+  });
+});
+
+for (const width of [390, 1440]) {
+  test(`Edit weeks reflows at 200% text at ${width}px, review included`, async ({ page }) => {
+    await openTraining(page, width, 900, editOptions());
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    await expectNoHorizontalOverflow(page);
+    await reviewRenamedWeek(page);
+    await expectNoHorizontalOverflow(page);
+  });
+}
+
+test('Edit weeks at phone width shows this week first, keeps Apply in view and passes axe', async ({
+  page,
+}) => {
+  await openTraining(page, 390, 844, editOptions());
+
+  await expect(page.locator('section.week:visible')).toHaveCount(1);
+  await expect(page.locator('section.week:visible')).toHaveAttribute('aria-label', 'Week 3');
+  await expect(page.locator('.week-chip input:checked')).toHaveAttribute('aria-label', 'Week 3');
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p3b-edit-390.png', fullPage: true });
+
+  const sheet = await reviewRenamedWeek(page);
+  await expect(sheet.getByRole('button', { name: 'Apply changes' })).toBeInViewport();
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p3b-review-390.png' });
+});
+
+test('Edit weeks asks before leaving with changes not applied', async ({ page }) => {
+  await openTraining(page, 1440, 900, editOptions());
+  await page.getByLabel('Name of week 4').fill('Heavy');
+
+  await page.getByRole('link', { name: 'Maya’s training' }).click();
+  const ask = page.getByRole('dialog', { name: 'Leave without applying?' });
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: 'Stay' }).click();
+  await expect(page).toHaveURL(EDIT_PATH);
+
+  await page.getByRole('link', { name: 'Maya’s training' }).click();
+  await page
+    .getByRole('dialog', { name: 'Leave without applying?' })
+    .getByRole('button', { name: 'Leave without applying' })
+    .click();
+  await expect(page).toHaveURL(`/clients/${ID}/training`);
+});
+
+test('Edit weeks follows dark mode and reads right to left', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openTraining(page, 1440, 900, editOptions());
+
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p3b-edit-dark-1440.png', fullPage: true });
+  await reviewRenamedWeek(page);
+  await axe(page);
+
+  await useRtl(page);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
 });

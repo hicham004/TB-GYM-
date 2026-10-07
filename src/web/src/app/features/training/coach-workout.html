@@ -92,6 +92,38 @@
           Older notes
         </button>
       }
+      <!-- The coach answers on the workout itself (P4); the client reads it there (TRN-009). -->
+      @if (canReply()) {
+        <form
+          class="reply"
+          (submit)="$event.preventDefault(); sendNote(detail.workout.workoutExecutionId)"
+        >
+          <label class="reply-label" [for]="replyId">{{ replyLabel() }}</label>
+          <textarea
+            class="reply-text"
+            [id]="replyId"
+            name="coach-note"
+            rows="3"
+            maxlength="2000"
+            autocomplete="off"
+            dir="auto"
+            [value]="note()"
+            (input)="note.set($any($event.target).value)"
+          ></textarea>
+          @if (sendError(); as message) {
+            <p class="reply-error" role="alert">{{ message }}</p>
+          }
+          <div class="reply-actions">
+            <button appButton type="submit" [loading]="sending()" [disabled]="!note().trim()">
+              @if (sending()) {
+                <span i18n>Sending…</span>
+              } @else {
+                <span i18n>Send note</span>
+              }
+            </button>
+          </div>
+        </form>
+      }
     </section>
   }
 }

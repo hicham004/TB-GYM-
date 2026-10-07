@@ -11,6 +11,11 @@ public interface ITrainingProgressionTransform
     decimal? TransformRpe(decimal? sourceRpe, decimal increment, int iteration);
 }
 
+/// <summary>
+/// RPE progression v1 (STR-006), the first Build next block rule: one RPE step a week. Since P3a Build next
+/// block takes all four <see cref="WeekStepProgressionTransform"/> steps, of which this is the RPE step, so
+/// new applications name WeekStep; records made before then still name RpeStep.
+/// </summary>
 public sealed class RpeStepProgressionTransform : ITrainingProgressionTransform
 {
     public const string Key = "RpeStep";
@@ -47,6 +52,8 @@ public sealed record WeekProgressionSteps(
 /// away in RPE or RIR, repetitions, percentage of training max and fixed weight. It writes plain
 /// numbers and calculates no load, so programs already assigned keep their snapshots. Warm-up sets
 /// stay as they are. Any result outside a set's own limits refuses the whole copy with the reason.
+/// Build next block (P3a, ADR 0036) uses the same steps on a client's assigned weeks; there the server
+/// works the weights out from the program's maxes after the numbers have moved.
 /// </summary>
 public sealed class WeekStepProgressionTransform
 {
@@ -78,11 +85,16 @@ public sealed class WeekStepProgressionTransform
         }
     }
 
+    /// <param name="sourceLabel">
+    /// Names the source in a refusal ("Week 3"), for callers that copy several weeks; the builder copies
+    /// one, so its refusals just say which copy.
+    /// </param>
     public static IReadOnlyList<TrainingWeekRequest> Generate(
         TrainingWeekRequest source,
         WeekProgressionSteps steps,
         int copies,
-        IReadOnlyDictionary<Guid, string> exerciseNames)
+        IReadOnlyDictionary<Guid, string> exerciseNames,
+        string? sourceLabel = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(exerciseNames);
@@ -101,11 +113,12 @@ public sealed class WeekStepProgressionTransform
                 {
                     Exercises = (session.Exercises ?? []).Select(exercise => exercise with
                     {
-                        Sets = (exercise.Sets ?? []).Select(set => TransformSet(
+                        // Numbered by their order, as a coach reads them, not by the position a program stored.
+                        Sets = (exercise.Sets ?? []).Select((set, setIndex) => TransformSet(
                             set,
                             steps,
                             copy,
-                            $"Copy {copy}, {session.Name}, {exerciseNames.GetValueOrDefault(exercise.ExerciseId, "an exercise")}, set {set.Position}")).ToArray(),
+                            $"{(sourceLabel is null ? "Copy" : $"{sourceLabel}, copy")} {copy}, {session.Name}, {exerciseNames.GetValueOrDefault(exercise.ExerciseId, "an exercise")}, set {setIndex + 1}")).ToArray(),
                     }).ToArray(),
                 }).ToArray(),
             });

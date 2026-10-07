@@ -309,6 +309,9 @@
   display: flex;
   gap: 0.25rem;
 }
+.exercise-heading app-exercise-demo {
+  margin-inline-start: auto;
+}
 .exercise-grip {
   color: var(--tb-muted);
   cursor: grab;

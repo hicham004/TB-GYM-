@@ -148,12 +148,21 @@ export type AllergenCode =
   | 'Lupin'
   | 'Molluscs';
 
+export type ApplyProgramEditRequest = {
+  mesocycleVersion: number | string;
+  weeks: Array<ProgramEditWeekRequest>;
+  previewHash: string;
+};
+
 export type ApplyProgressionRequest = {
   sourceWeekIds: Array<string>;
   iterations: number | string;
   rpeIncrement: number | string;
   previewHash: string;
   mesocycleVersion: number | string;
+  repetitionsStep?: number | string;
+  percentageStep?: number | string;
+  loadStep?: number | string;
 };
 
 export type ApplyTrainingMaxesRequest = {
@@ -949,6 +958,7 @@ export type ClientWorkoutHistoryItemView = {
   totalSetCount: number | string;
   volume: Array<WorkoutVolumeView>;
   personalRecords: Array<WorkoutPersonalRecordView>;
+  notes: Array<WorkoutNoteView>;
 };
 
 export type ClientWorkoutHistoryPage = {
@@ -1664,6 +1674,7 @@ export type ExercisePrescriptionView = {
   coachNotes: null | string;
   approvedAlternativeExerciseIds: Array<string>;
   sets: Array<SetPrescriptionView>;
+  mediaAssetIds: Array<string>;
 };
 
 export type ExerciseSearchResult = {
@@ -2303,6 +2314,11 @@ export type PreparationBasis = 'Raw' | 'Cooked' | 'AsSold' | 'Prepared';
 
 export type PrescriptionModificationPolicy = 'Locked' | 'CoachApprovedSwap';
 
+export type PreviewProgramEditRequest = {
+  mesocycleVersion: number | string;
+  weeks: Array<ProgramEditWeekRequest>;
+};
+
 export type PreviewTrainingMaxesRequest = {
   mesocycleVersion: number | string;
   changes: Array<TrainingMaxChangeRequest>;
@@ -2413,6 +2429,62 @@ export type ProgramDraftView = {
   exercises: Array<ProgramDraftExerciseView>;
 };
 
+export type ProgramEditChangeKind = 'Added' | 'Edited' | 'Moved' | 'Removed';
+
+export type ProgramEditPreviewView = {
+  previewHash: string;
+  ruleKey: string;
+  ruleVersion: string;
+  today: string;
+  frozenWeekCount: number | string;
+  resultingWeekCount: number | string;
+  currentEndDateExclusive: string;
+  resultingEndDateExclusive: string;
+  isInsideTrainingCoverage: boolean;
+  problems: Array<string>;
+  weeksAdded: number | string;
+  weeksMoved: number | string;
+  weeksRemoved: number | string;
+  sessionsAdded: number | string;
+  sessionsEdited: number | string;
+  sessionsMoved: number | string;
+  sessionsRemoved: number | string;
+  weekChanges: Array<ProgramEditWeekChangeView>;
+  sessionChanges: Array<ProgramEditSessionChangeView>;
+};
+
+export type ProgramEditSessionChangeView = {
+  kind: ProgramEditChangeKind;
+  sessionId: null | string;
+  weekNumber: number | string;
+  date: string;
+  previousWeekNumber: null | number | string;
+  previousDate: null | string;
+  name: string;
+  weekIsShared: boolean;
+  after: null | TrainingSessionView;
+};
+
+export type ProgramEditSessionRequest = {
+  sessionId: null | string;
+  session: TrainingSessionRequest;
+};
+
+export type ProgramEditWeekChangeView = {
+  kind: ProgramEditChangeKind;
+  weekNumber: number | string;
+  previousWeekNumber: null | number | string;
+  label: null | string;
+  isShared: boolean;
+};
+
+export type ProgramEditWeekRequest = {
+  weekId: null | string;
+  label: null | string;
+  isPublished: boolean;
+  sessions: Array<ProgramEditSessionRequest>;
+};
+
 export type ProgramTemplatePage = {
   total: number | string;
   skip: number | string;
@@ -2470,6 +2542,9 @@ export type ProgressionPreviewRequest = {
   iterations: number | string;
   rpeIncrement: number | string;
   mesocycleVersion: number | string;
+  repetitionsStep?: number | string;
+  percentageStep?: number | string;
+  loadStep?: number | string;
 };
 
 export type ProgressionPreviewView = {
@@ -6367,6 +6442,77 @@ export type ApplyTrainingProgressionResponses = {
 
 export type ApplyTrainingProgressionResponse =
   ApplyTrainingProgressionResponses[keyof ApplyTrainingProgressionResponses];
+
+export type PreviewProgramEditData = {
+  body: PreviewProgramEditRequest;
+  path: {
+    mesocycleId: string;
+  };
+  query?: never;
+  url: '/api/training/mesocycles/{mesocycleId}/edit/preview';
+};
+
+export type PreviewProgramEditErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PreviewProgramEditError = PreviewProgramEditErrors[keyof PreviewProgramEditErrors];
+
+export type PreviewProgramEditResponses = {
+  /**
+   * OK
+   */
+  200: ProgramEditPreviewView;
+};
+
+export type PreviewProgramEditResponse =
+  PreviewProgramEditResponses[keyof PreviewProgramEditResponses];
+
+export type ApplyProgramEditData = {
+  body: ApplyProgramEditRequest;
+  path: {
+    mesocycleId: string;
+  };
+  query?: never;
+  url: '/api/training/mesocycles/{mesocycleId}/edit/apply';
+};
+
+export type ApplyProgramEditErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ApplyProgramEditError = ApplyProgramEditErrors[keyof ApplyProgramEditErrors];
+
+export type ApplyProgramEditResponses = {
+  /**
+   * OK
+   */
+  200: TrainingMesocycleView;
+};
+
+export type ApplyProgramEditResponse = ApplyProgramEditResponses[keyof ApplyProgramEditResponses];
 
 export type GetTrainingMaxesData = {
   body?: never;

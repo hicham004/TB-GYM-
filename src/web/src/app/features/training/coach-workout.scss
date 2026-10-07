@@ -24,3 +24,43 @@ p {
 button {
   min-block-size: 44px;
 }
+// The coach's note on the workout (P4).
+.reply {
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-block-start: 0.75rem;
+  padding-block-start: 0.75rem;
+}
+.reply-label {
+  color: var(--tb-ink);
+  font-weight: 600;
+}
+.reply-text {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line-strong);
+  border-radius: var(--tb-radius-control);
+  box-sizing: border-box;
+  color: var(--tb-ink);
+  font: inherit;
+  inline-size: 100%;
+  min-block-size: 5rem;
+  padding: 0.5rem 0.75rem;
+  resize: vertical;
+}
+.reply-text:focus-visible {
+  border-color: var(--tb-focus);
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 0;
+}
+.reply-error {
+  background: var(--tb-danger-soft);
+  border-radius: var(--tb-radius-control);
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+}
+.reply-actions {
+  display: flex;
+  justify-content: flex-end;
+}

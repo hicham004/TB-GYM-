@@ -18,7 +18,6 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
     private readonly CoachClientScope coachClientScope;
     private readonly StrengthLoadRecommendationStrategy loadRecommendation = new();
     private readonly RpeChartLoadStrategy rpeChartRecommendation = new();
-    private readonly RpeStepProgressionTransform rpeProgression = new();
 
     public TrainingApplicationService(
         GymDbContext dbContext,

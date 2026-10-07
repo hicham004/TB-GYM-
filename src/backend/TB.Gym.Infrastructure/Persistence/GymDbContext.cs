@@ -206,6 +206,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<ProgressionApplication> ProgressionApplications => Set<ProgressionApplication>();
 
+    public DbSet<ProgramEdit> ProgramEdits => Set<ProgramEdit>();
+
     public DbSet<NutritionWorkspaceSettings> NutritionWorkspaceSettings => Set<NutritionWorkspaceSettings>();
 
     public DbSet<FoodItem> FoodItems => Set<FoodItem>();
@@ -924,6 +926,7 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<WorkingMaxUpdate>("Training max updates are append-only.");
         RejectAppendOnlyMutations<WorkoutNote>("Workout notes are append-only.");
         RejectAppendOnlyMutations<ProgressionApplication>("Progression applications are append-only.");
+        RejectAppendOnlyMutations<ProgramEdit>("Program edits are append-only.");
         RejectAppendOnlyMutations<MesocycleLifecycleEvent>("Mesocycle lifecycle events are append-only.");
         RejectAppendOnlyMutations<FoodItemVersion>("Food item versions are immutable.");
         RejectAppendOnlyMutations<CookingFactorRecord>("Cooking factors are versioned and immutable.");

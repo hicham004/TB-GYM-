@@ -2,10 +2,13 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type { Observable } from 'rxjs';
 import type {
+  ApplyProgramEditRequest,
   ApplyTrainingMaxesRequest,
   CoachClientProgramView,
   EstimateRpeChartMaxRequest,
+  PreviewProgramEditRequest,
   PreviewTrainingMaxesRequest,
+  ProgramEditPreviewView,
   RenameMesocycleRequest,
   RpeChartMaxEstimateView,
   TrainingMaxesPreviewView,
@@ -63,6 +66,28 @@ export class ClientProgramApi {
   ): Observable<TrainingMesocycleView> {
     return this.http.put<TrainingMesocycleView>(
       `/api/training/mesocycles/${mesocycleId}/name`,
+      request,
+    );
+  }
+
+  /** What an edit of the client's weeks would change, every weight worked out, nothing saved (TRN-028). */
+  previewProgramEdit(
+    mesocycleId: string,
+    request: PreviewProgramEditRequest,
+  ): Observable<ProgramEditPreviewView> {
+    return this.http.post<ProgramEditPreviewView>(
+      `/api/training/mesocycles/${mesocycleId}/edit/preview`,
+      request,
+    );
+  }
+
+  /** Carries out exactly the edit the coach reviewed: the same weeks, the version and the preview's hash. */
+  applyProgramEdit(
+    mesocycleId: string,
+    request: ApplyProgramEditRequest,
+  ): Observable<TrainingMesocycleView> {
+    return this.http.post<TrainingMesocycleView>(
+      `/api/training/mesocycles/${mesocycleId}/edit/apply`,
       request,
     );
   }

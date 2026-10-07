@@ -191,6 +191,11 @@ internal sealed partial class TrainingApplicationService
             .Include(item => item.Exercises).ThenInclude(item => item.Sets)
             .AsSplitQuery()
             .ToDictionaryAsync(item => item.Id, cancellationToken);
+        var notes = (await dbContext.WorkoutNotes.AsNoTracking()
+                .Where(item => ids.Contains(item.WorkoutExecutionId))
+                .OrderBy(item => item.CreatedAtUtc)
+                .ToListAsync(cancellationToken))
+            .ToLookup(item => item.WorkoutExecutionId);
         var earlier = workouts.Count == 0
             ? []
             : await LoadEarlierSetsAsync(
@@ -214,7 +219,8 @@ internal sealed partial class TrainingApplicationService
                 summary.CompletedSetCount,
                 summary.TotalSetCount,
                 summary.Volume,
-                summary.PersonalRecords);
+                summary.PersonalRecords,
+                notes[workout.Id].Select(ToView).ToArray());
         }).ToArray();
         return new(true, access.Reason.ToString(), items,
             page.Count > HistoryPageSize ? skip + HistoryPageSize : null,

@@ -75,9 +75,11 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R4.2b | **Program builder**, part 2b: inline sets × reps × load / RPE editing on the grid, and the publish preview | §2 | Done · 2026-10-05 · e51143f |
 | R4.3 | **Check-in review** (C5) | §2 | Done · 2026-10-05 |
 | P1 | **Progression, builder** (owner-approved 2026-10-05, ADR 0036): "Duplicate with progression" on a week's menu (1 to 12 copies; RPE, reps, % and weight steps; the new weeks are shown before they are added), the RTS RPE chart as a load formula, and the program's formula choice | §2, plus domain reference tests (the chart, the steps) and API tests | Done · 2026-10-06 · 3538285 |
-| P2 | **Progression, training maxes** (ADR 0036): a "Training maxes" panel at the top right of a client's program (each lift, value, source, date); "Update maxes for the coming weeks" with a preview of every changed weight; name or rename the program; weights from week 1's weight | §2, plus backend tests (superseding snapshot, stale preview, retry, other coach, released client) | Done · 2026-10-06 |
-| P3 | **Progression, editing and next block** (ADR 0036): Build next block takes the same steps and the program's formula; a client's future weeks are edited in the builder's grid through the coverage policy, with an audit record; started and finished sessions stay locked | §2, plus backend tests | To do |
-| P4 | **Session extras** (ADR 0036): an exercise video button in the builder, the session sheet and the client's workout player; coach and client notes visible both ways. Plan only for adjusting next week from logged performance, then ask the owner | §2 | To do |
+| P2 | **Progression, training maxes** (ADR 0036): a "Training maxes" panel at the top right of a client's program (each lift, value, source, date); "Update maxes for the coming weeks" with a preview of every changed weight; name or rename the program; weights from week 1's weight | §2, plus backend tests (superseding snapshot, stale preview, retry, other coach, released client) | Done · 2026-10-06 · a94b973 |
+| P3a | **Progression, next block** (ADR 0036): Build next block takes the builder's four steps (RPE, reps, % of the max, weight) and each set's own formula, and shows the new weeks with their weights before adding them | §2, plus backend tests (each step and formula, limits, stale preview, coverage, race, other coach, released client) | Done · 2026-10-07 |
+| P3b | **Progression, editing** (ADR 0036): a client's future weeks are edited in the builder's grid through the coverage policy, with an audit record; started and finished sessions stay locked | §2, plus backend tests | Done · 2026-10-07 |
+| P4a | **Session extras** (ADR 0036): an exercise video button in the builder, the session sheet and the client's workout player; coach and client notes visible both ways | §2 | Done · 2026-10-07 |
+| P4b | 🚦 **Adjusting next week from logged performance** (ADR 0036): planned, not built; the owner answers the three questions in the ADR first | The owner decides | Waiting for the owner |
 | R4.4 | **Nutrition library and meal-plan builder** (C7) | §2 | To do |
 | R5.1 | **Products** (C8), **Exercise library** (C10), notifications | §2 | To do |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
@@ -233,7 +235,12 @@ of the implemented R1.3 screens before production rollout.
   the confirmation dialog stay in the builder's lazy chunk. R4.2b keeps the initial bundle at
   541.7 kB; inline editing and preview stay lazy, with `program-week.scss` now 7.3 kB. R4.3 keeps it
   at 541.7 kB too: the check-in list and review are lazy (the review's chunk is about 39 kB, saved
-  replies included), and both stylesheets stay under the 5 kB warning.
+  replies included), and both stylesheets stay under the 5 kB warning. P1 and P2 were not measured; the
+  build at their commit reads 542.13 kB, and P3a keeps it there (the sheet and its models stay in the
+  lazy client-program chunk, and its inline styles are under the 5 kB warning). P3b keeps it at 542.13 kB:
+  Edit weeks is its own lazy chunk (about 62 kB with the builder's grid pieces it reuses), and its own
+  stylesheet is under the 5 kB warning. P4a measured 542.33 kB (+0.2 kB, the `play` glyph in the shared
+  icon set); `ExerciseDemo` loads with the lazy pages that use it.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -355,6 +362,45 @@ of the implemented R1.3 screens before production rollout.
   builder, then the program is assigned); (2) on a wide page the header is shorter than the panel, so
   there is a gap under it, which a later step could fill (for example with the next sessions); (3) the
   per-client sequence "Meso 1" of TRN-002 was never built, so programs are told apart by name and date.
+- **Build next block (from P3a, built 2026-10-06; screenshots `docs/design/p3a-*.png`).** The sheet takes
+  the builder's four steps (TRN-027); each step says how many of the chosen weeks' sets it would move,
+  the preview marks the sets that moved against the week each copy builds on, and one line names the
+  formula the weights follow. Left for later: (1) choosing the formula again for the new block (each set
+  keeps the one it has, as decision 1 of ADR 0036 says the coach picks it per program in the builder);
+  (2) the new weeks are shared as their source week is, as before, so a coach who wants them private
+  unshares them on the timeline; (3) a client is not told when a shared week changes, here or in the
+  session swap: that wants an owner decision on notifications (see P3b); (4) the old RPE-only wording
+  moved warm-up sets too, the builder's rule does not (TRN-025), so warm-ups now stay as they are;
+  (5) a program only grows inside the plan it was assigned under (TRN-011), so on the Atlas demo, where
+  every program ends with its plan, the sheet says "run past the end of the plan" for all but Sara
+  Mansour (two spare weeks). It now says what to do next: fewer copies, or renew the plan and assign the
+  next program; (6) the builder's "Duplicate with progression" panel gives its step fields `inputmode`
+  "numeric" or "decimal", and a phone's numeric keypads have no minus key, so a negative step is hard to
+  type there; this sheet leaves `inputmode` off its step fields for that reason (not changed in the builder).
+- **Edit weeks (from P3b, built 2026-10-07; screenshots `docs/design/p3b-*.png`).** Manage program's **Edit
+  weeks** opens `/clients/:clientId/training/:mesocycleId/edit`: the builder's grid with real dates, the
+  sessions that started, finished or passed drawn locked with their state, days already gone closed, and the
+  weeks holding them kept in place (TRN-028). Review changes shows the server's preview (what is new,
+  changed, moved or removed, every new weight, a new end date, and what stops it, such as running past the
+  plan); Apply changes carries out exactly that. The owner left "draft or one sitting" to Claude: one
+  sitting (ADR 0036), with the leave confirmation, the workspace-switch question and the browser's warning
+  before a reload. Left for later: (1) the grid template is a copy of the builder's, adapted for locked
+  sessions; both share the models, sheets and stylesheets, and a shared grid component would remove the
+  copy; (2) the library's "Add to saved sessions" and "Duplicate with progression" are not offered here
+  (Build next block does the progression); (3) a client is still not told when a shared week changes, as
+  in P3a; (4) week labels that carry a number ("Week 4 · Heavy") are not renumbered when weeks move, as in
+  the builder; (5) a phone moves a session to another week only on a wide screen, as in the builder.
+- **Session extras (from P4a, built 2026-10-07; screenshots `docs/design/p4-*.png`).** Watch demo
+  (`ExerciseDemo`, a new `play` icon) sits on the builder's and Edit weeks' exercise rows (the library's
+  media) and beside each exercise of a client's session sheet (the snapshot the client was given, now on
+  the coach's program read); it opens the picture or video in a sheet through the usual grant. The session
+  sheet's workout view takes the coach's note ("Note for Maya on this workout"), and the client's finished
+  workouts list every note ("You", "Your coach"). The player already had both. The kit's modal title bar
+  is no longer a `<header>`, so two stacked modals no longer make two page banners (axe). Left for later:
+  (1) the Atlas demo has no exercise media, so playback was checked with mocks and the grant test, not a
+  real video; (2) a client is not notified of a coach's workout note (notifications are a separate
+  decision); (3) the coach's workout view keeps its older look (plain "Target:"/"Actual:" lines and
+  hand-built units); (4) the client sees notes on finished workouts in Training, not on Today after the day.
 
 ---
 
@@ -700,7 +746,7 @@ limited to the coach's assigned clients.
   - A session opens a sheet: what it prescribes (equal sets told once, "3 × 8–10 reps · 60 kg · RPE
     8"), what the client did when they started it (the coach's workout view, set by set against the
     target) and, for one still to come, a swap for one of the coach's saved sessions.
-  - Manage program: Assign program, Build next block, Reschedule, Open every shared week now (or
+  - Manage program: Assign program, Build next block, Edit weeks (P3b), Reschedule, Open every shared week now (or
     Open weeks as they start), Close program and Cancel program. What cannot be done stays in the list
     with its reason: a started program cannot move, Close program waits for every session to be done
     or for the last day to pass (the misses stay on record), and a workout in progress blocks Close and

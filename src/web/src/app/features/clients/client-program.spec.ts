@@ -106,7 +106,10 @@ async function render(options: Options = {}) {
   const csrf = { refresh: vi.fn().mockResolvedValue(undefined) };
   TestBed.configureTestingModule({
     providers: [
-      provideRouter([{ path: 'clients/:clientId/training', component: ClientProgram }]),
+      provideRouter([
+        { path: 'clients/:clientId/training', component: ClientProgram },
+        { path: 'clients/:clientId/training/:mesocycleId/edit', children: [] },
+      ]),
       ClientWorkspaceContext,
       { provide: ApiClient, useValue: api },
       { provide: ClientProgramApi, useValue: programApi },
@@ -520,22 +523,23 @@ describe('a client’s Training', () => {
         'Assign program',
         'Rename program',
         'Build next block',
+        'Edit weeks',
         'Reschedule',
         'Open every shared week now',
         'Close program',
         'Cancel program',
       ]);
-      expect(items[3].getAttribute('aria-disabled')).toBe('true');
-      expect(textOf(items[3])).toContain('Not possible once a workout has started');
-      expect(items[5].getAttribute('aria-disabled')).toBe('true');
-      expect(items[6].getAttribute('aria-disabled')).toBeNull();
+      expect(items[4].getAttribute('aria-disabled')).toBe('true');
+      expect(textOf(items[4])).toContain('Not possible once a workout has started');
+      expect(items[6].getAttribute('aria-disabled')).toBe('true');
+      expect(items[7].getAttribute('aria-disabled')).toBeNull();
     });
 
     it('cancels a program only with a reason, then reads it again', async () => {
       const { harness, host, api, getProgram, context } = await render();
       press(host, 'Manage program');
       await settle(harness.fixture);
-      all(host, 'app-client-actions .item')[6].click();
+      all(host, 'app-client-actions .item')[7].click();
       await settle(harness.fixture);
 
       const cancel = dialog()!;
@@ -576,7 +580,7 @@ describe('a client’s Training', () => {
       });
       press(host, 'Manage program');
       await settle(harness.fixture);
-      all(host, 'app-client-actions .item')[6].click();
+      all(host, 'app-client-actions .item')[7].click();
       await settle(harness.fixture);
       const cancel = dialog()!;
       const reason = cancel.querySelector<HTMLTextAreaElement>('textarea')!;
@@ -593,6 +597,17 @@ describe('a client’s Training', () => {
       );
     });
 
+    it('opens the weeks still to come in the builder’s grid', async () => {
+      const { harness, host, router } = await render();
+      press(host, 'Manage program');
+      await settle(harness.fixture);
+
+      all(host, 'app-client-actions .item')[3].click();
+      await settle(harness.fixture);
+
+      expect(router.url).toBe('/clients/client-1/training/block-lean/edit');
+    });
+
     it('moves a program that has not started, to the date typed', async () => {
       const { harness, host, api, context } = await render({
         program: coachProgram([plannedBlock()]),
@@ -600,8 +615,8 @@ describe('a client’s Training', () => {
       press(host, 'Manage program');
       await settle(harness.fixture);
       const items = all(host, 'app-client-actions .item');
-      expect(items[3].getAttribute('aria-disabled')).toBeNull();
-      items[3].click();
+      expect(items[4].getAttribute('aria-disabled')).toBeNull();
+      items[4].click();
       await settle(harness.fixture);
 
       const move = dialog()!;
@@ -627,7 +642,7 @@ describe('a client’s Training', () => {
       press(host, 'Manage program');
       await settle(harness.fixture);
 
-      all(host, 'app-client-actions .item')[4].click();
+      all(host, 'app-client-actions .item')[5].click();
       await settle(harness.fixture);
 
       expect(api['updateMesocycleVisibility']).toHaveBeenCalledWith('block-lean', {

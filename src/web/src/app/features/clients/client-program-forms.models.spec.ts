@@ -4,26 +4,41 @@ import type { ClientEnrollment } from '../../core/api/api.models';
 import type {
   ProgramTemplateSummary,
   ProgramTemplateVersionView,
+  ProgressionPreviewView,
   StrengthMaxView,
 } from '../../core/api/generated';
+import {
+  chartSet,
+  exerciseView,
+  leanProgram,
+  sessionView,
+  setView,
+  weekView,
+} from '../../../testing/mesocycle-fixtures';
 import {
   assignmentErrors,
   assignmentRequest,
   cancelReasonErrors,
+  copiesThatFit,
   coverageText,
   defaultStartDate,
   exercisesNeedingMax,
+  hasProgressionProblems,
   lastDayOf,
   maxRow,
+  nextBlockFormula,
   planChoices,
+  previewWeeks,
   programChoices,
   programNameErrors,
   programWriteError,
   progressionErrors,
   rescheduleErrors,
   runSummary,
+  stepReach,
   withMaxMode,
   type AssignmentValues,
+  type ProgressionValues,
 } from './client-program-forms.models';
 
 function enrollment(fields: Partial<ClientEnrollment>): ClientEnrollment {
@@ -393,24 +408,231 @@ describe('changing a program', () => {
       'Keep the reason to 500 characters or fewer.',
     ]);
   });
+});
 
-  it('checks the weeks to build on, how many to add and the effort step', () => {
-    expect(progressionErrors({ weekIds: ['w1'], iterations: 3, rpeIncrement: 0.5 })).toEqual([]);
-    expect(progressionErrors({ weekIds: [], iterations: 0, rpeIncrement: 0.3 })).toEqual([
-      'Choose at least one week to build on.',
-      'Add between 1 and 12 weeks.',
-      'The effort change must be between -2 and 2, in steps of 0.5.',
+describe('building the next block', () => {
+  const starting: ProgressionValues = {
+    weekIds: ['w6'],
+    iterations: 3,
+    rpeStep: 0.5,
+    repetitionsStep: 0,
+    percentageStep: 0,
+    loadStep: 0,
+  };
+  const fine = { weeks: [], copies: [], rpe: [], reps: [], percentage: [], load: [] };
+
+  it('accepts the starting steps on a chosen week', () => {
+    expect(progressionErrors(starting, 12)).toEqual(fine);
+    expect(hasProgressionProblems(progressionErrors(starting, 12))).toBe(false);
+  });
+
+  it('checks the weeks, the copies and each step the way the server does', () => {
+    const problems = progressionErrors(
+      {
+        weekIds: [],
+        iterations: 0,
+        rpeStep: 0.3,
+        repetitionsStep: 21,
+        percentageStep: 50.5,
+        loadStep: 500.01,
+      },
+      12,
+    );
+
+    expect(problems).toEqual({
+      weeks: ['Choose at least one week to build on.'],
+      copies: ['Choose 1 to 12 copies.'],
+      rpe: ['Use -2 to 2, in steps of 0.5.'],
+      reps: ['Use a whole number from -20 to 20.'],
+      percentage: ['Use -50 to 50 points, with at most two decimals.'],
+      load: ['Use -500 to 500, with at most two decimals.'],
+    });
+    expect(hasProgressionProblems(problems)).toBe(true);
+  });
+
+  it('takes the edges of every range and nothing past them', () => {
+    const edge = (fields: Partial<ProgressionValues>) =>
+      hasProgressionProblems(progressionErrors({ ...starting, ...fields }, 12));
+
+    expect([-2, 2, -0.5, 0].some((rpeStep) => edge({ rpeStep }))).toBe(false);
+    expect([-2.5, 2.5, 0.25].every((rpeStep) => edge({ rpeStep }))).toBe(true);
+    expect([-20, 20].some((repetitionsStep) => edge({ repetitionsStep }))).toBe(false);
+    expect([-21, 21, 1.5].every((repetitionsStep) => edge({ repetitionsStep }))).toBe(true);
+    expect([-50, 50, 2.25].some((percentageStep) => edge({ percentageStep }))).toBe(false);
+    expect([-50.5, 51, 1.005].every((percentageStep) => edge({ percentageStep }))).toBe(true);
+    expect([-500, 500, 2.5].some((loadStep) => edge({ loadStep }))).toBe(false);
+    expect([-500.5, 501, 1.005].every((loadStep) => edge({ loadStep }))).toBe(true);
+    // A field the coach emptied is not zero.
+    expect(edge({ rpeStep: null })).toBe(true);
+    expect(edge({ repetitionsStep: null })).toBe(true);
+    expect(edge({ percentageStep: null })).toBe(true);
+    expect(edge({ loadStep: null })).toBe(true);
+    expect(edge({ iterations: null })).toBe(true);
+    // A fraction of a copy is not a copy.
+    expect(edge({ iterations: 1.5 })).toBe(true);
+  });
+
+  it('leaves room for copies up to 12 and for no more than 52 weeks', () => {
+    expect(copiesThatFit(6, 1)).toBe(12);
+    expect(copiesThatFit(48, 1)).toBe(4);
+    expect(copiesThatFit(50, 3)).toBe(0);
+    expect(copiesThatFit(40, 3)).toBe(4);
+    expect(copiesThatFit(52, 1)).toBe(0);
+    expect(progressionErrors({ ...starting, iterations: 5 }, 4).copies).toEqual([
+      'Choose 1 to 4 copies.',
     ]);
-    expect(progressionErrors({ weekIds: ['w1'], iterations: 13, rpeIncrement: -2.5 })).toHaveLength(
-      2,
-    );
-    expect(
-      progressionErrors({ weekIds: ['w1'], iterations: null, rpeIncrement: null }),
-    ).toHaveLength(2);
-    // A fraction of a week is not a week.
-    expect(progressionErrors({ weekIds: ['w1'], iterations: 1.5, rpeIncrement: 0 })).toHaveLength(
-      1,
-    );
+    expect(progressionErrors({ ...starting, iterations: 1 }, 0).copies).toEqual([
+      'A program holds up to 52 weeks, and this one is full. Assign a new program to carry on.',
+    ]);
+  });
+
+  it('says how many sets each step would move, and leaves warm-ups out', () => {
+    const program = leanProgram();
+
+    // Week 6: a warm-up (never moved), a chart set, a typed bench weight and a % of the max.
+    expect(stepReach(program, ['block-lean-week6'])).toEqual({
+      rpe: 2,
+      reps: 3,
+      percentage: 1,
+      load: 1,
+      unit: 'kg',
+    });
+    // Two weeks double the counts; none says nothing moves.
+    expect(stepReach(program, ['block-lean-week5', 'block-lean-week6']).rpe).toBe(4);
+    expect(stepReach(program, [])).toEqual({ rpe: 0, reps: 0, percentage: 0, load: 0, unit: null });
+  });
+
+  it('counts a manual weight as a fixed one, in its own unit', () => {
+    const program = leanProgram();
+    const set = program.weeks[5].sessions[0].exercises[1].sets[1];
+    program.weeks[5].sessions[0].exercises[1].sets[1] = {
+      ...set,
+      loadStrategy: 'Direct',
+      isManualLoadOverride: true,
+      loadUnit: 'Pound',
+      percentageWorkingMax: null,
+    };
+
+    expect(stepReach(program, ['block-lean-week6'])).toMatchObject({
+      percentage: 0,
+      load: 2,
+      unit: 'kg / lb',
+    });
+  });
+
+  it('names the formula the chosen weeks use for sets set by RPE', () => {
+    const program = leanProgram();
+    expect(nextBlockFormula(program, ['block-lean-week6'])).toBe('RpeChart');
+
+    const curve = leanProgram();
+    curve.weeks[5].sessions[0].exercises[0].sets[1] = chartSet(2, {
+      loadStrategy: 'RpeBasedEpley',
+    });
+    expect(nextBlockFormula(curve, ['block-lean-week6'])).toBe('RpeBasedEpley');
+    expect(nextBlockFormula(curve, ['block-lean-week5', 'block-lean-week6'])).toBe('mixed');
+    expect(nextBlockFormula(curve, [])).toBeNull();
+
+    const typed = leanProgram();
+    typed.weeks[5].sessions[0].exercises[0].sets[1] = setView({ position: 2 });
+    expect(nextBlockFormula(typed, ['block-lean-week6'])).toBeNull();
+  });
+
+  describe('the preview', () => {
+    // Round by round: the chosen weeks once, then once again, so week 5 and 6 give 7, 8, 9, 10.
+    function previewOf(weeks: { number: number; load: number; rpe: number }[]) {
+      return {
+        previewHash: 'hash',
+        transformKey: 'WeekStep',
+        transformVersion: '1.0',
+        resultingWeekCount: 6 + weeks.length,
+        resultingEndDateExclusive: '2026-12-07',
+        isInsideTrainingCoverage: true,
+        coverageMessage: null,
+        generatedWeeks: weeks.map((week) =>
+          weekView(`new-${week.number}`, week.number, [
+            sessionView(`new-s${week.number}`, 'Lower A', [
+              exerciseView(`new-squat-${week.number}`, 'Back squat', [
+                setView({
+                  position: 1,
+                  setType: 'WarmUp',
+                  loadStrategy: 'Direct',
+                  loadUnit: 'Kilogram',
+                  directLoad: 60,
+                  prescribedLoad: 60,
+                  targetRpe: 6,
+                }),
+                chartSet(2, { prescribedLoad: week.load, targetRpe: week.rpe }),
+              ]),
+            ]),
+          ]),
+        ),
+      } as ProgressionPreviewView;
+    }
+
+    it('marks a set that differs from the week its copy builds on, and not one that is the same', () => {
+      const program = leanProgram();
+      const result = previewOf([
+        { number: 7, load: 80, rpe: 7.5 },
+        { number: 8, load: 82.5, rpe: 8 },
+      ]);
+
+      const [seven, eight] = previewWeeks(
+        result,
+        program,
+        ['block-lean-week6'],
+        'Kilogram',
+        'en-US',
+      );
+
+      expect(seven.number).toBe(7);
+      // Told only when several weeks were chosen and it could be any of them.
+      expect(seven.from).toBeNull();
+      const squat = seven.sessions[0].exercises[0];
+      expect(squat.name).toBe('Back squat');
+      expect(squat.sets).toEqual([
+        { text: '5 reps · 60 kg · RPE 6', changed: false },
+        { text: '5 reps · 80 kg · RPE 7.5', changed: true },
+      ]);
+      // Week 8 is read against week 7, not against the week they all started from.
+      expect(eight.sessions[0].exercises[0].sets.map((set) => set.changed)).toEqual([false, true]);
+    });
+
+    it('says which chosen week each new week builds on, round by round', () => {
+      const program = leanProgram();
+      const result = previewOf([
+        { number: 7, load: 80, rpe: 7.5 },
+        { number: 8, load: 80, rpe: 7.5 },
+        { number: 9, load: 82.5, rpe: 8 },
+        { number: 10, load: 82.5, rpe: 8 },
+      ]);
+
+      const weeks = previewWeeks(
+        result,
+        program,
+        ['block-lean-week6', 'block-lean-week5'],
+        'Kilogram',
+        'en-US',
+      );
+
+      expect(weeks.map((week) => [week.number, week.from])).toEqual([
+        [7, 5],
+        [8, 6],
+        [9, 5],
+        [10, 6],
+      ]);
+      // Week 9 is the second round of week 5, so it is read against week 7.
+      expect(weeks[2].sessions[0].exercises[0].sets[1].changed).toBe(true);
+      expect(weeks[3].sessions[0].exercises[0].sets[1].changed).toBe(true);
+    });
+
+    it('shows the weeks without marks while the program is not read yet', () => {
+      const result = previewOf([{ number: 7, load: 80, rpe: 7.5 }]);
+
+      const [week] = previewWeeks(result, null, ['block-lean-week6'], 'Kilogram', 'en-US');
+
+      expect(week.from).toBeNull();
+      expect(week.sessions[0].exercises[0].sets.map((set) => set.changed)).toEqual([false, false]);
+    });
   });
 });
 
@@ -451,6 +673,33 @@ describe('what the server answers', () => {
     ).toBe(
       'This program changed since you opened this. Close it and open it again to see the latest, then try again.',
     );
+  });
+
+  it('says a block that was changed after it was previewed in coach words', () => {
+    // A stale version is refused while the block is worked out, so it arrives as a conflict, not as
+    // the database's concurrency error.
+    expect(
+      programWriteError(
+        conflict(
+          'progression_conflict',
+          'The mesocycle changed after this progression request was prepared.',
+        ),
+        'Failed.',
+        'Maya',
+      ),
+    ).toBe(
+      'This program changed since you opened this. Close it and open it again to see the latest, then try again.',
+    );
+    expect(
+      programWriteError(
+        conflict(
+          'progression_preview_changed',
+          'The progression no longer matches the reviewed preview. Generate a new preview before applying.',
+        ),
+        'Failed.',
+        'Maya',
+      ),
+    ).toBe('The new weeks changed since you looked at them. Preview them again, then add them.');
   });
 
   it('says another change got there first', () => {

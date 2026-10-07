@@ -720,7 +720,8 @@ internal sealed partial class TrainingApplicationService
                 exercise.ModificationPolicy,
                 exercise.CoachNotes,
                 exercise.Alternatives.Select(item => item.ExerciseId).ToArray(),
-                exercise.Sets.OrderBy(item => item.Position).Select(ToView).ToArray())).ToArray());
+                exercise.Sets.OrderBy(item => item.Position).Select(ToView).ToArray(),
+                [])).ToArray());
 
     private static SetPrescriptionView ToView(ProgramTemplateSet set) =>
         new(
@@ -855,7 +856,8 @@ internal sealed partial class TrainingApplicationService
             exercise.ModificationPolicy,
             exercise.CoachNotes,
             exercise.Alternatives.Select(item => item.ExerciseId).ToArray(),
-            exercise.Sets.OrderBy(item => item.Position).Select(ToView).ToArray());
+            exercise.Sets.OrderBy(item => item.Position).Select(ToView).ToArray(),
+            exercise.Media.OrderBy(item => item.DisplayOrder).Select(item => item.MediaAssetId).ToArray());
 
     private static SetPrescriptionView ToView(SetPrescription set) =>
         new(

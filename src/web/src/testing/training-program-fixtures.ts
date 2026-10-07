@@ -104,6 +104,7 @@ export function historyItem(
         ruleVersion: 1,
       },
     ],
+    notes: [],
     ...overrides,
   };
 }

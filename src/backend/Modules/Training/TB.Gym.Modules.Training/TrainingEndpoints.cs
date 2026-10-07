@@ -322,6 +322,64 @@ public static class TrainingEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // Editing a client's weeks in the builder's grid (TRN-028): preview saves nothing, apply carries out
+        // exactly what the coach read.
+        coach.MapPost("/mesocycles/{mesocycleId:guid}/edit/preview", async (
+            Guid mesocycleId,
+            PreviewProgramEditRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            try
+            {
+                var preview = await service.PreviewProgramEditAsync(mesocycleId, request, cancellationToken);
+                return preview is null ? Results.NotFound() : Results.Ok(preview);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["edit"] = [exception.Message],
+                });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new
+                {
+                    code = "program_edit_conflict",
+                    message = exception.Message,
+                });
+            }
+        })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
+        .WithMetadata(new RequestSizeLimitAttribute(MaximumDraftRequestBytes))
+        .WithName("PreviewProgramEdit")
+        .Produces<ProgramEditPreviewView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status404NotFound);
+
+        coach.MapPost("/mesocycles/{mesocycleId:guid}/edit/apply", async (
+            Guid mesocycleId,
+            ApplyProgramEditRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.ApplyProgramEditAsync(mesocycleId, request, cancellationToken));
+        })
+        .WithMetadata(new RequestSizeLimitAttribute(MaximumDraftRequestBytes))
+        .WithName("ApplyProgramEdit")
+        .Produces<TrainingMesocycleView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status404NotFound);
+
         coach.MapGet("/mesocycles/{mesocycleId:guid}/training-maxes", async (
             Guid mesocycleId,
             ITrainingApplicationService service,

@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, Subject } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
+import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { press, settle } from '../../../testing/dom';
 import type { CoachWorkoutDetail } from './training-read.models';
@@ -179,7 +180,9 @@ describe('CoachWorkout', () => {
     expect(content()).not.toContain('5–5');
     expect(content()).toContain('Client note: Knees felt good.');
     expect(content()).toContain('Felt stable today.');
-    expect(host.querySelector('input, textarea, select')).toBeNull();
+    // What the client logged is read only; the one field is the coach's own note (P4).
+    expect(host.querySelector('input, select')).toBeNull();
+    expect(host.querySelectorAll('textarea')).toHaveLength(1);
 
     press(host, 'Older notes');
     await settle(fixture);
@@ -187,6 +190,71 @@ describe('CoachWorkout', () => {
     expect(read).toHaveBeenLastCalledWith('client-1', 'workout-1', 50);
     expect(content()).toContain('Felt stable today.');
     expect(content()).toContain('Increase only if form stays clean.');
-    expect(host.querySelector('button')).toBeNull();
+    expect(
+      Array.from(host.querySelectorAll('button')).map((item) => item.textContent?.trim()),
+    ).toEqual(['Send note']);
+  });
+
+  it('sends the coach’s note on the workout, then reads the workout again', async () => {
+    const read = vi.fn(() => of(workoutDetail(null)));
+    const addWorkoutNote = vi.fn(() => of({}));
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    await TestBed.configureTestingModule({
+      imports: [CoachWorkout],
+      providers: [
+        { provide: ApiClient, useValue: { getCoachWorkoutDetail: read, addWorkoutNote } },
+        { provide: CsrfService, useValue: { refresh } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CoachWorkout);
+    fixture.componentRef.setInput('clientId', 'client-1');
+    fixture.componentRef.setInput('workoutId', 'workout-1');
+    fixture.componentRef.setInput('clientName', 'Maya');
+    await settle(fixture);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('label.reply-label')?.textContent?.trim()).toBe(
+      'Note for Maya on this workout',
+    );
+    const send = Array.from(host.querySelectorAll('button')).find(
+      (item) => item.textContent?.trim() === 'Send note',
+    )!;
+    expect(send.disabled).toBe(true);
+
+    const box = host.querySelector('textarea')!;
+    box.value = '  Great depth on the last set.  ';
+    box.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    send.click();
+    await settle(fixture);
+
+    expect(refresh).toHaveBeenCalled();
+    expect(addWorkoutNote).toHaveBeenCalledWith('workout-1', {
+      text: 'Great depth on the last set.',
+      exercisePerformanceId: null,
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(box.value).toBe('');
+  });
+
+  it('offers no note on a former client’s record', async () => {
+    await TestBed.configureTestingModule({
+      imports: [CoachWorkout],
+      providers: [
+        {
+          provide: ApiClient,
+          useValue: { getCoachWorkoutDetail: vi.fn(() => of(workoutDetail(null))) },
+        },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CoachWorkout);
+    fixture.componentRef.setInput('clientId', 'client-1');
+    fixture.componentRef.setInput('workoutId', 'workout-1');
+    fixture.componentRef.setInput('canReply', false);
+    await settle(fixture);
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('textarea')).toBeNull();
   });
 });

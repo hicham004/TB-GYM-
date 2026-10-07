@@ -1046,8 +1046,11 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
   before R4.4 in the redesign plan's table). P1: a week duplicated with RPE, reps, % and weight
   steps, shown before it is added, and the RTS RPE chart as a load formula (built). P2: each assigned
   program's own training maxes, updated for the coming weeks after a preview, a max worked out from
-  week 1's weight, and a program name set when assigning and changed later (built). P3: the next block
-  and a client's future weeks edited with the same steps. P4: exercise videos and notes in sessions.
+  week 1's weight, and a program name set when assigning and changed later (built). P3a: Build next
+  block with the same four steps and each set's own formula (built). P3b: a client's future weeks edited
+  in the builder's grid, reviewed and applied in one sitting (built). P4a: exercise demos on the coach's
+  grids and session sheet, and coach and client workout notes both ways (built). P4b: adjusting next week
+  from logged performance, planned in ADR 0036 and waiting for the owner.
 
 Work follows this order; anything outside it needs the user's approval first.
 

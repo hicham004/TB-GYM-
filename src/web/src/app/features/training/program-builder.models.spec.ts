@@ -382,6 +382,9 @@ describe('program builder library', () => {
       mediaId: null,
     });
     expect(row.mediaId).toBe('media-1');
+    // Every demo stays, in order, for the grid's Watch demo (P4).
+    expect(row.mediaIds[0]).toBe('media-1');
+    expect(squat.mediaIds).toEqual([]);
 
     const presse = libraryExercise(exerciseView({ id: 'press', name: 'Développé couché' }));
     const items = [squat, row, presse];

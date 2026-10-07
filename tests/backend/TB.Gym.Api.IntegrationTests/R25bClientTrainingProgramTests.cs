@@ -114,6 +114,19 @@ public sealed partial class Phase3TrainingWorkflowTests
         var blockName = (await ReadSliceAsync<TrainingMesocycleView>(coach,
             $"/api/training/mesocycles/{block.Id}")).Name;
         Assert.IsTrue(history.Items.All(item => item.ProgramName == blockName));
+        Assert.IsTrue(history.Items.All(item => item.Notes.Count == 0));
+
+        // A coach's note on a finished workout reaches the client in their history (P4).
+        await RefreshCsrfAsync(coach);
+        await AssertStatusAsync(
+            await coach.PostAsJsonAsync(
+                $"/api/training/workouts/{history.Items[2].WorkoutExecutionId}/notes",
+                new { text = "Great depth on the last set." }),
+            HttpStatusCode.OK);
+        history = await ReadSliceAsync<ClientWorkoutHistoryPage>(client, "/api/training/me/history");
+        var note = history.Items[2].Notes.Single();
+        Assert.AreEqual(("Great depth on the last set.", WorkoutNoteAuthorRole.Coach), (note.Text, note.AuthorRole));
+        Assert.IsEmpty(history.Items[0].Notes);
 
         var rest = await ReadSliceAsync<ClientWorkoutHistoryPage>(client, "/api/training/me/history?skip=2");
         Assert.AreEqual("Squat day 1", rest.Items.Single().Name);

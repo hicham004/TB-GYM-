@@ -429,6 +429,7 @@ export type ProgramActionId =
   | 'assign'
   | 'rename'
   | 'next-block'
+  | 'edit-weeks'
   | 'reschedule'
   | 'reveal-all'
   | 'reveal-weekly'
@@ -467,6 +468,12 @@ export function programMenu(
       label: $localize`Build next block`,
       hint: $localize`Add weeks that build on this one`,
       action: 'next-block',
+    });
+    // The weeks still to come, in the builder's grid (TRN-028); what started or passed stays locked.
+    items.push({
+      label: $localize`Edit weeks`,
+      hint: $localize`Change the sessions still to come`,
+      action: 'edit-weeks',
     });
     items.push(
       block.started
@@ -551,6 +558,8 @@ export interface ExerciseLine {
   /** "3 × 8–10 reps · 60 kg · RPE 8": equal sets are told once. */
   readonly sets: readonly string[];
   readonly notes: string | null;
+  /** The demos the client was given for it (P4), in order. */
+  readonly media: readonly string[];
 }
 
 function setText(set: SetPrescriptionView, fallbackUnit: TrainingLoadUnit, locale: string): string {
@@ -603,5 +612,6 @@ export function exerciseLines(
     name: exercise.exerciseName,
     sets: setLines(exercise.sets, unit, locale),
     notes: exercise.coachNotes,
+    media: exercise.mediaAssetIds ?? [],
   }));
 }

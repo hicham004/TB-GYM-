@@ -328,6 +328,7 @@ describe('what a coach can do about a program', () => {
       'Assign program',
       'Rename program',
       'Build next block',
+      'Edit weeks',
       'Reschedule',
       'Open every shared week now',
       'Close program',
@@ -336,19 +337,25 @@ describe('what a coach can do about a program', () => {
     // The name is always the coach's to change, so renaming is never greyed out.
     expect(items[1]).toMatchObject({ action: 'rename', hint: 'Change what it is called' });
     expect(items[1].disabled).toBeFalsy();
-    // Workouts were done, so the dates can no longer move; sessions remain, so it cannot be closed.
+    // The weeks still to come can change after workouts were done; those stay locked (TRN-028).
     expect(items[3]).toMatchObject({
+      action: 'edit-weeks',
+      hint: 'Change the sessions still to come',
+    });
+    expect(items[3].disabled).toBeFalsy();
+    // Workouts were done, so the dates can no longer move; sessions remain, so it cannot be closed.
+    expect(items[4]).toMatchObject({
       action: 'reschedule',
       disabled: true,
       hint: 'Not possible once a workout has started',
     });
-    expect(items[5]).toMatchObject({
+    expect(items[6]).toMatchObject({
       action: 'complete',
       disabled: true,
       hint: 'Possible after its last day, Sun 25 Oct',
     });
-    expect(items[6].disabled).toBeFalsy();
-    expect(items[4].hint).toBe(
+    expect(items[7].disabled).toBeFalsy();
+    expect(items[5].hint).toBe(
       'Maya sees every shared week now, not only the ones that have started',
     );
   });
@@ -360,12 +367,13 @@ describe('what a coach can do about a program', () => {
       'Assign program',
       'Rename program',
       'Build next block',
+      'Edit weeks',
       'Reschedule',
       'Open every shared week now',
       'Cancel program',
     ]);
-    expect(items[3]).toMatchObject({ hint: 'Move the start date' });
-    expect(items[3].disabled).toBeFalsy();
+    expect(items[4]).toMatchObject({ hint: 'Move the start date' });
+    expect(items[4].disabled).toBeFalsy();
   });
 
   it('turns the weekly opening back on when every shared week is already open', () => {
@@ -521,7 +529,7 @@ describe('what a session prescribes', () => {
     expect(setLines([set({})], 'Kilogram', 'en-US')).toEqual(['Set']);
   });
 
-  it('lists the exercises of a session with their notes', () => {
+  it('lists the exercises of a session with their notes and demos', () => {
     const session = {
       id: 's1',
       exercises: [
@@ -529,6 +537,7 @@ describe('what a session prescribes', () => {
           id: 'e1',
           exerciseName: 'Back squat',
           coachNotes: 'Brace before every rep.',
+          mediaAssetIds: ['squat-demo'],
           sets: [set(working), set(working)],
         },
         {
@@ -546,8 +555,10 @@ describe('what a session prescribes', () => {
         name: 'Back squat',
         sets: ['2 × 8–10 reps · 60 kg · RPE 8'],
         notes: 'Brace before every rep.',
+        media: ['squat-demo'],
       },
-      { id: 'e2', name: 'Leg curl', sets: ['12 reps'], notes: null },
+      // A program read from before demos were sent has none.
+      { id: 'e2', name: 'Leg curl', sets: ['12 reps'], notes: null, media: [] },
     ]);
   });
 });

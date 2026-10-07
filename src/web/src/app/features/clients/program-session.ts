@@ -21,6 +21,7 @@ import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { sessionFromSaved, toTrainingSessionRequest } from '../training/training-builder.models';
 import { CoachWorkout } from '../training/coach-workout';
+import { ExerciseDemo } from '../training/exercise-demo';
 import {
   exerciseLines,
   markTone,
@@ -30,6 +31,7 @@ import {
   type WeekColumn,
 } from './client-program.models';
 import { programWriteError } from './client-program-forms.models';
+import { ClientWorkspaceContext } from './client-workspace.context';
 
 /**
  * One session of a program, opened from the timeline: what the coach prescribed and, when the client
@@ -38,7 +40,7 @@ import { programWriteError } from './client-program-forms.models';
  */
 @Component({
   selector: 'app-program-session',
-  imports: [Button, CoachWorkout, Control, Field, Skeleton, StatusPill],
+  imports: [Button, CoachWorkout, Control, ExerciseDemo, Field, Skeleton, StatusPill],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="sheet">
@@ -50,7 +52,12 @@ import { programWriteError } from './client-program-forms.models';
       @if (session().workoutId; as workoutId) {
         <section aria-labelledby="did-title">
           <h3 id="did-title" dir="auto" i18n>What {{ firstName() }} did</h3>
-          <app-coach-workout [clientId]="clientId()" [workoutId]="workoutId" />
+          <app-coach-workout
+            [clientId]="clientId()"
+            [workoutId]="workoutId"
+            [clientName]="firstName()"
+            [canReply]="!isFormer()"
+          />
         </section>
       }
 
@@ -75,7 +82,10 @@ import { programWriteError } from './client-program-forms.models';
             <ol class="exercises">
               @for (exercise of exercises(); track exercise.id) {
                 <li>
-                  <p class="exercise-name" dir="auto">{{ exercise.name }}</p>
+                  <div class="exercise-head">
+                    <p class="exercise-name" dir="auto">{{ exercise.name }}</p>
+                    <app-exercise-demo [assetIds]="exercise.media" [exerciseName]="exercise.name" />
+                  </div>
                   <ul class="sets">
                     @for (line of exercise.sets; track $index) {
                       <li>{{ line }}</li>
@@ -201,6 +211,14 @@ import { programWriteError } from './client-program-forms.models';
       padding-block-start: 0;
     }
 
+    .exercise-head {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem 0.75rem;
+      justify-content: space-between;
+    }
+
     .exercise-name {
       color: var(--tb-ink);
       font-weight: 600;
@@ -296,6 +314,9 @@ export class ProgramSession {
   protected readonly swapError = signal<string | null>(null);
 
   protected readonly tone = computed(() => markTone(this.session().mark));
+  /** A former client's record is read-only (ADR 0027), so it takes no new note. */
+  private readonly record = inject(ClientWorkspaceContext, { optional: true });
+  protected readonly isFormer = computed(() => this.record?.isFormer() ?? false);
 
   private readonly detail = computed(() => {
     const view = this.view();

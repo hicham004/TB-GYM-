@@ -33,8 +33,43 @@ follow, and the client's program can always be adjusted.
    came from or when it runs.
 4. **Editing and next block** (step P3): Build next block takes the same steps; future weeks are
    edited in the builder's grid through the coverage policy (TRN-014) with an audit record. Started
-   and finished sessions stay locked.
+   and finished sessions stay locked. Split in two: P3a is Build next block, built (TRN-027): the
+   builder's four steps, then each copy's weights worked out from the program's maxes by each set's own
+   formula, so the program keeps the formula the coach chose in the builder. P3b, the grid editing of
+   a client's future weeks, is built (TRN-028): "Edit weeks" opens the program in the builder's grid,
+   the sessions that started, finished or passed drawn locked beside it, and the coach reviews the
+   server's preview (every new weight worked out) before applying it. **An edit is made in one sitting,
+   not kept as a private server draft** (decided 2026-10-06, when the owner left the question to Claude):
+   a draft of a live program goes stale as the client trains (a session it changes starts, a day
+   passes), Everfit, TrainHeroic, TrueCoach and QuickCoach all change a client's coming workouts
+   directly, and the review then checks the edit against the program as it is. Leaving with changes not
+   applied asks first. A draft could be added later if coaches lose work.
 5. kg and lb are never converted, and history (snapshots, executions, versions) is never rewritten.
+6. **Session extras** (step P4), split in two. P4a is built: Watch demo on the builder's and Edit weeks'
+   grid rows (the library's media) and in a client's session sheet (the snapshot the client was given,
+   MED-002), opened through the usual short-lived grant; the coach's note on a client's workout from the
+   session sheet, and every note on the client's finished-workout history (TRN-009). The workout player
+   already had both. P4b, adjusting next week from logged performance, is a plan for the owner below.
+
+## Adjusting next week from logged performance (P4b, proposed, not built)
+
+The owner asked for it to be planned, then asked about. The proposal, a separate strategy as STR-007 says:
+
+- **What it reads.** For each lift with a training max in the program, the client's working sets of the
+  week just finished that logged reps and an RPE inside the RTS chart (RPE 6.5 to 10, 1 to 12 reps).
+  Each such set implies a max: load divided by the chart's percentage (STR-011 already does this for
+  week 1's prescription). The best implied max of the week is the estimate; warm-ups never count.
+- **What it does.** Nothing on its own. When the estimate differs from the max in use by more than one
+  rounding step, the Training maxes panel says so ("Logged sets suggest 65 kg for Back Squat, up from
+  62.5 kg") and offers the existing P2 update: preview every changed weight of the coming weeks, then
+  apply, with the source "Estimated from logged sets, week N" on the new max.
+- **What it never does.** Change a max without the coach, rewrite a week already started, mix kg and
+  lb, or treat a set without an RPE as evidence.
+
+Questions for the owner, with the recommendation first: (1) a suggestion the coach applies (recommended)
+or an automatic adjustment; (2) the best set of the week (recommended) or the average of the top two;
+(3) build it next (P5, before R4.4) or after launch (recommended: after the nutrition builder, R4.4,
+since founding coaches can already update maxes by hand in P2).
 
 ## Where the chart comes from
 

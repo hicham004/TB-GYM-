@@ -237,7 +237,10 @@ public sealed partial class Phase3TrainingWorkflowTests
             1,
             TenantToday(),
             includeMedia: true);
-        await AssignAsync(coach, clientId, resources, TenantToday());
+        var assigned = await AssignAsync(coach, clientId, resources, TenantToday());
+        // The coach opens the demo of an exercise in the client's program (P4).
+        var coachAccess = await CreateMediaAccessAsync(coach, resources.Media!.Id);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(coachAccess.Url));
 
         var currentExercise = await coach.GetFromJsonAsync<Exercise>(
             $"/api/exercises/{resources.Exercise.Id}")
@@ -288,6 +291,18 @@ public sealed partial class Phase3TrainingWorkflowTests
         var today = await client.GetFromJsonAsync<TrainingDay>("/api/training/me/today")
             ?? throw new AssertFailedException("Client training day was empty.");
         CollectionAssert.Contains(today.Workouts.Single().Exercises.Single().MediaAssetIds, resources.Media.Id);
+
+        // The coach's read of the program still names the demo the client was given (P4), although the
+        // library no longer offers it.
+        using (var program = System.Text.Json.JsonDocument.Parse(
+            await coach.GetStringAsync($"/api/training/mesocycles/{assigned.Id}")))
+        {
+            var exercise = program.RootElement.GetProperty("weeks")[0].GetProperty("sessions")[0]
+                .GetProperty("exercises")[0];
+            CollectionAssert.AreEqual(
+                new[] { resources.Media.Id },
+                exercise.GetProperty("mediaAssetIds").EnumerateArray().Select(item => item.GetGuid()).ToArray());
+        }
 
         var access = await CreateMediaAccessAsync(client, resources.Media.Id);
         client.DefaultRequestHeaders.Remove("X-Tenant-Id");

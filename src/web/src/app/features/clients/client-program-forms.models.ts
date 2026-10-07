@@ -7,11 +7,15 @@ import type {
   ProgramTemplateSummary,
   ProgramTemplateVersionView,
   ProgressionPreviewView,
+  SetPrescriptionView,
   StrengthMaxView,
   TrainingLoadRoundingMode,
   TrainingLoadUnit,
+  TrainingMesocycleView,
+  TrainingSessionView,
 } from '../../core/api/generated';
-import { exerciseLines, type ExerciseLine } from './client-program.models';
+import { unitLabel } from '../training/training-program.models';
+import { setLines } from './client-program.models';
 import { addDays } from './client-overview.models';
 import { weekOneAnchor, type WeekOneAnchor } from './program-maxes.models';
 
@@ -317,48 +321,218 @@ export function cancelReasonErrors(reason: string): string[] {
   return [];
 }
 
+// ------------------------------------------------------------------------------------------------
+// Build next block (STR-006, TRN-025)
+// ------------------------------------------------------------------------------------------------
+
+/** The most copies of each week one go makes, and the most weeks a program holds. */
+export const MAX_COPIES = 12;
+export const MAX_PROGRAM_WEEKS = 52;
+
+/**
+ * What Build next block asks for: the weeks to repeat, how many copies of each, and how far each copy
+ * moves from the one before it. They are the builder's four steps (TRN-025); the server's rules are the
+ * ones checked here, and it checks them again.
+ */
 export interface ProgressionValues {
-  weekIds: readonly string[];
-  iterations: number | null;
-  rpeIncrement: number | null;
+  readonly weekIds: readonly string[];
+  readonly iterations: number | null;
+  readonly rpeStep: number | null;
+  readonly repetitionsStep: number | null;
+  readonly percentageStep: number | null;
+  readonly loadStep: number | null;
 }
 
-/** What to repeat, how many times and how much harder, checked the way the server checks it. */
-export function progressionErrors(values: ProgressionValues): string[] {
-  const errors: string[] = [];
-  if (values.weekIds.length === 0) errors.push($localize`Choose at least one week to build on.`);
-  const iterations = values.iterations;
-  if (iterations === null || !Number.isInteger(iterations) || iterations < 1 || iterations > 12) {
-    errors.push($localize`Add between 1 and 12 weeks.`);
-  }
-  const step = values.rpeIncrement;
-  if (step === null || step < -2 || step > 2 || step * 2 !== Math.trunc(step * 2)) {
-    errors.push($localize`The effort change must be between -2 and 2, in steps of 0.5.`);
-  }
-  return errors;
+export type ProgressionField = 'weeks' | 'copies' | 'rpe' | 'reps' | 'percentage' | 'load';
+export type ProgressionProblems = Readonly<Record<ProgressionField, readonly string[]>>;
+
+/** The steps a new block starts from: a little more effort each week, nothing else moving. */
+export const STARTING_STEPS = { iterations: 3, rpe: 0.5, reps: 0, percentage: 0, load: 0 } as const;
+
+/**
+ * How many copies of each chosen week still fit: at most 12, and no more than the 52 weeks a program
+ * holds leave room for.
+ */
+export function copiesThatFit(weeksNow: number, chosen: number): number {
+  const room = Math.floor((MAX_PROGRAM_WEEKS - weeksNow) / Math.max(1, chosen));
+  return Math.max(0, Math.min(MAX_COPIES, room));
+}
+
+function hasAtMostTwoDecimals(value: number): boolean {
+  return Math.abs(value * 100 - Math.round(value * 100)) < 1e-6;
+}
+
+function isWhole(value: number | null, from: number, to: number): boolean {
+  return value !== null && Number.isInteger(value) && value >= from && value <= to;
+}
+
+function isTwoDecimals(value: number | null, limit: number): boolean {
+  return (
+    value !== null &&
+    Number.isFinite(value) &&
+    Math.abs(value) <= limit &&
+    hasAtMostTwoDecimals(value)
+  );
+}
+
+/** What is wrong, field by field, in the way the server will check it. Empty lists mean nothing is. */
+export function progressionErrors(values: ProgressionValues, room: number): ProgressionProblems {
+  const rpe = values.rpeStep;
+  return {
+    weeks: values.weekIds.length === 0 ? [$localize`Choose at least one week to build on.`] : [],
+    copies: isWhole(values.iterations, 1, room)
+      ? []
+      : [
+          room === 0
+            ? $localize`A program holds up to 52 weeks, and this one is full. Assign a new program to carry on.`
+            : $localize`Choose 1 to ${room}:count: copies.`,
+        ],
+    rpe:
+      rpe !== null && rpe >= -2 && rpe <= 2 && rpe * 2 === Math.trunc(rpe * 2)
+        ? []
+        : [$localize`Use -2 to 2, in steps of 0.5.`],
+    reps: isWhole(values.repetitionsStep, -20, 20)
+      ? []
+      : [$localize`Use a whole number from -20 to 20.`],
+    percentage: isTwoDecimals(values.percentageStep, 50)
+      ? []
+      : [$localize`Use -50 to 50 points, with at most two decimals.`],
+    load: isTwoDecimals(values.loadStep, 500)
+      ? []
+      : [$localize`Use -500 to 500, with at most two decimals.`],
+  };
+}
+
+export function hasProgressionProblems(problems: ProgressionProblems): boolean {
+  return Object.values(problems).some((messages) => messages.length > 0);
+}
+
+/** The program's weeks that the coach chose to build on, in the order they run. */
+function chosenWeeks(view: TrainingMesocycleView, weekIds: readonly string[]) {
+  return view.weeks
+    .filter((week) => weekIds.includes(week.id))
+    .sort((a, b) => Number(a.weekNumber) - Number(b.weekNumber));
+}
+
+function chosenSets(
+  view: TrainingMesocycleView,
+  weekIds: readonly string[],
+): SetPrescriptionView[] {
+  return chosenWeeks(view, weekIds).flatMap((week) =>
+    week.sessions.flatMap((session) => session.exercises.flatMap((exercise) => exercise.sets)),
+  );
+}
+
+/** How many of the chosen weeks' sets each step would move, so a step is never a guess. */
+export interface StepReach {
+  readonly rpe: number;
+  readonly reps: number;
+  readonly percentage: number;
+  readonly load: number;
+  /** The unit of the fixed weights the weight step moves: "kg", "lb", or "kg / lb". */
+  readonly unit: string | null;
+}
+
+export function stepReach(view: TrainingMesocycleView, weekIds: readonly string[]): StepReach {
+  // A warm-up stays as it is (TRN-025).
+  const sets = chosenSets(view, weekIds).filter((set) => set.setType !== 'WarmUp');
+  const fixed = sets.filter(
+    (set) => set.isManualLoadOverride || (set.loadStrategy === 'Direct' && set.directLoad !== null),
+  );
+  const units = new Set(fixed.map((set) => unitLabel(set.loadUnit ?? view.loadUnit)));
+  return {
+    rpe: sets.filter((set) => set.targetRpe !== null).length,
+    reps: sets.filter((set) => set.repetitionsMinimum !== null || set.repetitionsMaximum !== null)
+      .length,
+    percentage: sets.filter(
+      (set) => set.loadStrategy === 'PercentageWorkingMax' && set.percentageWorkingMax !== null,
+    ).length,
+    load: fixed.length,
+    unit: units.size === 0 ? null : [...units].sort().join(' / '),
+  };
+}
+
+/**
+ * The formula the chosen weeks' sets that take their weight from an RPE use: the RTS chart, the Epley
+ * curve, both ('mixed') or neither (null). The new weeks keep each set's own formula (STR-005, STR-010).
+ */
+export type NextBlockFormula = 'RpeChart' | 'RpeBasedEpley' | 'mixed' | null;
+
+export function nextBlockFormula(
+  view: TrainingMesocycleView,
+  weekIds: readonly string[],
+): NextBlockFormula {
+  const used = new Set(
+    chosenSets(view, weekIds)
+      .map((set) => set.loadStrategy)
+      .filter((strategy) => strategy === 'RpeChart' || strategy === 'RpeBasedEpley'),
+  );
+  if (used.size === 0) return null;
+  if (used.size > 1) return 'mixed';
+  return used.has('RpeChart') ? 'RpeChart' : 'RpeBasedEpley';
+}
+
+export interface PreviewSet {
+  readonly text: string;
+  /** Not the same as the week it builds on, so the coach sees what moved. */
+  readonly changed: boolean;
+}
+
+export interface PreviewExercise {
+  readonly name: string;
+  readonly sets: readonly PreviewSet[];
+}
+
+export interface PreviewSession {
+  readonly name: string;
+  readonly exercises: readonly PreviewExercise[];
 }
 
 export interface PreviewWeek {
   readonly number: number;
-  readonly sessions: readonly {
-    readonly name: string;
-    readonly exercises: readonly ExerciseLine[];
-  }[];
+  /** The week it builds on, told only when several weeks were chosen and it could be any of them. */
+  readonly from: number | null;
+  readonly sessions: readonly PreviewSession[];
 }
 
-/** The weeks a preview would add, as sessions with their exercises. */
+/**
+ * The weeks a preview would add, as sessions with their exercises. Each set is marked when it differs
+ * from the week its copy builds on: the chosen week itself for the first round, then the round before.
+ */
 export function previewWeeks(
   preview: ProgressionPreviewView,
+  view: TrainingMesocycleView | null,
+  weekIds: readonly string[],
   unit: TrainingLoadUnit,
   locale: string,
 ): PreviewWeek[] {
-  return preview.generatedWeeks.map((week) => ({
-    number: Number(week.weekNumber),
-    sessions: week.sessions.map((session) => ({
-      name: session.name,
-      exercises: exerciseLines(session, unit, locale),
-    })),
-  }));
+  const sources = view ? chosenWeeks(view, weekIds) : [];
+  const linesOf = (session: TrainingSessionView | undefined) =>
+    (session?.exercises ?? []).map((exercise) => setLines(exercise.sets, unit, locale));
+  const generated = preview.generatedWeeks;
+  return generated.map((week, index) => {
+    // The server makes every chosen week once, then every chosen week again: round by round.
+    const from = sources.length > 0 ? sources[index % sources.length] : null;
+    const base =
+      index < sources.length ? from?.sessions : generated[index - sources.length]?.sessions;
+    return {
+      number: Number(week.weekNumber),
+      from: from !== null && sources.length > 1 ? Number(from.weekNumber) : null,
+      sessions: week.sessions.map((session, sessionIndex) => {
+        const before = linesOf(base?.[sessionIndex]);
+        return {
+          name: session.name,
+          exercises: linesOf(session).map((lines, exerciseIndex) => ({
+            name: session.exercises[exerciseIndex].exerciseName,
+            sets: lines.map((text) => ({
+              text,
+              changed: base !== undefined && !(before[exerciseIndex] ?? []).includes(text),
+            })),
+          })),
+        };
+      }),
+    };
+  });
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -395,8 +569,11 @@ export function programWriteError(error: unknown, fallback: string, name: string
   if (code === 'training_maxes_preview_changed') {
     return $localize`The new weights changed since you looked at them. Show them again, then update.`;
   }
-  if (code === 'training_maxes_conflict') {
+  if (code === 'training_maxes_conflict' || code === 'progression_conflict') {
     return $localize`This program changed since you opened this. Close it and open it again to see the latest, then try again.`;
+  }
+  if (code === 'progression_preview_changed') {
+    return $localize`The new weeks changed since you looked at them. Preview them again, then add them.`;
   }
   if (code === 'idempotency_conflict' || code === 'assignment_conflict') {
     return $localize`That clashes with another assignment. Reload the page and try again.`;

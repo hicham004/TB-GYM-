@@ -335,6 +335,11 @@ export class ClientProgram {
           $localize`Build next block`,
           () => $localize`The new weeks are added to ${name}:program:.`,
         );
+      case 'edit-weeks': {
+        const id = this.card()?.id;
+        if (id) void this.router.navigate([id, 'edit'], { relativeTo: this.route });
+        return;
+      }
       case 'reschedule':
         return this.open(
           this.dialogs,

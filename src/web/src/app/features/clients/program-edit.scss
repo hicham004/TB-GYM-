@@ -1,0 +1,171 @@
+// Editing a client's weeks (P3b): the builder's page and grid styles, plus what only a client's
+// program has: real dates, sessions that are locked, days already gone and the review of an edit.
+
+.edit-title {
+  color: var(--tb-ink);
+  font-size: clamp(1.5rem, 4cqi, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0;
+  outline: none;
+  text-wrap: balance;
+}
+
+.edit-program {
+  color: var(--tb-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem 0.75rem;
+  margin: 0;
+}
+
+.edit-name {
+  color: var(--tb-ink);
+  font-weight: 600;
+}
+
+.edit-runs {
+  font-variant-numeric: tabular-nums;
+}
+
+.week-dates {
+  color: var(--tb-muted);
+  flex: none;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.day-label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.75rem;
+}
+
+// A day already gone takes nothing new; what happened on it stays readable.
+.day.gone {
+  background: transparent;
+  border: 1px solid var(--tb-line);
+}
+
+.day.gone .day-label {
+  text-decoration: line-through;
+  text-decoration-color: var(--tb-line-strong);
+}
+
+.locked-card {
+  align-items: flex-start;
+  background: var(--tb-surface-2);
+  border: 1px solid var(--tb-line);
+  border-radius: 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-inline-size: 0;
+  padding: 0.5rem;
+}
+
+.locked-name {
+  color: var(--tb-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+// ---------- the review ----------
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.review-headline {
+  color: var(--tb-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.review-end {
+  background: var(--tb-warm-soft);
+  border-radius: var(--tb-radius-card-small);
+  color: var(--tb-ink);
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+}
+
+.review-heading {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin: 0.25rem 0 0;
+  text-transform: uppercase;
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.review-row {
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-block: 0.625rem;
+}
+
+.review-row:first-child {
+  border-block-start: 0;
+}
+
+.review-top {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 0.625rem;
+}
+
+.review-title {
+  color: var(--tb-ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.review-note {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+
+.review-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+}
+
+.review-lines li {
+  display: flex;
+  flex-direction: column;
+}
+
+.review-exercise {
+  color: var(--tb-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.review-set {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}

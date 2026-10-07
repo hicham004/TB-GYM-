@@ -306,6 +306,96 @@ public sealed class TrainingMesocycle : TenantEntity
         return (sessions.Count, applied);
     }
 
+    /// <summary>
+    /// Carries out a planned edit of the weeks (TRN-028): open sessions are replaced, added, moved or taken out,
+    /// and weeks after the last one that has started or passed are added, moved or removed. Anything that has
+    /// started, finished or passed is refused whoever built the plan, so that history is never rewritten.
+    /// <paramref name="blueprints"/> holds the calculated prescription of every planned session that is not kept
+    /// as it is, by its key. Returns the rows made or taken away, for the context to track.
+    /// </summary>
+    public ProgramEditApplied ApplyProgramEdit(
+        ProgramEditPlan plan,
+        IReadOnlyDictionary<int, TrainingSessionBlueprint> blueprints)
+    {
+        EnsureNonTerminal();
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(blueprints);
+        if (plan.Weeks.Count is < 1 or > ProgramEditRules.MaximumWeeks)
+        {
+            throw new ArgumentOutOfRangeException(nameof(plan), "A mesocycle supports 1 to 52 weeks.");
+        }
+
+        if (plan.RemovedSessions.Any(session => !ProgramEditRules.IsOpen(session, plan.Today)) ||
+            plan.RemovedWeeks.Any(week => week.Sessions.Any(session => !ProgramEditRules.IsOpen(session, plan.Today))))
+        {
+            throw new InvalidOperationException("Started or completed programming is immutable.");
+        }
+
+        var removedSessions = plan.RemovedSessions;
+        var removedWeeks = plan.RemovedWeeks;
+        var addedWeeks = new List<MesocycleWeek>();
+        var addedSessions = new List<TrainingSession>();
+        var replacedSessions = new List<TrainingSession>();
+        foreach (var session in removedSessions)
+        {
+            weeks.Single(week => week.Id == session.MesocycleWeekId).RemoveSession(session);
+        }
+
+        foreach (var week in removedWeeks)
+        {
+            weeks.Remove(week);
+        }
+
+        foreach (var planned in plan.Weeks)
+        {
+            if (!planned.KeepsRow)
+            {
+                // A new week, or one that moved: built afresh at its new place, its sessions numbered in order.
+                var created = MesocycleWeek.Create(
+                    TenantId,
+                    Id,
+                    planned.Number,
+                    StartDate.AddDays(checked((planned.Number - 1) * 7)),
+                    new TrainingWeekBlueprint(
+                        planned.Label,
+                        planned.IsPublished,
+                        planned.Sessions.OrderBy(item => item.Position).Select(item => blueprints[item.Key]).ToArray()));
+                weeks.Add(created);
+                addedWeeks.Add(created);
+                continue;
+            }
+
+            var week = planned.Source!;
+            week.Edit(planned.Label, planned.IsPublished);
+            foreach (var item in planned.Sessions)
+            {
+                switch (item.Disposition)
+                {
+                    case ProgramEditDisposition.Keep:
+                        break;
+                    case ProgramEditDisposition.Replace:
+                        item.Existing!.ReplacePrescription(blueprints[item.Key]);
+                        replacedSessions.Add(item.Existing);
+                        break;
+                    default:
+                        var session = TrainingSession.Create(
+                            TenantId,
+                            week.Id,
+                            week.StartsOn,
+                            item.Position,
+                            blueprints[item.Key]);
+                        week.AddSession(session);
+                        addedSessions.Add(session);
+                        break;
+                }
+            }
+        }
+
+        RecalculateEndDate();
+        RegisterMutation();
+        return new ProgramEditApplied(addedWeeks, removedWeeks, addedSessions, removedSessions, replacedSessions);
+    }
+
     public void MarkSessionStarted(Guid sessionId)
     {
         EnsureNonTerminal();
@@ -426,6 +516,33 @@ public sealed class MesocycleWeek : TenantEntity
         new(tenantId, mesocycleId, weekNumber, startsOn, blueprint);
 
     internal void SetPublished(bool value) => IsPublished = value;
+
+    /// <summary>A week's name and whether the client sees it, as the grid sets them (TRN-028).</summary>
+    internal void Edit(string? label, bool isPublished)
+    {
+        Label = TrainingText.Optional(label, ProgramEditRules.MaximumLabelLength, nameof(label));
+        IsPublished = isPublished;
+    }
+
+    internal void AddSession(TrainingSession session)
+    {
+        if (sessions.Count >= ProgramEditRules.MaximumSessionsPerWeek)
+        {
+            throw new ArgumentOutOfRangeException(nameof(session), "Each week supports at most 14 sessions.");
+        }
+
+        sessions.Add(session);
+    }
+
+    internal void RemoveSession(TrainingSession session)
+    {
+        if (session.HasStarted)
+        {
+            throw new InvalidOperationException("Started or completed programming is immutable.");
+        }
+
+        sessions.Remove(session);
+    }
 
     internal void Reschedule(DateOnly startsOn)
     {

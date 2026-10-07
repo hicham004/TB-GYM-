@@ -164,6 +164,13 @@ const GLYPHS = {
       'M8.5 10A1 1 0 1 1 6.5 10A1 1 0 1 1 8.5 10ZM13.5 10A1 1 0 1 1 11.5 10A1 1 0 1 1 13.5 10Z' +
       'M8.5 15A1 1 0 1 1 6.5 15A1 1 0 1 1 8.5 15ZM13.5 15A1 1 0 1 1 11.5 15A1 1 0 1 1 13.5 15Z',
   },
+  // An exercise demo (P4): a play triangle in a circle, drawn in code on the 20px, 1.5px-stroke grid.
+  play: {
+    size: 20,
+    path:
+      'M8.25 7.1V12.9L13 10L8.25 7.1ZM17.25 10C17.25 14.004 14.004 17.25 10 17.25C5.996 17.25' +
+      ' 2.75 14.004 2.75 10C2.75 5.996 5.996 2.75 10 2.75C14.004 2.75 17.25 5.996 17.25 10Z',
+  },
 } as const satisfies Record<string, { size: number; path: string }>;
 
 export type IconName = keyof typeof GLYPHS;

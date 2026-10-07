@@ -1,10 +1,13 @@
 import { formatDate } from '@angular/common';
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
+  Injector,
   input,
   linkedSignal,
   LOCALE_ID,
@@ -13,7 +16,12 @@ import {
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
-import type { ProgressionPreviewView, TrainingLoadUnit } from '../../core/api/generated';
+import type {
+  ApplyProgressionRequest,
+  ProgressionPreviewRequest,
+  ProgressionPreviewView,
+  TrainingMesocycleView,
+} from '../../core/api/generated';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
@@ -21,21 +29,31 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
+import { unitLabel } from '../training/training-program.models';
 import type { BlockCard } from './client-program.models';
 import {
   coverageText,
+  copiesThatFit,
+  hasProgressionProblems,
+  nextBlockFormula,
   previewWeeks,
   programWriteError,
   progressionErrors,
+  STARTING_STEPS,
+  stepReach,
   type PreviewWeek,
+  type ProgressionField,
+  type ProgressionValues,
 } from './client-program-forms.models';
 import { addDays } from './client-overview.models';
 
 /**
- * "Build next block": repeat the weeks the coach picks, a little harder each time, and append them to
- * the program (STR-006, STR-009). Nothing is added until the coach has seen the result: the preview
- * has no side effect, and adding the weeks sends back the preview's hash and the program's version,
- * so the server refuses anything that changed in between.
+ * "Build next block": repeat the weeks the coach picks, each copy a further step on in effort, reps,
+ * percentage and weight (the builder's four steps, TRN-025), and append them to the program (STR-006,
+ * STR-009). The server works every weight out again from the program's training maxes by each set's own
+ * formula. Nothing is added until the coach has seen the result: the preview has no side effect, and
+ * adding the weeks sends back the preview's hash and the program's version, so the server refuses
+ * anything that changed in between.
  */
 @Component({
   selector: 'app-program-next-block',
@@ -44,11 +62,15 @@ import { addDays } from './client-overview.models';
   template: `
     <div class="body">
       <p class="muted" dir="auto" i18n>
-        Pick the weeks of {{ block().name }} to repeat. Each copy asks for a little more effort, and
-        you see the new weeks before anything is added.
+        Pick the weeks of {{ block().name }} to repeat. Each copy moves one more step from the week
+        it builds on, and you see the new weeks before anything is added.
       </p>
 
-      <fieldset class="weeks">
+      <fieldset
+        class="weeks"
+        [class.invalid]="shown('weeks') !== null"
+        [attr.aria-describedby]="shown('weeks') ? 'next-block-weeks-error' : null"
+      >
         <legend i18n>Weeks to build on</legend>
         @for (week of block().weeks; track week.id) {
           <app-checkbox [label]="week.title + ' · ' + week.range">
@@ -60,39 +82,104 @@ import { addDays } from './client-overview.models';
             />
           </app-checkbox>
         }
+        @if (shown('weeks'); as messages) {
+          <p id="next-block-weeks-error" class="field-error">{{ messages[0] }}</p>
+        }
       </fieldset>
 
-      <div class="pair">
-        <app-field [label]="weeksLabel" [help]="weeksHelp">
+      <div class="fields">
+        <app-field
+          [label]="copiesLabel"
+          density="compact"
+          [help]="help().copies"
+          [errors]="shown('copies')"
+        >
           <input
             appControl
             type="number"
+            autocomplete="off"
             min="1"
-            max="12"
+            [max]="room()"
             step="1"
+            inputmode="numeric"
             [value]="iterations() ?? ''"
             (input)="setIterations($any($event.target).valueAsNumber)"
+            (blur)="attempt.touch('copies')"
           />
         </app-field>
-        <app-field [label]="effortLabel" [help]="effortHelp">
+        <!-- A step can be negative, and a phone's numeric and decimal keypads have no minus key, so
+             the four steps take no inputmode. -->
+        <app-field [label]="rpeLabel" density="compact" [help]="help().rpe" [errors]="shown('rpe')">
           <input
             appControl
             type="number"
+            autocomplete="off"
             min="-2"
             max="2"
             step="0.5"
-            [value]="step() ?? ''"
-            (input)="setStep($any($event.target).valueAsNumber)"
+            [value]="rpe() ?? ''"
+            (input)="setRpe($any($event.target).valueAsNumber)"
+            (blur)="attempt.touch('rpe')"
+          />
+        </app-field>
+        <app-field
+          [label]="repsLabel"
+          density="compact"
+          [help]="help().reps"
+          [errors]="shown('reps')"
+        >
+          <input
+            appControl
+            type="number"
+            autocomplete="off"
+            min="-20"
+            max="20"
+            step="1"
+            [value]="reps() ?? ''"
+            (input)="setReps($any($event.target).valueAsNumber)"
+            (blur)="attempt.touch('reps')"
+          />
+        </app-field>
+        <app-field
+          [label]="percentageLabel"
+          density="compact"
+          [help]="help().percentage"
+          [errors]="shown('percentage')"
+        >
+          <input
+            appControl
+            type="number"
+            autocomplete="off"
+            min="-50"
+            max="50"
+            step="0.5"
+            [value]="percentage() ?? ''"
+            (input)="setPercentage($any($event.target).valueAsNumber)"
+            (blur)="attempt.touch('percentage')"
+          />
+        </app-field>
+        <app-field
+          [label]="weightLabel()"
+          density="compact"
+          [help]="help().load"
+          [errors]="shown('load')"
+        >
+          <input
+            appControl
+            type="number"
+            autocomplete="off"
+            min="-500"
+            max="500"
+            step="0.25"
+            [value]="load() ?? ''"
+            (input)="setLoad($any($event.target).valueAsNumber)"
+            (blur)="attempt.touch('load')"
           />
         </app-field>
       </div>
 
-      @if (attempt.wasTried() && problems().length > 0) {
-        <ul class="problem" role="alert">
-          @for (problem of problems(); track problem) {
-            <li>{{ problem }}</li>
-          }
-        </ul>
+      @if (formulaLine(); as line) {
+        <p class="muted small" dir="auto">{{ line }}</p>
       }
 
       @if (preview(); as result) {
@@ -109,10 +196,21 @@ import { addDays } from './client-overview.models';
                 <div class="preview-session">
                   <p class="preview-name" dir="auto">{{ session.name }}</p>
                   <ul>
-                    @for (exercise of session.exercises; track exercise.id) {
+                    @for (exercise of session.exercises; track $index) {
                       <li dir="auto">
-                        <strong>{{ exercise.name }}</strong>
-                        <span>{{ exercise.sets.join(' · ') }}</span>
+                        <strong>{{ exercise.name }}</strong
+                        >&ngsp;<span class="sets">
+                          @for (set of exercise.sets; track $index) {
+                            <span class="set" [class.changed]="set.changed">
+                              {{ set.text }}
+                              @if (set.changed) {
+                                <span class="tb-visually-hidden"
+                                  >, <ng-container i18n>changed</ng-container></span
+                                >
+                              }
+                            </span>
+                          }
+                        </span>
                       </li>
                     }
                   </ul>
@@ -178,6 +276,10 @@ import { addDays } from './client-overview.models';
       color: var(--tb-muted);
     }
 
+    .small {
+      font-size: 0.8125rem;
+    }
+
     fieldset {
       border: 0;
       display: flex;
@@ -194,24 +296,31 @@ import { addDays } from './client-overview.models';
       padding: 0;
     }
 
-    .pair {
-      display: grid;
-      gap: 1rem;
-      grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    // The action bar sticks over the end of the scrolling sheet: when focus scrolls a control into
+    // view, leave room for the bar so it never covers it.
+    input {
+      scroll-margin-block-end: 5rem;
     }
 
-    .problem,
+    .field-error {
+      color: var(--tb-danger);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      margin-block-start: 0.25rem;
+    }
+
+    .fields {
+      display: grid;
+      gap: 0.875rem 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+    }
+
     .problem-text {
       background: var(--tb-danger-soft);
       border-radius: var(--tb-radius-control);
       color: var(--tb-danger);
       font-weight: 600;
-      margin: 0;
       padding: 0.625rem 0.875rem;
-    }
-
-    .problem {
-      list-style: none;
     }
 
     // The buttons stay in view while a long sheet scrolls under them. The sheet pads its body by
@@ -269,22 +378,38 @@ import { addDays } from './client-overview.models';
       font-size: 0.8125rem;
     }
 
+    // An exercise's name, then its set lines under it, as the builder's preview reads.
     ul {
+      display: grid;
       font-size: 0.875rem;
+      gap: 0.5rem;
       list-style: none;
-      margin: 0.125rem 0 0;
+      margin: 0.25rem 0 0;
       padding: 0;
     }
 
     li {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0 0.5rem;
+      display: grid;
+      gap: 0.125rem;
+      min-inline-size: 0;
+      overflow-wrap: anywhere;
     }
 
-    li span {
+    .sets {
+      display: grid;
+      gap: 0.125rem;
+    }
+
+    .set {
       color: var(--tb-muted);
       font-variant-numeric: tabular-nums;
+    }
+
+    // A set that differs from the week it builds on reads in the ink colour and heavier, so the
+    // difference is not carried by colour alone.
+    .set.changed {
+      color: var(--tb-ink);
+      font-weight: 600;
     }
   `,
 })
@@ -293,6 +418,8 @@ export class ProgramNextBlock {
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly locale = inject(LOCALE_ID);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
 
   readonly block = input.required<BlockCard>();
@@ -301,10 +428,11 @@ export class ProgramNextBlock {
   readonly closed = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
-  protected readonly weeksLabel = $localize`Weeks to add`;
-  protected readonly weeksHelp = $localize`Between 1 and 12.`;
-  protected readonly effortLabel = $localize`Effort change per week`;
-  protected readonly effortHelp = $localize`RPE, from -2 to 2 in steps of 0.5.`;
+  protected readonly copiesLabel = $localize`Copies of each week`;
+  protected readonly rpeLabel = $localize`RPE a week`;
+  protected readonly repsLabel = $localize`Reps a week`;
+  protected readonly percentageLabel = $localize`% of training max a week`;
+
   /** Starts from the program's last week, the usual week to build on. */
   protected readonly chosen = linkedSignal<ReadonlySet<string>>(
     () =>
@@ -314,24 +442,90 @@ export class ProgramNextBlock {
           .map((week) => week.id),
       ),
   );
-  protected readonly iterations = signal<number | null>(3);
-  protected readonly step = signal<number | null>(0.5);
+  protected readonly iterations = signal<number | null>(STARTING_STEPS.iterations);
+  protected readonly rpe = signal<number | null>(STARTING_STEPS.rpe);
+  protected readonly reps = signal<number | null>(STARTING_STEPS.reps);
+  protected readonly percentage = signal<number | null>(STARTING_STEPS.percentage);
+  protected readonly load = signal<number | null>(STARTING_STEPS.load);
+  /** The program as it stands: its unit, and the sets the steps would move. */
+  protected readonly view = signal<TrainingMesocycleView | null>(null);
   protected readonly preview = signal<ProgressionPreviewView | null>(null);
-  protected readonly unit = signal<TrainingLoadUnit>('Kilogram');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
-  protected readonly problems = computed(() =>
-    progressionErrors({
-      weekIds: [...this.chosen()],
-      iterations: this.iterations(),
-      rpeIncrement: this.step(),
-    }),
+  protected readonly unit = computed(() => this.view()?.loadUnit ?? 'Kilogram');
+  protected readonly weightLabel = computed(
+    () => $localize`Weight a week (${this.reach()?.unit ?? unitLabel(this.unit())}:unit:)`,
   );
+
+  private readonly weekIds = computed(() => [...this.chosen()]);
+  protected readonly room = computed(() =>
+    copiesThatFit(this.block().weekCount, this.chosen().size),
+  );
+  private readonly values = computed<ProgressionValues>(() => ({
+    weekIds: this.weekIds(),
+    iterations: this.iterations(),
+    rpeStep: this.rpe(),
+    repetitionsStep: this.reps(),
+    percentageStep: this.percentage(),
+    loadStep: this.load(),
+  }));
+  protected readonly problems = computed(() => progressionErrors(this.values(), this.room()));
+  private readonly reach = computed(() => {
+    const view = this.view();
+    return view ? stepReach(view, this.weekIds()) : null;
+  });
+
+  /** What each field would move in the chosen weeks, so a step is never a guess. */
+  protected readonly help = computed(() => {
+    const reach = this.reach();
+    const room = this.room();
+    return {
+      copies: $localize`Added after the last week. Up to ${room}:count: fit.`,
+      rpe: !reach
+        ? null
+        : reach.rpe > 0
+          ? $localize`Sets moved: ${reach.rpe}:count:. Warm-ups stay as they are.`
+          : $localize`No set in these weeks has an RPE or RIR.`,
+      reps: !reach
+        ? null
+        : reach.reps > 0
+          ? $localize`Sets moved: ${reach.reps}:count:.`
+          : $localize`No set in these weeks has reps.`,
+      percentage: !reach
+        ? null
+        : reach.percentage > 0
+          ? $localize`Sets moved: ${reach.percentage}:count:.`
+          : $localize`No set in these weeks uses a % of training max.`,
+      load: !reach
+        ? null
+        : reach.load > 0
+          ? $localize`Sets moved: ${reach.load}:count:, fixed or typed weights.`
+          : $localize`No set in these weeks has a fixed weight.`,
+    };
+  });
+
+  /** Which formula the new weeks' weights follow: each set keeps the one it has. */
+  protected readonly formulaLine = computed(() => {
+    const view = this.view();
+    const formula = view ? nextBlockFormula(view, this.weekIds()) : null;
+    switch (formula) {
+      case 'RpeChart':
+        return $localize`Weights come from this program’s training maxes. Where a weight follows an RPE, it uses the RTS chart, as it does now.`;
+      case 'RpeBasedEpley':
+        return $localize`Weights come from this program’s training maxes. Where a weight follows an RPE, it uses the Epley curve, as it does now.`;
+      case 'mixed':
+        return $localize`Weights come from this program’s training maxes. Where a weight follows an RPE, it uses the RTS chart or the Epley curve, each as it does now.`;
+      default:
+        return null;
+    }
+  });
 
   protected readonly weeks = computed<PreviewWeek[]>(() => {
     const result = this.preview();
-    return result ? previewWeeks(result, this.unit(), this.locale) : [];
+    return result
+      ? previewWeeks(result, this.view(), this.weekIds(), this.unit(), this.locale)
+      : [];
   });
 
   protected readonly previewLine = computed(() => {
@@ -348,28 +542,42 @@ export class ProgramNextBlock {
       : $localize`${added}:count: new weeks. The program would end ${end}:date:.`;
   });
 
-  protected readonly coverage = computed(() =>
-    coverageText(this.preview()?.coverageMessage ?? null, this.firstName()),
-  );
+  /**
+   * Why the weeks cannot be added, and what to do: a program only grows inside the plan it was assigned
+   * under, so past it the coach builds fewer weeks, or renews the plan and assigns the next program.
+   */
+  protected readonly coverage = computed(() => {
+    const said = coverageText(this.preview()?.coverageMessage ?? null, this.firstName());
+    return $localize`${said}:coverage: Choose fewer copies, or renew the plan and assign the next program.`;
+  });
 
   constructor() {
-    // The unit the loads are in belongs to the program; the preview does not carry it.
+    // The program as it stands: the unit its loads are in and the sets the steps would move. The
+    // preview carries neither.
     effect(() => {
       this.scope.epoch();
       const id = this.block().id;
-      void this.scope.run('unit', async (owner) => {
+      void this.scope.run('program', async (owner) => {
         try {
-          const view = await owner.wait(firstValueFrom(this.api.getTrainingMesocycle(id)));
-          this.unit.set(view.loadUnit);
+          this.view.set(await owner.wait(firstValueFrom(this.api.getTrainingMesocycle(id))));
         } catch {
-          // Loads then read in kilograms; the preview itself does not depend on it.
+          // Loads then read in kilograms and the steps say nothing about what they move; the
+          // preview itself does not depend on it.
         }
       });
     });
   }
 
+  /** The messages due on screen for a field now: after the coach left it, or tried to preview. */
+  protected shown(field: ProgressionField): readonly string[] | null {
+    const messages = this.problems()[field];
+    return this.attempt.shows(field, messages) ? messages : null;
+  }
+
   protected weekTitle(week: PreviewWeek): string {
-    return $localize`Week ${week.number}:week:`;
+    return week.from === null
+      ? $localize`Week ${week.number}:week:`
+      : $localize`Week ${week.number}:week: · from week ${week.from}:source:`;
   }
 
   protected toggle(id: string, checked: boolean): void {
@@ -377,6 +585,7 @@ export class ProgramNextBlock {
     if (checked) next.add(id);
     else next.delete(id);
     this.chosen.set(next);
+    this.attempt.touch('weeks');
     this.changed();
   }
 
@@ -385,8 +594,23 @@ export class ProgramNextBlock {
     this.changed();
   }
 
-  protected setStep(value: number): void {
-    this.step.set(Number.isNaN(value) ? null : value);
+  protected setRpe(value: number): void {
+    this.rpe.set(Number.isNaN(value) ? null : value);
+    this.changed();
+  }
+
+  protected setReps(value: number): void {
+    this.reps.set(Number.isNaN(value) ? null : value);
+    this.changed();
+  }
+
+  protected setPercentage(value: number): void {
+    this.percentage.set(Number.isNaN(value) ? null : value);
+    this.changed();
+  }
+
+  protected setLoad(value: number): void {
+    this.load.set(Number.isNaN(value) ? null : value);
     this.changed();
   }
 
@@ -396,24 +620,43 @@ export class ProgramNextBlock {
     this.error.set(null);
   }
 
+  /** What the server previews and applies: the weeks, the copies and the four steps. */
+  private request(): Omit<ApplyProgressionRequest, 'previewHash' | 'mesocycleVersion'> {
+    return {
+      sourceWeekIds: this.weekIds(),
+      iterations: this.iterations()!,
+      rpeIncrement: this.rpe()!,
+      repetitionsStep: this.reps()!,
+      percentageStep: this.percentage()!,
+      loadStep: this.load()!,
+    };
+  }
+
   protected async previewIt(): Promise<void> {
     if (this.busy()) return;
     this.attempt.attempt();
-    if (this.problems().length > 0) return;
+    if (hasProgressionProblems(this.problems())) {
+      // The first week box or field that is wrong, in the order they are on screen.
+      afterNextRender(
+        () =>
+          this.host.nativeElement
+            .querySelector<HTMLElement>('fieldset.invalid input, [aria-invalid="true"]')
+            ?.focus(),
+        { injector: this.injector },
+      );
+      return;
+    }
     const block = this.block();
+    const request: ProgressionPreviewRequest = {
+      ...this.request(),
+      mesocycleVersion: block.version,
+    };
     this.busy.set(true);
     this.error.set(null);
     try {
       await this.csrf.refresh();
       this.preview.set(
-        await firstValueFrom(
-          this.api.previewTrainingProgression(block.id, {
-            sourceWeekIds: [...this.chosen()],
-            iterations: this.iterations()!,
-            rpeIncrement: this.step()!,
-            mesocycleVersion: block.version,
-          }),
-        ),
+        await firstValueFrom(this.api.previewTrainingProgression(block.id, request)),
       );
     } catch (error) {
       this.error.set(
@@ -432,19 +675,16 @@ export class ProgramNextBlock {
     const result = this.preview();
     if (this.busy() || !result || !result.isInsideTrainingCoverage) return;
     const block = this.block();
+    const request: ApplyProgressionRequest = {
+      ...this.request(),
+      previewHash: result.previewHash,
+      mesocycleVersion: block.version,
+    };
     this.busy.set(true);
     this.error.set(null);
     try {
       await this.csrf.refresh();
-      await firstValueFrom(
-        this.api.applyTrainingProgression(block.id, {
-          sourceWeekIds: [...this.chosen()],
-          iterations: this.iterations()!,
-          rpeIncrement: this.step()!,
-          previewHash: result.previewHash,
-          mesocycleVersion: block.version,
-        }),
-      );
+      await firstValueFrom(this.api.applyTrainingProgression(block.id, request));
       this.closed.emit(true);
     } catch (error) {
       this.error.set(

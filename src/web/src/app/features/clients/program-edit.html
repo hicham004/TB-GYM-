@@ -1,0 +1,493 @@
+<div class="builder edit" [attr.inert]="applying() ? '' : null">
+  <a class="back" [routerLink]="trainingLink()">
+    <app-icon class="back-icon" name="chevron-right" />
+    <span>{{ backLabel() }}</span>
+  </a>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="6" />
+      </div>
+    }
+    @case ('missing') {
+      <div class="panel pad stack">
+        <h2 class="panel-title" i18n>This program isn’t here</h2>
+        <p i18n>It may have been opened from an old link, or it belongs to another client.</p>
+        <a appButton [routerLink]="trainingLink()">{{ backLabel() }}</a>
+      </div>
+    }
+    @case ('closed') {
+      <div class="panel pad stack">
+        <h2 class="panel-title" i18n>These weeks can’t be edited</h2>
+        <p>{{ closedLine() }}</p>
+        <a appButton [routerLink]="trainingLink()">{{ backLabel() }}</a>
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>The program could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="retry()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      <section class="identity" aria-labelledby="edit-title">
+        <div class="names">
+          <h2 id="edit-title" class="edit-title" #heading tabindex="-1" i18n>Edit weeks</h2>
+          <p class="edit-program" dir="auto">
+            <span class="edit-name">{{ edit()?.name }}</span>
+            <span class="edit-runs">{{ runsLine() }}</span>
+          </p>
+        </div>
+        <div class="save">
+          <p class="status" [class.unsaved]="dirty()">{{ statusLine() }}</p>
+          <div class="save-buttons">
+            @if (dirty()) {
+              <button appButton type="button" variant="text" (click)="discard()" i18n>
+                Discard changes
+              </button>
+            }
+            <button
+              appButton
+              type="button"
+              [disabled]="!dirty()"
+              [loading]="reviewing()"
+              (click)="openReview()"
+              i18n
+            >
+              Review changes
+            </button>
+          </div>
+        </div>
+      </section>
+
+      @if (problem(); as issue) {
+        <div class="alert" role="alert">
+          <p dir="auto">{{ issue.message }}</p>
+          @if (issue.sessionKey) {
+            <button appButton type="button" variant="outlined" (click)="openProblem()">
+              @if (issue.setKey) {
+                <span i18n>Fix the set</span>
+              } @else {
+                <span i18n>Open the session</span>
+              }
+            </button>
+          }
+        </div>
+      }
+      @if (failure(); as trouble) {
+        <div class="alert" role="alert">
+          <p dir="auto">{{ trouble.message }}</p>
+          @if (trouble.reload) {
+            <button appButton type="button" variant="outlined" (click)="reload()" i18n>
+              Reload
+            </button>
+          }
+        </div>
+      }
+
+      <div class="workspace" [class.with-library]="libraryOpen()">
+        @if (libraryOpen()) {
+          <aside class="library panel" aria-labelledby="library-title">
+            <div class="library-head">
+              <h3 id="library-title" class="panel-title" i18n>Exercises</h3>
+            </div>
+            <app-program-library
+              mode="drag"
+              [exercises]="exercises()"
+              [saved]="saved()"
+              [thumbs]="thumbs()"
+              [state]="libraryState()"
+              [connectedTo]="dropIds()"
+              (retry)="loadLibrary()"
+            />
+          </aside>
+        }
+
+        <section class="plan" aria-labelledby="weeks-title">
+          <div class="plan-tools">
+            <h3 id="weeks-title" class="panel-title" i18n>Weeks</h3>
+            <div class="plan-buttons">
+              <button
+                appButton
+                class="library-toggle"
+                type="button"
+                variant="text"
+                [attr.aria-expanded]="libraryOpen()"
+                (click)="libraryOpen.set(!libraryOpen())"
+              >
+                @if (libraryOpen()) {
+                  <span i18n>Hide exercises</span>
+                } @else {
+                  <span i18n>Show exercises</span>
+                }
+              </button>
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                [disabled]="draft().weeks.length >= maxWeeks"
+                (click)="addWeek()"
+              >
+                <app-icon name="plus" />
+                <span i18n>Add week</span>
+              </button>
+            </div>
+          </div>
+
+          @if (grid().length > 1) {
+            <fieldset class="week-chips">
+              <legend class="tb-visually-hidden" i18n>Week to show</legend>
+              @for (row of grid(); track row.key) {
+                <label class="week-chip">
+                  <input
+                    class="tb-visually-hidden"
+                    type="radio"
+                    name="phone-week"
+                    [checked]="row.key === shownWeek()"
+                    [attr.aria-label]="row.title"
+                    (change)="phoneWeek.set(row.key)"
+                  />
+                  <span aria-hidden="true">{{ row.number }}</span>
+                </label>
+              }
+            </fieldset>
+          }
+
+          <div class="weeks" cdkScrollable [style.--day-columns]="columns()">
+            @for (row of grid(); track row.key) {
+              <section
+                class="week"
+                [class.phone-hidden]="row.key !== shownWeek()"
+                [attr.aria-label]="row.title"
+                [attr.data-week]="row.key"
+                tabindex="-1"
+              >
+                <header class="week-head">
+                  <span class="week-number" aria-hidden="true">{{ row.number }}</span>
+                  <input
+                    class="week-label"
+                    autocomplete="off"
+                    [(ngModel)]="row.week.label"
+                    (ngModelChange)="touched()"
+                    maxlength="120"
+                    [placeholder]="row.title"
+                    [attr.aria-label]="row.labelName"
+                    dir="auto"
+                  />
+                  <span class="week-dates">{{ row.dates }}</span>
+                  <app-checkbox class="shared" [label]="sharedLabel()">
+                    <input
+                      type="checkbox"
+                      appControl
+                      [(ngModel)]="row.week.isPublished"
+                      (ngModelChange)="touched()"
+                    />
+                  </app-checkbox>
+                  <app-menu
+                    icon="more"
+                    [label]="row.menuLabel"
+                    [items]="row.menu"
+                    (chosen)="onWeekAction(row.key, $event)"
+                  />
+                </header>
+
+                <div class="days">
+                  @for (cell of row.days; track cell.day) {
+                    <div
+                      class="day"
+                      [class.rest]="cell.sessions.length === 0 && cell.locked.length === 0"
+                      [class.gone]="cell.closed"
+                      cdkDropList
+                      [id]="cell.listId"
+                      [cdkDropListDisabled]="cell.closed"
+                      [cdkDropListConnectedTo]="dropIds()"
+                      [cdkDropListData]="cell.target"
+                      [cdkDropListEnterPredicate]="canEnter"
+                      (cdkDropListDropped)="dropped($event)"
+                    >
+                      <span class="day-label"
+                        >{{ cell.label }}
+                        @if (cell.closed) {
+                          <span class="tb-visually-hidden" i18n>, passed</span>
+                        }
+                      </span>
+                      @for (done of cell.locked; track done.id) {
+                        <article class="locked-card">
+                          <span class="locked-name" dir="auto">{{ done.name }}</span>
+                          <app-status-pill [label]="done.label" [tone]="done.tone" />
+                        </article>
+                      }
+                      @for (session of cell.sessions; track session.key) {
+                        <article
+                          class="session-card"
+                          cdkDrag
+                          [cdkDragData]="session.drag"
+                          cdkDragPreviewClass="tb-drag-preview"
+                        >
+                          <div *cdkDragPlaceholder class="session-placeholder"></div>
+                          <div *cdkDragPreview class="session-preview">
+                            <span class="session-preview-name" dir="auto">{{ session.name }}</span>
+                            <span class="session-preview-count">{{ session.countLabel }}</span>
+                          </div>
+                          <div class="session-head">
+                            <span class="session-grip" cdkDragHandle aria-hidden="true">
+                              <app-icon name="grip" />
+                            </span>
+                            <button
+                              class="session-name"
+                              type="button"
+                              dir="auto"
+                              (click)="openSession(session.ref)"
+                            >
+                              {{ session.name }}
+                            </button>
+                            <app-menu
+                              icon="more"
+                              [label]="session.menuLabel"
+                              [items]="session.menu"
+                              (chosen)="onSessionAction(session.ref, $event)"
+                            />
+                          </div>
+                          <ol
+                            class="exercise-list"
+                            cdkDropList
+                            [id]="session.listId"
+                            [cdkDropListConnectedTo]="dropIds()"
+                            [cdkDropListData]="session.target"
+                            [cdkDropListEnterPredicate]="canEnter"
+                            (cdkDropListDropped)="dropped($event)"
+                          >
+                            @for (exercise of session.exercises; track exercise.key) {
+                              <li
+                                class="exercise-row"
+                                cdkDrag
+                                [cdkDragData]="exercise.drag"
+                                [cdkDragStartDelay]="dragDelay"
+                                cdkDragPreviewClass="tb-drag-preview"
+                              >
+                                <div class="exercise-heading">
+                                  <span class="exercise-grip" cdkDragHandle aria-hidden="true"
+                                    ><app-icon name="grip"
+                                  /></span>
+                                  <span class="exercise-name" dir="auto">
+                                    {{ exercise.name }}
+                                    @if (exercise.isMainLift) {
+                                      <span class="main-lift" i18n>Main</span>
+                                    }
+                                  </span>
+                                  <app-exercise-demo
+                                    compact
+                                    [assetIds]="exercise.media"
+                                    [exerciseName]="exercise.name"
+                                  />
+                                </div>
+                                <button
+                                  class="prescription-toggle exercise-line"
+                                  type="button"
+                                  [attr.aria-label]="exercise.editLabel"
+                                  [attr.aria-expanded]="inlineEditing() === exercise.key"
+                                  [attr.aria-controls]="'inline-' + exercise.key"
+                                  (click)="editSets(exercise.key)"
+                                >
+                                  {{ exercise.line }} <app-icon name="chevron-down" />
+                                </button>
+                                @if (inlineEditing() === exercise.key) {
+                                  <div class="inline-sets" [id]="'inline-' + exercise.key">
+                                    <app-program-sets-editor
+                                      [exercise]="exercise.draft"
+                                      [revision]="revision()"
+                                      (edited)="touched()"
+                                    /><button
+                                      appButton
+                                      variant="text"
+                                      type="button"
+                                      (click)="editSets(exercise.key)"
+                                      i18n
+                                    >
+                                      Done editing sets
+                                    </button>
+                                  </div>
+                                }
+                              </li>
+                            } @empty {
+                              <li class="drop-hint" i18n>Drop exercises here</li>
+                            }
+                          </ol>
+                          <button
+                            class="add-exercise"
+                            type="button"
+                            [attr.aria-label]="session.addLabel"
+                            (click)="openPicker({ kind: 'session', ref: session.ref })"
+                          >
+                            <app-icon name="plus" />
+                            <span i18n>Exercise</span>
+                          </button>
+                        </article>
+                      }
+                      @if (cell.sessions.length === 0 && cell.locked.length === 0) {
+                        <span class="rest-word" i18n>Rest</span>
+                      }
+                      @if (!cell.closed && cell.sessions.length === 0) {
+                        <button
+                          class="add-day"
+                          type="button"
+                          [attr.aria-label]="cell.addLabel"
+                          (click)="openPicker({ kind: 'day', at: cell.at })"
+                        >
+                          <app-icon name="plus" />
+                        </button>
+                      }
+                    </div>
+                  }
+                </div>
+              </section>
+            }
+          </div>
+        </section>
+      </div>
+    }
+  }
+</div>
+
+<ng-template #sessionSheet let-sheet>
+  @if (editingSession(); as session) {
+    <app-program-session-editor
+      [session]="session"
+      [weekNumber]="editingWeekNumber()"
+      [library]="exercises()"
+      [revision]="revision()"
+      (edited)="touched()"
+      (addExercise)="addToEditing()"
+      (remove)="deleteEditing(sheet)"
+      (removeExercise)="removeFromEditing($event)"
+      (done)="sheet.close()"
+    />
+  } @else {
+    <p i18n>This session is no longer in the program.</p>
+  }
+</ng-template>
+
+<ng-template #pickerSheet let-sheet>
+  <div class="picker">
+    <app-program-library
+      mode="pick"
+      [exercises]="exercises()"
+      [saved]="saved()"
+      [thumbs]="thumbs()"
+      [state]="libraryState()"
+      [offerSaved]="picking()?.kind === 'day'"
+      [added]="addedInSheet()"
+      (pickExercise)="pickExercise($event)"
+      (pickSaved)="pickSaved($event)"
+      (retry)="loadLibrary()"
+    />
+    <p class="tb-visually-hidden" role="status">{{ announcement() }}</p>
+    <div class="sheet-footer">
+      <button appButton type="button" (click)="sheet.close()" i18n>Done</button>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #reviewSheet let-sheet>
+  @if (review(); as shown) {
+    <div class="review">
+      <p class="review-headline">{{ shown.summary.headline }}</p>
+      @if (shown.summary.endLine; as line) {
+        <p class="review-end">{{ line }}</p>
+      }
+      @for (problem of shown.summary.problems; track $index) {
+        <p class="preview-error" role="alert" dir="auto">{{ problem }}</p>
+      }
+      @if (shown.summary.weeks.length > 0) {
+        <h3 class="review-heading" i18n>Weeks</h3>
+        <ul class="review-list" role="list">
+          @for (row of shown.summary.weeks; track row.key) {
+            <li class="review-row">
+              <div class="review-top">
+                <app-status-pill [label]="row.kind" [tone]="row.tone" />
+                <span class="review-title" dir="auto">{{ row.title }}</span>
+              </div>
+              @if (row.from; as from) {
+                <span class="review-note">{{ from }}</span>
+              }
+              @if (row.hidden; as hidden) {
+                <span class="review-note">{{ hidden }}</span>
+              }
+            </li>
+          }
+        </ul>
+      }
+      @if (shown.summary.sessions.length > 0) {
+        <h3 class="review-heading" i18n>Sessions</h3>
+        <ul class="review-list" role="list">
+          @for (row of shown.summary.sessions; track row.key) {
+            <li class="review-row">
+              <div class="review-top">
+                <app-status-pill [label]="row.kind" [tone]="row.tone" />
+                <span class="review-title" dir="auto">{{ row.title }}</span>
+              </div>
+              @if (row.from; as from) {
+                <span class="review-note">{{ from }}</span>
+              }
+              @if (row.hidden; as hidden) {
+                <span class="review-note">{{ hidden }}</span>
+              }
+              @if (row.lines.length > 0) {
+                <ul class="review-lines" role="list">
+                  @for (line of row.lines; track line.id) {
+                    <li>
+                      <span class="review-exercise" dir="auto">{{ line.name }}</span>
+                      @for (text of line.sets; track $index) {
+                        <span class="review-set">{{ text }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+            </li>
+          }
+        </ul>
+      }
+      @if (failure(); as trouble) {
+        <p class="preview-error" role="alert" dir="auto">{{ trouble.message }}</p>
+      }
+      <div class="preview-footer">
+        <button
+          appButton
+          variant="outlined"
+          type="button"
+          [disabled]="applying()"
+          (click)="sheet.close()"
+          i18n
+        >
+          Back to editing
+        </button>
+        <button
+          appButton
+          type="button"
+          [disabled]="shown.summary.problems.length > 0 || !shown.summary.hasChanges"
+          [loading]="applying()"
+          (click)="apply()"
+        >
+          @if (applying()) {
+            <span i18n>Applying…</span>
+          } @else {
+            <span i18n>Apply changes</span>
+          }
+        </button>
+      </div>
+    </div>
+  }
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>
