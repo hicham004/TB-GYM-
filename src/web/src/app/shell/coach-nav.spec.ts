@@ -15,7 +15,7 @@ const ROUTES = [
   'training/programs',
   'training/exercises',
   'nutrition/plans',
-  'nutrition/library',
+  'nutrition/foods',
   'checkins/forms',
   'checkins/clients',
   'messages',

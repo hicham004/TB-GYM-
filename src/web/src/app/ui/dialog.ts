@@ -1,7 +1,14 @@
 import { DOCUMENT } from '@angular/common';
 import { Dialog as CdkDialog, DialogRef } from '@angular/cdk/dialog';
 import { inject, Injectable, TemplateRef } from '@angular/core';
-import { ModalData, modalDirection, ModalOptions, ModalSurface } from './modal-surface';
+import {
+  guardClose,
+  guardedConfig,
+  ModalData,
+  modalDirection,
+  ModalOptions,
+  ModalSurface,
+} from './modal-surface';
 
 let nextDialogId = 0;
 
@@ -23,7 +30,7 @@ export class UiDialog {
       closeLabel: options.closeLabel ?? 'Close',
     };
 
-    return this.cdkDialog.open<R, ModalData, ModalSurface>(ModalSurface, {
+    const ref = this.cdkDialog.open<R, ModalData, ModalSurface>(ModalSurface, {
       id,
       data,
       role: 'dialog',
@@ -38,6 +45,9 @@ export class UiDialog {
       width: 'min(28rem, calc(100vw - 2rem))',
       maxHeight: 'calc(100dvh - 2rem)',
       closeOnNavigation: options.closeOnNavigation ?? true,
+      ...guardedConfig(options),
     });
+    guardClose(ref, data, options.canClose);
+    return ref;
   }
 }

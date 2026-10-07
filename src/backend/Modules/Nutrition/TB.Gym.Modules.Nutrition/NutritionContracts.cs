@@ -5,10 +5,11 @@ public interface INutritionApplicationService
     AiMealDraftAvailabilityView GetAiAvailability();
     Task<NutritionWorkspaceSettingsView> GetSettingsAsync(CancellationToken cancellationToken);
     Task<NutritionCommandResult> UpdateSettingsAsync(UpdateNutritionSettingsRequest request, CancellationToken cancellationToken);
-    Task<FoodItemPage> ListFoodsAsync(string? query, int skip, int take, CancellationToken cancellationToken);
+    Task<FoodItemPage> ListFoodsAsync(string? query, bool archived, int skip, int take, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CreateFoodAsync(CreateFoodItemRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> AddFoodVersionAsync(Guid foodItemId, AddFoodVersionRequest request, CancellationToken cancellationToken);
-    Task<ProviderFoodSearchPage> SearchUsdaAsync(string query, int skip, int take, CancellationToken cancellationToken);
+    Task<NutritionCommandResult> SetFoodArchivedAsync(Guid foodItemId, SetFoodArchivedRequest request, CancellationToken cancellationToken);
+    Task<ProviderFoodSearchPage> SearchUsdaAsync(string query, FoodSearchKind kind, int skip, int take, CancellationToken cancellationToken);
     Task<NutritionCommandResult> ImportUsdaFoodAsync(ImportUsdaFoodRequest request, CancellationToken cancellationToken);
     Task<CookingFactorPage> ListCookingFactorsAsync(int skip, int take, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CreateCookingFactorAsync(CreateCookingFactorRequest request, CancellationToken cancellationToken);
@@ -62,6 +63,9 @@ public interface INutritionApplicationService
     Task<NutritionCommandResult> ReviewAiDraftAsync(Guid operationId, ReviewAiMealDraftRequest request, CancellationToken cancellationToken);
 }
 
+/// <param name="AiMaximumMonthlyRequests">TB Gym's ceiling on the workspace's allowance (R4.4c); the
+/// allowance in use is the lower of the two.</param>
+/// <param name="AiMaximumMonthlyCost">The same ceiling's monthly cost, in USD.</param>
 public sealed record NutritionWorkspaceSettingsView(
     string EnergyPolicyKey,
     string EnergyPolicyVersion,
@@ -69,7 +73,9 @@ public sealed record NutritionWorkspaceSettingsView(
     int AiMonthlyRequestLimit,
     decimal AiMonthlyCostLimit,
     string AiCostCurrency,
-    uint Version);
+    uint Version,
+    int AiMaximumMonthlyRequests,
+    decimal AiMaximumMonthlyCost);
 
 public sealed record UpdateNutritionSettingsRequest(
     string EnergyPolicyKey,
@@ -87,6 +93,11 @@ public sealed record CreateFoodItemRequest(
     Guid? LabelMediaAssetId,
     AddFoodVersionRequest Version);
 
+/// <param name="Name">A new version of a food may rename it (R4.4c); recipes keep the name they
+/// copied. Creating a food names it on <see cref="CreateFoodItemRequest"/>, so this one is not read
+/// there.</param>
+/// <param name="BaseRevision">The revision the editor opened; a version saved since then is a
+/// conflict (<c>food_changed</c>), not overwritten.</param>
 public sealed record AddFoodVersionRequest(
     decimal BasisQuantity,
     FoodQuantityUnit BasisUnit,
@@ -100,9 +111,16 @@ public sealed record AddFoodVersionRequest(
     decimal? ProviderCalories,
     string SourceAttribution,
     string SourceRecordVersion,
-    IReadOnlyList<AllergenCode> DeclaredAllergens);
+    IReadOnlyList<AllergenCode> DeclaredAllergens,
+    string? Name = null,
+    int? BaseRevision = null);
 
-public sealed record FoodItemView(Guid Id, string Name, FoodProvenance Provenance, string? ExternalId, string? ExternalDataType, int CurrentRevision, FoodVersionView CurrentVersion);
+/// <param name="ArchivedAtUtc">Set while the food is archived (R4.4c): out of Foods and the ingredient
+/// search, still in every recipe and plan that copied it.</param>
+public sealed record FoodItemView(Guid Id, string Name, FoodProvenance Provenance, string? ExternalId, string? ExternalDataType, int CurrentRevision, FoodVersionView CurrentVersion, DateTimeOffset? ArchivedAtUtc = null);
+
+/// <summary>Archives a food, or restores an archived one. Doing either twice changes nothing.</summary>
+public sealed record SetFoodArchivedRequest(bool IsArchived);
 
 public sealed record FoodVersionView(
     Guid Id,
@@ -124,7 +142,8 @@ public sealed record FoodVersionView(
     string SourceAttribution,
     string SourceRecordVersion,
     IReadOnlyList<AllergenCode> DeclaredAllergens,
-    IReadOnlyList<UnreportedNutrient> UnreportedNutrients);
+    IReadOnlyList<UnreportedNutrient> UnreportedNutrients,
+    decimal? ReportedCarbohydrateGrams = null);
 
 public sealed record FoodItemPage(int Total, int Skip, int Take, IReadOnlyList<FoodItemView> Items);
 
@@ -227,6 +246,8 @@ public sealed record RecipeVersionView(
     IReadOnlyList<RecipeIngredientView> Ingredients);
 
 /// <summary>An ingredient line as saved: its food version, amount and what that amount holds.</summary>
+/// <param name="NewerFood">The food as it is now when it was edited since the line copied it, so the
+/// editor can offer its new numbers (R4.4c); null while the line has the food's current version.</param>
 public sealed record RecipeIngredientView(
     Guid FoodItemId,
     Guid FoodItemVersionId,
@@ -241,7 +262,8 @@ public sealed record RecipeIngredientView(
     decimal FatGrams,
     IReadOnlyList<AllergenCode> DeclaredAllergens,
     Guid? YieldFactorId,
-    Guid? RetentionFactorId);
+    Guid? RetentionFactorId,
+    FoodItemView? NewerFood = null);
 
 public sealed record RecipePage(int Total, int Skip, int Take, IReadOnlyList<RecipeSummary> Items);
 

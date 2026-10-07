@@ -21,12 +21,25 @@ internal sealed class UsdaFoodDataCentralProvider(
 {
     public string ProviderKey => "UsdaFdc";
 
-    public async Task<IReadOnlyList<FoodSearchResult>> SearchAsync(string query, int skip, int take, CancellationToken cancellationToken)
+    // Generic foods (lab-analysed, legacy reference and survey dishes such as "chicken breast,
+    // baked") or US packaged products. Unfiltered, USDA lists branded items first.
+    private static readonly string[] BasicDataTypes = ["Foundation", "SR Legacy", "Survey (FNDDS)"];
+    private static readonly string[] PackagedDataTypes = ["Branded"];
+
+    public async Task<IReadOnlyList<FoodSearchResult>> SearchAsync(string query, FoodSearchKind kind, int skip, int take, CancellationToken cancellationToken)
     {
         EnsureConfigured();
         var pageNumber = skip / take + 1;
-        var uri = $"foods/search?api_key={Uri.EscapeDataString(options.Value.ApiKey)}&query={Uri.EscapeDataString(query)}&pageSize={take.ToString(CultureInfo.InvariantCulture)}&pageNumber={pageNumber.ToString(CultureInfo.InvariantCulture)}";
-        using var response = await httpClient.GetAsync(uri, cancellationToken);
+        // The criteria go in a POST body: USDA's edge refused about half the GET searches whose
+        // address held "Survey (FNDDS)" (checked 2026-10-07), and none of the POSTs.
+        var criteria = new
+        {
+            query,
+            dataType = kind == FoodSearchKind.Packaged ? PackagedDataTypes : BasicDataTypes,
+            pageSize = take,
+            pageNumber,
+        };
+        using var response = await httpClient.PostAsJsonAsync($"foods/search?api_key={Uri.EscapeDataString(options.Value.ApiKey)}", criteria, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         if (!payload.TryGetProperty("foods", out var foods) || foods.ValueKind != JsonValueKind.Array)
@@ -34,11 +47,37 @@ internal sealed class UsdaFoodDataCentralProvider(
             throw new NutritionProviderUnavailableException("usda_schema_changed", "USDA FoodData Central returned an unexpected response. No data was imported.");
         }
 
-        return foods.EnumerateArray().Select(item => new FoodSearchResult(
+        return foods.EnumerateArray().Select(ToSearchResult).OfType<FoodSearchResult>().ToArray();
+    }
+
+    /// <summary>
+    /// One match with its brand and its nutrients per 100 g, so the coach can tell matches apart
+    /// before copying one. A match without protein, fat or carbohydrate is left out: importing it
+    /// would be refused (NUT-003).
+    /// </summary>
+    private FoodSearchResult? ToSearchResult(JsonElement item)
+    {
+        var nutrients = item.TryGetProperty("foodNutrients", out var array) && array.ValueKind == JsonValueKind.Array
+            ? array.EnumerateArray().ToArray()
+            : [];
+        var protein = FindNutrient(nutrients, ["Protein"], "G");
+        var carbohydrate = FindNutrient(nutrients, ["Carbohydrate, by difference", "Carbohydrate, by summation"], "G");
+        var fat = FindNutrient(nutrients, ["Total lipid (fat)"], "G");
+        if (protein is null || carbohydrate is null || fat is null)
+        {
+            return null;
+        }
+
+        return new FoodSearchResult(
             ReadNumberAsString(item, "fdcId"),
-            ReadRequiredString(item, "description"),
+            ReadableName(ReadRequiredString(item, "description")),
             ReadOptionalString(item, "dataType") ?? "Unknown",
-            ProviderKey)).ToArray();
+            ProviderKey,
+            ReadOptionalString(item, "brandName") is { Length: > 0 } brand ? brand : ReadOptionalString(item, "brandOwner"),
+            StatedEnergy(nutrients),
+            protein,
+            carbohydrate,
+            fat);
     }
 
     public async Task<ProviderFoodRecord?> GetFoodAsync(string externalId, CancellationToken cancellationToken)
@@ -59,11 +98,11 @@ internal sealed class UsdaFoodDataCentralProvider(
 
         return new ProviderFoodRecord(
             ReadNumberAsString(payload, "fdcId"),
-            ReadRequiredString(payload, "description"),
+            ReadableName(ReadRequiredString(payload, "description")),
             ReadOptionalString(payload, "dataType") ?? "Unknown",
             100m,
             PreparationBasis.AsSold,
-            FindNutrient(nutrients, ["Energy"], "KCAL"),
+            StatedEnergy(nutrients),
             RequireNutrient(nutrients, ["Protein"], "G"),
             RequireNutrient(nutrients, ["Carbohydrate, by difference", "Carbohydrate, by summation"], "G"),
             RequireNutrient(nutrients, ["Total lipid (fat)"], "G"),
@@ -75,6 +114,29 @@ internal sealed class UsdaFoodDataCentralProvider(
             clock.UtcNow,
             unreported);
     }
+
+    /// <summary>
+    /// USDA writes packaged products' names in capitals ("GREEK YOGURT") and its basic foods in
+    /// sentence case ("Chicken, breast, meat and skin, raw"). A name in capitals is put in the same
+    /// sentence case, so the two read alike in one list; any other name is kept as USDA wrote it.
+    /// </summary>
+    internal static string ReadableName(string name)
+    {
+        if (!name.Any(char.IsUpper) || name.Any(char.IsLower))
+        {
+            return name;
+        }
+
+        var characters = name.ToLowerInvariant().ToCharArray();
+        var first = Array.FindIndex(characters, char.IsLetter);
+        characters[first] = char.ToUpperInvariant(characters[first]);
+        return new string(characters);
+    }
+
+    // Foundation foods state energy only under the Atwater names, so a search and an import both
+    // fall back to the general factors.
+    private static decimal? StatedEnergy(IReadOnlyList<JsonElement> nutrients) =>
+        FindNutrient(nutrients, ["Energy"], "KCAL") ?? FindNutrient(nutrients, ["Energy (Atwater General Factors)"], "KCAL");
 
     private void EnsureConfigured()
     {

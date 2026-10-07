@@ -5780,6 +5780,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("ArchivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -5979,6 +5982,10 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
 
+                    b.Property<decimal?>("ReportedCarbohydrateGrams")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
                     b.Property<int>("Revision")
                         .HasColumnType("integer");
 
@@ -6023,6 +6030,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("FoodItemVersions", "nutrition", t =>
                         {
                             t.HasCheckConstraint("CK_FoodItemVersions_NonNegative", "\"BasisQuantity\" > 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0 AND \"FibreGrams\" >= 0 AND \"PolyolGrams\" >= 0 AND \"EthanolGrams\" >= 0 AND \"ComputedCalories\" >= 0 AND (\"ProviderCalories\" IS NULL OR \"ProviderCalories\" >= 0)");
+
+                            t.HasCheckConstraint("CK_FoodItemVersions_ReportedCarbohydrate", "\"ReportedCarbohydrateGrams\" IS NULL OR (\"ReportedCarbohydrateGrams\" < 0 AND \"ReportedCarbohydrateGrams\" >= -0.5 AND \"CarbohydrateGrams\" = 0)");
 
                             t.HasCheckConstraint("CK_FoodItemVersions_UnreportedNutrients", "\"UnreportedNutrients\" <@ ARRAY['Fibre', 'Polyols', 'Ethanol']::text[] AND (NOT ('Fibre' = ANY(\"UnreportedNutrients\")) OR \"FibreGrams\" = 0) AND (NOT ('Polyols' = ANY(\"UnreportedNutrients\")) OR \"PolyolGrams\" = 0) AND (NOT ('Ethanol' = ANY(\"UnreportedNutrients\")) OR \"EthanolGrams\" = 0)");
                         });

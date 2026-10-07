@@ -1041,7 +1041,8 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
 - F1 (done): one active price option per product, duration and currency, and Change price, which
   replaces a price for new plans without touching earlier plans or payments (ADR 0034).
 - F2 (built; one live generation waits for the owner's API key): AI meal suggestions through the
-  Anthropic SDK, always reviewed by the coach (ADR 0035).
+  Anthropic SDK, always reviewed by the coach (ADR 0035). Since R4.4c TB Gym caps every workspace's
+  monthly allowance from server configuration, which must be set before AI is switched on.
 - Progression and training maxes, P1 to P4 (approved by the owner 2026-10-05, ADR 0036; they come
   before R4.4 in the redesign plan's table). P1: a week duplicated with RPE, reps, % and weight
   steps, shown before it is added, and the RTS RPE chart as a load formula (built). P2: each assigned
@@ -1051,7 +1052,8 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
   in the builder's grid, reviewed and applied in one sitting (built). P4a: exercise demos on the coach's
   grids and session sheet, and coach and client workout notes both ways (built). P4b: adjusting next week
   from logged performance, decided in ADR 0036 on 2026-10-07 (a suggestion from the week's best logged
-  set that the coach applies), built right after the nutrition builder (R4.4).
+  set that the coach applies), built right after the nutrition builder (R4.4a to R4.4d; R4.4d, recipes
+  for clients, was added on 2026-10-07 because every competitor shows a client the whole recipe).
 
 Work follows this order; anything outside it needs the user's approval first.
 

@@ -65,6 +65,7 @@ public sealed partial class GymDbContext
             entity.PrimitiveCollection(item => item.UnreportedNutrients).HasDefaultValueSql("'{}'::text[]").ElementType().HasConversion<string>();
             entity.Property(item => item.ComputedCalories).HasPrecision(18, 6);
             entity.Property(item => item.ProviderCalories).HasPrecision(18, 6);
+            entity.Property(item => item.ReportedCarbohydrateGrams).HasPrecision(18, 6);
             entity.Property(item => item.CalorieTolerance).HasPrecision(9, 3);
             entity.HasIndex(item => new { item.TenantId, item.FoodItemId, item.Revision }).IsUnique();
             entity.HasMany(item => item.Allergens).WithOne().HasForeignKey(item => new { item.TenantId, item.FoodItemVersionId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
@@ -72,6 +73,10 @@ public sealed partial class GymDbContext
             entity.ToTable(table => table.HasCheckConstraint(
                 "CK_FoodItemVersions_UnreportedNutrients",
                 "\"UnreportedNutrients\" <@ ARRAY['Fibre', 'Polyols', 'Ethanol']::text[] AND (NOT ('Fibre' = ANY(\"UnreportedNutrients\")) OR \"FibreGrams\" = 0) AND (NOT ('Polyols' = ANY(\"UnreportedNutrients\")) OR \"PolyolGrams\" = 0) AND (NOT ('Ethanol' = ANY(\"UnreportedNutrients\")) OR \"EthanolGrams\" = 0)"));
+            // A provider's carbohydrate just below zero is kept only beside the 0 g it counts as (NUT-003).
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_FoodItemVersions_ReportedCarbohydrate",
+                "\"ReportedCarbohydrateGrams\" IS NULL OR (\"ReportedCarbohydrateGrams\" < 0 AND \"ReportedCarbohydrateGrams\" >= -0.5 AND \"CarbohydrateGrams\" = 0)"));
             ConfigureTenantEntity(entity);
         });
 

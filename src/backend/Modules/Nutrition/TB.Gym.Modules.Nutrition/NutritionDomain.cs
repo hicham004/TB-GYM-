@@ -144,6 +144,12 @@ public sealed class FoodItem : TenantEntity
 
     public int CurrentRevision { get; private set; }
 
+    /// <summary>
+    /// Set while the food is archived: left out of Foods and the ingredient search, while every recipe,
+    /// meal plan and client plan that copied one of its versions keeps it (R4.4c, Cronometer's "Retire").
+    /// </summary>
+    public DateTimeOffset? ArchivedAtUtc { get; private set; }
+
     public IReadOnlyCollection<FoodItemVersion> Versions => versions;
 
     public static FoodItem Create(
@@ -155,13 +161,27 @@ public sealed class FoodItem : TenantEntity
         Guid? labelMediaAssetId = null) =>
         new(tenantId, name, provenance, externalId, externalDataType, labelMediaAssetId);
 
+    /// <summary>The library's name only: recipe lines and client plans keep the name they copied.</summary>
+    public void Rename(string name)
+    {
+        Name = NutritionRules.RequiredText(name, 300, nameof(name));
+        NormalizedName = Name.ToUpperInvariant();
+    }
+
     public FoodItemVersion AddVersion(FoodVersionInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
-        var version = FoodItemVersion.Create(TenantId, Id, ++CurrentRevision, Provenance, input);
+        // The revision moves only once the version is valid, so a refused save leaves it as it was.
+        var version = FoodItemVersion.Create(TenantId, Id, CurrentRevision + 1, Provenance, input);
+        CurrentRevision = version.Revision;
         versions.Add(version);
         return version;
     }
+
+    /// <summary>Archives the food; archiving it again keeps the first time.</summary>
+    public void Archive(DateTimeOffset now) => ArchivedAtUtc ??= now;
+
+    public void Restore() => ArchivedAtUtc = null;
 
     private void ValidateProvenance()
     {
@@ -203,7 +223,31 @@ public sealed record FoodVersionInput(
     string SourceAttribution,
     string SourceRecordVersion,
     IReadOnlyList<AllergenCode> DeclaredAllergens,
-    IReadOnlyList<UnreportedNutrient>? UnreportedNutrients = null);
+    IReadOnlyList<UnreportedNutrient>? UnreportedNutrients = null,
+    decimal? ReportedCarbohydrateGrams = null);
+
+/// <summary>
+/// USDA works "carbohydrate, by difference" out as 100 g less water, protein, fat and ash, so in a
+/// food with next to none, such as raw meat, measurement error can leave it just below zero (FDC
+/// 2727569, chicken breast with skin, raw: -0.428 g). Down to -0.5 g per 100 g it counts as 0 g: EU
+/// labels may declare 0.5 g per 100 g or less as 0 g, and US labels less than 0.5 g a serving
+/// (21 CFR 101.9(c)(6)). The version keeps USDA's figure. A lower one means the record does not add
+/// up, so it is not imported.
+/// </summary>
+public static class ProviderCarbohydrateRule
+{
+    public const string Key = "UsdaNegativeByDifferenceAsZero";
+    public const string Version = "v1";
+    public const decimal LowestCountedAsZero = -0.5m;
+
+    /// <summary>The carbohydrate to store for a provider's figure, or null when it cannot be used.</summary>
+    public static decimal? Count(decimal reported) => reported switch
+    {
+        >= 0m => reported,
+        >= LowestCountedAsZero => 0m,
+        _ => null,
+    };
+}
 
 public sealed class FoodItemVersion : TenantEntity
 {
@@ -231,6 +275,7 @@ public sealed class FoodItemVersion : TenantEntity
         SourceAttribution = NutritionRules.RequiredText(input.SourceAttribution, 500, nameof(input.SourceAttribution));
         SourceRecordVersion = NutritionRules.RequiredText(input.SourceRecordVersion, 100, nameof(input.SourceRecordVersion));
         UnreportedNutrients = ValidateUnreported(provenance, input.UnreportedNutrients ?? []);
+        ReportedCarbohydrateGrams = ValidateReportedCarbohydrate(provenance, input.ReportedCarbohydrateGrams);
 
         IEnergyFactorPolicy policy = input.EnergyPolicyKey switch
         {
@@ -306,6 +351,12 @@ public sealed class FoodItemVersion : TenantEntity
     /// <summary>Nutrients the provider did not report; each is stored as zero.</summary>
     public UnreportedNutrient[] UnreportedNutrients { get; private set; } = [];
 
+    /// <summary>
+    /// The provider's own carbohydrate when it was just below zero and is counted as 0 g
+    /// (<see cref="ProviderCarbohydrateRule"/>); null when the stored figure is the provider's.
+    /// </summary>
+    public decimal? ReportedCarbohydrateGrams { get; private set; }
+
     public IReadOnlyCollection<FoodItemAllergen> Allergens => allergens;
 
     internal static FoodItemVersion Create(Guid tenantId, Guid foodItemId, int revision, FoodProvenance provenance, FoodVersionInput input) =>
@@ -340,6 +391,23 @@ public sealed class FoodItemVersion : TenantEntity
         }
 
         return unreported.Distinct().Order().ToArray();
+    }
+
+    private decimal? ValidateReportedCarbohydrate(FoodProvenance provenance, decimal? reported)
+    {
+        if (reported is not { } value)
+        {
+            return null;
+        }
+
+        if (provenance != FoodProvenance.UsdaFdc
+            || value >= 0m
+            || ProviderCarbohydrateRule.Count(value) != CarbohydrateGrams)
+        {
+            throw new ArgumentException("Only a provider's carbohydrate just below zero is kept beside the 0 g it counts as.", nameof(reported));
+        }
+
+        return value;
     }
 }
 

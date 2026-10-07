@@ -137,6 +137,14 @@ R4.4b gives each `RecipeVersion` an optional cover photo, `PhotoMediaAssetId`, a
 same workspace by composite key (MED-014). Media owns the upload (`POST /api/media/recipe-photo`, new
 `RecipePhoto` purpose) and the staff-only read; Infrastructure checks the photo when a version is
 saved, as it checks the workspace logo. A recipe save can publish in the same transaction.
+R4.4c: the USDA adapter searches by POST with the data types in the body (basic foods, or packaged
+products when asked; USDA's edge refused about half the GET searches naming "Survey (FNDDS)"), and
+each match carries its brand and nutrients per 100 g. `Nutrition:AiAllowance` is TB Gym's ceiling on
+every workspace's monthly AI allowance (zero, so AI is off, until set); the workspace's own allowance
+counts only up to it, and only the owner changes the nutrition settings. The adapter also puts
+USDA's names in capitals into sentence case and takes Foundation foods' Atwater energy on import as on
+search; whether USDA's carbohydrate is usable is the module's rule (`ProviderCarbohydrateRule`), applied
+by the application service to searches and imports alike.
 
 Progress Phase 5A extends the Phase 1 `BodyweightObservation` rather than introducing another
 profile weight. It stores canonical kilograms plus the entered value/unit, keeps one current

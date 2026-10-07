@@ -12,11 +12,8 @@ import {
   mapAiDraft,
   mapCalculation,
   mapClientPlan,
-  mapFoodPage,
   mapMealPlanPage,
   mapNutritionDay,
-  mapNutritionSettings,
-  mapProviderSearch,
   mapRecipePage,
 } from '../../features/nutrition/nutrition.models';
 import {
@@ -856,46 +853,10 @@ export class ApiClient {
     );
   }
 
-  getNutritionSettings() {
-    return this.http
-      .get<Phase3Contracts.NutritionWorkspaceSettingsView>('/api/nutrition/settings')
-      .pipe(map(mapNutritionSettings));
-  }
-
   getAiMealDraftAvailability() {
     return this.http
       .get<Phase3Contracts.AiMealDraftAvailabilityView>('/api/nutrition/ai-drafts/availability')
       .pipe(map((value) => ({ isConfigured: value.isConfigured === true })));
-  }
-
-  updateNutritionSettings(request: Phase3Contracts.UpdateNutritionSettingsRequest) {
-    return this.http
-      .put<Phase3Contracts.NutritionWorkspaceSettingsView>('/api/nutrition/settings', request)
-      .pipe(map(mapNutritionSettings));
-  }
-
-  listFoods(query = '', skip = 0, take = 100) {
-    return this.http
-      .get<Phase3Contracts.FoodItemPage>('/api/nutrition/foods', { params: { query, skip, take } })
-      .pipe(map(mapFoodPage));
-  }
-
-  createFood(request: Phase3Contracts.CreateFoodItemRequest) {
-    return this.http.post<Phase3Contracts.FoodItemView>('/api/nutrition/foods', request);
-  }
-
-  searchUsdaFoods(query: string, skip = 0, take = 25) {
-    return this.http
-      .get<Phase3Contracts.ProviderFoodSearchPage>('/api/nutrition/providers/usda/search', {
-        params: { query, skip, take },
-      })
-      .pipe(map(mapProviderSearch));
-  }
-
-  importUsdaFood(fdcId: string) {
-    return this.http.post<Phase3Contracts.FoodItemView>('/api/nutrition/providers/usda/import', {
-      fdcId,
-    });
   }
 
   listRecipes(query = '', skip = 0, take = 100) {

@@ -208,6 +208,18 @@
               </div>
             }
 
+            @if (newerCount() > 1) {
+              <div class="banner info">
+                <p i18n>
+                  {{ newerCount() }} of these foods were edited since this recipe was saved. The
+                  recipe keeps their old numbers until you use the new ones.
+                </p>
+                <button appButton type="button" variant="text" (click)="useNewer(null)" i18n>
+                  Use all the new numbers
+                </button>
+              </div>
+            }
+
             @if (current.lines.length) {
               <ul class="lines" role="list">
                 @for (line of current.lines; track line.key) {
@@ -216,6 +228,20 @@
                       <div class="line-food">
                         <span class="line-name" dir="auto">{{ food.name }}</span>
                         <span class="line-detail">{{ lineDetail(line) }}</span>
+                        @if (line.newer) {
+                          <span class="line-newer">
+                            {{ newerText(line) }}
+                            <button
+                              appButton
+                              type="button"
+                              variant="text"
+                              (click)="useNewer(line)"
+                              i18n
+                            >
+                              Use its new numbers
+                            </button>
+                          </span>
+                        }
                         @if (line.suggestion; as suggestion) {
                           <span class="line-suggested" [class.uncertain]="suggestion.uncertain">
                             {{ suggestionText(line) }}

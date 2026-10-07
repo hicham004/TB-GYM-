@@ -75,8 +75,10 @@ server's secret `.env`; keep the key out of git, browser code and logs. The API 
 `Nutrition__Anthropic__Enabled` and `Nutrition__Anthropic__ApiKey`. Direct deployments can use those
 environment variables or the `Nutrition:Anthropic` configuration section. Defaults are
 `claude-sonnet-5-5`, 2,048 output tokens, a 45-second timeout and five-minute prompt caching when
-eligible. Set a positive monthly request limit and USD cost limit in Nutrition defaults, restart
-the API, and test one suggestion through coach review. Leaving AI disabled displays a setup message.
+eligible. TB Gym pays for every suggestion, so also set its ceiling per workspace,
+`TB_GYM_AI_MAX_MONTHLY_REQUESTS` and `TB_GYM_AI_MAX_MONTHLY_COST_USD` (for example 100 and 3; 0 keeps
+AI off). Restart the API; then a workspace owner sets an allowance up to that ceiling in Settings,
+Nutrition, and tests one suggestion through coach review. Leaving AI disabled displays a setup message.
 
 - **Update**: `cd /opt/tbgym && tb exec backup backup.sh && git pull && tb up -d --build`.
 - **Server lost**: new server, point the DNS record at it, and repeat Deploy step 1 **up to

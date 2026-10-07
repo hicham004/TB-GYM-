@@ -1,5 +1,6 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
+import { DIALOG_DATA, DialogConfig, DialogRef } from '@angular/cdk/dialog';
+import { hasModifierKey } from '@angular/cdk/keycodes';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -23,6 +24,11 @@ export interface ModalOptions {
    * browser's Back button changes the address before the page is asked whether it may go.
    */
   closeOnNavigation?: boolean;
+  /**
+   * Asked before the close button, Escape or the backdrop closes the modal, say to keep typed work;
+   * false keeps it open. A close the page makes itself, after a save, is not asked.
+   */
+  canClose?: () => boolean | Promise<boolean>;
 }
 
 export interface ModalData {
@@ -30,6 +36,8 @@ export interface ModalData {
   title: string;
   titleId: string;
   closeLabel: string;
+  /** Set by `guardClose` when the modal asks before closing. */
+  requestClose?: () => void;
 }
 
 /** Content shell shared by the centred dialog and the mobile bottom sheet. */
@@ -40,7 +48,7 @@ export interface ModalData {
     <!-- Not a <header>: a modal's title bar is no page banner, and two stacked modals would make two. -->
     <div class="tb-modal__header">
       <h2 class="tb-modal__title" [id]="data.titleId">{{ data.title }}</h2>
-      <button appIconButton type="button" [label]="data.closeLabel" (click)="dialogRef.close()">
+      <button appIconButton type="button" [label]="data.closeLabel" (click)="close()">
         <span aria-hidden="true">&times;</span>
       </button>
     </div>
@@ -163,6 +171,46 @@ export interface ModalData {
 export class ModalSurface {
   protected readonly data = inject<ModalData>(DIALOG_DATA);
   protected readonly dialogRef = inject<DialogRef<unknown>>(DialogRef);
+
+  protected close(): void {
+    if (this.data.requestClose) this.data.requestClose();
+    else this.dialogRef.close();
+  }
+}
+
+/** The CDK settings for a modal that asks first: Escape and the backdrop no longer close it alone. */
+export function guardedConfig(options: ModalOptions): Pick<DialogConfig, 'disableClose'> {
+  return { disableClose: !!options.canClose };
+}
+
+/**
+ * Sends the close button, Escape and the backdrop through `canClose`, one question at a time, and
+ * closes only on a yes.
+ */
+export function guardClose<R>(
+  ref: DialogRef<R, ModalSurface>,
+  data: ModalData,
+  canClose: ModalOptions['canClose'],
+): void {
+  if (!canClose) return;
+  let asking = false;
+  const request = async () => {
+    if (asking) return;
+    asking = true;
+    try {
+      if (await canClose()) ref.close();
+    } finally {
+      asking = false;
+    }
+  };
+  data.requestClose = () => void request();
+  ref.backdropClick.subscribe(() => void request());
+  ref.keydownEvents.subscribe((event) => {
+    if (event.key === 'Escape' && !hasModifierKey(event)) {
+      event.preventDefault();
+      void request();
+    }
+  });
 }
 
 /** A lab-local `dir` also governs a surface portalled to the document body. */

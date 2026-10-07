@@ -42,3 +42,13 @@ recipe importer (MyFitnessPal's matches each line and lets the user change or dr
 suggested ingredients or add others; approval needs at least one line rather than exactly one per
 suggestion. Every saved line is still a food version the coach chose, approval may publish in the
 same save, and the operation keeps the suggestion beside the recipe it became (NUT-004).
+
+## Amended in R4.4c (2026-10-07)
+
+TB Gym pays Anthropic, yet any coach could set a workspace's allowance up to USD 1,000,000 a month.
+TB Gym now sets a ceiling for every workspace in server configuration (`Nutrition:AiAllowance`,
+`MaximumMonthlyRequests` and `MaximumMonthlyCostUsd`; zero, so AI stays off, until set). Only the owner
+changes the workspace's allowance, from Settings, Nutrition, and never above the ceiling; an allowance
+saved before a lower ceiling counts only up to it. Everfit and Trainerize likewise sell AI inside their
+plans rather than letting coaches set the platform's spend. A ceiling per plan or per workspace set by
+the platform admin is a later choice; the suggested launch ceiling is 100 suggestions and USD 3.

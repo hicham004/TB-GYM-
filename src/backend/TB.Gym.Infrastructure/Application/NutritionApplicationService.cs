@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Clients;
@@ -17,7 +19,8 @@ internal sealed partial class NutritionApplicationService(
     ITenantContext tenantContext,
     ICoachingFeatureAccessService featureAccessService,
     INutritionDataProvider nutritionDataProvider,
-    IAiMealDraftProvider aiMealDraftProvider) : INutritionApplicationService
+    IAiMealDraftProvider aiMealDraftProvider,
+    IOptions<NutritionAiAllowanceOptions> aiAllowance) : INutritionApplicationService
 {
     private const string AiSchemaVersion = "meal-draft-v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -78,6 +81,19 @@ internal sealed partial class NutritionApplicationService(
             dbContext.Entry(settings).Property(item => item.Version).OriginalValue = request.Version;
         }
 
+        // Raising an allowance above TB Gym's ceiling is refused; keeping or lowering one set before a
+        // lower ceiling is not, so the owner can still save the other defaults.
+        var ceiling = aiAllowance.Value;
+        if (request.AiMonthlyRequestLimit > ceiling.MaximumMonthlyRequests && request.AiMonthlyRequestLimit > settings.AiMonthlyRequestLimit)
+        {
+            return Invalid("aiMonthlyRequestLimit", string.Create(CultureInfo.InvariantCulture, $"TB Gym allows each workspace up to {ceiling.MaximumMonthlyRequests} AI suggestions a month."));
+        }
+
+        if (request.AiMonthlyCostLimit > ceiling.MaximumMonthlyCostUsd && request.AiMonthlyCostLimit > settings.AiMonthlyCostLimit)
+        {
+            return Invalid("aiMonthlyCostLimit", string.Create(CultureInfo.InvariantCulture, $"TB Gym allows each workspace up to USD {ceiling.MaximumMonthlyCostUsd:0.00} of AI suggestions a month."));
+        }
+
         try
         {
             settings.Update(request.EnergyPolicyKey, request.ProviderCalorieTolerance, request.AiMonthlyRequestLimit, request.AiMonthlyCostLimit, request.AiCostCurrency);
@@ -94,9 +110,9 @@ internal sealed partial class NutritionApplicationService(
         }
     }
 
-    public async Task<FoodItemPage> ListFoodsAsync(string? query, int skip, int take, CancellationToken cancellationToken)
+    public async Task<FoodItemPage> ListFoodsAsync(string? query, bool archived, int skip, int take, CancellationToken cancellationToken)
     {
-        var source = dbContext.FoodItems.AsNoTracking();
+        var source = dbContext.FoodItems.AsNoTracking().Where(item => (item.ArchivedAtUtc != null) == archived);
         if (!string.IsNullOrWhiteSpace(query))
         {
             var pattern = $"%{query.Trim()}%";
@@ -134,33 +150,97 @@ internal sealed partial class NutritionApplicationService(
 
     public async Task<NutritionCommandResult> AddFoodVersionAsync(Guid foodItemId, AddFoodVersionRequest request, CancellationToken cancellationToken)
     {
-        var food = await dbContext.FoodItems.SingleOrDefaultAsync(item => item.Id == foodItemId, cancellationToken);
-        if (food is null)
+        int? firstRevision = null;
+        for (var attempt = 0; ; attempt++)
         {
-            return NotFound();
-        }
+            var food = await dbContext.FoodItems.SingleOrDefaultAsync(item => item.Id == foodItemId, cancellationToken);
+            if (food is null)
+            {
+                return NotFound();
+            }
 
-        try
-        {
-            var settings = await GetOrCreateSettingsEntityAsync(cancellationToken);
-            var version = food.AddVersion(ToFoodVersionInput(request, settings));
-            dbContext.FoodItemVersions.Add(version);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            var reloaded = await dbContext.FoodItems.AsNoTracking().Include(item => item.Versions).ThenInclude(item => item.Allergens)
-                .AsSplitQuery().SingleAsync(item => item.Id == foodItemId, cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, Food: ToFoodView(reloaded));
-        }
-        catch (ArgumentException exception)
-        {
-            return Invalid("version", exception.Message);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return Conflict("food_version_conflict", "The food was versioned by another request.");
+            firstRevision ??= food.CurrentRevision;
+            if (request.BaseRevision is { } baseRevision && baseRevision != food.CurrentRevision)
+            {
+                return Conflict("food_changed", "This food was changed since it was opened. Reload it and make your change again.");
+            }
+
+            try
+            {
+                var settings = await GetOrCreateSettingsEntityAsync(cancellationToken);
+                if (request.Name is not null)
+                {
+                    food.Rename(request.Name);
+                }
+
+                var version = food.AddVersion(ToFoodVersionInput(request, settings));
+                dbContext.FoodItemVersions.Add(version);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                var reloaded = await dbContext.FoodItems.AsNoTracking().Include(item => item.Versions).ThenInclude(item => item.Allergens)
+                    .AsSplitQuery().SingleAsync(item => item.Id == foodItemId, cancellationToken);
+                return new NutritionCommandResult(NutritionCommandStatus.Success, Food: ToFoodView(reloaded));
+            }
+            catch (ArgumentException exception)
+            {
+                return Invalid("version", exception.Message);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                dbContext.ChangeTracker.Clear();
+                // The save goes again: after an archive or a restore it lands, and after another
+                // version the base revision check says the food changed.
+                var versioned = await CurrentRevisionAsync(foodItemId, cancellationToken) != firstRevision;
+                if (attempt >= 2 || (versioned && request.BaseRevision is null))
+                {
+                    return Conflict("food_version_conflict", "The food was versioned by another request.");
+                }
+            }
         }
     }
 
-    public async Task<ProviderFoodSearchPage> SearchUsdaAsync(string query, int skip, int take, CancellationToken cancellationToken)
+    private Task<int> CurrentRevisionAsync(Guid foodItemId, CancellationToken cancellationToken) =>
+        dbContext.FoodItems.AsNoTracking().Where(item => item.Id == foodItemId).Select(item => item.CurrentRevision).SingleAsync(cancellationToken);
+
+    public async Task<NutritionCommandResult> SetFoodArchivedAsync(Guid foodItemId, SetFoodArchivedRequest request, CancellationToken cancellationToken)
+    {
+        // Archiving changes only the flag, so a save that raced another (a new version, say) is
+        // applied again to the food as it now is, rather than refused.
+        for (var attempt = 0; ; attempt++)
+        {
+            var food = await dbContext.FoodItems.SingleOrDefaultAsync(item => item.Id == foodItemId, cancellationToken);
+            if (food is null)
+            {
+                return NotFound();
+            }
+
+            if (request.IsArchived)
+            {
+                food.Archive(clock.UtcNow);
+            }
+            else
+            {
+                food.Restore();
+            }
+
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                var saved = await dbContext.FoodItems.AsNoTracking().Include(item => item.Versions).ThenInclude(item => item.Allergens)
+                    .AsSplitQuery().SingleAsync(item => item.Id == foodItemId, cancellationToken);
+                return new NutritionCommandResult(NutritionCommandStatus.Success, Food: ToFoodView(saved));
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < 2)
+            {
+                dbContext.ChangeTracker.Clear();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict("food_changed", "This food was changed while it was being archived. Try again.");
+            }
+        }
+    }
+
+    public async Task<ProviderFoodSearchPage> SearchUsdaAsync(string query, FoodSearchKind kind, int skip, int take, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -169,8 +249,15 @@ internal sealed partial class NutritionApplicationService(
 
         try
         {
-            var items = await nutritionDataProvider.SearchAsync(query.Trim(), skip, take, cancellationToken);
-            return new ProviderFoodSearchPage(skip, take, items);
+            var items = await nutritionDataProvider.SearchAsync(query.Trim(), kind, skip, take, cancellationToken);
+            // Carbohydrate as an import counts it; a match that could not be imported is left out.
+            var counted = items
+                .Select(item => item.CarbohydrateGrams is not { } carbohydrate
+                    ? item
+                    : ProviderCarbohydrateRule.Count(carbohydrate) is { } count ? item with { CarbohydrateGrams = count } : null)
+                .OfType<FoodSearchResult>()
+                .ToArray();
+            return new ProviderFoodSearchPage(skip, take, counted);
         }
         catch (NutritionProviderUnavailableException exception)
         {
@@ -190,6 +277,20 @@ internal sealed partial class NutritionApplicationService(
             .SingleOrDefaultAsync(item => item.Provenance == FoodProvenance.UsdaFdc && item.ExternalId == externalId, cancellationToken);
         if (existing is not null)
         {
+            // Adding an archived USDA food again brings it back.
+            if (existing.ArchivedAtUtc is not null)
+            {
+                existing.Restore();
+                try
+                {
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    return Conflict("food_changed", "This food was changed while it was being added. Try again.");
+                }
+            }
+
             return new NutritionCommandResult(NutritionCommandStatus.Success, Food: ToFoodView(existing));
         }
 
@@ -201,6 +302,12 @@ internal sealed partial class NutritionApplicationService(
                 return NotFound();
             }
 
+            var carbohydrate = ProviderCarbohydrateRule.Count(providerFood.CarbohydrateGrams);
+            if (carbohydrate is null)
+            {
+                return Invalid("providerFood", "USDA’s numbers for this food don’t add up (its carbohydrate is below zero), so it was not added. Choose another match or add the food yourself.");
+            }
+
             var settings = await GetOrCreateSettingsEntityAsync(cancellationToken);
             var food = FoodItem.Create(tenantContext.TenantId, providerFood.Name, FoodProvenance.UsdaFdc, providerFood.ExternalId, providerFood.DataType);
             food.AddVersion(new FoodVersionInput(
@@ -208,7 +315,7 @@ internal sealed partial class NutritionApplicationService(
                 FoodQuantityUnit.Gram,
                 providerFood.PreparationBasis,
                 providerFood.ProteinGrams,
-                providerFood.CarbohydrateGrams,
+                carbohydrate.Value,
                 providerFood.FatGrams,
                 providerFood.FibreGrams,
                 providerFood.PolyolGrams,
@@ -219,7 +326,8 @@ internal sealed partial class NutritionApplicationService(
                 "USDA FoodData Central (CC0 1.0)",
                 $"{providerFood.DataType}:{providerFood.RetrievedAtUtc:O}",
                 providerFood.DeclaredAllergens,
-                providerFood.UnreportedNutrients));
+                providerFood.UnreportedNutrients,
+                providerFood.CarbohydrateGrams < 0m ? providerFood.CarbohydrateGrams : null));
             dbContext.FoodItems.Add(food);
             await dbContext.SaveChangesAsync(cancellationToken);
             return new NutritionCommandResult(NutritionCommandStatus.Success, Food: ToFoodView(food));
@@ -1011,7 +1119,10 @@ internal sealed partial class NutritionApplicationService(
                     return;
                 }
 
-                if (aiMealDraftProvider.IsConfigured && (settings.AiMonthlyRequestLimit == 0 || usage.Count >= settings.AiMonthlyRequestLimit || usage.Cost >= settings.AiMonthlyCostLimit || usage.Cost + reservedCost > settings.AiMonthlyCostLimit))
+                // The workspace's allowance, never more than TB Gym's ceiling.
+                var requestLimit = Math.Min(settings.AiMonthlyRequestLimit, aiAllowance.Value.MaximumMonthlyRequests);
+                var costLimit = Math.Min(settings.AiMonthlyCostLimit, aiAllowance.Value.MaximumMonthlyCostUsd);
+                if (aiMealDraftProvider.IsConfigured && (requestLimit == 0 || usage.Count >= requestLimit || usage.Cost >= costLimit || usage.Cost + reservedCost > costLimit))
                 {
                     refusal = Conflict("ai_usage_limit", "This workspace has reached its AI allowance, or the remaining budget cannot cover this suggestion. Ask the workspace owner to check AI limits.");
                     return;
@@ -1344,17 +1455,18 @@ internal sealed partial class NutritionApplicationService(
     private static FoodVersionInput ToFoodVersionInput(AddFoodVersionRequest request, NutritionWorkspaceSettings settings) =>
         new(request.BasisQuantity, request.BasisUnit, request.PreparationBasis, request.ProteinGrams, request.CarbohydrateGrams, request.FatGrams, request.FibreGrams, request.PolyolGrams, request.EthanolGrams, request.ProviderCalories, settings.EnergyPolicyKey, settings.ProviderCalorieTolerance, request.SourceAttribution, request.SourceRecordVersion, request.DeclaredAllergens);
 
-    private static NutritionWorkspaceSettingsView ToSettingsView(NutritionWorkspaceSettings settings) =>
-        new(settings.EnergyPolicyKey, settings.EnergyPolicyVersion, settings.ProviderCalorieTolerance, settings.AiMonthlyRequestLimit, settings.AiMonthlyCostLimit, settings.AiCostCurrency, settings.Version);
+    private NutritionWorkspaceSettingsView ToSettingsView(NutritionWorkspaceSettings settings) =>
+        new(settings.EnergyPolicyKey, settings.EnergyPolicyVersion, settings.ProviderCalorieTolerance, settings.AiMonthlyRequestLimit, settings.AiMonthlyCostLimit, settings.AiCostCurrency, settings.Version,
+            aiAllowance.Value.MaximumMonthlyRequests, aiAllowance.Value.MaximumMonthlyCostUsd);
 
     private static FoodItemView ToFoodView(FoodItem item)
     {
         var version = item.Versions.OrderByDescending(candidate => candidate.Revision).First();
-        return new FoodItemView(item.Id, item.Name, item.Provenance, item.ExternalId, item.ExternalDataType, item.CurrentRevision, ToFoodVersionView(version));
+        return new FoodItemView(item.Id, item.Name, item.Provenance, item.ExternalId, item.ExternalDataType, item.CurrentRevision, ToFoodVersionView(version), item.ArchivedAtUtc);
     }
 
     private static FoodVersionView ToFoodVersionView(FoodItemVersion item) =>
-        new(item.Id, item.Revision, item.BasisQuantity, item.BasisUnit, item.PreparationBasis, item.ComputedCalories, item.ProviderCalories, item.HasCalorieDiscrepancy, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams, item.FibreGrams, item.PolyolGrams, item.EthanolGrams, item.EnergyPolicyKey, item.EnergyPolicyVersion, item.SourceAttribution, item.SourceRecordVersion, item.Allergens.Select(allergen => allergen.Code).Order().ToArray(), item.UnreportedNutrients);
+        new(item.Id, item.Revision, item.BasisQuantity, item.BasisUnit, item.PreparationBasis, item.ComputedCalories, item.ProviderCalories, item.HasCalorieDiscrepancy, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams, item.FibreGrams, item.PolyolGrams, item.EthanolGrams, item.EnergyPolicyKey, item.EnergyPolicyVersion, item.SourceAttribution, item.SourceRecordVersion, item.Allergens.Select(allergen => allergen.Code).Order().ToArray(), item.UnreportedNutrients, item.ReportedCarbohydrateGrams);
 
     private static CookingFactorView ToCookingFactorView(CookingFactorRecord item) =>
         new(item.Id, Enum.Parse<CookingFactorKind>(item.Kind), item.SourceKey, item.SourceVersion, item.FromBasis, item.ToBasis, item.Factor);

@@ -1,0 +1,237 @@
+@let current = draft();
+<form class="food-form" novalidate (ngSubmit)="save()">
+  <p class="summary" role="alert" tabindex="-1" #summary>
+    @if (stale()) {
+      <span i18n
+        >Someone changed this food after you opened it. Close this sheet and open the food again to
+        see their change.</span
+      >
+    } @else if (saveError(); as message) {
+      <span>{{ message }}</span>
+    } @else if (attempt.wasTried() && problems().length) {
+      <span i18n>Check the boxes marked below.</span>
+    }
+  </p>
+
+  @if (mode() === 'copy') {
+    <p class="note" i18n>
+      Your copy becomes a food of your own that you can change. The USDA food stays as it is.
+    </p>
+  }
+
+  <app-field label="Name" i18n-label [errors]="shown('name')">
+    <input
+      appControl
+      name="name"
+      data-field="name"
+      [ngModel]="current.name"
+      (ngModelChange)="setName($event)"
+      (blur)="attempt.touch('name')"
+      maxlength="300"
+      autocomplete="off"
+      dir="auto"
+    />
+  </app-field>
+
+  <div class="measure">
+    <app-field
+      label="Nutrition per"
+      i18n-label
+      [errors]="shown('amount')"
+      help="The amount the numbers below are for, as on the label."
+      i18n-help
+    >
+      <input
+        appControl
+        type="number"
+        inputmode="decimal"
+        name="amount"
+        data-field="amount"
+        min="0"
+        step="any"
+        [ngModel]="current.amount"
+        (ngModelChange)="setNumber('amount', $event)"
+        (blur)="attempt.touch('amount')"
+      />
+    </app-field>
+    <app-field label="Unit" i18n-label>
+      <select appControl name="unit" [ngModel]="current.unit" (ngModelChange)="setUnit($event)">
+        <option value="Gram" i18n>grams (g)</option>
+        <option value="Millilitre" i18n>millilitres (ml)</option>
+        <option value="Serving" i18n>servings</option>
+      </select>
+    </app-field>
+  </div>
+
+  <div class="basis">
+    <app-segmented-control
+      label="Weighed"
+      i18n-label
+      [options]="basisOptions"
+      [selected]="current.basis"
+      (selectedChange)="setBasis($event)"
+    />
+    <p class="hint" i18n>
+      Raw and cooked weights are different foods: rice weighs about three times more cooked.
+    </p>
+  </div>
+
+  <fieldset class="macros">
+    <legend i18n>Grams in that amount</legend>
+    <app-field label="Protein" i18n-label density="compact" [errors]="shown('protein')">
+      <input
+        appControl
+        type="number"
+        inputmode="decimal"
+        name="protein"
+        data-field="protein"
+        min="0"
+        step="any"
+        [ngModel]="current.protein"
+        (ngModelChange)="setNumber('protein', $event)"
+        (blur)="attempt.touch('protein')"
+      />
+    </app-field>
+    <app-field
+      label="Carbs"
+      i18n-label
+      density="compact"
+      help="Total, fibre included"
+      i18n-help
+      [errors]="shown('carbs')"
+    >
+      <input
+        appControl
+        type="number"
+        inputmode="decimal"
+        name="carbs"
+        data-field="carbs"
+        min="0"
+        step="any"
+        [ngModel]="current.carbs"
+        (ngModelChange)="setNumber('carbs', $event)"
+        (blur)="attempt.touch('carbs')"
+      />
+    </app-field>
+    <app-field label="Fat" i18n-label density="compact" [errors]="shown('fat')">
+      <input
+        appControl
+        type="number"
+        inputmode="decimal"
+        name="fat"
+        data-field="fat"
+        min="0"
+        step="any"
+        [ngModel]="current.fat"
+        (ngModelChange)="setNumber('fat', $event)"
+        (blur)="attempt.touch('fat')"
+      />
+    </app-field>
+  </fieldset>
+
+  <details class="extras" [open]="extrasOpen()" (toggle)="extrasOpen.set($any($event.target).open)">
+    <summary i18n>Fibre, sugar alcohols, alcohol and label calories</summary>
+    @if (unreported(); as missing) {
+      <p class="note" i18n>
+        USDA didn’t report {{ missing }}, so it was saved as 0. Check the label if you have it.
+      </p>
+    }
+    <div class="extra-grid">
+      <app-field label="Fibre (g)" i18n-label density="compact" [errors]="shown('more')">
+        <input
+          appControl
+          type="number"
+          inputmode="decimal"
+          name="fibre"
+          data-field="more"
+          min="0"
+          step="any"
+          [ngModel]="current.fibre"
+          (ngModelChange)="setNumber('fibre', $event)"
+          (blur)="attempt.touch('more')"
+        />
+      </app-field>
+      <app-field label="Sugar alcohols (g)" i18n-label density="compact">
+        <input
+          appControl
+          type="number"
+          inputmode="decimal"
+          name="polyols"
+          min="0"
+          step="any"
+          [ngModel]="current.polyols"
+          (ngModelChange)="setNumber('polyols', $event)"
+          (blur)="attempt.touch('more')"
+        />
+      </app-field>
+      <app-field label="Alcohol (g)" i18n-label density="compact">
+        <input
+          appControl
+          type="number"
+          inputmode="decimal"
+          name="alcohol"
+          min="0"
+          step="any"
+          [ngModel]="current.alcohol"
+          (ngModelChange)="setNumber('alcohol', $event)"
+          (blur)="attempt.touch('more')"
+        />
+      </app-field>
+      <app-field
+        label="Calories on the label"
+        i18n-label
+        density="compact"
+        help="Optional. The food is flagged if they’re far from what the macros add up to."
+        i18n-help
+      >
+        <input
+          appControl
+          type="number"
+          inputmode="decimal"
+          name="labelCalories"
+          min="0"
+          step="any"
+          [ngModel]="current.labelCalories"
+          (ngModelChange)="setNumber('labelCalories', $event)"
+          (blur)="attempt.touch('more')"
+        />
+      </app-field>
+    </div>
+  </details>
+
+  <fieldset class="allergens">
+    <legend i18n>Contains</legend>
+    <div class="allergen-grid">
+      @for (allergen of allergens; track allergen.code) {
+        <app-checkbox [label]="allergen.label">
+          <input
+            appControl
+            type="checkbox"
+            [name]="'allergen-' + allergen.code"
+            [checked]="current.allergens.includes(allergen.code)"
+            (change)="toggleAllergen(allergen.code, $any($event.target).checked)"
+          />
+        </app-checkbox>
+      }
+    </div>
+  </fieldset>
+
+  <div class="footer">
+    <p class="estimate" aria-live="polite">
+      @if (estimate(); as line) {
+        {{ line }}
+      } @else {
+        <span i18n>The calories add up here as you type the macros.</span>
+      }
+    </p>
+    @if (mode() === 'edit') {
+      <p class="hint" i18n>
+        Recipes that already use this food keep the numbers they were saved with.
+      </p>
+    }
+    <div class="actions">
+      <button appButton type="button" variant="text" (click)="cancelled.emit()" i18n>Cancel</button>
+      <button appButton type="submit" [loading]="saving()">{{ saveLabel() }}</button>
+    </div>
+  </div>
+</form>

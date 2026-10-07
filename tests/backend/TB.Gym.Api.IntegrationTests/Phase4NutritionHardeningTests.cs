@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using TB.Gym.Modules.Nutrition;
@@ -655,7 +656,7 @@ internal sealed class FibreRichTestNutritionDataProvider : INutritionDataProvide
 
     public string ProviderKey => "UsdaFoodDataCentral";
 
-    public Task<IReadOnlyList<FoodSearchResult>> SearchAsync(string query, int skip, int take, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<FoodSearchResult>> SearchAsync(string query, FoodSearchKind kind, int skip, int take, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<FoodSearchResult>>(
             [new FoodSearchResult(LentilFdcId, "Lentils, mature seeds, cooked, boiled", "SR Legacy", ProviderKey)]);
 
@@ -694,6 +695,53 @@ internal sealed class UsdaFoodDataCentralFake : HttpMessageHandler
 
     public const string NoProteinFdcId = "9999001";
 
+    // FDC 2727569, Foundation: chicken, breast, meat and skin, raw. USDA's carbohydrate by difference
+    // is -0.42825 g, counted as 0 g (R4.4c); 9999002 is a record whose carbohydrate is too far below.
+    public const string ChickenWithSkinFdcId = "2727569";
+
+    public const string BrokenCarbohydrateFdcId = "9999002";
+
+    public const string ChobaniFdcId = "2038865";
+
+    private const string ChickenWithSkinJson = """
+        {"fdcId":2727569,"description":"Chicken, breast, meat and skin, raw","dataType":"Foundation","foodNutrients":[
+        {"type":"FoodNutrient","id":1,"nutrient":{"id":1051,"number":"255","name":"Water","rank":100,"unitName":"g"},"amount":73.2},
+        {"type":"FoodNutrient","id":2,"nutrient":{"id":2047,"number":"957","name":"Energy (Atwater General Factors)","rank":280,"unitName":"kcal"},"amount":126.905},
+        {"type":"FoodNutrient","id":3,"nutrient":{"id":1003,"number":"203","name":"Protein","rank":600,"unitName":"g"},"amount":21.40625},
+        {"type":"FoodNutrient","id":4,"nutrient":{"id":1004,"number":"204","name":"Total lipid (fat)","rank":800,"unitName":"g"},"amount":4.777},
+        {"type":"FoodNutrient","id":5,"nutrient":{"id":1005,"number":"205","name":"Carbohydrate, by difference","rank":1110,"unitName":"g"},"amount":-0.42825}]}
+        """;
+
+    private const string BrokenCarbohydrateJson = """
+        {"fdcId":9999002,"description":"Record that does not add up","dataType":"SR Legacy","foodNutrients":[
+        {"type":"FoodNutrient","id":1,"nutrient":{"id":1003,"number":"203","name":"Protein","rank":600,"unitName":"g"},"amount":30},
+        {"type":"FoodNutrient","id":2,"nutrient":{"id":1004,"number":"204","name":"Total lipid (fat)","rank":800,"unitName":"g"},"amount":5},
+        {"type":"FoodNutrient","id":3,"nutrient":{"id":1005,"number":"205","name":"Carbohydrate, by difference","rank":1110,"unitName":"g"},"amount":-0.8}]}
+        """;
+
+    private const string ChobaniJson = """
+        {"fdcId":2038865,"description":"GREEK YOGURT","dataType":"Branded","brandOwner":"Chobani, Inc.","brandName":"CHOBANI","foodNutrients":[
+        {"type":"FoodNutrient","id":1,"nutrient":{"id":1003,"number":"203","name":"Protein","rank":600,"unitName":"g"},"amount":8.67},
+        {"type":"FoodNutrient","id":2,"nutrient":{"id":1004,"number":"204","name":"Total lipid (fat)","rank":800,"unitName":"g"},"amount":0},
+        {"type":"FoodNutrient","id":3,"nutrient":{"id":1005,"number":"205","name":"Carbohydrate, by difference","rank":1110,"unitName":"g"},"amount":10.7},
+        {"type":"FoodNutrient","id":4,"nutrient":{"id":1008,"number":"208","name":"Energy","rank":300,"unitName":"kcal"},"amount":80}]}
+        """;
+
+    // A basic-foods search for "chicken with skin": the four cuts' carbohydrate is just below zero in
+    // USDA's own data, and one made-up record is too far below to use (R4.4c).
+    private const string WithSkinSearchJson = """
+        {"totalHits":2,"currentPage":1,"totalPages":1,"foods":[
+        {"fdcId":2727569,"description":"Chicken, breast, meat and skin, raw","dataType":"Foundation","foodNutrients":[
+        {"nutrientId":1003,"nutrientName":"Protein","nutrientNumber":"203","unitName":"G","value":21.4},
+        {"nutrientId":1004,"nutrientName":"Total lipid (fat)","nutrientNumber":"204","unitName":"G","value":4.78},
+        {"nutrientId":1005,"nutrientName":"Carbohydrate, by difference","nutrientNumber":"205","unitName":"G","value":-0.43},
+        {"nutrientId":2047,"nutrientName":"Energy (Atwater General Factors)","nutrientNumber":"957","unitName":"KCAL","value":127}]},
+        {"fdcId":9999002,"description":"Record that does not add up","dataType":"SR Legacy","foodNutrients":[
+        {"nutrientId":1003,"nutrientName":"Protein","nutrientNumber":"203","unitName":"G","value":30},
+        {"nutrientId":1004,"nutrientName":"Total lipid (fat)","nutrientNumber":"204","unitName":"G","value":5},
+        {"nutrientId":1005,"nutrientName":"Carbohydrate, by difference","nutrientNumber":"205","unitName":"G","value":-0.8}]}]}
+        """;
+
     private const string ChickenJson = """
         {"fdcId":2646170,"description":"Chicken, breast, boneless, skinless, raw","dataType":"Foundation","foodNutrients":[
         {"type":"FoodNutrient","id":33295225,"nutrient":{"id":1051,"number":"255","name":"Water","rank":100,"unitName":"g"},"amount":74.78},
@@ -709,23 +757,68 @@ internal sealed class UsdaFoodDataCentralFake : HttpMessageHandler
         {"type":"FoodNutrient","id":2,"nutrient":{"id":1005,"number":"205","name":"Carbohydrate, by difference","rank":1110,"unitName":"g"},"amount":2}]}
         """;
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    // A basic-foods search, abridged as /foods/search answers: the Foundation chicken states energy
+    // only under the Atwater names, and the second match has no protein (R4.4c).
+    private const string BasicSearchJson = """
+        {"totalHits":2,"currentPage":1,"totalPages":1,"foods":[
+        {"fdcId":2646170,"description":"Chicken, breast, boneless, skinless, raw","dataType":"Foundation","foodNutrients":[
+        {"nutrientId":1004,"nutrientName":"Total lipid (fat)","nutrientNumber":"204","unitName":"G","value":1.93},
+        {"nutrientId":1003,"nutrientName":"Protein","nutrientNumber":"203","unitName":"G","value":22.5},
+        {"nutrientId":1005,"nutrientName":"Carbohydrate, by difference","nutrientNumber":"205","unitName":"G","value":0.0},
+        {"nutrientId":2047,"nutrientName":"Energy (Atwater General Factors)","nutrientNumber":"957","unitName":"KCAL","value":106},
+        {"nutrientId":2048,"nutrientName":"Energy (Atwater Specific Factors)","nutrientNumber":"958","unitName":"KCAL","value":112}]},
+        {"fdcId":9999001,"description":"Incomplete record","dataType":"SR Legacy","foodNutrients":[
+        {"nutrientId":1004,"nutrientName":"Total lipid (fat)","nutrientNumber":"204","unitName":"G","value":1}]}]}
+        """;
+
+    // A packaged-products search: USDA's branded foods, one without a brand name.
+    private const string PackagedSearchJson = """
+        {"totalHits":2,"currentPage":1,"totalPages":1,"foods":[
+        {"fdcId":2038865,"description":"GREEK YOGURT","dataType":"Branded","brandOwner":"Chobani, Inc.","brandName":"CHOBANI","foodNutrients":[
+        {"nutrientId":1003,"nutrientName":"Protein","nutrientNumber":"203","unitName":"G","value":8.67},
+        {"nutrientId":1004,"nutrientName":"Total lipid (fat)","nutrientNumber":"204","unitName":"G","value":0.0},
+        {"nutrientId":1005,"nutrientName":"Carbohydrate, by difference","nutrientNumber":"205","unitName":"G","value":10.7},
+        {"nutrientId":1008,"nutrientName":"Energy","nutrientNumber":"208","unitName":"KCAL","value":80.0}]},
+        {"fdcId":373595,"description":"GREEK YOGURT","dataType":"Branded","brandOwner":"TRADER JOE'S","foodNutrients":[
+        {"nutrientId":1003,"nutrientName":"Protein","nutrientNumber":"203","unitName":"G","value":4.85},
+        {"nutrientId":1004,"nutrientName":"Total lipid (fat)","nutrientNumber":"204","unitName":"G","value":7.05},
+        {"nutrientId":1005,"nutrientName":"Carbohydrate, by difference","nutrientNumber":"205","unitName":"G","value":12.3},
+        {"nutrientId":1008,"nutrientName":"Energy","nutrientNumber":"208","unitName":"KCAL","value":132}]}]}
+        """;
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var uri = request.RequestUri ?? throw new InvalidOperationException("USDA request had no URI.");
         if (!uri.Query.Contains($"api_key={ApiKey}", StringComparison.Ordinal))
         {
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+            return new HttpResponseMessage(HttpStatusCode.Forbidden);
         }
 
-        var body = uri.AbsolutePath switch
+        // A search posts its criteria; which data types it asked for picks the answer (R4.4c).
+        var dataTypes = string.Empty;
+        var query = string.Empty;
+        if (request.Method == HttpMethod.Post && request.Content is not null)
         {
-            "/fdc/v1/food/" + ChickenFdcId => ChickenJson,
-            "/fdc/v1/food/" + NoProteinFdcId => NoProteinJson,
+            using var criteria = JsonDocument.Parse(await request.Content.ReadAsStringAsync(cancellationToken));
+            dataTypes = string.Join(",", criteria.RootElement.GetProperty("dataType").EnumerateArray().Select(item => item.GetString()));
+            query = criteria.RootElement.GetProperty("query").GetString() ?? string.Empty;
+        }
+
+        var body = (request.Method.Method, uri.AbsolutePath) switch
+        {
+            ("GET", "/fdc/v1/food/" + ChickenFdcId) => ChickenJson,
+            ("GET", "/fdc/v1/food/" + NoProteinFdcId) => NoProteinJson,
+            ("GET", "/fdc/v1/food/" + ChickenWithSkinFdcId) => ChickenWithSkinJson,
+            ("GET", "/fdc/v1/food/" + BrokenCarbohydrateFdcId) => BrokenCarbohydrateJson,
+            ("GET", "/fdc/v1/food/" + ChobaniFdcId) => ChobaniJson,
+            ("POST", "/fdc/v1/foods/search") when dataTypes == "Branded" => PackagedSearchJson,
+            ("POST", "/fdc/v1/foods/search") when query == "chicken with skin" => WithSkinSearchJson,
+            ("POST", "/fdc/v1/foods/search") when dataTypes == "Foundation,SR Legacy,Survey (FNDDS)" => BasicSearchJson,
             _ => null,
         };
-        return Task.FromResult(body is null
+        return body is null
             ? new HttpResponseMessage(HttpStatusCode.NotFound)
-            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") });
+            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
     }
 }
 

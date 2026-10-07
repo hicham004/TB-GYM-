@@ -140,6 +140,17 @@ export const routes: Routes = [
       import('./features/workspace/workspace-brand').then((module) => module.WorkspaceBrand),
   },
   {
+    // How calories are counted and the AI allowance (R4.4c), a Settings page; the API is the owner's too.
+    path: 'workspace/nutrition',
+    canActivate: [authGuard, ownerGuard],
+    data: REDESIGNED,
+    title: $localize`Nutrition settings | TB Gym`,
+    loadComponent: () =>
+      import('./features/workspace/workspace-nutrition').then(
+        (module) => module.WorkspaceNutrition,
+      ),
+  },
+  {
     path: 'workspace',
     canActivate: [authGuard, ownerGuard],
     title: $localize`Coaching space | TB Gym`,

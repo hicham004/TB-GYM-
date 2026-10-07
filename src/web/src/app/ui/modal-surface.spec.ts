@@ -10,6 +10,7 @@ import { UiSheet } from './sheet';
     <div dir="rtl">
       <button id="open-dialog" type="button" (click)="openDialog()">Open dialog</button>
       <button id="open-sheet" type="button" (click)="openSheet()">Open sheet</button>
+      <button id="open-guarded" type="button" (click)="openGuarded()">Open guarded sheet</button>
     </div>
     <ng-template #content let-modal>
       <p>Changes to this plan are ready.</p>
@@ -22,6 +23,9 @@ class Host {
   private readonly sheets = inject(UiSheet);
   private readonly content = viewChild.required<TemplateRef<unknown>>('content');
   result?: string;
+  /** What the guarded sheet answers when asked whether it may close. */
+  allowClose = false;
+  asked = 0;
 
   openDialog(): void {
     const ref = this.dialogs.open<string>(this.content(), { title: 'Plan changes' });
@@ -31,6 +35,17 @@ class Host {
   openSheet(): void {
     const ref = this.sheets.open<string>(this.content(), { title: 'Plan changes' });
     ref.closed.subscribe((result) => (this.result = result));
+  }
+
+  openGuarded(): void {
+    this.sheets.open<string>(this.content(), {
+      title: 'Plan changes',
+      closeLabel: 'Close',
+      canClose: async () => {
+        this.asked++;
+        return this.allowClose;
+      },
+    });
   }
 }
 
@@ -84,5 +99,38 @@ describe('UI modal surfaces', () => {
     await settle(fixture);
     expect(document.querySelector('.tb-modal-pane--sheet')).toBeNull();
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('asks before Escape, the backdrop or the close button closes a guarded sheet', async () => {
+    const { fixture, host } = await render();
+    press(host, 'Open guarded sheet');
+    await settle(fixture);
+    const sheet = query<HTMLElement>(document, '.tb-modal-pane--sheet [role="dialog"]');
+
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }),
+    );
+    await settle(fixture);
+    query<HTMLElement>(document, '.tb-modal-backdrop').click();
+    await settle(fixture);
+    expect(fixture.componentInstance.asked).toBe(2);
+    expect(document.querySelector('.tb-modal-pane--sheet')).not.toBeNull();
+
+    fixture.componentInstance.allowClose = true;
+    query<HTMLButtonElement>(sheet, 'button[aria-label="Close"]').click();
+    await settle(fixture);
+    expect(fixture.componentInstance.asked).toBe(3);
+    expect(document.querySelector('.tb-modal-pane--sheet')).toBeNull();
+  });
+
+  it('still closes when the page closes it itself, without asking', async () => {
+    const { fixture, host } = await render();
+    press(host, 'Open guarded sheet');
+    await settle(fixture);
+
+    press(query<HTMLElement>(document, '[role="dialog"]'), 'Save plan');
+    await settle(fixture);
+    expect(fixture.componentInstance.asked).toBe(0);
+    expect(document.querySelector('.tb-modal-pane--sheet')).toBeNull();
   });
 });

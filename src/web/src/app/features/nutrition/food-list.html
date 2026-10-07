@@ -1,0 +1,284 @@
+<section class="foods" aria-labelledby="foods-heading">
+  <header class="top">
+    <div class="intro">
+      <h1 id="foods-heading" #heading tabindex="-1" i18n>Foods</h1>
+      @if (summary(); as line) {
+        <p class="lede">{{ line }}</p>
+      } @else {
+        <p class="lede" i18n>
+          The foods your recipes are made of: your own, and those copied from USDA.
+        </p>
+      }
+    </div>
+    <button appButton type="button" (click)="newFood()">
+      <app-icon name="plus" />
+      <span i18n>New food</span>
+    </button>
+  </header>
+
+  <app-section-nav label="Nutrition sections" i18n-label [links]="sections" />
+
+  <div class="search">
+    <app-icon name="search" />
+    <input
+      type="search"
+      [value]="search()"
+      (input)="typed($any($event.target).value)"
+      placeholder="Search your foods and USDA…"
+      i18n-placeholder
+      autocomplete="off"
+      aria-label="Search your foods and USDA"
+      i18n-aria-label
+      enterkeyhint="search"
+    />
+  </div>
+
+  <div class="columns" [class.with-usda]="searchingUsda()">
+    <section class="panel" aria-labelledby="own-heading">
+      <!-- One heading and one button whose words change, so focus stays on the button pressed. -->
+      <div class="own-head">
+        <h2 id="own-heading" #ownHeading class="panel-title" tabindex="-1">{{ ownTitle() }}</h2>
+        <button appButton type="button" variant="text" (click)="toggleArchived()">
+          {{ toggleLabel() }}
+        </button>
+      </div>
+      @if (showArchived()) {
+        <p class="pad note archived-note" i18n>
+          Archived foods are left out of your list and the ingredient search. Recipes and plans that
+          use them keep them. Open one to restore it.
+        </p>
+      }
+      @switch (state()) {
+        @case ('loading') {
+          <div class="pad" aria-busy="true">
+            <app-skeleton [label]="loadingLabel" [lines]="4" />
+          </div>
+        }
+        @case ('error') {
+          <div class="pad load-failed">
+            <p role="alert" i18n>Your foods could not be loaded.</p>
+            <button appButton type="button" variant="outlined" (click)="load()" i18n>
+              Try again
+            </button>
+          </div>
+        }
+        @default {
+          @if (foodsEmpty() && showArchived()) {
+            <p class="pad note" role="status" i18n>No food is archived.</p>
+          } @else if (foodsEmpty()) {
+            <app-empty-state
+              heading="No foods yet"
+              description="Add a food from its label, or search above to copy one from USDA. Recipes are made of these foods."
+              i18n-heading
+              i18n-description
+            >
+              <button appButton empty-state-action type="button" (click)="newFood()" i18n>
+                Add your own food
+              </button>
+            </app-empty-state>
+          } @else if (rows().length === 0) {
+            <div class="pad load-failed">
+              @if (showArchived()) {
+                <p role="status" i18n>No archived food matches “{{ searched() }}”.</p>
+              } @else {
+                <p role="status" i18n>None of your foods match “{{ searched() }}”.</p>
+              }
+              <button appButton type="button" variant="text" (click)="clearSearch()" i18n>
+                Show all your foods
+              </button>
+            </div>
+          } @else {
+            <ul class="rows" role="list">
+              @for (row of rows(); track row.id) {
+                <li class="row">
+                  <span class="name-block">
+                    <!-- The whole row opens the food (a stretched button), named by the food. -->
+                    <button
+                      class="stretched name"
+                      type="button"
+                      dir="auto"
+                      (click)="openRow(row.id)"
+                    >
+                      {{ row.name }}
+                    </button>
+                    <span class="meta">{{ row.meta }}</span>
+                    @if (row.allergens) {
+                      <span class="allergens">{{ row.allergens }}</span>
+                    }
+                  </span>
+                  <span class="numbers">
+                    <span class="kcal">{{ row.kcal }}</span>
+                    @if (row.split; as split) {
+                      <span class="split-bar" aria-hidden="true">
+                        <span class="protein" [style.flex-grow]="split.protein"></span>
+                        <span class="carbs" [style.flex-grow]="split.carbs"></span>
+                        <span class="fat" [style.flex-grow]="split.fat"></span>
+                      </span>
+                    }
+                    <span class="macros">{{ row.macros }}</span>
+                    @if (row.flag; as flag) {
+                      <span class="flag">{{ flag }}</span>
+                    }
+                  </span>
+                </li>
+              }
+            </ul>
+            @if (hasMore()) {
+              <div class="more">
+                @if (moreFailed()) {
+                  <p role="alert" i18n>More foods could not be loaded.</p>
+                }
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  [loading]="loadingMore()"
+                  (click)="loadMore()"
+                  i18n
+                >
+                  Show more foods
+                </button>
+              </div>
+            }
+          }
+        }
+      }
+    </section>
+
+    @if (searchingUsda()) {
+      <section class="panel" aria-labelledby="usda-heading">
+        <div class="usda-head">
+          <h2 id="usda-heading" class="panel-title" i18n>From USDA</h2>
+          <app-segmented-control
+            label="Show"
+            i18n-label
+            [options]="kindOptions"
+            [selected]="usdaKind()"
+            (selectedChange)="chooseKind($event)"
+          />
+          <label class="switch">
+            <input
+              type="checkbox"
+              [checked]="showDatabase()"
+              (change)="showDatabase.set($any($event.target).checked)"
+            />
+            <ng-container i18n>Database details</ng-container>
+          </label>
+        </div>
+        @switch (usdaState()) {
+          @case ('searching') {
+            <p class="pad note" role="status" i18n>Searching USDA…</p>
+          }
+          @case ('unavailable') {
+            <p class="pad note" role="status" i18n>
+              USDA search isn’t available right now, so only your own foods are listed.
+            </p>
+          }
+          @case ('error') {
+            <p class="pad note" role="alert" i18n>
+              USDA couldn’t be searched. Check your connection and try again.
+            </p>
+          }
+          @default {
+            @if (usdaRows().length === 0) {
+              <p class="pad note" role="status" i18n>
+                No USDA food matches “{{ searched() }}”. Try fewer or simpler words.
+              </p>
+            } @else {
+              <p class="pad note per-note" i18n>Numbers per 100 g, as USDA publishes them.</p>
+              <ul class="rows" role="list">
+                @for (row of usdaRows(); track row.fdcId) {
+                  <li class="row usda">
+                    <span class="name-block">
+                      <span class="name" dir="auto">{{ row.name }}</span>
+                      @if (row.brand; as brand) {
+                        <span class="meta">{{ brand }}</span>
+                      }
+                      @if (showDatabase()) {
+                        <span class="meta database">{{ row.database }}</span>
+                      }
+                    </span>
+                    <span class="numbers">
+                      @if (row.kcal; as kcal) {
+                        <span class="kcal">{{ kcal }}</span>
+                      }
+                      @if (row.split; as split) {
+                        <span class="split-bar" aria-hidden="true">
+                          <span class="protein" [style.flex-grow]="split.protein"></span>
+                          <span class="carbs" [style.flex-grow]="split.carbs"></span>
+                          <span class="fat" [style.flex-grow]="split.fat"></span>
+                        </span>
+                      }
+                      @if (row.macros; as macros) {
+                        <span class="macros">{{ macros }}</span>
+                      }
+                    </span>
+                    <span class="action">
+                      @if (row.added) {
+                        <span class="added" i18n>In your foods</span>
+                      } @else {
+                        <button
+                          appButton
+                          type="button"
+                          variant="outlined"
+                          [loading]="adding() === row.fdcId"
+                          (click)="add(row.fdcId, row.name)"
+                        >
+                          <span i18n>Add</span
+                          ><span class="tb-visually-hidden">&ngsp;{{ row.name }}</span>
+                        </button>
+                      }
+                    </span>
+                    @if (addError(); as failure) {
+                      @if (failure.fdcId === row.fdcId) {
+                        <p class="add-error" role="alert">{{ failure.message }}</p>
+                      }
+                    }
+                  </li>
+                }
+              </ul>
+            }
+          }
+        }
+      </section>
+    }
+  </div>
+</section>
+
+<ng-template #detailsSheet>
+  @if (viewing(); as food) {
+    <app-food-details
+      [food]="food"
+      [tolerance]="tolerance()"
+      [working]="working() === food.id"
+      (edit)="openEditor('edit', food)"
+      (editCopy)="openEditor('copy', food)"
+      (archive)="archive(food)"
+      (restore)="restore(food)"
+    />
+  }
+</ng-template>
+
+<ng-template #editorSheet>
+  @if (editing(); as editor) {
+    <app-food-editor
+      [mode]="editor.mode"
+      [food]="editor.food"
+      [policyKey]="settings()?.energyPolicyKey ?? null"
+      (saved)="saved($event, editor.mode)"
+      (cancelled)="cancelEditor()"
+      (dirtyChange)="editorChanged($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

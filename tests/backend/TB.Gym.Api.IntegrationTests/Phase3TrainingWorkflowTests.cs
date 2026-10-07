@@ -139,15 +139,20 @@ public sealed partial class Phase3TrainingWorkflowTests
                             Phase5B5WorkspaceQuotaBytes().ToString(CultureInfo.InvariantCulture),
                         ["Media:MaxClientProgressPhotoBytes"] =
                             Phase5B5ClientQuotaBytes().ToString(CultureInfo.InvariantCulture),
+                        // TB Gym's AI ceiling is the development one, lowered for the test of it (R4.4c).
+                        ["Nutrition:AiAllowance:MaximumMonthlyRequests"] =
+                            TestContext.TestName?.StartsWith("R44cAi", StringComparison.Ordinal) == true ? "2" : "200",
                     })));
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IClock>();
                 services.RemoveAll<IAiMealDraftProvider>();
                 services.AddSingleton<IClock>(clock);
-                // The launch provider answers the AI tests (F2) and the recipe editor's AI test (R4.4b).
+                // The launch provider answers the AI tests (F2), the recipe editor's AI test (R4.4b) and
+                // the AI ceiling's (R4.4c).
                 services.AddSingleton<IAiMealDraftProvider>(TestContext.TestName is { } testName &&
-                    (testName.StartsWith("F2", StringComparison.Ordinal) || testName.StartsWith("R44bAnAi", StringComparison.Ordinal))
+                    (testName.StartsWith("F2", StringComparison.Ordinal) || testName.StartsWith("R44bAnAi", StringComparison.Ordinal) ||
+                        testName.StartsWith("R44cAi", StringComparison.Ordinal))
                     ? launchAiProvider
                     : new InvalidSchemaAiMealDraftProvider());
                 if (realUsdaProvider)

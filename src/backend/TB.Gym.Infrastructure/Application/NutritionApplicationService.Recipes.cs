@@ -48,6 +48,18 @@ internal sealed partial class NutritionApplicationService
                 .ToListAsync(cancellationToken))
             .ToLookup(item => item.FoodItemVersionId, item => item.Code);
 
+        // A food edited since a line copied it, as it is now, so the editor can offer its new numbers.
+        var foodIds = foods.Values.Select(item => item.FoodId).Distinct().ToArray();
+        var currentFoods = (await dbContext.FoodItems.AsNoTracking()
+                .Where(item => foodIds.Contains(item.Id))
+                .Include(item => item.Versions).ThenInclude(item => item.Allergens)
+                .AsSplitQuery()
+                .ToListAsync(cancellationToken))
+            .Select(ToFoodView)
+            .ToDictionary(item => item.Id);
+        FoodItemView? Newer(Guid foodId, Guid versionId) =>
+            currentFoods.TryGetValue(foodId, out var current) && current.CurrentVersion.Id != versionId ? current : null;
+
         var ingredients = latest.Ingredients
             .OrderBy(item => item.Order)
             .Select(item => new RecipeIngredientView(
@@ -64,7 +76,8 @@ internal sealed partial class NutritionApplicationService
                 item.FatGrams,
                 allergens[item.FoodItemVersionId].Order().ToArray(),
                 item.YieldFactorId,
-                item.RetentionFactorId))
+                item.RetentionFactorId,
+                Newer(foods[item.FoodItemVersionId].FoodId, item.FoodItemVersionId)))
             .ToArray();
         return new RecipeDetail(
             recipe.Id,

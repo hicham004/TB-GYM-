@@ -80,8 +80,9 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | P3b | **Progression, editing** (ADR 0036): a client's future weeks are edited in the builder's grid through the coverage policy, with an audit record; started and finished sessions stay locked | §2, plus backend tests | Done · 2026-10-07 · f0f0bb9 |
 | P4a | **Session extras** (ADR 0036): an exercise video button in the builder, the session sheet and the client's workout player; coach and client notes visible both ways | §2 | Done · 2026-10-07 · f0f0bb9 |
 | R4.4a | **Meal plans** (C7, part 1): the plans as cards, and the meal-plan builder: days side by side with each day's total against the daily target, recipes dragged into meals, options per meal, the coach's server draft (NUT-013) and Publish | §2, plus backend tests | Done · 2026-10-07 · 4556bd2 |
-| R4.4b | **Recipes** (C7, part 2): recipe cards with macro bars, the recipe editor (ingredients from a food search, totals per serving as they are typed, publish), the AI suggestion inside New recipe, and recipe photos | §2, plus backend tests | Built, not committed · 2026-10-07 |
-| R4.4c | **Foods** (C7, part 3): one clean search over the coach's own foods and USDA (database codes behind a details toggle), adding your own food, and the calculation defaults moved to Settings; the older Recipes and foods page goes | §2 | To do |
+| R4.4b | **Recipes** (C7, part 2): recipe cards with macro bars, the recipe editor (ingredients from a food search, totals per serving as they are typed, publish), the AI suggestion inside New recipe, and recipe photos | §2, plus backend tests | Done · 2026-10-07 · b71d004 |
+| R4.4c | **Foods** (C7, part 3): one clean search over the coach's own foods and USDA (database codes behind a details toggle), adding your own food, and the calculation defaults moved to Settings; the older Recipes and foods page goes. Its first follow-ups were closed in the same step: archive and restore, a recipe line offered its food's new numbers, USDA names in sentence case, USDA carbs just below zero counted as 0 g, and the food sheet asking before it closes | §2, plus backend tests | Done · 2026-10-07 |
+| R4.4d | **Recipes for clients** (M4 and C7, decided 2026-10-07): assigning a plan copies each recipe's ingredients, method, prep and cook time and cover photo into the client's snapshot (NUT-006), and the client's day opens a recipe in a sheet; the recipe editor gains prep and cook time; the meal-plan builder offers "Use the newest version" for a recipe republished since; recipe photos no version names are removed 48 hours after upload (MED-014) | §2, plus backend tests (the snapshot, the client's read, the photo only for the client's own plan, another client, a released client, the 48-hour sweep) | To do |
 | P4b | **Adjusting next week from logged performance** (ADR 0036, decided 2026-10-07): the Training maxes panel suggests a new max from the best logged set of the week (1 to 8 reps at RPE 7 to 10), and the coach applies it through the existing preview; never automatic | §2, plus domain reference tests (which sets count, the estimate) and API tests (other coach, released client, kg and lb kept apart) | To do |
 | R5.1 | **Products** (C8), **Exercise library** (C10), notifications, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only) | §2 | To do |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
@@ -246,7 +247,8 @@ of the implemented R1.3 screens before production rollout.
   builder is its own lazy chunk (about 82 kB), and its two stylesheets warn as the program builder's do
   (`meal-plan-builder.scss` 5.6 kB, `meal-plan-days.scss` 7.4 kB; the error is at 8 kB). R4.4b measures
   542.23 kB: the recipe pages are lazy chunks (the editor about 50 kB), the old library page shrank, and
-  `recipe-editor.scss` warns at 6.3 kB.
+  `recipe-editor.scss` warns at 6.3 kB. R4.4c measures 540.42 kB: Foods is a lazy chunk (about 47 kB
+  with its two sheets), and the older library page and the food calls `ApiClient` carried are gone.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -438,6 +440,44 @@ of the implemented R1.3 screens before production rollout.
   conversion). (5) No Versions list in the editor (the server keeps every version). (6) USDA search
   needs the server's data.gov key; without it the ingredient search lists the coach's own foods and
   says USDA is not available. (7) The demo's recipes have no photos (none are licensed for it).
+  **Decided by Claude for the owner on 2026-10-07 (R4.4c session), after looking again at Everfit,
+  Trainerize, That Clean Life, Cronometer and Discourse:** (1) yes, as its own step R4.4d right after
+  R4.4c and before P4b: Everfit's meal detail shows the instructions and macros, Trainerize's the
+  ingredients, instructions and macros, That Clean Life's the ingredient list, directions, prep time
+  and photo. Clients get the copy made when the plan was assigned, as Everfit's client copies are
+  independent of the library. (2) yes, in the builder, built with R4.4d; it changes the coach's draft
+  only, never a published plan or a client's. (3) an upload no version names is removed 48 hours after
+  it was uploaded (Discourse's default grace for orphan uploads), built with R4.4d. (4) prep and cook
+  time join R4.4d, since the client's recipe shows them; categories and tags wait until a library
+  outgrows search (a plan's meal names already say breakfast or lunch); household units come after R5
+  through the food's own portion weights from USDA, which keeps ADR 0008's no implicit conversion. (5)
+  not planned.
+- **Foods, left for later (from R4.4c, built 2026-10-07; screenshots `docs/design/r44c-*.png`).**
+  Decided by Claude for the owner: only the owner changes the nutrition settings, as on every Settings
+  page; TB Gym caps each workspace's AI allowance (ADR 0035 amended: TB Gym pays the provider, and
+  Everfit and Trainerize sell AI inside their plans); USDA lists basic foods first and packaged products
+  on request (a plain USDA search for "chicken breast" returned only US brand-name products, out of
+  21,661 matches); a USDA food is changed only as a copy of the coach's own (Cronometer's "Edit a
+  copy"). **Closed in the same step on 2026-10-07, decided by Claude for the owner after looking at
+  Cronometer, Everfit, FSANZ and the US and EU labelling rules:** (1) a food is archived, never deleted:
+  Cronometer offers "Retire" (kept in history, gone from the list) beside a "Delete" that also wipes
+  every diary entry, and Everfit's Remove says nothing of what uses the ingredient; here recipes and
+  client plans name the versions, so archive it is, with Undo, a list of archived foods and Restore,
+  and adding an archived USDA food again restores it. (2) A recipe line offers its food's new numbers
+  ("Use its new numbers", or for all lines at once); the recipe changes only when saved, and the amount
+  is kept only in the same unit. (4) USDA's capitals read in sentence case ("Greek yogurt"), like its
+  basic foods' names. (6) USDA's carbs between -0.5 g and 0 per 100 g count as 0 g and the food keeps
+  USDA's figure (the four raw chicken cuts with skin are -0.17 to -0.48 g; FSANZ explains these as
+  measurement error in low-carb foods; EU labels may declare 0.5 g/100 g or less as 0 g, US labels
+  under 0.5 g a serving); lower is refused and left out of the search (NUT-003, ADR 0008). (7) The food
+  sheet asks before it closes with something typed. Imports now also keep Foundation foods' Atwater
+  energy as USDA's calories, as the search showed. Left: (3) A USDA copy cannot be renamed without
+  copying it. (5) No screen for a food's label photo or for raw-to-cooked factors. (8) A ceiling per TB
+  Gym plan, or one the platform admin sets per workspace, would replace the one server setting. (9) A
+  line made through cooking factors is not offered new numbers (none can be made on the new screens).
+  (10) A meal plan keeps the recipe version it was published with, so a food's new numbers reach a plan
+  only through the recipe (R4.4d's "Use the newest version"). (11) No count of the recipes that use a
+  food before it is archived, and no archiving several at once.
 
 ---
 
@@ -981,6 +1021,28 @@ limited to the coach's assigned clients.
   carry over, and a failure is said and focused beside the button. Leaving with changes asks first.
   On a phone a bar keeps one serving's numbers in sight once its card scrolls away. The older page
   is now **Foods**, without its recipe form or AI section.
+- Built in R4.4c: **Foods** (`/nutrition/foods`; the old address leads there) has one search over the
+  workspace's foods and USDA's. Your foods come first, each row with its source, raw or cooked, the
+  amount its numbers are for, calories, a protein/carbs/fat bar and grams, allergens, and a flag when the
+  label's calories disagree with the macros or USDA left a nutrient out. From USDA follows once three
+  letters are typed: basic foods, or packaged products with their brand, each with USDA's calories and
+  macros per 100 g and an Add button that copies it into the foods ("In your foods" after); database
+  codes show only behind the Database details switch. A food opens in a sheet with its nutrients, the
+  label's or USDA's calories, what USDA left out and its allergens; the coach's own food has Edit food
+  (the next version, which may rename it), a USDA food Edit a copy. New food opens the same sheet: name,
+  the amount and unit the numbers are for, raw, cooked, as sold or prepared, protein, carbs and fat, then
+  fibre, sugar alcohols, alcohol and label calories behind a disclosure, and allergens; the calories add
+  up as they are typed, under the workspace's policy, and every check is said beside its box. The
+  calculation defaults moved to **Settings › Nutrition** (owner only): how calories are counted (4/4/9,
+  or as on EU labels), the label check, and the AI allowance within TB Gym's ceiling. The recipe
+  ingredient search lists USDA's basic foods with their calories per 100 g. A food's sheet has Archive
+  food (a toast with Undo); Archived foods, beside the list's heading, lists them on their own (no USDA
+  panel), and an archived food's sheet says when it was archived and has Restore food. Closing the food
+  sheet with something typed (its close button, Escape, the backdrop or Cancel) asks "Close without
+  saving?" first; the kit's sheet and dialog take a `canClose` for this. In the recipe editor a line
+  whose food was edited since says so with "Use its new numbers", and two or more such lines get "Use
+  all the new numbers" above the list. USDA's names in capitals read in sentence case, and a USDA food
+  whose carbs USDA lists just below zero shows 0 g with a line saying what USDA listed.
 
 **C8. Products**
 - The heading becomes "Plans you sell": cards with price, duration and icons for the included

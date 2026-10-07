@@ -73,9 +73,14 @@ export class RecipeApi {
     });
   }
 
+  /** USDA's basic foods only: an ingredient is rarely a US packaged product (R4.4c). */
   searchUsda(query: string): Observable<ProviderFoodSearchPage> {
     return this.http.get<ProviderFoodSearchPage>('/api/nutrition/providers/usda/search', {
-      params: new HttpParams().set('query', query).set('skip', 0).set('take', 10),
+      params: new HttpParams()
+        .set('query', query)
+        .set('kind', 'Basic')
+        .set('skip', 0)
+        .set('take', 10),
     });
   }
 

@@ -131,6 +131,8 @@ services:
       Nutrition__UsdaFoodDataCentral__ApiKey: ${TB_GYM_USDA_API_KEY:-}
       Nutrition__Anthropic__Enabled: ${TB_GYM_AI_ENABLED:-false}
       Nutrition__Anthropic__ApiKey: ${TB_GYM_ANTHROPIC_API_KEY:-}
+      Nutrition__AiAllowance__MaximumMonthlyRequests: ${TB_GYM_AI_MAX_MONTHLY_REQUESTS:-0}
+      Nutrition__AiAllowance__MaximumMonthlyCostUsd: ${TB_GYM_AI_MAX_MONTHLY_COST_USD:-0}
     volumes:
       - data-protection-keys:/home/app/.aspnet/DataProtection-Keys
     depends_on:

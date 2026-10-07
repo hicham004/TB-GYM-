@@ -327,6 +327,47 @@ describe('the recipe editor', () => {
     expect(request.ingredients.map((line) => line.quantity)).toEqual([80, 200]);
   });
 
+  it('offers a food’s new numbers to the lines that copied it before it was edited', async () => {
+    const detail = recipeDetail();
+    const [oats, yogurt] = detail.latest.ingredients;
+    const edited = {
+      ...YOGURT_FOOD,
+      name: 'Strained yogurt',
+      currentRevision: 2,
+      currentVersion: { ...YOGURT_FOOD.currentVersion, id: 'yogurt-food-v2', proteinGrams: 11 },
+    };
+    const { harness, host, api } = await render({
+      getRecipe: () =>
+        of({
+          ...detail,
+          latest: { ...detail.latest, ingredients: [oats, { ...yogurt, newerFood: edited }] },
+        }),
+    });
+
+    expect(all(host, '.line-newer').map(textOf)).toEqual([
+      'Strained yogurt was edited since this recipe was saved. Use its new numbers',
+    ]);
+    // A single line is offered on itself, with no banner over the list.
+    expect(host.querySelector('.banner.info')).toBeNull();
+    expect(named(host, 'Publish changes').disabled).toBe(true);
+
+    named(host, 'Use its new numbers').click();
+    await settle(harness.fixture);
+    expect(all(host, '.line-name').map(textOf)).toEqual(['Rolled oats', 'Strained yogurt']);
+    expect(host.querySelector('.line-newer')).toBeNull();
+    expect(textOf(host.querySelector('.tb-visually-hidden[role="status"]'))).toContain(
+      'Strained yogurt now has its new numbers.',
+    );
+
+    named(host, 'Publish changes').click();
+    await until(harness.fixture, () => api.addVersion.mock.calls.length === 1);
+    const [, request] = api.addVersion.mock.calls[0];
+    expect(request.ingredients.map((line) => [line.foodItemVersionId, line.quantity])).toEqual([
+      ['oats-food-v1', 80],
+      ['yogurt-food-v2', 200],
+    ]);
+  });
+
   it('tells the coach when someone saved the recipe since it opened', async () => {
     const { harness, host } = await render({
       addVersion: () =>

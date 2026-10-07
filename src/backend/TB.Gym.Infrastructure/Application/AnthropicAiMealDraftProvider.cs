@@ -24,10 +24,28 @@ internal sealed class AnthropicAiMealDraftOptions
     public bool UsePromptCaching { get; set; } = true;
 }
 
+/// <summary>
+/// TB Gym's ceiling on each workspace's monthly AI allowance (R4.4c). TB Gym pays the provider, so a
+/// workspace owner may set any allowance up to it, never above; unset, it is zero and AI stays off.
+/// </summary>
+internal sealed class NutritionAiAllowanceOptions
+{
+    public const string SectionName = "Nutrition:AiAllowance";
+
+    public int MaximumMonthlyRequests { get; set; }
+    public decimal MaximumMonthlyCostUsd { get; set; }
+}
+
 internal static class AnthropicMealDraftDependencyInjection
 {
     public static IServiceCollection AddTbGymAnthropicMealDrafts(this IServiceCollection services, IConfiguration configuration)
     {
+        // The same bounds a workspace's own allowance has (NutritionWorkspaceSettings.Update).
+        services.AddOptions<NutritionAiAllowanceOptions>()
+            .Bind(configuration.GetSection(NutritionAiAllowanceOptions.SectionName))
+            .Validate(options => options.MaximumMonthlyRequests is >= 0 and <= 100_000, "Nutrition:AiAllowance:MaximumMonthlyRequests must be between 0 and 100000.")
+            .Validate(options => options.MaximumMonthlyCostUsd is >= 0m and <= 1_000_000m, "Nutrition:AiAllowance:MaximumMonthlyCostUsd must be between 0 and 1000000.")
+            .ValidateOnStart();
         services.AddOptions<AnthropicAiMealDraftOptions>()
             .Bind(configuration.GetSection(AnthropicAiMealDraftOptions.SectionName))
             .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.ApiKey), "Nutrition:Anthropic:ApiKey is required when Anthropic meal drafts are enabled.")

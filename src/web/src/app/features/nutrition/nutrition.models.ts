@@ -3,26 +3,10 @@ import type {
   AllergenCode,
   ClientNutritionDayView as ContractClientNutritionDayView,
   ClientNutritionPlanSummary as ContractClientNutritionPlanSummary,
-  FoodItemPage as ContractFoodItemPage,
   MealPlanTemplatePage as ContractMealPlanTemplatePage,
   NutritionCalculationView as ContractNutritionCalculationView,
-  NutritionWorkspaceSettingsView as ContractNutritionWorkspaceSettingsView,
-  ProviderFoodSearchPage as ContractProviderFoodSearchPage,
   RecipePage as ContractRecipePage,
 } from '../../core/api/generated';
-
-export interface NutritionSettings {
-  energyPolicyKey: string;
-  energyPolicyVersion: string;
-  providerCalorieTolerance: number;
-  aiMonthlyRequestLimit: number;
-  aiMonthlyCostLimit: number;
-  aiCostCurrency: string;
-  version: number;
-}
-
-/** A nutrient USDA left out of a food, which was saved as 0. */
-export type UnreportedNutrient = 'Fibre' | 'Polyols' | 'Ethanol';
 
 /** The order allergens are offered in, and the names a coach reads for each stored code. */
 export const ALLERGEN_LABELS: readonly { code: AllergenCode; label: string }[] = [
@@ -41,58 +25,6 @@ export const ALLERGEN_LABELS: readonly { code: AllergenCode; label: string }[] =
   { code: 'Lupin', label: $localize`Lupin` },
   { code: 'Molluscs', label: $localize`Molluscs (mussels, squid)` },
 ];
-
-const UNIT_LABELS: Record<FoodItem['basisUnit'], string> = {
-  Gram: $localize`g`,
-  Millilitre: $localize`ml`,
-  Serving: $localize`serving`,
-};
-
-const PREPARATION_LABELS: Record<FoodItem['preparationBasis'], string> = {
-  Raw: $localize`raw`,
-  Cooked: $localize`cooked`,
-  AsSold: $localize`as sold`,
-  Prepared: $localize`prepared`,
-};
-
-const SOURCE_LABELS: Record<FoodItem['provenance'], string> = {
-  UsdaFdc: $localize`USDA`,
-  CoachAuthored: $localize`Your food`,
-  LabelTranscribed: $localize`From a label`,
-};
-
-export const unitLabel = (unit: FoodItem['basisUnit']): string => UNIT_LABELS[unit];
-
-export const preparationLabel = (basis: FoodItem['preparationBasis']): string =>
-  PREPARATION_LABELS[basis];
-
-export const sourceLabel = (provenance: FoodItem['provenance']): string =>
-  SOURCE_LABELS[provenance];
-
-export interface FoodItem {
-  id: string;
-  name: string;
-  provenance: 'UsdaFdc' | 'CoachAuthored' | 'LabelTranscribed';
-  /** The provider's id, such as a USDA FDC id, when the food was imported. */
-  externalId: string | null;
-  currentRevision: number;
-  versionId: string;
-  basisQuantity: number;
-  basisUnit: 'Gram' | 'Millilitre' | 'Serving';
-  preparationBasis: 'Raw' | 'Cooked' | 'AsSold' | 'Prepared';
-  calories: number;
-  providerCalories: number | null;
-  discrepancy: boolean;
-  protein: number;
-  carbohydrate: number;
-  fat: number;
-  unreportedNutrients: UnreportedNutrient[];
-}
-
-export interface FoodPage {
-  total: number;
-  items: FoodItem[];
-}
 
 export interface RecipeSummary {
   id: string;
@@ -201,12 +133,6 @@ export interface NutritionDay {
   logVersion: number | null;
 }
 
-export interface ProviderFoodSearch {
-  items: { externalId: string; name: string; dataType: string }[];
-  failureCode: string | null;
-  message: string | null;
-}
-
 export interface AiMealDraft {
   id: string;
   status: 'Pending' | 'Failed' | 'AwaitingCoachReview' | 'Approved' | 'Rejected';
@@ -216,42 +142,6 @@ export interface AiMealDraft {
   uncertainFieldsJson: string | null;
   failureCode: string | null;
   createdRecipeVersionId: string | null;
-}
-
-export function mapNutritionSettings(
-  value: ContractNutritionWorkspaceSettingsView,
-): NutritionSettings {
-  return {
-    ...value,
-    providerCalorieTolerance: numeric(value.providerCalorieTolerance),
-    aiMonthlyRequestLimit: numeric(value.aiMonthlyRequestLimit),
-    aiMonthlyCostLimit: numeric(value.aiMonthlyCostLimit),
-    version: numeric(value.version),
-  };
-}
-
-export function mapFoodPage(value: ContractFoodItemPage): FoodPage {
-  return {
-    total: numeric(value.total),
-    items: value.items.map((item) => ({
-      id: item.id,
-      name: item.name,
-      provenance: item.provenance,
-      externalId: item.externalId ?? null,
-      currentRevision: numeric(item.currentRevision),
-      versionId: item.currentVersion.id,
-      basisQuantity: numeric(item.currentVersion.basisQuantity),
-      basisUnit: item.currentVersion.basisUnit,
-      preparationBasis: item.currentVersion.preparationBasis,
-      calories: numeric(item.currentVersion.computedCalories),
-      providerCalories: nullableNumeric(item.currentVersion.providerCalories),
-      discrepancy: item.currentVersion.hasCalorieDiscrepancy,
-      protein: numeric(item.currentVersion.proteinGrams),
-      carbohydrate: numeric(item.currentVersion.carbohydrateGrams),
-      fat: numeric(item.currentVersion.fatGrams),
-      unreportedNutrients: [...item.currentVersion.unreportedNutrients],
-    })),
-  };
 }
 
 export function mapRecipePage(value: ContractRecipePage): RecipePage {
@@ -352,18 +242,6 @@ export function mapNutritionDay(value: ContractClientNutritionDayView): Nutritio
     })),
     safetyNotice: value.safetyNotice,
     logVersion: value.dailyLogVersion === null ? null : numeric(value.dailyLogVersion),
-  };
-}
-
-export function mapProviderSearch(value: ContractProviderFoodSearchPage): ProviderFoodSearch {
-  return {
-    items: value.items.map((item) => ({
-      externalId: item.externalId,
-      name: item.name,
-      dataType: item.dataType,
-    })),
-    failureCode: value.failureCode ?? null,
-    message: value.message ?? null,
   };
 }
 

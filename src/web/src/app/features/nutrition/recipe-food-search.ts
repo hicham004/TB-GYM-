@@ -17,8 +17,9 @@ import { firstValueFrom } from 'rxjs';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Icon } from '../../ui/icon';
+import { numeric } from '../training/training-builder.models';
 import { RecipeApi } from './recipe-api';
-import { foodFromView, foodMeasure, type RecipeFood, sourceWord } from './recipe.models';
+import { foodFromView, foodMeasure, kcal, type RecipeFood, sourceWord } from './recipe.models';
 
 const SEARCH_DELAY_MS = 250;
 /** USDA is asked only once a word is long enough to mean something; it is slower and paged. */
@@ -26,7 +27,7 @@ const USDA_MINIMUM = 3;
 
 type Option =
   | { kind: 'food'; key: string; food: RecipeFood }
-  | { kind: 'usda'; key: string; fdcId: string; name: string };
+  | { kind: 'usda'; key: string; fdcId: string; name: string; detail: string };
 
 /**
  * Finds an ingredient (R4.4b): the workspace's own foods first, each with its source and calories
@@ -63,7 +64,7 @@ export class RecipeFoodSearch {
   protected readonly adding = signal<string | null>(null);
   protected readonly problem = signal<string | null>(null);
   private readonly foods = signal<RecipeFood[]>([]);
-  private readonly usda = signal<{ fdcId: string; name: string }[]>([]);
+  private readonly usda = signal<{ fdcId: string; name: string; detail: string }[]>([]);
   /** Said once, quietly, when USDA search is not available here; never the server's own sentence. */
   protected readonly usdaNote = signal<string | null>(null);
 
@@ -221,7 +222,17 @@ export class RecipeFoodSearch {
       ]);
       if (generation !== this.generation) return;
       this.foods.set(own.items.map(foodFromView));
-      this.usda.set(usda?.items.map((item) => ({ fdcId: item.externalId, name: item.name })) ?? []);
+      this.usda.set(
+        usda?.items.map((item) => ({
+          fdcId: item.externalId,
+          name: item.name,
+          // What USDA states per 100 g, so matches with the same name can be told apart.
+          detail:
+            item.calories === null || item.calories === undefined
+              ? $localize`USDA`
+              : $localize`USDA · ${kcal(numeric(item.calories), this.locale)}:calories: per 100 g`,
+        })) ?? [],
+      );
       if (usda?.failureCode || usda?.message) {
         this.usdaNote.set(
           $localize`USDA search isn’t available right now, so only your own foods are listed.`,

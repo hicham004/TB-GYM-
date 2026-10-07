@@ -8,6 +8,7 @@ public interface INutritionDataProvider
 
     Task<IReadOnlyList<FoodSearchResult>> SearchAsync(
         string query,
+        FoodSearchKind kind,
         int skip,
         int take,
         CancellationToken cancellationToken);
@@ -15,11 +16,29 @@ public interface INutritionDataProvider
     Task<ProviderFoodRecord?> GetFoodAsync(string externalId, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Which provider foods a search lists (R4.4c). USDA's branded list is US packaged products and
+/// outnumbers its generic foods, so basic foods come first and packaged products are asked for.
+/// </summary>
+public enum FoodSearchKind
+{
+    Basic = 1,
+    Packaged = 2,
+}
+
+/// <param name="Calories">The provider's stated energy, per 100 g or ml like the other nutrients;
+/// a food copied into the workspace has its calories worked out again by the energy policy.</param>
+/// <param name="CarbohydrateGrams">Total carbohydrate, as on <see cref="ProviderFoodRecord"/>.</param>
 public sealed record FoodSearchResult(
     string ExternalId,
     string Name,
     string DataType,
-    string Provider);
+    string Provider,
+    string? Brand = null,
+    decimal? Calories = null,
+    decimal? ProteinGrams = null,
+    decimal? CarbohydrateGrams = null,
+    decimal? FatGrams = null);
 
 /// <param name="CarbohydrateGrams">
 /// TOTAL carbohydrate including fibre and polyols, matching USDA "Carbohydrate, by difference".

@@ -38,11 +38,14 @@ export const nutritionRoutes: Routes = [
     loadComponent: () => import('./recipe-editor').then((module) => module.RecipeEditor),
   },
   {
-    path: 'library',
+    path: 'foods',
     canActivate: [coachGuard],
     title: $localize`Foods | TB Gym`,
-    loadComponent: () => import('./nutrition-library').then((module) => module.NutritionLibrary),
+    data: REDESIGNED,
+    loadComponent: () => import('./food-list').then((module) => module.FoodList),
   },
+  // The older Recipes and foods page's address, kept for bookmarks (R4.4c).
+  { path: 'library', redirectTo: 'foods', pathMatch: 'full' },
   {
     path: 'today',
     canActivate: [clientGuard],

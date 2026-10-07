@@ -41,6 +41,8 @@ export type AddFoodVersionRequest = {
   sourceAttribution: string;
   sourceRecordVersion: string;
   declaredAllergens: Array<AllergenCode>;
+  name?: null | string;
+  baseRevision?: null | number | string;
 };
 
 export type AddMealPlanVersionRequest = {
@@ -1755,17 +1757,25 @@ export type FoodItemView = {
   externalDataType: null | string;
   currentRevision: number | string;
   currentVersion: FoodVersionView;
+  archivedAtUtc?: null | string;
 };
 
 export type FoodProvenance = 'UsdaFdc' | 'CoachAuthored' | 'LabelTranscribed';
 
 export type FoodQuantityUnit = 'Gram' | 'Millilitre' | 'Serving';
 
+export type FoodSearchKind = 'Basic' | 'Packaged';
+
 export type FoodSearchResult = {
   externalId: string;
   name: string;
   dataType: string;
   provider: string;
+  brand?: null | string;
+  calories?: null | number | string;
+  proteinGrams?: null | number | string;
+  carbohydrateGrams?: null | number | string;
+  fatGrams?: null | number | string;
 };
 
 export type FoodVersionView = {
@@ -1789,6 +1799,7 @@ export type FoodVersionView = {
   sourceRecordVersion: string;
   declaredAllergens: Array<AllergenCode>;
   unreportedNutrients: Array<UnreportedNutrient>;
+  reportedCarbohydrateGrams?: null | number | string;
 };
 
 export type ForgotPasswordRequest = {
@@ -2335,6 +2346,8 @@ export type NutritionWorkspaceSettingsView = {
   aiMonthlyCostLimit: number | string;
   aiCostCurrency: string;
   version: number | string;
+  aiMaximumMonthlyRequests: number | string;
+  aiMaximumMonthlyCost: number | string;
 };
 
 export type OccupationActivityType = 'Seated' | 'Mixed' | 'Physical';
@@ -2818,6 +2831,7 @@ export type RecipeIngredientView = {
   declaredAllergens: Array<AllergenCode>;
   yieldFactorId: null | string;
   retentionFactorId: null | string;
+  newerFood?: null | FoodItemView;
 };
 
 export type RecipePage = {
@@ -3117,6 +3131,10 @@ export type SessionDayCountView = {
 export type SetExerciseArchivedRequest = {
   isArchived: boolean;
   version: number | string;
+};
+
+export type SetFoodArchivedRequest = {
+  isArchived: boolean;
 };
 
 export type SetOfferAvailabilityRequest = {
@@ -7250,6 +7268,7 @@ export type ListFoodItemsData = {
   path?: never;
   query?: {
     query?: string;
+    archived?: boolean;
     skip?: number | string;
     take?: number | string;
   };
@@ -7326,11 +7345,44 @@ export type AddFoodItemVersionResponses = {
 export type AddFoodItemVersionResponse =
   AddFoodItemVersionResponses[keyof AddFoodItemVersionResponses];
 
+export type SetFoodItemArchivedData = {
+  body: SetFoodArchivedRequest;
+  path: {
+    foodItemId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/foods/{foodItemId}/archive';
+};
+
+export type SetFoodItemArchivedErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SetFoodItemArchivedError = SetFoodItemArchivedErrors[keyof SetFoodItemArchivedErrors];
+
+export type SetFoodItemArchivedResponses = {
+  /**
+   * OK
+   */
+  200: FoodItemView;
+};
+
+export type SetFoodItemArchivedResponse =
+  SetFoodItemArchivedResponses[keyof SetFoodItemArchivedResponses];
+
 export type SearchUsdaFoodDataCentralData = {
   body?: never;
   path?: never;
   query: {
     query: string;
+    kind?: FoodSearchKind;
     skip?: number | string;
     take?: number | string;
   };

@@ -23,6 +23,7 @@ import {
   recipeCard,
   recipeProblem,
   recipeTotal,
+  useNewerFood,
 } from './recipe.models';
 
 const OATS = foodFromView(OATS_FOOD);
@@ -67,6 +68,49 @@ describe('recipe totals as typed', () => {
     const doubled = { ...draft.lines[0], quantity: 160 };
     expect(lineMacros(doubled)?.calories).toBeCloseTo(608);
     expect(draft.photoId).toBe('photo-1');
+  });
+
+  it('offers a food edited since, and takes its numbers into the line on request', () => {
+    const detail = recipeDetail();
+    const [oats, yogurt] = detail.latest.ingredients;
+    const edited = {
+      ...YOGURT_FOOD,
+      currentVersion: { ...YOGURT_FOOD.currentVersion, id: 'yogurt-food-v2', proteinGrams: 11 },
+    };
+    const perServing = {
+      ...YOGURT_FOOD,
+      currentVersion: { ...edited.currentVersion, basisQuantity: 1, basisUnit: 'Serving' as const },
+    };
+    const draft = draftFromDetail({
+      ...detail,
+      latest: {
+        ...detail.latest,
+        ingredients: [
+          { ...oats, newerFood: perServing, yieldFactorId: 'yield-1' },
+          { ...yogurt, newerFood: edited },
+        ],
+      },
+    });
+
+    // A line through cooking factors is the server's to work out, so it is not offered.
+    expect(draft.lines.map((line) => line.newer?.versionId ?? null)).toEqual([
+      null,
+      'yogurt-food-v2',
+    ]);
+    const taken = useNewerFood(draft.lines[1]);
+    expect([taken.food?.versionId, taken.quantity, taken.newer]).toEqual([
+      'yogurt-food-v2',
+      200,
+      null,
+    ]);
+    expect(lineMacros(taken)?.protein).toBeCloseTo(22);
+    expect(draftSignature({ ...draft, lines: [draft.lines[0], taken] })).not.toBe(
+      draftSignature(draft),
+    );
+
+    // Measured in another unit now: the amount is typed again, never converted.
+    const remeasured = useNewerFood({ ...draft.lines[1], newer: foodFromView(perServing) });
+    expect(remeasured.quantity).toBeNull();
   });
 
   it('gives each macro its share of the calories it brings', () => {

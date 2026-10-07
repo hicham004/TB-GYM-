@@ -55,6 +55,27 @@ const RECIPES = [
   }),
 ];
 
+/** Both foods were edited since the recipe was saved (R4.4c), so each line is offered its new numbers. */
+const EDITED = (() => {
+  const detail = recipeDetail({ id: 'recipe-edited' });
+  const newer = (food: typeof OATS_FOOD, versionId: string) => ({
+    ...food,
+    currentRevision: 2,
+    currentVersion: { ...food.currentVersion, id: versionId },
+  });
+  const [oats, yogurt] = detail.latest.ingredients;
+  return {
+    ...detail,
+    latest: {
+      ...detail.latest,
+      ingredients: [
+        { ...oats, newerFood: newer(OATS_FOOD, 'oats-food-v2') },
+        { ...yogurt, newerFood: newer(YOGURT_FOOD, 'yogurt-food-v2') },
+      ],
+    },
+  };
+})();
+
 interface Sent {
   created: CreateRecipeRequest[];
   versions: AddRecipeVersionRequest[];
@@ -76,6 +97,7 @@ async function openRecipes(
       'GET /api/nutrition/recipes/recipe-oats': (route: Route) => json(route, 200, recipeDetail()),
       'GET /api/nutrition/recipes/recipe-new': (route: Route) =>
         json(route, 200, recipeDetail({ id: 'recipe-new', name: 'Oats & yogurt' })),
+      'GET /api/nutrition/recipes/recipe-edited': (route: Route) => json(route, 200, EDITED),
       'POST /api/nutrition/recipes': (route: Route) => {
         sent.created.push(route.request().postDataJSON() as CreateRecipeRequest);
         return json(route, 200, recipeSummary({ id: 'recipe-new' }));
@@ -199,6 +221,28 @@ test('a new recipe from the food search, published in one save', async ({ page }
   await expect(page).toHaveURL(/\/nutrition\/recipes\/recipe-new$/);
   expect(sent.created).toHaveLength(1);
   expect(sent.created[0]).toMatchObject({ name: 'Oats & yogurt', publish: true, servings: 1 });
+});
+
+test('lines whose foods were edited since are offered the new numbers, at 200% text', async ({
+  page,
+}) => {
+  await openRecipes(page, 1440);
+  await page.goto('/nutrition/recipes/recipe-edited');
+  await expect(page.locator('.line-newer')).toHaveCount(2);
+  await expect(page.locator('.banner.info')).toContainText(
+    '2 of these foods were edited since this recipe was saved.',
+  );
+  await waitForFonts(page);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await useRtl(page);
+  await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+  await expectNoHorizontalOverflow(page);
+
+  await expect(page.getByRole('button', { name: 'Publish changes' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Use all the new numbers' }).click();
+  await expect(page.locator('.line-newer')).toHaveCount(0);
+  await expect(page.locator('.banner.info')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Publish changes' })).toBeEnabled();
 });
 
 test('the editor in dark, right to left and at 200% text', async ({ page }) => {

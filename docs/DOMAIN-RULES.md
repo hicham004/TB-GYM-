@@ -544,6 +544,16 @@ maxes, and a released client's program is read-only (ADR 0027).
 **NUT-001** Ingredient records include food identity, quantity, unit, raw/cooked/preparation
 basis, provider/source, source record/version, protein, carbohydrate, fat, calories, and any
 manual override with actor/reason. Raw and cooked weights are not interchangeable.
+Since R4.4c a coach edits a food of the workspace's own as its next version, which may rename it; the
+save names the revision the sheet opened and a later save since is refused (`food_changed`). Recipe
+lines keep the food version and name they copied. A USDA food is never changed in place: "Edit a
+copy" makes a coach-authored food from its values (Cronometer's model), so provenance stays true.
+A food is archived, never deleted, since recipe lines and client snapshots name its versions (Cronometer's
+"Retire"; its "Delete" also removes diary entries, which history here forbids). Archiving hides it from
+Foods and the ingredient search only: recipes using it still read and save with it, it is restored at
+any time, and adding an archived USDA food again restores it. The recipe editor's read names, per line,
+the food as it is now when a newer version exists; the coach takes it into the line ("Use its new
+numbers"), which changes the recipe only when saved, and the amount is kept only in the same unit.
 
 **NUT-002** Recipe totals derive from ingredient lines under one calculation policy. The
 recipe records yield/servings and preparation instructions. A manual total cannot silently
@@ -561,6 +571,17 @@ reliable or legally safe data source. Imported data keeps provenance and require
 especially preparation basis and serving yield. A provider food without protein, fat or
 carbohydrate is refused; a missing fibre, polyol or ethanol value is stored as zero and named as
 unreported on that version, so it is never mistaken for a stated zero.
+USDA search (R4.4c) lists basic foods (Foundation, SR Legacy, Survey FNDDS) unless packaged products
+(Branded, US products) are asked for, each with its brand and stated nutrients per 100 g; a match
+without protein, fat or carbohydrate is left out, since importing it would be refused. A name USDA
+writes in capitals ("GREEK YOGURT") is put in sentence case, like its basic foods' names.
+`ProviderCarbohydrateRule` v1: USDA's "carbohydrate, by difference" (100 g less water, protein, fat
+and ash) can come out just below zero in a food with almost none, such as raw meat (FDC 2727569,
+chicken breast with skin: -0.428 g). Down to -0.5 g per 100 g it counts as 0 g, the same rounding EU
+labels (0.5 g/100 g or less may be declared 0 g) and US labels (under 0.5 g a serving, 21 CFR
+101.9(c)(6)) use, and the version keeps USDA's figure (`ReportedCarbohydrateGrams`, a database check
+allows it only beside a counted zero). Below -0.5 g the record does not add up: the import is refused
+and the search leaves it out.
 
 **NUT-004** AI-generated meals are drafts, never trusted nutrition facts. Output must match a
 schema, identify uncertain ingredients/units, pass domain validation, and be approved by the
@@ -570,6 +591,10 @@ Anthropic Claude Sonnet 5.5 is the optional configured adapter (ADR 0035); no cl
 included in the request. Per-tenant monthly limits reserve a conservative USD cost before calling
 the provider. Known costs, including failed/invalid output, replace reservations; an ambiguous
 timeout retains its reservation. No automatic provider retry or automatic recipe approval occurs.
+TB Gym pays the provider, so since R4.4c it sets a ceiling on every workspace's monthly allowance
+(`Nutrition:AiAllowance`, zero until set). The owner, the only one who changes nutrition settings,
+sets an allowance up to it; raising one above it is refused, keeping or lowering one saved before a
+lower ceiling is not, and generation counts only up to the ceiling.
 Since R4.4b the suggestion starts the recipe editor: the coach chooses a food for each suggested
 ingredient, and may drop one or add others, as when matching any imported recipe. Approval saves
 the lines the coach chose (at least one), each a food version of the workspace; the operation keeps
@@ -1554,8 +1579,10 @@ staff read one; a client never does, even for a recipe in their plan. A recipe v
 photo its saver uploaded, or one an earlier version of that recipe already has, so a second coach's
 edit keeps the photo; nothing else, and never another workspace's upload (composite key). The
 photo belongs to the version, so a published version keeps the photo it was published with. The
-coach library neither lists nor deletes recipe photos. Uploads no version names stay until a
-retention decision (plan follow-up).
+coach library neither lists nor deletes recipe photos. Uploads no version names stay, counted in
+the allowance, until R4.4d builds the retention decided on 2026-10-07: an upload no version names is
+tombstoned 48 hours after it was uploaded (Discourse's default grace for orphan uploads). R4.4d also
+lets a client read the photo of a recipe in their own assigned plan's snapshot, and nothing else.
 
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and

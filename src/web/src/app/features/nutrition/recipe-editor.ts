@@ -58,6 +58,7 @@ import {
   recipeAllergens,
   type RecipeDraft,
   type RecipeFood,
+  useNewerFood,
   type RecipeProblem,
   recipeProblem,
   recipeTotal,
@@ -186,6 +187,10 @@ export class RecipeEditor implements HoldsUnsavedWork {
   protected readonly allergens = computed(() => allergenText(recipeAllergens(this.draft().lines)));
   protected readonly unmatched = computed(
     () => this.draft().lines.filter((line) => !line.food).length,
+  );
+  /** Lines whose food was edited since the recipe was saved (R4.4c). */
+  protected readonly newerCount = computed(
+    () => this.draft().lines.filter((line) => line.newer).length,
   );
   protected readonly pageTitle = computed(
     () => this.draft().name.trim() || (this.isNew() ? $localize`New recipe` : $localize`Recipe`),
@@ -357,6 +362,29 @@ export class RecipeEditor implements HoldsUnsavedWork {
       ),
     });
     this.announced.set($localize`${food.name}:food: chosen.`);
+  }
+
+  /** Takes the food's numbers as they are now into one line, or every line offered them. */
+  protected useNewer(line: EditorLine | null): void {
+    const offered = this.draft().lines.filter(
+      (item) => item.newer && (!line || item.key === line.key),
+    );
+    if (!offered.length) return;
+    this.change({
+      lines: this.draft().lines.map((item) => (offered.includes(item) ? useNewerFood(item) : item)),
+    });
+    const said =
+      offered.length === 1
+        ? $localize`${offered[0].newer?.name ?? ''}:food: now has its new numbers.`
+        : $localize`${offered.length}:count: foods now have their new numbers.`;
+    const retype = offered.some((item) => item.food?.unit !== item.newer?.unit)
+      ? $localize`A food is now measured in another unit, so type its amount again.`
+      : '';
+    this.announced.set(retype ? `${said} ${retype}` : said);
+  }
+
+  protected newerText(line: EditorLine): string {
+    return $localize`${line.newer?.name ?? ''}:food: was edited since this recipe was saved.`;
   }
 
   protected quantityTyped(line: EditorLine, value: string): void {

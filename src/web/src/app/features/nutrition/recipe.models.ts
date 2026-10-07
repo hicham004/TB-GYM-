@@ -63,6 +63,8 @@ export interface EditorLine {
   /** A saved line's cooking factors, sent back unchanged. */
   yieldFactorId: string | null;
   retentionFactorId: string | null;
+  /** The food as it is now, when it was edited since this line copied it (R4.4c). */
+  newer?: RecipeFood | null;
 }
 
 export interface RecipeDraft {
@@ -127,7 +129,27 @@ export function draftFromDetail(detail: RecipeDetail): RecipeDraft {
       suggestion: null,
       yieldFactorId: line.yieldFactorId,
       retentionFactorId: line.retentionFactorId,
+      // A line through cooking factors is worked out by the server alone, so it is not offered.
+      newer:
+        line.newerFood && !line.yieldFactorId && !line.retentionFactorId
+          ? foodFromView(line.newerFood)
+          : null,
     })),
+  };
+}
+
+/**
+ * The line with its food's newer numbers. The amount stays when the food is still measured in the
+ * same unit; otherwise the coach types it again, since no unit is converted.
+ */
+export function useNewerFood(line: EditorLine): EditorLine {
+  const newer = line.newer;
+  if (!newer) return line;
+  return {
+    ...line,
+    food: newer,
+    quantity: line.food?.unit === newer.unit ? line.quantity : null,
+    newer: null,
   };
 }
 

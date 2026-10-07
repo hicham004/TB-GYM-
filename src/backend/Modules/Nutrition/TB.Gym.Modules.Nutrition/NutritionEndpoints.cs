@@ -24,12 +24,15 @@ public static class NutritionEndpoints
         {
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.UpdateSettingsAsync(request, token));
-        }).WithName("UpdateNutritionSettings").Produces<NutritionWorkspaceSettingsView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status409Conflict);
+        }).WithName("UpdateNutritionSettings").Produces<NutritionWorkspaceSettingsView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status409Conflict)
+            // Workspace-wide calculation defaults and the AI allowance are a Settings page (R4.4c).
+            .RequireAuthorization(AuthorizationPolicies.TenantOwner);
 
-        coach.MapGet("/foods", async (string? query, int? skip, int? take, INutritionApplicationService service, CancellationToken token) =>
+        // The workspace's foods, or with archived=true only those archived (R4.4c).
+        coach.MapGet("/foods", async (string? query, bool? archived, int? skip, int? take, INutritionApplicationService service, CancellationToken token) =>
         {
             var page = Page(skip, take);
-            return Results.Ok(await service.ListFoodsAsync(query, page.Skip, page.Take, token));
+            return Results.Ok(await service.ListFoodsAsync(query, archived ?? false, page.Skip, page.Take, token));
         }).WithName("ListFoodItems").Produces<FoodItemPage>();
         coach.MapPost("/foods", async (CreateFoodItemRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
@@ -41,10 +44,15 @@ public static class NutritionEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.AddFoodVersionAsync(foodItemId, request, token));
         }).WithName("AddFoodItemVersion").Produces<FoodItemView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status409Conflict);
-        coach.MapGet("/providers/usda/search", async (string query, int? skip, int? take, INutritionApplicationService service, CancellationToken token) =>
+        coach.MapPut("/foods/{foodItemId:guid}/archive", async (Guid foodItemId, SetFoodArchivedRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.SetFoodArchivedAsync(foodItemId, request, token));
+        }).WithName("SetFoodItemArchived").Produces<FoodItemView>().ProducesProblem(StatusCodes.Status409Conflict).Produces(StatusCodes.Status404NotFound);
+        coach.MapGet("/providers/usda/search", async (string query, FoodSearchKind? kind, int? skip, int? take, INutritionApplicationService service, CancellationToken token) =>
         {
             var page = Page(skip, take);
-            return Results.Ok(await service.SearchUsdaAsync(query, page.Skip, page.Take, token));
+            return Results.Ok(await service.SearchUsdaAsync(query, kind ?? FoodSearchKind.Basic, page.Skip, page.Take, token));
         }).WithName("SearchUsdaFoodDataCentral").Produces<ProviderFoodSearchPage>();
         coach.MapPost("/providers/usda/import", async (ImportUsdaFoodRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {

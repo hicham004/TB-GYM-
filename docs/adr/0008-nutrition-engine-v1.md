@@ -32,8 +32,11 @@ data type, retrieval/source version, and provider calories. A record missing pro
 carbohydrate is rejected. Amended 2026-09-27: USDA almost never reports polyols and often omits
 fibre and ethanol, which made nearly every import fail, so a missing one of those three is stored
 as zero and the version records it in `UnreportedNutrients`; the screen says "not reported by
-USDA" and a database check keeps each named nutrient at zero. The API key is server configuration
-only.
+USDA" and a database check keeps each named nutrient at zero. Amended 2026-10-07 (R4.4c): USDA's
+carbohydrate by difference just below zero (down to -0.5 g per 100 g, measurement error in foods
+with almost none) counts as 0 g, as EU and US labels round it, and the version keeps USDA's figure;
+anything lower is refused (NUT-003). A food is archived rather than deleted, because recipes and
+snapshots name its versions (NUT-001). The API key is server configuration only.
 
 Coach-authored and label-transcribed foods are first-class provenance types. Labels require a
 media reference. No invented Lebanese-food seed values are included. Edamam, Nutritionix, and
