@@ -142,6 +142,9 @@ public sealed partial class GymDbContext
             // workspace with the asset, so no version can point at another workspace's upload.
             entity.HasOne<MediaAsset>().WithMany().HasForeignKey(item => new { item.TenantId, item.PhotoMediaAssetId }).HasPrincipalKey(asset => new { asset.TenantId, asset.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint("CK_RecipeVersions_Macros", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0"));
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_RecipeVersions_Minutes",
+                $"(\"PrepMinutes\" IS NULL OR \"PrepMinutes\" BETWEEN 0 AND {RecipeVersion.MaximumMinutes}) AND (\"CookMinutes\" IS NULL OR \"CookMinutes\" BETWEEN 0 AND {RecipeVersion.MaximumMinutes})"));
             ConfigureTenantEntity(entity);
         });
 
@@ -329,6 +332,7 @@ public sealed partial class GymDbContext
             entity.HasOne<MealPlanTemplateVersion>().WithMany().HasForeignKey(item => new { item.TenantId, item.SourceMealPlanTemplateVersionId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<NutritionCalculationSnapshot>().WithMany().HasForeignKey(item => new { item.TenantId, item.NutritionCalculationSnapshotId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(item => item.Days).WithOne().HasForeignKey(item => new { item.TenantId, item.ClientNutritionPlanId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(item => item.Recipes).WithOne().HasForeignKey(item => new { item.TenantId, item.ClientNutritionPlanId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint("CK_ClientNutritionPlans_Period", "\"EndDateExclusive\" > \"StartDate\"");
@@ -381,6 +385,38 @@ public sealed partial class GymDbContext
             entity.Property(item => item.Calories).HasPrecision(18, 6);
             entity.HasOne<RecipeVersion>().WithMany().HasForeignKey(item => new { item.TenantId, item.SourceRecipeVersionId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint("CK_ClientNutritionPlanChoices_NonNegative", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0"));
+            ConfigureTenantEntity(entity);
+        });
+
+        // The client's copy of each recipe a plan names (NUT-006, R4.4d), one per recipe version.
+        builder.Entity<ClientNutritionPlanRecipe>(entity =>
+        {
+            entity.ToTable("ClientNutritionPlanRecipes", "nutrition");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(300).IsRequired();
+            entity.Property(item => item.Instructions).HasMaxLength(20_000).IsRequired();
+            entity.Property(item => item.Servings).HasPrecision(12, 4);
+            entity.HasIndex(item => new { item.TenantId, item.ClientNutritionPlanId, item.SourceRecipeVersionId }).IsUnique();
+            entity.HasIndex(item => new { item.TenantId, item.PhotoMediaAssetId });
+            entity.HasOne<RecipeVersion>().WithMany().HasForeignKey(item => new { item.TenantId, item.SourceRecipeVersionId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<MediaAsset>().WithMany().HasForeignKey(item => new { item.TenantId, item.PhotoMediaAssetId }).HasPrincipalKey(asset => new { asset.TenantId, asset.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(item => item.Ingredients).WithOne().HasForeignKey(item => new { item.TenantId, item.ClientNutritionPlanRecipeId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_ClientNutritionPlanRecipes_Values",
+                $"\"Servings\" > 0 AND (\"PrepMinutes\" IS NULL OR \"PrepMinutes\" BETWEEN 0 AND {RecipeVersion.MaximumMinutes}) AND (\"CookMinutes\" IS NULL OR \"CookMinutes\" BETWEEN 0 AND {RecipeVersion.MaximumMinutes})"));
+            ConfigureTenantEntity(entity);
+        });
+
+        builder.Entity<ClientNutritionPlanRecipeIngredient>(entity =>
+        {
+            entity.ToTable("ClientNutritionPlanRecipeIngredients", "nutrition");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.FoodName).HasMaxLength(300).IsRequired();
+            entity.Property(item => item.Unit).HasConversion<string>().HasMaxLength(20);
+            entity.Property(item => item.Basis).HasConversion<string>().HasMaxLength(20);
+            entity.Property(item => item.Quantity).HasPrecision(18, 6);
+            entity.HasIndex(item => new { item.TenantId, item.ClientNutritionPlanRecipeId, item.Order }).IsUnique();
+            entity.ToTable(table => table.HasCheckConstraint("CK_ClientNutritionPlanRecipeIngredients_Quantity", "\"Quantity\" > 0"));
             ConfigureTenantEntity(entity);
         });
 

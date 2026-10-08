@@ -31,12 +31,13 @@ internal sealed partial class DemoWorkspaceGenerator
         }
 
         // Each recipe is saved and published in one step, as the recipe editor does (R4.4b).
-        async Task<Guid> RecipeAsync(string name, string method, bool publish, params (string Key, decimal Grams)[] ingredients)
+        async Task<Guid> RecipeAsync(string name, string method, bool publish, (int Prep, int Cook) minutes, params (string Key, decimal Grams)[] ingredients)
         {
             var lines = ingredients.Select(item => new RecipeIngredientRequest(
                 versions[item.Key].Id, item.Grams, FoodQuantityUnit.Gram, versions[item.Key].Basis)).ToArray();
             var created = await As<INutritionApplicationService, NutritionCommandResult>(OwnerActor,
-                (service, token) => service.CreateRecipeAsync(new CreateRecipeRequest(name, method, 1m, lines, Publish: publish), token));
+                (service, token) => service.CreateRecipeAsync(new CreateRecipeRequest(
+                    name, method, 1m, lines, Publish: publish, PrepMinutes: minutes.Prep, CookMinutes: minutes.Cook), token));
             return Require(created.Recipe, created.Status == NutritionCommandStatus.Success, $"demo recipe {name}", created).VersionId;
         }
 
@@ -44,32 +45,38 @@ internal sealed partial class DemoWorkspaceGenerator
             "Yogurt, oats & banana",
             "Spoon the yogurt into a bowl, stir in the oats and leave them five minutes to soften. Slice the banana on top.",
             true,
+            (5, 0),
             ("yogurt", 250m), ("oats", 60m), ("banana", 100m));
         var lunch = await RecipeAsync(
             "Grilled chicken & rice",
             "Season the chicken with salt, pepper and lemon, grill it four to five minutes a side and let it rest. Slice it over the warm rice.",
             true,
+            (10, 15),
             ("chicken", 170m), ("rice", 220m));
         var snack = await RecipeAsync(
             "Yogurt & banana",
             "Slice the banana into the yogurt. Eat it within the hour, or the banana browns.",
             true,
+            (3, 0),
             ("yogurt", 200m), ("banana", 120m));
         var alternative = await RecipeAsync(
             "Egg & rice bowl",
             "Peel and halve the eggs and lay them over the warm rice. A pinch of salt and chilli flakes finishes it.",
             true,
+            (5, 12),
             ("egg", 160m), ("rice", 180m));
         // Two more for the recipe library, not in the plan: one ready, one still a draft.
         await RecipeAsync(
             "Chicken shawarma bowl",
             "Toss the sliced chicken with shawarma spices and sear it hot. Serve it on the rice with a spoon of yogurt thinned with lemon.",
             true,
+            (15, 10),
             ("chicken", 180m), ("rice", 200m), ("yogurt", 60m));
         await RecipeAsync(
             "Banana oat pancakes",
             "Mash the banana, beat in the eggs and the oats, and cook small pancakes in a dry non-stick pan, two minutes a side.",
             false,
+            (5, 10),
             ("banana", 120m), ("egg", 100m), ("oats", 50m));
         const int dayCount = 7;
         var slots = Enumerable.Range(0, dayCount).SelectMany(day => new[]

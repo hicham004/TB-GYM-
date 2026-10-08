@@ -6,6 +6,7 @@ import {
   guardedConfig,
   ModalData,
   modalDirection,
+  modalPaneClasses,
   ModalOptions,
   ModalSurface,
 } from './modal-surface';
@@ -40,7 +41,7 @@ export class UiDialog {
       restoreFocus: true,
       hasBackdrop: true,
       backdropClass: 'tb-modal-backdrop',
-      panelClass: ['tb-modal-pane', 'tb-modal-pane--dialog'],
+      panelClass: modalPaneClasses('dialog', options),
       direction: modalDirection(this.document, options.direction),
       width: 'min(28rem, calc(100vw - 2rem))',
       maxHeight: 'calc(100dvh - 2rem)',

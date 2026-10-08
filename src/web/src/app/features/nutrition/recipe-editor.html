@@ -321,6 +321,48 @@
 
           <section class="card" aria-labelledby="method-title">
             <h2 id="method-title" class="card-title" i18n>Method</h2>
+            <div class="times">
+              <app-field
+                label="Prep time (min)"
+                i18n-label
+                density="compact"
+                [errors]="errorsFor('prep')"
+              >
+                <input
+                  appControl
+                  id="recipe-prep"
+                  name="prepMinutes"
+                  autocomplete="off"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  [max]="maxMinutes"
+                  step="1"
+                  [value]="current.prepMinutes ?? ''"
+                  (input)="minutesTyped('prepMinutes', $any($event.target).value)"
+                />
+              </app-field>
+              <app-field
+                label="Cook time (min)"
+                i18n-label
+                density="compact"
+                [errors]="errorsFor('cook')"
+              >
+                <input
+                  appControl
+                  id="recipe-cook"
+                  name="cookMinutes"
+                  autocomplete="off"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  [max]="maxMinutes"
+                  step="1"
+                  [value]="current.cookMinutes ?? ''"
+                  (input)="minutesTyped('cookMinutes', $any($event.target).value)"
+                />
+              </app-field>
+            </div>
             <app-field
               label="How to make it"
               i18n-label
@@ -333,7 +375,7 @@
                 rows="6"
                 [maxlength]="maxInstructions"
                 dir="auto"
-                placeholder="1. Cook the rice. 2. Grill the chicken…"
+                placeholder="Cook the rice.&#10;Grill the chicken…"
                 i18n-placeholder
                 [ngModel]="current.instructions"
                 (ngModelChange)="change({ instructions: $event })"

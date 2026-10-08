@@ -210,6 +210,11 @@ public static class NutritionEndpoints
             var day = await service.GetOwnDayAsync(localDate, token);
             return day is null ? Results.NotFound() : Results.Ok(day);
         }).WithName("GetOwnNutritionDay").Produces<ClientNutritionDayView>().Produces(StatusCodes.Status404NotFound);
+        client.MapGet("/recipes/{recipeId:guid}", async (Guid recipeId, INutritionApplicationService service, CancellationToken token) =>
+        {
+            var recipe = await service.GetOwnRecipeAsync(recipeId, token);
+            return recipe is null ? Results.NotFound() : Results.Ok(recipe);
+        }).WithName("GetOwnPlanRecipe").Produces<ClientPlanRecipeView>().Produces(StatusCodes.Status404NotFound);
         client.MapPut("/choices", async (RecordNutritionChoiceRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
             await antiforgery.ValidateRequestAsync(context);

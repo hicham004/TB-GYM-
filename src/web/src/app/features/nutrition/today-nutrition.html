@@ -158,8 +158,34 @@
               @if (displayChoice(slot); as choice) {
                 @let shownServings = slot.selectedChoiceId ? slot.actualServings : choice.servings;
                 <div class="meal-body">
-                  <strong>{{ choice.recipeName }}</strong>
-                  <span i18n
+                  @if (choice.recipeId) {
+                    @let photo = thumbnail(choice);
+                    <button
+                      type="button"
+                      class="recipe-open"
+                      [class.with-photo]="!!photo"
+                      (click)="showRecipe(choice)"
+                    >
+                      @if (photo) {
+                        <img
+                          class="meal-photo"
+                          [src]="photo"
+                          alt=""
+                          width="56"
+                          height="56"
+                          loading="lazy"
+                          (error)="dropThumbnail(choice)"
+                        />
+                      }
+                      <strong>{{ choice.recipeName }}</strong
+                      >&ngsp;<span class="recipe-cue"
+                        ><ng-container i18n>Recipe</ng-container><app-icon name="chevron-right"
+                      /></span>
+                    </button>
+                  } @else {
+                    <strong>{{ choice.recipeName }}</strong>
+                  }
+                  <span class="meal-amount" i18n
                     >{{ shownServings | number: '1.0-2' }} {{ servingUnit(shownServings) }} ·
                     {{ choice.calories | number: '1.0-0' }} kcal planned</span
                   >
@@ -187,6 +213,16 @@
                       }
                     </select>
                   </label>
+                  @if (draftChoice(slot, entry.choiceId)?.recipeId) {
+                    <button
+                      type="button"
+                      class="text-action recipe-inline"
+                      (click)="showRecipe(draftChoice(slot, entry.choiceId))"
+                      i18n
+                    >
+                      See the recipe
+                    </button>
+                  }
                   <label
                     ><span i18n>Actual servings</span>
                     <input
@@ -392,3 +428,9 @@
     <p class="safety-notice" role="note">{{ plan.safetyNotice }}</p>
   }
 </div>
+
+<ng-template #recipeSheet>
+  @if (openRecipe(); as open) {
+    <app-client-recipe [recipeId]="open.recipeId" [choice]="open.choice" />
+  }
+</ng-template>

@@ -31,6 +31,8 @@ function day(selectedA: string | null = null, servingsA: number | null = null): 
           {
             id: 'choice-a1',
             recipeName: 'A1',
+            recipeId: null,
+            photoId: null,
             servings: 1,
             calories: 300,
             protein: 20,
@@ -40,6 +42,8 @@ function day(selectedA: string | null = null, servingsA: number | null = null): 
           {
             id: 'choice-a2',
             recipeName: 'A2',
+            recipeId: null,
+            photoId: null,
             servings: 1,
             calories: 400,
             protein: 25,
@@ -58,6 +62,8 @@ function day(selectedA: string | null = null, servingsA: number | null = null): 
           {
             id: 'choice-b1',
             recipeName: 'B1',
+            recipeId: null,
+            photoId: null,
             servings: 1,
             calories: 500,
             protein: 35,

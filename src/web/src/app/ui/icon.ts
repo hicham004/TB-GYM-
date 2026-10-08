@@ -171,6 +171,13 @@ const GLYPHS = {
       'M8.25 7.1V12.9L13 10L8.25 7.1ZM17.25 10C17.25 14.004 14.004 17.25 10 17.25C5.996 17.25' +
       ' 2.75 14.004 2.75 10C2.75 5.996 5.996 2.75 10 2.75C14.004 2.75 17.25 5.996 17.25 10Z',
   },
+  // Printing a client's recipe (R4.4d): a printer, drawn in code on the 20px, 1.5px-stroke grid.
+  print: {
+    size: 20,
+    path:
+      'M6 7V3.5H14V7M5.5 14H4.5C3.948 14 3.5 13.552 3.5 13V8C3.5 7.448 3.948 7 4.5 7H15.5' +
+      'C16.052 7 16.5 7.448 16.5 8V13C16.5 13.552 16.052 14 15.5 14H14.5M6 11.5H14V16.5H6V11.5Z',
+  },
 } as const satisfies Record<string, { size: number; path: string }>;
 
 export type IconName = keyof typeof GLYPHS;

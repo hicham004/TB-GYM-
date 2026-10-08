@@ -24,6 +24,30 @@ const user = {
 const decisions = ['Training', 'Nutrition', 'CheckIns', 'Messaging', 'ResourceLibrary'].map(
   (feature) => ({ feature, isAllowed: true, reason: 'Granted' }),
 );
+/** A 4×3 image, standing in for a coach's recipe photo. */
+const PHOTO = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGM4siAPjhhwcgCuMhXZQnoZuwAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+/** The client's copy of the lunch recipe (R4.4d). */
+const chickenRecipe = {
+  id: 'recipe-chicken',
+  name: 'Chicken, rice & greens',
+  servings: 2,
+  prepMinutes: 15,
+  cookMinutes: 20,
+  instructions: ['Season and grill the chicken.', 'Cook the rice.', 'Serve over the greens.'].join(
+    '\n',
+  ),
+  photoMediaAssetId: 'photo-chicken',
+  ingredients: [
+    { foodName: 'Chicken breast', quantity: 300, unit: 'Gram', basis: 'Raw' },
+    { foodName: 'Basmati rice', quantity: 160, unit: 'Gram', basis: 'Raw' },
+    { foodName: 'Spinach', quantity: 2, unit: 'Serving', basis: 'AsSold' },
+  ],
+};
+
 const slots = [
   {
     id: 'breakfast',
@@ -62,6 +86,8 @@ const slots = [
       {
         id: 'chicken',
         recipeName: 'Chicken, rice & greens',
+        recipeId: 'recipe-chicken',
+        recipePhotoMediaAssetId: 'photo-chicken',
         servings: 1,
         calories: 680,
         proteinGrams: 50,
@@ -142,6 +168,37 @@ async function openNutrition(page: Page, width: number, height: number) {
         state.dailyLogVersion++;
         return json(route, 200, state);
       },
+      'GET /api/nutrition/me/recipes/recipe-chicken': (route: Route) =>
+        json(route, 200, chickenRecipe),
+      'POST /api/media/photo-chicken/access': (route: Route) =>
+        json(route, 200, {
+          assetId: 'photo-chicken',
+          kind: 'Image',
+          source: 'Upload',
+          contentType: 'image/png',
+          url: '/api/media/photo-chicken/content?grant=e2e',
+          expiresAtUtc: '2030-01-01T00:00:00Z',
+          downloadAllowed: false,
+          thumbnailUrl: null,
+        }),
+      // The day asks for its meal cards' photos in one batch (R4.4d).
+      'POST /api/media/access': (route: Route) =>
+        json(route, 200, {
+          items: [
+            {
+              assetId: 'photo-chicken',
+              kind: 'Image',
+              source: 'Upload',
+              contentType: 'image/png',
+              url: '/api/media/photo-chicken/content?grant=e2e',
+              expiresAtUtc: '2030-01-01T00:00:00Z',
+              downloadAllowed: false,
+              thumbnailUrl: null,
+            },
+          ],
+        }),
+      'GET /api/media/photo-chicken/content': (route: Route) =>
+        route.fulfill({ status: 200, contentType: 'image/png', body: PHOTO }),
       'POST /api/nutrition/me/custom-foods/extra-1/reverse': (route: Route) => {
         state.selectedCalories -= state.customFoods[0].calories;
         state.customFoods.splice(0, 1);
@@ -195,6 +252,77 @@ test('Nutrition day at 1440px reflows at 200% text', async ({ page }) => {
   await axe(page);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.screenshot({ path: '../../docs/design/r24-nutrition-1440.png', fullPage: true });
+  // The day follows the person's mode since R4.4d, so it passes in dark as well.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await axe(page);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '200%';
+  });
+  await expectNoHorizontalOverflow(page);
+});
+
+test('A meal’s recipe opens in a sheet at 390px, in light and dark, and reflows at 200% text', async ({
+  page,
+}) => {
+  await openNutrition(page, 390, 844);
+  await expect(page.getByRole('button', { name: 'Overnight oats & berries Recipe' })).toHaveCount(
+    0,
+  );
+  // The lunch card leads with its recipe's photo; a meal without one shows none.
+  const cardPhoto = page.locator('.meal-card img.meal-photo');
+  await expect(cardPhoto).toHaveCount(1);
+  await expect
+    .poll(() => cardPhoto.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBe(4);
+  await page.getByRole('button', { name: 'Chicken, rice & greens Recipe' }).click();
+
+  const sheet = page.getByRole('dialog', { name: 'Chicken, rice & greens' });
+  await expect(sheet.locator('.facts li')).toHaveText([
+    'Prep 15 min',
+    'Cook 20 min',
+    'Makes 2 servings',
+  ]);
+  await expect(sheet.getByText('Your plan: 1 serving · 680 kcal')).toBeVisible();
+  // The client's 1 serving of a recipe that makes 2 first, the whole recipe a tap away.
+  await expect(sheet.locator('.note')).toHaveText(
+    'For your 1 serving. The method is for the whole recipe.',
+  );
+  await expect(sheet.locator('.ingredients li')).toHaveText([
+    'Chicken breast 150 g raw',
+    'Basmati rice 80 g raw',
+    'Spinach 1 serving',
+  ]);
+  await sheet.getByRole('radio', { name: 'Whole recipe' }).click();
+  await expect(sheet.locator('.ingredients li')).toHaveText([
+    'Chicken breast 300 g raw',
+    'Basmati rice 160 g raw',
+    'Spinach 2 servings',
+  ]);
+  await expect(sheet.getByRole('radio', { name: 'Whole recipe' })).toBeChecked();
+  await expect(sheet.locator('.steps li')).toHaveText([
+    'Season and grill the chicken.',
+    'Cook the rice.',
+    'Serve over the greens.',
+  ]);
+  const photo = sheet.getByRole('img', { name: 'Chicken, rice & greens, as your coach made it' });
+  await expect(photo).toBeVisible();
+  expect(await photo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(4);
+
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await axe(page);
+
+  // On paper the sheet prints alone and light, without its own controls.
+  await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
+  await expect(page.locator('app-root')).toBeHidden();
+  await expect(sheet.getByRole('heading', { name: 'Chicken, rice & greens' })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: 'Print recipe' })).toBeHidden();
+  await expect(sheet.getByRole('button', { name: 'Close' })).toBeHidden();
+  await expect(sheet.locator('h2')).toHaveCSS('color', 'rgb(24, 45, 39)');
+  await page.emulateMedia({ media: 'screen', colorScheme: 'dark' });
+  await expect(sheet.getByRole('button', { name: 'Print recipe' })).toBeVisible();
+
   await page.evaluate(() => {
     document.documentElement.style.fontSize = '200%';
   });

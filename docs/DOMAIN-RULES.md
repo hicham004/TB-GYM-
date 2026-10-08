@@ -619,7 +619,15 @@ snapshot and its logs as history and releases the date range for a corrected pla
 
 **NUT-006** Assigning a diet from a library creates a client-specific versioned snapshot
 linked to the subscription, following the same template rule as training. Client logs and
-notes refer to the snapshot/choice that existed on that date.
+notes refer to the snapshot/choice that existed on that date. Since R4.4d the snapshot also holds the
+client's own copy of each recipe the plan names, once per recipe version: its name as the plan gives
+it, the method, servings, prep and cook time, cover photo and ingredient lines (food name, amount in
+the food's own unit, raw or cooked). The client reads only that copy, while the plan is active and
+their nutrition access lasts; a library edit, rename or new version never reaches it. Plans assigned
+before R4.4d were given the same copy by the migration, since recipe versions never change. The client's
+sheet lists the amounts for their portion first: each amount × the portion's servings ÷ the servings the
+recipe makes, shown in whole grams or millilitres from 10, one decimal from 1 and two below. That is a
+reading aid only: the portion's calories and macros stay the plan's own numbers.
 
 **NUT-007** `plan.docx` uses **BMR** incorrectly for the 2,500-calorie value after applying
 activity/training intensity and as the basis for weight-loss calories. BMR is resting energy
@@ -1579,10 +1587,11 @@ staff read one; a client never does, even for a recipe in their plan. A recipe v
 photo its saver uploaded, or one an earlier version of that recipe already has, so a second coach's
 edit keeps the photo; nothing else, and never another workspace's upload (composite key). The
 photo belongs to the version, so a published version keeps the photo it was published with. The
-coach library neither lists nor deletes recipe photos. Uploads no version names stay, counted in
-the allowance, until R4.4d builds the retention decided on 2026-10-07: an upload no version names is
-tombstoned 48 hours after it was uploaded (Discourse's default grace for orphan uploads). R4.4d also
-lets a client read the photo of a recipe in their own assigned plan's snapshot, and nothing else.
+coach library neither lists nor deletes recipe photos. An upload no version names is tombstoned 48
+hours after it was uploaded (decided 2026-10-07, Discourse's default grace for orphan uploads, built in
+R4.4d) and purged on the same sweep; a save may name such an upload only until 47 hours after it, so the
+sweep never removes a photo a save is naming. A client reads a recipe photo only through their own copy
+of a recipe in an active plan of theirs (NUT-006), while their nutrition access lasts, and nothing else.
 
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and

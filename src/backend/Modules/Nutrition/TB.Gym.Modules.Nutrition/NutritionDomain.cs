@@ -508,10 +508,10 @@ public sealed class Recipe : TenantEntity
         NormalizedName = Name.ToUpperInvariant();
     }
 
-    public RecipeVersion AddDraft(string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredients, Guid? photoMediaAssetId = null)
+    public RecipeVersion AddDraft(string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredients, Guid? photoMediaAssetId = null, int? prepMinutes = null, int? cookMinutes = null)
     {
         // The revision moves only once the version is valid, so a refused save leaves it as it was.
-        var draft = RecipeVersion.Create(TenantId, Id, CurrentRevision + 1, instructions, servings, ingredients, photoMediaAssetId);
+        var draft = RecipeVersion.Create(TenantId, Id, CurrentRevision + 1, instructions, servings, ingredients, photoMediaAssetId, prepMinutes, cookMinutes);
         CurrentRevision = draft.Revision;
         versions.Add(draft);
         return draft;
@@ -542,7 +542,10 @@ public sealed class RecipeVersion : TenantEntity
     {
     }
 
-    private RecipeVersion(Guid tenantId, Guid recipeId, int revision, string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredientInputs, Guid? photoMediaAssetId)
+    /// <summary>A prep or cook time is whole minutes up to two days, so an overnight soak fits.</summary>
+    public const int MaximumMinutes = 2_880;
+
+    private RecipeVersion(Guid tenantId, Guid recipeId, int revision, string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredientInputs, Guid? photoMediaAssetId, int? prepMinutes, int? cookMinutes)
         : base(tenantId)
     {
         if (photoMediaAssetId == Guid.Empty)
@@ -552,6 +555,8 @@ public sealed class RecipeVersion : TenantEntity
 
         RecipeId = recipeId;
         PhotoMediaAssetId = photoMediaAssetId;
+        PrepMinutes = NutritionRules.OptionalMinutes(prepMinutes, MaximumMinutes, "Prep time");
+        CookMinutes = NutritionRules.OptionalMinutes(cookMinutes, MaximumMinutes, "Cook time");
         Revision = revision;
         Instructions = NutritionRules.RequiredText(instructions, 20_000, nameof(instructions));
         Servings = NutritionRules.Positive(servings, 10_000m, nameof(servings));
@@ -596,6 +601,12 @@ public sealed class RecipeVersion : TenantEntity
     /// </summary>
     public Guid? PhotoMediaAssetId { get; private set; }
 
+    /// <summary>Minutes of preparation, or null when the coach gave none; 0 is "none needed".</summary>
+    public int? PrepMinutes { get; private set; }
+
+    /// <summary>Minutes of cooking, or null when the coach gave none; 0 is "no cooking".</summary>
+    public int? CookMinutes { get; private set; }
+
     public decimal Servings { get; private set; }
 
     public decimal Calories { get; private set; }
@@ -622,8 +633,8 @@ public sealed class RecipeVersion : TenantEntity
         PublishedByUserId = userId;
     }
 
-    internal static RecipeVersion Create(Guid tenantId, Guid recipeId, int revision, string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredients, Guid? photoMediaAssetId = null) =>
-        new(tenantId, recipeId, revision, instructions, servings, ingredients, photoMediaAssetId);
+    internal static RecipeVersion Create(Guid tenantId, Guid recipeId, int revision, string instructions, decimal servings, IEnumerable<RecipeIngredientInput> ingredients, Guid? photoMediaAssetId = null, int? prepMinutes = null, int? cookMinutes = null) =>
+        new(tenantId, recipeId, revision, instructions, servings, ingredients, photoMediaAssetId, prepMinutes, cookMinutes);
 }
 
 public sealed class RecipeIngredient : TenantEntity
@@ -984,14 +995,28 @@ public sealed class MealPlanChoice : TenantEntity
 public sealed class ClientNutritionPlan : TenantEntity
 {
     private readonly List<ClientNutritionPlanDay> days = [];
+    private readonly List<ClientNutritionPlanRecipe> recipes = [];
 
     private ClientNutritionPlan()
     {
     }
 
-    private ClientNutritionPlan(Guid tenantId, Guid clientProfileId, Guid enrollmentId, Guid sourceVersionId, Guid calculationSnapshotId, DateOnly startDate, DateOnly endDateExclusive, IEnumerable<MealSlotInput> slots)
+    private ClientNutritionPlan(Guid tenantId, Guid clientProfileId, Guid enrollmentId, Guid sourceVersionId, Guid calculationSnapshotId, DateOnly startDate, DateOnly endDateExclusive, IReadOnlyList<MealSlotInput> slots, IReadOnlyList<PlanRecipeInput> recipeInputs)
         : base(tenantId)
     {
+        // The client reads their copy of each recipe the plan names (NUT-006), one per recipe version.
+        var named = slots.SelectMany(slot => slot.Choices).Select(choice => choice.RecipeVersionId).ToHashSet();
+        var copied = recipeInputs.Select(recipe => recipe.RecipeVersionId).ToArray();
+        if (copied.Length != copied.Distinct().Count() || !named.SetEquals(copied))
+        {
+            throw new ArgumentException("The plan must copy each recipe it names exactly once.", nameof(recipeInputs));
+        }
+
+        foreach (var recipe in recipeInputs)
+        {
+            recipes.Add(ClientNutritionPlanRecipe.Create(tenantId, Id, recipe));
+        }
+
         ClientProfileId = clientProfileId;
         EnrollmentId = enrollmentId;
         SourceMealPlanTemplateVersionId = sourceVersionId;
@@ -1025,7 +1050,10 @@ public sealed class ClientNutritionPlan : TenantEntity
     public bool BlocksOverlap { get; private set; }
     public IReadOnlyCollection<ClientNutritionPlanDay> Days => days;
 
-    public static ClientNutritionPlan Assign(Guid tenantId, Guid clientProfileId, Guid enrollmentId, Guid sourceVersionId, Guid calculationSnapshotId, DateOnly startDate, DateOnly endDateExclusive, IEnumerable<MealSlotInput> slots, NutritionCoverageAuthorization coverage)
+    /// <summary>The client's copy of each recipe the plan names, made when it was assigned (NUT-006).</summary>
+    public IReadOnlyCollection<ClientNutritionPlanRecipe> Recipes => recipes;
+
+    public static ClientNutritionPlan Assign(Guid tenantId, Guid clientProfileId, Guid enrollmentId, Guid sourceVersionId, Guid calculationSnapshotId, DateOnly startDate, DateOnly endDateExclusive, IEnumerable<MealSlotInput> slots, IEnumerable<PlanRecipeInput> recipes, NutritionCoverageAuthorization coverage)
     {
         var decision = NutritionCoveragePolicy.Evaluate(clientProfileId, startDate, endDateExclusive, coverage);
         if (!decision.IsAuthorized)
@@ -1033,7 +1061,7 @@ public sealed class ClientNutritionPlan : TenantEntity
             throw new InvalidOperationException(decision.Reason);
         }
 
-        return new ClientNutritionPlan(tenantId, clientProfileId, enrollmentId, sourceVersionId, calculationSnapshotId, startDate, endDateExclusive, slots);
+        return new ClientNutritionPlan(tenantId, clientProfileId, enrollmentId, sourceVersionId, calculationSnapshotId, startDate, endDateExclusive, slots.ToArray(), recipes.ToArray());
     }
 
     /// <summary>
@@ -1200,6 +1228,109 @@ public sealed class ClientNutritionPlanChoice : TenantEntity
     public decimal FatGrams { get; private set; }
 
     internal static ClientNutritionPlanChoice Create(Guid tenantId, Guid slotId, MealChoiceInput input) => new(tenantId, slotId, input);
+}
+
+/// <summary>A recipe version as a client's plan copies it: what the client reads, never the library's.</summary>
+public sealed record PlanRecipeInput(
+    Guid RecipeVersionId,
+    string Name,
+    string Instructions,
+    decimal Servings,
+    int? PrepMinutes,
+    int? CookMinutes,
+    Guid? PhotoMediaAssetId,
+    IReadOnlyList<PlanRecipeIngredientInput> Ingredients);
+
+/// <summary>An ingredient line as the client reads it: the food's name and the amount in its own unit.</summary>
+public sealed record PlanRecipeIngredientInput(string FoodName, decimal Quantity, FoodQuantityUnit Unit, PreparationBasis Basis);
+
+/// <summary>
+/// The client's copy of one recipe their plan names (NUT-006, R4.4d): its name as the plan gave it, the
+/// method, servings, prep and cook time, cover photo and ingredient lines. It is made when the plan is
+/// assigned and never changes, so a later edit, rename or new version in the library never reaches a
+/// plan a client already has.
+/// </summary>
+public sealed class ClientNutritionPlanRecipe : TenantEntity
+{
+    private readonly List<ClientNutritionPlanRecipeIngredient> ingredients = [];
+
+    private ClientNutritionPlanRecipe()
+    {
+    }
+
+    private ClientNutritionPlanRecipe(Guid tenantId, Guid planId, PlanRecipeInput input) : base(tenantId)
+    {
+        if (input.RecipeVersionId == Guid.Empty || input.PhotoMediaAssetId == Guid.Empty)
+        {
+            throw new ArgumentException("A recipe copy must name its recipe version and, when it has one, its photo.", nameof(input));
+        }
+
+        var lines = input.Ingredients.ToArray();
+        if (lines.Length is 0 or > 500)
+        {
+            throw new ArgumentException("A recipe copy holds 1 to 500 ingredient lines.", nameof(input));
+        }
+
+        ClientNutritionPlanId = planId;
+        SourceRecipeVersionId = input.RecipeVersionId;
+        Name = NutritionRules.RequiredText(input.Name, 300, nameof(input.Name));
+        Instructions = NutritionRules.RequiredText(input.Instructions, 20_000, nameof(input.Instructions));
+        Servings = NutritionRules.Positive(input.Servings, 10_000m, nameof(input.Servings));
+        PrepMinutes = NutritionRules.OptionalMinutes(input.PrepMinutes, RecipeVersion.MaximumMinutes, "Prep time");
+        CookMinutes = NutritionRules.OptionalMinutes(input.CookMinutes, RecipeVersion.MaximumMinutes, "Cook time");
+        PhotoMediaAssetId = input.PhotoMediaAssetId;
+        for (var index = 0; index < lines.Length; index++)
+        {
+            ingredients.Add(ClientNutritionPlanRecipeIngredient.Create(tenantId, Id, index, lines[index]));
+        }
+    }
+
+    public Guid ClientNutritionPlanId { get; private set; }
+    public Guid SourceRecipeVersionId { get; private set; }
+    public string Name { get; private set; } = string.Empty;
+    public string Instructions { get; private set; } = string.Empty;
+    public decimal Servings { get; private set; }
+    public int? PrepMinutes { get; private set; }
+    public int? CookMinutes { get; private set; }
+
+    /// <summary>The version's cover photo; the client may read it while this copy is in their plan (MED-014).</summary>
+    public Guid? PhotoMediaAssetId { get; private set; }
+
+    public IReadOnlyCollection<ClientNutritionPlanRecipeIngredient> Ingredients => ingredients;
+
+    internal static ClientNutritionPlanRecipe Create(Guid tenantId, Guid planId, PlanRecipeInput input) => new(tenantId, planId, input);
+}
+
+public sealed class ClientNutritionPlanRecipeIngredient : TenantEntity
+{
+    private ClientNutritionPlanRecipeIngredient()
+    {
+    }
+
+    private ClientNutritionPlanRecipeIngredient(Guid tenantId, Guid planRecipeId, int order, PlanRecipeIngredientInput input) : base(tenantId)
+    {
+        if (!Enum.IsDefined(input.Unit) || !Enum.IsDefined(input.Basis))
+        {
+            throw new ArgumentException("Ingredient unit and preparation basis are required.", nameof(input));
+        }
+
+        ClientNutritionPlanRecipeId = planRecipeId;
+        Order = order;
+        FoodName = NutritionRules.RequiredText(input.FoodName, 300, nameof(input.FoodName));
+        Quantity = NutritionRules.Positive(input.Quantity, 1_000_000m, nameof(input.Quantity));
+        Unit = input.Unit;
+        Basis = input.Basis;
+    }
+
+    public Guid ClientNutritionPlanRecipeId { get; private set; }
+    public int Order { get; private set; }
+    public string FoodName { get; private set; } = string.Empty;
+    public decimal Quantity { get; private set; }
+    public FoodQuantityUnit Unit { get; private set; }
+    public PreparationBasis Basis { get; private set; }
+
+    internal static ClientNutritionPlanRecipeIngredient Create(Guid tenantId, Guid planRecipeId, int order, PlanRecipeIngredientInput input) =>
+        new(tenantId, planRecipeId, order, input);
 }
 
 public sealed class DailyNutritionLog : TenantEntity
@@ -1563,4 +1694,7 @@ internal static class NutritionRules
 
     public static decimal Positive(decimal value, decimal maximum, string field) =>
         value is > 0m && value <= maximum ? value : throw new ArgumentOutOfRangeException(field, $"{field} must be positive and no more than {maximum}.");
+
+    public static int? OptionalMinutes(int? value, int maximum, string field) =>
+        value is null || (value >= 0 && value <= maximum) ? value : throw new ArgumentOutOfRangeException(field, $"{field} must be 0 to {maximum} minutes.");
 }

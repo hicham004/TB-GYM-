@@ -27,14 +27,21 @@ $serif: 'TB Home Serif', Georgia, 'Times New Roman', serif;
   @return url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%23#{$stroke}' stroke-opacity='#{$opacity}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
+// Light surfaces, text and lines, which paper uses too (see the print block below).
+$light-surface: #ffffff;
+$light-surface-2: #f3f1e7;
+$light-ink: #182d27;
+$light-muted: #4f6057;
+$light-line: #d9dfd1;
+
 @mixin light {
   color-scheme: light;
   --tb-bg: #fbfaf5;
-  --tb-surface: #ffffff;
-  --tb-surface-2: #f3f1e7;
-  --tb-ink: #182d27;
-  --tb-muted: #4f6057;
-  --tb-line: #d9dfd1;
+  --tb-surface: #{$light-surface};
+  --tb-surface-2: #{$light-surface-2};
+  --tb-ink: #{$light-ink};
+  --tb-muted: #{$light-muted};
+  --tb-line: #{$light-line};
   // Control borders: at least 3:1 on every surface (WCAG 1.4.11).
   --tb-line-strong: #7b8a81;
   // Accent as text, icons and focus rings on the page: the brand on light, the accent on dark.
@@ -232,5 +239,23 @@ $serif: 'TB Home Serif', Georgia, 'Times New Roman', serif;
 @media (prefers-color-scheme: dark) {
   [data-mode='system'] {
     @include dark;
+  }
+}
+
+// Paper is light whatever the screen shows: a dark page would print its light text on white paper,
+// since browsers leave page backgrounds off. Only what printed text and lines read is set again (the
+// whole light set would add its icons and aliases to every page load); the aliases declared on the
+// same element follow, since they resolve there.
+@media print {
+  [data-mode='dark'],
+  [data-mode='system'] {
+    color-scheme: light;
+    --tb-surface: #{$light-surface};
+    --tb-surface-2: #{$light-surface-2};
+    --tb-ink: #{$light-ink};
+    --tb-muted: #{$light-muted};
+    --tb-line: #{$light-line};
+    --tb-accent-ink: var(--tb-brand);
+    --tb-accent-soft: color-mix(in srgb, var(--tb-accent) 30%, transparent);
   }
 }

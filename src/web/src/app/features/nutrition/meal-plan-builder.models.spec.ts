@@ -7,6 +7,7 @@ import {
   OATS,
   planDetail,
   planSummary,
+  recipe,
   versionView,
 } from '../../../testing/meal-plan-fixtures';
 import {
@@ -29,6 +30,7 @@ import {
   type MealPlanModel,
   mealTotal,
   moveMeal,
+  newerRecipes,
   planCard,
   planFromDraft,
   planFromVersion,
@@ -41,6 +43,7 @@ import {
   shiftMeal,
   standing,
   toDraftContent,
+  useNewestVersion,
   versionRecipes,
   weeksOf,
 } from './meal-plan-builder.models';
@@ -421,5 +424,74 @@ describe('meal-plan builder models', () => {
       ]);
       expect(rows[1].openLabel).toBe('Open version 1');
     });
+  });
+});
+
+describe('a recipe published again since the plan took it (R4.4d)', () => {
+  const oatsV1 = planRecipe({ ...OATS, publishedVersionId: 'oats-v2' });
+  const oatsV2 = planRecipe(
+    recipe({ versionId: 'oats-v2', revision: 2, calories: 420, publishedVersionId: 'oats-v2' }),
+  );
+  const current = recipeBook([oatsV1, oatsV2, chicken, lentils]);
+
+  /** Day 1 offers the old oats beside the new ones; day 2 offers the old oats twice over. */
+  function mixed(): MealPlanModel {
+    const choice = (key: string, recipeVersionId: string, servings: number) => ({
+      key,
+      recipeVersionId,
+      servings,
+    });
+    return {
+      name: 'Lean bulk',
+      targets: { calories: 2000, protein: 150, carbs: 200, fat: 67 },
+      days: [
+        {
+          key: 'd1',
+          meals: [
+            {
+              key: 'm1',
+              name: 'Breakfast',
+              choices: [choice('c1', 'oats-v1', 1.5), choice('c2', 'oats-v2', 1)],
+            },
+          ],
+        },
+        {
+          key: 'd2',
+          meals: [
+            {
+              key: 'm2',
+              name: 'Breakfast',
+              choices: [choice('c3', 'chicken-v1', 1), choice('c4', 'oats-v1', 2)],
+            },
+            { key: 'm3', name: 'Snack', choices: [choice('c5', 'oats-v1', 0.5)] },
+          ],
+        },
+      ],
+    };
+  }
+
+  it('is offered once per recipe, from the version the plan holds to the newest published one', () => {
+    const updates = newerRecipes(mixed(), current);
+    expect(
+      updates.map((update) => [
+        update.recipeId,
+        update.current.map((item) => item.versionId),
+        update.newest.versionId,
+      ]),
+    ).toEqual([['recipe-oats', ['oats-v1'], 'oats-v2']]);
+    expect(newerRecipes(opened(), book)).toEqual([]);
+  });
+
+  it('moves each option to the newest version with its servings, and a meal offers it once', () => {
+    const plan = mixed();
+    const next = useNewestVersion(plan, newerRecipes(plan, current)[0]);
+    const options = next.days.map((day) =>
+      day.meals.map((meal) =>
+        meal.choices.map((item) => `${item.recipeVersionId}×${item.servings}`),
+      ),
+    );
+    expect(options).toEqual([[['oats-v2×1']], [['chicken-v1×1', 'oats-v2×2'], ['oats-v2×0.5']]]);
+    expect(newerRecipes(next, current)).toEqual([]);
+    expect(plan.days[1].meals[1].choices[0].recipeVersionId).toBe('oats-v1');
   });
 });

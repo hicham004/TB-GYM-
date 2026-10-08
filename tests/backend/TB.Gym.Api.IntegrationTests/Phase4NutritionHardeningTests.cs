@@ -586,7 +586,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         declaredAllergens = allergens,
     };
 
-    private static async Task<Enrollment> CreateFreeNutritionEnrollmentAsync(HttpClient coach, Guid clientId, int durationDays)
+    private static async Task<Enrollment> CreateFreeNutritionEnrollmentAsync(HttpClient coach, Guid clientId, int durationDays, string startDate = "2026-08-22")
     {
         await RefreshCsrfAsync(coach);
         var productResponse = await coach.PostAsJsonAsync("/api/commercial/products", new
@@ -609,7 +609,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         var enrollmentResponse = await coach.PostAsJsonAsync($"/api/commercial/clients/{clientId}/enrollments", new
         {
             offerId = product.Offers[0].Id,
-            startDate = "2026-08-22",
+            startDate,
             idempotencyKey = Guid.NewGuid(),
         });
         await AssertStatusAsync(enrollmentResponse, HttpStatusCode.OK);

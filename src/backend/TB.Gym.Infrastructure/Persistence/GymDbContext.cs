@@ -248,6 +248,10 @@ public sealed partial class GymDbContext(
 
     public DbSet<ClientNutritionPlanChoice> ClientNutritionPlanChoices => Set<ClientNutritionPlanChoice>();
 
+    public DbSet<ClientNutritionPlanRecipe> ClientNutritionPlanRecipes => Set<ClientNutritionPlanRecipe>();
+
+    public DbSet<ClientNutritionPlanRecipeIngredient> ClientNutritionPlanRecipeIngredients => Set<ClientNutritionPlanRecipeIngredient>();
+
     public DbSet<DailyNutritionLog> DailyNutritionLogs => Set<DailyNutritionLog>();
 
     public DbSet<DailyNutritionLogEntry> DailyNutritionLogEntries => Set<DailyNutritionLogEntry>();
@@ -937,6 +941,8 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<DailyNutritionCustomFood>("Custom food entries are append-only.");
         RejectAppendOnlyMutations<DailyNutritionCustomFoodReversal>("Custom food reversals are append-only.");
         RejectAppendOnlyMutations<AllergenConflictRecord>("Allergen conflict records are append-only.");
+        RejectAppendOnlyMutations<ClientNutritionPlanRecipe>("A client's recipe copy never changes (NUT-006).");
+        RejectAppendOnlyMutations<ClientNutritionPlanRecipeIngredient>("A client's recipe copy never changes (NUT-006).");
         RejectAppendOnlyMutations<BodyweightCorrection>("Bodyweight correction history is append-only.");
         RejectAppendOnlyMutations<BodyweightObservationVoid>("Bodyweight void history is append-only.");
         RejectAppendOnlyMutations<BodyMeasurementCorrection>("Body measurement correction history is append-only.");

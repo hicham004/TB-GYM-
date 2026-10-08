@@ -88,6 +88,10 @@ export interface ClientNutritionPlan {
 export interface NutritionChoice {
   id: string;
   recipeName: string;
+  /** The client's copy of the recipe, which their day opens (R4.4d); null when there is none. */
+  recipeId: string | null;
+  /** That copy's cover photo, shown on the meal card once granted; null when it has none. */
+  photoId: string | null;
   servings: number;
   calories: number;
   protein: number;
@@ -223,6 +227,8 @@ export function mapNutritionDay(value: ContractClientNutritionDayView): Nutritio
       choices: slot.choices.map((choice) => ({
         id: choice.id,
         recipeName: choice.recipeName,
+        recipeId: choice.recipeId ?? null,
+        photoId: choice.recipePhotoMediaAssetId ?? null,
         servings: numeric(choice.servings),
         calories: numeric(choice.calories),
         protein: numeric(choice.proteinGrams),

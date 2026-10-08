@@ -5377,6 +5377,150 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("ClientNutritionPlanDays", "nutrition");
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Nutrition.ClientNutritionPlanRecipe", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientNutritionPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("CookMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Instructions")
+                        .IsRequired()
+                        .HasMaxLength(20000)
+                        .HasColumnType("character varying(20000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid?>("PhotoMediaAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("PrepMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Servings")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<Guid>("SourceRecipeVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PhotoMediaAssetId");
+
+                    b.HasIndex("TenantId", "SourceRecipeVersionId");
+
+                    b.HasIndex("TenantId", "ClientNutritionPlanId", "SourceRecipeVersionId")
+                        .IsUnique();
+
+                    b.ToTable("ClientNutritionPlanRecipes", "nutrition", t =>
+                        {
+                            t.HasCheckConstraint("CK_ClientNutritionPlanRecipes_Values", "\"Servings\" > 0 AND (\"PrepMinutes\" IS NULL OR \"PrepMinutes\" BETWEEN 0 AND 2880) AND (\"CookMinutes\" IS NULL OR \"CookMinutes\" BETWEEN 0 AND 2880)");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Nutrition.ClientNutritionPlanRecipeIngredient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("ClientNutritionPlanRecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FoodName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "ClientNutritionPlanRecipeId", "Order")
+                        .IsUnique();
+
+                    b.ToTable("ClientNutritionPlanRecipeIngredients", "nutrition", t =>
+                        {
+                            t.HasCheckConstraint("CK_ClientNutritionPlanRecipeIngredients_Quantity", "\"Quantity\" > 0");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.ClientNutritionPlanSlot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6896,6 +7040,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
 
+                    b.Property<int?>("CookMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -6915,6 +7062,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("PhotoMediaAssetId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("PrepMinutes")
+                        .HasColumnType("integer");
 
                     b.Property<decimal>("ProteinGrams")
                         .HasPrecision(18, 6)
@@ -6968,6 +7118,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("RecipeVersions", "nutrition", t =>
                         {
                             t.HasCheckConstraint("CK_RecipeVersions_Macros", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0");
+
+                            t.HasCheckConstraint("CK_RecipeVersions_Minutes", "(\"PrepMinutes\" IS NULL OR \"PrepMinutes\" BETWEEN 0 AND 2880) AND (\"CookMinutes\" IS NULL OR \"CookMinutes\" BETWEEN 0 AND 2880)");
                         });
                 });
 
@@ -12096,6 +12248,39 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Nutrition.ClientNutritionPlanRecipe", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Nutrition.ClientNutritionPlan", null)
+                        .WithMany("Recipes")
+                        .HasForeignKey("TenantId", "ClientNutritionPlanId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Media.MediaAsset", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PhotoMediaAssetId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Nutrition.RecipeVersion", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SourceRecipeVersionId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Nutrition.ClientNutritionPlanRecipeIngredient", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Nutrition.ClientNutritionPlanRecipe", null)
+                        .WithMany("Ingredients")
+                        .HasForeignKey("TenantId", "ClientNutritionPlanRecipeId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.ClientNutritionPlanSlot", b =>
                 {
                     b.HasOne("TB.Gym.Modules.Nutrition.ClientNutritionPlanDay", null)
@@ -13160,11 +13345,18 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.ClientNutritionPlan", b =>
                 {
                     b.Navigation("Days");
+
+                    b.Navigation("Recipes");
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.ClientNutritionPlanDay", b =>
                 {
                     b.Navigation("Slots");
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Nutrition.ClientNutritionPlanRecipe", b =>
+                {
+                    b.Navigation("Ingredients");
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.ClientNutritionPlanSlot", b =>

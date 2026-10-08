@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Media;
+using TB.Gym.Modules.Nutrition;
 using TB.Gym.Modules.Progress;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
@@ -906,9 +907,11 @@ internal sealed class MediaApplicationService(
         var role = await ActiveMembershipRoleAsync(userId, cancellationToken);
         if (purpose == MediaPurpose.RecipePhoto)
         {
-            // Recipe photos belong to the staff's shared recipe library (MED-014, LIB-001); a client
-            // never reaches one, even while a recipe is in their plan.
-            return role is TenantRole.Owner or TenantRole.Coach;
+            // Recipe photos belong to the staff's shared recipe library (MED-014, LIB-001). A client
+            // reads one only through their own copy of a recipe in an active plan of theirs (R4.4d),
+            // and only while their nutrition access lasts, exactly as they read that recipe.
+            return role is TenantRole.Owner or TenantRole.Coach ||
+                   (role == TenantRole.Client && await IsOwnPlanRecipePhotoAsync(assetId, userId, cancellationToken));
         }
 
         if (purpose == MediaPurpose.WorkspaceLogo)
@@ -1324,6 +1327,40 @@ internal sealed class MediaApplicationService(
         "image/png" => ".png",
         _ => ".jpg",
     };
+
+    /// <summary>
+    /// Whether the caller's current client profile has this photo on its own copy of a recipe in an
+    /// active plan (NUT-006, MED-014), with nutrition access allowed now. A released client has no
+    /// current profile, so they never reach one.
+    /// </summary>
+    private async Task<bool> IsOwnPlanRecipePhotoAsync(
+        Guid assetId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var client = await dbContext.ClientProfiles.AsNoTracking()
+            .CurrentFor(userId)
+            .Select(item => new { item.Id })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (client is null)
+        {
+            return false;
+        }
+
+        var inOwnPlan = await (
+            from copy in dbContext.ClientNutritionPlanRecipes.AsNoTracking()
+            join plan in dbContext.ClientNutritionPlans.AsNoTracking()
+                on new { copy.TenantId, Id = copy.ClientNutritionPlanId } equals new { plan.TenantId, plan.Id }
+            where copy.PhotoMediaAssetId == assetId &&
+                  plan.ClientProfileId == client.Id &&
+                  plan.Status == ClientNutritionPlanStatus.Active
+            select copy.Id).AnyAsync(cancellationToken);
+        return inOwnPlan && (await featureAccessService.EvaluateAsync(
+            tenantContext.TenantId,
+            client.Id,
+            CoachingFeature.Nutrition,
+            cancellationToken)).IsAllowed;
+    }
 
     /// <summary>
     /// A progress photo is readable by the client it depicts, and by an Owner/Coach of the same

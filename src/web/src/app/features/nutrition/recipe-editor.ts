@@ -52,6 +52,7 @@ import {
   linesFromSuggestion,
   matchLine,
   MAX_INSTRUCTIONS,
+  MAX_MINUTES,
   MAX_RECIPE_NAME,
   perServing,
   readSuggestion,
@@ -137,6 +138,7 @@ export class RecipeEditor implements HoldsUnsavedWork {
   protected readonly loadingLabel = $localize`Loading the recipe…`;
   protected readonly maxName = MAX_RECIPE_NAME;
   protected readonly maxInstructions = MAX_INSTRUCTIONS;
+  protected readonly maxMinutes = MAX_MINUTES;
   protected readonly aiPromptMax = AI_PROMPT_MAX;
   protected readonly unitWord = unitWord;
   protected readonly sourceWord = sourceWord;
@@ -347,6 +349,12 @@ export class RecipeEditor implements HoldsUnsavedWork {
   protected servingsTyped(value: string): void {
     const parsed = value.trim() === '' ? null : Number(value);
     this.change({ servings: parsed === null || Number.isNaN(parsed) ? null : parsed });
+  }
+
+  /** A prep or cook time as typed; an empty box means none given. */
+  protected minutesTyped(field: 'prepMinutes' | 'cookMinutes', value: string): void {
+    const parsed = value.trim() === '' ? null : Number(value);
+    this.change({ [field]: parsed === null || Number.isNaN(parsed) ? null : parsed });
   }
 
   protected addFood(food: RecipeFood): void {
@@ -672,6 +680,8 @@ export class RecipeEditor implements HoldsUnsavedWork {
               photoMediaAssetId: draft.photoId,
               publish,
               baseRevision: numeric(detail.currentRevision),
+              prepMinutes: draft.prepMinutes,
+              cookMinutes: draft.cookMinutes,
             }),
           );
           recipeId = saved.id;
@@ -687,6 +697,8 @@ export class RecipeEditor implements HoldsUnsavedWork {
               ingredientMappings: ingredientRequests(draft.lines),
               photoMediaAssetId: draft.photoId,
               publish,
+              prepMinutes: draft.prepMinutes,
+              cookMinutes: draft.cookMinutes,
             }),
           );
           recipeId = view.createdRecipeId ?? '';
@@ -700,6 +712,8 @@ export class RecipeEditor implements HoldsUnsavedWork {
               ingredients: ingredientRequests(draft.lines),
               photoMediaAssetId: draft.photoId,
               publish,
+              prepMinutes: draft.prepMinutes,
+              cookMinutes: draft.cookMinutes,
             }),
           );
           recipeId = saved.id;

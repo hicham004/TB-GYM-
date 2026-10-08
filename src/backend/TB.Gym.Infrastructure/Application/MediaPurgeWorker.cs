@@ -79,6 +79,8 @@ internal sealed class MediaPurgeWorker(
         {
             await using var scope = scopeFactory.CreateAsyncScope();
             var service = scope.ServiceProvider.GetRequiredService<IMediaPurgeService>();
+            // Unused recipe photos first, so the purge below removes them in the same tick.
+            await service.RetireUnusedRecipePhotosAsync(options.PurgeBatchSize, stoppingToken);
             var outcome = await service.PurgeDueAsync(options.PurgeBatchSize, stoppingToken);
             if (outcome.Claimed > 0)
             {

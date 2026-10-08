@@ -112,6 +112,70 @@ internal sealed class MediaPurgeService(
         return new MediaPurgeOutcome(claimed, purged, failed);
     }
 
+    public async Task<int> RetireUnusedRecipePhotosAsync(
+        int batchSize,
+        CancellationToken cancellationToken)
+    {
+        if (batchSize <= 0)
+        {
+            return 0;
+        }
+
+        var cutoff = clock.UtcNow - MediaRetentionPolicy.UnusedRecipePhotoLifetime;
+        var candidates = await UnusedRecipePhotos(dbContext, cutoff)
+            .OrderBy(item => item.CreatedAtUtc)
+            .Select(item => new { item.TenantId, item.Id })
+            .Take(batchSize)
+            .ToListAsync(cancellationToken);
+        var retired = 0;
+        foreach (var workspace in candidates.GroupBy(item => item.TenantId))
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var provider = scope.ServiceProvider;
+            provider.GetRequiredService<IMutableTenantContext>().SetTenant(workspace.Key);
+            var context = provider.GetRequiredService<GymDbContext>();
+            var ids = workspace.Select(item => item.Id).ToArray();
+
+            // Asked again inside the workspace: a version saved since discovery keeps its photo, and
+            // a save can no longer name one this old (MediaRetentionPolicy.UnusedRecipePhotoSaveWindow).
+            var assets = await UnusedRecipePhotos(context, cutoff)
+                .AsTracking()
+                .Where(item => item.TenantId == workspace.Key && ids.Contains(item.Id))
+                .ToListAsync(cancellationToken);
+            var now = clock.UtcNow;
+            foreach (var asset in assets)
+            {
+                // Nothing names it, so it waits for no retention window: the next purge removes it.
+                asset.MarkTombstoned(now, TimeSpan.Zero, isHistoricallyReferenced: false);
+            }
+
+            try
+            {
+                await context.SaveChangesAsync(cancellationToken);
+                retired += assets.Count;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Another replica or a user changed one of them first; the next sweep looks again.
+            }
+        }
+
+        return retired;
+    }
+
+    private static IQueryable<MediaAsset> UnusedRecipePhotos(GymDbContext context, DateTimeOffset uploadedBefore) =>
+        context.MediaAssets
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(item =>
+                item.Purpose == MediaPurpose.RecipePhoto &&
+                (item.Status == MediaAssetStatus.Ready || item.Status == MediaAssetStatus.Rejected) &&
+                item.CreatedAtUtc <= uploadedBefore &&
+                !context.RecipeVersions.IgnoreQueryFilters().Any(version =>
+                    version.TenantId == item.TenantId && version.PhotoMediaAssetId == item.Id) &&
+                !context.ClientNutritionPlanRecipes.IgnoreQueryFilters().Any(copy =>
+                    copy.TenantId == item.TenantId && copy.PhotoMediaAssetId == item.Id));
+
     private static IQueryable<MediaAsset> DueAssets(GymDbContext context, DateTimeOffset now) =>
         context.MediaAssets
             .IgnoreQueryFilters()

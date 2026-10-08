@@ -74,6 +74,8 @@ export type AddRecipeVersionRequest = {
   photoMediaAssetId?: null | string;
   publish?: boolean;
   baseRevision?: null | number | string;
+  prepMinutes?: null | number | string;
+  cookMinutes?: null | number | string;
 };
 
 export type AddWorkoutNoteRequest = {
@@ -783,6 +785,24 @@ export type ClientPersonalRecordView = {
   ruleVersion: number | string;
 };
 
+export type ClientPlanRecipeIngredientView = {
+  foodName: string;
+  quantity: number | string;
+  unit: FoodQuantityUnit;
+  basis: PreparationBasis;
+};
+
+export type ClientPlanRecipeView = {
+  id: string;
+  name: string;
+  servings: number | string;
+  prepMinutes: null | number | string;
+  cookMinutes: null | number | string;
+  instructions: string;
+  photoMediaAssetId: null | string;
+  ingredients: Array<ClientPlanRecipeIngredientView>;
+};
+
 export type ClientPlanState =
   'Running' | 'Paused' | 'PaymentDue' | 'NotStarted' | 'Ended' | 'None' | 'Blocked';
 
@@ -1415,6 +1435,8 @@ export type CreateRecipeRequest = {
   ingredients: Array<RecipeIngredientRequest>;
   photoMediaAssetId?: null | string;
   publish?: boolean;
+  prepMinutes?: null | number | string;
+  cookMinutes?: null | number | string;
 };
 
 export type CreateSavedReplyRequest = {
@@ -2316,6 +2338,8 @@ export type NutritionChoiceView = {
   proteinGrams: number | string;
   carbohydrateGrams: number | string;
   fatGrams: number | string;
+  recipeId?: null | string;
+  recipePhotoMediaAssetId?: null | string;
 };
 
 export type NutritionCustomFoodView = {
@@ -2871,6 +2895,8 @@ export type RecipeVersionView = {
   photoMediaAssetId: null | string;
   declaredAllergens: Array<AllergenCode>;
   ingredients: Array<RecipeIngredientView>;
+  prepMinutes?: null | number | string;
+  cookMinutes?: null | number | string;
 };
 
 export type RecordBodyMeasurementRequest = {
@@ -3047,6 +3073,8 @@ export type ReviewAiMealDraftRequest = {
   ingredientMappings: Array<AiIngredientMappingRequest>;
   photoMediaAssetId?: null | string;
   publish?: boolean;
+  prepMinutes?: null | number | string;
+  cookMinutes?: null | number | string;
 };
 
 export type RevokeClientInvitationRequest = {
@@ -8247,6 +8275,31 @@ export type GetOwnNutritionDayResponses = {
 
 export type GetOwnNutritionDayResponse =
   GetOwnNutritionDayResponses[keyof GetOwnNutritionDayResponses];
+
+export type GetOwnPlanRecipeData = {
+  body?: never;
+  path: {
+    recipeId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/me/recipes/{recipeId}';
+};
+
+export type GetOwnPlanRecipeErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetOwnPlanRecipeResponses = {
+  /**
+   * OK
+   */
+  200: ClientPlanRecipeView;
+};
+
+export type GetOwnPlanRecipeResponse = GetOwnPlanRecipeResponses[keyof GetOwnPlanRecipeResponses];
 
 export type RecordOwnNutritionChoiceData = {
   body: RecordNutritionChoiceRequest;

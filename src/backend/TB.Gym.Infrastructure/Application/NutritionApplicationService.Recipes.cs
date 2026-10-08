@@ -97,7 +97,9 @@ internal sealed partial class NutritionApplicationService
                 latest.FatGrams,
                 latest.PhotoMediaAssetId,
                 latest.Allergens.Select(item => item.Code).Order().ToArray(),
-                ingredients));
+                ingredients,
+                latest.PrepMinutes,
+                latest.CookMinutes));
     }
 
     /// <summary>
@@ -116,7 +118,7 @@ internal sealed partial class NutritionApplicationService
         var userId = RequireUserId();
         var asset = await dbContext.MediaAssets.AsNoTracking()
             .Where(item => item.Id == assetId && item.Purpose == MediaPurpose.RecipePhoto && item.Status == MediaAssetStatus.Ready)
-            .Select(item => new { item.OwnerUserId })
+            .Select(item => new { item.OwnerUserId, item.CreatedAtUtc })
             .SingleOrDefaultAsync(cancellationToken);
         var allowed = asset is not null &&
             (asset.OwnerUserId == userId ||
@@ -125,6 +127,14 @@ internal sealed partial class NutritionApplicationService
         if (!allowed)
         {
             throw new NutritionInputException("photoMediaAssetId", "Choose a photo uploaded for this recipe.");
+        }
+
+        // An upload no version names is removed 48 hours after it was uploaded; a save stops taking
+        // one an hour before that, so the sweep can never remove a photo a save is naming.
+        if (asset!.CreatedAtUtc <= clock.UtcNow - MediaRetentionPolicy.UnusedRecipePhotoSaveWindow &&
+            !await dbContext.RecipeVersions.AsNoTracking().AnyAsync(item => item.PhotoMediaAssetId == assetId, cancellationToken))
+        {
+            throw new NutritionInputException("photoMediaAssetId", "This photo was uploaded two days ago and is no longer kept. Add it again.");
         }
     }
 

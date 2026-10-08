@@ -299,6 +299,23 @@ h1 {
   gap: 0.5rem;
 }
 
+// A recipe published again since it was added: news, not a fault (R4.4d).
+.update {
+  align-items: center;
+  background: var(--tb-info-soft);
+  border-radius: var(--tb-radius-card-small);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+  padding: 0.625rem 0.875rem;
+
+  p {
+    color: var(--tb-ink);
+    margin: 0;
+  }
+}
+
 // ---------- the recipes beside the grid ----------
 
 .workspace {

@@ -24,6 +24,8 @@ import { ALLERGEN_LABELS } from './nutrition.models';
 export const MAX_RECIPE_NAME = 300;
 export const MAX_INSTRUCTIONS = 20_000;
 export const MAX_SERVINGS = 10_000;
+/** A prep or cook time is whole minutes up to two days, so an overnight soak fits (R4.4d). */
+export const MAX_MINUTES = 2_880;
 export const MAX_LINES = 500;
 export const MAX_QUANTITY = 1_000_000;
 
@@ -73,6 +75,9 @@ export interface RecipeDraft {
   instructions: string;
   lines: EditorLine[];
   photoId: string | null;
+  /** Minutes, or null when not given; the client's recipe shows them (R4.4d). */
+  prepMinutes: number | null;
+  cookMinutes: number | null;
 }
 
 let nextLineKey = 0;
@@ -108,6 +113,8 @@ export function draftFromDetail(detail: RecipeDetail): RecipeDraft {
     servings: numeric(latest.servings),
     instructions: latest.instructions,
     photoId: latest.photoMediaAssetId,
+    prepMinutes: nullableMinutes(latest.prepMinutes),
+    cookMinutes: nullableMinutes(latest.cookMinutes),
     lines: latest.ingredients.map((line) => ({
       key: lineKey(),
       // A saved line is its own measure: what its amount held, scaled from there as it changes.
@@ -154,7 +161,15 @@ export function useNewerFood(line: EditorLine): EditorLine {
 }
 
 export function emptyDraft(): RecipeDraft {
-  return { name: '', servings: 1, instructions: '', lines: [], photoId: null };
+  return {
+    name: '',
+    servings: 1,
+    instructions: '',
+    lines: [],
+    photoId: null,
+    prepMinutes: null,
+    cookMinutes: null,
+  };
 }
 
 /** A new line for a chosen food, at the food's own measure (100 g, say) until the coach types. */
@@ -301,7 +316,7 @@ export function allergenText(codes: readonly string[]): string {
 
 // ---------- checks ----------
 
-export type RecipeField = 'name' | 'servings' | 'lines' | 'instructions';
+export type RecipeField = 'name' | 'servings' | 'lines' | 'prep' | 'cook' | 'instructions';
 
 export interface RecipeProblem {
   field: RecipeField;
@@ -354,6 +369,20 @@ export function recipeProblem(draft: RecipeDraft): RecipeProblem | null {
       };
     }
   }
+  for (const [field, minutes] of [
+    ['prep', draft.prepMinutes],
+    ['cook', draft.cookMinutes],
+  ] as const) {
+    if (
+      minutes !== null &&
+      !(Number.isInteger(minutes) && minutes >= 0 && minutes <= MAX_MINUTES)
+    ) {
+      return {
+        field,
+        message: $localize`Give the time in whole minutes, up to ${MAX_MINUTES}:max: (two days).`,
+      };
+    }
+  }
   if (!draft.instructions.trim()) {
     return {
       field: 'instructions',
@@ -394,6 +423,8 @@ export function draftSignature(draft: RecipeDraft): string {
     servings: draft.servings,
     instructions: draft.instructions.trim(),
     photo: draft.photoId,
+    prep: draft.prepMinutes,
+    cook: draft.cookMinutes,
     lines: draft.lines.map((line) => [
       line.food?.versionId ?? null,
       line.quantity,
@@ -485,4 +516,8 @@ export function recipeCard(recipe: RecipeSummary, locale: string): RecipeCard {
           ? { label: $localize`Changes not published`, tone: 'warm' }
           : { label: $localize`Draft`, tone: 'neutral' },
   };
+}
+
+function nullableMinutes(value: number | string | null | undefined): number | null {
+  return value === null || value === undefined ? null : numeric(value);
 }

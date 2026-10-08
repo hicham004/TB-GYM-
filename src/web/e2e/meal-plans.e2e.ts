@@ -78,13 +78,19 @@ async function openBuilder(
         const body = route.request().postDataJSON() as CreateMealPlanDraftRequest;
         sent.started.push(body);
         sent.contents.push(body.content);
-        return json(route, 200, saveView('draft-1', version));
+        return json(route, 200, {
+          ...saveView('draft-1', version),
+          updatedAtUtc: new Date().toISOString(),
+        });
       },
       'PUT /api/nutrition/meal-plan-drafts/draft-1': (route: Route) => {
         const body = route.request().postDataJSON() as SaveMealPlanDraftRequest;
         expect(body.version).toBe(version);
         sent.contents.push(body.content);
-        return json(route, 200, saveView('draft-1', ++version));
+        return json(route, 200, {
+          ...saveView('draft-1', ++version),
+          updatedAtUtc: new Date().toISOString(),
+        });
       },
       'POST /api/nutrition/meal-plan-drafts/draft-1/publish': (route: Route) => {
         sent.published.push(route.request().postDataJSON() as PublishMealPlanDraftRequest);

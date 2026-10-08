@@ -82,6 +82,8 @@ import {
   type MealPlanModel,
   type MealRef,
   mealTotal,
+  type NewerRecipe,
+  newerRecipes,
   type PlanDragItem,
   type PlanDropTarget,
   type PlanProblem,
@@ -102,6 +104,7 @@ import {
   standing,
   type TargetStanding,
   toDraftContent,
+  useNewestVersion,
   versionRecipes,
   weeksOf,
 } from './meal-plan-builder.models';
@@ -299,6 +302,11 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
   /** The recipes the opened draft or version names, in whatever state they are now. */
   private readonly planRecipes = signal<PlanRecipe[]>([]);
   protected readonly book = computed(() => recipeBook(this.planRecipes(), this.recipes()));
+  /** Recipes in the plan published again since they were added (R4.4d); never changed unasked. */
+  protected readonly updates = computed(() => {
+    this.revision();
+    return newerRecipes(this.plan(), this.book());
+  });
   protected readonly libraryState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly libraryOpen = signal(true);
   /** The week a phone shows; null until one is chosen, then the first. */
@@ -723,6 +731,27 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     this.commit(removeMeal(before, ref));
     this.focusDay(ref.dayKey);
     this.offerUndo($localize`${name}:meal: deleted.`, before);
+  }
+
+  /** Says what changed in the newest version: the name if it was renamed, and a serving's calories. */
+  protected updateLine(update: NewerRecipe): string {
+    const was = update.current[0];
+    const name =
+      was.name === update.newest.name
+        ? was.name
+        : $localize`${was.name}:oldName: (now ${update.newest.name}:newName:)`;
+    const now = kcalText(update.newest.perServing.calories, this.locale);
+    const before = kcalText(was.perServing.calories, this.locale);
+    return now === before
+      ? $localize`${name}:recipe: was published again; a serving is still ${now}:calories:.`
+      : $localize`${name}:recipe: was published again: ${now}:newCalories: a serving, ${before}:oldCalories: before.`;
+  }
+
+  /** Moves the recipe's options to its newest version in this draft only, with an Undo. */
+  protected useNewest(update: NewerRecipe): void {
+    const before = this.plan();
+    this.commit(useNewestVersion(before, update));
+    this.offerUndo($localize`${update.newest.name}:recipe: now uses its newest version.`, before);
   }
 
   private offerUndo(message: string, before: MealPlanModel): void {

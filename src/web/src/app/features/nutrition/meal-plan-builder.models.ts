@@ -22,6 +22,10 @@ export interface Macros {
 /** A published recipe as the builder shows and counts it: its totals per one serving. */
 export interface PlanRecipe {
   versionId: string;
+  /** The library recipe it is a version of; null for one this workspace no longer lists. */
+  recipeId: string | null;
+  /** That recipe's newest published version, which the builder offers in its place (R4.4d). */
+  newestVersionId: string | null;
   name: string;
   isPublished: boolean;
   perServing: Macros;
@@ -91,6 +95,8 @@ export function planRecipe(summary: RecipeSummary): PlanRecipe {
   const servings = numeric(summary.servings) || 1;
   return {
     versionId: summary.versionId,
+    recipeId: summary.id,
+    newestVersionId: summary.publishedVersionId ?? null,
     name: summary.name,
     isPublished: summary.status === 'Published',
     perServing: {
@@ -193,6 +199,8 @@ export function versionRecipes(view: MealPlanVersionView): PlanRecipe[] {
     const servings = numeric(choice.servings) || 1;
     recipes.set(choice.recipeVersionId, {
       versionId: choice.recipeVersionId,
+      recipeId: null,
+      newestVersionId: null,
       name: choice.recipeName,
       isPublished: true,
       perServing: {
@@ -465,6 +473,60 @@ export function addChoice(plan: MealPlanModel, ref: MealRef, recipe: PlanRecipe)
     ...item,
     choices: [...item.choices, { key: key(), recipeVersionId: recipe.versionId, servings: 1 }],
   }));
+}
+
+/** A recipe the plan holds at an older version than the one published since (R4.4d). */
+export interface NewerRecipe {
+  recipeId: string;
+  /** The versions the plan holds, as they read now. */
+  current: PlanRecipe[];
+  newest: PlanRecipe;
+}
+
+/** Each recipe the plan holds that was published again since, once, in the plan's order. */
+export function newerRecipes(plan: MealPlanModel, book: RecipeBook): NewerRecipe[] {
+  const found = new Map<string, NewerRecipe>();
+  for (const choice of plan.days.flatMap((day) => day.meals).flatMap((meal) => meal.choices)) {
+    const current = book.get(choice.recipeVersionId);
+    const newest = current?.newestVersionId ? book.get(current.newestVersionId) : undefined;
+    if (!current?.recipeId || !newest || newest.versionId === current.versionId) continue;
+    const entry = found.get(current.recipeId) ?? {
+      recipeId: current.recipeId,
+      current: [],
+      newest,
+    };
+    if (!entry.current.includes(current)) entry.current.push(current);
+    found.set(current.recipeId, entry);
+  }
+  return [...found.values()];
+}
+
+/**
+ * Every option of the recipe at an older version moves to its newest, with the same servings. A meal
+ * that already offers the newest keeps that one option, since a meal offers a recipe once.
+ */
+export function useNewestVersion(plan: MealPlanModel, update: NewerRecipe): MealPlanModel {
+  const older = new Set(update.current.map((recipe) => recipe.versionId));
+  const newest = update.newest.versionId;
+  return {
+    ...plan,
+    days: plan.days.map((day) => ({
+      ...day,
+      meals: day.meals.map((meal) => {
+        if (!meal.choices.some((choice) => older.has(choice.recipeVersionId))) return meal;
+        let offered = meal.choices.some((choice) => choice.recipeVersionId === newest);
+        const choices: PlanChoice[] = [];
+        for (const choice of meal.choices) {
+          if (!older.has(choice.recipeVersionId)) choices.push(choice);
+          else if (!offered) {
+            choices.push({ ...choice, recipeVersionId: newest });
+            offered = true;
+          }
+        }
+        return { ...meal, choices };
+      }),
+    })),
+  };
 }
 
 export function removeChoice(plan: MealPlanModel, ref: MealRef, choiceKey: string): MealPlanModel {

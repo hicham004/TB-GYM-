@@ -382,6 +382,18 @@ public sealed class MediaAsset : TenantEntity
 public static class MediaRetentionPolicy
 {
     public static readonly TimeSpan DeleteRetention = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// A recipe photo no recipe version names is removed this long after its upload (MED-014,
+    /// Discourse's default grace for orphan uploads).
+    /// </summary>
+    public static readonly TimeSpan UnusedRecipePhotoLifetime = TimeSpan.FromHours(48);
+
+    /// <summary>
+    /// How long a save may still name such an upload: an hour short of its removal, so the sweep
+    /// never removes a photo a save is naming at that moment.
+    /// </summary>
+    public static readonly TimeSpan UnusedRecipePhotoSaveWindow = TimeSpan.FromHours(47);
 }
 
 public static class MediaUploadPolicy

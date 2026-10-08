@@ -7,6 +7,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantContext } from '../../core/tenancy/tenant-context';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { planRecipeView } from '../../../testing/client-recipe-fixtures';
 import { button, field, fill, press, query, settle } from '../../../testing/dom';
 import type { NutritionDay, NutritionSlot } from './nutrition.models';
 import { TodayNutrition } from './today-nutrition';
@@ -20,6 +21,8 @@ function slot(overrides: Partial<NutritionSlot> = {}): NutritionSlot {
       {
         id: 'choice-1',
         recipeName: 'Oats and whey',
+        recipeId: 'plan-recipe-1',
+        photoId: null,
         servings: 1,
         calories: 520,
         protein: 38,
@@ -29,6 +32,8 @@ function slot(overrides: Partial<NutritionSlot> = {}): NutritionSlot {
       {
         id: 'choice-2',
         recipeName: 'Eggs and toast',
+        recipeId: null,
+        photoId: null,
         servings: 1,
         calories: 480,
         protein: 30,
@@ -121,6 +126,9 @@ async function render(
             of(day({ selectedCalories: 0, logVersion: 4, customFoods: [] })),
           ),
           completeMyNutritionLog: vi.fn(() => of(day({ logStatus: 'Completed', logVersion: 4 }))),
+          getMyPlanRecipe: vi.fn(() =>
+            of(planRecipeView({ name: 'Oats and whey', photoMediaAssetId: null })),
+          ),
           ...api,
         },
       },
@@ -171,7 +179,106 @@ async function changeDate(
 
 describe('TodayNutrition', () => {
   afterEach(() => {
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
+  });
+
+  it('opens a meal’s recipe in a sheet, from the card or from the option chosen while editing', async () => {
+    const { fixture, host, api } = await render();
+    const sheet = () => document.querySelector<HTMLElement>('[role="dialog"]');
+
+    const open = host.querySelector<HTMLButtonElement>('.meal-card .recipe-open')!;
+    expect(open.textContent?.replace(/\s+/g, ' ').trim()).toBe('Oats and whey Recipe');
+    open.click();
+    await settle(fixture);
+    await settle(fixture);
+    expect(api.getMyPlanRecipe).toHaveBeenCalledWith('plan-recipe-1');
+    expect(sheet()?.querySelector('h2')?.textContent?.trim()).toBe('Oats and whey');
+    expect(sheet()?.querySelectorAll('.ingredients li')).toHaveLength(4);
+    // Printing the page while the recipe is open prints the recipe alone.
+    expect(sheet()?.closest('.tb-modal-pane--printable')).toBeTruthy();
+    sheet()!.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+    await settle(fixture);
+
+    // Editing, the option chosen opens its own recipe; one without a recipe offers none.
+    press(host, 'Swap or adjust');
+    await settle(fixture);
+    expect(button(host, 'See the recipe')).toBeTruthy();
+    component(fixture)['updateChoice']('slot-1', 'choice-2');
+    await settle(fixture);
+    expect(
+      Array.from(host.querySelectorAll('button')).map((item) => item.textContent?.trim()),
+    ).not.toContain('See the recipe');
+  });
+
+  it('shows each option’s recipe photo on its meal card, granted in one call', async () => {
+    const createMediaAccessBatch = vi.fn(() =>
+      of({
+        items: [
+          {
+            assetId: 'photo-1',
+            kind: 'Image' as const,
+            source: 'Upload' as const,
+            contentType: 'image/jpeg',
+            url: '/api/media/photo-1/content?grant=1',
+            thumbnailUrl: '/api/media/photo-1/content/thumbnail?grant=1',
+            expiresAtUtc: '2026-08-25T10:00:00Z',
+            downloadAllowed: false,
+          },
+        ],
+      }),
+    );
+    const refresh = vi.fn(() => Promise.resolve());
+    const pictured = slot();
+    pictured.choices[0].photoId = 'photo-1';
+    pictured.choices[1].photoId = 'photo-2';
+    const lunch = slot({
+      id: 'slot-2',
+      name: 'Lunch',
+      order: 1,
+      choices: [{ ...slot().choices[1], id: 'choice-3' }],
+    });
+    const { fixture, host } = await render(
+      { createMediaAccessBatch },
+      day({ slots: [pictured, lunch] }),
+      { csrfRefresh: refresh },
+    );
+    await settle(fixture);
+
+    // Every option's photo is asked for at once, after a fresh antiforgery token; one the server
+    // leaves out (photo-2 here) simply has none.
+    expect(createMediaAccessBatch).toHaveBeenCalledOnce();
+    expect(createMediaAccessBatch).toHaveBeenCalledWith(['photo-1', 'photo-2']);
+    expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(
+      createMediaAccessBatch.mock.invocationCallOrder[0],
+    );
+    const cards = host.querySelectorAll('.meal-card');
+    const photo = cards[0].querySelector<HTMLImageElement>('.recipe-open img.meal-photo')!;
+    expect(photo.getAttribute('src')).toBe('/api/media/photo-1/content/thumbnail?grant=1');
+    expect(photo.alt).toBe('');
+    expect(cards[0].querySelector('.recipe-open')?.classList).toContain('with-photo');
+    expect(cards[1].querySelector('img')).toBeNull();
+
+    // A grant that lapsed leaves the card without its photo instead of a broken image.
+    photo.dispatchEvent(new Event('error'));
+    await settle(fixture);
+    expect(cards[0].querySelector('img')).toBeNull();
+  });
+
+  it('reads the day without photos when the photos cannot be granted', async () => {
+    const pictured = slot();
+    pictured.choices[0].photoId = 'photo-1';
+    const { fixture, host } = await render(
+      { createMediaAccessBatch: vi.fn(() => throwError(() => new Error('offline'))) },
+      day({ slots: [pictured] }),
+    );
+    await settle(fixture);
+
+    expect(host.querySelector('.meal-card img')).toBeNull();
+    expect(
+      host.querySelector('.meal-card .recipe-open')?.textContent?.replace(/\s+/g, ' ').trim(),
+    ).toBe('Oats and whey Recipe');
+    expect(host.querySelector('[role="alert"]')).toBeNull();
   });
 
   /**
@@ -303,7 +410,7 @@ describe('TodayNutrition', () => {
       }),
     );
 
-    const lines = Array.from(host.querySelectorAll('.meal-body span')).map((item) =>
+    const lines = Array.from(host.querySelectorAll('.meal-body .meal-amount')).map((item) =>
       item.textContent?.replace(/\s+/g, ' ').trim(),
     );
     expect(lines[0]).toBe('1 serving · 520 kcal planned');
@@ -638,3 +745,7 @@ describe('TodayNutrition', () => {
     expect(component['loading']()).toBe(false);
   });
 });
+
+function component(fixture: { componentInstance: TodayNutrition }): TodayNutrition {
+  return fixture.componentInstance;
+}

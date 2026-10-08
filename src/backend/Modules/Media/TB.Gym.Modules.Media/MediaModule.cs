@@ -35,6 +35,13 @@ public interface IObjectStorage
 public interface IMediaPurgeService
 {
     Task<MediaPurgeOutcome> PurgeDueAsync(int batchSize, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Tombstones, for removal on the next purge, the recipe photos no recipe version names once
+    /// <see cref="MediaRetentionPolicy.UnusedRecipePhotoLifetime"/> has passed since their upload
+    /// (MED-014). Returns how many it tombstoned.
+    /// </summary>
+    Task<int> RetireUnusedRecipePhotosAsync(int batchSize, CancellationToken cancellationToken);
 }
 
 /// <summary>What one sweep did. Failed work remains due and retryable.</summary>

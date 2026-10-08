@@ -55,6 +55,9 @@ public interface INutritionApplicationService
     Task<NutritionCommandResult> AssignPlanAsync(Guid clientProfileId, AssignNutritionPlanRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CancelPlanAsync(Guid clientProfileId, Guid planId, CancelNutritionPlanRequest request, CancellationToken cancellationToken);
     Task<ClientNutritionDayView?> GetOwnDayAsync(DateOnly? localDate, CancellationToken cancellationToken);
+
+    /// <summary>A recipe in the caller's own current plan, as it was copied there (R4.4d); null otherwise.</summary>
+    Task<ClientPlanRecipeView?> GetOwnRecipeAsync(Guid recipeId, CancellationToken cancellationToken);
     Task<NutritionCommandResult> RecordOwnChoiceAsync(RecordNutritionChoiceRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> AddOwnCustomFoodAsync(AddNutritionCustomFoodRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> ReverseOwnCustomFoodAsync(Guid foodId, ReverseNutritionCustomFoodRequest request, CancellationToken cancellationToken);
@@ -179,13 +182,17 @@ public sealed record RecipeIngredientRequest(
 
 /// <param name="PhotoMediaAssetId">A recipe photo of this workspace the caller uploaded (MED-014).</param>
 /// <param name="Publish">Publishes the first version in the same save, ready for meal plans.</param>
+/// <param name="PrepMinutes">Minutes of preparation (0 to 2,880), or null when not given.</param>
+/// <param name="CookMinutes">Minutes of cooking (0 to 2,880), or null when not given.</param>
 public sealed record CreateRecipeRequest(
     string Name,
     string Instructions,
     decimal Servings,
     IReadOnlyList<RecipeIngredientRequest> Ingredients,
     Guid? PhotoMediaAssetId = null,
-    bool Publish = false);
+    bool Publish = false,
+    int? PrepMinutes = null,
+    int? CookMinutes = null);
 
 /// <param name="Name">A new name for the recipe, or null to keep it.</param>
 /// <param name="PhotoMediaAssetId">
@@ -195,6 +202,8 @@ public sealed record CreateRecipeRequest(
 /// <param name="BaseRevision">
 /// The newest revision the editor opened; another save since then is a conflict, not overwritten.
 /// </param>
+/// <param name="PrepMinutes">Minutes of preparation (0 to 2,880), or null when not given.</param>
+/// <param name="CookMinutes">Minutes of cooking (0 to 2,880), or null when not given.</param>
 public sealed record AddRecipeVersionRequest(
     string Instructions,
     decimal Servings,
@@ -202,7 +211,9 @@ public sealed record AddRecipeVersionRequest(
     string? Name = null,
     Guid? PhotoMediaAssetId = null,
     bool Publish = false,
-    int? BaseRevision = null);
+    int? BaseRevision = null,
+    int? PrepMinutes = null,
+    int? CookMinutes = null);
 
 /// <summary>A recipe at one of its versions, totals for the whole recipe.</summary>
 /// <param name="PublishedVersionId">The newest published version, or null while none is published.</param>
@@ -243,7 +254,9 @@ public sealed record RecipeVersionView(
     decimal FatGrams,
     Guid? PhotoMediaAssetId,
     IReadOnlyList<AllergenCode> DeclaredAllergens,
-    IReadOnlyList<RecipeIngredientView> Ingredients);
+    IReadOnlyList<RecipeIngredientView> Ingredients,
+    int? PrepMinutes = null,
+    int? CookMinutes = null);
 
 /// <summary>An ingredient line as saved: its food version, amount and what that amount holds.</summary>
 /// <param name="NewerFood">The food as it is now when it was edited since the line copied it, so the
@@ -431,7 +444,12 @@ public sealed record CancelNutritionPlanRequest(string Reason, uint Version);
 
 public sealed record ClientNutritionPlanSummary(Guid Id, Guid SourceMealPlanTemplateVersionId, Guid EnrollmentId, DateOnly StartDate, DateOnly EndDateExclusive, decimal CalorieTarget, ClientNutritionPlanStatus Status, uint Version);
 
-public sealed record NutritionChoiceView(Guid Id, string RecipeName, decimal Servings, decimal Calories, decimal ProteinGrams, decimal CarbohydrateGrams, decimal FatGrams);
+/// <param name="RecipeId">The client's copy of the recipe (R4.4d), which the client opens; null for none.</param>
+/// <param name="RecipePhotoMediaAssetId">
+/// That copy's cover photo, which the meal card shows; null for none. It is an id, not an address:
+/// reading it still needs a grant, given only through the client's own active plan (MED-014).
+/// </param>
+public sealed record NutritionChoiceView(Guid Id, string RecipeName, decimal Servings, decimal Calories, decimal ProteinGrams, decimal CarbohydrateGrams, decimal FatGrams, Guid? RecipeId = null, Guid? RecipePhotoMediaAssetId = null);
 
 public sealed record NutritionSlotView(Guid Id, string Name, int Order, IReadOnlyList<NutritionChoiceView> Choices, Guid? SelectedChoiceId, decimal? ActualServings);
 
@@ -455,6 +473,22 @@ public sealed record ClientNutritionDayView(
     IReadOnlyList<NutritionSlotView> Slots,
     IReadOnlyList<NutritionCustomFoodView> CustomFoods,
     string SafetyNotice);
+
+/// <summary>
+/// A recipe as the client's plan copied it (NUT-006, R4.4d): what the coach wrote for the whole
+/// recipe, its servings, and its ingredient lines in the foods' own units.
+/// </summary>
+public sealed record ClientPlanRecipeView(
+    Guid Id,
+    string Name,
+    decimal Servings,
+    int? PrepMinutes,
+    int? CookMinutes,
+    string Instructions,
+    Guid? PhotoMediaAssetId,
+    IReadOnlyList<ClientPlanRecipeIngredientView> Ingredients);
+
+public sealed record ClientPlanRecipeIngredientView(string FoodName, decimal Quantity, FoodQuantityUnit Unit, PreparationBasis Basis);
 
 public sealed record RecordNutritionChoiceRequest(Guid PlanDayId, Guid PlanSlotId, Guid ChoiceId, decimal ActualServings, uint? DailyLogVersion);
 
@@ -482,7 +516,9 @@ public sealed record ReviewAiMealDraftRequest(
     decimal? Servings,
     IReadOnlyList<AiIngredientMappingRequest> IngredientMappings,
     Guid? PhotoMediaAssetId = null,
-    bool Publish = false);
+    bool Publish = false,
+    int? PrepMinutes = null,
+    int? CookMinutes = null);
 
 /// <param name="CreatedRecipeId">The recipe an approval saved, so the editor can open it.</param>
 public sealed record AiMealDraftView(Guid Id, AiDraftStatus Status, string PromptVersion, string SchemaVersion, string ProviderKey, string? Model, string? ModelVersion, string? ValidatedDraftJson, string? UncertainFieldsJson, string? FailureCode, decimal CostAmount, string CostCurrency, Guid? CreatedRecipeVersionId, Guid? CreatedRecipeId = null);

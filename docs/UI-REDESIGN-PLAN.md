@@ -81,8 +81,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | P4a | **Session extras** (ADR 0036): an exercise video button in the builder, the session sheet and the client's workout player; coach and client notes visible both ways | §2 | Done · 2026-10-07 · f0f0bb9 |
 | R4.4a | **Meal plans** (C7, part 1): the plans as cards, and the meal-plan builder: days side by side with each day's total against the daily target, recipes dragged into meals, options per meal, the coach's server draft (NUT-013) and Publish | §2, plus backend tests | Done · 2026-10-07 · 4556bd2 |
 | R4.4b | **Recipes** (C7, part 2): recipe cards with macro bars, the recipe editor (ingredients from a food search, totals per serving as they are typed, publish), the AI suggestion inside New recipe, and recipe photos | §2, plus backend tests | Done · 2026-10-07 · b71d004 |
-| R4.4c | **Foods** (C7, part 3): one clean search over the coach's own foods and USDA (database codes behind a details toggle), adding your own food, and the calculation defaults moved to Settings; the older Recipes and foods page goes. Its first follow-ups were closed in the same step: archive and restore, a recipe line offered its food's new numbers, USDA names in sentence case, USDA carbs just below zero counted as 0 g, and the food sheet asking before it closes | §2, plus backend tests | Done · 2026-10-07 |
-| R4.4d | **Recipes for clients** (M4 and C7, decided 2026-10-07): assigning a plan copies each recipe's ingredients, method, prep and cook time and cover photo into the client's snapshot (NUT-006), and the client's day opens a recipe in a sheet; the recipe editor gains prep and cook time; the meal-plan builder offers "Use the newest version" for a recipe republished since; recipe photos no version names are removed 48 hours after upload (MED-014) | §2, plus backend tests (the snapshot, the client's read, the photo only for the client's own plan, another client, a released client, the 48-hour sweep) | To do |
+| R4.4c | **Foods** (C7, part 3): one clean search over the coach's own foods and USDA (database codes behind a details toggle), adding your own food, and the calculation defaults moved to Settings; the older Recipes and foods page goes. Its first follow-ups were closed in the same step: archive and restore, a recipe line offered its food's new numbers, USDA names in sentence case, USDA carbs just below zero counted as 0 g, and the food sheet asking before it closes | §2, plus backend tests | Done · 2026-10-07 · fd42b34 |
+| R4.4d | **Recipes for clients** (M4 and C7, decided 2026-10-07): assigning a plan copies each recipe's ingredients, method, prep and cook time and cover photo into the client's snapshot (NUT-006), and the client's day opens a recipe in a sheet; the recipe editor gains prep and cook time; the meal-plan builder offers "Use the newest version" for a recipe republished since; recipe photos no version names are removed 48 hours after upload (MED-014). Its first follow-ups were closed in the same step: the ingredients scaled to the client's portion, the recipe photo on the meal cards, and Print recipe | §2, plus backend tests (the snapshot, the client's read, the photo only for the client's own plan, another client, a released client, the 48-hour sweep) | Done · 2026-10-08 |
 | P4b | **Adjusting next week from logged performance** (ADR 0036, decided 2026-10-07): the Training maxes panel suggests a new max from the best logged set of the week (1 to 8 reps at RPE 7 to 10), and the coach applies it through the existing preview; never automatic | §2, plus domain reference tests (which sets count, the estimate) and API tests (other coach, released client, kg and lb kept apart) | To do |
 | R5.1 | **Products** (C8), **Exercise library** (C10), notifications, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only) | §2 | To do |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
@@ -479,6 +479,24 @@ of the implemented R1.3 screens before production rollout.
   only through the recipe (R4.4d's "Use the newest version"). (11) No count of the recipes that use a
   food before it is archived, and no archiving several at once.
 
+- **Recipes for clients, R4.4d's follow-ups (built 2026-10-08; screenshots `docs/design/r44d-*.png`).
+  Decided by Claude for the owner on 2026-10-08**, after looking at Everfit (changing a portion
+  rescales the recipe's ingredients and macros for the client, help article "Adjust recipe portion
+  size"), ABC Trainerize (the same in its meal planner), That Clean Life (the client portal shows recipe
+  photos; clients export a plan or a recipe as a PDF only when the practitioner turns on "Allow
+  exports") and Nutrium (a recipe's "Print Out" prints it or saves a PDF). Built in R4.4d: (1) the sheet
+  lists the ingredients for the client's portion (amount × their servings ÷ the recipe's), with "Whole
+  recipe" one tap away because the method is written for it; (2) each meal card shows its recipe's
+  photo, every option's asked for in one batch grant (MED-014 unchanged: only the client's own active
+  plan); (3) **Print recipe** opens the browser's print dialog, which also saves a PDF; the sheet prints
+  alone and always light. Not built, on purpose: (4) no share link or coach "allow exports" switch. A
+  recipe is the coach's work; the client already sees every word, so a switch would protect nothing,
+  and a public link would be a new kind of access for the owner to decide. (5) No "Use the newest
+  version" for a food on its own: a food edit reaches a plan in two deliberate steps (the recipe's "Use
+  its new numbers" and Publish, then the builder's "Use the newest version"), which keeps every recipe
+  version and plan snapshot what it was (NUT-006); a shortcut in the builder would publish recipe
+  versions from the meal-plan screen. Still open: (6) a client's copy keeps no allergens of its own; the
+  plan's allergen review happens at assignment, as before.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1043,6 +1061,10 @@ limited to the coach's assigned clients.
   whose food was edited since says so with "Use its new numbers", and two or more such lines get "Use
   all the new numbers" above the list. USDA's names in capitals read in sentence case, and a USDA food
   whose carbs USDA lists just below zero shows 0 g with a line saying what USDA listed.
+- Built in R4.4d: the recipe editor's Method card has **Prep time** and **Cook time** in minutes
+  (optional; 0 cook reads "No cooking" to the client). The meal-plan builder says when a recipe in the
+  plan was published again since ("Overnight oats was published again: 420 kcal a serving, 400 kcal
+  before") and **Use the newest version** moves that recipe's options in this draft only, with Undo.
 
 **C8. Products**
 - The heading becomes "Plans you sell": cards with price, duration and icons for the included
@@ -1094,6 +1116,14 @@ limited to the coach's assigned clients.
   custom food.
 - Friendly states, e.g. "Your coach hasn't set a meal plan yet". Never "No authorized nutrition
   plan".
+- Built in R4.4d: a meal's recipe name opens the **recipe sheet**: the cover photo, prep and cook time
+  and the yield as chips, "Your plan: 1 serving · 432 kcal" with its grams, the ingredients for the
+  client's portion with "Amounts for: Your portion | Whole recipe" when the two differ (raw or cooked
+  said beside the amount) and the method as numbered steps, then **Print recipe**. Swap or adjust has
+  "See the recipe" for the option chosen. It reads the client's own copy (NUT-006). Raw or cooked is said
+  after an amount ("170 g cooked") unless the food's name says it. A meal card leads with its recipe's
+  photo when it has one. The day now follows the person's light or dark setting (checked in dark), so it
+  and its sheet always share one mode; paper is always light.
 
 **M5. Progress**
 - A hero **weight trend chart** with a weekly-average band and a range switch (4 w / 12 w / All).

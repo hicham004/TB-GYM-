@@ -50,6 +50,8 @@ export const nutritionRoutes: Routes = [
     path: 'today',
     canActivate: [clientGuard],
     title: $localize`Today's nutrition | TB Gym`,
+    // Checked in dark in R4.4d, so the day and its recipe sheet share the person's mode.
+    data: REDESIGNED,
     loadComponent: () => import('./today-nutrition').then((module) => module.TodayNutrition),
   },
   { path: '', redirectTo: 'plans', pathMatch: 'full' },

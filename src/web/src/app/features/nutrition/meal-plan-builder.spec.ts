@@ -11,6 +11,8 @@ import type {
   MealPlanDraftView,
   MealPlanTemplateDetail,
   MealPlanTemplateSummary,
+  MealPlanVersionView,
+  RecipeSummary,
   SaveMealPlanDraftRequest,
 } from '../../core/api/generated';
 import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
@@ -19,11 +21,15 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { UiToast } from '../../ui/toast';
 import { fill, settle } from '../../../testing/dom';
 import {
+  CHICKEN,
   draftContent,
   draftSummary,
   draftView,
+  LENTILS,
+  OATS,
   planDetail,
   planSummary,
+  recipe,
   RECIPES,
   saveView,
   versionView,
@@ -44,6 +50,8 @@ interface Options {
   url?: string;
   getPlan?: () => Observable<MealPlanTemplateDetail>;
   getDraft?: () => Observable<MealPlanDraftView>;
+  getVersion?: () => Observable<MealPlanVersionView>;
+  library?: RecipeSummary[];
   createDraft?: () => Observable<MealPlanDraftSaveView>;
   saveDraft?: () => Observable<MealPlanDraftSaveView>;
   publishDraft?: () => Observable<MealPlanTemplateSummary>;
@@ -53,10 +61,11 @@ interface Options {
 async function render(options: Options = {}) {
   const api = {
     getPlan: vi.fn(options.getPlan ?? (() => of(planDetail()))),
-    getVersion: vi.fn(() => of(versionView())),
-    listPublishedRecipes: vi.fn(() =>
-      of({ total: RECIPES.length, skip: 0, take: 100, items: RECIPES }),
-    ),
+    getVersion: vi.fn(options.getVersion ?? (() => of(versionView()))),
+    listPublishedRecipes: vi.fn(() => {
+      const items = options.library ?? RECIPES;
+      return of({ total: items.length, skip: 0, take: 100, items });
+    }),
     listDrafts: vi.fn(() => of([])),
     getDraft: vi.fn(options.getDraft ?? (() => of(draftView()))),
     createDraft: vi.fn<(request: CreateMealPlanDraftRequest) => Observable<MealPlanDraftSaveView>>(
@@ -400,6 +409,70 @@ describe('the meal-plan builder', () => {
     await settle(harness.fixture);
     expect(api.createDraft).toHaveBeenCalledTimes(1);
     expect(router.url).toBe('/nutrition/plans');
+  });
+
+  it('offers a recipe published again since, and moves only this draft to it, with Undo', async () => {
+    const newer = recipe({
+      versionId: 'oats-v2',
+      revision: 2,
+      name: 'Berry oats',
+      calories: 420,
+      publishedVersionId: 'oats-v2',
+    });
+    // The library lists each recipe at its newest published version only.
+    const { harness, host, api, toast } = await render({
+      library: [CHICKEN, LENTILS, newer],
+      getVersion: () =>
+        of(
+          versionView({
+            recipes: [CHICKEN, LENTILS, { ...OATS, publishedVersionId: 'oats-v2' }, newer],
+          }),
+        ),
+    });
+
+    expect(all(host, '.update p').map(textOf)).toEqual([
+      'Overnight oats (now Berry oats) was published again: 420 kcal a serving, 400 kcal before.',
+    ]);
+    named(host, 'Use the newest version').click();
+    await settle(harness.fixture);
+
+    expect(host.querySelector('.update')).toBeNull();
+    const content = api.createDraft.mock.calls.at(-1)![0].content;
+    const options = (content.days ?? [])
+      .flatMap((day) => day.meals ?? [])
+      .flatMap((meal) => meal.choices ?? [])
+      .map((choice) => choice.recipeVersionId);
+    expect(options).toContain('oats-v2');
+    expect(options).not.toContain('oats-v1');
+    const [message, settings] = toast.show.mock.calls.at(-1) as unknown as [
+      string,
+      { action: { label: string; run(): void } },
+    ];
+    expect([message, settings.action.label]).toEqual([
+      'Berry oats now uses its newest version.',
+      'Undo',
+    ]);
+
+    settings.action.run();
+    await settle(harness.fixture);
+    expect(all(host, '.update')).toHaveLength(1);
+  });
+
+  it('says a serving’s calories are unchanged when only the method or times were', async () => {
+    const newer = recipe({ versionId: 'oats-v2', revision: 2, publishedVersionId: 'oats-v2' });
+    const { host } = await render({
+      library: [CHICKEN, LENTILS, newer],
+      getVersion: () =>
+        of(
+          versionView({
+            recipes: [CHICKEN, LENTILS, { ...OATS, publishedVersionId: 'oats-v2' }, newer],
+          }),
+        ),
+    });
+
+    expect(all(host, '.update p').map(textOf)).toEqual([
+      'Overnight oats was published again; a serving is still 400 kcal.',
+    ]);
   });
 
   it('deletes a day from its menu, with Undo', async () => {

@@ -7,6 +7,7 @@ import {
   guardedConfig,
   ModalData,
   modalDirection,
+  modalPaneClasses,
   ModalOptions,
   ModalSurface,
 } from './modal-surface';
@@ -42,7 +43,7 @@ export class UiSheet {
       restoreFocus: true,
       hasBackdrop: true,
       backdropClass: 'tb-modal-backdrop',
-      panelClass: ['tb-modal-pane', 'tb-modal-pane--sheet'],
+      panelClass: modalPaneClasses('sheet', options),
       direction: modalDirection(this.document, options.direction),
       positionStrategy: this.overlay.position().global().centerHorizontally().bottom('0'),
       width: '100vw',

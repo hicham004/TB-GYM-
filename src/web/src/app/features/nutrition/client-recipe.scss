@@ -1,0 +1,176 @@
+:host {
+  color: var(--tb-ink);
+  display: block;
+}
+
+.recipe {
+  border-radius: var(--tb-radius-control);
+  display: grid;
+  gap: 1.25rem;
+
+  &:focus-visible {
+    outline: 3px solid var(--tb-focus);
+    outline-offset: 4px;
+  }
+}
+
+.photo {
+  aspect-ratio: 4 / 3;
+  background: var(--tb-surface-2);
+  border-radius: var(--tb-radius-card);
+  overflow: hidden;
+
+  img {
+    block-size: 100%;
+    display: block;
+    inline-size: 100%;
+    object-fit: cover;
+  }
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  li {
+    background: var(--tb-surface-2);
+    border-radius: 999px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.35rem 0.8rem;
+  }
+}
+
+.portion {
+  background: var(--tb-accent-soft);
+  border-radius: var(--tb-radius-control);
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+}
+
+.portion-line {
+  font-weight: 700;
+  margin: 0;
+}
+
+.portion-macros {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+.part {
+  display: grid;
+  gap: 0.5rem;
+
+  h3 {
+    font-size: 1.05rem;
+    margin: 0;
+  }
+}
+
+.note {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.ingredients {
+  border-block: 1px solid var(--tb-line);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  li {
+    align-items: baseline;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 0.6rem 0;
+
+    & + li {
+      border-block-start: 1px solid var(--tb-line);
+    }
+  }
+
+  .name {
+    overflow-wrap: anywhere;
+  }
+
+  .basis {
+    color: var(--tb-muted);
+    font-size: 0.875rem;
+    font-weight: 400;
+  }
+
+  .amount {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+}
+
+.steps {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding-inline-start: 1.4rem;
+
+  li {
+    line-height: 1.5;
+    padding-inline-start: 0.25rem;
+  }
+
+  li::marker {
+    color: var(--tb-accent-ink);
+    font-weight: 700;
+  }
+}
+
+.step {
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-line;
+}
+
+.print {
+  display: flex;
+}
+
+// On paper (the sheet prints alone): the photo smaller, no line split across two pages, and chips
+// and the portion outlined, since a browser leaves backgrounds off unless asked.
+@media print {
+  .recipe {
+    gap: 0.9rem;
+  }
+
+  .photo {
+    max-inline-size: 10cm;
+  }
+
+  .facts li,
+  .portion {
+    border: 1px solid var(--tb-line);
+  }
+
+  .ingredients li,
+  .steps li {
+    break-inside: avoid;
+  }
+}
+
+.state {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+
+  p {
+    margin: 0;
+  }
+}

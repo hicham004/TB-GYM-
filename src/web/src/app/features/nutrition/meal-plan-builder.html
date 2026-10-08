@@ -208,6 +208,14 @@
           <p dir="auto">{{ message }}</p>
         </div>
       }
+      @for (update of updates(); track update.recipeId) {
+        <div class="update">
+          <p dir="auto">{{ updateLine(update) }}</p>
+          <button appButton type="button" variant="outlined" (click)="useNewest(update)" i18n>
+            Use the newest version
+          </button>
+        </div>
+      }
 
       <div class="workspace" [class.with-library]="libraryOpen()">
         @if (libraryOpen()) {

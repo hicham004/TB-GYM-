@@ -145,6 +145,14 @@ counts only up to it, and only the owner changes the nutrition settings. The ada
 USDA's names in capitals into sentence case and takes Foundation foods' Atwater energy on import as on
 search; whether USDA's carbohydrate is usable is the module's rule (`ProviderCarbohydrateRule`), applied
 by the application service to searches and imports alike.
+R4.4d: assigning a plan copies each recipe version it names into `nutrition."ClientNutritionPlanRecipes"`
+and `"ClientNutritionPlanRecipeIngredients"` (append-only, one copy per recipe version and plan, NUT-006);
+the client reads the copy (`GET /api/nutrition/me/recipes/{recipeId}`), each option on their day names
+its copy and the copy's photo, and Media lets a client read a recipe photo only through a copy in their
+own active plan (one grant at a time or the day's photos in one batch, the same check per photo). The media purge worker first tombstones recipe
+photos no version names 48 hours after upload (`RetireUnusedRecipePhotosAsync`), and a save stops taking
+such an upload at 47 hours, so the sweep never races a save (MED-014). Recipe versions gain optional prep
+and cook minutes.
 
 Progress Phase 5A extends the Phase 1 `BodyweightObservation` rather than introducing another
 profile weight. It stores canonical kilograms plus the entered value/unit, keeps one current

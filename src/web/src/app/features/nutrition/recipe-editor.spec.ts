@@ -253,6 +253,8 @@ describe('the recipe editor', () => {
     // Each starts at its food's own measure, 100 g.
     expect(serving(host)).toBe('450 kcal');
     typeInto(host.querySelector<HTMLTextAreaElement>('#recipe-instructions')!, 'Stir and chill.');
+    typeInto(host.querySelector<HTMLInputElement>('#recipe-prep')!, '5');
+    typeInto(host.querySelector<HTMLInputElement>('#recipe-cook')!, '0');
     await settle(harness.fixture);
 
     named(host, 'Publish').click();
@@ -282,6 +284,8 @@ describe('the recipe editor', () => {
       ],
       photoMediaAssetId: null,
       publish: true,
+      prepMinutes: 5,
+      cookMinutes: 0,
     });
     expect(api.getRecipe).toHaveBeenCalledWith('recipe-new');
     expect(toast.show).toHaveBeenCalledWith('Published. It’s in your meal plans’ recipes now.', {
@@ -311,6 +315,7 @@ describe('the recipe editor', () => {
     const { harness, host, api } = await render();
 
     typeInto(host.querySelector<HTMLInputElement>('#recipe-name')!, 'Berry oats');
+    typeInto(host.querySelector<HTMLInputElement>('#recipe-cook')!, '15');
     await settle(harness.fixture);
     named(host, 'Publish changes').click();
     await until(harness.fixture, () => api.addVersion.mock.calls.length === 1);
@@ -323,6 +328,8 @@ describe('the recipe editor', () => {
       publish: true,
       baseRevision: 1,
       servings: 2,
+      prepMinutes: null,
+      cookMinutes: 15,
     });
     expect(request.ingredients.map((line) => line.quantity)).toEqual([80, 200]);
   });

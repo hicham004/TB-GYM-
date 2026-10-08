@@ -413,7 +413,7 @@ internal sealed partial class NutritionApplicationService(
             await EnsureRecipePhotoAsync(request.PhotoMediaAssetId, null, cancellationToken);
             var ingredientInputs = await BuildRecipeIngredientsAsync(request.Ingredients, cancellationToken);
             var recipe = Recipe.Create(tenantContext.TenantId, request.Name);
-            var version = recipe.AddDraft(request.Instructions, request.Servings, ingredientInputs, request.PhotoMediaAssetId);
+            var version = recipe.AddDraft(request.Instructions, request.Servings, ingredientInputs, request.PhotoMediaAssetId, request.PrepMinutes, request.CookMinutes);
             if (request.Publish)
             {
                 version.Publish(clock.UtcNow, RequireUserId());
@@ -457,7 +457,7 @@ internal sealed partial class NutritionApplicationService(
                 recipe.Rename(request.Name);
             }
 
-            var version = recipe.AddDraft(request.Instructions, request.Servings, ingredientInputs, request.PhotoMediaAssetId);
+            var version = recipe.AddDraft(request.Instructions, request.Servings, ingredientInputs, request.PhotoMediaAssetId, request.PrepMinutes, request.CookMinutes);
             if (request.Publish)
             {
                 version.Publish(clock.UtcNow, RequireUserId());
@@ -768,9 +768,24 @@ internal sealed partial class NutritionApplicationService(
             slot.Order,
             slot.Name,
             slot.Choices.Select(choice => new MealChoiceInput(choice.RecipeVersionId, choice.RecipeName, choice.Servings, choice.Calories, choice.ProteinGrams, choice.CarbohydrateGrams, choice.FatGrams)).ToArray())).ToArray();
+
+        // The client gets their own copy of each recipe (NUT-006), named as the meal plan names it.
+        var planNames = template.Slots.OrderBy(slot => slot.DayOffset).ThenBy(slot => slot.Order).SelectMany(slot => slot.Choices)
+            .GroupBy(choice => choice.RecipeVersionId).ToDictionary(group => group.Key, group => group.First().RecipeName);
+        var recipeVersions = await dbContext.RecipeVersions.AsNoTracking().Include(item => item.Ingredients)
+            .Where(item => recipeVersionIds.Contains(item.Id)).AsSplitQuery().ToListAsync(cancellationToken);
+        var recipeInputs = recipeVersions.Select(version => new PlanRecipeInput(
+            version.Id,
+            planNames[version.Id],
+            version.Instructions,
+            version.Servings,
+            version.PrepMinutes,
+            version.CookMinutes,
+            version.PhotoMediaAssetId,
+            version.Ingredients.OrderBy(line => line.Order).Select(line => new PlanRecipeIngredientInput(line.FoodName, line.Quantity, line.Unit, line.Basis)).ToArray())).ToArray();
         try
         {
-            var plan = ClientNutritionPlan.Assign(tenantContext.TenantId, clientProfileId, request.EnrollmentId, template.Id, calculation.Id, request.StartDate, endDate, slotInputs, coverage.Authorization!);
+            var plan = ClientNutritionPlan.Assign(tenantContext.TenantId, clientProfileId, request.EnrollmentId, template.Id, calculation.Id, request.StartDate, endDate, slotInputs, recipeInputs, coverage.Authorization!);
             dbContext.ClientNutritionPlans.Add(plan);
             dbContext.NutritionPlanLifecycleEvents.Add(NutritionPlanLifecycleEvent.Record(
                 tenantContext.TenantId,
@@ -887,7 +902,34 @@ internal sealed partial class NutritionApplicationService(
             .Include(item => item.Choices).OrderBy(item => item.Order).AsSplitQuery().ToListAsync(cancellationToken);
         var log = await dbContext.DailyNutritionLogs.AsNoTracking().Where(item => item.ClientNutritionPlanDayId == row.DayId)
             .Include(item => item.Entries).Include(item => item.CustomFoods).Include(item => item.CustomFoodReversals).AsSplitQuery().SingleOrDefaultAsync(cancellationToken);
-        return ToDayView(row, slots, log);
+        return ToDayView(row, slots, log, await LoadPlanRecipesAsync(row.PlanId, cancellationToken));
+    }
+
+    public async Task<ClientPlanRecipeView?> GetOwnRecipeAsync(Guid recipeId, CancellationToken cancellationToken)
+    {
+        // The same reach as the day: the caller's current profile, nutrition access and an active plan.
+        var client = await FindSelfClientAsync(cancellationToken);
+        if (client is null || !(await GetNutritionAccessAsync(client.Id, cancellationToken)).IsAllowed)
+        {
+            return null;
+        }
+
+        var recipe = await (from copy in dbContext.ClientNutritionPlanRecipes.AsNoTracking().Include(item => item.Ingredients)
+                            join plan in dbContext.ClientNutritionPlans.AsNoTracking()
+                                on new { copy.TenantId, Id = copy.ClientNutritionPlanId } equals new { plan.TenantId, plan.Id }
+                            where copy.Id == recipeId && plan.ClientProfileId == client.Id && plan.Status == ClientNutritionPlanStatus.Active
+                            select copy).AsSplitQuery().SingleOrDefaultAsync(cancellationToken);
+        return recipe is null
+            ? null
+            : new ClientPlanRecipeView(
+                recipe.Id,
+                recipe.Name,
+                recipe.Servings,
+                recipe.PrepMinutes,
+                recipe.CookMinutes,
+                recipe.Instructions,
+                recipe.PhotoMediaAssetId,
+                recipe.Ingredients.OrderBy(line => line.Order).Select(line => new ClientPlanRecipeIngredientView(line.FoodName, line.Quantity, line.Unit, line.Basis)).ToArray());
     }
 
     public async Task<NutritionCommandResult> RecordOwnChoiceAsync(RecordNutritionChoiceRequest request, CancellationToken cancellationToken)
@@ -943,7 +985,7 @@ internal sealed partial class NutritionApplicationService(
             await dbContext.SaveChangesAsync(cancellationToken);
             var row = await LoadDayRowAsync(day.Id, cancellationToken);
             var slots = await dbContext.ClientNutritionPlanSlots.AsNoTracking().Where(item => item.ClientNutritionPlanDayId == day.Id).Include(item => item.Choices).OrderBy(item => item.Order).AsSplitQuery().ToListAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, Day: ToDayView(row!, slots, log));
+            return new NutritionCommandResult(NutritionCommandStatus.Success, Day: ToDayView(row!, slots, log, await LoadPlanRecipesAsync(row!.PlanId, cancellationToken)));
         }
         catch (InvalidOperationException exception)
         {
@@ -1000,7 +1042,7 @@ internal sealed partial class NutritionApplicationService(
             var row = await LoadDayRowAsync(day.Id, cancellationToken);
             var slots = await dbContext.ClientNutritionPlanSlots.AsNoTracking().Where(item => item.ClientNutritionPlanDayId == day.Id)
                 .Include(item => item.Choices).OrderBy(item => item.Order).AsSplitQuery().ToListAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, Day: ToDayView(row!, slots, log));
+            return new NutritionCommandResult(NutritionCommandStatus.Success, Day: ToDayView(row!, slots, log, await LoadPlanRecipesAsync(row!.PlanId, cancellationToken)));
         }
         catch (ArgumentException exception)
         {
@@ -1043,7 +1085,7 @@ internal sealed partial class NutritionApplicationService(
             var row = await LoadDayRowAsync(log.ClientNutritionPlanDayId, cancellationToken);
             var slots = await dbContext.ClientNutritionPlanSlots.AsNoTracking().Where(item => item.ClientNutritionPlanDayId == log.ClientNutritionPlanDayId)
                 .Include(item => item.Choices).OrderBy(item => item.Order).AsSplitQuery().ToListAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, Day: ToDayView(row!, slots, log));
+            return new NutritionCommandResult(NutritionCommandStatus.Success, Day: ToDayView(row!, slots, log, await LoadPlanRecipesAsync(row!.PlanId, cancellationToken)));
         }
         catch (InvalidOperationException exception)
         {
@@ -1080,7 +1122,7 @@ internal sealed partial class NutritionApplicationService(
             await dbContext.SaveChangesAsync(cancellationToken);
             var row = await LoadDayRowAsync(log.ClientNutritionPlanDayId, cancellationToken);
             var slots = await dbContext.ClientNutritionPlanSlots.AsNoTracking().Where(item => item.ClientNutritionPlanDayId == log.ClientNutritionPlanDayId).Include(item => item.Choices).OrderBy(item => item.Order).AsSplitQuery().ToListAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, Day: ToDayView(row!, slots, log));
+            return new NutritionCommandResult(NutritionCommandStatus.Success, Day: ToDayView(row!, slots, log, await LoadPlanRecipesAsync(row!.PlanId, cancellationToken)));
         }
         catch (InvalidOperationException exception)
         {
@@ -1257,7 +1299,7 @@ internal sealed partial class NutritionApplicationService(
             var ingredientRequests = request.IngredientMappings.Select(item => new RecipeIngredientRequest(item.FoodItemVersionId, item.Quantity, item.Unit, item.Basis, item.YieldFactorId, item.RetentionFactorId)).ToArray();
             var inputs = await BuildRecipeIngredientsAsync(ingredientRequests, cancellationToken);
             var recipe = Recipe.Create(tenantContext.TenantId, request.RecipeName);
-            var version = recipe.AddDraft(request.Instructions, request.Servings.Value, inputs, request.PhotoMediaAssetId);
+            var version = recipe.AddDraft(request.Instructions, request.Servings.Value, inputs, request.PhotoMediaAssetId, request.PrepMinutes, request.CookMinutes);
             if (request.Publish)
             {
                 version.Publish(clock.UtcNow, RequireUserId());
@@ -1425,7 +1467,16 @@ internal sealed partial class NutritionApplicationService(
                where day.Id == dayId
                select new DayQueryRow(plan.Id, day.Id, day.Date, calculation.CalorieTarget, calculation.ProteinGrams, calculation.CarbohydrateGrams, calculation.FatGrams)).SingleOrDefaultAsync(cancellationToken);
 
-    private static ClientNutritionDayView ToDayView(DayQueryRow row, IReadOnlyList<ClientNutritionPlanSlot> slots, DailyNutritionLog? log)
+    /// <summary>The plan's recipe copies and their photos, by the recipe version each was copied from (R4.4d).</summary>
+    private async Task<Dictionary<Guid, PlanRecipeRow>> LoadPlanRecipesAsync(Guid planId, CancellationToken cancellationToken) =>
+        await dbContext.ClientNutritionPlanRecipes.AsNoTracking()
+            .Where(item => item.ClientNutritionPlanId == planId)
+            .Select(item => new { item.SourceRecipeVersionId, Row = new PlanRecipeRow(item.Id, item.PhotoMediaAssetId) })
+            .ToDictionaryAsync(item => item.SourceRecipeVersionId, item => item.Row, cancellationToken);
+
+    private sealed record PlanRecipeRow(Guid Id, Guid? PhotoMediaAssetId);
+
+    private static ClientNutritionDayView ToDayView(DayQueryRow row, IReadOnlyList<ClientNutritionPlanSlot> slots, DailyNutritionLog? log, Dictionary<Guid, PlanRecipeRow> recipes)
     {
         var entries = log?.Entries.ToDictionary(item => item.ClientNutritionPlanSlotId) ?? new Dictionary<Guid, DailyNutritionLogEntry>();
         return new ClientNutritionDayView(
@@ -1446,7 +1497,7 @@ internal sealed partial class NutritionApplicationService(
             slots.Select(slot =>
             {
                 entries.TryGetValue(slot.Id, out var entry);
-                return new NutritionSlotView(slot.Id, slot.Name, slot.Order, slot.Choices.Select(choice => new NutritionChoiceView(choice.Id, choice.RecipeName, choice.Servings, choice.Calories, choice.ProteinGrams, choice.CarbohydrateGrams, choice.FatGrams)).ToArray(), entry?.SelectedClientNutritionPlanChoiceId, entry?.Servings);
+                return new NutritionSlotView(slot.Id, slot.Name, slot.Order, slot.Choices.Select(choice => new NutritionChoiceView(choice.Id, choice.RecipeName, choice.Servings, choice.Calories, choice.ProteinGrams, choice.CarbohydrateGrams, choice.FatGrams, recipes.GetValueOrDefault(choice.SourceRecipeVersionId)?.Id, recipes.GetValueOrDefault(choice.SourceRecipeVersionId)?.PhotoMediaAssetId)).ToArray(), entry?.SelectedClientNutritionPlanChoiceId, entry?.Servings);
             }).ToArray(),
             log?.CustomFoods.Where(item => log.CustomFoodReversals.All(reversal => reversal.CustomFoodId != item.Id)).OrderBy(item => item.CreatedAtUtc).Select(item => new NutritionCustomFoodView(item.Id, item.Name, item.Amount, item.Unit, item.Calories, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams)).ToArray() ?? [],
             "Allergen declarations may be incomplete. Absence of a declared conflict is not evidence of absence; TB Gym does not assert any meal is safe.");

@@ -29,6 +29,20 @@ export interface ModalOptions {
    * false keeps it open. A close the page makes itself, after a save, is not asked.
    */
   canClose?: () => boolean | Promise<boolean>;
+  /**
+   * Printing the page while the modal is open prints the modal alone: its title and content, on as
+   * many pages as they take (the client's recipe, R4.4d). Content marked `tb-print-hide` is left out.
+   */
+  printable?: boolean;
+}
+
+/** The overlay pane's classes for a modal of this kind and these options. */
+export function modalPaneClasses(kind: 'dialog' | 'sheet', options: ModalOptions): string[] {
+  return [
+    'tb-modal-pane',
+    `tb-modal-pane--${kind}`,
+    ...(options.printable ? ['tb-modal-pane--printable'] : []),
+  ];
 }
 
 export interface ModalData {
@@ -162,6 +176,54 @@ export interface ModalData {
     @media (forced-colors: active) {
       .tb-modal-pane app-modal-surface {
         border-color: CanvasText;
+      }
+    }
+
+    /*
+     * A printable modal prints alone: the page, the backdrop and any other overlay stay off the
+     * paper, and the modal flows over as many pages as it needs instead of scrolling. The overlay
+     * wraps the backdrop and the pane in one popover; the pane's size and place are inline styles
+     * from the overlay, hence the !important.
+     */
+    @media print {
+      body:has(.tb-modal-pane--printable) > :not(.cdk-overlay-container),
+      .cdk-overlay-container:has(.tb-modal-pane--printable) > :not(:has(.tb-modal-pane--printable)),
+      :has(> .tb-modal-pane--printable) > .cdk-overlay-backdrop,
+      .tb-modal-pane--printable .tb-modal__header button,
+      .tb-modal-pane--printable .tb-print-hide {
+        display: none !important;
+      }
+
+      .cdk-overlay-container:has(.tb-modal-pane--printable),
+      .cdk-overlay-container:has(.tb-modal-pane--printable) > :has(.tb-modal-pane--printable),
+      .tb-modal-pane--printable,
+      .tb-modal-pane--printable > .cdk-dialog-container {
+        block-size: auto !important;
+        display: block !important;
+        inline-size: auto !important;
+        max-block-size: none !important;
+        max-inline-size: none !important;
+        position: static !important;
+        transform: none !important;
+      }
+
+      .tb-modal-pane--printable app-modal-surface {
+        animation: none;
+        border: 0;
+        box-shadow: none;
+        display: block;
+        max-block-size: none;
+        overflow: visible;
+      }
+
+      .tb-modal-pane--printable .tb-modal__header {
+        border: 0;
+        padding: 0 0 1rem;
+      }
+
+      .tb-modal-pane--printable .tb-modal__body {
+        overflow: visible;
+        padding: 0;
       }
     }
   `,

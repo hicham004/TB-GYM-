@@ -207,6 +207,7 @@ public sealed class Phase4NutritionDomainTests
             new DateOnly(2026, 8, 10),
             new DateOnly(2026, 8, 11),
             slots,
+            [new PlanRecipeInput(recipeId, "Original recipe", "Grill and serve.", 1m, 10, 15, null, [new PlanRecipeIngredientInput("Chicken breast", 150m, FoodQuantityUnit.Gram, PreparationBasis.Raw)])],
             coverage);
 
         choice = choice with { RecipeName = "Edited library recipe", Calories = 700m };

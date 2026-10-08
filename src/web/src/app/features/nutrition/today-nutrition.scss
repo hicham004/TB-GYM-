@@ -212,6 +212,55 @@ select:focus-visible {
   color: var(--tb-muted);
   font-size: 0.85rem;
 }
+// The option's name opens its recipe (R4.4d): the whole row is the target, as wide as the card.
+.recipe-open {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: var(--tb-radius-control);
+  color: inherit;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  inline-size: calc(100% + 1rem);
+  justify-content: space-between;
+  margin-inline: -0.5rem;
+  min-block-size: 2.75rem;
+  padding: 0.25rem 0.5rem;
+  text-align: start;
+}
+.recipe-open:hover {
+  background: var(--tb-surface-2);
+}
+// The recipe's cover photo leads the row when the coach gave it one (R4.4d).
+.recipe-open.with-photo {
+  flex-wrap: nowrap;
+  justify-content: start;
+
+  strong {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    overflow-wrap: break-word;
+  }
+}
+.meal-photo {
+  block-size: 3.5rem;
+  border-radius: var(--tb-radius-control);
+  flex: none;
+  inline-size: 3.5rem;
+  object-fit: cover;
+}
+.meal-body .recipe-cue {
+  align-items: center;
+  color: var(--tb-accent-ink);
+  display: inline-flex;
+  font-weight: 700;
+  gap: 0.1rem;
+}
+.recipe-inline {
+  justify-self: start;
+  padding-inline: 0;
+}
 .meal-actions {
   display: flex;
   flex-wrap: wrap;

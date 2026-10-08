@@ -1,0 +1,83 @@
+@if (recipe(); as item) {
+  <!-- A long recipe scrolls inside the sheet; focus lets the keyboard scroll it. -->
+  <article class="recipe" tabindex="0" [attr.aria-label]="item.name">
+    @if (item.photoId) {
+      <div class="photo">
+        @if (photoUrl(); as url) {
+          <img
+            [src]="url"
+            [alt]="photoAlt(item.name)"
+            width="640"
+            height="480"
+            (error)="photoUrl.set(null)"
+          />
+        }
+      </div>
+    }
+
+    <ul class="facts">
+      @for (fact of item.facts; track fact) {
+        <li>{{ fact }}</li>
+      }
+    </ul>
+
+    <div class="portion">
+      <p class="portion-line">{{ item.portion }}</p>
+      <p class="portion-macros">{{ item.portionMacros }}</p>
+    </div>
+
+    <section class="part">
+      <h3 i18n>Ingredients</h3>
+      @if (item.scaled) {
+        <app-segmented-control
+          class="tb-print-hide"
+          label="Amounts for"
+          i18n-label
+          [options]="amountOptions"
+          [selected]="amounts()"
+          (selectedChange)="showAmounts($event)"
+        />
+      }
+      <p class="note" aria-live="polite">{{ item.notes[shownAmounts()] }}</p>
+      <ul class="ingredients">
+        @for (line of item.ingredients; track $index) {
+          <li>
+            <span class="name" dir="auto">{{ line.name }}</span
+            >&ngsp;<span class="amount"
+              >{{ line.amounts[shownAmounts()] }}
+              @if (line.basis; as basis) {
+                &ngsp;<span class="basis">{{ basis }}</span>
+              }
+            </span>
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="part">
+      <h3 i18n>Method</h3>
+      @if (item.steps.length > 1) {
+        <ol class="steps">
+          @for (step of item.steps; track $index) {
+            <li dir="auto">{{ step }}</li>
+          }
+        </ol>
+      } @else {
+        <p class="step" dir="auto">{{ item.steps[0] }}</p>
+      }
+    </section>
+
+    <div class="print tb-print-hide">
+      <button appButton type="button" variant="outlined" size="touch" (click)="print()">
+        <app-icon name="print" /><ng-container i18n>Print recipe</ng-container>
+      </button>
+    </div>
+  </article>
+} @else if (failed()) {
+  <div class="state" role="alert">
+    <p i18n>This recipe could not be loaded.</p>
+    <button appButton type="button" variant="outlined" (click)="retry()" i18n>Try again</button>
+  </div>
+} @else {
+  <app-skeleton label="Loading the recipe" i18n-label [lines]="4" />
+}

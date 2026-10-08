@@ -1,7 +1,15 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  type TemplateRef,
+  viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -11,10 +19,16 @@ import { ownNutritionDenialMessage } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
+import { Icon } from '../../ui/icon';
 import { ProgressRing } from '../../ui/progress-ring';
+import { UiSheet } from '../../ui/sheet';
 import { addDays } from '../clients/client-overview.models';
+import { ClientRecipeSheet } from './client-recipe';
 import { NutritionChoiceDrafts } from './nutrition-choice-drafts';
-import { NutritionDay, NutritionSlot } from './nutrition.models';
+import { NutritionChoice, NutritionDay, NutritionSlot } from './nutrition.models';
+
+/** The server grants at most this many photos a call (MED-004). */
+const PHOTO_GRANT_BATCH = 32;
 
 interface NutritionDateOwner {
   readonly selectedDate: string;
@@ -23,7 +37,7 @@ interface NutritionDateOwner {
 
 @Component({
   selector: 'app-today-nutrition',
-  imports: [DatePipe, DecimalPipe, FormsModule, ProgressRing],
+  imports: [ClientRecipeSheet, DatePipe, DecimalPipe, FormsModule, Icon, ProgressRing],
   templateUrl: './today-nutrition.html',
   styleUrl: './today-nutrition.scss',
 })
@@ -32,6 +46,8 @@ export class TodayNutrition {
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly calendar = inject(WorkspaceCalendar);
+  private readonly sheets = inject(UiSheet);
+  private readonly recipeSheet = viewChild.required<TemplateRef<unknown>>('recipeSheet');
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly drafts = new NutritionChoiceDrafts();
   private loadedTenantId: string | null = null;
@@ -51,6 +67,12 @@ export class TodayNutrition {
   protected readonly reversingFoodId = signal<string | null>(null);
   protected readonly customError = signal<string | null>(null);
   protected readonly selectedDate = signal('');
+  /** The recipe its sheet shows, with the option it was opened from (R4.4d). */
+  protected readonly openRecipe = signal<{ recipeId: string; choice: NutritionChoice } | null>(
+    null,
+  );
+  /** Meal-card photos by asset once granted (R4.4d); a card whose photo has none shows none. */
+  private readonly thumbnails = signal<ReadonlyMap<string, string>>(new Map());
   protected readonly activeDate = computed(
     () => this.selectedDate() || this.day()?.date || this.calendar.today(),
   );
@@ -136,6 +158,38 @@ export class TodayNutrition {
 
   protected displayChoice(slot: NutritionSlot) {
     return slot.choices.find((choice) => choice.id === slot.selectedChoiceId) ?? slot.choices[0];
+  }
+
+  /** The option's recipe photo for its meal card, once granted. */
+  protected thumbnail(choice: NutritionChoice): string | null {
+    return choice.photoId ? (this.thumbnails().get(choice.photoId) ?? null) : null;
+  }
+
+  /** A grant that lapsed while the page stayed open leaves the card without its photo until a reload. */
+  protected dropThumbnail(choice: NutritionChoice): void {
+    const photoId = choice.photoId;
+    if (!photoId) return;
+    this.thumbnails.update((current) => {
+      const next = new Map(current);
+      next.delete(photoId);
+      return next;
+    });
+  }
+
+  /** Opens the client's copy of an option's recipe in a sheet: what their plan gives them to cook. */
+  protected showRecipe(choice: NutritionChoice | undefined): void {
+    if (!choice?.recipeId) return;
+    this.openRecipe.set({ recipeId: choice.recipeId, choice });
+    this.sheets.open(this.recipeSheet(), {
+      title: choice.recipeName,
+      closeLabel: $localize`Close`,
+      printable: true,
+    });
+  }
+
+  /** The option chosen in a meal's editor, so its recipe can be opened before it is saved. */
+  protected draftChoice(slot: NutritionSlot, choiceId: string | null): NutritionChoice | undefined {
+    return slot.choices.find((choice) => choice.id === choiceId);
   }
 
   protected removeFoodLabel(name: string): string {
@@ -344,6 +398,7 @@ export class TodayNutrition {
         this.day.set(loaded);
         this.drafts.reconcile(loaded);
         this.bumpDrafts();
+        void this.grantPhotos(loaded);
       } catch (error) {
         if (!owner.current || !this.ownsDate(dateOwner)) return;
         this.day.set(null);
@@ -369,6 +424,42 @@ export class TodayNutrition {
         if (owner.current && this.ownsDate(dateOwner)) {
           this.loading.set(false);
         }
+      }
+    });
+  }
+
+  /**
+   * Asks for the day's recipe photos, every option's, so a swap shows its photo at once. A photo is
+   * not a public address: its route needs a short-lived grant (MED-004), which the server gives a
+   * client only for their own active plan's copy (MED-014). A failure leaves the cards without one.
+   */
+  private grantPhotos(day: NutritionDay): Promise<void> {
+    const known = this.thumbnails();
+    const ids = [
+      ...new Set(
+        day.slots.flatMap((slot) =>
+          slot.choices.flatMap((choice) => (choice.photoId ? [choice.photoId] : [])),
+        ),
+      ),
+    ].filter((id) => !known.has(id));
+    if (ids.length === 0) return Promise.resolve();
+    return this.scope.run('grantPhotos', async (owner) => {
+      try {
+        await owner.wait(this.csrf.refresh());
+        for (let start = 0; start < ids.length; start += PHOTO_GRANT_BATCH) {
+          const batch = await owner.wait(
+            firstValueFrom(
+              this.api.createMediaAccessBatch(ids.slice(start, start + PHOTO_GRANT_BATCH)),
+            ),
+          );
+          this.thumbnails.update((current) => {
+            const next = new Map(current);
+            for (const item of batch.items) next.set(item.assetId, item.thumbnailUrl ?? item.url);
+            return next;
+          });
+        }
+      } catch {
+        // The cards show no photos; the meals read the same without them.
       }
     });
   }
@@ -406,6 +497,7 @@ export class TodayNutrition {
 
   private resetTenantState(): void {
     this.loadedTenantId = null;
+    this.thumbnails.set(new Map());
     this.selectedDate.set('');
     this.invalidateDateState();
     this.draftRevision.set(0);

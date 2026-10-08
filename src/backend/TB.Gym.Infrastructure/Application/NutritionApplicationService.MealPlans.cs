@@ -490,7 +490,8 @@ internal sealed partial class NutritionApplicationService
 
     /// <summary>
     /// The recipe versions a plan names, as this workspace's library has them: names, yields, macros
-    /// and status. An id from anywhere else names nothing.
+    /// and status, and each recipe's newest published version as well, so the builder can offer it
+    /// (R4.4d). An id from anywhere else names nothing.
     /// </summary>
     private async Task<RecipeSummary[]> RecipeSummariesAsync(IEnumerable<Guid> recipeVersionIds, CancellationToken cancellationToken)
     {
@@ -500,12 +501,11 @@ internal sealed partial class NutritionApplicationService
             return [];
         }
 
-        var versions = await dbContext.RecipeVersions.AsNoTracking()
+        var recipeIds = await dbContext.RecipeVersions.AsNoTracking()
             .Where(version => ids.Contains(version.Id))
-            .Include(version => version.Allergens)
-            .AsSplitQuery()
-            .ToListAsync(cancellationToken);
-        var recipeIds = versions.Select(version => version.RecipeId).Distinct().ToArray();
+            .Select(version => version.RecipeId)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
         var recipes = await dbContext.Recipes.AsNoTracking()
             .Where(recipe => recipeIds.Contains(recipe.Id))
             .ToDictionaryAsync(recipe => recipe.Id, cancellationToken);
@@ -515,6 +515,12 @@ internal sealed partial class NutritionApplicationService
                 .ToListAsync(cancellationToken))
             .GroupBy(version => version.RecipeId)
             .ToDictionary(group => group.Key, group => group.MaxBy(version => version.Revision)!.Id);
+        var shown = ids.Concat(newestPublished.Values).Distinct().ToArray();
+        var versions = await dbContext.RecipeVersions.AsNoTracking()
+            .Where(version => shown.Contains(version.Id))
+            .Include(version => version.Allergens)
+            .AsSplitQuery()
+            .ToListAsync(cancellationToken);
         return versions
             .Where(version => recipes.ContainsKey(version.RecipeId))
             .Select(version => ToRecipeSummary(recipes[version.RecipeId], version, newestPublished.TryGetValue(version.RecipeId, out var published) ? published : null))

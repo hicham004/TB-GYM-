@@ -937,6 +937,13 @@ export class ApiClient {
       .pipe(map(mapNutritionDay));
   }
 
+  /** A recipe in the caller's own plan, as the plan copied it (R4.4d). */
+  getMyPlanRecipe(recipeId: string) {
+    return this.http.get<Phase3Contracts.ClientPlanRecipeView>(
+      `/api/nutrition/me/recipes/${recipeId}`,
+    );
+  }
+
   recordMyNutritionChoice(request: Phase3Contracts.RecordNutritionChoiceRequest) {
     return this.http
       .put<Phase3Contracts.ClientNutritionDayView>('/api/nutrition/me/choices', request)

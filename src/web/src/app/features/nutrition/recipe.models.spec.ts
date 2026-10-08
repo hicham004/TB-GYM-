@@ -68,6 +68,12 @@ describe('recipe totals as typed', () => {
     const doubled = { ...draft.lines[0], quantity: 160 };
     expect(lineMacros(doubled)?.calories).toBeCloseTo(608);
     expect(draft.photoId).toBe('photo-1');
+    expect([draft.prepMinutes, draft.cookMinutes]).toEqual([null, null]);
+    const timed = recipeDetail();
+    timed.latest = { ...timed.latest, prepMinutes: 10, cookMinutes: 0 };
+    expect([draftFromDetail(timed).prepMinutes, draftFromDetail(timed).cookMinutes]).toEqual([
+      10, 0,
+    ]);
   });
 
   it('offers a food edited since, and takes its numbers into the line on request', () => {
@@ -174,6 +180,12 @@ describe('what stops a save', () => {
     expect(recipeProblem({ ...ready(), servings: null })?.field).toBe('servings');
     expect(recipeProblem({ ...ready(), lines: [] })?.message).toBe('Add at least one ingredient.');
     expect(recipeProblem({ ...ready(), instructions: ' ' })?.field).toBe('instructions');
+    expect(recipeProblem({ ...ready(), prepMinutes: -1 })?.field).toBe('prep');
+    expect(recipeProblem({ ...ready(), cookMinutes: 12.5 })?.message).toBe(
+      'Give the time in whole minutes, up to 2880 (two days).',
+    );
+    expect(recipeProblem({ ...ready(), cookMinutes: 2_881 })?.field).toBe('cook');
+    expect(recipeProblem({ ...ready(), prepMinutes: 0, cookMinutes: 2_880 })).toBeNull();
   });
 
   it('names the ingredient at fault', () => {
@@ -209,6 +221,8 @@ describe('what stops a save', () => {
     const draft = ready();
     expect(draftSignature({ ...draft, name: ' Overnight oats ' })).toBe(draftSignature(draft));
     expect(draftSignature({ ...draft, photoId: 'photo-2' })).not.toBe(draftSignature(draft));
+    expect(draftSignature({ ...draft, prepMinutes: 5 })).not.toBe(draftSignature(draft));
+    expect(draftSignature({ ...draft, cookMinutes: 0 })).not.toBe(draftSignature(draft));
   });
 });
 
