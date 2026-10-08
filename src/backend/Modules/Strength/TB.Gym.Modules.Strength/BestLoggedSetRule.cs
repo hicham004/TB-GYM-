@@ -42,6 +42,13 @@ public static class BestLoggedSetRule
 
     private const decimal MaximumMax = 2_000m;
 
+    /// <summary>
+    /// The moment after which logged sets can speak for a max: when it was set or, once the coach has kept it
+    /// over a suggestion, the last time they did (STR-013). Sets the coach has already weighed stay quiet.
+    /// </summary>
+    public static DateTimeOffset CountsAfter(DateTimeOffset maxSetAtUtc, DateTimeOffset? lastKeptAtUtc) =>
+        lastKeptAtUtc is { } kept && kept > maxSetAtUtc ? kept : maxSetAtUtc;
+
     /// <summary>Whether a logged set is evidence for a program in <paramref name="unit"/> whose max in use was set at <paramref name="since"/>.</summary>
     public static bool Counts(LoggedSetEvidence set, LoadUnit unit, DateTimeOffset since)
     {

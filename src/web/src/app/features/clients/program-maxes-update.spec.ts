@@ -383,6 +383,65 @@ describe('Update maxes for the coming weeks', () => {
     expect(closed).toHaveBeenCalledWith(true);
   });
 
+  it('brings in the estimate of a set logged during the review, keeps the choice and says why', async () => {
+    // Week 3's 95 kg for 5 at RPE 8 arrives while the coach looks at week 2's estimate.
+    const newer = () => {
+      const view = suggesting();
+      view.version = 5;
+      view.maxes[0].suggestion = {
+        value: 117.139,
+        unit: 'Kilogram',
+        explanation: 'Best logged set v1: …',
+        basis: {
+          load: 95,
+          repetitions: 5,
+          rpe: 8,
+          methodKey: 'RpeChart',
+          methodVersion: '1.0',
+          loggedSet: {
+            setPerformanceId: 'set-10',
+            weekNumber: 3,
+            performedOn: '2026-10-20',
+            sessionName: 'Lower A',
+          },
+        },
+      } as never;
+      return view;
+    };
+    const read = vi.fn().mockReturnValueOnce(of(suggesting())).mockReturnValue(of(newer()));
+    const moved = new HttpErrorResponse({
+      status: 409,
+      error: {
+        code: 'training_max_suggestion_changed',
+        message: 'Back squat has a newer logged set than the one you looked at.',
+      },
+    });
+    const { fixture, host, api, closed } = await render(
+      { getTrainingMaxes: read, applyTrainingMaxes: vi.fn(() => throwError(() => moved)) },
+      { suggested: 'squat' },
+    );
+
+    press(host, 'Update maxes');
+    await settle(fixture);
+
+    expect(closed).not.toHaveBeenCalled();
+    expect(textOf(query(host, '.problem-text'))).toBe(
+      'Maya logged a newer set since you looked, so the suggested max changed. Look at the new suggestion, then try again.',
+    );
+    // The sheet is back on the numbers, still on the logged sets' estimate, now week 3's.
+    expect(host.querySelector('.preview')).toBeNull();
+    const box = query<HTMLInputElement>(host, 'fieldset:nth-of-type(1) input[type="checkbox"]');
+    expect(box.checked).toBe(true);
+    expect(textOf(host.querySelector('#logged-from-squat'))).toContain('95 kg for 5 reps');
+
+    press(host, 'Show the new weights');
+    await settle(fixture);
+    expect(api.previewTrainingMaxes).toHaveBeenLastCalledWith('block-lean', {
+      mesocycleVersion: 5,
+      changes: [{ exerciseId: 'squat', value: null, weekOneWeight: null, loggedSetId: 'set-10' }],
+    });
+  });
+
   it('says the program moved on when its version is no longer the one the coach opened', async () => {
     const moved = new HttpErrorResponse({
       status: 409,

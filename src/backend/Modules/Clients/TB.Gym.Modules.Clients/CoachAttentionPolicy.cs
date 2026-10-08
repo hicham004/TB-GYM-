@@ -3,14 +3,14 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Modules.Clients;
 
 /// <summary>
-/// Coach attention v1 (CLI-018, R3.1): which of a client's signals ask the coach to act, how the
-/// queue is ranked, and the one status the client list shows. The signals arrive already gated by the
-/// client's plan, so this rule only weighs them.
+/// Coach attention v2 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review): which of a client's signals ask
+/// the coach to act, how the queue is ranked, and the one status the client list shows. The signals arrive
+/// already gated by the client's plan, so this rule only weighs them.
 /// </summary>
 public static class CoachAttentionPolicy
 {
     public const string Key = "CoachAttention";
-    public const int Version = 1;
+    public const int Version = 2;
 
     /// <summary>A running plan whose last covered day falls within this many days is ending soon.</summary>
     public const int PlanEndingWithinDays = 14;
@@ -77,18 +77,25 @@ public static class CoachAttentionPolicy
             flags.Add(CoachAttentionKind.NoProgram);
         }
 
+        if (signals.MaxesToReview > 0)
+        {
+            flags.Add(CoachAttentionKind.MaxesToReview);
+        }
+
         return flags;
     }
 
     /// <summary>
-    /// Anything to act on besides a plan ending makes a client Needs attention; otherwise a paused plan
-    /// shows Paused, a plan ending soon Ending soon, a running plan On track, and anything else (ended,
-    /// unpaid, not started, none, blocked) No active plan.
+    /// Anything to act on besides a plan ending or maxes to review makes a client Needs attention; otherwise a
+    /// paused plan shows Paused, a plan ending soon Ending soon, a running plan On track, and anything else
+    /// (ended, unpaid, not started, none, blocked) No active plan. A client whose sets suggest heavier maxes is
+    /// doing well, so that alone never turns them to Needs attention.
     /// </summary>
     public static ClientOverviewStatus Status(
         IReadOnlyCollection<CoachAttentionKind> flags,
         ClientPlanState planState) =>
-        flags.Any(flag => flag != CoachAttentionKind.PlanEndingSoon) ? ClientOverviewStatus.NeedsAttention
+        flags.Any(flag => flag is not (CoachAttentionKind.PlanEndingSoon or CoachAttentionKind.MaxesToReview))
+            ? ClientOverviewStatus.NeedsAttention
         : planState == ClientPlanState.Paused ? ClientOverviewStatus.Paused
         : flags.Contains(CoachAttentionKind.PlanEndingSoon) ? ClientOverviewStatus.EndingSoon
         : planState == ClientPlanState.Running ? ClientOverviewStatus.OnTrack
@@ -157,6 +164,7 @@ public static class CoachAttentionPolicy
 /// <param name="PlanLastDay">The last day the current and following plans cover.</param>
 /// <param name="MissedSinceLastWorkout">Training rule TRN-021.</param>
 /// <param name="HasNoProgram">Training is in the plan but no block is running or coming.</param>
+/// <param name="MaxesToReview">Lifts of a running block whose logged sets suggest a new max (STR-012).</param>
 public sealed record ClientAttentionSignals(
     int CheckInsToReview,
     long UnreadMessages,
@@ -164,4 +172,5 @@ public sealed record ClientAttentionSignals(
     DateOnly? PlanLastDay,
     bool HasWeekToShare,
     int MissedSinceLastWorkout,
-    bool HasNoProgram);
+    bool HasNoProgram,
+    int MaxesToReview = 0);

@@ -76,6 +76,7 @@ internal sealed partial class TrainingApplicationService
             timeZone,
             cancellationToken);
         var setsById = loggedSets.Values.SelectMany(sets => sets).ToDictionary(set => set.SetId);
+        var lastKeeps = await LoggedSetMaxSuggestions.LoadLastKeepsAsync(dbContext, [mesocycleId], cancellationToken);
 
         var current = CurrentWorkingMaxes(snapshots);
         var maxes = current.Values
@@ -98,7 +99,13 @@ internal sealed partial class TrainingApplicationService
                     anchor is null ? null : new TrainingMaxWeekOneSetView(anchor.Repetitions, anchor.Rpe, anchor.Load),
                     earlier,
                     suggests && loggedSets.TryGetValue(item.ExerciseId, out var sets)
-                        ? SuggestionFor(item, sets, header.LoadUnit, header.LoadIncrement)
+                        ? SuggestionFor(item, lastKeeps.GetValueOrDefault(item.Id)?.CreatedAtUtc, sets, header.LoadUnit, header.LoadIncrement)
+                        : null,
+                    lastKeeps.TryGetValue(item.Id, out var kept)
+                        ? new TrainingMaxKeptView(
+                            kept.SuggestedValue,
+                            header.LoadUnit,
+                            DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(kept.CreatedAtUtc, timeZone).DateTime))
                         : null);
             })
             .ToArray();
@@ -253,6 +260,10 @@ internal sealed partial class TrainingApplicationService
         {
             return Invalid("maxes", exception.Message);
         }
+        catch (TrainingMaxSuggestionChangedException exception)
+        {
+            return Conflict(TrainingMaxSuggestionChangedException.Code, exception.Message);
+        }
         catch (InvalidOperationException exception)
         {
             return Conflict("training_maxes_conflict", exception.Message);
@@ -371,6 +382,7 @@ internal sealed partial class TrainingApplicationService
         // from the request, and only while the coach may read those workouts (STR-007, TRN-023).
         var loggedLifts = changes.Where(item => item.LoggedSetId is not null).Select(item => item.ExerciseId).Distinct().ToArray();
         var loggedSets = new Dictionary<Guid, LoggedSetEvidence[]>();
+        var lastKeeps = new Dictionary<Guid, WorkingMaxKeep>();
         if (loggedLifts.Length > 0)
         {
             if (!await CoachMayReadLoggedSetsAsync(mesocycle.ClientProfileId, cancellationToken))
@@ -385,6 +397,7 @@ internal sealed partial class TrainingApplicationService
                 [],
                 TimeZoneInfo.FindSystemTimeZoneById(mesocycle.TimeZoneId),
                 cancellationToken);
+            lastKeeps = await LoggedSetMaxSuggestions.LoadLastKeepsAsync(dbContext, [mesocycle.Id], cancellationToken);
         }
 
         var lifts = new List<PlannedLift>();
@@ -410,6 +423,7 @@ internal sealed partial class TrainingApplicationService
                     loggedSetId,
                     name,
                     existing,
+                    lastKeeps.GetValueOrDefault(existing.Id)?.CreatedAtUtc,
                     loggedSets.GetValueOrDefault(change.ExerciseId, []),
                     mesocycle.LoadUnit);
                 lift = new PlannedLift(
@@ -709,6 +723,7 @@ internal sealed partial class TrainingApplicationService
         WorkingMaxSource.SavedMax => TrainingMaxSource.SavedMax,
         WorkingMaxSource.WeekOneWeight => TrainingMaxSource.WeekOneWeight,
         WorkingMaxSource.LoggedSet => TrainingMaxSource.LoggedSet,
+        WorkingMaxSource.PreviousProgram => TrainingMaxSource.PreviousProgram,
         _ => throw new ArgumentOutOfRangeException(nameof(source)),
     };
 

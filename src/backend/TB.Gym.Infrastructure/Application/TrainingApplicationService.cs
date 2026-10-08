@@ -401,6 +401,11 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         {
             return Invalid("assignment", exception.Message);
         }
+        catch (TrainingMaxSuggestionChangedException exception)
+        {
+            // A newer best set was logged in the latest program after the coach opened Assign program (STR-014).
+            return Conflict(TrainingMaxSuggestionChangedException.Code, exception.Message);
+        }
         catch (InvalidOperationException exception)
         {
             return Invalid("assignment", exception.Message);

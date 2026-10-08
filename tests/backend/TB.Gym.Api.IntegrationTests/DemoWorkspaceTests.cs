@@ -196,6 +196,18 @@ public sealed class DemoWorkspaceTests
         Assert.AreEqual("Afternoon coffee", mayaMeals.CustomFoods.Single().Name);
         Assert.IsGreaterThan(0m, mayaMeals.SelectedCalories);
 
+        // Demo clients hit their numbers (P4c): logged sets suggest only heavier maxes, for clients getting stronger.
+        var ownerToday = await requests.AsAsync<ICoachOverviewService, CoachTodayView>(
+            new DemoActor(people.OwnerId, people.TenantId), service => service.GetTodayAsync(CancellationToken.None));
+        var suggested = ownerToday.Attention
+            .Where(item => item.Kind == CoachAttentionKind.MaxesToReview)
+            .SelectMany(item => (item.Maxes ?? []).Select(max => (item.Client.FirstName, max)))
+            .ToArray();
+        Console.WriteLine(string.Join(Environment.NewLine, suggested.Select(item =>
+            $"{item.FirstName} {item.max.ExerciseName}: {item.max.Current} -> {item.max.Suggested}")));
+        Assert.IsNotEmpty(suggested, "Clients who set personal bests show a heavier max to review.");
+        Assert.IsTrue(suggested.All(item => item.max.Suggested > item.max.Current), "No demo client is weaker than their program.");
+
         using var again = new StringWriter();
         Assert.AreEqual(2, await DemoWorkspaceCommand.RunAsync(
             factory.Services, [DemoWorkspaceCommand.Name], again, cast, CancellationToken.None));

@@ -176,6 +176,70 @@ describe('what needs the coach on a client’s page', () => {
     expect(never.detail).toBe('No workout logged yet');
   });
 
+  it('names the lift whose logged sets suggest a new max, and opens the maxes to review it', () => {
+    const [maxes] = needRows(
+      [
+        attentionItem('MaxesToReview', MAYA, {
+          count: 1,
+          maxes: [
+            {
+              exerciseId: 'deadlift',
+              exerciseName: 'Deadlift',
+              current: 77.5,
+              suggested: 80.749,
+              unit: 'Kilogram',
+            },
+          ],
+        }),
+      ],
+      COACH_TODAY,
+      context,
+    );
+
+    expect(maxes).toMatchObject({
+      tone: 'share',
+      tag: 'Maxes',
+      heading: 'Logged sets suggest a new Deadlift max',
+      detail: '80.75 kg, up from 77.5 kg',
+      action: { label: 'Review maxes', link: `${page}/training`, queryParams: { action: 'maxes' } },
+    });
+  });
+
+  it('carries what the last program suggests onto No program, for Assign program', () => {
+    const [between] = needRows(
+      [
+        attentionItem('NoProgram', MAYA, {
+          date: '2026-03-01',
+          subjectId: 'block-ended',
+          maxes: [
+            {
+              exerciseId: 'squat',
+              exerciseName: 'Back squat',
+              current: 385,
+              suggested: 400,
+              unit: 'Pound',
+            },
+            {
+              exerciseId: 'deadlift',
+              exerciseName: 'Deadlift',
+              current: 77.5,
+              suggested: 80.749,
+              unit: 'Kilogram',
+            },
+          ],
+        }),
+      ],
+      COACH_TODAY,
+      context,
+    );
+
+    expect(between).toMatchObject({
+      heading: 'No program running',
+      detail: 'Last program’s sets suggest Back squat 400 lb, Deadlift 80.75 kg',
+      action: { label: 'Assign program', queryParams: { action: 'assign' } },
+    });
+  });
+
   it('says when an unshared week starts today, tomorrow or already started', () => {
     const starts = (date: string) =>
       needRows(

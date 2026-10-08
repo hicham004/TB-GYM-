@@ -4,6 +4,7 @@ using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Messaging;
 using TB.Gym.Modules.Nutrition;
 using TB.Gym.Modules.Progress;
+using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Training;
 using TB.Gym.SharedKernel;
@@ -322,6 +323,7 @@ internal sealed partial class DemoWorkspaceGenerator
         workout = await FindWorkoutAsync(state, mesocycleId, session.Name, label);
         var version = execution.Version;
         var weeksIn = (day - client.Plans[0].StartDay) / 7m;
+        var weeksIntoBlock = Math.Max(0m, (day - client.Blocks[blockIndex].StartDay) / 7m);
         string? personalBest = null;
         clock.Advance(TimeSpan.FromMinutes(random.Next(5, 9)));
 
@@ -339,14 +341,21 @@ internal sealed partial class DemoWorkspaceGenerator
                 decimal rpe;
                 if (plan.IsMainLift)
                 {
+                    // The client hits their numbers: the RPE they log is what the weight was for their strength
+                    // that day on the RTS chart, so the suggested maxes (STR-012) only move when they got stronger.
                     load = set.PrescribedLoad;
                     repetitions = set.PrescribedRepetitionsMaximum ?? scheme.MainReps;
-                    rpe = scheme.MainRpe + (last ? 0.5m : 0m) + Jitter(random);
-                    if (last && client.SetsPersonalBests && !scheme.IsDeload && weekNumber >= 3 && random.NextDouble() < 0.45)
+                    var strength = Strength(client, definition.Key, blockIndex, weeksIntoBlock);
+                    rpe = load is { } weight ? HonestRpe(weight, repetitions, strength) : scheme.MainRpe;
+                    if (last && load is { } top && client.SetsPersonalBests && !scheme.IsDeload && rpe <= scheme.MainRpe - 1m)
                     {
-                        repetitions += random.Next(1, 3);
-                        rpe = 9m;
-                        personalBest = exercise.ActualExerciseName;
+                        // A client getting stronger finds the weight light and pushes the last set: more reps, hard,
+                        // as their strength allows. Now and then they say so.
+                        (repetitions, rpe) = PushedSet(top, repetitions, strength);
+                        if (random.NextDouble() < 0.45)
+                        {
+                            personalBest = exercise.ActualExerciseName;
+                        }
                     }
                 }
                 else
@@ -779,6 +788,67 @@ internal sealed partial class DemoWorkspaceGenerator
 
         var raw = baseLoad * client.StrengthFactor * (1m + (0.015m * Math.Max(0m, weeksIn)));
         return Math.Max(exercise.LoadStep, Math.Round(raw / exercise.LoadStep, MidpointRounding.AwayFromZero) * exercise.LoadStep);
+    }
+
+    /// <summary>
+    /// A client's one-rep max on a lift that day. Most clients are exactly as strong as their program's max says;
+    /// those who set personal bests get about 2% stronger each week of a block, as early progress goes, so a few
+    /// weeks in their pushed sets suggest a higher max.
+    /// </summary>
+    private static decimal Strength(DemoClient client, string exerciseKey, int blockIndex, decimal weeksIntoBlock) =>
+        TrainingMax(client, exerciseKey, blockIndex) * (1m + (client.SetsPersonalBests ? 0.02m * weeksIntoBlock : 0m));
+
+    /// <summary>
+    /// The RPE on the RTS chart that this weight and these reps were for a lifter this strong: the half step whose
+    /// weight is nearest. Lighter than RPE 6.5 (a deload) is logged as 6, which never suggests a max.
+    /// </summary>
+    private static decimal HonestRpe(decimal load, int repetitions, decimal strength)
+    {
+        if (repetitions is < RtsRpeChart.MinimumRepetitions or > RtsRpeChart.MaximumRepetitions)
+        {
+            return 8m;
+        }
+
+        if (load < strength * RtsRpeChart.PercentOfOneRepMax(repetitions, RtsRpeChart.MinimumRpe) / 100m * 0.97m)
+        {
+            return 6m;
+        }
+
+        var best = RtsRpeChart.MaximumRpe;
+        var gap = decimal.MaxValue;
+        for (var rpe = RtsRpeChart.MinimumRpe; rpe <= RtsRpeChart.MaximumRpe; rpe += 0.5m)
+        {
+            var distance = Math.Abs((strength * RtsRpeChart.PercentOfOneRepMax(repetitions, rpe) / 100m) - load);
+            if (distance < gap)
+            {
+                (best, gap) = (rpe, distance);
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// A pushed last set: at least the prescribed reps and up to 8, at RPE 8 to 10, the pair whose weight on the
+    /// chart is nearest to what this lifter can do, so the max it implies is their real strength.
+    /// </summary>
+    private static (int Repetitions, decimal Rpe) PushedSet(decimal load, int prescribed, decimal strength)
+    {
+        var best = (Repetitions: prescribed, Rpe: 9m);
+        var gap = decimal.MaxValue;
+        for (var repetitions = Math.Max(1, prescribed); repetitions <= 8; repetitions++)
+        {
+            for (var rpe = 8m; rpe <= RtsRpeChart.MaximumRpe; rpe += 0.5m)
+            {
+                var distance = Math.Abs((load * 100m / RtsRpeChart.PercentOfOneRepMax(repetitions, rpe)) - strength);
+                if (distance < gap)
+                {
+                    (best, gap) = ((repetitions, rpe), distance);
+                }
+            }
+        }
+
+        return best;
     }
 
     private static decimal Jitter(Random random) => random.Next(4) switch

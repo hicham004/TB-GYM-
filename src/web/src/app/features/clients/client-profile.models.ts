@@ -10,7 +10,7 @@ import type {
   MesocycleSummary,
 } from '../../core/api/generated';
 import type { StatusPillTone } from '../../ui/status-pill';
-import { ago } from '../dashboard/coach-today.models';
+import { ago, carriedMaxDetail, suggestedMaxDetail } from '../dashboard/coach-today.models';
 import type {
   DashboardNutrition,
   DashboardSection,
@@ -166,13 +166,34 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
           : $localize`No workout logged yet`,
         action: { label: $localize`See training`, link: `${page}/training`, queryParams: null },
       };
+    case 'MaxesToReview': {
+      const lifts = item.maxes ?? [];
+      return {
+        ...base,
+        tone: 'share',
+        tag: $localize`Maxes`,
+        heading:
+          lifts.length === 1
+            ? $localize`Logged sets suggest a new ${lifts[0].exerciseName}:lift: max`
+            : $localize`Logged sets suggest new maxes for ${count}:count: lifts`,
+        detail: suggestedMaxDetail(lifts, context.locale),
+        action: {
+          label: $localize`Review maxes`,
+          link: `${page}/training`,
+          queryParams: { action: 'maxes' },
+        },
+      };
+    }
     case 'NoProgram':
       return {
         ...base,
         tone: 'new',
         tag: $localize`Program`,
-        heading: $localize`No program yet`,
-        detail: $localize`Joined ${date(item.date)}:date:`,
+        heading: item.subjectId ? $localize`No program running` : $localize`No program yet`,
+        detail:
+          (item.maxes ?? []).length > 0
+            ? carriedMaxDetail(item.maxes ?? [], context.locale)
+            : $localize`Joined ${date(item.date)}:date:`,
         // Opens the Training section with the Assign program sheet already open.
         action: {
           label: $localize`Assign program`,

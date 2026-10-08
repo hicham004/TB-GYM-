@@ -93,6 +93,10 @@ describe('the panel’s lifts', () => {
     expect(sourceWords(entry({ source: 'LoggedSet' }) as never, 'Maya')).toBe(
       'Estimated from Maya’s logged sets',
     );
+    // P4c, STR-014: a new program can start where the last one ended.
+    expect(sourceWords(entry({ source: 'PreviousProgram' }) as never, 'Maya')).toBe(
+      'Carried over from the last program',
+    );
     expect(card.suggestion).toBeNull();
   });
 
@@ -104,7 +108,9 @@ describe('the panel’s lifts', () => {
       valueText: '110.97 kg',
       headline: 'Logged sets suggest 110.97 kg, up from 100 kg.',
       from: 'From 90 kg for 5 reps at RPE 8 on Tue 13 Oct, week 2.',
+      keepLabel: 'Keep 100 kg',
     });
+    expect(up.kept).toBeNull();
 
     const [down] = maxCards(
       view([squat({ suggestion: suggested({ value: 92.5 }) })]),
@@ -112,6 +118,19 @@ describe('the panel’s lifts', () => {
       'en-US',
     );
     expect(down.suggestion?.headline).toBe('Logged sets suggest 92.5 kg, down from 100 kg.');
+  });
+
+  it('says when the coach kept the max over a suggestion, until something newer is suggested', () => {
+    const kept = { suggestedValue: 110.974, unit: 'Kilogram', keptOn: '2026-10-14' };
+    const [quiet] = maxCards(view([squat({ kept })]), 'Maya', 'en-US');
+    expect(quiet.kept).toBe(
+      'You kept 100 kg on Wed 14 Oct, over the 110.97 kg logged sets suggested.',
+    );
+    expect(quiet.suggestion).toBeNull();
+
+    const [newer] = maxCards(view([squat({ kept, suggestion: suggested() })]), 'Maya', 'en-US');
+    expect(newer.kept).toBeNull();
+    expect(newer.suggestion?.keepLabel).toBe('Keep 100 kg');
   });
 
   it('tells a max estimated from a logged set by its set, day and week', () => {
@@ -195,6 +214,31 @@ describe('the panel’s lifts', () => {
     expect(card.value).toBe('220.5 lb');
     expect(card.change).toBe('Down 4.5 lb from 225 lb');
     expect(card.basis).toBe('175 lb for 5 reps at RPE 7.5 in week 1');
+  });
+
+  it('says a max a new program took from the last program’s logged sets came from there', () => {
+    const [card] = maxCards(
+      view([
+        squat({
+          current: entry({
+            value: 110.974,
+            source: 'LoggedSet',
+            basis: {
+              load: 90,
+              repetitions: 5,
+              rpe: 8,
+              methodKey: 'RpeChart',
+              methodVersion: '1.0',
+              loggedSet: null,
+            },
+          }),
+        }),
+      ]),
+      'Maya',
+      'en-US',
+    );
+
+    expect(card.basis).toBe('90 kg for 5 reps at RPE 8, logged in the last program');
   });
 });
 

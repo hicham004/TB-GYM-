@@ -92,6 +92,34 @@ The owner asked for it to be planned, then left its three questions to Claude af
   again and refuses a set the rule no longer picks (a newer best set arrived), and the new max keeps the
   set it came from. A suggestion also shows on a program past its last day, because Build next block
   works the new weeks out from the program's maxes.
+- **P4b's follow-ups, built as P4c (2026-10-08), decided by Claude for the owner** (the owner asked for
+  web research and a decision, compared with competitors). **Keep this max (STR-013):** Everfit raises the
+  1RM by itself and TrainHeroic stops adjusting once the coach sets a max; a suggestion with no way to say
+  "no" would only nag, the more so once Coach Today shows it. So the coach can keep the max in use: it is
+  recorded, and only sets logged afterwards can suggest again (TrainHeroic's "fixed by the coach", but new
+  evidence still speaks). No undo: the keep is history, and typing the suggested number is always open.
+  **Coach Today (CLI-018 v2):** Trainerize coaches complain that PR alerts do not say what was achieved, so
+  the item names the lift and both numbers ("80.75 kg, up from 77.5 kg") and opens the panel. It ranks last
+  and never makes a client Needs attention: getting stronger is good news. **A newer set during review**
+  answers with its own code, and the sheet reads the new estimate and says so. **Demo data:** demo clients
+  log the RPE their weight was on the chart for their strength; those who set bests get about 2% stronger
+  a week and push their last set, so the demo suggests only heavier maxes.
+- **Between programs, decided by Claude for the owner on 2026-10-08** (the owner's "do the last session's
+  not-done work", with research). In Everfit, TrainHeroic and TrueCoach a max belongs to the client, so the
+  next program simply uses it; in TB Gym each program keeps its own maxes (STR-002), and Assign program read
+  only the client's recorded maxes, so a max raised during a program was lost at the next assignment and a
+  finished program's suggestion had nowhere to go. **The next program starts where the last one ended
+  (STR-014):** Assign program fills each lift with the max the client's latest program uses now (unless a
+  max recorded since is newer) and offers that program's suggestion as "Use 80.75 kg"; the new max names the
+  max it carried or the set it came from, and the database keeps it to the same client. Coach Today does not
+  add a Maxes to review item for a finished program, which cannot be updated: its No program item names the
+  suggestion ("Last program's sets suggest Deadlift 80.75 kg, up from 77.5 kg") and opens Assign program.
+  The client list gains a **Maxes to review** chip, shown only while a client has one. **No notification
+  for a suggestion:** it is never urgent (the max in use stays valid until the coach acts) and comes most
+  weeks for most clients on percentage programs, so a notice would compete with messages and check-ins;
+  Coach Today already names it with both numbers. TrainingPeaks, the closest equivalent, emails threshold
+  improvements only when the coach switches them on per athlete, and Trainerize's personal-best alerts are
+  criticised for saying nothing useful. If founding coaches ask, it comes back as an opt-in in-app notice.
 
 **Telling the client about changes** (the owner's open question from P3a, P3b and P4a, decided by Claude
 on the same day). TB Gym sends no training notices at all today, not even for a new program or a shared

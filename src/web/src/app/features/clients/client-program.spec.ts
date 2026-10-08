@@ -84,6 +84,9 @@ async function render(options: Options = {}) {
     previewTrainingMaxes: vi.fn(() => of({})),
     applyTrainingMaxes: vi.fn(() => of({})),
     renameProgram: vi.fn(() => of({})),
+    getPreviousMaxes: vi.fn(() =>
+      of({ mesocycleId: null, programName: null, lastDay: null, loadUnit: null, maxes: [] }),
+    ),
     ...options.programApi,
   };
   const api = {
@@ -797,6 +800,17 @@ describe('a client’s Training', () => {
 
       expect(textOf(dialog()!.querySelector('h2'))).toBe('Assign program');
       // The word is taken out of the address, so Back and a reload do not open it again.
+      expect(router.url).toBe('/clients/client-1/training');
+    });
+
+    it('brings the training maxes into view when the coach came to review them, once', async () => {
+      const { harness, router } = await render({ url: '/clients/client-1/training?action=maxes' });
+      await settle(harness.fixture);
+
+      const panel = harness.fixture.debugElement.query(
+        (element) => element.name === 'app-program-maxes',
+      );
+      expect(panel.componentInstance.reveal()).toBe(true);
       expect(router.url).toBe('/clients/client-1/training');
     });
 

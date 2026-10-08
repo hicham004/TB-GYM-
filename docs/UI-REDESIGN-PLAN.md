@@ -83,7 +83,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R4.4b | **Recipes** (C7, part 2): recipe cards with macro bars, the recipe editor (ingredients from a food search, totals per serving as they are typed, publish), the AI suggestion inside New recipe, and recipe photos | §2, plus backend tests | Done · 2026-10-07 · b71d004 |
 | R4.4c | **Foods** (C7, part 3): one clean search over the coach's own foods and USDA (database codes behind a details toggle), adding your own food, and the calculation defaults moved to Settings; the older Recipes and foods page goes. Its first follow-ups were closed in the same step: archive and restore, a recipe line offered its food's new numbers, USDA names in sentence case, USDA carbs just below zero counted as 0 g, and the food sheet asking before it closes | §2, plus backend tests | Done · 2026-10-07 · fd42b34 |
 | R4.4d | **Recipes for clients** (M4 and C7, decided 2026-10-07): assigning a plan copies each recipe's ingredients, method, prep and cook time and cover photo into the client's snapshot (NUT-006), and the client's day opens a recipe in a sheet; the recipe editor gains prep and cook time; the meal-plan builder offers "Use the newest version" for a recipe republished since; recipe photos no version names are removed 48 hours after upload (MED-014). Its first follow-ups were closed in the same step: the ingredients scaled to the client's portion, the recipe photo on the meal cards, and Print recipe | §2, plus backend tests (the snapshot, the client's read, the photo only for the client's own plan, another client, a released client, the 48-hour sweep) | Done · 2026-10-08 · 810f642 |
-| P4b | **Adjusting next week from logged performance** (ADR 0036, decided 2026-10-07): the Training maxes panel suggests a new max from the best logged set of the week (1 to 8 reps at RPE 7 to 10), and the coach applies it through the existing preview; never automatic | §2, plus domain reference tests (which sets count, the estimate) and API tests (other coach, released client, kg and lb kept apart) | Done · 2026-10-08 |
+| P4b | **Adjusting next week from logged performance** (ADR 0036, decided 2026-10-07): the Training maxes panel suggests a new max from the best logged set of the week (1 to 8 reps at RPE 7 to 10), and the coach applies it through the existing preview; never automatic | §2, plus domain reference tests (which sets count, the estimate) and API tests (other coach, released client, kg and lb kept apart) | Done · 2026-10-08 · d9835b2 |
+| P4c | **Suggested maxes, P4b's follow-ups** (owner, 2026-10-08: "do the last session's not-done work"; decided by Claude after comparing competitors, ADR 0036): **Keep this max** on a suggestion (STR-013), Coach Today names the lifts whose logged sets suggest a new max (CLI-018 v2), a newer set during review says so, and demo clients hit their numbers. Its own follow-ups were closed in the same step: a new program starts where the last one ended, with the last program's suggestion one tap away in Assign program and on Coach Today's No program item (STR-014), and the client list has a Maxes to review chip | §2, plus domain tests (the keep, the attention rule, the carried max) and API tests (keep, retry, newer set, other coach, other workspace, released client, Coach Today, append-only, carry from the latest program only, the same client only) | Done · 2026-10-08 |
 | R5.1 | **Products** (C8), **Exercise library** (C10), notifications, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only) | §2 | To do |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
 | R5.3 | **Delete legacy CSS**, add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
@@ -510,7 +511,28 @@ of the implemented R1.3 screens before production rollout.
   until the coach changes that max or newer sets replace it; add one if coaches find it noisy. (3) A newer
   best set logged between the preview and Update answers with the general "This program changed since you
   opened this" message; a code of its own could name the new set. (4) Coach Today does not mention
-  suggestions.
+  suggestions. **All four were built in P4c (2026-10-08; screenshots `docs/design/p4c-*.png`):** the demo
+  logs honest RPEs and its only suggestion is Maya's deadlift, 77.5 to 80.75 kg; **Keep 77.5 kg** sits beside
+  Review the new weights; a newer set answers `training_max_suggestion_changed` and the sheet reads the new
+  estimate; Coach Today, the client's page and the client list show "Maxes to review", last, without
+  making the client Needs attention, and **Review maxes** opens Training with the suggestion in view.
+  Left: (5) a client between programs (the last one ended) has no Coach Today item, because only running
+  or coming blocks are read; the ended program's own panel still suggests, for Build next block. (6) The
+  suggestion is not sent to the coach as a notice; notifications come with R5.1. (7) The client list's
+  "Needs attention" filter does not offer "Maxes to review" as a filter of its own. **All three were
+  closed in P4c on 2026-10-08, decided by Claude for the owner after comparing competitors (ADR 0036,
+  STR-014; screenshots `docs/design/p4c-next-*.png`):** (5) the next program starts where the last one
+  ended. Everfit, TrainHeroic and TrueCoach keep one max per client, so the next program uses it; here
+  Assign program fills each lift from the latest program's max in use and offers its suggestion ("Use
+  80.75 kg"), and Coach Today's No program item names it and opens Assign program, rather than a Maxes to
+  review item for a program that can no longer be updated. (6) No notice for a suggestion: never urgent,
+  frequent, and already on Coach Today; TrainingPeaks emails its equivalent only when a coach switches it
+  on per athlete. It can come back as an opt-in if founding coaches ask. (7) A **Maxes to review** chip,
+  shown only while some client has one, so coaches who never program from maxes see no empty chip. Not
+  built: (8) a max raised during a program is not written back to the client's recorded maxes (More
+  training tools); Assign program reads the latest program instead, so nothing is lost, and the history
+  stays the coach's own entries. (9) At 390 px Coach Today's suggestion line can break between a number and
+  its unit ("67.82 / kg"); a no-break space in `suggestedMaxDetail`, as Assign program now uses, fixes it.
 ---
 
 ## 1. Verdict: why the product feels "meh"

@@ -417,7 +417,9 @@ public static class TrainingEndpoints
             {
                 return Results.Conflict(new
                 {
-                    code = "training_maxes_conflict",
+                    code = exception is TrainingMaxSuggestionChangedException
+                        ? TrainingMaxSuggestionChangedException.Code
+                        : "training_maxes_conflict",
                     message = exception.Message,
                 });
             }
@@ -444,6 +446,23 @@ public static class TrainingEndpoints
         .Produces<TrainingMesocycleView>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
+
+        coach.MapPost("/mesocycles/{mesocycleId:guid}/training-maxes/keep", async (
+            Guid mesocycleId,
+            KeepTrainingMaxRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.KeepTrainingMaxAsync(mesocycleId, request, cancellationToken));
+        })
+        .WithName("KeepTrainingMax")
+        .Produces<TrainingMaxesView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status404NotFound);
 
         coach.MapPut("/mesocycles/{mesocycleId:guid}/name", async (
             Guid mesocycleId,
@@ -507,6 +526,19 @@ public static class TrainingEndpoints
         })
         .WithName("GetClientTrainingProgram")
         .Produces<CoachClientProgramView>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        // Where the client's latest program ended, for Assign program to start from (P4c, STR-014).
+        coach.MapGet("/clients/{clientProfileId:guid}/previous-maxes", async (
+            Guid clientProfileId,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var maxes = await service.GetPreviousProgramMaxesAsync(clientProfileId, cancellationToken);
+            return maxes is null ? Results.NotFound() : Results.Ok(maxes);
+        })
+        .WithName("GetPreviousProgramMaxes")
+        .Produces<PreviousProgramMaxesView>()
         .Produces(StatusCodes.Status404NotFound);
 
         var client = endpoints
@@ -772,6 +804,7 @@ public static class TrainingEndpoints
                 (object?)result.SavedSession ??
                 (object?)result.SetSave ??
                 (object?)result.Draft ??
+                (object?)result.TrainingMaxes ??
                 result.WorkoutExecution),
             TrainingCommandStatus.NotFound => Results.NotFound(),
             TrainingCommandStatus.Forbidden => Results.Forbid(),

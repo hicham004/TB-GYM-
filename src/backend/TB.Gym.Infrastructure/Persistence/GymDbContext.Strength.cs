@@ -111,8 +111,19 @@ public sealed partial class GymDbContext
                 .HasForeignKey(item => new { item.TenantId, item.SourceSetPerformanceId })
                 .HasPrincipalKey(item => new { item.TenantId, item.Id })
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // A max carried into a new program names the earlier max, and the key includes the client, so a
+            // max can only ever be carried from the same client's own program (STR-014).
+            entity.HasOne<MesocycleWorkingMaxSnapshot>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId, item.CarriedFromSnapshotId })
+                .HasPrincipalKey(item => new { item.TenantId, item.ClientProfileId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table =>
             {
+                table.HasCheckConstraint(
+                    "CK_WorkingMaxSnapshots_CarriedFrom",
+                    "\"CarriedFromSnapshotId\" IS NULL OR (\"SourceMaxRecordId\" IS NULL AND \"BasisLoad\" IS NULL AND \"SupersedesSnapshotId\" IS NULL)");
                 // A max estimated from a logged set keeps that set's numbers beside the link (P4b, STR-007).
                 table.HasCheckConstraint(
                     "CK_WorkingMaxSnapshots_LoggedSetBasis",
@@ -158,6 +169,39 @@ public sealed partial class GymDbContext
                     "CK_WorkingMaxUpdates_Hashes",
                     "char_length(\"RequestFingerprint\") = 64 AND char_length(\"PreviewHash\") = 64");
             });
+            ConfigureTenantEntity(entity);
+        });
+
+        // A coach keeping a max over a logged set's suggestion (STR-013, P4c). Append-only, and one record per
+        // max and set, so a retried keep finds the first one.
+        builder.Entity<WorkingMaxKeep>(entity =>
+        {
+            entity.ToTable("WorkingMaxKeeps", "strength");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.SuggestedValue).HasPrecision(8, 3);
+            entity.Property(item => item.Unit).HasConversion<string>().HasMaxLength(16);
+            entity.HasIndex(item => new { item.TenantId, item.WorkingMaxSnapshotId, item.LoggedSetPerformanceId })
+                .IsUnique()
+                .HasDatabaseName(DatabaseConstraintNames.OneKeepPerTrainingMaxAndSet);
+            entity.HasIndex(item => new { item.TenantId, item.MesocycleId, item.CreatedAtUtc });
+            entity.HasOne<TrainingMesocycle>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.MesocycleId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<MesocycleWorkingMaxSnapshot>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.WorkingMaxSnapshotId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<WorkoutSetPerformance>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.LoggedSetPerformanceId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_WorkingMaxKeeps_SuggestedValue",
+                "\"SuggestedValue\" > 0 AND \"SuggestedValue\" <= 2000"));
             ConfigureTenantEntity(entity);
         });
     }

@@ -151,6 +151,44 @@ describe('Clients', () => {
     expect(squash(query(host, '[role="status"]').textContent)).toBe('Showing 2 of 12 clients');
   });
 
+  it('offers Maxes to review only while a client has maxes to review', async () => {
+    const view = clientListView();
+    const stronger = view.clients.find((item) => item.client.firstName === 'Hiba');
+    if (!stronger) throw new Error('No Hiba in the fixture.');
+    const withMaxes: ClientOverviewView = {
+      ...view,
+      clients: view.clients.map((item) =>
+        item === stronger ? { ...item, attention: ['MaxesToReview'] } : item,
+      ),
+    };
+    const { host, harness } = await render({ getOverview: () => of(withMaxes) });
+
+    const chips = Array.from(host.querySelectorAll('.chip')).map((chip) =>
+      squash(chip.textContent),
+    );
+    expect(chips).toEqual([
+      'All 12',
+      'Needs attention 6',
+      'Ending soon 2',
+      'Paused 1',
+      'New 2',
+      'Maxes to review 1',
+    ]);
+
+    tick(host, 'Maxes to review');
+    await settle(harness.fixture);
+    expect(names(host)).toEqual(['Hiba Nasser']);
+    expect(TestBed.inject(Router).url).toBe('/clients?show=maxes');
+  });
+
+  it('keeps Maxes to review when the address asks for it, and says nobody has any', async () => {
+    const { host } = await render({ url: '/clients?show=maxes' });
+
+    expect(query<HTMLInputElement>(host, 'input[value="maxes"]').checked).toBe(true);
+    expect(names(host)).toEqual([]);
+    expect(host.textContent).toContain('No logged sets suggest a new max right now');
+  });
+
   it('opens on the chip named in the address, so Back returns to the same list', async () => {
     const { host } = await render({ url: '/clients?show=paused' });
 

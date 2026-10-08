@@ -411,6 +411,11 @@ internal sealed partial class TrainingApplicationService
             .SelectMany(item => item.Exercises)
             .GroupBy(item => item.ExerciseId)
             .ToDictionary(group => group.Key, group => group.First().ExerciseNameSnapshot);
+
+        // Read once, and only when a max starts from the client's latest program (STR-014).
+        var previous = selections.Any(item => item.CarriedFromMaxId is not null || item.LoggedSetId is not null)
+            ? await LoadPreviousProgramAsync(clientProfileId, cancellationToken)
+            : null;
         var result = new Dictionary<Guid, MesocycleWorkingMaxSnapshot>();
         foreach (var selection in selections)
         {
@@ -419,9 +424,45 @@ internal sealed partial class TrainingApplicationService
                 throw new ArgumentException("Working-max units must match the mesocycle load unit.");
             }
 
-            if ((selection.Value is null) == (selection.WeekOneWeight is null))
+            if (new object?[] { selection.Value, selection.WeekOneWeight, selection.LoggedSetId }.Count(item => item is not null) != 1)
             {
-                throw new ArgumentException("Give each training max either a number or week 1's weight.");
+                throw new ArgumentException(
+                    "Give each training max either a number or week 1's weight, or name the logged set its suggestion came from.");
+            }
+
+            var exerciseName = exerciseNames.GetValueOrDefault(selection.ExerciseId, "This lift");
+            if (selection.LoggedSetId is not null)
+            {
+                if (selection.StrengthMaxRecordId is not null || selection.CarriedFromMaxId is not null)
+                {
+                    throw new ArgumentException("A max estimated from a logged set has no saved or carried max behind it.");
+                }
+
+                result.Add(selection.ExerciseId, await MaxFromPreviousLoggedSetAsync(
+                    mesocycleId,
+                    clientProfileId,
+                    selection,
+                    previous,
+                    exerciseName,
+                    cancellationToken));
+                continue;
+            }
+
+            if (selection.CarriedFromMaxId is not null)
+            {
+                if (selection.StrengthMaxRecordId is not null || selection.WeekOneWeight is not null)
+                {
+                    throw new ArgumentException("A max carried over from the previous program has no other source.");
+                }
+
+                result.Add(selection.ExerciseId, CarryMax(
+                    tenantContext.TenantId,
+                    mesocycleId,
+                    clientProfileId,
+                    selection,
+                    previous,
+                    exerciseName));
+                continue;
             }
 
             if (selection.WeekOneWeight is { } weekOneWeight)
@@ -634,13 +675,16 @@ internal sealed partial class TrainingApplicationService
             snapshots.Any(snapshot =>
                 snapshot.ExerciseId == selection.ExerciseId &&
                 snapshot.SourceMaxRecordId == selection.StrengthMaxRecordId &&
+                snapshot.CarriedFromSnapshotId == selection.CarriedFromMaxId &&
                 snapshot.Unit == ToStrengthUnit(selection.Unit) &&
                 (selection.WeekOneWeight is { } weight
                     ? snapshot.Source == WorkingMaxSource.WeekOneWeight &&
                       snapshot.BasisLoad == decimal.Round(weight, 3, MidpointRounding.AwayFromZero)
-                    : selection.Value is { } value &&
-                      snapshot.Source != WorkingMaxSource.WeekOneWeight &&
-                      snapshot.Value == decimal.Round(value, 3, MidpointRounding.AwayFromZero))));
+                    : selection.LoggedSetId is { } setId
+                        ? snapshot.SourceSetPerformanceId == setId
+                        : selection.Value is { } value &&
+                          snapshot.Source is not (WorkingMaxSource.WeekOneWeight or WorkingMaxSource.LoggedSet) &&
+                          snapshot.Value == decimal.Round(value, 3, MidpointRounding.AwayFromZero))));
     }
 
     private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken)

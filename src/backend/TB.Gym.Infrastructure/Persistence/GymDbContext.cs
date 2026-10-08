@@ -158,6 +158,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<WorkingMaxUpdate> WorkingMaxUpdates => Set<WorkingMaxUpdate>();
 
+    public DbSet<WorkingMaxKeep> WorkingMaxKeeps => Set<WorkingMaxKeep>();
+
     public DbSet<ProgramTemplate> ProgramTemplates => Set<ProgramTemplate>();
 
     public DbSet<ProgramTemplateVersion> ProgramTemplateVersions => Set<ProgramTemplateVersion>();
@@ -930,6 +932,7 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<StrengthMaxRecord>("Strength max history is append-only.");
         RejectAppendOnlyMutations<MesocycleWorkingMaxSnapshot>("Working-max snapshots are append-only.");
         RejectAppendOnlyMutations<WorkingMaxUpdate>("Training max updates are append-only.");
+        RejectAppendOnlyMutations<WorkingMaxKeep>("Kept training maxes are append-only.");
         RejectAppendOnlyMutations<WorkoutNote>("Workout notes are append-only.");
         RejectAppendOnlyMutations<ProgressionApplication>("Progression applications are append-only.");
         RejectAppendOnlyMutations<ProgramEdit>("Program edits are append-only.");

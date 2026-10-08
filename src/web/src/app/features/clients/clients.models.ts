@@ -18,7 +18,7 @@ import { ago, daysBetween } from '../dashboard/coach-today.models';
  * against the workspace date the server sent; only "2 hours ago" uses the device clock.
  */
 
-export type ClientFilter = 'all' | 'attention' | 'ending' | 'paused' | 'new';
+export type ClientFilter = 'all' | 'attention' | 'ending' | 'paused' | 'new' | 'maxes';
 
 export const CLIENT_FILTERS: readonly ClientFilter[] = [
   'all',
@@ -26,7 +26,14 @@ export const CLIENT_FILTERS: readonly ClientFilter[] = [
   'ending',
   'paused',
   'new',
+  'maxes',
 ];
+
+/**
+ * Chips the list offers only while a client answers them (or the address asks for one): a coach who
+ * never programs from training maxes never sees an empty "Maxes to review".
+ */
+export const CLIENT_FILTERS_WHEN_USED: ReadonlySet<ClientFilter> = new Set(['maxes']);
 
 /** A day of the last seven, as the strip draws it. */
 export type DayMark = 'done' | 'partial' | 'missed' | 'due' | 'rest';
@@ -116,6 +123,8 @@ export function clientRow(
   }
   if (row.planState === 'Paused') filters.add('paused');
   if (row.isNew) filters.add('new');
+  // Good news, so never part of Needs attention, but a coach can still find everyone to review (P4c).
+  if (row.attention.includes('MaxesToReview')) filters.add('maxes');
 
   return {
     id: client.clientProfileId,
@@ -196,6 +205,8 @@ function attentionReason(kind: CoachAttentionKind): string {
       return $localize`Missed sessions`;
     case 'NoProgram':
       return $localize`No program yet`;
+    case 'MaxesToReview':
+      return $localize`Maxes to review`;
   }
 }
 

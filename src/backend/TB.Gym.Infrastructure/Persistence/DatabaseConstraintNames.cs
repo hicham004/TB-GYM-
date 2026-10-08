@@ -18,6 +18,10 @@ internal static class DatabaseConstraintNames
     public const string OneTrainingMaxUpdatePerKey =
         "IX_WorkingMaxUpdates_TenantId_IdempotencyKey";
 
+    /// <summary>A coach keeps a max over one logged set's suggestion once; a retried keep finds the first (STR-013).</summary>
+    public const string OneKeepPerTrainingMaxAndSet =
+        "IX_WorkingMaxKeeps_OneKeepPerMaxAndSet";
+
     /// <summary>
     /// A training max is superseded by at most one newer one, and a lift has one first max, so the maxes
     /// of a lift in a program form a single chain (STR-002). Two updates that race to supersede the same

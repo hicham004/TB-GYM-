@@ -1039,6 +1039,7 @@ export type CoachAttentionItemView = {
   count: null | number | string;
   weekNumber: null | number | string;
   subjectId: null | string;
+  maxes?: null | Array<CoachMaxSuggestionView>;
 };
 
 export type CoachAttentionKind =
@@ -1048,7 +1049,8 @@ export type CoachAttentionKind =
   | 'PlanEndingSoon'
   | 'WeekNotShared'
   | 'MissedSessions'
-  | 'NoProgram';
+  | 'NoProgram'
+  | 'MaxesToReview';
 
 export type CoachClientDetails = {
   id: string;
@@ -1107,6 +1109,14 @@ export type CoachingProductView = {
   isActive: boolean;
   offers: Array<ProductOfferView>;
   version: number | string;
+};
+
+export type CoachMaxSuggestionView = {
+  exerciseId: string;
+  exerciseName: string;
+  current: number | string;
+  suggested: number | string;
+  unit: CoachActivityLoadUnit;
 };
 
 export type CoachProgramBlockView = {
@@ -1907,6 +1917,11 @@ export type IssueInvoicesRequest = {
   periodStart: null | string;
 };
 
+export type KeepTrainingMaxRequest = {
+  exerciseId: string;
+  loggedSetId: string;
+};
+
 export type LeaveWorkspaceRequest = {
   reason: null | string;
   version: number | string;
@@ -2491,6 +2506,24 @@ export type PreviousExercisePerformanceView = {
   repetitions: null | number | string;
   rpe: null | number | string;
   sets?: null | Array<PreviousSetPerformanceView>;
+};
+
+export type PreviousProgramMaxesView = {
+  mesocycleId: null | string;
+  programName: null | string;
+  lastDay: null | string;
+  loadUnit: null | TrainingLoadUnit;
+  maxes: Array<PreviousProgramMaxView>;
+};
+
+export type PreviousProgramMaxView = {
+  exerciseId: string;
+  exerciseName: string;
+  maxId: string;
+  value: number | string;
+  unit: TrainingLoadUnit;
+  setOn: string;
+  suggestion: null | TrainingMaxSuggestionView;
 };
 
 export type PreviousSetPerformanceView = {
@@ -3343,6 +3376,12 @@ export type TrainingMaxesView = {
   maxes: Array<TrainingMaxView>;
 };
 
+export type TrainingMaxKeptView = {
+  suggestedValue: number | string;
+  unit: TrainingLoadUnit;
+  keptOn: string;
+};
+
 export type TrainingMaxLiftChangeView = {
   exerciseId: string;
   exerciseName: string;
@@ -3378,7 +3417,8 @@ export type TrainingMaxSetChangeView = {
   explanation: string;
 };
 
-export type TrainingMaxSource = 'Typed' | 'SavedMax' | 'WeekOneWeight' | 'LoggedSet';
+export type TrainingMaxSource =
+  'Typed' | 'SavedMax' | 'WeekOneWeight' | 'LoggedSet' | 'PreviousProgram';
 
 export type TrainingMaxSuggestionView = {
   value: number | string;
@@ -3394,6 +3434,7 @@ export type TrainingMaxView = {
   weekOneSet: null | TrainingMaxWeekOneSetView;
   earlier: Array<TrainingMaxEntryView>;
   suggestion: null | TrainingMaxSuggestionView;
+  kept: null | TrainingMaxKeptView;
 };
 
 export type TrainingMaxWeekOneSetView = {
@@ -3587,6 +3628,8 @@ export type WorkingMaxSelectionRequest = {
   value: null | number | string;
   unit: TrainingLoadUnit;
   weekOneWeight?: null | number | string;
+  carriedFromMaxId?: null | string;
+  loggedSetId?: null | string;
 };
 
 export type WorkingMaxSnapshotView = {
@@ -6842,6 +6885,41 @@ export type ApplyTrainingMaxesResponses = {
 export type ApplyTrainingMaxesResponse =
   ApplyTrainingMaxesResponses[keyof ApplyTrainingMaxesResponses];
 
+export type KeepTrainingMaxData = {
+  body: KeepTrainingMaxRequest;
+  path: {
+    mesocycleId: string;
+  };
+  query?: never;
+  url: '/api/training/mesocycles/{mesocycleId}/training-maxes/keep';
+};
+
+export type KeepTrainingMaxErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type KeepTrainingMaxError = KeepTrainingMaxErrors[keyof KeepTrainingMaxErrors];
+
+export type KeepTrainingMaxResponses = {
+  /**
+   * OK
+   */
+  200: TrainingMaxesView;
+};
+
+export type KeepTrainingMaxResponse = KeepTrainingMaxResponses[keyof KeepTrainingMaxResponses];
+
 export type RenameMesocycleData = {
   body: RenameMesocycleRequest;
   path: {
@@ -6954,6 +7032,32 @@ export type GetClientTrainingProgramResponses = {
 
 export type GetClientTrainingProgramResponse =
   GetClientTrainingProgramResponses[keyof GetClientTrainingProgramResponses];
+
+export type GetPreviousProgramMaxesData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/training/clients/{clientProfileId}/previous-maxes';
+};
+
+export type GetPreviousProgramMaxesErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetPreviousProgramMaxesResponses = {
+  /**
+   * OK
+   */
+  200: PreviousProgramMaxesView;
+};
+
+export type GetPreviousProgramMaxesResponse =
+  GetPreviousProgramMaxesResponses[keyof GetPreviousProgramMaxesResponses];
 
 export type GetCoachWorkoutDetailData = {
   body?: never;

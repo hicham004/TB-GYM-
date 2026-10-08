@@ -46,7 +46,7 @@ describe('client list (C2)', () => {
       'Tala Rizk',
       'Ziad Chahine',
     ]);
-    expect(list.counts).toEqual({ all: 12, attention: 6, ending: 2, paused: 1, new: 2 });
+    expect(list.counts).toEqual({ all: 12, attention: 6, ending: 2, paused: 1, new: 2, maxes: 0 });
   });
 
   it('names each server status with a tone, never colour alone', () => {
@@ -78,6 +78,20 @@ describe('client list (C2)', () => {
       context,
     );
     expect(both.reasons).toBe('Check-in to review · Week not shared');
+
+    // Maxes to review is a reason, but on its own the client stays on track: the server says so.
+    const stronger = clientRow(
+      overviewRow(coachClient('c-y', 'Nour', 'Haddad'), {
+        status: 'OnTrack',
+        attention: ['MaxesToReview'],
+      }),
+      COACH_TODAY,
+      context,
+    );
+    expect(stronger.reasons).toBe('Maxes to review');
+    expect(stronger.status).toEqual({ label: 'On track', tone: 'success' });
+    // Never in Needs attention, but the coach can still list everyone to review (P4c).
+    expect([...stronger.filters]).toEqual(['all', 'maxes']);
   });
 
   it('phrases the last activity by what it was and how long ago', () => {

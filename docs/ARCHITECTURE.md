@@ -380,7 +380,9 @@ terms and enrollment price/date snapshots while still allowing lifecycle status 
 Phase 3 extends database defense in depth to immutable template-version content, append-only
 strength max and working-max history (one first max per lift and one successor per max, plus an
 append-only record of each update; a max estimated from a logged set references that completed set
-and keeps its numbers, STR-012), append-only workout notes/progression applications,
+and keeps its numbers, STR-012, each keep of a max over a suggestion is append-only too, STR-013, and a
+max carried into a new program names the earlier max through a key that includes the client, STR-014),
+append-only workout notes/progression applications,
 started/completed prescription snapshots, and completed actual performance. A second GiST
 exclusion constraint rejects overlapping primary mesocycles per tenant/client/date range,
 while `pg_trgm` indexes support tenant-local exercise and tag search.

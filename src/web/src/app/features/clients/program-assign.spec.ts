@@ -131,6 +131,50 @@ const recorded = {
   ],
 };
 
+/** The client's latest program left the squat at 105 kg, set on 20 Sep, and its sets suggest 110.97 kg. */
+const previousMaxes = {
+  mesocycleId: 'block-old',
+  programName: 'Phase 1',
+  lastDay: '2026-09-30',
+  loadUnit: 'Kilogram',
+  maxes: [
+    {
+      exerciseId: 'squat',
+      exerciseName: 'Back squat',
+      maxId: 'snap-1',
+      value: 105,
+      unit: 'Kilogram',
+      setOn: '2026-09-20',
+      suggestion: {
+        value: 110.974,
+        unit: 'Kilogram',
+        basis: {
+          load: 90,
+          repetitions: 5,
+          rpe: 8,
+          methodKey: 'BestLoggedSet',
+          methodVersion: '1.0',
+          loggedSet: {
+            setPerformanceId: 'set-9',
+            weekNumber: 4,
+            performedOn: '2026-09-28',
+            sessionName: 'Lower A',
+          },
+        },
+        explanation: 'Best logged set v1.',
+      },
+    },
+  ],
+};
+
+const noPreviousProgram = {
+  mesocycleId: null,
+  programName: null,
+  lastDay: null,
+  loadUnit: null,
+  maxes: [],
+};
+
 const assigned = {
   id: 'block-new',
   name: 'Full Body Reset',
@@ -156,6 +200,7 @@ async function render(options: Options = {}) {
   };
   const programApi = {
     estimateMaxFromRpeChart: vi.fn(() => of(worked)),
+    getPreviousMaxes: vi.fn(() => of(noPreviousProgram)),
     ...options.programApi,
   };
   const csrf = { refresh: vi.fn().mockResolvedValue(undefined) };
@@ -267,6 +312,139 @@ describe('Assign program', () => {
     await settle(fixture);
     expect(textOf(fieldset)).toContain('Nothing recorded yet');
     expect(textOf(fieldset)).not.toContain('Entered now');
+  });
+
+  it('starts each max where the latest program left it, unless a newer one was recorded (STR-014)', async () => {
+    const { fixture, host, api, programApi } = await render({
+      api: {
+        listStrengthMaxes: vi.fn(() =>
+          of({ ...recorded, items: [{ ...recorded.items[0], effectiveDate: '2026-09-01' }] }),
+        ),
+      },
+      programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxes)) },
+    });
+    fill(host, 'Program', 'fbr-2');
+    await settle(fixture);
+
+    expect(programApi['getPreviousMaxes']).toHaveBeenCalledWith('client-1');
+    const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
+    expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('105');
+    expect(textOf(fieldset)).toContain('Where Phase 1 left it, set Sun 20 Sep');
+
+    press(host, 'Assign program');
+    await settle(fixture);
+    const request = (api['assignClientMesocycle'] as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(request.workingMaxes).toEqual([
+      {
+        exerciseId: 'squat',
+        strengthMaxRecordId: null,
+        value: 105,
+        unit: 'Kilogram',
+        carriedFromMaxId: 'snap-1',
+      },
+    ]);
+  });
+
+  it('keeps a max recorded after the latest program set its own', async () => {
+    const { fixture, host } = await render({
+      api: {
+        listStrengthMaxes: vi.fn(() =>
+          of({ ...recorded, items: [{ ...recorded.items[0], effectiveDate: '2026-09-25' }] }),
+        ),
+      },
+      programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxes)) },
+    });
+    fill(host, 'Program', 'fbr-2');
+    await settle(fixture);
+
+    const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
+    expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('100');
+    expect(textOf(fieldset)).toContain('Your recorded training max');
+    // The suggestion is still one tap away.
+    expect(textOf(fieldset.querySelector('.suggested'))).toContain('Use 110.97 kg');
+  });
+
+  it('offers what the latest program’s logged sets suggest and sends only the set (STR-014)', async () => {
+    const { fixture, host, api } = await render({
+      programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxes)) },
+    });
+    fill(host, 'Program', 'fbr-2');
+    await settle(fixture);
+
+    const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
+    expect(textOf(fieldset.querySelector('.suggested p'))).toBe(
+      'Phase 1’s logged sets suggest 110.97 kg (90 kg for 5 reps at RPE 8).',
+    );
+    press(host, 'Use 110.97 kg');
+    await settle(fixture);
+    expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('110.974');
+    expect(textOf(fieldset)).toContain(
+      'Estimated from Phase 1’s logged sets: 90 kg for 5 reps at RPE 8',
+    );
+    expect(fieldset.querySelector('.suggested')).toBeNull();
+
+    press(host, 'Assign program');
+    await settle(fixture);
+    const request = (api['assignClientMesocycle'] as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(request.workingMaxes).toEqual([
+      {
+        exerciseId: 'squat',
+        strengthMaxRecordId: null,
+        value: null,
+        unit: 'Kilogram',
+        loggedSetId: 'set-9',
+      },
+    ]);
+  });
+
+  it('never carries the latest program’s max across kilograms and pounds', async () => {
+    const { fixture, host } = await render({
+      programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxes)) },
+    });
+    fill(host, 'Program', 'fbr-2');
+    await settle(fixture);
+    tick(host, 'lb');
+    await settle(fixture);
+
+    const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
+    expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('');
+    expect(fieldset.querySelector('.suggested')).toBeNull();
+  });
+
+  it('reads the suggestion again when a newer set was logged while assigning', async () => {
+    const changed = new HttpErrorResponse({
+      status: 409,
+      error: {
+        code: 'training_max_suggestion_changed',
+        message: 'Back squat has a newer logged set.',
+      },
+    });
+    const newer = structuredClone(previousMaxes);
+    newer.maxes[0].suggestion.value = 115;
+    newer.maxes[0].suggestion.basis.loggedSet.setPerformanceId = 'set-10';
+    const getPreviousMaxes = vi
+      .fn()
+      .mockReturnValueOnce(of(previousMaxes))
+      .mockReturnValue(of(newer));
+    const { fixture, host } = await render({
+      api: { assignClientMesocycle: vi.fn(() => throwError(() => changed)) },
+      programApi: { getPreviousMaxes },
+    });
+    fill(host, 'Program', 'fbr-2');
+    await settle(fixture);
+    press(host, 'Use 110.97 kg');
+    await settle(fixture);
+
+    press(host, 'Assign program');
+    await settle(fixture);
+
+    expect(textOf(host.querySelector('.problem-text'))).toBe(
+      'Maya logged a newer set since you looked, so the suggested max changed. Look at the new suggestion, then try again.',
+    );
+    const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
+    // The row is back where the sheet started, with the new suggestion one tap away.
+    expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('100');
+    expect(textOf(fieldset.querySelector('.suggested'))).toContain('Use 115 kg');
   });
 
   it('names the program the coach assigns, or keeps its own name when left empty (P2)', async () => {

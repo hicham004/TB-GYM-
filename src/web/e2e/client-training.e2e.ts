@@ -451,6 +451,15 @@ async function openTraining(page: Page, width: number, height: number, options: 
     'GET /api/training/templates': (route) => json(route, 200, templates),
     'GET /api/training/template-versions/version-1': (route) => json(route, 200, versionDetail),
     [`GET /api/strength/clients/${ID}/maxes`]: (route) => json(route, 200, maxes),
+    // Assign program starts from the latest program's maxes (STR-014); none unless a test says so.
+    [`GET /api/training/clients/${ID}/previous-maxes`]: (route) =>
+      json(route, 200, {
+        mesocycleId: null,
+        programName: null,
+        lastDay: null,
+        loadUnit: null,
+        maxes: [],
+      }),
     // Every program the coach can open reads its own training maxes (P2).
     ...Object.fromEntries(
       [...new Set(programs.flatMap((program) => program.blocks.map((block) => block.id)))].map(
@@ -836,6 +845,112 @@ test('a finished program asks for the next one, and earlier ones can be opened',
   await axe(page);
 });
 
+/** Where Maya's finished program left the squat (80 kg, set 2 Oct) and what its logged sets suggest. */
+const previousMaxes = {
+  mesocycleId: 'block-done',
+  programName: 'Strength Base',
+  lastDay: '2026-10-04',
+  loadUnit: 'Kilogram',
+  maxes: [
+    {
+      exerciseId: 'ex-squat',
+      exerciseName: 'Back Squat',
+      maxId: 'snap-done',
+      value: 80,
+      unit: 'Kilogram',
+      setOn: '2026-10-02',
+      suggestion: {
+        value: 86.25,
+        unit: 'Kilogram',
+        basis: {
+          load: 70,
+          repetitions: 5,
+          rpe: 8,
+          methodKey: 'RpeChart',
+          methodVersion: '1.0',
+          loggedSet: {
+            setPerformanceId: 'set-done',
+            weekNumber: 6,
+            performedOn: '2026-10-03',
+            sessionName: 'Lower A',
+          },
+        },
+        explanation: 'Best logged set v1.',
+      },
+    },
+  ],
+};
+
+for (const [width, height, mode] of [
+  [1440, 900, 'light'],
+  [390, 844, 'light'],
+  [390, 844, 'dark'],
+] as const) {
+  test(`the next program starts where the last one ended, its suggestion one tap away, at ${width} px ${mode} (P4c)`, async ({
+    page,
+  }) => {
+    if (mode === 'dark') await page.emulateMedia({ colorScheme: 'dark' });
+    const requests: { method: string; path: string; body: unknown }[] = [];
+    await openTraining(page, width, height, {
+      path: `/clients/${ID}/training?action=assign`,
+      opensSheet: true,
+      requests,
+      programs: [coachProgram([completedBlock()])],
+      extra: {
+        [`GET /api/training/clients/${ID}/previous-maxes`]: (route) =>
+          json(route, 200, previousMaxes),
+        [`POST /api/training/clients/${ID}/mesocycles`]: (route) =>
+          json(route, 200, {
+            id: 'block-next',
+            name: 'Lean & Strong · Phase 3',
+            startDate: '2026-10-26',
+          }),
+      },
+    });
+
+    const sheet = page.getByRole('dialog', { name: 'Assign program' });
+    await sheet
+      .getByLabel('Program', { exact: true })
+      .selectOption({ label: 'Lean & Strong · Phase 3 · 6 weeks' });
+    // The 70 kg recorded on 14 Sep is older than where Strength Base left the squat.
+    const squat = sheet.getByLabel('Back Squat', { exact: true });
+    await expect(squat).toHaveValue('80');
+    await expect(sheet.getByText('Where Strength Base left it, set Fri 2 Oct')).toBeVisible();
+    await expect(sheet.locator('.suggested p')).toHaveText(
+      'Strength Base’s logged sets suggest 86.25 kg (70 kg for 5 reps at RPE 8).',
+    );
+    // Clear of the sheet's sticky buttons, as a coach scrolling to it would see it.
+    await sheet.locator('.suggested').evaluate((box) => box.scrollIntoView({ block: 'center' }));
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/p4c-next-assign-${width}-${mode}.png` });
+
+    await sheet.getByRole('button', { name: 'Use 86.25 kg' }).click();
+    await expect(squat).toHaveValue('86.25');
+    await expect(
+      sheet.getByText('Estimated from Strength Base’s logged sets: 70 kg for 5 reps at RPE 8'),
+    ).toBeVisible();
+    await expect(sheet.locator('.suggested')).toHaveCount(0);
+    await sheet.getByLabel('Start date', { exact: true }).fill('2026-10-26');
+    await sheet.getByRole('button', { name: 'Assign program' }).click();
+    await expect(sheet).toHaveCount(0);
+    expect(requests[0]).toMatchObject({
+      path: `/api/training/clients/${ID}/mesocycles`,
+      body: {
+        workingMaxes: [
+          {
+            exerciseId: 'ex-squat',
+            strengthMaxRecordId: null,
+            value: null,
+            unit: 'Kilogram',
+            loggedSetId: 'set-done',
+          },
+        ],
+      },
+    });
+  });
+}
+
 test('Training follows dark mode', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await openTraining(page, 1440, 900, { programs: [EVERYTHING] });
@@ -1126,6 +1241,61 @@ test('a suggested max reads at phone width and in dark mode, and passes axe', as
   await page.screenshot({ path: 'test-results/p4b-review-390.png' });
 });
 
+test('keeping a max quiets its suggestion and says so, at phone width and in dark mode (P4c)', async ({
+  page,
+}) => {
+  const requests: { method: string; path: string; body: unknown }[] = [];
+  const view = maxesView();
+  const kept = {
+    ...view,
+    maxes: [
+      {
+        ...view.maxes[0],
+        kept: { suggestedValue: 77.065, unit: 'Kilogram', keptOn: '2026-10-01' },
+      },
+      view.maxes[1],
+    ],
+  };
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openTraining(page, 390, 844, {
+    maxes: suggestingMaxes(),
+    requests,
+    extra: {
+      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/keep`]: (route) =>
+        json(route, 200, kept),
+    },
+  });
+  const panel = page.locator('app-program-maxes');
+  const keep = panel.getByRole('button', { name: 'Keep 70 kg' });
+  await keep.scrollIntoViewIfNeeded();
+  await keep.click();
+
+  // The suggestion is gone; the line that replaced it says what was kept, and has the focus.
+  const line = panel.locator('#kept-ex-squat');
+  await expect(line).toHaveText(
+    'You kept 70 kg on Thu 1 Oct, over the 77.07 kg logged sets suggested.',
+  );
+  await expect(line).toBeFocused();
+  await expect(panel.locator('.suggestion')).toHaveCount(0);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Kept Back Squat at 70 kg.' }),
+  ).toBeVisible();
+  expect(requests).toEqual([
+    {
+      method: 'POST',
+      path: `/api/training/mesocycles/${BLOCK}/training-maxes/keep`,
+      body: { exerciseId: 'ex-squat', loggedSetId: 'set-logged-9' },
+    },
+  ]);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p4c-kept-dark-390.png' });
+
+  await page.emulateMedia({ colorScheme: 'light' });
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p4c-kept-390.png' });
+});
+
 test.describe('a stale update', () => {
   test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/training\//] } });
   test('says the weights changed since they were looked at, and keeps the sheet open', async ({
@@ -1315,8 +1485,11 @@ for (const width of [390, 1440]) {
     await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
     await expect(page.locator('app-program-maxes .lift').first()).toBeVisible();
-    // The logged sets' suggestion and its button wrap with the text (P4b).
-    await expect(page.locator('app-program-maxes .suggestion button')).toBeVisible();
+    // The logged sets' suggestion and its two buttons wrap with the text (P4b, P4c).
+    const buttons = page.locator('app-program-maxes .suggestion button');
+    await expect(buttons).toHaveCount(2);
+    await expect(buttons.first()).toBeVisible();
+    await expect(buttons.last()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await page.getByRole('button', { name: 'Update maxes for the coming weeks' }).click();

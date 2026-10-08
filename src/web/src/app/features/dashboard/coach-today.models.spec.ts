@@ -192,6 +192,93 @@ describe('Coach Today view model', () => {
     expect(settled.tag).toBe('Program');
   });
 
+  it('names the lifts whose logged sets suggest a new max, with both numbers', () => {
+    const lift = (exerciseName: string, current: number, suggested: number, unit = 'Kilogram') => ({
+      exerciseId: exerciseName.toLowerCase(),
+      exerciseName,
+      current,
+      suggested,
+      unit: unit as 'Kilogram' | 'Pound',
+    });
+    const one = attentionRow(
+      attentionItem('MaxesToReview', SARA, {
+        count: 1,
+        subjectId: 'block-1',
+        maxes: [lift('Deadlift', 77.5, 80.749)],
+      }),
+      COACH_TODAY,
+      context,
+    );
+    expect(one).toMatchObject({
+      heading: "Sara Mansour's logged sets suggest a new Deadlift max",
+      detail: '80.75 kg, up from 77.5 kg',
+      tag: 'Maxes',
+      tone: 'share',
+      action: {
+        label: 'Review maxes',
+        link: `/clients/${SARA.clientProfileId}/training`,
+        queryParams: { action: 'maxes' },
+      },
+    });
+
+    const several = attentionRow(
+      attentionItem('MaxesToReview', SARA, {
+        count: 2,
+        maxes: [lift('Back squat', 385, 400, 'Pound'), lift('Bench press', 100, 96.2)],
+      }),
+      COACH_TODAY,
+      context,
+    );
+    expect(several.heading).toBe("Sara Mansour's logged sets suggest new maxes for 2 lifts");
+    // Pounds stay pounds; a lower suggestion is shown as it is.
+    expect(several.detail).toBe('Back squat 400 lb, Bench press 96.2 kg');
+    const lower = attentionRow(
+      attentionItem('MaxesToReview', SARA, { count: 1, maxes: [lift('Bench press', 100, 96.2)] }),
+      COACH_TODAY,
+      context,
+    );
+    expect(lower.detail).toBe('96.2 kg, down from 100 kg');
+  });
+
+  it('says a client between programs has none running, with what the last one suggests', () => {
+    const deadlift = {
+      exerciseId: 'deadlift',
+      exerciseName: 'Deadlift',
+      current: 77.5,
+      suggested: 80.749,
+      unit: 'Kilogram' as const,
+    };
+    const between = attentionRow(
+      attentionItem('NoProgram', SARA, {
+        date: '2026-03-01',
+        subjectId: 'block-ended',
+        maxes: [deadlift],
+      }),
+      COACH_TODAY,
+      context,
+    );
+    expect(between).toMatchObject({
+      heading: 'Sara Mansour has no program running',
+      detail: 'Last program’s sets suggest Deadlift 80.75 kg, up from 77.5 kg',
+      action: {
+        label: 'Assign program',
+        link: `/clients/${SARA.clientProfileId}/training`,
+        queryParams: { action: 'assign' },
+      },
+    });
+
+    // An ended program with nothing to suggest still says the client had one.
+    const quiet = attentionRow(
+      attentionItem('NoProgram', SARA, { date: '2026-03-01', subjectId: 'block-ended' }),
+      COACH_TODAY,
+      context,
+    );
+    expect([quiet.heading, quiet.detail]).toEqual([
+      'Sara Mansour has no program running',
+      'Joined Sun 1 Mar',
+    ]);
+  });
+
   it('turns a finished workout into a sentence with its first two records', () => {
     const [rami, maya, rita] = mapCoachToday(coachTodayView(), context).activity;
 

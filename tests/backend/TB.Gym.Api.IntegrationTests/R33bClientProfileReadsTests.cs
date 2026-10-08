@@ -194,8 +194,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         var mayaPage = await ReadSliceAsync<ClientProfileOverviewView>(coach, R33bOverviewUrl(mayaId));
         var queries = RequiredTodayQueryCounter.Count;
         Console.WriteLine($"R3.3b client page: {queries} SQL commands for 1 of 4 clients.");
-        // Observed 18, sign-in and tenant checks included: a fixed number, whatever the client count.
-        Assert.IsLessThanOrEqualTo(22, queries, "One client's page must stay a fixed number of queries.");
+        // Observed 18, sign-in and tenant checks included: a fixed number, whatever the client count. P4c's
+        // suggested maxes add two reads (the maxes in use, then the sets), 23 observed.
+        Assert.IsLessThanOrEqualTo(24, queries, "One client's page must stay a fixed number of queries.");
         Assert.AreEqual((ClientOverviewStatus.OnTrack, CoachActivityKind.WeighInLogged),
             (mayaPage.Status, mayaPage.LastActivityKind));
         Assert.IsEmpty(mayaPage.Attention);

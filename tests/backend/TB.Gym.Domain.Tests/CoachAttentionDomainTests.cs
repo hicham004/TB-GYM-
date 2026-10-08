@@ -70,7 +70,7 @@ public sealed class CoachAttentionDomainTests
     [TestMethod]
     public void EachSignalRaisesItsKindInRankOrder()
     {
-        var everything = new ClientAttentionSignals(1, 3, null, Today, true, 2, true);
+        var everything = new ClientAttentionSignals(1, 3, null, Today, true, 2, true, 2);
 
         CollectionAssert.AreEqual(
             new[]
@@ -81,6 +81,7 @@ public sealed class CoachAttentionDomainTests
                 CoachAttentionKind.WeekNotShared,
                 CoachAttentionKind.MissedSessions,
                 CoachAttentionKind.NoProgram,
+                CoachAttentionKind.MaxesToReview,
             },
             CoachAttentionPolicy.Flags(everything, ClientPlanState.Running, Today).ToArray());
         Assert.IsEmpty(CoachAttentionPolicy.Flags(Quiet(), ClientPlanState.Running, Today));
@@ -110,6 +111,22 @@ public sealed class CoachAttentionDomainTests
         Assert.IsEmpty(CoachAttentionPolicy.Flags(
             Quiet() with { RenewalRequestedOn = Today }, ClientPlanState.NotStarted, Today),
             "Once a renewal is waiting to start, the request has been answered.");
+    }
+
+    [TestMethod]
+    public void LiftsWhoseLoggedSetsSuggestANewMaxAreRaisedLastAndNeverMakeAClientNeedAttention()
+    {
+        CollectionAssert.AreEqual(
+            new[] { CoachAttentionKind.MaxesToReview },
+            CoachAttentionPolicy.Flags(Quiet() with { MaxesToReview = 1 }, ClientPlanState.Running, Today).ToArray());
+
+        // A client getting stronger is good news: on track stays on track, ending soon stays ending soon.
+        Assert.AreEqual(ClientOverviewStatus.OnTrack, CoachAttentionPolicy.Status(
+            [CoachAttentionKind.MaxesToReview], ClientPlanState.Running));
+        Assert.AreEqual(ClientOverviewStatus.EndingSoon, CoachAttentionPolicy.Status(
+            [CoachAttentionKind.PlanEndingSoon, CoachAttentionKind.MaxesToReview], ClientPlanState.Running));
+        Assert.AreEqual(ClientOverviewStatus.NeedsAttention, CoachAttentionPolicy.Status(
+            [CoachAttentionKind.MissedSessions, CoachAttentionKind.MaxesToReview], ClientPlanState.Running));
     }
 
     [TestMethod]

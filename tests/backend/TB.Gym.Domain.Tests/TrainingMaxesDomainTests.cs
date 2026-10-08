@@ -212,6 +212,33 @@ public sealed class TrainingMaxesDomainTests
     }
 
     [TestMethod]
+    public void ACarriedMaxStartsTheNewProgramsChainWithTheSameClientsLiftUnitAndValue()
+    {
+        // P4c, STR-014: the next program starts where the last one ended.
+        var ended = MesocycleWorkingMaxSnapshot.Capture(
+            TenantId, Guid.NewGuid(), ClientId, SquatId, null, 152.5m, StrengthLoadUnit.Pound, 1, null, "Typed");
+        var next = Guid.NewGuid();
+
+        var carried = MesocycleWorkingMaxSnapshot.CaptureCarried(TenantId, next, ClientId, ended, "Carried over");
+
+        Assert.AreEqual(WorkingMaxSource.PreviousProgram, carried.Source);
+        Assert.AreEqual(
+            (next, SquatId, 152.5m, StrengthLoadUnit.Pound, 1, (Guid?)null, (Guid?)ended.Id),
+            (carried.MesocycleId, carried.ExerciseId, carried.Value, carried.Unit, carried.EffectiveFromWeek,
+                carried.SupersedesSnapshotId, carried.CarriedFromSnapshotId));
+        Assert.IsNull(carried.SourceMaxRecordId);
+        Assert.IsNull(carried.BasisLoad);
+
+        // Never another client's max, another workspace's, or one from the same program.
+        Assert.ThrowsExactly<ArgumentException>(() => MesocycleWorkingMaxSnapshot.CaptureCarried(
+            TenantId, next, Guid.NewGuid(), ended, "Another client"));
+        Assert.ThrowsExactly<ArgumentException>(() => MesocycleWorkingMaxSnapshot.CaptureCarried(
+            Guid.NewGuid(), next, ClientId, ended, "Another workspace"));
+        Assert.ThrowsExactly<ArgumentException>(() => MesocycleWorkingMaxSnapshot.CaptureCarried(
+            TenantId, ended.MesocycleId, ClientId, ended, "Same program"));
+    }
+
+    [TestMethod]
     public void AWeekOneEstimateKeepsOnlyASetThatIsAValidPrescription()
     {
         var estimate = RpeChartMaxEstimator.Estimate(100m, 5, 7m, StrengthLoadUnit.Kilogram);

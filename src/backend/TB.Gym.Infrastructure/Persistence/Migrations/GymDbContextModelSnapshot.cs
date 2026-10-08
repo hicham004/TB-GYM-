@@ -8181,6 +8181,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrecision(3, 1)
                         .HasColumnType("numeric(3,1)");
 
+                    b.Property<Guid?>("CarriedFromSnapshotId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ClientProfileId")
                         .HasColumnType("uuid");
 
@@ -8251,8 +8254,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "ClientProfileId");
-
                     b.HasIndex("TenantId", "ExerciseId");
 
                     b.HasIndex("TenantId", "SourceMaxRecordId");
@@ -8264,6 +8265,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_WorkingMaxSnapshots_OneSuccessor")
                         .HasFilter("\"SupersedesSnapshotId\" IS NOT NULL");
 
+                    b.HasIndex("TenantId", "ClientProfileId", "CarriedFromSnapshotId");
+
                     b.HasIndex("TenantId", "MesocycleId", "ExerciseId")
                         .IsUnique()
                         .HasDatabaseName("IX_WorkingMaxSnapshots_OneRoot")
@@ -8273,6 +8276,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("WorkingMaxSnapshots", "strength", t =>
                         {
+                            t.HasCheckConstraint("CK_WorkingMaxSnapshots_CarriedFrom", "\"CarriedFromSnapshotId\" IS NULL OR (\"SourceMaxRecordId\" IS NULL AND \"BasisLoad\" IS NULL AND \"SupersedesSnapshotId\" IS NULL)");
+
                             t.HasCheckConstraint("CK_WorkingMaxSnapshots_EffectiveWeek", "\"EffectiveFromWeek\" >= 1 AND \"EffectiveFromWeek\" <= 52");
 
                             t.HasCheckConstraint("CK_WorkingMaxSnapshots_LoggedSetBasis", "\"SourceSetPerformanceId\" IS NULL OR \"BasisLoad\" IS NOT NULL");
@@ -8370,6 +8375,73 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("MaxHistory", "strength", t =>
                         {
                             t.HasCheckConstraint("CK_StrengthMaxHistory_Value", "\"Value\" > 0 AND \"Value\" <= 2000");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Strength.WorkingMaxKeep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("LoggedSetPerformanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MesocycleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("SuggestedValue")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<Guid>("WorkingMaxSnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "LoggedSetPerformanceId");
+
+                    b.HasIndex("TenantId", "MesocycleId", "CreatedAtUtc");
+
+                    b.HasIndex("TenantId", "WorkingMaxSnapshotId", "LoggedSetPerformanceId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WorkingMaxKeeps_OneKeepPerMaxAndSet");
+
+                    b.ToTable("WorkingMaxKeeps", "strength", t =>
+                        {
+                            t.HasCheckConstraint("CK_WorkingMaxKeeps_SuggestedValue", "\"SuggestedValue\" > 0 AND \"SuggestedValue\" <= 2000");
                         });
                 });
 
@@ -12761,6 +12833,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "SupersedesSnapshotId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Strength.MesocycleWorkingMaxSnapshot", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId", "CarriedFromSnapshotId")
+                        .HasPrincipalKey("TenantId", "ClientProfileId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Strength.StrengthMaxRecord", b =>
@@ -12784,6 +12862,30 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "SourceWorkoutExecutionId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Strength.WorkingMaxKeep", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Training.WorkoutSetPerformance", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "LoggedSetPerformanceId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Training.TrainingMesocycle", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "MesocycleId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Strength.MesocycleWorkingMaxSnapshot", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "WorkingMaxSnapshotId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Strength.WorkingMaxUpdate", b =>

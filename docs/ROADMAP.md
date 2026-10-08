@@ -1054,7 +1054,9 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
   from logged performance, decided in ADR 0036 on 2026-10-07 (a suggestion from the week's best logged
   set that the coach applies), built on 2026-10-08 right after the nutrition builder (R4.4a to R4.4d;
   R4.4d, recipes for clients, was added on 2026-10-07 because every competitor shows a client the whole
-  recipe).
+  recipe). P4c, P4b's follow-ups, the same day at the owner's request: keep a max over a suggestion,
+  Coach Today names the lifts to review, the demo's clients hit their numbers, and a new program starts
+  where the last one ended (STR-014), with a "Maxes to review" chip on the client list.
 
 Work follows this order; anything outside it needs the user's approval first.
 

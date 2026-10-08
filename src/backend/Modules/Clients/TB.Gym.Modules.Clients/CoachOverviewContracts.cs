@@ -37,6 +37,9 @@ public enum CoachAttentionKind
     WeekNotShared = 5,
     MissedSessions = 6,
     NoProgram = 7,
+
+    /// <summary>The client's logged sets suggest new training maxes (STR-012); good news, so last.</summary>
+    MaxesToReview = 8,
 }
 
 /// <summary>The one status a client shows in the coach's list (CLI-018).</summary>
@@ -96,7 +99,10 @@ public sealed record CoachClientRef(
 /// <item><c>PlanEndingSoon</c>: Date the plan's last covered day, SubjectId the enrollment ending last.</item>
 /// <item><c>WeekNotShared</c>: Date the week starts, WeekNumber, SubjectId the program block.</item>
 /// <item><c>MissedSessions</c>: Count missed since the last workout, Date that workout's day (null if none).</item>
-/// <item><c>NoProgram</c>: Date the client joined.</item>
+/// <item><c>NoProgram</c>: Date the client joined, SubjectId their latest program (null if they never had
+/// one), and Maxes what its logged sets suggest, for the next program to start from (STR-014).</item>
+/// <item><c>MaxesToReview</c>: Count of lifts, Since the newest set behind them was logged, SubjectId the
+/// program, and Maxes each lift with its max and the suggestion.</item>
 /// </list>
 /// </summary>
 public sealed record CoachAttentionItemView(
@@ -106,7 +112,19 @@ public sealed record CoachAttentionItemView(
     DateOnly? Date,
     int? Count,
     int? WeekNumber,
-    Guid? SubjectId);
+    Guid? SubjectId,
+    IReadOnlyList<CoachMaxSuggestionView>? Maxes = null);
+
+/// <summary>
+/// A lift whose max the client's logged sets suggest changing (STR-012), named with both numbers so the coach
+/// knows what happened before opening anything. Values are in the program's unit and never converted.
+/// </summary>
+public sealed record CoachMaxSuggestionView(
+    Guid ExerciseId,
+    string ExerciseName,
+    decimal Current,
+    decimal Suggested,
+    CoachActivityLoadUnit Unit);
 
 /// <summary>Sessions programmed and completed on one workspace day.</summary>
 public sealed record SessionDayCountView(DateOnly Date, int Scheduled, int Completed);

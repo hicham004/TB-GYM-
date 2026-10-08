@@ -57,6 +57,8 @@ export interface MaxCard {
   readonly earlier: readonly MaxHistoryRow[];
   /** The max the client's logged sets suggest (P4b); null when they suggest nothing. */
   readonly suggestion: MaxSuggestion | null;
+  /** "You kept 100 kg on Thu 8 Oct, over the 110.97 kg logged sets suggested." Only while nothing newer is suggested. */
+  readonly kept: string | null;
 }
 
 /**
@@ -72,6 +74,8 @@ export interface MaxSuggestion {
   readonly headline: string;
   /** "From 90 kg for 5 reps at RPE 8 on Thu 8 Oct, week 1." */
   readonly from: string;
+  /** "Keep 100 kg": the max in use, kept over the suggestion (STR-013). */
+  readonly keepLabel: string;
 }
 
 /** Where a max came from, in words; never a system word. */
@@ -83,6 +87,8 @@ export function sourceWords(entry: TrainingMaxEntryView, firstName: string): str
       return $localize`Worked out from week 1’s weight`;
     case 'LoggedSet':
       return $localize`Estimated from ${firstName}:name:’s logged sets`;
+    case 'PreviousProgram':
+      return $localize`Carried over from the last program`;
     default:
       return $localize`Typed by you`;
   }
@@ -101,9 +107,12 @@ function basisWords(entry: TrainingMaxEntryView, locale: string): string | null 
   if (!basis) return null;
   const { load, reps, rpe } = setParts(basis, entry.unit, locale);
   const logged = basis.loggedSet;
+  // A max a new program took from the last program's logged sets (STR-014) names a set of that program.
   return logged
     ? $localize`${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe: on ${day(logged.performedOn, locale)}:date:, week ${num(logged.weekNumber)}:week:`
-    : $localize`${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe: in week 1`;
+    : entry.source === 'LoggedSet'
+      ? $localize`${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe:, logged in the last program`
+      : $localize`${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe: in week 1`;
 }
 
 function suggestionOf(lift: TrainingMaxView, locale: string): MaxSuggestion | null {
@@ -124,7 +133,14 @@ function suggestionOf(lift: TrainingMaxView, locale: string): MaxSuggestion | nu
         ? $localize`Logged sets suggest ${valueText}:value:, up from ${now}:current:.`
         : $localize`Logged sets suggest ${valueText}:value:, down from ${now}:current:.`,
     from: $localize`From ${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe: on ${day(logged.performedOn, locale)}:date:, week ${num(logged.weekNumber)}:week:.`,
+    keepLabel: $localize`Keep ${now}:current:`,
   };
+}
+
+function keptWords(lift: TrainingMaxView, locale: string): string | null {
+  const kept = lift.kept;
+  if (!kept || lift.suggestion) return null;
+  return $localize`You kept ${weight(lift.current.value, lift.current.unit, locale)}:current: on ${day(kept.keptOn, locale)}:date:, over the ${weight(kept.suggestedValue, kept.unit, locale)}:suggested: logged sets suggested.`;
 }
 
 function entryWords(entry: TrainingMaxEntryView, firstName: string, locale: string): string {
@@ -164,6 +180,7 @@ function cardOf(lift: TrainingMaxView, firstName: string, locale: string): MaxCa
           : entry.reason,
     })),
     suggestion: suggestionOf(lift, locale),
+    kept: keptWords(lift, locale),
   };
 }
 

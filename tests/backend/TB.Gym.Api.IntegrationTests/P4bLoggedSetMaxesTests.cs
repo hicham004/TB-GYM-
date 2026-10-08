@@ -323,7 +323,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         current = await ReadSliceAsync<TrainingMesocycleView>(coach, P2MesocycleUrl(block.Id));
         var refused = await P2ApplyAsync(coach, block.Id, current.Version, changes, null, preview.PreviewHash, Guid.NewGuid());
         await AssertStatusAsync(refused, HttpStatusCode.Conflict);
-        StringAssert.Contains(await refused.Content.ReadAsStringAsync(), "newer logged sets");
+        StringAssert.Contains(await refused.Content.ReadAsStringAsync(), "training_max_suggestion_changed");
         Assert.AreEqual(
             1L,
             await P2CountAsync("""SELECT count(*) FROM strength."WorkingMaxSnapshots" WHERE "MesocycleId" = @id""", block.Id));

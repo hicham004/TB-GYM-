@@ -29,7 +29,7 @@ import { Skeleton } from '../../ui/skeleton';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { unitLabel } from '../training/training-program.models';
 import { ClientProgramApi } from './client-program-api';
-import { programWriteError } from './client-program-forms.models';
+import { programWriteError, serverCode } from './client-program-forms.models';
 import {
   changesRequest,
   editErrors,
@@ -51,7 +51,8 @@ import {
  * a suggestion, it starts on that estimate already worked out. Updating sends back the preview's hash,
  * the version the preview was worked out against and one idempotency key, so the server refuses
  * anything that changed in between and a retry saves once. Sessions that have started, or are in the
- * past, keep what they had.
+ * past, keep what they had. A set the client logs while the coach reviews moves the estimate: the sheet
+ * reads it again and says so (P4c), and nothing is saved until the coach looks.
  */
 @Component({
   selector: 'app-program-maxes-update',
@@ -662,13 +663,7 @@ export class ProgramMaxesUpdate {
       this.previewed = { version, changes };
       this.preview.set(result);
     } catch (error) {
-      this.error.set(
-        programWriteError(
-          error,
-          $localize`The new weights could not be worked out.`,
-          this.firstName(),
-        ),
-      );
+      await this.refused(error, $localize`The new weights could not be worked out.`);
     } finally {
       this.busy.set(false);
     }
@@ -698,15 +693,41 @@ export class ProgramMaxesUpdate {
       this.intent.complete();
       this.closed.emit(true);
     } catch (error) {
-      this.error.set(
-        programWriteError(
-          error,
-          $localize`The training maxes could not be updated.`,
-          this.firstName(),
-        ),
-      );
+      await this.refused(error, $localize`The training maxes could not be updated.`);
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  /** Says why the server refused; a newer logged set first brings its estimate into the sheet. */
+  private async refused(error: unknown, fallback: string): Promise<void> {
+    if (serverCode(error) === 'training_max_suggestion_changed') {
+      this.preview.set(null);
+      this.previewed = null;
+      await this.readSuggestionsAgain();
+    }
+    this.error.set(programWriteError(error, fallback, this.firstName()));
+  }
+
+  /**
+   * The lifts as the server reads them now, keeping what the coach chose: a typed max or week 1's weight
+   * stays, and a lift that was on its logged-sets estimate moves to the new one while it still has one.
+   */
+  private async readSuggestionsAgain(): Promise<void> {
+    try {
+      const view = await firstValueFrom(this.programApi.getTrainingMaxes(this.blockId()));
+      this.version = Number(view.version);
+      const fresh = editRows(view, this.locale);
+      this.rows.update((rows) =>
+        fresh.map((row) => {
+          const before = rows.find((item) => item.exerciseId === row.exerciseId);
+          if (!before) return row;
+          const kept = { ...row, value: before.value, weekOneWeight: before.weekOneWeight };
+          return before.useLogged ? withLogged(kept, true) : kept;
+        }),
+      );
+    } catch {
+      // The message already asks the coach to look again; the rows stay as they were.
     }
   }
 }

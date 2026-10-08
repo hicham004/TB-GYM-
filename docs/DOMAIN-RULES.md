@@ -122,7 +122,7 @@ kept (SYS-007, ADR 0009), a coach reading a client's progress starts in kilogram
 unchanged (the workout player asks for its own unit). Values are `Kilogram` or `Pound`, enforced by
 a database check.
 
-**CLI-018** Coach attention v1 (`CoachAttention`, R3.1) is what Coach Today asks a coach to act on
+**CLI-018** Coach attention v2 (`CoachAttention`; v1 in R3.1, v2 in P4c) is what Coach Today asks a coach to act on
 and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
 their own, the Owner all) and never a former client. Each signal is read only while the client's
 plan includes its feature, decided by the shared access service, so a lapsed plan's training or
@@ -131,9 +131,12 @@ most urgent first: a submitted check-in not reviewed; the caller's own unread me
 coach's chat is never counted, not even for the Owner); a renewal request from the last 30 days
 while the whole plan is still ended (ADR 0029); a running plan whose last covered day is within 14
 days, counting renewals already in place; a week not shared (TRN-021); two or more missed sessions
-(TRN-021); and training in the plan but no block running or coming. The status is Needs attention
-for any of those but the plan's end, else Paused, Ending soon, On track for a running plan, or No
-active plan. A client is new for 14 days after joining. The activity feed holds finished workouts,
+(TRN-021); training in the plan but no block running or coming, which names the client's latest
+program and what its logged sets suggest for the next one (STR-014); and, last, the lifts of a running or
+coming block whose logged sets suggest a new max (STR-012, after any keep, STR-013), named with the max
+in use and the suggestion. The status is Needs attention for any of those but the plan's end and maxes
+to review (a client getting stronger is good news), else Paused, Ending soon, On track for a running
+plan, or No active plan. A client is new for 14 days after joining. The activity feed holds finished workouts,
 with their records (TRN-019), and sent check-ins of the last 7 days; a weigh-in counts only as a
 client's last activity. Counts carry their dates; no percentage is derived on the server.
 A client's own page (R3.3b, `GET /api/clients/{clientId}/overview`) reads the same rule for that one
@@ -549,7 +552,29 @@ while it moves the max in use by more than one rounding step, either way, on an 
 client still coached here, while the coach's training reads are open (TRN-023). The coach applies it
 through the STR-011 preview by naming the set; the server works the max out again and accepts only the
 set the rule picks now. The new max keeps the set (`SourceSetPerformanceId`) and its numbers. Nothing
-changes a max on its own.
+changes a max on its own. A set the coach looked at that the rule no longer picks (a newer best set, or
+a keep since) is refused with its own code, `training_max_suggestion_changed`, so the screen can say a
+newer set was logged.
+
+**STR-013** Keeping a max (P4c, built 2026-10-08, ADR 0036): instead of applying a suggestion the coach
+can keep the max in use. The server accepts only the set the rule picks now, changes nothing in the
+program, and records an append-only keep (`WorkingMaxKeeps`: the max kept, the set and the max it
+suggested, one per max and set, so a retry finds the first). From then on only sets logged after the
+latest keep of that max count for STR-012; a new max leaves its keeps behind. The panel says when and
+over what the max was kept. A released client's program, a closed program or closed training reads
+refuse it, as they refuse an update.
+
+**STR-014** A new program starts where the last one ended (P4c, built 2026-10-08, ADR 0036). The client's
+latest program is their newest by start date that was not cancelled, whatever its dates or status.
+`GET /api/training/clients/{clientProfileId}/previous-maxes` gives the max each of its lifts uses now and,
+while the coach's training reads are open (TRN-023) and the client is still coached here, what its logged
+sets suggest (STR-012, after any keep, STR-013), also once that program is finished. Assign program starts
+each lift from that max, in that program's unit only, unless a max recorded since is newer. An assignment
+may carry it over (`CarriedFromMaxId`, with the same value; source `PreviousProgram`) or start from the
+suggested set (`LoggedSetId`; the server works the max out again and accepts only the set the rule picks
+now, else `training_max_suggestion_changed`); both are checked against the latest program at the time of
+the assignment, and a max that program has replaced is refused. The new max names what it came from, and a
+composite key keeps a carried max to the same client's own.
 
 ## 6. Nutrition, recipes, and calorie targets
 

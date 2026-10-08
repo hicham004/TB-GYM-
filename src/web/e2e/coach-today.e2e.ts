@@ -2,9 +2,11 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
 import type { CoachTodayView } from '../src/app/core/api/generated';
 import {
+  attentionItem,
   COACH_NOW,
   coachTodayView,
   emptyCoachTodayView,
+  MAYA,
   OWNER_ID,
 } from '../src/testing/coach-today-fixtures';
 import {
@@ -86,6 +88,43 @@ for (const [width, height] of [
     await page.screenshot({ path: `test-results/r32-coach-today-${width}.png`, fullPage: true });
   });
 }
+
+test('lifts whose logged sets suggest a new max are named, last, with a way to review them (P4c)', async ({
+  page,
+}) => {
+  const view = coachTodayView();
+  const maxes = attentionItem('MaxesToReview', MAYA, {
+    count: 1,
+    subjectId: 'block-lean',
+    maxes: [
+      {
+        exerciseId: 'deadlift',
+        exerciseName: 'Deadlift',
+        current: 77.5,
+        suggested: 80.749,
+        unit: 'Kilogram',
+      },
+    ],
+  });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openToday(page, 390, 844, { ...view, attention: [...view.attention, maxes] });
+
+  const row = page.locator('li.need').last();
+  await expect(row).toContainText("Maya Fakhoury's logged sets suggest a new Deadlift max");
+  await expect(row).toContainText('80.75 kg, up from 77.5 kg');
+  await expect(row.getByRole('link', { name: 'Review maxes for Maya Fakhoury' })).toHaveAttribute(
+    'href',
+    '/clients/c-maya/training?action=maxes',
+  );
+  await row.scrollIntoViewIfNeeded();
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p4c-coach-today-dark-390.png' });
+
+  await page.emulateMedia({ colorScheme: 'light' });
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p4c-coach-today-390.png' });
+});
 
 test('the sidebar calls the page Today and marks it current', async ({ page }) => {
   await openToday(page, 1440, 900);

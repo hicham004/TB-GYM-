@@ -25,6 +25,7 @@ import { StatusPill } from '../../ui/status-pill';
 import { ClientListApi } from './client-list-api';
 import {
   CLIENT_FILTERS,
+  CLIENT_FILTERS_WHEN_USED,
   formerClientRow,
   mapClientList,
   matches,
@@ -40,6 +41,7 @@ const FILTER_LABELS: Record<ClientFilter, string> = {
   ending: $localize`Ending soon`,
   paused: $localize`Paused`,
   new: $localize`New`,
+  maxes: $localize`Maxes to review`,
 };
 
 /**
@@ -94,11 +96,15 @@ export class Clients {
 
   protected readonly chips = computed(() => {
     const counts = this.list()?.counts;
+    const chosen = this.filter();
     return CLIENT_FILTERS.map((value) => ({
       value,
       label: FILTER_LABELS[value],
       count: counts?.[value] ?? 0,
-    }));
+    })).filter(
+      (chip) =>
+        !CLIENT_FILTERS_WHEN_USED.has(chip.value) || chip.count > 0 || chip.value === chosen,
+    );
   });
 
   protected readonly visible = computed(() => {
@@ -143,6 +149,7 @@ export class Clients {
       ending: $localize`No plan ends in the next 14 days`,
       paused: $localize`No plan is paused`,
       new: $localize`No new clients in the last 14 days`,
+      maxes: $localize`No logged sets suggest a new max right now`,
     };
     return {
       heading: headings[this.filter()],

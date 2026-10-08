@@ -115,6 +115,9 @@ public enum WorkingMaxSource
 
     /// <summary>Estimated from a set the client logged, on the coach's review (BestLoggedSet v1, STR-007).</summary>
     LoggedSet = 4,
+
+    /// <summary>The max in use at the end of the client's previous program, carried into the next (STR-014).</summary>
+    PreviousProgram = 5,
 }
 
 /// <summary>
@@ -151,7 +154,8 @@ public sealed class MesocycleWorkingMaxSnapshot : TenantEntity
         Guid? supersedesSnapshotId,
         string reason,
         MaxEstimateBasis? basis,
-        Guid? sourceSetPerformanceId = null)
+        Guid? sourceSetPerformanceId = null,
+        Guid? carriedFromSnapshotId = null)
         : base(tenantId)
     {
         if (mesocycleId == Guid.Empty || clientProfileId == Guid.Empty || exerciseId == Guid.Empty)
@@ -174,8 +178,16 @@ public sealed class MesocycleWorkingMaxSnapshot : TenantEntity
             throw new ArgumentException("A max estimated from a logged set keeps that set and its numbers.");
         }
 
+        if (carriedFromSnapshotId is not null &&
+            (carriedFromSnapshotId == Guid.Empty || basis is not null || sourceMaxRecordId is not null ||
+             supersedesSnapshotId is not null))
+        {
+            throw new ArgumentException("A max carried from an earlier program starts a program's chain and has no other source.");
+        }
+
         MesocycleId = mesocycleId;
         SourceSetPerformanceId = sourceSetPerformanceId;
+        CarriedFromSnapshotId = carriedFromSnapshotId;
         ClientProfileId = clientProfileId;
         ExerciseId = exerciseId;
         SourceMaxRecordId = sourceMaxRecordId;
@@ -210,6 +222,9 @@ public sealed class MesocycleWorkingMaxSnapshot : TenantEntity
     /// <summary>The logged set a max was estimated from (P4b); null for every other source.</summary>
     public Guid? SourceSetPerformanceId { get; private set; }
 
+    /// <summary>The same client's earlier program max this one carries over (STR-014); null for every other source.</summary>
+    public Guid? CarriedFromSnapshotId { get; private set; }
+
     public decimal Value { get; private set; }
 
     public LoadUnit Unit { get; private set; }
@@ -239,7 +254,9 @@ public sealed class MesocycleWorkingMaxSnapshot : TenantEntity
                 ? WorkingMaxSource.WeekOneWeight
                 : SourceMaxRecordId is not null
                     ? WorkingMaxSource.SavedMax
-                    : WorkingMaxSource.Typed;
+                    : CarriedFromSnapshotId is not null
+                        ? WorkingMaxSource.PreviousProgram
+                        : WorkingMaxSource.Typed;
 
     public static MesocycleWorkingMaxSnapshot Capture(
         Guid tenantId,
@@ -328,6 +345,45 @@ public sealed class MesocycleWorkingMaxSnapshot : TenantEntity
                 estimate.Estimate.StrategyKey,
                 estimate.Estimate.Version),
             set.SetId);
+    }
+
+    /// <summary>
+    /// Starts a new program's chain from the max in use at the end of the same client's earlier program
+    /// (STR-014), in the same unit and with the same value. Whether it may be carried (same client, the latest
+    /// program, the max still in use) is checked where both programs are known; the database adds same client.
+    /// </summary>
+    public static MesocycleWorkingMaxSnapshot CaptureCarried(
+        Guid tenantId,
+        Guid mesocycleId,
+        Guid clientProfileId,
+        MesocycleWorkingMaxSnapshot carried,
+        string reason)
+    {
+        ArgumentNullException.ThrowIfNull(carried);
+        if (carried.TenantId != tenantId || carried.ClientProfileId != clientProfileId)
+        {
+            throw new ArgumentException("Only the same client's own training max can be carried into a new program.");
+        }
+
+        if (carried.MesocycleId == mesocycleId)
+        {
+            throw new ArgumentException("A max is carried from an earlier program, not from the same one.");
+        }
+
+        return new(
+            tenantId,
+            mesocycleId,
+            clientProfileId,
+            carried.ExerciseId,
+            null,
+            carried.Value,
+            carried.Unit,
+            1,
+            null,
+            reason,
+            null,
+            null,
+            carried.Id);
     }
 }
 

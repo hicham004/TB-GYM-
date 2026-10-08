@@ -208,6 +208,39 @@ public sealed class LoggedSetMaxDomainTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => BestLoggedSetRule.IsWorthSuggesting(100m, 110m, 0m));
     }
 
+    // ----- keeping a max over a suggestion (STR-013, P4c) -----
+
+    [TestMethod]
+    public void AfterAKeepOnlySetsLoggedLaterCanSuggestAgain()
+    {
+        var keptAt = MaxSetAt.AddDays(3);
+        Assert.AreEqual(MaxSetAt, BestLoggedSetRule.CountsAfter(MaxSetAt, null));
+        Assert.AreEqual(keptAt, BestLoggedSetRule.CountsAfter(MaxSetAt, keptAt));
+        // A keep of an older max never reaches back past the max in use.
+        Assert.AreEqual(MaxSetAt, BestLoggedSetRule.CountsAfter(MaxSetAt, MaxSetAt.AddDays(-1)));
+
+        var weighed = Set(2, 5, 90m, 8m, hoursAfterMax: 48);
+        var later = Set(3, 5, 92.5m, 8m, hoursAfterMax: 96);
+        var since = BestLoggedSetRule.CountsAfter(MaxSetAt, keptAt);
+        Assert.IsNull(BestLoggedSetRule.Best([weighed], StrengthLoadUnit.Kilogram, since));
+        Assert.AreEqual(later.SetId, BestLoggedSetRule.Best([weighed, later], StrengthLoadUnit.Kilogram, since)?.Set.SetId);
+    }
+
+    [TestMethod]
+    public void AKeepRecordsTheMaxTheSetAndWhatItSuggested()
+    {
+        var snapshot = Guid.Parse("60000000-0000-0000-0000-000000000042");
+        var set = Guid.Parse("50000000-0000-0000-0000-000000000042");
+        var keep = WorkingMaxKeep.Record(TenantId, MesocycleId, snapshot, set, 110.9744m, StrengthLoadUnit.Kilogram);
+
+        Assert.AreEqual(
+            (MesocycleId, snapshot, set, 110.974m, StrengthLoadUnit.Kilogram),
+            (keep.MesocycleId, keep.WorkingMaxSnapshotId, keep.LoggedSetPerformanceId, keep.SuggestedValue, keep.Unit));
+        Assert.ThrowsExactly<ArgumentException>(() => WorkingMaxKeep.Record(TenantId, MesocycleId, snapshot, Guid.Empty, 100m, StrengthLoadUnit.Kilogram));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => WorkingMaxKeep.Record(TenantId, MesocycleId, snapshot, set, 0m, StrengthLoadUnit.Kilogram));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => WorkingMaxKeep.Record(TenantId, MesocycleId, snapshot, set, 100m, (StrengthLoadUnit)9));
+    }
+
     // ----- the max kept -----
 
     [TestMethod]
