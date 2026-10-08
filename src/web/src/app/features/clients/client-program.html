@@ -88,7 +88,7 @@
             <app-program-maxes
               [block]="block"
               [firstName]="firstName()"
-              (update)="openMaxesUpdate()"
+              (update)="openMaxesUpdate($event)"
             />
           </div>
 
@@ -291,6 +291,7 @@
       [blockId]="block.id"
       [blockName]="block.name"
       [firstName]="firstName()"
+      [suggested]="maxesSuggested()"
       (closed)="sheet.close($event)"
     />
   }

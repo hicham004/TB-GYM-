@@ -49,9 +49,10 @@ follow, and the client's program can always be adjusted.
    grid rows (the library's media) and in a client's session sheet (the snapshot the client was given,
    MED-002), opened through the usual short-lived grant; the coach's note on a client's workout from the
    session sheet, and every note on the client's finished-workout history (TRN-009). The workout player
-   already had both. P4b, adjusting next week from logged performance, is decided below and not built.
+   already had both. P4b, adjusting next week from logged performance, is decided below and built
+   (STR-012, 2026-10-08).
 
-## Adjusting next week from logged performance (P4b, decided 2026-10-07, not built)
+## Adjusting next week from logged performance (P4b, decided 2026-10-07, built 2026-10-08)
 
 The owner asked for it to be planned, then left its three questions to Claude after research
 (2026-10-07). A separate strategy, as STR-007 says:
@@ -81,6 +82,16 @@ The owner asked for it to be planned, then left its three questions to Claude af
 - **When: right after the nutrition builder (R4.4).** Founding coaches can already update maxes by hand
   with the full preview (P2) and read every logged set on the session sheet (P4a), while the meal-plan
   builder is the last coach builder still on an old screen.
+- **As built (2026-10-08), decided by Claude for the owner after checking Everfit, TrainHeroic and
+  Juggernaut again.** "The week" is the latest program week holding a set that counts, so a finished
+  workout speaks the same day (Everfit recalculates the 1RM once a workout is logged, TrainHeroic from any
+  lift performed, Juggernaut within the session). Only sets logged after the max in use was set count:
+  TrainHeroic keeps a max the coach set fixed until the coach changes it, so here the coach's own update
+  quiets an older suggestion. Only finished workouts count, since a finished workout cannot change under
+  the coach's review. The coach applies the suggestion by naming its set; the server works the max out
+  again and refuses a set the rule no longer picks (a newer best set arrived), and the new max keeps the
+  set it came from. A suggestion also shows on a program past its last day, because Build next block
+  works the new weeks out from the program's maxes.
 
 **Telling the client about changes** (the owner's open question from P3a, P3b and P4a, decided by Claude
 on the same day). TB Gym sends no training notices at all today, not even for a new program or a shared

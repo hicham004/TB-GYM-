@@ -466,15 +466,37 @@ public enum TrainingMaxSource
     Typed = 1,
     SavedMax = 2,
     WeekOneWeight = 3,
+    LoggedSet = 4,
 }
 
-/// <summary>The week 1 set, weight and method a "from week 1's weight" max was worked out from.</summary>
+/// <summary>
+/// The set, weight and method a max was worked out from: week 1's prescribed set, or a set the client logged
+/// (<paramref name="LoggedSet"/> then says which and when).
+/// </summary>
 public sealed record TrainingMaxBasisView(
     decimal Load,
     int Repetitions,
     decimal Rpe,
     string MethodKey,
-    string MethodVersion);
+    string MethodVersion,
+    TrainingMaxLoggedSetView? LoggedSet);
+
+/// <summary>Where a logged set behind a max sits: its program week, the day the workout was finished and the session.</summary>
+public sealed record TrainingMaxLoggedSetView(
+    Guid SetPerformanceId,
+    int WeekNumber,
+    DateOnly PerformedOn,
+    string SessionName);
+
+/// <summary>
+/// The max the client's logged sets suggest for a lift (BestLoggedSet v1, STR-007): shown only while it moves
+/// the max in use by more than one rounding step. The coach applies it through the preview, never the server.
+/// </summary>
+public sealed record TrainingMaxSuggestionView(
+    decimal Value,
+    TrainingLoadUnit Unit,
+    TrainingMaxBasisView Basis,
+    string Explanation);
 
 /// <summary>One training max as it was set: its value, source, the week it applies from and why.</summary>
 public sealed record TrainingMaxEntryView(
@@ -490,13 +512,17 @@ public sealed record TrainingMaxEntryView(
 /// <summary>The set of week 1 that "from week 1's weight" would read for a lift, and the weight it has now.</summary>
 public sealed record TrainingMaxWeekOneSetView(int Repetitions, decimal Rpe, decimal? Load);
 
-/// <summary>One lift's training max in use, the week 1 set it could be worked out from, and its earlier values.</summary>
+/// <summary>
+/// One lift's training max in use, the week 1 set it could be worked out from, its earlier values, and the
+/// max its logged sets suggest, if any.
+/// </summary>
 public sealed record TrainingMaxView(
     Guid ExerciseId,
     string ExerciseName,
     TrainingMaxEntryView Current,
     TrainingMaxWeekOneSetView? WeekOneSet,
-    IReadOnlyList<TrainingMaxEntryView> Earlier);
+    IReadOnlyList<TrainingMaxEntryView> Earlier,
+    TrainingMaxSuggestionView? Suggestion);
 
 /// <param name="IsClosed">True once the program is finished or cancelled; its maxes are then history.</param>
 public sealed record TrainingMaxesView(
@@ -506,8 +532,11 @@ public sealed record TrainingMaxesView(
     bool IsClosed,
     IReadOnlyList<TrainingMaxView> Maxes);
 
-/// <summary>One lift's new max: a typed number, or the weight of week 1's set to work it out from (STR-011).</summary>
-public sealed record TrainingMaxChangeRequest(Guid ExerciseId, decimal? Value, decimal? WeekOneWeight);
+/// <summary>
+/// One lift's new max: a typed number, the weight of week 1's set to work it out from (STR-011), or a set the
+/// client logged, whose max the server works out again itself (STR-007). Exactly one of the three is given.
+/// </summary>
+public sealed record TrainingMaxChangeRequest(Guid ExerciseId, decimal? Value, decimal? WeekOneWeight, Guid? LoggedSetId);
 
 public sealed record PreviewTrainingMaxesRequest(
     uint MesocycleVersion,

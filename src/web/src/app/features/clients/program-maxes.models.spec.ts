@@ -14,6 +14,7 @@ import {
   reasonErrors,
   sourceWords,
   weekOneAnchor,
+  withLogged,
   withValue,
   withWeekOneWeight,
 } from './program-maxes.models';
@@ -47,6 +48,28 @@ const squat = (fields: Record<string, unknown> = {}) => ({
   current: entry({}),
   weekOneSet: { repetitions: 5, rpe: 8, load: 80 },
   earlier: [],
+  suggestion: null,
+  ...fields,
+});
+
+/** What the server suggests from Maya's week 2 top set: 90 kg for 5 at RPE 8 is 81.1% of 110.974 kg. */
+const suggested = (fields: Record<string, unknown> = {}) => ({
+  value: 110.974,
+  unit: 'Kilogram',
+  basis: {
+    load: 90,
+    repetitions: 5,
+    rpe: 8,
+    methodKey: 'RpeChart',
+    methodVersion: '1.0',
+    loggedSet: {
+      setPerformanceId: 'set-9',
+      weekNumber: 2,
+      performedOn: '2026-10-13',
+      sessionName: 'Lower A',
+    },
+  },
+  explanation: 'Best logged set v1: …',
   ...fields,
 });
 
@@ -67,6 +90,49 @@ describe('the panel’s lifts', () => {
     expect(sourceWords(entry({ source: 'WeekOneWeight' }) as never, 'Maya')).toBe(
       'Worked out from week 1’s weight',
     );
+    expect(sourceWords(entry({ source: 'LoggedSet' }) as never, 'Maya')).toBe(
+      'Estimated from Maya’s logged sets',
+    );
+    expect(card.suggestion).toBeNull();
+  });
+
+  it('says what the logged sets suggest and which set it came from, up or down', () => {
+    const [up] = maxCards(view([squat({ suggestion: suggested() })]), 'Maya', 'en-US');
+    expect(up.suggestion).toEqual({
+      setId: 'set-9',
+      value: 110.974,
+      valueText: '110.97 kg',
+      headline: 'Logged sets suggest 110.97 kg, up from 100 kg.',
+      from: 'From 90 kg for 5 reps at RPE 8 on Tue 13 Oct, week 2.',
+    });
+
+    const [down] = maxCards(
+      view([squat({ suggestion: suggested({ value: 92.5 }) })]),
+      'Maya',
+      'en-US',
+    );
+    expect(down.suggestion?.headline).toBe('Logged sets suggest 92.5 kg, down from 100 kg.');
+  });
+
+  it('tells a max estimated from a logged set by its set, day and week', () => {
+    const [card] = maxCards(
+      view([
+        squat({
+          current: entry({
+            id: 'max-2',
+            value: 110.974,
+            source: 'LoggedSet',
+            basis: suggested().basis,
+          }),
+          earlier: [entry({})],
+        }),
+      ]),
+      'Maya',
+      'en-US',
+    );
+
+    expect(card.source).toBe('Estimated from Maya’s logged sets · Sat 3 Oct');
+    expect(card.basis).toBe('90 kg for 5 reps at RPE 8 on Tue 13 Oct, week 2');
   });
 
   it('keeps the older maxes, newest first, and says how the number moved', () => {
@@ -116,6 +182,7 @@ describe('the panel’s lifts', () => {
               rpe: 7.5,
               methodKey: 'RpeChart',
               methodVersion: '1.0',
+              loggedSet: null,
             },
           }),
           earlier: [entry({ value: 225, unit: 'Pound' })],
@@ -138,6 +205,7 @@ describe('updating the maxes', () => {
         squat(),
         squat({ exerciseId: 'bench', exerciseName: 'Bench press', weekOneSet: null }),
       ]),
+      'en-US',
     );
 
   it('starts with nothing changed, and says the one thing to do', () => {
@@ -161,11 +229,11 @@ describe('updating the maxes', () => {
     const worked = withWeekOneWeight(second, 105);
 
     expect(changesRequest([typed, rows()[1]])).toEqual([
-      { exerciseId: 'squat', value: 120, weekOneWeight: null },
+      { exerciseId: 'squat', value: 120, weekOneWeight: null, loggedSetId: null },
     ]);
     expect(changesRequest([typed, worked])).toEqual([
-      { exerciseId: 'squat', value: 120, weekOneWeight: null },
-      { exerciseId: 'bench', value: null, weekOneWeight: 105 },
+      { exerciseId: 'squat', value: 120, weekOneWeight: null, loggedSetId: null },
+      { exerciseId: 'bench', value: null, weekOneWeight: 105, loggedSetId: null },
     ]);
     // Typing one clears the other, so both can never be sent for a lift.
     expect(withWeekOneWeight(typed, 110)).toMatchObject({ value: null, weekOneWeight: 110 });
@@ -175,6 +243,31 @@ describe('updating the maxes', () => {
     });
     // Emptying a field leaves the other as it was.
     expect(withValue(withWeekOneWeight(first, 110), null)).toMatchObject({ weekOneWeight: 110 });
+  });
+
+  it('offers the logged sets’ estimate where there is one, as a third choice that clears the others', () => {
+    const [first, second] = editRows(
+      view([
+        squat({ suggestion: suggested() }),
+        squat({ exerciseId: 'bench', exerciseName: 'Bench press' }),
+      ]),
+      'en-US',
+    );
+    expect(first.logged?.setId).toBe('set-9');
+    expect(second.logged).toBeNull();
+
+    const chosen = withLogged(withValue(first, 120), true);
+    expect(chosen).toMatchObject({ useLogged: true, value: null, weekOneWeight: null });
+    expect(editErrors([chosen, second])).toEqual({});
+    // Only the set goes to the server, which works the max out again itself.
+    expect(changesRequest([chosen, second])).toEqual([
+      { exerciseId: 'squat', value: null, weekOneWeight: null, loggedSetId: 'set-9' },
+    ]);
+    // Typing a number or week 1's weight unticks it; a lift without a suggestion cannot tick it.
+    expect(withValue(chosen, 115)).toMatchObject({ useLogged: false, value: 115 });
+    expect(withWeekOneWeight(chosen, 90)).toMatchObject({ useLogged: false, weekOneWeight: 90 });
+    expect(withLogged(second, true).useLogged).toBe(false);
+    expect(withLogged(chosen, false).useLogged).toBe(false);
   });
 
   it('refuses a number that is zero or too big, field by field', () => {

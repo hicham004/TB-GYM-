@@ -1052,8 +1052,9 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
   in the builder's grid, reviewed and applied in one sitting (built). P4a: exercise demos on the coach's
   grids and session sheet, and coach and client workout notes both ways (built). P4b: adjusting next week
   from logged performance, decided in ADR 0036 on 2026-10-07 (a suggestion from the week's best logged
-  set that the coach applies), built right after the nutrition builder (R4.4a to R4.4d; R4.4d, recipes
-  for clients, was added on 2026-10-07 because every competitor shows a client the whole recipe).
+  set that the coach applies), built on 2026-10-08 right after the nutrition builder (R4.4a to R4.4d;
+  R4.4d, recipes for clients, was added on 2026-10-07 because every competitor shows a client the whole
+  recipe).
 
 Work follows this order; anything outside it needs the user's approval first.
 

@@ -33,6 +33,7 @@ const maxes = () => ({
       current: entry({}),
       weekOneSet: { repetitions: 5, rpe: 8, load: 80 },
       earlier: [],
+      suggestion: null,
     },
     {
       exerciseId: 'bench',
@@ -40,9 +41,34 @@ const maxes = () => ({
       current: entry({ id: 'max-2', value: 80 }),
       weekOneSet: null,
       earlier: [],
+      suggestion: null,
     },
   ],
 });
+
+/** The same lifts, the squat with a max its logged sets suggest: 90 kg for 5 at RPE 8 in week 2. */
+const suggesting = () => {
+  const view = maxes();
+  view.maxes[0].suggestion = {
+    value: 110.974,
+    unit: 'Kilogram',
+    basis: {
+      load: 90,
+      repetitions: 5,
+      rpe: 8,
+      methodKey: 'RpeChart',
+      methodVersion: '1.0',
+      loggedSet: {
+        setPerformanceId: 'set-9',
+        weekNumber: 2,
+        performedOn: '2026-10-13',
+        sessionName: 'Lower A',
+      },
+    },
+    explanation: 'Best logged set v1: …',
+  } as never;
+  return view;
+};
 
 const set = (fields: Record<string, unknown>) => ({
   setId: 'set-1',
@@ -89,7 +115,7 @@ const preview = (fields: Record<string, unknown> = {}) => ({
   ...fields,
 });
 
-async function render(api: Record<string, unknown> = {}) {
+async function render(api: Record<string, unknown> = {}, inputs: Record<string, unknown> = {}) {
   const calls = {
     getTrainingMaxes: vi.fn(() => of(maxes())),
     previewTrainingMaxes: vi.fn(() => of(preview())),
@@ -109,6 +135,7 @@ async function render(api: Record<string, unknown> = {}) {
   fixture.componentRef.setInput('blockId', 'block-lean');
   fixture.componentRef.setInput('blockName', 'Strength Base');
   fixture.componentRef.setInput('firstName', 'Maya');
+  for (const [name, value] of Object.entries(inputs)) fixture.componentRef.setInput(name, value);
   const closed = vi.fn();
   fixture.componentInstance.closed.subscribe(closed);
   document.body.append(fixture.nativeElement);
@@ -177,7 +204,7 @@ describe('Update maxes for the coming weeks', () => {
 
     expect(api.previewTrainingMaxes).toHaveBeenCalledWith('block-lean', {
       mesocycleVersion: 4,
-      changes: [{ exerciseId: 'squat', value: 120, weekOneWeight: null }],
+      changes: [{ exerciseId: 'squat', value: 120, weekOneWeight: null, loggedSetId: null }],
     });
     expect(api.applyTrainingMaxes).not.toHaveBeenCalled();
     const section = query<HTMLElement>(host, '.preview');
@@ -217,7 +244,7 @@ describe('Update maxes for the coming weeks', () => {
     expect(body[0]).toBe('block-lean');
     expect(body[1]).toMatchObject({
       mesocycleVersion: 4,
-      changes: [{ exerciseId: 'squat', value: 120, weekOneWeight: null }],
+      changes: [{ exerciseId: 'squat', value: 120, weekOneWeight: null, loggedSetId: null }],
       reason: 'New test result',
       previewHash: 'hash-1',
     });
@@ -246,8 +273,61 @@ describe('Update maxes for the coming weeks', () => {
 
     expect(api.previewTrainingMaxes).toHaveBeenCalledWith('block-lean', {
       mesocycleVersion: 4,
-      changes: [{ exerciseId: 'squat', value: null, weekOneWeight: 115 }],
+      changes: [{ exerciseId: 'squat', value: null, weekOneWeight: 115, loggedSetId: null }],
     });
+  });
+
+  it('offers the estimate the logged sets suggest, and sends only the set for the server to work out', async () => {
+    const { fixture, host, api } = await render({
+      getTrainingMaxes: vi.fn(() => of(suggesting())),
+    });
+    const box = query<HTMLInputElement>(host, 'fieldset:nth-of-type(1) input[type="checkbox"]');
+    expect(box.checked).toBe(false);
+    expect(textOf(box.closest('app-checkbox'))).toBe(
+      'Use the estimate from logged sets: 110.97 kg',
+    );
+    expect(textOf(query(host, '#logged-from-squat'))).toBe(
+      'From 90 kg for 5 reps at RPE 8 on Tue 13 Oct, week 2.',
+    );
+    // Only lifts with a suggestion offer it.
+    expect(host.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);
+
+    type(host, squatMax, '120');
+    await settle(fixture);
+    box.click();
+    await settle(fixture);
+    expect(query<HTMLInputElement>(host, squatMax).value).toBe('');
+
+    press(host, 'Show the new weights');
+    await settle(fixture);
+    expect(api.previewTrainingMaxes).toHaveBeenCalledWith('block-lean', {
+      mesocycleVersion: 4,
+      changes: [{ exerciseId: 'squat', value: null, weekOneWeight: null, loggedSetId: 'set-9' }],
+    });
+  });
+
+  it('opened from a lift’s suggestion, starts on its new weights already worked out', async () => {
+    const { fixture, host, api } = await render(
+      { getTrainingMaxes: vi.fn(() => of(suggesting())) },
+      { suggested: 'squat' },
+    );
+
+    expect(api.previewTrainingMaxes).toHaveBeenCalledTimes(1);
+    expect(api.previewTrainingMaxes).toHaveBeenCalledWith('block-lean', {
+      mesocycleVersion: 4,
+      changes: [{ exerciseId: 'squat', value: null, weekOneWeight: null, loggedSetId: 'set-9' }],
+    });
+    expect(host.querySelector('.preview')).not.toBeNull();
+    expect(api.applyTrainingMaxes).not.toHaveBeenCalled();
+
+    // Going back shows the choice it was worked out from; typing a number instead unticks it.
+    press(host, 'Change the numbers');
+    await settle(fixture);
+    const box = query<HTMLInputElement>(host, 'fieldset:nth-of-type(1) input[type="checkbox"]');
+    expect(box.checked).toBe(true);
+    type(host, squatMax, '115');
+    await settle(fixture);
+    expect(box.checked).toBe(false);
   });
 
   it('forgets a preview as soon as the coach goes back to change a number', async () => {

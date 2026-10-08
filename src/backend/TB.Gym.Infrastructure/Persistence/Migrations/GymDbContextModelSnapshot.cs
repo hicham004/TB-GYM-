@@ -8217,6 +8217,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("SourceMaxRecordId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("SourceSetPerformanceId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("SupersedesSnapshotId")
                         .HasColumnType("uuid");
 
@@ -8254,6 +8257,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "SourceMaxRecordId");
 
+                    b.HasIndex("TenantId", "SourceSetPerformanceId");
+
                     b.HasIndex("TenantId", "SupersedesSnapshotId")
                         .IsUnique()
                         .HasDatabaseName("IX_WorkingMaxSnapshots_OneSuccessor")
@@ -8269,6 +8274,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("WorkingMaxSnapshots", "strength", t =>
                         {
                             t.HasCheckConstraint("CK_WorkingMaxSnapshots_EffectiveWeek", "\"EffectiveFromWeek\" >= 1 AND \"EffectiveFromWeek\" <= 52");
+
+                            t.HasCheckConstraint("CK_WorkingMaxSnapshots_LoggedSetBasis", "\"SourceSetPerformanceId\" IS NULL OR \"BasisLoad\" IS NOT NULL");
 
                             t.HasCheckConstraint("CK_WorkingMaxSnapshots_Value", "\"Value\" > 0 AND \"Value\" <= 2000");
 
@@ -11312,8 +11319,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("TenantId", "Id");
-
                     b.HasIndex("TenantId", "WorkoutExercisePerformanceId", "Position")
                         .IsUnique();
 
@@ -12742,6 +12747,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasOne("TB.Gym.Modules.Strength.StrengthMaxRecord", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "SourceMaxRecordId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Training.WorkoutSetPerformance", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SourceSetPerformanceId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
 

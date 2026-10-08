@@ -3302,12 +3302,14 @@ export type TrainingMaxBasisView = {
   rpe: number | string;
   methodKey: string;
   methodVersion: string;
+  loggedSet: null | TrainingMaxLoggedSetView;
 };
 
 export type TrainingMaxChangeRequest = {
   exerciseId: string;
   value: null | number | string;
   weekOneWeight: null | number | string;
+  loggedSetId: null | string;
 };
 
 export type TrainingMaxEntryView = {
@@ -3352,6 +3354,13 @@ export type TrainingMaxLiftChangeView = {
   explanation: string;
 };
 
+export type TrainingMaxLoggedSetView = {
+  setPerformanceId: string;
+  weekNumber: number | string;
+  performedOn: string;
+  sessionName: string;
+};
+
 export type TrainingMaxSetChangeView = {
   setId: string;
   weekNumber: number | string;
@@ -3369,7 +3378,14 @@ export type TrainingMaxSetChangeView = {
   explanation: string;
 };
 
-export type TrainingMaxSource = 'Typed' | 'SavedMax' | 'WeekOneWeight';
+export type TrainingMaxSource = 'Typed' | 'SavedMax' | 'WeekOneWeight' | 'LoggedSet';
+
+export type TrainingMaxSuggestionView = {
+  value: number | string;
+  unit: TrainingLoadUnit;
+  basis: TrainingMaxBasisView;
+  explanation: string;
+};
 
 export type TrainingMaxView = {
   exerciseId: string;
@@ -3377,6 +3393,7 @@ export type TrainingMaxView = {
   current: TrainingMaxEntryView;
   weekOneSet: null | TrainingMaxWeekOneSetView;
   earlier: Array<TrainingMaxEntryView>;
+  suggestion: null | TrainingMaxSuggestionView;
 };
 
 export type TrainingMaxWeekOneSetView = {

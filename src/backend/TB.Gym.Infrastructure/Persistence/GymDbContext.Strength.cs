@@ -106,8 +106,17 @@ public sealed partial class GymDbContext
                 .HasForeignKey(item => new { item.TenantId, item.SupersedesSnapshotId })
                 .HasPrincipalKey(item => new { item.TenantId, item.Id })
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<WorkoutSetPerformance>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.SourceSetPerformanceId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table =>
             {
+                // A max estimated from a logged set keeps that set's numbers beside the link (P4b, STR-007).
+                table.HasCheckConstraint(
+                    "CK_WorkingMaxSnapshots_LoggedSetBasis",
+                    "\"SourceSetPerformanceId\" IS NULL OR \"BasisLoad\" IS NOT NULL");
                 table.HasCheckConstraint(
                     "CK_WorkingMaxSnapshots_Value",
                     "\"Value\" > 0 AND \"Value\" <= 2000");
@@ -115,8 +124,8 @@ public sealed partial class GymDbContext
                     "CK_WorkingMaxSnapshots_EffectiveWeek",
                     "\"EffectiveFromWeek\" >= 1 AND \"EffectiveFromWeek\" <= 52");
 
-                // A max worked out from week 1's weight keeps the set and the method behind it, all or
-                // nothing, and has no saved max behind it (STR-011).
+                // A max worked out from a set (week 1's weight, or a logged set) keeps the set and the method
+                // behind it, all or nothing, and has no saved max behind it (STR-011).
                 table.HasCheckConstraint(
                     "CK_WorkingMaxSnapshots_WeekOneBasis",
                     "(\"BasisLoad\" IS NULL AND \"BasisRepetitions\" IS NULL AND \"BasisRpe\" IS NULL AND \"EstimateMethodKey\" IS NULL AND \"EstimateMethodVersion\" IS NULL) OR (\"BasisLoad\" > 0 AND \"BasisLoad\" <= 2000 AND \"BasisRepetitions\" >= 1 AND \"BasisRepetitions\" <= 100 AND \"BasisRpe\" >= 5 AND \"BasisRpe\" <= 10 AND \"EstimateMethodKey\" IS NOT NULL AND \"EstimateMethodVersion\" IS NOT NULL AND \"SourceMaxRecordId\" IS NULL)");

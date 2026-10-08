@@ -675,6 +675,7 @@ describe('a client’s Training', () => {
           },
           weekOneSet: { repetitions: 5, rpe: 8, load: 80 },
           earlier: [],
+          suggestion: null,
         },
       ],
     };

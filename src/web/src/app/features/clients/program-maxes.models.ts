@@ -2,6 +2,7 @@ import { formatDate, formatNumber } from '@angular/common';
 import type {
   ProgramTemplateVersionView,
   TrainingLoadUnit,
+  TrainingMaxBasisView,
   TrainingMaxChangeRequest,
   TrainingMaxEntryView,
   TrainingMaxesPreviewView,
@@ -54,6 +55,23 @@ export interface MaxCard {
   /** "Applies from week 3. Earlier weeks keep 100 kg." Null when it applies from the start. */
   readonly appliesFrom: string | null;
   readonly earlier: readonly MaxHistoryRow[];
+  /** The max the client's logged sets suggest (P4b); null when they suggest nothing. */
+  readonly suggestion: MaxSuggestion | null;
+}
+
+/**
+ * The max a lift's logged sets suggest (STR-007). The server picks the set and works the number out; the
+ * coach applies it through the usual preview, sending back only the set.
+ */
+export interface MaxSuggestion {
+  readonly setId: string;
+  readonly value: number;
+  /** "110.97 kg". */
+  readonly valueText: string;
+  /** "Logged sets suggest 110.97 kg, up from 100 kg." */
+  readonly headline: string;
+  /** "From 90 kg for 5 reps at RPE 8 on Thu 8 Oct, week 1." */
+  readonly from: string;
 }
 
 /** Where a max came from, in words; never a system word. */
@@ -63,18 +81,50 @@ export function sourceWords(entry: TrainingMaxEntryView, firstName: string): str
       return $localize`From ${firstName}:name:’s recorded max`;
     case 'WeekOneWeight':
       return $localize`Worked out from week 1’s weight`;
+    case 'LoggedSet':
+      return $localize`Estimated from ${firstName}:name:’s logged sets`;
     default:
       return $localize`Typed by you`;
   }
 }
 
+function setParts(basis: TrainingMaxBasisView, unit: TrainingLoadUnit, locale: string) {
+  return {
+    load: weight(basis.load, unit, locale),
+    reps: num(basis.repetitions),
+    rpe: formatNumber(num(basis.rpe), locale, '1.0-1'),
+  };
+}
+
 function basisWords(entry: TrainingMaxEntryView, locale: string): string | null {
   const basis = entry.basis;
   if (!basis) return null;
-  const load = weight(basis.load, entry.unit, locale);
-  const reps = num(basis.repetitions);
-  const rpe = formatNumber(num(basis.rpe), locale, '1.0-1');
-  return $localize`${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe: in week 1`;
+  const { load, reps, rpe } = setParts(basis, entry.unit, locale);
+  const logged = basis.loggedSet;
+  return logged
+    ? $localize`${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe: on ${day(logged.performedOn, locale)}:date:, week ${num(logged.weekNumber)}:week:`
+    : $localize`${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe: in week 1`;
+}
+
+function suggestionOf(lift: TrainingMaxView, locale: string): MaxSuggestion | null {
+  const suggestion = lift.suggestion;
+  const logged = suggestion?.basis.loggedSet;
+  if (!suggestion || !logged) return null;
+  const value = num(suggestion.value);
+  const current = num(lift.current.value);
+  const valueText = weight(value, suggestion.unit, locale);
+  const now = weight(current, lift.current.unit, locale);
+  const { load, reps, rpe } = setParts(suggestion.basis, suggestion.unit, locale);
+  return {
+    setId: logged.setPerformanceId,
+    value,
+    valueText,
+    headline:
+      value > current
+        ? $localize`Logged sets suggest ${valueText}:value:, up from ${now}:current:.`
+        : $localize`Logged sets suggest ${valueText}:value:, down from ${now}:current:.`,
+    from: $localize`From ${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe: on ${day(logged.performedOn, locale)}:date:, week ${num(logged.weekNumber)}:week:.`,
+  };
 }
 
 function entryWords(entry: TrainingMaxEntryView, firstName: string, locale: string): string {
@@ -113,6 +163,7 @@ function cardOf(lift: TrainingMaxView, firstName: string, locale: string): MaxCa
           ? $localize`When the program was assigned`
           : entry.reason,
     })),
+    suggestion: suggestionOf(lift, locale),
   };
 }
 
@@ -145,9 +196,13 @@ export interface MaxEditRow {
   readonly value: number | null;
   /** The weight of week 1's first set, from which the max is worked out; null when not used. */
   readonly weekOneWeight: number | null;
+  /** What the client's logged sets suggest for this lift; null when they suggest nothing. */
+  readonly logged: MaxSuggestion | null;
+  /** The coach chose the logged sets' estimate. */
+  readonly useLogged: boolean;
 }
 
-export function editRows(view: TrainingMaxesView): MaxEditRow[] {
+export function editRows(view: TrainingMaxesView, locale: string): MaxEditRow[] {
   return view.maxes.map((lift) => ({
     exerciseId: lift.exerciseId,
     name: lift.exerciseName,
@@ -162,16 +217,28 @@ export function editRows(view: TrainingMaxesView): MaxEditRow[] {
       : null,
     value: null,
     weekOneWeight: null,
+    logged: suggestionOf(lift, locale),
+    useLogged: false,
   }));
 }
 
-/** A max is a number or week 1's weight, never both: typing one clears the other. */
+/** A max is a number, week 1's weight or the logged sets' estimate, one at a time: choosing one clears the others. */
 export function withValue(row: MaxEditRow, value: number | null): MaxEditRow {
-  return { ...row, value, weekOneWeight: value === null ? row.weekOneWeight : null };
+  return value === null
+    ? { ...row, value }
+    : { ...row, value, weekOneWeight: null, useLogged: false };
 }
 
 export function withWeekOneWeight(row: MaxEditRow, weekOneWeight: number | null): MaxEditRow {
-  return { ...row, weekOneWeight, value: weekOneWeight === null ? row.value : null };
+  return weekOneWeight === null
+    ? { ...row, weekOneWeight }
+    : { ...row, weekOneWeight, value: null, useLogged: false };
+}
+
+export function withLogged(row: MaxEditRow, useLogged: boolean): MaxEditRow {
+  return useLogged && row.logged
+    ? { ...row, useLogged: true, value: null, weekOneWeight: null }
+    : { ...row, useLogged: false };
 }
 
 function outOfRange(value: number): boolean {
@@ -183,6 +250,7 @@ export function editErrors(rows: readonly MaxEditRow[]): FieldMessages {
   const errors: FieldMessages = {};
   let changed = false;
   for (const row of rows) {
+    if (row.useLogged && row.logged) changed = true;
     if (row.value !== null) {
       if (outOfRange(row.value)) {
         errors[`max:${row.exerciseId}`] = [
@@ -211,11 +279,15 @@ export function editErrors(rows: readonly MaxEditRow[]): FieldMessages {
 /** Only the lifts that change are sent: the server refuses a "change" to the number already in use. */
 export function changesRequest(rows: readonly MaxEditRow[]): TrainingMaxChangeRequest[] {
   return rows.flatMap((row): TrainingMaxChangeRequest[] => {
+    const exerciseId = row.exerciseId;
+    if (row.useLogged && row.logged) {
+      return [{ exerciseId, value: null, weekOneWeight: null, loggedSetId: row.logged.setId }];
+    }
     if (row.weekOneWeight !== null) {
-      return [{ exerciseId: row.exerciseId, value: null, weekOneWeight: row.weekOneWeight }];
+      return [{ exerciseId, value: null, weekOneWeight: row.weekOneWeight, loggedSetId: null }];
     }
     if (row.value !== null && row.value !== row.current) {
-      return [{ exerciseId: row.exerciseId, value: row.value, weekOneWeight: null }];
+      return [{ exerciseId, value: row.value, weekOneWeight: null, loggedSetId: null }];
     }
     return [];
   });

@@ -293,6 +293,7 @@ function maxesView(overrides: Record<string, unknown> = {}) {
         },
         weekOneSet: { repetitions: 5, rpe: 8, load: 55 },
         earlier: [],
+        suggestion: null,
       },
       {
         exerciseId: 'ex-bench',
@@ -320,9 +321,46 @@ function maxesView(overrides: Record<string, unknown> = {}) {
             reason: 'Assignment training max.',
           },
         ],
+        suggestion: null,
       },
     ],
     ...overrides,
+  };
+}
+
+/**
+ * The squat's max with what Maya's logged sets suggest (P4b): her week 2 top set, 62.5 kg for 5 at RPE 8,
+ * is 81.1% of 77.065 kg on the RTS chart.
+ */
+function suggestingMaxes() {
+  const view = maxesView();
+  return {
+    ...view,
+    maxes: [
+      {
+        ...view.maxes[0],
+        suggestion: {
+          value: 77.065,
+          unit: 'Kilogram',
+          basis: {
+            load: 62.5,
+            repetitions: 5,
+            rpe: 8,
+            methodKey: 'RpeChart',
+            methodVersion: '1.0',
+            loggedSet: {
+              setPerformanceId: 'set-logged-9',
+              weekNumber: 2,
+              performedOn: '2026-09-23',
+              sessionName: 'Lower B',
+            },
+          },
+          explanation:
+            'Best logged set v1: the best set of week 2 was 62.5 kg for 5 reps at RPE 8 on Wed 23 Sep 2026. RTS RPE chart v1: 5 reps at RPE 8 is 81.1% of the max, so 62.5 kg / 81.1% = 77.065 kg.',
+        },
+      },
+      view.maxes[1],
+    ],
   };
 }
 
@@ -366,6 +404,20 @@ const maxesPreview = {
   unchangedSetCount: 0,
   sessionCount: 2,
   keptSessionCount: 3,
+};
+
+/** The preview of that suggestion: the same four sets, worked out from 77.065 kg. */
+const suggestionPreview = {
+  ...maxesPreview,
+  lifts: [
+    {
+      ...maxesPreview.lifts[0],
+      newValue: 77.065,
+      source: 'LoggedSet',
+      basis: suggestingMaxes().maxes[0].suggestion!.basis,
+      explanation: suggestingMaxes().maxes[0].suggestion!.explanation,
+    },
+  ],
 };
 
 type Handlers = Record<string, (route: Route) => unknown>;
@@ -959,11 +1011,11 @@ test('updating a max shows every new weight first, then sends what was reviewed'
   await expect(sheet).toHaveCount(0);
   expect(requests[0].body).toEqual({
     mesocycleVersion: 4,
-    changes: [{ exerciseId: 'ex-squat', value: 75, weekOneWeight: null }],
+    changes: [{ exerciseId: 'ex-squat', value: 75, weekOneWeight: null, loggedSetId: null }],
   });
   expect(requests[1].body).toMatchObject({
     mesocycleVersion: 4,
-    changes: [{ exerciseId: 'ex-squat', value: 75, weekOneWeight: null }],
+    changes: [{ exerciseId: 'ex-squat', value: 75, weekOneWeight: null, loggedSetId: null }],
     reason: 'Retested on Wednesday',
     previewHash: 'hash-1',
     idempotencyKey: expect.any(String),
@@ -974,6 +1026,104 @@ test('updating a max shows every new weight first, then sends what was reviewed'
       .getByRole('status')
       .filter({ hasText: 'Training maxes updated. The weeks still to come follow them.' }),
   ).toBeVisible();
+});
+
+test('a lift’s logged sets suggest a max, and Review opens its new weights already worked out (P4b)', async ({
+  page,
+}) => {
+  const requests: { method: string; path: string; body: unknown }[] = [];
+  await openTraining(page, 1440, 900, {
+    requests,
+    programs: [coachProgram(), coachProgram()],
+    maxes: suggestingMaxes(),
+    extra: {
+      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/preview`]: (route) =>
+        json(route, 200, suggestionPreview),
+      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/apply`]: (route) =>
+        json(route, 200, { id: BLOCK }),
+    },
+  });
+
+  const panel = page.locator('app-program-maxes');
+  const suggestion = panel.locator('.lift').first().locator('.suggestion');
+  await expect(suggestion.locator('.suggestion-head')).toHaveText(
+    'Logged sets suggest 77.07 kg, up from 70 kg.',
+  );
+  await expect(suggestion.locator('.detail')).toHaveText(
+    'From 62.5 kg for 5 reps at RPE 8 on Wed 23 Sep, week 2.',
+  );
+  // Nothing changed on its own, and the bench, with nothing to suggest, says nothing.
+  await expect(panel.locator('.lift').first().locator('.value')).toHaveText('70 kg');
+  await expect(panel.locator('.lift').nth(1).locator('.suggestion')).toHaveCount(0);
+  expect(requests).toEqual([]);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p4b-suggestion-1440.png', fullPage: true });
+
+  await suggestion.getByRole('button', { name: 'Review the new weights' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Update training maxes' });
+  await expect(sheet.locator('.lift-move')).toHaveText('70 kg to 77.07 kg');
+  await expect(sheet.locator('.lift-changes .why')).toContainText('the best set of week 2');
+  await expect(sheet.locator('.strong')).toHaveText('4 weights change in 2 sessions.');
+  expect(requests[0].body).toEqual({
+    mesocycleVersion: 4,
+    changes: [
+      { exerciseId: 'ex-squat', value: null, weekOneWeight: null, loggedSetId: 'set-logged-9' },
+    ],
+  });
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p4b-review-1440.png' });
+
+  // Back to the numbers: the estimate is the lift's choice, ticked, with the set it came from.
+  await sheet.getByRole('button', { name: 'Change the numbers' }).click();
+  const estimate = sheet.getByRole('checkbox', {
+    name: 'Use the estimate from logged sets: 77.07 kg',
+  });
+  await expect(estimate).toBeChecked();
+  await sheet.getByRole('button', { name: 'Show the new weights' }).click();
+  await sheet.getByRole('button', { name: 'Update maxes', exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+  expect(requests.at(-1)!.body).toMatchObject({
+    mesocycleVersion: 4,
+    changes: [
+      { exerciseId: 'ex-squat', value: null, weekOneWeight: null, loggedSetId: 'set-logged-9' },
+    ],
+    previewHash: 'hash-1',
+    idempotencyKey: expect.any(String),
+  });
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: 'Training maxes updated. The weeks still to come follow them.' }),
+  ).toBeVisible();
+});
+
+test('a suggested max reads at phone width and in dark mode, and passes axe', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openTraining(page, 390, 844, {
+    maxes: suggestingMaxes(),
+    extra: {
+      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/preview`]: (route) =>
+        json(route, 200, suggestionPreview),
+    },
+  });
+  const suggestion = page.locator('app-program-maxes .suggestion');
+  await suggestion.scrollIntoViewIfNeeded();
+  await expect(suggestion).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p4b-suggestion-dark-390.png', fullPage: true });
+
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p4b-suggestion-390.png', fullPage: true });
+
+  await suggestion.getByRole('button', { name: 'Review the new weights' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Update training maxes' });
+  await expect(sheet.locator('.preview')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/p4b-review-390.png' });
 });
 
 test.describe('a stale update', () => {
@@ -1156,6 +1306,7 @@ for (const width of [390, 1440]) {
     page,
   }) => {
     await openTraining(page, width, 900, {
+      maxes: suggestingMaxes(),
       extra: {
         [`POST /api/training/mesocycles/${BLOCK}/training-maxes/preview`]: (route) =>
           json(route, 200, maxesPreview),
@@ -1164,6 +1315,8 @@ for (const width of [390, 1440]) {
     await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
     await expect(page.locator('app-program-maxes .lift').first()).toBeVisible();
+    // The logged sets' suggestion and its button wrap with the text (P4b).
+    await expect(page.locator('app-program-maxes .suggestion button')).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await page.getByRole('button', { name: 'Update maxes for the coming weeks' }).click();

@@ -495,9 +495,9 @@ longer moves a warm-up set.
 **STR-007** Phase 3 calculated loads use only the captured mesocycle working max. Calculation
 from week-1 performed load is a different future strategy and is never mixed implicitly.
 Estimating a max from week 1's prescribed fixed weight (P2, ADR 0036) uses the prescription alone;
-adjusting from logged performance stays a separate, later strategy. As decided for P4b (ADR 0036, not
-built): it only suggests a max, from the week's best logged working set of 1 to 8 reps at RPE 7 to 10,
-and a coach applies it through the max update's preview (STR-011); it never changes a max on its own.
+adjusting from logged performance stays a separate strategy. Built in P4b as STR-012 (ADR 0036): it
+only suggests a max, from the week's best logged working set of 1 to 8 reps at RPE 7 to 10, and a coach
+applies it through the max update's preview (STR-011); it never changes a max on its own.
 
 **STR-008** A recommendation and its rounding are separate. Rounding is configured per
 mesocycle with unit, positive increment, and Nearest/Down/Up mode. Phase 3 does not silently
@@ -538,6 +538,18 @@ request under the same key conflicts, a stale preview or version is refused, and
 for the same max cannot both win (one first max per lift, one successor per max). Each update leaves
 an append-only record of its counts, hashes and reason. A finished or cancelled program keeps its
 maxes, and a released client's program is read-only (ADR 0027).
+
+**STR-012** BestLoggedSet v1 (P4b, built 2026-10-08, ADR 0036): the max a client's logged sets suggest
+for a lift of a program. A set counts when it is a finished working set (not a warm-up, in a finished
+workout) of the exercise actually performed, with 1 to 8 reps at RPE 7 to 10, a weight in the program's
+unit (never converted) and an implied max of at most 2,000, logged after the max in use was set. Of the
+latest program week holding such a set, the one implying the highest max (weight / RTS chart %, to
+three decimals) is the suggestion; a tie goes to the later set. The Training maxes panel shows it only
+while it moves the max in use by more than one rounding step, either way, on an open program of a
+client still coached here, while the coach's training reads are open (TRN-023). The coach applies it
+through the STR-011 preview by naming the set; the server works the max out again and accepts only the
+set the rule picks now. The new max keeps the set (`SourceSetPerformanceId`) and its numbers. Nothing
+changes a max on its own.
 
 ## 6. Nutrition, recipes, and calorie targets
 

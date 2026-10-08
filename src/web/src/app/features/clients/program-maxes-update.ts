@@ -23,6 +23,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
+import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
 import { Skeleton } from '../../ui/skeleton';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
@@ -36,6 +37,7 @@ import {
   previewSummary,
   REASON_LIMIT,
   reasonErrors,
+  withLogged,
   withValue,
   withWeekOneWeight,
   type MaxEditRow,
@@ -44,14 +46,16 @@ import {
 
 /**
  * "Update maxes for the coming weeks" (P2, STR-002, STR-009). The coach changes a lift's training max,
- * by typing it or from the weight of week 1's first set, and sees every weight that would change
- * before anything is saved. Updating sends back the preview's hash, the version the preview was
- * worked out against and one idempotency key, so the server refuses anything that changed in between
- * and a retry saves once. Sessions that have started, or are in the past, keep what they had.
+ * by typing it, from the weight of week 1's first set, or from the estimate the client's logged sets
+ * suggest (P4b, STR-007), and sees every weight that would change before anything is saved. Opened from
+ * a suggestion, it starts on that estimate already worked out. Updating sends back the preview's hash,
+ * the version the preview was worked out against and one idempotency key, so the server refuses
+ * anything that changed in between and a retry saves once. Sessions that have started, or are in the
+ * past, keep what they had.
  */
 @Component({
   selector: 'app-program-maxes-update',
-  imports: [Button, Control, Field, Skeleton],
+  imports: [Button, Checkbox, Control, Field, Skeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="body">
@@ -138,6 +142,22 @@ import {
                   {{ row.name }}
                   <span class="now">{{ nowText(row) }}</span>
                 </legend>
+                @if (row.logged; as logged) {
+                  <div class="logged">
+                    <app-checkbox [label]="loggedLabel(logged.valueText)">
+                      <input
+                        type="checkbox"
+                        appControl
+                        [checked]="row.useLogged"
+                        [attr.aria-describedby]="'logged-from-' + row.exerciseId"
+                        (change)="setLogged(row, $any($event.target).checked)"
+                      />
+                    </app-checkbox>
+                    <p class="muted small" [id]="'logged-from-' + row.exerciseId" dir="auto">
+                      {{ logged.from }}
+                    </p>
+                  </div>
+                }
                 <app-field
                   [label]="newLabel"
                   [errors]="
@@ -297,6 +317,16 @@ import {
       font-size: 0.875rem;
       font-weight: 400;
       margin-inline-start: 0.5rem;
+    }
+
+    .logged {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+
+    .logged p {
+      padding-inline-start: 2.5rem;
     }
 
     .value-unit {
@@ -479,6 +509,8 @@ export class ProgramMaxesUpdate {
   readonly blockId = input.required<string>();
   readonly blockName = input.required<string>();
   readonly firstName = input.required<string>();
+  /** The lift whose logged-sets estimate the sheet opens on, worked out; null opens it blank. */
+  readonly suggested = input<string | null>(null);
   /** True when the maxes were updated, so the page reads the program again. */
   readonly closed = output<boolean>();
 
@@ -500,6 +532,8 @@ export class ProgramMaxesUpdate {
   /** What the preview was worked out from: the version of the program and the lifts it changes. */
   private previewed: { version: number; changes: TrainingMaxChangeRequest[] } | null = null;
   private version = 0;
+  /** The suggestion the sheet was opened on is worked out once; a reload keeps what the coach chose. */
+  private suggestionShown = false;
 
   protected readonly errors = computed(() => editErrors(this.rows()));
   protected readonly reasonProblems = computed(() => reasonErrors(this.reason()));
@@ -529,6 +563,10 @@ export class ProgramMaxesUpdate {
     return $localize`now ${row.current}:value: ${unitLabel(row.unit)}:unit:`;
   }
 
+  protected loggedLabel(value: string): string {
+    return $localize`Use the estimate from logged sets: ${value}:value:`;
+  }
+
   protected weekOneHelp(set: WeekOneSet, row: MaxEditRow): string {
     const reps = set.repetitions;
     const rpe = set.rpe;
@@ -545,8 +583,16 @@ export class ProgramMaxesUpdate {
           firstValueFrom(this.programApi.getTrainingMaxes(this.blockId())),
         );
         this.version = Number(view.version);
-        this.rows.set(editRows(view));
+        const suggested = this.suggestionShown ? null : this.suggested();
+        const rows = editRows(view, this.locale).map((row) =>
+          row.exerciseId === suggested ? withLogged(row, true) : row,
+        );
+        this.rows.set(rows);
         this.load.set('ready');
+        if (rows.some((row) => row.useLogged)) {
+          this.suggestionShown = true;
+          void this.previewIt();
+        }
       } catch {
         if (owner.current) this.load.set('error');
       }
@@ -566,6 +612,10 @@ export class ProgramMaxesUpdate {
     this.edit(row.exerciseId, (item) =>
       withWeekOneWeight(item, Number.isNaN(value) ? null : value),
     );
+  }
+
+  protected setLogged(row: MaxEditRow, checked: boolean): void {
+    this.edit(row.exerciseId, (item) => withLogged(item, checked));
   }
 
   protected setReason(value: string): void {

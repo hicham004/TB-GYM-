@@ -82,8 +82,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R4.4a | **Meal plans** (C7, part 1): the plans as cards, and the meal-plan builder: days side by side with each day's total against the daily target, recipes dragged into meals, options per meal, the coach's server draft (NUT-013) and Publish | §2, plus backend tests | Done · 2026-10-07 · 4556bd2 |
 | R4.4b | **Recipes** (C7, part 2): recipe cards with macro bars, the recipe editor (ingredients from a food search, totals per serving as they are typed, publish), the AI suggestion inside New recipe, and recipe photos | §2, plus backend tests | Done · 2026-10-07 · b71d004 |
 | R4.4c | **Foods** (C7, part 3): one clean search over the coach's own foods and USDA (database codes behind a details toggle), adding your own food, and the calculation defaults moved to Settings; the older Recipes and foods page goes. Its first follow-ups were closed in the same step: archive and restore, a recipe line offered its food's new numbers, USDA names in sentence case, USDA carbs just below zero counted as 0 g, and the food sheet asking before it closes | §2, plus backend tests | Done · 2026-10-07 · fd42b34 |
-| R4.4d | **Recipes for clients** (M4 and C7, decided 2026-10-07): assigning a plan copies each recipe's ingredients, method, prep and cook time and cover photo into the client's snapshot (NUT-006), and the client's day opens a recipe in a sheet; the recipe editor gains prep and cook time; the meal-plan builder offers "Use the newest version" for a recipe republished since; recipe photos no version names are removed 48 hours after upload (MED-014). Its first follow-ups were closed in the same step: the ingredients scaled to the client's portion, the recipe photo on the meal cards, and Print recipe | §2, plus backend tests (the snapshot, the client's read, the photo only for the client's own plan, another client, a released client, the 48-hour sweep) | Done · 2026-10-08 |
-| P4b | **Adjusting next week from logged performance** (ADR 0036, decided 2026-10-07): the Training maxes panel suggests a new max from the best logged set of the week (1 to 8 reps at RPE 7 to 10), and the coach applies it through the existing preview; never automatic | §2, plus domain reference tests (which sets count, the estimate) and API tests (other coach, released client, kg and lb kept apart) | To do |
+| R4.4d | **Recipes for clients** (M4 and C7, decided 2026-10-07): assigning a plan copies each recipe's ingredients, method, prep and cook time and cover photo into the client's snapshot (NUT-006), and the client's day opens a recipe in a sheet; the recipe editor gains prep and cook time; the meal-plan builder offers "Use the newest version" for a recipe republished since; recipe photos no version names are removed 48 hours after upload (MED-014). Its first follow-ups were closed in the same step: the ingredients scaled to the client's portion, the recipe photo on the meal cards, and Print recipe | §2, plus backend tests (the snapshot, the client's read, the photo only for the client's own plan, another client, a released client, the 48-hour sweep) | Done · 2026-10-08 · 810f642 |
+| P4b | **Adjusting next week from logged performance** (ADR 0036, decided 2026-10-07): the Training maxes panel suggests a new max from the best logged set of the week (1 to 8 reps at RPE 7 to 10), and the coach applies it through the existing preview; never automatic | §2, plus domain reference tests (which sets count, the estimate) and API tests (other coach, released client, kg and lb kept apart) | Done · 2026-10-08 |
 | R5.1 | **Products** (C8), **Exercise library** (C10), notifications, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only) | §2 | To do |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
 | R5.3 | **Delete legacy CSS**, add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
@@ -497,6 +497,20 @@ of the implemented R1.3 screens before production rollout.
   version and plan snapshot what it was (NUT-006); a shortcut in the builder would publish recipe
   versions from the meal-plan screen. Still open: (6) a client's copy keeps no allergens of its own; the
   plan's allergen review happens at assignment, as before.
+
+- **Suggested maxes, P4b's follow-ups (built 2026-10-08; screenshots `docs/design/p4b-*.png`, from a live
+  Atlas pass).** Each lift of the Training maxes panel says what the client's logged sets suggest ("Logged
+  sets suggest 70.9 kg, up from 62.5 kg", naming the set), and **Review the new weights** opens the update
+  sheet on that estimate, already worked out; the sheet also offers it as a third choice beside a typed
+  max and week 1's weight (STR-012). Decided by Claude for the owner on 2026-10-08 (ADR 0036, "As built"):
+  the latest week with a finished workout speaks; only sets logged after the max in use count; the server
+  accepts only the set the rule picks now. Left: (1) **demo data**: the generator logs weights below the
+  prescription, so most demo suggestions point down (Jad's squat 120 to 101.7 kg); make demo clients hit
+  their numbers before showing P4b to founding coaches. (2) No "keep this max" on a suggestion: it stays
+  until the coach changes that max or newer sets replace it; add one if coaches find it noisy. (3) A newer
+  best set logged between the preview and Update answers with the general "This program changed since you
+  opened this" message; a code of its own could name the new set. (4) Coach Today does not mention
+  suggestions.
 ---
 
 ## 1. Verdict: why the product feels "meh"

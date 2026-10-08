@@ -25,6 +25,8 @@ import { maxCards } from './program-maxes.models';
  * it came from and when, and the way to change them for the coming weeks. A program keeps its own
  * maxes; changing one adds a new max beside the old, so the history stays (STR-002). The server says
  * which max is in use; this draws it. A program that works no weight out from a max shows nothing.
+ * When the client's logged sets suggest another max (P4b, STR-007), the lift says so and offers the
+ * same update, worked out first; nothing changes until the coach applies it.
  */
 @Component({
   selector: 'app-program-maxes',
@@ -75,6 +77,30 @@ import { maxCards } from './program-maxes.models';
                   @if (card.appliesFrom; as applies) {
                     <p class="detail" dir="auto">{{ applies }}</p>
                   }
+                  @if (card.suggestion; as suggestion) {
+                    @if (!block().terminal) {
+                      <div class="suggestion">
+                        <p
+                          class="suggestion-head"
+                          [id]="'suggestion-' + card.exerciseId"
+                          dir="auto"
+                        >
+                          {{ suggestion.headline }}
+                        </p>
+                        <p class="detail" dir="auto">{{ suggestion.from }}</p>
+                        <button
+                          appButton
+                          type="button"
+                          variant="outlined"
+                          [attr.aria-describedby]="'suggestion-' + card.exerciseId"
+                          (click)="update.emit(card.exerciseId)"
+                          i18n
+                        >
+                          Review the new weights
+                        </button>
+                      </div>
+                    }
+                  }
                   @if (card.earlier.length > 0) {
                     <details class="history">
                       <summary>
@@ -100,7 +126,7 @@ import { maxCards } from './program-maxes.models';
               @if (block().terminal) {
                 <p class="note" i18n>This program is over, so its maxes stay as they were.</p>
               } @else {
-                <button appButton type="button" (click)="update.emit()" i18n>
+                <button appButton type="button" (click)="update.emit(null)" i18n>
                   Update maxes for the coming weeks
                 </button>
               }
@@ -199,6 +225,26 @@ import { maxCards } from './program-maxes.models';
       font-size: 0.8125rem;
     }
 
+    // What the client's logged sets suggest (P4b): set apart, never applied until the coach reviews it.
+    .suggestion {
+      align-items: flex-start;
+      background: var(--tb-accent-soft);
+      border-radius: var(--tb-radius-control);
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin-block-start: 0.5rem;
+      padding: 0.75rem;
+    }
+
+    .suggestion-head {
+      font-weight: 600;
+    }
+
+    .suggestion button {
+      margin-block-start: 0.375rem;
+    }
+
     .history {
       margin-block-start: 0.25rem;
     }
@@ -276,8 +322,11 @@ export class ProgramMaxes {
   /** The program in front of the coach; its id and version say when to read the maxes again. */
   readonly block = input.required<BlockCard>();
   readonly firstName = input.required<string>();
-  /** The coach asked to change the maxes: the page opens the sheet, which shares its data. */
-  readonly update = output<void>();
+  /**
+   * The coach asked to change the maxes: the page opens the sheet, which shares its data. The exercise id
+   * says the coach came from that lift's suggestion, which the sheet then shows worked out; null otherwise.
+   */
+  readonly update = output<string | null>();
 
   protected readonly loadingLabel = $localize`Loading the training maxes…`;
   protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');

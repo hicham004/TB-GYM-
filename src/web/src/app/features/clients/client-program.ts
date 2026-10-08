@@ -117,6 +117,8 @@ export class ClientProgram {
   protected readonly sharing = signal(false);
   protected readonly toolsOpened = signal(false);
   protected readonly active = signal<{ week: WeekColumn; session: SessionCard } | null>(null);
+  /** The lift whose suggested max the maxes sheet opens on; null for a plain update. */
+  protected readonly maxesSuggested = signal<string | null>(null);
 
   protected readonly assignSheet = viewChild.required<TemplateRef<unknown>>('assignSheet');
   protected readonly nextSheet = viewChild.required<TemplateRef<unknown>>('nextSheet');
@@ -381,8 +383,12 @@ export class ClientProgram {
     });
   }
 
-  /** The panel's one button: change the program's training maxes for the coming weeks (P2). */
-  protected openMaxesUpdate(): void {
+  /**
+   * Change the program's training maxes for the coming weeks (P2). From a lift's suggestion (P4b) the
+   * sheet opens on that lift's estimate, already worked out.
+   */
+  protected openMaxesUpdate(suggested: string | null): void {
+    this.maxesSuggested.set(suggested);
     this.open(
       this.sheets,
       this.maxesSheet(),

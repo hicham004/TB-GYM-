@@ -46,6 +46,7 @@ const squat = {
   }),
   weekOneSet: { repetitions: 5, rpe: 8, load: 80 },
   earlier: [entry({})],
+  suggestion: null,
 };
 const bench = {
   exerciseId: 'bench',
@@ -53,6 +54,30 @@ const bench = {
   current: entry({ id: 'max-3', value: 80, exerciseId: 'bench' }),
   weekOneSet: null,
   earlier: [],
+  suggestion: null,
+};
+
+/** Maya's week 2 top set, 130 kg for 3 at RPE 8 (86.3%), suggests 150.637 kg for the squat. */
+const suggestingSquat = {
+  ...squat,
+  suggestion: {
+    value: 150.637,
+    unit: 'Kilogram',
+    basis: {
+      load: 130,
+      repetitions: 3,
+      rpe: 8,
+      methodKey: 'RpeChart',
+      methodVersion: '1.0',
+      loggedSet: {
+        setPerformanceId: 'set-9',
+        weekNumber: 2,
+        performedOn: '2026-09-30',
+        sessionName: 'Lower A',
+      },
+    },
+    explanation: 'Best logged set v1: …',
+  },
 };
 
 async function render(
@@ -121,6 +146,42 @@ describe('the training maxes panel', () => {
     await settle(fixture);
 
     expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(null);
+  });
+
+  it('says what the logged sets suggest for a lift, and opens the update on it', async () => {
+    const { fixture, host, update } = await render({
+      read: () => of(maxes([suggestingSquat, bench])),
+    });
+
+    const lifts = Array.from(host.querySelectorAll('.lift'));
+    const suggestion = lifts[0].querySelector('.suggestion');
+    expect(textOf(suggestion?.querySelector('.suggestion-head'))).toBe(
+      'Logged sets suggest 150.64 kg, up from 120 kg.',
+    );
+    expect(textOf(suggestion?.querySelector('.detail'))).toBe(
+      'From 130 kg for 3 reps at RPE 8 on Wed 30 Sep, week 2.',
+    );
+    expect(lifts[1].querySelector('.suggestion')).toBeNull();
+    // Nothing changed on its own: the max in use is still the one shown.
+    expect(textOf(lifts[0].querySelector('.value'))).toBe('120 kg');
+
+    const review = suggestion?.querySelector('button') as HTMLButtonElement;
+    expect(textOf(review)).toBe('Review the new weights');
+    expect(review.getAttribute('aria-describedby')).toBe('suggestion-squat');
+    review.click();
+    await settle(fixture);
+
+    expect(update).toHaveBeenCalledWith('squat');
+  });
+
+  it('suggests nothing on a program that is over', async () => {
+    const { host } = await render({
+      block: cancelledBlock(),
+      read: () => of(maxes([suggestingSquat])),
+    });
+
+    expect(host.querySelector('.suggestion')).toBeNull();
   });
 
   it('shows nothing for a program that works no weight out from a max', async () => {
