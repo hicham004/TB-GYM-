@@ -104,8 +104,12 @@ export const routes: Routes = [
       ),
   },
   {
+    // Rebuilt in R5.3b: the first run is a few short steps and later it is the answers as cards. A step
+    // that is half typed asks before the router, a workspace switch or a sign-out drops it.
     path: 'profile',
     canActivate: [authGuard, clientGuard],
+    canDeactivate: [confirmBeforeLeaving],
+    data: REDESIGNED,
     title: $localize`My profile | TB Gym`,
     loadComponent: () =>
       import('./features/profile/client-profile').then((module) => module.ClientProfilePage),

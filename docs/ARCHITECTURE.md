@@ -460,8 +460,9 @@ they next gain derived validation or are otherwise changed.
 
 Three sites were examined and excluded, because each reports an action that has already happened
 rather than a standing property of the form: `today-nutrition` sets a per-meal error only inside
-`save(slot)`; `client-intake-form` sets `localError` only inside `save()`/`complete()`, which is
-already this convention's summary-region shape on a reactive form; and `client-training` renders a
+`save(slot)`; `client-intake-form` (replaced in R5.3b by steps and sheets that use `FormAttempt`) sets
+`localError` only inside `save()`/`complete()`, which is already this convention's summary-region
+shape on a reactive form; and `client-training` renders a
 server-computed coverage verdict that only exists once a progression preview has been requested.
 
 The `client-training` exclusion was re-examined in 6A-6 and confirmed: a coverage verdict is the

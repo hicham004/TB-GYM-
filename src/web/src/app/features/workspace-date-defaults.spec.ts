@@ -4,12 +4,11 @@ import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../core/api/api-client';
-import type { ClientIntakeProfile, ProductCatalog, WorkspaceDetails } from '../core/api/api.models';
+import type { ProductCatalog, WorkspaceDetails } from '../core/api/api.models';
 import { CsrfService } from '../core/security/csrf.service';
 import { TenantContext } from '../core/tenancy/tenant-context';
 import { TenantStore } from '../core/tenancy/tenant.store';
 import { field, settle } from '../../testing/dom';
-import { ClientIntakeForm } from './clients/client-intake-form';
 import { ClientTrainingTools } from './clients/client-training-tools';
 import { ProgramAssign } from './clients/program-assign';
 import { planCard } from './clients/client-service.models';
@@ -47,30 +46,6 @@ function workspaceOn(currentDate: string, id = 'workspace-a'): WorkspaceDetails 
     logoAssetId: null,
   };
 }
-
-const intake: ClientIntakeProfile = {
-  id: 'client-1',
-  firstName: 'Rana',
-  lastName: 'Haddad',
-  email: 'rana@example.test',
-  phoneNumber: null,
-  birthDate: null,
-  heightCentimeters: null,
-  heightEnteredValue: null,
-  heightEnteredUnit: null,
-  workType: null,
-  averageDailySteps: null,
-  trainingBackground: null,
-  foodPreferences: null,
-  foodAversions: null,
-  goals: null,
-  allergies: null,
-  medications: null,
-  previousInjuries: null,
-  onboardingStatus: 'InProgress',
-  onboardingCompletedAtUtc: null,
-  version: 7,
-};
 
 const emptyPage = { items: [], total: 0 };
 
@@ -219,27 +194,6 @@ describe('date defaults across a coach client page', () => {
 
         expect(field(host, 'Received on').value).toBe(currentDate);
         expect(field(host, 'Received on').max).toBe(currentDate);
-      });
-
-      it('defaults the intake measurement date and its upper bound to the workspace date', async () => {
-        const { host, getWorkspace } = await render(
-          ClientIntakeForm,
-          { profile: intake },
-          currentDate,
-        );
-
-        const measurementDate = field(host, 'Measurement date');
-        expect(measurementDate.value).toBe(currentDate);
-        // A client cannot have been measured tomorrow, and tomorrow is the workspace's tomorrow.
-        expect(measurementDate.getAttribute('max')).toBe(currentDate);
-        expect(getWorkspace).toHaveBeenCalled();
-      });
-
-      it('derives the adult birth-date bound from the workspace date', async () => {
-        const { host } = await render(ClientIntakeForm, { profile: intake }, currentDate);
-
-        const eighteenYearsBack = `${Number(currentDate.slice(0, 4)) - 18}${currentDate.slice(4)}`;
-        expect(field(host, 'Date of birth').getAttribute('max')).toBe(eighteenYearsBack);
       });
     });
   }

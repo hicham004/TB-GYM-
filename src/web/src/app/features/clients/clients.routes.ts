@@ -7,8 +7,8 @@ const sections = () => import('./client-workspace-sections');
 export const clientRoutes: Routes = [
   {
     // The two lists are rebuilt on brand v2 (R3.3a) and follow light or dark. In a client's record
-    // below the Overview and Progress are too (R3.3b), Training (R3.4a), Service & access (R3.4b)
-    // and Check-ins with each check-in's review (R4.3); the other sections stay light.
+    // below the Overview and Progress are too (R3.3b), Training (R3.4a), Service & access (R3.4b),
+    // Check-ins with each check-in's review (R4.3) and the intake (R5.3b); Nutrition stays light.
     path: '',
     title: $localize`Clients | TB Gym`,
     data: REDESIGNED,
@@ -85,7 +85,8 @@ export const clientRoutes: Routes = [
       {
         path: 'intake',
         title: $localize`Client intake | TB Gym`,
-        loadComponent: () => sections().then((module) => module.ClientIntakeSection),
+        data: REDESIGNED,
+        loadComponent: () => import('./client-intake').then((module) => module.ClientIntake),
       },
     ],
   },

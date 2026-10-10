@@ -1,0 +1,77 @@
+<div class="groups">
+  @if (setup(); as banner) {
+    <section class="panel setup" aria-labelledby="intake-setup-heading">
+      <h2 id="intake-setup-heading" i18n>Setting up is not finished</h2>
+      <p class="banner-text">{{ banner.text }}</p>
+      @if (editable()) {
+        <div>
+          <button
+            appButton
+            type="button"
+            [disabled]="!banner.ready"
+            (click)="edit('start')"
+            data-finish-setup
+            i18n
+          >
+            Finish setting up
+          </button>
+        </div>
+      }
+    </section>
+  }
+
+  @for (group of groups; track group) {
+    <section class="panel" [attr.aria-labelledby]="'intake-' + group">
+      <div class="panel-head">
+        <h2 [id]="'intake-' + group">{{ titleOf(group) }}</h2>
+        @if (editable()) {
+          <button
+            appButton
+            type="button"
+            variant="outlined"
+            (click)="edit(group)"
+            [attr.data-edit]="group"
+          >
+            <ng-container i18n>Edit</ng-container>
+            <span class="tb-visually-hidden"> {{ titleOf(group) }}</span>
+          </button>
+        }
+      </div>
+      <dl class="answers">
+        @for (row of rows()[group]; track row.key) {
+          <div class="answer" [class.long]="row.longText">
+            <dt>{{ row.label }}</dt>
+            <dd [class.empty]="row.value === null" [attr.dir]="row.value === null ? null : 'auto'">
+              {{ row.value ?? notAdded }}
+            </dd>
+          </div>
+        }
+      </dl>
+    </section>
+  }
+</div>
+
+<ng-template #editSheet let-sheet>
+  <app-intake-edit
+    [step]="editing()"
+    [profile]="profile()"
+    [saver]="saver()"
+    [subject]="subject()"
+    [today]="today()"
+    [firstDay]="firstDay()"
+    [weightUnit]="weightUnit()"
+    (dirtyChange)="setDirty($event)"
+    (closed)="closeSheet($event, sheet)"
+  />
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

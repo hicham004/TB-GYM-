@@ -7,11 +7,7 @@ import type { CoachClientDetails, WorkspaceDetails } from '../../core/api/api.mo
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { settle } from '../../../testing/dom';
-import {
-  ClientIntakeSection,
-  ClientServiceSection,
-  ClientTrainingSection,
-} from './client-workspace-sections';
+import { ClientServiceSection, ClientTrainingSection } from './client-workspace-sections';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
 const PROFILE = {
@@ -80,15 +76,6 @@ describe('client record sections', () => {
     const { host } = await render(ClientServiceSection);
 
     expect(host.querySelector('app-client-service')).not.toBeNull();
-  });
-
-  it('disables the whole intake for a former client', async () => {
-    const current = await render(ClientIntakeSection);
-    expect(current.host.querySelector<HTMLFieldSetElement>('fieldset')?.disabled).toBe(false);
-
-    TestBed.resetTestingModule();
-    const former = await render(ClientIntakeSection, { profile: FORMER });
-    expect(former.host.querySelector<HTMLFieldSetElement>('fieldset')?.disabled).toBe(true);
   });
 
   it('does not show a former client’s training', async () => {

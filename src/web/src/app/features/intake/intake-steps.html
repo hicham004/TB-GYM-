@@ -1,0 +1,68 @@
+<div class="steps">
+  <ol class="progress" [attr.aria-label]="progressLabel">
+    @for (item of progress(); track item.id) {
+      <li
+        class="item"
+        [class.current]="item.current"
+        [class.done]="item.done"
+        [attr.aria-current]="item.current ? 'step' : null"
+      >
+        <span class="bar" aria-hidden="true"></span>
+        <span class="name">
+          @if (item.done) {
+            <app-icon name="check-circle" />
+          }
+          <span>{{ item.name }}</span>
+          @if (item.done) {
+            <span class="tb-visually-hidden" i18n>, done</span>
+          }
+        </span>
+      </li>
+    }
+  </ol>
+
+  <section class="panel" aria-labelledby="intake-step-heading">
+    <div class="intro">
+      <p class="kicker">{{ kicker() }}</p>
+      <h2 id="intake-step-heading" #heading tabindex="-1">{{ title() }}</h2>
+      <p class="lede">{{ lede() }}</p>
+      @if (step() === 'health') {
+        <p class="privacy">
+          <app-icon name="lock" />
+          <span>{{ privacy() }}</span>
+        </p>
+      }
+    </div>
+
+    <form class="body" (submit)="$event.preventDefault(); next()" novalidate>
+      <app-intake-fields
+        [step]="step()"
+        [(values)]="values"
+        [errors]="shown()"
+        [today]="today()"
+        [firstDay]="firstDay()"
+        (touched)="attempt.touch($event)"
+      />
+
+      @if (attempt.wasTried() && problemCount() > 0) {
+        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
+      }
+      @if (refusal(); as message) {
+        <p class="problem-text refusal" role="alert">{{ message }}</p>
+      }
+
+      <div class="actions">
+        @if (index() > 0) {
+          <button appButton type="button" variant="text" (click)="back()" i18n>Back</button>
+        }
+        <button appButton type="submit" class="next" [loading]="busy()">
+          @if (isLast()) {
+            <ng-container i18n>Finish setting up</ng-container>
+          } @else {
+            <ng-container i18n>Continue</ng-container>
+          }
+        </button>
+      </div>
+    </form>
+  </section>
+</div>

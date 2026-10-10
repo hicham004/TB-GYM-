@@ -1,23 +1,15 @@
 import { Component, inject, signal } from '@angular/core';
-import { ApiClient } from '../../core/api/api-client';
-import type {
-  CompleteClientOnboardingRequest,
-  UpdateClientIntakeRequest,
-} from '../../core/api/api.models';
-import { onboardingStatusLabel } from '../../core/i18n/display-labels';
-import { StatusLabel } from '../../ui/status-label';
 import { ClientNutrition } from '../nutrition/client-nutrition';
 import { ProgressDashboardView } from '../progress/progress-dashboard';
 import { ProgressView } from '../progress/progress-view';
-import { ClientIntakeForm } from './client-intake-form';
 import { ClientProgram } from './client-program';
 import { ClientService } from './client-service';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
 /**
  * The sections of a client's record other than the Overview. Training, Progress and Service & access
- * are rebuilt (R3.3b, R3.4); Nutrition and the intake render the existing screens unchanged.
- * Check-ins and each check-in's review have their own files (R4.3). Each is its own route under
+ * are rebuilt (R3.3b, R3.4); Nutrition renders the existing screen unchanged. Check-ins and each
+ * check-in's review (R4.3) and the intake (R5.3b) have their own files. Each is its own route under
  * `/clients/:clientId`.
  */
 
@@ -152,63 +144,3 @@ export class ClientProgressSection {
   template: `<app-client-service />`,
 })
 export class ClientServiceSection {}
-
-/** The intake form and onboarding, reached from the header's "Edit intake". */
-@Component({
-  selector: 'app-client-intake-section',
-  imports: [ClientIntakeForm, StatusLabel],
-  template: `
-    @if (context.profile(); as client) {
-      <!-- Disabled as a whole for a former client, so nothing can be edited or submitted. -->
-      <fieldset class="record-fields" [disabled]="context.isFormer()">
-        <section class="surface-section">
-          <div class="section-heading">
-            <div>
-              <h2 i18n>Client intake</h2>
-              <p class="muted" i18n>Contact, training, nutrition, and health details.</p>
-            </div>
-            <app-status-label
-              class="tb-theme"
-              [label]="onboardingStatusLabel(client.onboardingStatus)"
-              [tone]="client.onboardingStatus === 'Completed' ? 'success' : 'neutral'"
-              [marker]="client.onboardingStatus === 'Completed' ? 'check' : 'dot'"
-            />
-          </div>
-          <app-client-intake-form
-            [profile]="client"
-            [busy]="context.busy()"
-            (saveIntake)="saveIntake($event)"
-            (completeOnboarding)="completeOnboarding($event)"
-          />
-        </section>
-      </fieldset>
-    }
-  `,
-  styles: `
-    .record-fields {
-      border: 0;
-      margin: 0;
-      min-inline-size: 0;
-      padding: 0;
-    }
-  `,
-})
-export class ClientIntakeSection {
-  private readonly api = inject(ApiClient);
-  protected readonly context = inject(ClientWorkspaceContext);
-  protected readonly onboardingStatusLabel = onboardingStatusLabel;
-
-  protected saveIntake(request: UpdateClientIntakeRequest): Promise<boolean> {
-    return this.context.save(
-      () => this.api.updateClientIntake(this.context.clientId(), request),
-      $localize`Client intake saved.`,
-    );
-  }
-
-  protected completeOnboarding(request: CompleteClientOnboardingRequest): Promise<boolean> {
-    return this.context.save(
-      () => this.api.completeClientOnboarding(this.context.clientId(), request),
-      $localize`Client onboarding completed.`,
-    );
-  }
-}

@@ -1,0 +1,51 @@
+// A finished profile as cards of answers (R5.3b). Brand v2 tokens only.
+@use '../../ui/page';
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.answers {
+  display: grid;
+  gap: 0.875rem 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  margin: 0;
+}
+
+.answer {
+  min-inline-size: 0;
+}
+
+// Long answers get the whole row, and keep the line breaks the person typed.
+.answer.long {
+  grid-column: 1 / -1;
+}
+
+dt {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+dd {
+  color: var(--tb-ink);
+  margin: 0.125rem 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+dd.empty {
+  color: var(--tb-muted);
+}
+
+.setup {
+  background: var(--tb-warning-soft);
+}
+
+.banner-text {
+  color: var(--tb-ink);
+  margin: 0;
+  max-inline-size: 44rem;
+}

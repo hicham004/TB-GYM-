@@ -92,7 +92,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.2a | **Settings, Team, Billing** (C9): one Settings layout for staff, the coaching space's pages (the owner's: Name and region, Brand, Nutrition, Team, Billing) and the person's own (Notifications, Appearance, Password and security), a column on a wide page and a row that scrolls on a phone; Name and region rebuilt (the time zone from a searchable sheet, the week's first day, the currency new plans start in, the leave warning); Team with faces, Invite a coach in a sheet and each row's actions in a menu; Billing with what is owed first, how to pay with copy buttons, this month so far and a clean list of invoices that open in a sheet; Password and security rebuilt for staff and clients, Sign out everywhere asked first, leaving in a kit dialog | §2 | Done · 2026-10-09 |
 | R5.2b | **The platform admin screen** (ADR 0028): every coaching space in the order that needs the admin first, with what it owes, when it falls due and when it locks; a page for each space (invoices, this month, discounts); sheets to record a payment dated the day the money arrived, void with or without a corrected invoice, grant and revoke a discount, and publish a price plan version after seeing what changes; and the kit's new date field instead of the browser's date inputs | §2, plus API tests (a payment's date in the service and the database, the list's due and lock days) | Done · 2026-10-10 |
 | R5.3a | **Invitations** (C2): who is waiting to join first with what happens next, Invite a client in a sheet (a name and an email, an optional phone and a birth date typed in three boxes), Send again, and Cancel after asking, Invite again when a link ran out or was cancelled, everyone earlier behind a closed disclosure; the kit's typed date input | §2, plus Vitest (the invitation tenant-ownership tests moved to the sheet) | Done · 2026-10-10 |
-| R5.3b | **My profile and the intake form** (M8, C3) | §2 | To do |
+| R5.3b | **My profile and the intake form** (M8, C3): the client's first-run questions as five short steps, each saved as they go and resumed where they stopped, then their answers as cards with an Edit sheet on each; the coach's view of the same answers with the same sheets, what a client still needs, and Finish setting up for the starting weight; the typed birth date; and the unsaved-changes guard on the steps and the sheets (§9) | §2, plus Vitest (steps, resume, validation in words, refusals, the guard, a late answer after a workspace switch) | Done · 2026-10-10 |
 | R5.3c | **Weigh-ins, photos and measurements** (M5): the client's logging pages on the kit | §2 | To do |
 | R5.3d | **The coach's client nutrition and training tools** (C3, C7): the targets calculator and the max history | §2 | To do |
 | R5.3e | **The leftovers**: check-in forms and assignment buttons, the coach's workout page, the empty and status styles on Training, the plan dialogs' notes, the top bar's sign-out | §2 | To do |
@@ -201,7 +201,8 @@ of the implemented R1.3 screens before production rollout.
 - **Old screens behind Me (from R2.5c).** My profile (the intake form, which the coach's client page
   reuses), Password and security and Notification settings are still the old screens. Rebuild each
   with its unsaved-changes guard (§9): the intake form with R3.3, notifications with R5.1 and
-  security with R5.2. Notifications was rebuilt in R5.1c and Password and security in R5.2a.
+  security with R5.2. Notifications was rebuilt in R5.1c, Password and security in R5.2a and My profile
+  (with the intake form and its leave guard) in R5.3b.
 - **The brand hero (from R2.5c).** Training and Me each carry their own copy of the hero's gradient,
   glow and dots. Move it into one shared style when a third screen needs it.
 - **Coach Today extras (from R3.1).** The prototype's "+3 this month", "↑ 6% vs this point last
@@ -284,8 +285,8 @@ of the implemented R1.3 screens before production rollout.
 - **An unsaved coach note (from R3.3b).** A refresh or closed tab asks first, but moving to another
   section discards a note being edited. R4.2a built the kit's leave confirmation for C4 (`UiConfirm`
   in a Dialog, the `confirmBeforeLeaving` route guard and `UnsavedWork` for a workspace switch or
-  sign-out); the coach note, the intake form, C7 (§9) and the Brand page (R3.5a), which also only asks
-  before a refresh or a closed tab, can use it.
+  sign-out); the coach note, C7 (§9) and the Brand page (R3.5a), which also only asks before a refresh
+  or a closed tab, can use it. The intake form uses it since R5.3b.
 - **Numbers in right-to-left (from R3.3b).** With English text in an RTL layout "60 kg × 5" and
   "2 of 5" reorder their pieces, as they already do on Today and Clients. Settle it with the
   translation work (locale number formatting, isolating each figure).
@@ -354,7 +355,7 @@ of the implemented R1.3 screens before production rollout.
   - Drafts of a coach who left a workspace stay with their ended membership, unseen. A sweep could
     remove them, and new-program drafts untouched for months, if storage ever matters.
   - The leave confirmation (`UiConfirm`, `confirmBeforeLeaving`, `UnsavedWork`) is ready for the other
-    editors that still lose work on navigation: the coach note, Brand, the intake form and C7.
+    editors that still lose work on navigation: the coach note, Brand and C7 (the intake since R5.3b).
 - **Check-in review, left for later (from R4.3).**
   - Assigning a check-in still happens on the older Client check-ins screen (`/checkins/clients`),
     which also keeps its older way to read and compare. An Assign sheet on the client's Check-ins
@@ -692,6 +693,35 @@ of the implemented R1.3 screens before production rollout.
   `0` in four older sheets (the client's plan sheets, Assign program, Update maxes, Build next block): to check
   in R5.3f whether the strip shows there too.
 
+- **My profile and the intake, R5.3b (built 2026-10-10; screenshots `docs/design/r53b-*.png`). Decided by Claude
+  for the owner on 2026-10-10**, after looking at Trainerize (its intake form is meant to take a client at most
+  10 minutes, and holds goals, injury history and a PAR-Q-style health screen), Everfit (a form is a task in the
+  client's own app, and the coach opens the submission), W3C's guidance on multi-page forms (say how many steps
+  there are, show progress on every step, group by meaning, make optional steps easy to pass) and the server's
+  own rules (ADR 0004): (1) **Five short steps instead of one long form**: About you, Your goal, Your day and
+  food, Your health, Where you start. Each Continue saves that step's answers only, so closing the tab loses
+  nothing already passed, and a returning client starts at the first step not done. (2) **What finishes setting
+  up has not changed** (ADR 0004): an adult's date of birth, a height, a goal and a starting weight. Everything
+  else is optional, and the health step says so. (3) **The health step names who can read it**: "Only you, your
+  coach and the owner of {coaching space} can see these answers", which is true while ADR 0004 and ADR 0026
+  hold (a coach reads only their own clients) and must change with them. (4) **The starting weight** begins in
+  the unit the client chose in Me and is dated today in the coaching space, never the browser's; it is written
+  once, and later weigh-ins belong to Progress. (5) **A finished profile is cards of answers with an Edit on
+  each** (a sheet holding that group's boxes), the same for the client and for the coach. A coach filling in
+  what they know of a client who is still setting up may leave the required answers empty (CLI-004); a finished
+  profile keeps its date of birth, height and goal. The coach's Finish setting up (the starting weight) opens
+  only once those three are there. (6) The date of birth is typed in three boxes, and the adult cut-off now
+  follows the server around 29 February: a client born on 29 February is an adult on 28 February of a common
+  year. Not built: (a) a **PAR-Q-style health screen and consent**, which Trainerize's intake includes and
+  insurers often ask for. It needs wording and a consent record that the owner approves (CLI-008, legal), so
+  Claude recommends it as the next intake step, with the owner's or a lawyer's text; (b) changing the sign-in
+  email (ADR 0004 needs a re-verification workflow); (c) a profile photo; (d) the "sex used by the formula"
+  answer (CLI-006) has no field in the contract yet; (e) a reminder to a client who stopped half way (no notice
+  kind exists for it). Found by the tests and the live pass, and fixed here and in R5.3a: Not now in a sheet
+  skipped the question the close button asks (the invite sheet had the same hole), and a refusal could be
+  brought up behind a phone's tab bar. Checked live on the real API as a new client: invited, accepted,
+  answered the steps with a reload half way that resumed at step 3, finished, changed a group in a sheet, and
+  the coach read and corrected the same answers.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1091,6 +1121,16 @@ limited to the coach's assigned clients.
     and End coaching (owner). A former client's record shows the same plans and payments with nothing
     to change.
   - Follows dark mode. Screenshots on the Atlas demo: `docs/design/r34b-*.png`.
+- Built in R5.3b: **Intake** (`/clients/:clientId/intake`, from the header's Edit or View intake; follows dark
+  mode): what a client answered as four cards (About, Goal, Day and food, Health), each with an Edit that opens
+  that group in a sheet (the date of birth typed in three boxes, a refusal shown in the server's words, a
+  question before a half-typed sheet closes). A client who has not finished gets a banner saying what is still
+  needed, and Finish setting up (the starting weight) once the date of birth, height and a goal are there. A
+  former client's answers are read and not edited. The client's side is **My profile** (M8, `/profile`): a new
+  client's five steps (a progress bar and "Step 2 of 5", the step's name focused after each Continue, Back, each
+  Continue saved), then "You're all set" with Go to Today, and afterwards the same cards with Edit. Half-typed
+  work is asked about before the router, a workspace switch or a sign-out drops it. Screenshots:
+  `docs/design/r53b-*.png`, and `r53b-live-*.png` from the real API on the Atlas demo.
 
 **C4. Program builder (full rebuild): the coach's main tool**
 - Job: "Build a great program fast."
@@ -1577,7 +1617,7 @@ Maya Fakhoury is the client with a workout waiting today.
 These must be fixed while the screen is rebuilt, and verified in the browser:
 
 - **Unsaved work is discarded silently** on navigation and refresh in the editors. Add a guard to
-  every editor (C4, C7, the exercise editor, the intake form). The exercise editor must never drop
+  every editor (C4, C7, the exercise editor, the intake form: done in R5.3b). The exercise editor must never drop
   muscles, alternatives or linked media on save.
 - **Invalid form submits can fail silently.** Every form shows field errors and focuses the first
   one.
