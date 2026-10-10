@@ -120,6 +120,14 @@ The owner asked for it to be planned, then left its three questions to Claude af
   Coach Today already names it with both numbers. TrainingPeaks, the closest equivalent, emails threshold
   improvements only when the coach switches them on per athlete, and Trainerize's personal-best alerts are
   criticised for saying nothing useful. If founding coaches ask, it comes back as an opt-in in-app notice.
+- **One max history per lift (STR-015), decided by Claude for the owner on 2026-10-08** (P4c's last
+  follow-up, at the owner's request). In Everfit and TrainHeroic a client has one max per lift, so every
+  change, by the coach or the app, shows in that lift's history on the client's profile. Here a max raised
+  during a program stayed in that program, and the client's Training max history showed only the coach's
+  own entries. Copying it into the recorded maxes would store each fact twice, and a copy would also reach
+  Assign program as a "saved max" beside the carried one (STR-014). So the history reads both instead:
+  asked for, it lists every program's training maxes beside the recorded ones, named "Phase 2, from week 5,
+  from logged sets", while Assign program keeps reading the recorded maxes alone.
 
 **Telling the client about changes** (the owner's open question from P3a, P3b and P4a, decided by Claude
 on the same day). TB Gym sends no training notices at all today, not even for a new program or a shared

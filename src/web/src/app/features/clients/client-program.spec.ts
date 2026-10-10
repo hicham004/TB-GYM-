@@ -902,9 +902,10 @@ describe('a client’s Training', () => {
 
   describe('the older tools', () => {
     it('stay closed until they are opened, and are not read before then', async () => {
-      const { harness, host } = await render();
+      const { harness, host, api } = await render();
 
       expect(host.querySelector('app-client-training-tools')).toBeNull();
+      expect(api.listStrengthMaxes).not.toHaveBeenCalled();
       const tools = host.querySelector<HTMLDetailsElement>('.tools')!;
       tools.open = true;
       tools.dispatchEvent(new Event('toggle'));
@@ -912,6 +913,8 @@ describe('a client’s Training', () => {
 
       expect(host.querySelector('app-client-training-tools')).not.toBeNull();
       expect(tools.querySelector('.tools-body')?.getAttribute('data-mode')).toBe('light');
+      // One history per lift: the recorded maxes and every program's (STR-015).
+      expect(api.listStrengthMaxes).toHaveBeenCalledWith('client-1', undefined, 0, 100, true);
     });
   });
 });

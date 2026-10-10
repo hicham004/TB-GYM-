@@ -5,6 +5,7 @@ public interface IStrengthApplicationService
     Task<StrengthMaxPage?> ListAsync(
         Guid clientProfileId,
         Guid? exerciseId,
+        bool includeProgramMaxes,
         int skip,
         int take,
         CancellationToken cancellationToken);
@@ -33,7 +34,18 @@ public sealed record StrengthMaxView(
     string MethodVersion,
     Guid? SourceWorkoutExecutionId,
     string? Note,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    StrengthMaxProgramView? Program = null);
+
+/// <summary>
+/// The program a row of the client's max history belongs to, when the row is a program's training max rather
+/// than a recorded one (STR-015). Its id is that max's, never a recorded max's.
+/// </summary>
+public sealed record StrengthMaxProgramView(
+    Guid MesocycleId,
+    string ProgramName,
+    int EffectiveFromWeek,
+    WorkingMaxSource Origin);
 
 public sealed record StrengthMaxPage(
     int Total,

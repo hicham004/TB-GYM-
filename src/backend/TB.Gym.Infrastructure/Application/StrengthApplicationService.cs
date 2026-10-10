@@ -9,10 +9,12 @@ internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenant
     : IStrengthApplicationService
 {
     private const string ManualMethodVersion = "1.0";
+    private const string ProgramMaxMethodKey = "ProgramMax";
 
     public async Task<StrengthMaxPage?> ListAsync(
         Guid clientProfileId,
         Guid? exerciseId,
+        bool includeProgramMaxes,
         int skip,
         int take,
         CancellationToken cancellationToken)
@@ -36,6 +38,21 @@ internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenant
                 record => new { record.TenantId, Id = record.ExerciseId },
                 exercise => new { exercise.TenantId, exercise.Id },
                 (record, exercise) => new { Record = record, exercise.Name });
+        if (includeProgramMaxes)
+        {
+            // STR-015: one history per lift, each fact stored once. One client's recorded and program maxes
+            // are few, so they are merged and paged here rather than copied into one table.
+            var recorded = await joined.ToListAsync(cancellationToken);
+            var merged = recorded
+                .Select(item => ToView(item.Record, item.Name))
+                .Concat(await ListProgramMaxesAsync(clientProfileId, exerciseId, cancellationToken))
+                .OrderByDescending(item => item.EffectiveDate)
+                .ThenByDescending(item => item.CreatedAtUtc)
+                .ThenByDescending(item => item.Id)
+                .ToArray();
+            return new StrengthMaxPage(merged.Length, skip, take, merged.Skip(skip).Take(take).ToArray());
+        }
+
         var total = await joined.CountAsync(cancellationToken);
         var rows = await joined
             .OrderByDescending(item => item.Record.EffectiveDate)
@@ -169,6 +186,68 @@ internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenant
             item.SourceWorkoutExecutionId,
             item.Note,
             item.CreatedAtUtc);
+
+    /// <summary>
+    /// Every training max of the client's programs, each dated the day the coach set it in that program's
+    /// time zone, as the program's own maxes read says (STR-011).
+    /// </summary>
+    private async Task<IEnumerable<StrengthMaxView>> ListProgramMaxesAsync(
+        Guid clientProfileId,
+        Guid? exerciseId,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.MesocycleWorkingMaxSnapshots.AsNoTracking()
+            .Where(item => item.ClientProfileId == clientProfileId);
+        if (exerciseId is { } id)
+        {
+            query = query.Where(item => item.ExerciseId == id);
+        }
+
+        var rows = await query
+            .Join(
+                dbContext.TrainingMesocycles.AsNoTracking(),
+                max => new { max.TenantId, Id = max.MesocycleId },
+                program => new { program.TenantId, program.Id },
+                (max, program) => new { Max = max, ProgramName = program.Name, program.TimeZoneId })
+            .Join(
+                dbContext.Exercises.AsNoTracking(),
+                row => new { row.Max.TenantId, Id = row.Max.ExerciseId },
+                exercise => new { exercise.TenantId, exercise.Id },
+                (row, exercise) => new { row.Max, row.ProgramName, row.TimeZoneId, ExerciseName = exercise.Name })
+            .ToListAsync(cancellationToken);
+        var timeZones = rows
+            .Select(row => row.TimeZoneId)
+            .Distinct()
+            .ToDictionary(zone => zone, TimeZoneInfo.FindSystemTimeZoneById);
+        return rows.Select(row => ToView(row.Max, row.ExerciseName, row.ProgramName, timeZones[row.TimeZoneId]));
+    }
+
+    private static StrengthMaxView ToView(
+        MesocycleWorkingMaxSnapshot max,
+        string exerciseName,
+        string programName,
+        TimeZoneInfo timeZone) =>
+        new(
+            max.Id,
+            max.ClientProfileId,
+            max.ExerciseId,
+            exerciseName,
+            StrengthMaxKind.CoachWorkingMax,
+            max.Value,
+            max.Unit,
+            DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(max.CreatedAtUtc, timeZone).DateTime),
+            max.Source switch
+            {
+                WorkingMaxSource.WeekOneWeight => StrengthMaxSource.Calculation,
+                WorkingMaxSource.LoggedSet => StrengthMaxSource.WorkoutSet,
+                _ => StrengthMaxSource.Manual,
+            },
+            max.EstimateMethodKey ?? ProgramMaxMethodKey,
+            max.EstimateMethodVersion ?? ManualMethodVersion,
+            null,
+            max.Reason,
+            max.CreatedAtUtc,
+            new StrengthMaxProgramView(max.MesocycleId, programName, max.EffectiveFromWeek, max.Source));
 
     private static StrengthCommandResult Invalid(string field, string message) =>
         new(

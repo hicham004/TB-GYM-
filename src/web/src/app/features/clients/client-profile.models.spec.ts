@@ -200,7 +200,7 @@ describe('what needs the coach on a client’s page', () => {
       tone: 'share',
       tag: 'Maxes',
       heading: 'Logged sets suggest a new Deadlift max',
-      detail: '80.75 kg, up from 77.5 kg',
+      detail: '80.75\u00a0kg, up from 77.5\u00a0kg',
       action: { label: 'Review maxes', link: `${page}/training`, queryParams: { action: 'maxes' } },
     });
   });
@@ -235,7 +235,7 @@ describe('what needs the coach on a client’s page', () => {
 
     expect(between).toMatchObject({
       heading: 'No program running',
-      detail: 'Last program’s sets suggest Back squat 400 lb, Deadlift 80.75 kg',
+      detail: 'Last program’s sets suggest Back squat 400\u00a0lb, Deadlift 80.75\u00a0kg',
       action: { label: 'Assign program', queryParams: { action: 'assign' } },
     });
   });

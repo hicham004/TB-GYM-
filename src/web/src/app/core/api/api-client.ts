@@ -749,17 +749,23 @@ export class ApiClient {
     });
   }
 
+  /**
+   * The client's recorded maxes; with `includeProgramMaxes` also every training max of their programs
+   * (STR-015), whose ids are never recorded maxes, so Assign program leaves it off.
+   */
   listStrengthMaxes(
     clientId: string,
     exerciseId?: string,
     skip = 0,
     take = 100,
+    includeProgramMaxes = false,
   ): Observable<Phase3Contracts.StrengthMaxPage> {
     return this.http.get<Phase3Contracts.StrengthMaxPage>(
       `/api/strength/clients/${clientId}/maxes`,
       {
         params: {
           ...(exerciseId ? { exerciseId } : {}),
+          ...(includeProgramMaxes ? { includeProgramMaxes } : {}),
           skip,
           take,
         },

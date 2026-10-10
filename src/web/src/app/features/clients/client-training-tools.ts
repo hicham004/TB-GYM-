@@ -17,12 +17,14 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { numeric } from '../training/training-builder.models';
+import { historySourceWords } from './program-maxes.models';
 
 /**
  * The two older training tools that are not part of a program: the history of a client's training
  * maxes with a form to record one, and how a client has performed one exercise over time. They keep
  * their older forms for now, in a light scope behind "More training tools" (plan §0, follow-ups);
- * the program itself moved to the timeline.
+ * the program itself moved to the timeline. The history lists each program's training maxes beside
+ * the recorded ones, named with their program (STR-015).
  */
 @Component({
   selector: 'app-client-training-tools',
@@ -92,7 +94,7 @@ export class ClientTrainingTools {
         const [exercises, maxPage] = await owner.wait(
           Promise.all([
             firstValueFrom(this.api.searchExercises({})),
-            firstValueFrom(this.api.listStrengthMaxes(this.clientId())),
+            firstValueFrom(this.maxHistoryPage(0)),
           ]),
         );
         this.exercises.set(exercises.items.filter((item) => !item.isArchived));
@@ -134,7 +136,7 @@ export class ClientTrainingTools {
             }),
           ),
         );
-        const page = await owner.wait(firstValueFrom(this.api.listStrengthMaxes(this.clientId())));
+        const page = await owner.wait(firstValueFrom(this.maxHistoryPage(0)));
         this.maxHistory.set(page.items);
         this.maxHistoryTotal.set(numeric(page.total));
         this.maxForm.value = null;
@@ -152,11 +154,7 @@ export class ClientTrainingTools {
   protected async loadMoreMaxHistory(): Promise<void> {
     return this.scope.run('loadMoreMaxHistory', async (owner) => {
       if (this.maxHistory().length >= this.maxHistoryTotal()) return;
-      const page = await owner.wait(
-        firstValueFrom(
-          this.api.listStrengthMaxes(this.clientId(), undefined, this.maxHistory().length),
-        ),
-      );
+      const page = await owner.wait(firstValueFrom(this.maxHistoryPage(this.maxHistory().length)));
       this.maxHistory.update((items) => [...items, ...page.items]);
     });
   }
@@ -205,10 +203,11 @@ export class ClientTrainingTools {
     });
   }
 
-  protected methodLabel(record: StrengthMaxView): string {
-    return record.methodKey === 'CoachEntry'
-      ? $localize`Entered by coach`
-      : `${record.methodKey} v${record.methodVersion}`;
+  protected readonly methodLabel = historySourceWords;
+
+  /** One history per lift: the recorded maxes and every program's training maxes (STR-015). */
+  private maxHistoryPage(skip: number) {
+    return this.api.listStrengthMaxes(this.clientId(), undefined, skip, 100, true);
   }
 
   protected displayNumber(value: null | number | string): string {

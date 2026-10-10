@@ -1056,7 +1056,9 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
   R4.4d, recipes for clients, was added on 2026-10-07 because every competitor shows a client the whole
   recipe). P4c, P4b's follow-ups, the same day at the owner's request: keep a max over a suggestion,
   Coach Today names the lifts to review, the demo's clients hit their numbers, and a new program starts
-  where the last one ended (STR-014), with a "Maxes to review" chip on the client list.
+  where the last one ended (STR-014), with a "Maxes to review" chip on the client list. P4d, its last
+  two follow-ups: the client's max history lists every program's training maxes beside the recorded ones
+  (STR-015), and Coach Today keeps a number and its unit together on a phone.
 
 Work follows this order; anything outside it needs the user's approval first.
 

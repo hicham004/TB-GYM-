@@ -298,6 +298,8 @@ describe('Assign program', () => {
     await settle(fixture);
 
     expect(api['getProgramTemplateVersion']).toHaveBeenCalledWith('fbr-2');
+    // Recorded maxes only: a program's max in the history has no id the server takes as a saved max.
+    expect(api['listStrengthMaxes']).toHaveBeenCalledWith(expect.any(String));
     const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
     expect(textOf(fieldset.querySelector('legend'))).toBe('Training maxes');
     expect(Array.from(fieldset.querySelectorAll('label')).map(textOf)).toEqual(['Back squat']);

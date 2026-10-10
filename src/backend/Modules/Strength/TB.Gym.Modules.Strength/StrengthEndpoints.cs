@@ -18,6 +18,7 @@ public static class StrengthEndpoints
         group.MapGet("/clients/{clientProfileId:guid}/maxes", async (
             Guid clientProfileId,
             Guid? exerciseId,
+            bool? includeProgramMaxes,
             int? skip,
             int? take,
             IStrengthApplicationService service,
@@ -27,6 +28,7 @@ public static class StrengthEndpoints
             var records = await service.ListAsync(
                 clientProfileId,
                 exerciseId,
+                includeProgramMaxes == true,
                 page.Skip,
                 page.Take,
                 cancellationToken);

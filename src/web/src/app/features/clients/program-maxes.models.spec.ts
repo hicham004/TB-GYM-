@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type {
   ProgramTemplateVersionView,
+  StrengthMaxView,
   TrainingMaxesPreviewView,
   TrainingMaxesView,
 } from '../../core/api/generated';
@@ -9,6 +10,7 @@ import {
   chartCovers,
   editErrors,
   editRows,
+  historySourceWords,
   maxCards,
   previewSummary,
   reasonErrors,
@@ -498,5 +500,47 @@ describe('week 1’s weight before the program exists', () => {
       weekOneAnchor(version([week(1, [day(0, [set(1, { targetRpe: 6 })])])]), 'squat'),
     ).toBeNull();
     expect(weekOneAnchor(version([]), 'squat')).toBeNull();
+  });
+});
+
+describe('the client’s max history (STR-015)', () => {
+  const row = (fields: Partial<StrengthMaxView>): StrengthMaxView => ({
+    id: 'row-1',
+    clientProfileId: 'client-1',
+    exerciseId: 'squat',
+    exerciseName: 'Back squat',
+    kind: 'CoachWorkingMax',
+    value: 100,
+    unit: 'Kilogram',
+    effectiveDate: '2026-10-08',
+    source: 'Manual',
+    methodKey: 'CoachSelection',
+    methodVersion: '1.0',
+    sourceWorkoutExecutionId: null,
+    note: null,
+    createdAtUtc: '2026-10-08T09:00:00Z',
+    ...fields,
+  });
+
+  it('names a program’s max by its program, its first week and where it came from', () => {
+    const program = (origin: NonNullable<StrengthMaxView['program']>['origin']) =>
+      row({
+        program: { mesocycleId: 'block-1', programName: 'Phase 2', effectiveFromWeek: 5, origin },
+      });
+    expect(historySourceWords(program('LoggedSet'))).toBe('Phase 2, from week 5, from logged sets');
+    expect(historySourceWords(program('Typed'))).toBe('Phase 2, from week 5, typed');
+    expect(historySourceWords(program('PreviousProgram'))).toBe(
+      'Phase 2, from week 5, carried over',
+    );
+  });
+
+  it('says how a recorded max was recorded, never its method code', () => {
+    expect(historySourceWords(row({}))).toBe('Recorded by a coach');
+    expect(historySourceWords(row({ kind: 'TestedOneRepMax', methodKey: 'TestedLift' }))).toBe(
+      'Tested',
+    );
+    expect(historySourceWords(row({ kind: 'EstimatedOneRepMax', methodKey: 'Epley' }))).toBe(
+      'Estimated (Epley)',
+    );
   });
 });

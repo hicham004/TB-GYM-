@@ -576,6 +576,14 @@ now, else `training_max_suggestion_changed`); both are checked against the lates
 the assignment, and a max that program has replaced is refused. The new max names what it came from, and a
 composite key keeps a carried max to the same client's own.
 
+**STR-015** One max history per lift (P4d, built 2026-10-08, ADR 0036). Asked for
+(`includeProgramMaxes=true` on `GET /api/strength/clients/{clientProfileId}/maxes`), the client's max
+history lists every training max of their programs (STR-011, STR-014) beside the recorded maxes (STR-001),
+newest first, each named with its program, the week it applies from and where it came from, and dated the
+day the coach set it in that program's time zone. Each fact stays stored once: a program's max is never
+copied into the recorded maxes, and its id is the program max's, which Assign program never sends as a
+saved max, so the plain list (and Assign program) stays the recorded maxes alone.
+
 ## 6. Nutrition, recipes, and calorie targets
 
 **NUT-001** Ingredient records include food identity, quantity, unit, raw/cooked/preparation

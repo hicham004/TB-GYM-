@@ -211,7 +211,7 @@ describe('Coach Today view model', () => {
     );
     expect(one).toMatchObject({
       heading: "Sara Mansour's logged sets suggest a new Deadlift max",
-      detail: '80.75 kg, up from 77.5 kg',
+      detail: '80.75\u00a0kg, up from 77.5\u00a0kg',
       tag: 'Maxes',
       tone: 'share',
       action: {
@@ -231,13 +231,13 @@ describe('Coach Today view model', () => {
     );
     expect(several.heading).toBe("Sara Mansour's logged sets suggest new maxes for 2 lifts");
     // Pounds stay pounds; a lower suggestion is shown as it is.
-    expect(several.detail).toBe('Back squat 400 lb, Bench press 96.2 kg');
+    expect(several.detail).toBe('Back squat 400\u00a0lb, Bench press 96.2\u00a0kg');
     const lower = attentionRow(
       attentionItem('MaxesToReview', SARA, { count: 1, maxes: [lift('Bench press', 100, 96.2)] }),
       COACH_TODAY,
       context,
     );
-    expect(lower.detail).toBe('96.2 kg, down from 100 kg');
+    expect(lower.detail).toBe('96.2\u00a0kg, down from 100\u00a0kg');
   });
 
   it('says a client between programs has none running, with what the last one suggests', () => {
@@ -259,7 +259,7 @@ describe('Coach Today view model', () => {
     );
     expect(between).toMatchObject({
       heading: 'Sara Mansour has no program running',
-      detail: 'Last program’s sets suggest Deadlift 80.75 kg, up from 77.5 kg',
+      detail: 'Last program’s sets suggest Deadlift 80.75\u00a0kg, up from 77.5\u00a0kg',
       action: {
         label: 'Assign program',
         link: `/clients/${SARA.clientProfileId}/training`,

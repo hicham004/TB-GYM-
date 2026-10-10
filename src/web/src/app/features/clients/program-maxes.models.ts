@@ -1,6 +1,7 @@
 import { formatDate, formatNumber } from '@angular/common';
 import type {
   ProgramTemplateVersionView,
+  StrengthMaxView,
   TrainingLoadUnit,
   TrainingMaxBasisView,
   TrainingMaxChangeRequest,
@@ -91,6 +92,40 @@ export function sourceWords(entry: TrainingMaxEntryView, firstName: string): str
       return $localize`Carried over from the last program`;
     default:
       return $localize`Typed by you`;
+  }
+}
+
+/**
+ * Where a row of the client's max history came from (STR-015): a program's training max names its
+ * program and the week it applies from, a recorded max how it was recorded.
+ */
+export function historySourceWords(record: StrengthMaxView): string {
+  const program = record.program;
+  if (program) {
+    const origin = (() => {
+      switch (program.origin) {
+        case 'SavedMax':
+          return $localize`from a recorded max`;
+        case 'WeekOneWeight':
+          return $localize`from week 1’s weight`;
+        case 'LoggedSet':
+          return $localize`from logged sets`;
+        case 'PreviousProgram':
+          return $localize`carried over`;
+        default:
+          return $localize`typed`;
+      }
+    })();
+    return $localize`${program.programName}:program:, from week ${program.effectiveFromWeek}:week:, ${origin}:origin:`;
+  }
+  switch (record.methodKey) {
+    case 'CoachSelection':
+    case 'CoachEntry':
+      return $localize`Recorded by a coach`;
+    case 'TestedLift':
+      return $localize`Tested`;
+    default:
+      return $localize`Estimated (${record.methodKey}:method:)`;
   }
 }
 

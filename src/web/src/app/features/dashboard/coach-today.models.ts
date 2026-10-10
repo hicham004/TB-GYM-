@@ -301,9 +301,12 @@ export function suggestedMaxDetail(
   lifts: readonly CoachMaxSuggestionView[],
   locale: string,
 ): string {
+  // A no-break space keeps "67.82 kg" on one line in a narrow Today row.
   const weight = (value: number | string, unit: CoachMaxSuggestionView['unit']) => {
     const amount = formatNumber(Number(value), locale, '1.0-2');
-    return unit === 'Pound' ? $localize`${amount}:weight: lb` : $localize`${amount}:weight: kg`;
+    return unit === 'Pound'
+      ? $localize`${amount}:weight:\u00a0lb`
+      : $localize`${amount}:weight:\u00a0kg`;
   };
   if (lifts.length === 1) {
     const [lift] = lifts;

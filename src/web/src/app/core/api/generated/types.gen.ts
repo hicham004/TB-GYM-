@@ -3260,6 +3260,13 @@ export type StrengthMaxPage = {
   items: Array<StrengthMaxView>;
 };
 
+export type StrengthMaxProgramView = {
+  mesocycleId: string;
+  programName: string;
+  effectiveFromWeek: number | string;
+  origin: WorkingMaxSource;
+};
+
 export type StrengthMaxSource = 'Manual' | 'TestedLift' | 'WorkoutSet' | 'Calculation';
 
 export type StrengthMaxView = {
@@ -3277,6 +3284,7 @@ export type StrengthMaxView = {
   sourceWorkoutExecutionId: null | string;
   note: null | string;
   createdAtUtc: string;
+  program?: null | StrengthMaxProgramView;
 };
 
 export type SubstituteExerciseRequest = {
@@ -3644,6 +3652,9 @@ export type WorkingMaxSnapshotView = {
   reason: string;
   source: TrainingMaxSource;
 };
+
+export type WorkingMaxSource =
+  'Typed' | 'SavedMax' | 'WeekOneWeight' | 'LoggedSet' | 'PreviousProgram';
 
 export type WorkoutExecutionStatus = 'InProgress' | 'Completed';
 
@@ -5888,6 +5899,7 @@ export type ListStrengthMaxHistoryData = {
   };
   query?: {
     exerciseId?: string;
+    includeProgramMaxes?: boolean;
     skip?: number | string;
     take?: number | string;
   };
