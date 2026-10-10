@@ -1,0 +1,150 @@
+<section class="strength" aria-labelledby="strength-title">
+  <div class="head">
+    <div class="head-text">
+      <h2 id="strength-title" i18n>Strength history</h2>
+      <p class="hint" i18n>Every max on record, and how {{ name() }} has done on each lift.</p>
+    </div>
+    <div class="actions">
+      <button
+        appButton
+        type="button"
+        variant="outlined"
+        (click)="performance(null)"
+        data-other
+        i18n
+      >
+        Another exercise
+      </button>
+      <button appButton type="button" (click)="record(null)" data-record i18n>Record a max</button>
+    </div>
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <app-skeleton [label]="loadingLabel" [lines]="4" />
+    }
+    @case ('error') {
+      <div class="problem" role="alert" data-error>
+        <span>{{ failure() }}</span
+        >&ngsp;<button appButton type="button" variant="outlined" (click)="load()" i18n>
+          Try again
+        </button>
+      </div>
+    }
+    @default {
+      @if (views().length === 0) {
+        <p class="empty" data-empty i18n>
+          No max is on record for {{ name() }} yet. A program’s training maxes show here, and so
+          does any you record.
+        </p>
+      } @else {
+        <ul class="lifts">
+          @for (view of views(); track view.lift.exerciseId) {
+            <li class="lift" data-lift>
+              <div class="lift-top">
+                <div class="lift-text">
+                  <h3 class="lift-name" dir="auto">{{ view.lift.name }}</h3>
+                  <p class="now">
+                    <strong class="value">{{ view.value }}</strong
+                    >&ngsp;<span class="kind">{{ view.lift.latest.kindLabel }}</span>
+                  </p>
+                  <p class="meta">{{ view.line }}</p>
+                </div>
+                @if (view.lift.series; as series) {
+                  <app-sparkline [values]="series" [summary]="view.summary" class="spark" />
+                }
+              </div>
+              @for (item of view.also; track item.kind) {
+                <p class="also" data-also>
+                  <span>{{ item.kind }}</span
+                  >&ngsp;<strong>{{ item.value }}</strong
+                  >&ngsp;<span class="meta">· {{ item.day }}</span>
+                </p>
+              }
+              <div class="lift-actions">
+                <button
+                  appButton
+                  type="button"
+                  variant="text"
+                  (click)="performance(view.lift)"
+                  data-performance
+                  i18n
+                >
+                  How they have done
+                </button>
+                <button
+                  appButton
+                  type="button"
+                  variant="text"
+                  (click)="record(view.lift)"
+                  data-record-lift
+                  i18n
+                >
+                  Record a max
+                </button>
+              </div>
+              <details class="history" data-history>
+                <summary i18n>All {{ view.history.length }} on record</summary>
+                <ul class="entries">
+                  @for (row of view.history; track row.entry.id) {
+                    <li class="entry">
+                      <span class="entry-when">{{ row.day }}</span
+                      >&ngsp;<strong class="entry-value">{{ row.value }}</strong
+                      >&ngsp;<span class="entry-kind">{{ row.entry.kindLabel }}</span
+                      >&ngsp;<span class="entry-source" dir="auto">{{ row.entry.source }}</span>
+                      @if (row.entry.note) {
+                        &ngsp;<span class="entry-note" dir="auto">{{ row.entry.note }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              </details>
+            </li>
+          }
+        </ul>
+        @if (truncated()) {
+          <p class="hint" data-truncated i18n>
+            Showing the newest maxes. The list is longer than can be read at once.
+          </p>
+        }
+      }
+    }
+  }
+</section>
+
+<ng-template #recordSheet let-sheet>
+  <app-record-max
+    [clientId]="clientId()"
+    [firstName]="name()"
+    [today]="today()"
+    [firstDay]="firstDay()"
+    [suggested]="choices()"
+    [start]="start"
+    [startUnit]="startUnit"
+    (dirtyChange)="dirty = $event"
+    (closed)="recorded($event, sheet)"
+  />
+</ng-template>
+
+<ng-template #historySheet let-sheet>
+  <app-exercise-history
+    [clientId]="clientId()"
+    [firstName]="name()"
+    [today]="today()"
+    [locale]="locale"
+    [suggested]="choices()"
+    [start]="start"
+    (closed)="sheet.close()"
+  />
+</ng-template>
+
+<ng-template #confirmTemplate let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

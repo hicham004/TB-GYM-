@@ -280,7 +280,7 @@ describe('a client’s Training', () => {
 
       expect(textOf(host)).toContain('Maya’s plan has ended, so their training isn’t shown.');
       expect(host.querySelector('.timeline')).toBeNull();
-      expect(host.querySelector('.tools')).toBeNull();
+      expect(host.querySelector('app-client-strength')).toBeNull();
       expect(textOf(host.querySelector('a'))).toBe('Open Service & access');
       // A plan that is over cannot take a new program, so none is offered.
       expect(host.querySelector('button.tb-button')).toBeNull();
@@ -376,8 +376,8 @@ describe('a client’s Training', () => {
       expect(textOf(host.querySelector('app-empty-state h2'))).toBe('No program yet');
       expect(textOf(host)).toContain('Maya sees it as soon as its first week opens.');
       expect(all(host, 'button').map(textOf)).toContain('Assign program');
-      // The older tools are still there for a client whose training is open.
-      expect(host.querySelector('.tools')).not.toBeNull();
+      // The strength history is there for a client whose training is open.
+      expect(host.querySelector('app-client-strength')).not.toBeNull();
     });
 
     it('says the program could not be loaded, and tries again', async () => {
@@ -912,20 +912,11 @@ describe('a client’s Training', () => {
     });
   });
 
-  describe('the older tools', () => {
-    it('stay closed until they are opened, and are not read before then', async () => {
-      const { harness, host, api } = await render();
+  describe('the strength history', () => {
+    it('is read with the page, one history per lift: recorded maxes and every program’s (STR-015)', async () => {
+      const { host, api } = await render();
 
-      expect(host.querySelector('app-client-training-tools')).toBeNull();
-      expect(api.listStrengthMaxes).not.toHaveBeenCalled();
-      const tools = host.querySelector<HTMLDetailsElement>('.tools')!;
-      tools.open = true;
-      tools.dispatchEvent(new Event('toggle'));
-      await settle(harness.fixture);
-
-      expect(host.querySelector('app-client-training-tools')).not.toBeNull();
-      expect(tools.querySelector('.tools-body')?.getAttribute('data-mode')).toBe('light');
-      // One history per lift: the recorded maxes and every program's (STR-015).
+      expect(host.querySelector('app-client-strength')).not.toBeNull();
       expect(api.listStrengthMaxes).toHaveBeenCalledWith('client-1', undefined, 0, 100, true);
     });
   });

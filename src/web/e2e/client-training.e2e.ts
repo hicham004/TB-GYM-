@@ -12,6 +12,14 @@ import {
 } from '../src/testing/client-program-fixtures';
 import { COACH_NOW, MAYA, OWNER_ID } from '../src/testing/coach-today-fixtures';
 import {
+  library,
+  maxPage,
+  maxView,
+  mayaMaxes,
+  SQUAT,
+  squatHistory,
+} from '../src/testing/client-strength-fixtures';
+import {
   chartSet,
   exerciseView,
   leanProgram,
@@ -1902,3 +1910,219 @@ test('Edit weeks follows dark mode and reads right to left', async ({ page }) =>
   await expectNoHorizontalOverflow(page);
   await axe(page);
 });
+
+// ---- A client's strength history (R5.3d): every max on record, and how they have done on each lift.
+
+const squatMaxes = () => ({
+  [`GET /api/strength/clients/${ID}/maxes`]: (route: Route) =>
+    json(route, 200, maxPage(mayaMaxes())),
+  [`GET /api/training/clients/${ID}/exercises/${SQUAT}/history`]: (route: Route) =>
+    json(route, 200, squatHistory()),
+});
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  for (const mode of ['light', 'dark'] as const) {
+    test(`the strength history lists each lift once at ${width}px ${mode} and passes axe`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: mode });
+      await openTraining(page, width, height, { extra: squatMaxes() });
+
+      const card = page.locator('app-client-strength');
+      await card.scrollIntoViewIfNeeded();
+      await expect(card.getByRole('heading', { level: 2, name: 'Strength history' })).toBeVisible();
+      await expect(card.locator('.lift-name')).toHaveText([
+        'Back Squat',
+        'Deadlift',
+        'Bench Press',
+      ]);
+      const squat = card.locator('[data-lift]').first();
+      await expect(squat.locator('.now')).toHaveText('62.5 kg Training max');
+      await expect(squat.locator('p.meta')).toHaveText('Set Tue 15 Sep · +2.5 kg since Wed 5 Aug');
+      await expect(squat.locator('[data-also]')).toHaveText('Tested 1RM 92.5 kg · Sun 20 Sep');
+      await expect(squat.locator('app-sparkline')).toHaveCount(1);
+      await expect(card.locator('[data-lift]').nth(1).locator('app-sparkline')).toHaveCount(0);
+
+      // The list of every max is closed until asked for, and says where each one came from.
+      await squat.locator('[data-history] summary').click();
+      await expect(squat.locator('.entry').nth(1)).toContainText(
+        'Lean & Strong · Phase 2, from week 1, typed',
+      );
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      // Clipped out of the whole page, so the sticky top bar does not cover the card's heading.
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({
+        path: `../../docs/design/r53d2-strength-${mode === 'dark' ? 'dark-' : ''}${width}.png`,
+        fullPage: true,
+        clip: (await card.boundingBox())!,
+      });
+    });
+  }
+}
+
+test('a client with no max on record is told what will fill the list', async ({ page }) => {
+  await openTraining(page, 390, 844, {
+    extra: { [`GET /api/strength/clients/${ID}/maxes`]: (route) => json(route, 200, maxPage([])) },
+  });
+  await expect(page.locator('app-client-strength [data-empty]')).toContainText(
+    'No max is on record for Maya yet.',
+  );
+  await axe(page);
+});
+
+test('a max recorded from a lift’s row sends a tested max with no estimate, then shows beside the training max', async ({
+  page,
+}) => {
+  const requests: { method: string; path: string; body: unknown }[] = [];
+  let recorded = false;
+  const tested = maxView({
+    id: 'max-new',
+    kind: 'TestedOneRepMax',
+    value: 100,
+    effectiveDate: '2026-10-01',
+    createdAtUtc: '2026-10-01T12:00:00Z',
+    source: 'Manual',
+    methodKey: null,
+    methodVersion: null,
+    note: 'Tested after the deload.',
+    program: null,
+  });
+  await openTraining(page, 390, 844, {
+    requests,
+    extra: {
+      ...squatMaxes(),
+      [`GET /api/strength/clients/${ID}/maxes`]: (route) =>
+        json(route, 200, maxPage(recorded ? [tested, ...mayaMaxes()] : mayaMaxes())),
+      [`POST /api/strength/clients/${ID}/maxes`]: (route) => {
+        recorded = true;
+        return json(route, 201, tested);
+      },
+    },
+  });
+
+  const card = page.locator('app-client-strength');
+  await card.locator('[data-lift]').first().getByRole('button', { name: 'Record a max' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Record a max for Back Squat' });
+  await expect(sheet).toBeVisible();
+  await page.waitForTimeout(700);
+  // Two kinds, and never an estimate: the server refuses one without a calculation or a workout.
+  await expect(sheet.locator('input[name="kind"]')).toHaveCount(2);
+  await expect(sheet).not.toContainText('Estimated');
+  await axe(page);
+  await page.screenshot({ path: '../../docs/design/r53d2-record-390.png' });
+
+  await sheet.getByRole('button', { name: 'Record max' }).click();
+  await expect(sheet).toContainText('Enter the weight.');
+  expect(requests).toEqual([]);
+
+  await sheet.locator('input[name="kind"][value="TestedOneRepMax"]').check();
+  await sheet.getByLabel('Weight', { exact: true }).fill('100');
+  await sheet.getByLabel('Note (optional)').fill('Tested after the deload.');
+  await sheet.getByRole('button', { name: 'Record max' }).click();
+
+  await expect(page.locator('app-toast-host')).toContainText(
+    'Back Squat — Tested 1RM 100 kg recorded.',
+  );
+  await expect(sheet).toHaveCount(0);
+  expect(requests).toEqual([
+    {
+      method: 'POST',
+      path: `/api/strength/clients/${ID}/maxes`,
+      body: {
+        exerciseId: SQUAT,
+        kind: 'TestedOneRepMax',
+        value: 100,
+        unit: 'Kilogram',
+        effectiveDate: '2026-10-01',
+        source: 'Manual',
+        methodKey: null,
+        methodVersion: null,
+        sourceWorkoutExecutionId: null,
+        note: 'Tested after the deload.',
+      },
+    },
+  ]);
+  await expect(card.locator('[data-lift]').first().locator('[data-also]')).toContainText(
+    'Tested 1RM 100 kg',
+  );
+  // The training max stays the headline: a tested max never replaces what the program works from.
+  await expect(card.locator('[data-lift]').first().locator('.now')).toHaveText(
+    '62.5 kg Training max',
+  );
+});
+
+test('a max for a lift with none is found by searching the library', async ({ page }) => {
+  const requests: { method: string; path: string; body: unknown }[] = [];
+  const searches: string[] = [];
+  await openTraining(page, 1440, 900, {
+    requests,
+    extra: {
+      ...squatMaxes(),
+      'GET /api/exercises': (route) => {
+        searches.push(new URL(route.request().url()).searchParams.get('query') ?? '');
+        return json(route, 200, library([['ex-pull', 'Pull-up']]));
+      },
+      [`POST /api/strength/clients/${ID}/maxes`]: (route) =>
+        json(
+          route,
+          201,
+          maxView({ id: 'max-pull', exerciseId: 'ex-pull', exerciseName: 'Pull-up' }),
+        ),
+    },
+  });
+
+  await page
+    .locator('app-client-strength .head')
+    .getByRole('button', { name: 'Record a max' })
+    .click();
+  const sheet = page.getByRole('dialog', { name: 'Record a max for Maya' });
+  await expect(sheet).toBeVisible();
+  await sheet.getByLabel('Another exercise').fill('pu');
+  await expect(sheet.locator('[data-matches] .choice-text')).toHaveText(['Pull-up']);
+  expect(searches).toEqual(['pu']);
+  await sheet.locator('[data-matches] input[type="radio"]').check();
+  await sheet.getByLabel('Weight', { exact: true }).fill('45');
+  await sheet.getByRole('button', { name: 'Record max' }).click();
+
+  await expect(page.locator('app-toast-host')).toContainText('Training max');
+  expect(requests).toHaveLength(1);
+  expect(requests[0].body).toMatchObject({
+    exerciseId: 'ex-pull',
+    kind: 'CoachWorkingMax',
+    value: 45,
+  });
+});
+
+for (const mode of ['light', 'dark'] as const) {
+  test(`how Maya has done on a lift lists her sets newest first at 390px ${mode} and passes axe`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: mode });
+    await openTraining(page, 390, 844, { extra: squatMaxes() });
+
+    await page
+      .locator('app-client-strength [data-lift]')
+      .first()
+      .getByRole('button', { name: 'How they have done' })
+      .click();
+    const sheet = page.getByRole('dialog', { name: 'How Maya has done on Back Squat' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.locator('[data-best]')).toContainText('Best estimated max 70 kg');
+    await expect(sheet.locator('[data-performance] .when')).toHaveText([
+      'Thu 8 Oct',
+      'Sun 4 Oct',
+      'Tue 29 Sep',
+      'Thu 24 Sep',
+    ]);
+    await expect(sheet.locator('app-sparkline')).toHaveCount(1);
+    await page.waitForTimeout(900);
+    await axe(page);
+    await page.screenshot({
+      path: `../../docs/design/r53d2-history-${mode === 'dark' ? 'dark-' : ''}390.png`,
+    });
+  });
+}

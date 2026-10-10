@@ -246,19 +246,7 @@
         }
 
         @if (program.isAllowed) {
-          <details class="tools" (toggle)="toolsToggled($event)">
-            <summary>
-              <span class="tools-title" i18n>More training tools</span>
-              <span class="tools-hint" i18n
-                >Training max history, and how {{ firstName() }} has done on one exercise.</span
-              >
-            </summary>
-            @if (toolsOpened()) {
-              <div class="tools-body" data-mode="light">
-                <app-client-training-tools [clientId]="context.clientId()" />
-              </div>
-            }
-          </details>
+          <app-client-strength />
         }
       }
     }

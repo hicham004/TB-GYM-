@@ -1,0 +1,190 @@
+// A client's strength history for their coach (R5.3d). Brand v2 tokens only, so it follows the coach's
+// brand and the person's mode. It sits at the foot of the Training page.
+:host {
+  display: block;
+}
+
+.strength {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-inline-size: 0;
+  padding: 1.25rem;
+}
+
+.head {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+}
+
+.head h2 {
+  color: var(--tb-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.hint,
+.meta {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.empty {
+  color: var(--tb-ink);
+  margin: 0;
+}
+
+.problem {
+  background: var(--tb-danger-soft);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-danger);
+  font-weight: 600;
+  padding: 0.625rem 0.875rem;
+}
+
+.lifts {
+  display: grid;
+  gap: 0.875rem;
+  grid-template-columns: minmax(0, 1fr);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@media (min-width: 52rem) {
+  .lifts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.lift {
+  background: var(--tb-surface-2);
+  border-radius: var(--tb-radius-control);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  padding: 0.875rem 1rem;
+}
+
+.lift-top {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.lift-text {
+  min-inline-size: 0;
+}
+
+.lift-name {
+  color: var(--tb-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.now {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem 0.5rem;
+  margin: 0.125rem 0;
+}
+
+.value {
+  color: var(--tb-ink);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.kind {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+
+.spark {
+  flex: none;
+  inline-size: 6.5rem;
+}
+
+.also {
+  color: var(--tb-ink);
+  font-size: 0.875rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.lift-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  margin-inline-start: -0.75rem;
+}
+
+.history summary {
+  color: var(--tb-ink);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-block-size: 2.75rem;
+  padding-block: 0.625rem;
+}
+
+.history summary:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.entries {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entry {
+  align-items: baseline;
+  border-block-start: 1px solid var(--tb-line);
+  color: var(--tb-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  gap: 0.125rem 0.75rem;
+  padding-block: 0.5rem;
+}
+
+.entry-value {
+  color: var(--tb-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-when {
+  color: var(--tb-ink);
+  min-inline-size: 5.5rem;
+}
+
+.entry-source,
+.entry-note {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}

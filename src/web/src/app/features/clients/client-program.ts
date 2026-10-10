@@ -47,7 +47,7 @@ import {
   type WeekColumn,
 } from './client-program.models';
 import { trainingClosed } from './client-profile.models';
-import { ClientTrainingTools } from './client-training-tools';
+import { ClientStrength } from './client-strength';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import { ProgramAssign } from './program-assign';
 import {
@@ -74,7 +74,7 @@ import { ProgramSession } from './program-session';
     ButtonLink,
     Checkbox,
     ClientActions,
-    ClientTrainingTools,
+    ClientStrength,
     Control,
     EmptyState,
     ProgramAssign,
@@ -116,7 +116,6 @@ export class ClientProgram {
   /** The week a phone shows; null until one is chosen, then the program's own opening week. */
   private readonly pickedWeek = signal<number | null>(null);
   protected readonly sharing = signal(false);
-  protected readonly toolsOpened = signal(false);
   protected readonly active = signal<{ week: WeekColumn; session: SessionCard } | null>(null);
   /** The lift whose suggested max the maxes sheet opens on; null for a plain update. */
   protected readonly maxesSuggested = signal<string | null>(null);
@@ -349,10 +348,6 @@ export class ClientProgram {
     this.pickedWeek.set(number);
   }
 
-  protected toolsToggled(event: Event): void {
-    if ((event.target as HTMLDetailsElement).open) this.toolsOpened.set(true);
-  }
-
   // ---------- the Actions menu ----------
 
   protected onAction(action: string): void {
@@ -548,7 +543,6 @@ export class ClientProgram {
     this.picked.set(null);
     this.pickedWeek.set(null);
     this.sharing.set(false);
-    this.toolsOpened.set(false);
     this.active.set(null);
   }
 }

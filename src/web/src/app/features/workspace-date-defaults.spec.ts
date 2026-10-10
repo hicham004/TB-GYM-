@@ -1,4 +1,4 @@
-import { signal, Type } from '@angular/core';
+import { Provider, signal, Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
@@ -8,8 +8,11 @@ import type { ProductCatalog, WorkspaceDetails } from '../core/api/api.models';
 import { CsrfService } from '../core/security/csrf.service';
 import { TenantContext } from '../core/tenancy/tenant-context';
 import { TenantStore } from '../core/tenancy/tenant.store';
-import { field, settle } from '../../testing/dom';
-import { ClientTrainingTools } from './clients/client-training-tools';
+import { maxPage, maxView, workspace } from '../../testing/client-strength-fixtures';
+import { profile } from '../../testing/client-nutrition-fixtures';
+import { fill, field, press, settle } from '../../testing/dom';
+import { ClientStrength } from './clients/client-strength';
+import { ClientWorkspaceContext } from './clients/client-workspace.context';
 import { ProgramAssign } from './clients/program-assign';
 import { planCard } from './clients/client-service.models';
 import { PlanPayment, PlanStart } from './clients/plan-sheets';
@@ -102,6 +105,8 @@ async function render(
   component: Type<unknown>,
   inputs: Record<string, unknown>,
   currentDate: string,
+  extra: Provider[] = [],
+  api: Record<string, unknown> = {},
 ): Promise<Harness> {
   const getWorkspace = vi.fn(() => of(workspaceOn(currentDate)));
   const tenantId = signal<string | null>('workspace-a');
@@ -120,8 +125,10 @@ async function render(
           listClientMesocycles: vi.fn(() => of([])),
           listSavedSessions: vi.fn(() => of([])),
           getProductCatalog: vi.fn(() => of(catalog)),
+          ...api,
         },
       },
+      ...extra,
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: tenantId } },
     ],
@@ -136,6 +143,45 @@ async function render(
   return { host: fixture.nativeElement as HTMLElement, fixture, getWorkspace, tenantId };
 }
 
+/** The strength card on a client page, with one lift on record so its row opens Record a max. */
+async function renderStrength(currentDate: string) {
+  const recordStrengthMax = vi.fn(() => of(maxView()));
+  const harness = await render(
+    ClientStrength,
+    {},
+    currentDate,
+    [
+      {
+        provide: ClientWorkspaceContext,
+        useValue: {
+          clientId: signal('client-1'),
+          profile: signal(profile()),
+          workspace: signal(workspace()),
+        },
+      },
+    ],
+    { listStrengthMaxes: vi.fn(() => of(maxPage([maxView()]))), recordStrengthMax },
+  );
+  return { ...harness, recordStrengthMax };
+}
+
+/** Records a max from the lift's row and says which day it was sent for. */
+async function dayRecorded({
+  host,
+  fixture,
+  recordStrengthMax,
+}: Awaited<ReturnType<typeof renderStrength>>) {
+  press(host.querySelector('[data-lift]')!, 'Record a max');
+  await settle(fixture);
+  const sheet = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  fill(sheet, 'Weight', '100');
+  await settle(fixture);
+  press(sheet, 'Record max');
+  await settle(fixture);
+  expect(recordStrengthMax).toHaveBeenCalledTimes(1);
+  return (recordStrengthMax.mock.calls[0] as unknown[])[1] as { effectiveDate: string };
+}
+
 describe('date defaults across a coach client page', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -144,6 +190,9 @@ describe('date defaults across a coach client page', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    document.body
+      .querySelectorAll('.cdk-overlay-container')
+      .forEach((node) => node.replaceChildren());
     TestBed.resetTestingModule();
   });
 
@@ -164,10 +213,10 @@ describe('date defaults across a coach client page', () => {
         expect(field(host, 'Start date').value).toBe(currentDate);
       });
 
-      it('defaults the strength-max effective date to the workspace date', async () => {
-        const { host } = await render(ClientTrainingTools, { clientId: 'client-1' }, currentDate);
+      it('defaults the day a max was true to the workspace date', async () => {
+        const request = await dayRecorded(await renderStrength(currentDate));
 
-        expect(field(host, 'Date').value).toBe(currentDate);
+        expect(request.effectiveDate).toBe(currentDate);
       });
 
       it('defaults a new plan’s first day to the workspace date the page was given', async () => {
@@ -198,12 +247,9 @@ describe('date defaults across a coach client page', () => {
     });
   }
 
-  it('re-derives the training max date after the active workspace changes', async () => {
-    const { host, fixture, getWorkspace, tenantId } = await render(
-      ClientTrainingTools,
-      { clientId: 'client-1' },
-      '2026-09-21',
-    );
+  it('re-derives the day a max was true after the active workspace changes', async () => {
+    const harness = await renderStrength('2026-09-21');
+    const { fixture, getWorkspace, tenantId } = harness;
 
     // The second workspace keeps its own calendar. Resetting must re-read it, not fall back to
     // the browser and not keep the first workspace's answer.
@@ -212,6 +258,6 @@ describe('date defaults across a coach client page', () => {
     TestBed.inject(TenantContext).invalidate();
     await settle(fixture);
 
-    expect(field(host, 'Date').value).toBe('2026-09-23');
+    expect((await dayRecorded(harness)).effectiveDate).toBe('2026-09-23');
   });
 });
