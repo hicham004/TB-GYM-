@@ -53,8 +53,8 @@ main[data-mode] {
 
 .topbar {
   align-items: center;
-  background: var(--surface);
-  border-block-end: 1px solid var(--border);
+  background: var(--tb-surface);
+  border-block-end: 1px solid var(--tb-line);
   display: flex;
   min-height: 64px;
   padding: 0 32px;
@@ -65,7 +65,7 @@ main[data-mode] {
 
 .brand {
   align-items: center;
-  color: var(--text);
+  color: var(--tb-ink);
   display: inline-flex;
   font-size: 1rem;
   font-weight: 750;
@@ -76,7 +76,7 @@ main[data-mode] {
 
 .brand-mark {
   align-items: center;
-  background: var(--text);
+  background: var(--tb-ink);
   border-radius: 5px;
   color: white;
   display: inline-flex;
@@ -103,7 +103,7 @@ nav,
 
 .account-link {
   border-radius: 5px;
-  color: var(--muted-text);
+  color: var(--tb-muted);
   font-size: 0.9rem;
   font-weight: 650;
   padding: 9px 11px;
@@ -112,22 +112,19 @@ nav,
 
 .account-link:hover,
 .account-link.active {
-  background: var(--surface-subtle);
-  color: var(--text);
+  background: var(--tb-surface-2);
+  color: var(--tb-ink);
 }
 
 .session-controls {
   gap: 12px;
 }
 
+// The kit's text button, shown only where the links collapse.
 .menu-button {
-  background: transparent;
-  border: 0;
-  color: var(--text);
   display: none;
   font-size: 1.35rem;
   margin-inline-start: auto;
-  padding: 8px;
 }
 
 .session-loading {
@@ -152,8 +149,8 @@ nav,
 
   .authenticated-nav {
     align-items: stretch;
-    background: var(--surface);
-    border-block-end: 1px solid var(--border);
+    background: var(--tb-surface);
+    border-block-end: 1px solid var(--tb-line);
     display: none;
     inset: 58px 0 auto;
     margin: 0;

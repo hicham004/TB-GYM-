@@ -1,3 +1,10 @@
+// The coach's two Check-ins pages (forms, and each client's check-ins): brand v2 tokens, so they
+// follow the coach's brand and the person's mode. Controls and buttons are the kit's.
+:host {
+  color: var(--tb-ink);
+  display: block;
+}
+
 .checkins {
   display: grid;
   gap: 1rem;
@@ -10,7 +17,9 @@
   justify-content: space-between;
 }
 
-.page-head h2 {
+h2,
+h3,
+h4 {
   margin: 0;
 }
 
@@ -27,49 +36,68 @@
 }
 
 .panel {
-  border: 1px solid var(--border, #d8dde3);
-  border-radius: 0.75rem;
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card-small);
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+  min-inline-size: 0;
   padding: 1rem;
 }
 
 .panel h3,
 .panel h4 {
-  margin-block: 0 0.5rem;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .detail,
 .empty,
 .hint {
-  color: var(--muted, #5b6470);
-  margin-block: 0.25rem 0;
+  color: var(--tb-muted);
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .hint {
   font-size: 0.875rem;
 }
 
-.error {
-  color: var(--danger, #b3261e);
-  margin-block: 0.25rem 0;
+// A refusal or a failure, and the one confirmation after a save.
+.problem,
+.note {
+  border-radius: var(--tb-radius-control);
+  margin: 0;
+  padding: 0.625rem 0.875rem;
 }
 
-/*
- * A derived validation reason: the same voice as .error, but plain text rather than a live region.
- * Each reason is its own span so several against one control read as a list rather than a run-on.
- */
+.problem {
+  background: var(--tb-danger-soft);
+  color: var(--tb-danger);
+  font-weight: 600;
+}
+
+.note {
+  background: var(--tb-surface-2);
+  color: var(--tb-ink);
+}
+
+// A derived reason that belongs to the draft as a whole: the same voice as .problem, plain text
+// rather than a live region. Each reason is its own span so several read as a list.
 .field-reason {
-  color: var(--danger, #b3261e);
+  color: var(--tb-danger);
   display: grid;
   font-size: 0.875rem;
   gap: 0.125rem;
-  margin-block: 0.25rem 0;
+  margin: 0;
 }
 
-/*
- * The submit-attempt summary. It stays in the DOM from first render so the live region is
- * registered before anything lands in it, and collapses while empty rather than reserving a gap on
- * a form that has not been refused anything.
- */
+// The submit-attempt summary. It stays in the DOM from first render so the live region is
+// registered before anything lands in it, and collapses while empty rather than reserving a gap on
+// a form that has not been refused anything.
 .summary {
   display: grid;
   gap: 0.125rem;
@@ -79,46 +107,11 @@
   display: none;
 }
 
-.notice {
-  color: var(--success, #1b5e20);
-  margin-block: 0.25rem 0;
-}
-
-.badge {
-  background: var(--surface-2, #eef1f5);
-  border-radius: 999px;
-  font-size: 0.75rem;
-  padding: 0.125rem 0.5rem;
-}
-
-.badge.muted {
-  color: var(--muted, #5b6470);
-}
-
-.badge.late {
-  background: var(--danger-surface, #fdecea);
-  color: var(--danger, #b3261e);
-}
-
-/*
- * The response summary puts a status badge beside a submitted date, and a second badge when the
- * submission was late. It is a plain paragraph, and Angular removes the newline between the
- * elements, so without an explicit gap the badge and the date render as one run-on token
- * ("Submitted26 Aug 2026"). The assignment rows below already solve this the same way.
- */
-.detail.badge-row {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
 .form-list,
 .versions,
 .assignments,
 .options,
-.questions,
-.answers {
+.questions {
   display: grid;
   gap: 0.5rem;
   list-style: none;
@@ -132,60 +125,82 @@
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.25rem 0.75rem;
 }
 
-.questions {
-  counter-reset: question;
+.form-list button {
+  text-align: start;
+}
+
+// The client being read, so a coach working down the list knows where they are.
+.form-list button[aria-current='true'] {
+  background: var(--tb-accent-soft);
+  color: var(--tb-accent-ink);
+}
+
+.version-name {
+  font-weight: 600;
 }
 
 .question,
 .answer {
-  border: 1px solid var(--border, #d8dde3);
-  border-radius: 0.5rem;
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-control);
   display: grid;
-  gap: 0.5rem;
+  gap: 0.75rem;
   padding: 0.75rem;
 }
 
-.question-head {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.builder-form,
-.answer-form {
-  display: grid;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-label {
-  display: grid;
+.answer {
   gap: 0.25rem;
 }
 
-label.inline {
-  align-items: center;
+.answer p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.prompt {
+  font-weight: 600;
+}
+
+.question-head {
+  align-items: end;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.question-type {
+  flex: 1 1 12rem;
+  max-inline-size: 18rem;
+}
+
+.question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.builder-form {
+  display: grid;
+  gap: 0.75rem;
 }
 
 .scale {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
 }
 
 .options li {
-  align-items: center;
+  align-items: end;
   display: flex;
   gap: 0.5rem;
 }
 
-.options input {
+.options app-field {
   flex: 1 1 auto;
 }
 
@@ -193,64 +208,50 @@ label.inline {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
-.link {
-  background: none;
-  border: none;
-  color: var(--accent, #1a4f8a);
-  cursor: pointer;
-  font: inherit;
-  padding: 0;
-  text-align: left;
-  text-decoration: underline;
+.danger {
+  color: var(--tb-danger);
 }
 
-.link.danger {
-  color: var(--danger, #b3261e);
-}
-
-.link:disabled {
-  color: var(--muted, #5b6470);
-  cursor: not-allowed;
-}
-
-.choices {
-  display: grid;
-  gap: 0.25rem;
+.detail.badge-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .comparison {
   border-collapse: collapse;
-  width: 100%;
+  inline-size: 100%;
 }
 
 .comparison th,
 .comparison td {
-  border-bottom: 1px solid var(--border, #d8dde3);
+  border-block-end: 1px solid var(--tb-line);
   padding: 0.5rem;
-  text-align: left;
+  text-align: start;
   vertical-align: top;
 }
 
 .comparison .not-asked {
-  color: var(--muted, #5b6470);
+  color: var(--tb-muted);
   font-style: italic;
 }
 
 .comparison .reworded {
-  color: var(--muted, #5b6470);
+  color: var(--tb-muted);
   display: block;
   font-size: 0.75rem;
+  font-weight: 400;
 }
 
 .scroll-x {
   overflow-x: auto;
 }
 
-/* The Check-ins section links above the page heading (reachability for client check-ins). */
+// The Check-ins section links above the page heading (reachability for client check-ins).
 .section-links {
   display: block;
-  margin-block-end: 16px;
 }

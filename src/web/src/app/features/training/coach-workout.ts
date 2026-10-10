@@ -1,15 +1,19 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
-import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, LOCALE_ID, signal } from '@angular/core';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
+import { Skeleton } from '../../ui/skeleton';
+import { StatusLabel } from '../../ui/status-label';
 import { firstValueFrom } from 'rxjs';
-import type { WorkoutNoteView } from '../../core/api/generated';
+import type { ClientSetView, WorkoutNoteView } from '../../core/api/generated';
 import {
-  trainingReadAccessLabel,
+  coachWorkoutAccessLabel,
+  setActualText,
+  setTargetText,
   workoutNoteTime,
   type CoachWorkoutDetail,
 } from './training-read.models';
@@ -18,7 +22,7 @@ let nextReply = 0;
 
 @Component({
   selector: 'app-coach-workout',
-  imports: [Button, DatePipe],
+  imports: [Button, DatePipe, Skeleton, StatusLabel],
   templateUrl: './coach-workout.html',
   styleUrl: './coach-workout.scss',
 })
@@ -26,6 +30,7 @@ export class CoachWorkout {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private generation = 0;
   readonly clientId = input.required<string>();
@@ -37,7 +42,7 @@ export class CoachWorkout {
   protected readonly result = signal<CoachWorkoutDetail | null>(null);
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly accessLabel = trainingReadAccessLabel;
+  protected readonly accessLabel = coachWorkoutAccessLabel;
   protected readonly noteTime = workoutNoteTime;
   protected readonly replyId = `coach-note-${++nextReply}`;
   protected readonly note = signal('');
@@ -62,11 +67,17 @@ export class CoachWorkout {
     });
   }
 
-  /** "6" when the target is one number, "6–8" for a range. */
-  protected targetReps(minimum: null | number | string, maximum: null | number | string): string {
-    return minimum !== null && Number(minimum) === Number(maximum)
-      ? `${Number(minimum)}`
-      : `${minimum ?? '—'}–${maximum ?? '—'}`;
+  protected target(set: ClientSetView): string {
+    return setTargetText(set, this.locale);
+  }
+
+  protected actual(set: ClientSetView): string {
+    return setActualText(set, this.locale);
+  }
+
+  /** The client by first name when it is known, since a note is read beside their sets. */
+  protected noteAuthor(role: WorkoutNoteView['authorRole']): string {
+    return role === 'Client' ? this.clientName() || $localize`Client` : $localize`Coach`;
   }
 
   protected async load(notesSkip = 0): Promise<void> {

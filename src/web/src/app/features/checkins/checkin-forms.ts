@@ -13,7 +13,11 @@ import type {
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { Button } from '../../ui/button';
+import { Checkbox } from '../../ui/checkbox';
+import { Control, Field } from '../../ui/field';
 import { SectionNav } from '../../ui/section-nav';
+import { StatusLabel } from '../../ui/status-label';
 import {
   CHECK_IN_LIMITS,
   draftFromVersion,
@@ -22,6 +26,10 @@ import {
   emptyQuestion,
   isChoice,
   moveItem,
+  questionCountText,
+  questionTypeLabel,
+  statusLabel,
+  versionCountText,
   toCreateRequest,
   toSaveRequest,
   validateDraft,
@@ -37,7 +45,7 @@ import {
  */
 @Component({
   selector: 'app-checkin-forms',
-  imports: [FormsModule, SectionNav],
+  imports: [Button, Checkbox, Control, Field, FormsModule, SectionNav, StatusLabel],
   templateUrl: './checkin-forms.html',
   styleUrl: './checkins.scss',
 })
@@ -129,6 +137,11 @@ export class CheckInForms {
       }
     });
   }
+
+  protected readonly statusLabel = statusLabel;
+  protected readonly typeLabel = questionTypeLabel;
+  protected readonly versionCount = versionCountText;
+  protected readonly questionCount = questionCountText;
 
   protected isChoice(questionType: CheckInQuestionType): boolean {
     return isChoice(questionType);

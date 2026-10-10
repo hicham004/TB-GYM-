@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -8,6 +8,13 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { press, settle } from '../../../testing/dom';
 import type { CoachWorkoutDetail } from './training-read.models';
 import { CoachWorkout } from './coach-workout';
+
+/** Each set's Target and Actual figures, in order. */
+function figures(host: HTMLElement): string[][] {
+  return Array.from(host.querySelectorAll('.set')).map((set) =>
+    Array.from(set.querySelectorAll('.figures dd')).map((value) => value.textContent?.trim() ?? ''),
+  );
+}
 
 describe('CoachWorkout', () => {
   afterEach(() => TestBed.resetTestingModule());
@@ -131,7 +138,9 @@ describe('CoachWorkout', () => {
     delayed.complete();
     await settle(fixture);
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.textContent).toContain('plan has ended');
+    expect(host.textContent).toContain('Their plan has ended');
+    // Said to the coach about the client, never as "Your plan".
+    expect(host.textContent).not.toContain('Your');
     expect(host.textContent).not.toContain('plan is paused');
     expect(read).toHaveBeenLastCalledWith('second-client', 'second-workout', 0);
   });
@@ -174,11 +183,15 @@ describe('CoachWorkout', () => {
 
     expect(content()).toContain('Front squat');
     expect(content()).toContain('Approved swap. Prescribed: Back squat');
-    expect(content()).toContain('Target: 6–8 reps · 60 kg · RPE 8');
-    expect(content()).toContain('Actual: 7 reps · 62.5 kg · RPE 8.5 · Logged');
-    expect(content()).toContain('Target: 5 reps · 60 kg');
-    expect(content()).not.toContain('5–5');
-    expect(content()).toContain('Client note: Knees felt good.');
+    // Each set reads Target then Actual; a set nothing was logged for says so once, in its
+    // status, and shows a dash for the figures.
+    expect(figures(host)).toEqual([
+      ['6–8 reps · 60 kg · RPE 8', '7 reps · 62.5 kg · RPE 8.5'],
+      ['5 reps · 60 kg', '—'],
+    ]);
+    expect(content()).toContain('Logged');
+    expect(content()).toContain('Not logged');
+    expect(content()).toContain('Client note Knees felt good.');
     expect(content()).toContain('Felt stable today.');
     // What the client logged is read only; the one field is the coach's own note (P4).
     expect(host.querySelector('input, select')).toBeNull();
@@ -256,5 +269,63 @@ describe('CoachWorkout', () => {
     await settle(fixture);
 
     expect((fixture.nativeElement as HTMLElement).querySelector('textarea')).toBeNull();
+  });
+
+  it('shows a failed read in words with a Retry that reads it again', async () => {
+    const read = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new Error('offline')))
+      .mockReturnValue(of(workoutDetail(null)));
+    await TestBed.configureTestingModule({
+      imports: [CoachWorkout],
+      providers: [
+        { provide: ApiClient, useValue: { getCoachWorkoutDetail: read } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CoachWorkout);
+    fixture.componentRef.setInput('clientId', 'client-1');
+    fixture.componentRef.setInput('workoutId', 'workout-1');
+    await settle(fixture);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('.problem[role="alert"]')?.textContent).toContain('Retry');
+    expect(host.textContent).not.toContain('Front squat');
+
+    press(host, 'Retry');
+    await settle(fixture);
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('.problem')).toBeNull();
+    expect(host.textContent).toContain('Front squat');
+  });
+
+  it('says a pound load in pounds and a missing load by leaving it out', async () => {
+    const detail = workoutDetail(null);
+    const sets = detail.detail!.workout.exercises[0].sets;
+    sets[0] = {
+      ...sets[0],
+      prescribedLoad: 135,
+      prescribedLoadUnit: 'Pound',
+      actualLoad: null,
+      actualLoadUnit: null,
+    };
+    sets[1] = { ...sets[1], prescribedLoad: null, prescribedLoadUnit: null };
+    await TestBed.configureTestingModule({
+      imports: [CoachWorkout],
+      providers: [
+        { provide: ApiClient, useValue: { getCoachWorkoutDetail: vi.fn(() => of(detail)) } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CoachWorkout);
+    fixture.componentRef.setInput('clientId', 'client-1');
+    fixture.componentRef.setInput('workoutId', 'workout-1');
+    await settle(fixture);
+
+    expect(figures(fixture.nativeElement as HTMLElement)).toEqual([
+      ['6–8 reps · 135 lb · RPE 8', '7 reps · RPE 8.5'],
+      ['5 reps', '—'],
+    ]);
   });
 });

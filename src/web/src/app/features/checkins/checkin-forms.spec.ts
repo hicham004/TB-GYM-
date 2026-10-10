@@ -374,7 +374,7 @@ describe('CheckInForms', () => {
 
 /** The reason rendered against one control, found by the id that control points at. */
 function reasonAt(host: HTMLElement, id: string): string {
-  return (host.querySelector(`#${id}-reason`)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+  return (host.querySelector(`#${id}-error`)?.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -474,7 +474,7 @@ describe('CheckInForms validation display', () => {
     await settleDom(fixture);
 
     expect(control().getAttribute('aria-invalid')).toBe('true');
-    expect(control().getAttribute('aria-describedby')).toBe('builder-title-reason');
+    expect(control().getAttribute('aria-describedby')).toBe('builder-title-error');
 
     fill(host, 'Title', 'Weekly check-in');
     await settleDom(fixture);

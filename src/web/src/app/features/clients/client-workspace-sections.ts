@@ -13,14 +13,16 @@ import { ClientWorkspaceContext } from './client-workspace.context';
  */
 
 const FORMER_HIDDEN = $localize`This is a former client. Their records are kept but are not shown here.`;
+const FORMER_STYLES = `.former { color: var(--tb-muted); margin: 0; }`;
 
 /** A client's Training (C3): the program as a timeline, with what a coach can do about it. */
 @Component({
   selector: 'app-client-training-section',
   imports: [ClientProgram],
+  styles: FORMER_STYLES,
   template: `
     @if (context.isFormer()) {
-      <p class="muted">{{ formerHidden }}</p>
+      <p class="former">{{ formerHidden }}</p>
     } @else {
       <app-client-program />
     }
@@ -34,9 +36,10 @@ export class ClientTrainingSection {
 @Component({
   selector: 'app-client-nutrition-section',
   imports: [ClientNutrition],
+  styles: FORMER_STYLES,
   template: `
     @if (context.isFormer()) {
-      <p class="muted">{{ formerHidden }}</p>
+      <p class="former">{{ formerHidden }}</p>
     } @else {
       <app-client-nutrition />
     }

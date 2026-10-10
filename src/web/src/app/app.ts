@@ -21,6 +21,7 @@ import { WorkspaceBrandStore } from './core/theme/workspace-brand.store';
 import { BillingBanner } from './features/billing/billing-banner';
 import { ClientTabs } from './shell/client-tabs';
 import { CoachShell } from './shell/coach-shell';
+import { Button } from './ui/button';
 
 /**
  * Which chrome surrounds the routed page. Presentation only: every route keeps its own guards and
@@ -37,7 +38,15 @@ export type ShellKind = 'coach' | 'client' | 'member' | 'public' | 'pending';
 
 @Component({
   selector: 'app-root',
-  imports: [BillingBanner, ClientTabs, CoachShell, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [
+    BillingBanner,
+    Button,
+    ClientTabs,
+    CoachShell,
+    RouterLink,
+    RouterLinkActive,
+    RouterOutlet,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
   host: {

@@ -298,7 +298,7 @@ select option {
   font-size: 0.75rem;
 }
 .set-note,
-.set-card .form-error {
+.set-card .player-error {
   grid-column: 1 / -1;
 }
 .set-note summary,
@@ -446,14 +446,10 @@ select option {
   font-weight: 700;
   margin-block-start: 1rem;
 }
-.player-empty {
+.next-up {
+  color: var(--tb-muted);
+  margin: 0;
   text-align: center;
-  padding: 3rem 1rem;
-}
-.player-empty h2 {
-  font-family: 'Instrument Serif', Georgia, serif;
-  font-size: 2.2rem;
-  font-weight: 400;
 }
 .save-status {
   color: var(--tb-accent, #d9ed94);
@@ -462,8 +458,12 @@ select option {
 .save-status-empty {
   display: none;
 }
-.form-error {
-  color: #ffd1bc;
+.player-error {
+  background: var(--tb-danger-soft);
+  border-radius: 0.6rem;
+  color: var(--tb-ink);
+  margin-block: 0.5rem;
+  padding: 0.5rem 0.75rem;
 }
 .player-skeleton {
   display: grid;

@@ -354,8 +354,17 @@ describe('TodayTraining interactions', () => {
     const { host } = await render({}, done);
 
     expect(host.querySelector('input[aria-label="Actual load"]')).toBeNull();
-    expect(host.textContent).toContain('Completed · read only');
+    expect(host.querySelector('app-status-label')?.textContent).toContain('Completed · read only');
     expect(() => button(host, 'Finish workout')).toThrow();
+  });
+
+  /** The player is always on the night colour, so the kit pieces in it read the dark tokens. */
+  it('draws on the dark tokens and says an empty day with the kit’s empty state', async () => {
+    const { host } = await render({}, day({ workouts: [] }));
+
+    expect(host.getAttribute('data-mode')).toBe('dark');
+    expect(host.querySelector('app-empty-state h2')?.textContent).toBe('Rest day');
+    expect(host.querySelector('.empty-state, .player-empty')).toBeNull();
   });
 
   /** An unentitled day says why, and offers no workout to log against. */

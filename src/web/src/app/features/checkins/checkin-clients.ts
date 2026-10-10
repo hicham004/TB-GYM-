@@ -18,8 +18,18 @@ import type { ClientSummary } from '../../core/api/api.models';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { Button } from '../../ui/button';
+import { isoWeekdayOfName } from '../../ui/calendar';
+import { DateField } from '../../ui/date-field';
+import { Control, Field } from '../../ui/field';
 import { SectionNav } from '../../ui/section-nav';
-import { validateAssignment, type AssignmentDraft } from './checkin-builder.models';
+import { StatusLabel } from '../../ui/status-label';
+import {
+  validateAssignment,
+  versionLabel,
+  responseStatusLabel,
+  type AssignmentDraft,
+} from './checkin-builder.models';
 import { comparisonRows, formatAnswer, type ComparisonRowView } from './checkin-response.models';
 
 /**
@@ -28,7 +38,7 @@ import { comparisonRows, formatAnswer, type ComparisonRowView } from './checkin-
  */
 @Component({
   selector: 'app-checkin-clients',
-  imports: [DatePipe, FormsModule, SectionNav],
+  imports: [Button, Control, DateField, DatePipe, Field, FormsModule, SectionNav, StatusLabel],
   templateUrl: './checkin-clients.html',
   styleUrl: './checkins.scss',
 })
@@ -55,6 +65,11 @@ export class CheckInClients {
   private savingGeneration = 0;
 
   private readonly workspaceToday = signal('');
+  /** The workspace's own day, and the weekday its calendars start on (the browser's are neither). */
+  protected readonly today = this.workspaceToday.asReadonly();
+  protected readonly firstDay = signal<number | null>(null);
+  protected readonly versionLabel = versionLabel;
+  protected readonly responseStatus = responseStatusLabel;
   protected readonly clients = signal<ClientSummary[]>([]);
   protected readonly forms = signal<CheckInFormSummary[]>([]);
   protected readonly assignments = signal<CheckInAssignmentListItem[]>([]);
@@ -395,6 +410,7 @@ export class CheckInClients {
         this.clients.set(clients);
         this.forms.set(forms.items);
         this.workspaceToday.set(workspace.currentDate);
+        this.firstDay.set(isoWeekdayOfName(workspace.weekStartsOn));
       } catch (error) {
         if (!owner.current) return;
         if (this.loadedTenantId === tenantId && this.contextGeneration === generation) {
@@ -603,6 +619,7 @@ export class CheckInClients {
     ++this.loadingGeneration;
     ++this.savingGeneration;
     this.workspaceToday.set('');
+    this.firstDay.set(null);
     this.clients.set([]);
     this.forms.set([]);
     this.assignments.set([]);

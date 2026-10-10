@@ -4,35 +4,38 @@
 
   <header class="page-head">
     <h2 i18n>Check-in forms</h2>
-    <button type="button" class="primary-button" (click)="startNewForm()" i18n>New form</button>
+    <button appButton type="button" (click)="startNewForm()" i18n>New form</button>
   </header>
 
   @if (error(); as message) {
-    <p class="error" role="alert">{{ message }}</p>
+    <p class="problem" role="alert">{{ message }}</p>
   }
   @if (notice(); as message) {
-    <p class="notice" role="status">{{ message }}</p>
+    <p class="note" role="status">{{ message }}</p>
   }
 
   <div class="split">
     <article class="panel library">
       <h3 i18n>Library</h3>
       @if (loading() && forms().length === 0) {
-        <p i18n>Loading check-in forms…</p>
+        <p class="empty" i18n>Loading check-in forms…</p>
       } @else if (forms().length === 0) {
         <p class="empty" i18n>No check-in forms yet.</p>
       } @else {
         <ul class="form-list">
           @for (form of forms(); track form.id) {
             <li>
-              <button type="button" class="link" (click)="openForm(form.id)">
+              <button appButton type="button" variant="text" (click)="openForm(form.id)">
                 {{ form.title }}
               </button>
-              <span class="badge">{{ form.status }}</span>
+              <app-status-label
+                [label]="statusLabel(form.status)"
+                [tone]="form.status === 'Published' ? 'success' : 'neutral'"
+              />
               @if (form.isArchived) {
-                <span class="badge muted" i18n>Archived</span>
+                <app-status-label label="Archived" i18n-label />
               }
-              <span class="detail" i18n>{{ form.currentVersionNumber }} version(s)</span>
+              <span class="detail">{{ versionCount(form.currentVersionNumber) }}</span>
             </li>
           }
         </ul>
@@ -44,7 +47,7 @@
         <h3>
           {{ details.form.title }}
           @if (isArchived()) {
-            <span class="badge muted" i18n>Archived</span>
+            <app-status-label label="Archived" i18n-label />
           }
         </h3>
         @if (details.form.description) {
@@ -55,9 +58,9 @@
              changed here and saved against the form's own concurrency token. -->
         @if (renaming()) {
           <form class="builder-form" (ngSubmit)="renameForm()">
-            <label>
-              <span i18n>Title</span>
+            <app-field label="Title" i18n-label>
               <input
+                appControl
                 type="text"
                 id="rename-title"
                 name="renameTitle"
@@ -66,10 +69,10 @@
                 [maxlength]="limits.titleLength"
                 required
               />
-            </label>
-            <label>
-              <span i18n>Description</span>
+            </app-field>
+            <app-field label="Description" i18n-label>
               <textarea
+                appControl
                 id="rename-description"
                 name="renameDescription"
                 rows="2"
@@ -77,29 +80,40 @@
                 (ngModelChange)="setRenameDescription($event)"
                 [maxlength]="limits.descriptionLength"
               ></textarea>
-            </label>
+            </app-field>
             <div class="actions">
-              <button type="submit" class="primary-button" [disabled]="saving()" i18n>
-                Save details
+              <button appButton type="submit" [loading]="saving()" i18n>Save details</button>
+              <button appButton type="button" variant="text" (click)="cancelRename()" i18n>
+                Cancel
               </button>
-              <button type="button" class="link" (click)="cancelRename()" i18n>Cancel</button>
             </div>
           </form>
         } @else {
           <div class="actions">
             @if (!isArchived()) {
-              <button type="button" class="link" (click)="startRename()" i18n>Edit details</button>
+              <button appButton type="button" variant="outlined" (click)="startRename()" i18n>
+                Edit details
+              </button>
               <button
+                appButton
                 type="button"
-                class="link danger"
-                [disabled]="saving()"
+                variant="text"
+                class="danger"
+                [loading]="saving()"
                 (click)="archiveForm()"
                 i18n
               >
                 Archive
               </button>
             } @else {
-              <button type="button" class="link" [disabled]="saving()" (click)="restoreForm()" i18n>
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                [loading]="saving()"
+                (click)="restoreForm()"
+                i18n
+              >
                 Restore
               </button>
             }
@@ -116,37 +130,60 @@
         <ul class="versions">
           @for (version of details.versions; track version.id) {
             <li>
-              <span i18n>Version {{ version.versionNumber }}</span>
-              <span class="badge">{{ version.status }}</span>
-              <span class="detail" i18n>{{ version.questionCount }} question(s)</span>
+              <span class="version-name" i18n>Version {{ version.versionNumber }}</span>
+              <app-status-label
+                [label]="statusLabel(version.status)"
+                [tone]="version.status === 'Published' ? 'success' : 'neutral'"
+              />
+              <span class="detail">{{ questionCount(version.questionCount) }}</span>
               <!-- An archived lineage offers reading only. The server refuses each of these too;
                    the screen simply stops offering an action that would be refused. -->
               @if (isArchived()) {
-                <button type="button" class="link" (click)="editVersion(version.id)" i18n>
+                <button
+                  appButton
+                  type="button"
+                  variant="text"
+                  (click)="editVersion(version.id)"
+                  i18n
+                >
                   View
                 </button>
               } @else if (version.status === 'Draft') {
-                <button type="button" class="link" (click)="editVersion(version.id)" i18n>
+                <button
+                  appButton
+                  type="button"
+                  variant="text"
+                  (click)="editVersion(version.id)"
+                  i18n
+                >
                   Edit
                 </button>
                 <button
+                  appButton
                   type="button"
-                  class="link"
-                  [disabled]="saving()"
+                  variant="outlined"
+                  [loading]="saving()"
                   (click)="publish(version.id, +version.version)"
                   i18n
                 >
                   Publish
                 </button>
               } @else {
-                <button type="button" class="link" (click)="editVersion(version.id)" i18n>
+                <button
+                  appButton
+                  type="button"
+                  variant="text"
+                  (click)="editVersion(version.id)"
+                  i18n
+                >
                   View
                 </button>
                 @if (!openDraft() && latestPublished() === version.id) {
                   <button
+                    appButton
                     type="button"
-                    class="link"
-                    [disabled]="saving()"
+                    variant="outlined"
+                    [loading]="saving()"
                     (click)="deriveDraft(version.id)"
                     i18n
                   >
@@ -182,13 +219,15 @@
 
           @if (creating()) {
             @let titleReasons = formFieldErrors('title');
-            @let showsTitle = attempt.shows('title', titleReasons);
             @let descriptionReasons = formFieldErrors('description');
-            @let showsDescription = attempt.shows('description', descriptionReasons);
 
-            <label>
-              <span i18n>Title</span>
+            <app-field
+              label="Title"
+              i18n-label
+              [errors]="attempt.shows('title', titleReasons) ? titleReasons : null"
+            >
               <input
+                appControl
                 type="text"
                 id="builder-title"
                 name="title"
@@ -196,23 +235,19 @@
                 (ngModelChange)="setTitle($event)"
                 (blur)="attempt.touch('title')"
                 [maxlength]="limits.titleLength"
-                [attr.aria-invalid]="showsTitle ? 'true' : null"
-                [attr.aria-describedby]="showsTitle ? 'builder-title-reason' : null"
                 required
               />
-            </label>
-            <!-- Plain text: already on screen when read, so no assertive region. -->
-            @if (showsTitle) {
-              <p class="field-reason" id="builder-title-reason">
-                @for (message of titleReasons; track message) {
-                  <span>{{ message }}</span>
-                }
-              </p>
-            }
+            </app-field>
 
-            <label>
-              <span i18n>Description</span>
+            <app-field
+              label="Description"
+              i18n-label
+              [errors]="
+                attempt.shows('description', descriptionReasons) ? descriptionReasons : null
+              "
+            >
               <textarea
+                appControl
                 id="builder-description"
                 name="description"
                 rows="2"
@@ -220,17 +255,8 @@
                 (ngModelChange)="setDescription($event)"
                 (blur)="attempt.touch('description')"
                 [maxlength]="limits.descriptionLength"
-                [attr.aria-invalid]="showsDescription ? 'true' : null"
-                [attr.aria-describedby]="showsDescription ? 'builder-description-reason' : null"
               ></textarea>
-            </label>
-            @if (showsDescription) {
-              <p class="field-reason" id="builder-description-reason">
-                @for (message of descriptionReasons; track message) {
-                  <span>{{ message }}</span>
-                }
-              </p>
-            }
+            </app-field>
           }
 
           <!-- Reasons belonging to the draft as a whole rather than to any one control. Nothing can
@@ -248,35 +274,64 @@
             @for (question of draft().questions; track question.key; let index = $index) {
               <li class="question">
                 <div class="question-head">
-                  <select
-                    [name]="'type-' + question.key"
-                    [ngModel]="question.questionType"
-                    (ngModelChange)="changeQuestionType(index, $event)"
-                    [disabled]="readOnly"
-                  >
-                    @for (type of questionTypes; track type) {
-                      <option [value]="type">{{ type }}</option>
-                    }
-                  </select>
+                  <app-field label="Kind of question" i18n-label class="question-type">
+                    <select
+                      appControl
+                      [name]="'type-' + question.key"
+                      [ngModel]="question.questionType"
+                      (ngModelChange)="changeQuestionType(index, $event)"
+                      [disabled]="readOnly"
+                    >
+                      @for (type of questionTypes; track type) {
+                        <option [value]="type">{{ typeLabel(type) }}</option>
+                      }
+                    </select>
+                  </app-field>
                   @if (!readOnly) {
-                    <button type="button" class="link" (click)="moveQuestion(index, -1)" i18n>
-                      Up
-                    </button>
-                    <button type="button" class="link" (click)="moveQuestion(index, 1)" i18n>
-                      Down
-                    </button>
-                    <button type="button" class="link danger" (click)="removeQuestion(index)" i18n>
-                      Remove
-                    </button>
+                    <div class="question-actions">
+                      <button
+                        appButton
+                        type="button"
+                        variant="text"
+                        (click)="moveQuestion(index, -1)"
+                        i18n
+                      >
+                        Up
+                      </button>
+                      <button
+                        appButton
+                        type="button"
+                        variant="text"
+                        (click)="moveQuestion(index, 1)"
+                        i18n
+                      >
+                        Down
+                      </button>
+                      <button
+                        appButton
+                        type="button"
+                        variant="text"
+                        class="danger"
+                        (click)="removeQuestion(index)"
+                        i18n
+                      >
+                        Remove
+                      </button>
+                    </div>
                   }
                 </div>
 
                 @let questionReasons = questionErrors(question);
-                @let showsQuestion = attempt.shows(questionField(question), questionReasons);
 
-                <label>
-                  <span i18n>Prompt</span>
+                <app-field
+                  label="Prompt"
+                  i18n-label
+                  [errors]="
+                    attempt.shows(questionField(question), questionReasons) ? questionReasons : null
+                  "
+                >
                   <input
+                    appControl
                     type="text"
                     [id]="'q-' + question.key"
                     [name]="'prompt-' + question.key"
@@ -285,38 +340,45 @@
                     (blur)="attempt.touch(questionField(question))"
                     [maxlength]="limits.promptLength"
                     [disabled]="readOnly"
-                    [attr.aria-invalid]="showsQuestion ? 'true' : null"
-                    [attr.aria-describedby]="showsQuestion ? 'q-' + question.key + '-reason' : null"
                   />
-                </label>
+                </app-field>
 
-                <label class="inline">
+                <app-checkbox label="Required" i18n-label>
                   <input
+                    appControl
                     type="checkbox"
                     [name]="'required-' + question.key"
                     [ngModel]="question.isRequired"
                     (ngModelChange)="setRequired(index, $event)"
                     [disabled]="readOnly"
                   />
-                  <span i18n>Required</span>
-                </label>
+                </app-checkbox>
 
                 @if (isChoice(question.questionType)) {
                   <ul class="options">
                     @for (option of question.options; track option.key; let optionIndex = $index) {
                       <li>
-                        <input
-                          type="text"
-                          [name]="'option-' + option.key"
-                          [ngModel]="option.label"
-                          (ngModelChange)="setOptionLabel(index, optionIndex, $event)"
-                          [maxlength]="limits.optionLabelLength"
-                          [disabled]="readOnly"
-                        />
+                        <app-field
+                          label="Option {{ optionIndex + 1 }}"
+                          i18n-label
+                          [hideLabel]="true"
+                        >
+                          <input
+                            appControl
+                            type="text"
+                            [name]="'option-' + option.key"
+                            [ngModel]="option.label"
+                            (ngModelChange)="setOptionLabel(index, optionIndex, $event)"
+                            [maxlength]="limits.optionLabelLength"
+                            [disabled]="readOnly"
+                          />
+                        </app-field>
                         @if (!readOnly) {
                           <button
+                            appButton
                             type="button"
-                            class="link danger"
+                            variant="text"
+                            class="danger"
                             (click)="removeOption(index, optionIndex)"
                             i18n
                           >
@@ -327,53 +389,53 @@
                     }
                   </ul>
                   @if (!readOnly) {
-                    <button type="button" class="link" (click)="addOption(index)" i18n>
-                      Add option
-                    </button>
+                    <div class="actions">
+                      <button
+                        appButton
+                        type="button"
+                        variant="outlined"
+                        (click)="addOption(index)"
+                        i18n
+                      >
+                        Add option
+                      </button>
+                    </div>
                   }
                 }
 
                 @if (question.questionType === 'NumericScale') {
                   <div class="scale">
-                    <label>
-                      <span i18n>Minimum</span>
+                    <app-field label="Minimum" i18n-label>
                       <input
+                        appControl
                         type="number"
                         [name]="'min-' + question.key"
                         [ngModel]="question.scaleMinimum"
                         (ngModelChange)="setScale(index, 'scaleMinimum', $event)"
                         [disabled]="readOnly"
                       />
-                    </label>
-                    <label>
-                      <span i18n>Maximum</span>
+                    </app-field>
+                    <app-field label="Maximum" i18n-label>
                       <input
+                        appControl
                         type="number"
                         [name]="'max-' + question.key"
                         [ngModel]="question.scaleMaximum"
                         (ngModelChange)="setScale(index, 'scaleMaximum', $event)"
                         [disabled]="readOnly"
                       />
-                    </label>
-                    <label>
-                      <span i18n>Step</span>
+                    </app-field>
+                    <app-field label="Step" i18n-label>
                       <input
+                        appControl
                         type="number"
                         [name]="'step-' + question.key"
                         [ngModel]="question.scaleStep"
                         (ngModelChange)="setScale(index, 'scaleStep', $event)"
                         [disabled]="readOnly"
                       />
-                    </label>
+                    </app-field>
                   </div>
-                }
-
-                @if (showsQuestion) {
-                  <p class="field-reason" [id]="'q-' + question.key + '-reason'">
-                    @for (message of questionReasons; track message) {
-                      <span>{{ message }}</span>
-                    }
-                  </p>
                 }
               </li>
             }
@@ -383,7 +445,7 @@
             <!-- The one assertive region on this form: present from the start so the live region is
                  registered, empty until a save is actually refused. `tabindex="-1"` so the refusal
                  can take focus without entering the tab order. -->
-            <p class="error summary" id="builder-summary" role="alert" tabindex="-1" #summary>
+            <p class="problem summary" id="builder-summary" role="alert" tabindex="-1" #summary>
               @if (attempt.wasTried() && outstanding().length > 0) {
                 <ng-container i18n>This draft cannot be saved yet:</ng-container>
                 @for (message of outstanding(); track $index) {
@@ -393,25 +455,34 @@
             </p>
 
             <div class="actions">
-              <button type="button" class="link" (click)="addQuestion()" i18n>Add question</button>
-              <!-- Disabled only while the request is in flight; see checkin-clients.html. -->
+              <button appButton type="button" variant="outlined" (click)="addQuestion()" i18n>
+                Add question
+              </button>
+              <!-- Busy while the request is in flight, never disabled for an invalid form: a
+                   disabled control cannot take focus to announce why it is refusing. -->
               <button
+                appButton
                 type="submit"
-                class="primary-button"
                 aria-describedby="builder-summary"
-                [disabled]="saving()"
+                [loading]="saving()"
                 i18n
               >
                 Save draft
               </button>
-              <button type="button" class="link" (click)="cancelEditing()" i18n>Cancel</button>
+              <button appButton type="button" variant="text" (click)="cancelEditing()" i18n>
+                Cancel
+              </button>
             </div>
           } @else {
             <p class="hint" i18n>
               This version is read-only. Restore an archived form, or create a draft from a
               published version, before changing it.
             </p>
-            <button type="button" class="link" (click)="cancelEditing()" i18n>Close</button>
+            <div class="actions">
+              <button appButton type="button" variant="outlined" (click)="cancelEditing()" i18n>
+                Close
+              </button>
+            </div>
           }
         </form>
       }

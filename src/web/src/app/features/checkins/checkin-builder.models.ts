@@ -368,3 +368,50 @@ function nullableText(value: string): string | null {
 function nullableNumber(value: number | string | null | undefined): number | null {
   return value === null || value === undefined ? null : Number(value);
 }
+
+/** What a coach calls each kind of question, rather than the name the server gives it. */
+export function questionTypeLabel(type: CheckInQuestionType): string {
+  switch (type) {
+    case 'ShortText':
+      return $localize`Short answer`;
+    case 'LongText':
+      return $localize`Long answer`;
+    case 'SingleChoice':
+      return $localize`Choose one`;
+    case 'MultipleChoice':
+      return $localize`Choose several`;
+    case 'NumericScale':
+      return $localize`Number scale`;
+  }
+}
+
+/** A form or a version is a draft the coach is still writing, or published and in use. */
+export function statusLabel(status: 'Draft' | 'Published'): string {
+  return status === 'Published' ? $localize`Published` : $localize`Draft`;
+}
+
+export function versionCountText(count: number | string): string {
+  const total = Number(count);
+  return total === 1 ? $localize`1 version` : $localize`${total}:count: versions`;
+}
+
+export function questionCountText(count: number | string): string {
+  const total = Number(count);
+  return total === 1 ? $localize`1 question` : $localize`${total}:count: questions`;
+}
+
+export function versionLabel(number: number | string | null): string {
+  return $localize`Version ${Number(number)}:number:`;
+}
+
+/** A client's answers are a draft they are still writing, then submitted, then reviewed by a coach. */
+export function responseStatusLabel(status: 'Draft' | 'Submitted' | 'Reviewed'): string {
+  switch (status) {
+    case 'Draft':
+      return $localize`In progress`;
+    case 'Submitted':
+      return $localize`Submitted`;
+    case 'Reviewed':
+      return $localize`Reviewed`;
+  }
+}

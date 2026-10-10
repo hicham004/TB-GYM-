@@ -96,7 +96,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.3c | **Weigh-ins, photos and measurements** (M5, C3): one Your entries page for the client with Weight, Measurements and Photos tabs (the tab kept in the address), and the same tabs for a coach inside a client's Progress; Log weight, Correct (a one-tap reason), Wrong day and See changes in sheets with the kit's date field, the client's saved kg or lb and a number out of range told in words; one sheet logs several measurements at once and another adds a photo set (front, side, back); a photo opens small and is removed with a reason; each entry says who added it; Show earlier reads the year before; Progress follows dark mode. A removed photo frees its date and pose, so a wrong shot can be retaken the same day (PRG-012) | §2, plus Vitest (the rules, every sheet, the page, the dashboard) and an API test (a retake after a removal, by the client and by the coach) | Done · 2026-10-10 · 2648962 |
 | R5.3d1 | **The coach's client Nutrition tab** (C3): the latest targets with the numbers they came from, Work out targets in a sheet that starts from what the record knows (weight, height, age, steps, each with where it came from), the meal plans (current, coming, earlier) with their calories and macros, Assign a meal plan in a sheet that says in words what overlaps or is not covered before sending, and the client's allergens in a sheet; two new coach reads (the declared allergens, the last work-outs with their inputs and warnings) and the plan list now names each plan | §2, plus Vitest (the rules, every sheet, the page) and API tests (the two reads, plan names and macros, tenant, coach and released scoping) | Done · 2026-10-10 · 31ffbde |
 | R5.3d2 | **The coach's Strength history** (C7), replacing "More training tools" at the foot of Training: every max on record by lift (a program's training maxes beside the recorded ones, STR-015) with how it moved, a Record a max sheet (a training max or a tested one; a manual estimate is refused by the server, so it is not offered), and How they have done on a lift (their sets newest first, the best estimated max, a chart) | §2, plus Vitest (the rules, the picker, both sheets, the card, the date defaults moved to it) | Done · 2026-10-10 · 4d5b514 |
-| R5.3e | **The leftovers**: check-in forms and assignment buttons, the coach's workout page, the empty and status styles on Training, the plan dialogs' notes, the top bar's sign-out | §2 | To do |
+| R5.3e | **The leftovers** (C5, C3, M2, M8): the coach's two check-in pages (the form library and builder; assigning a check-in, reading and comparing) on the kit's buttons, fields, calendar and status labels, with coach words for each kind of question and each status; the coach's workout page (Target and Actual per set, units in one helper, a loading and a Retry state, each note by its author, and the closed-plan sentences said to the coach rather than as "Your plan"); the client's Training player's empty, completed and error states (always on the dark tokens, so the kit's pieces fit it); the plain top bar of an account with no coaching space (the kit's buttons and the brand tokens); and the former-client note on Training and Nutrition | §2, plus Vitest (the new wording, units, a failed read, the validation reasons through the kit's field ids) and Playwright (the plain top bar at 1440 and 390 px) | Built, not committed · 2026-10-10 |
 | R5.3f | **Delete the legacy CSS** (the global rules and variables in `styles.scss`), add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
 | R6.2 | **Homepage** pre-render, GSAP scroll story, Jitter hero video (the owner makes the assets) | §2 | Optional |
@@ -268,7 +268,9 @@ of the implemented R1.3 screens before production rollout.
   app's code in them is unchanged to within 13 bytes (the API client grew 42, for the date range on two
   reads). The Entries page, its three sheet files and their models are lazy chunks. R5.3d measures 544.91 kB (−1.1 kB):
   the nutrition calls and models the old client page used left `ApiClient`, and the new Nutrition page and the
-  Strength history card load with their routes.
+  Strength history card load with their routes. R5.3e measures 546.95 kB (+2.04 kB): the kit's button in the app shell's plain top bar; the check-in pages, the
+  coach's workout page and the Training states are lazy chunks, and `today-training.scss` is 8.00 kB against the 8 kB
+  error line (it shrank when the older global classes it borrowed were removed).
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -361,8 +363,8 @@ of the implemented R1.3 screens before production rollout.
   - The leave confirmation (`UiConfirm`, `confirmBeforeLeaving`, `UnsavedWork`) is ready for the other
     editors that still lose work on navigation: the coach note, Brand and C7 (the intake since R5.3b).
 - **Check-in review, left for later (from R4.3).**
-  - Assigning a check-in still happens on the older Client check-ins screen (`/checkins/clients`),
-    which also keeps its older way to read and compare. An Assign sheet on the client's Check-ins
+  - Assigning a check-in still happens on the Client check-ins page (`/checkins/clients`), which since
+    R5.3e is on the kit but keeps its own way to read and compare. An Assign sheet on the client's Check-ins
     would let that screen go; C5 never specified assigning.
   - After Mark reviewed the coach goes back by hand. A "next check-in to review" step, from Today's
     queue, would make a Monday of reviews faster.
@@ -425,8 +427,8 @@ of the implemented R1.3 screens before production rollout.
   is no longer a `<header>`, so two stacked modals no longer make two page banners (axe). Left for later:
   (1) the Atlas demo has no exercise media, so playback was checked with mocks and the grant test, not a
   real video; (2) a client is not notified of a coach's workout note (closed in R5.1c, ADR
-  0036); (3) the coach's workout view keeps its older look (plain "Target:"/"Actual:" lines and
-  hand-built units); (4) the client sees notes on finished workouts in Training, not on Today after the day.
+  0036); (3) the coach's workout view kept its older look (plain "Target:"/"Actual:" lines and
+  hand-built units; rebuilt in R5.3e); (4) the client sees notes on finished workouts in Training, not on Today after the day.
 - **Meal plans, left for later (from R4.4a, built 2026-10-07; screenshots `docs/design/r44a-*.png`).**
   (1) A meal's recipes are equal options the client chooses between (NUT-005): a version stores no order
   for them, so after Publish they come back in the order the server returns, and a day counts each meal's
@@ -802,6 +804,29 @@ of the implemented R1.3 screens before production rollout.
   no meal plan, carb cycling, typing the macros over the calculation, and stopping a plan early; (d) the
   server checking that an allergen save was made from what is stored now; (e) the Strength history lists the 1,000 newest maxes
   and the search the first 8 matches; (f) a chart of a lift's maxes across kinds.
+- **The leftovers, R5.3e (built 2026-10-10; screenshots `docs/design/r53e-*.png`). Decided by Claude for the
+  owner on 2026-10-10**, after looking at how Everfit and Trainerize handle check-ins (Everfit sends daily
+  and weekly check-in forms on a schedule through Autoflow and gives the coach one dashboard of who is on
+  track; Trainerize coaches are still asking for scheduled progress forms). *Check-ins:* (1) **Assigning
+  stays one check-in, one client, one due date**, as built; a schedule that repeats is Everfit's feature
+  and a billing-adjacent product decision (it creates work for the client without the coach acting each
+  time), so it is a follow-up, not part of a styling step. (2) **The two pages keep their layout and their
+  accessibility wiring** (one assertive summary that takes focus, reasons shown only once a field is left
+  or a submit refused) and change what they are made of: kit buttons, fields and selects, the kit's
+  calendar for the due date (greyed before the workspace's own today, opening on its week start), and
+  status labels. (3) **Coach words:** a question is a Short answer, Long answer, Choose one, Choose
+  several or Number scale; a client's draft says "In progress"; "1 version" and "6 questions" are counted
+  in words. *The coach's workout page:* Target and Actual are two figures per set with the status "Logged"
+  or "Not logged" said once, a missing load is left out rather than shown as a dash, RIR is said only when
+  no RPE was set, and a closed plan reads "Their plan has ended, so this workout is closed" (the client's
+  sentence, "Your coaching plan has ended", was being shown to the coach). *The client's player* is always
+  night-coloured, so it now says so (`data-mode="dark"`) and the kit's empty state and status label read
+  the dark tokens; the older global `.empty-state`, `.status-badge` and `.form-error` it borrowed are gone
+  from it. *The plan dialogs* of Service & access (pause, cancel, block, renew, record a payment, reassign,
+  end coaching) were already the kit's sheets and dialogs with their own styles; nothing in them needed
+  changing. Not done: assigning from a sheet on the client's own Check-ins (R4.3's follow-up stands), a
+  schedule that repeats, comparing more than two check-ins, and the forms' layout on a phone beyond what
+  the kit gives (a long builder is a long page). R5.3f deletes the global rules these pages no longer use.
 ---
 
 ## 1. Verdict: why the product feels "meh"

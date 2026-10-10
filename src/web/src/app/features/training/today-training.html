@@ -17,7 +17,7 @@
   <p
     #errorSummary
     id="training-error-summary"
-    class="form-error runner-summary"
+    class="player-error runner-summary"
     [class.runner-summary-empty]="!error()"
     role="alert"
     aria-atomic="true"
@@ -78,26 +78,37 @@
     </div>
   } @else if (day(); as currentDay) {
     @if (!currentDay.isAllowed) {
-      <section class="player-empty access-state">
-        <h2 i18n>Training is not available</h2>
-        <p>{{ accessReasonLabel(currentDay.accessReason) }}</p>
-      </section>
+      <app-empty-state
+        heading="Training is not available"
+        i18n-heading
+        [description]="accessReasonLabel(currentDay.accessReason)"
+      />
     } @else if (!currentDay.workouts.length) {
-      <section class="player-empty empty-state">
-        @if (!upcoming()?.hasAssignedProgram) {
-          <h2 i18n>Nothing assigned yet</h2>
-          <p i18n>Your coach will put your program here.</p>
-        } @else if (!upcoming()?.hasVisibleSessions) {
-          <h2 i18n>No sessions shared yet</h2>
-          <p i18n>Your sessions will appear when your coach shares them.</p>
-        } @else {
-          <h2 i18n>Rest day</h2>
-          <p i18n>No workout is scheduled today.</p>
-        }
-        @if (upcoming()?.nextSession; as next) {
-          <p dir="auto">{{ next.date | date: 'EEE d MMM' }} · {{ next.name }}</p>
-        }
-      </section>
+      @if (!upcoming()?.hasAssignedProgram) {
+        <app-empty-state
+          heading="Nothing assigned yet"
+          i18n-heading
+          description="Your coach will put your program here."
+          i18n-description
+        />
+      } @else if (!upcoming()?.hasVisibleSessions) {
+        <app-empty-state
+          heading="No sessions shared yet"
+          i18n-heading
+          description="Your sessions will appear when your coach shares them."
+          i18n-description
+        />
+      } @else {
+        <app-empty-state
+          heading="Rest day"
+          i18n-heading
+          description="No workout is scheduled today."
+          i18n-description
+        />
+      }
+      @if (upcoming()?.nextSession; as next) {
+        <p class="next-up" dir="auto">{{ next.date | date: 'EEE d MMM' }} · {{ next.name }}</p>
+      }
     } @else {
       @if (currentDay.workouts.length > 1) {
         <label class="workout-picker"
@@ -135,7 +146,12 @@
             </button>
           }
           @if (workout.status === 'Completed') {
-            <p class="status-badge" i18n>Completed · read only</p>
+            <app-status-label
+              tone="success"
+              marker="check"
+              label="Completed · read only"
+              i18n-label
+            />
           }
           @if (workout.workoutExecutionId && workout.status !== 'Completed') {
             <label class="unit-choice"
@@ -376,7 +392,7 @@
                           </details>
                         }
                         @if (set.performanceId && setErrors()[set.performanceId]; as setError) {
-                          <p class="form-error">{{ setError }}</p>
+                          <p class="player-error">{{ setError }}</p>
                         }
                       </section>
                     }

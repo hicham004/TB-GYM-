@@ -30,6 +30,8 @@ import type {
 import { workoutStatusLabel } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { EmptyState } from '../../ui/empty-state';
+import { StatusLabel } from '../../ui/status-label';
 import { nullableNumeric, numeric } from './training-builder.models';
 import {
   trainingReadAccessLabel,
@@ -50,9 +52,11 @@ import {
 
 @Component({
   selector: 'app-today-training',
-  imports: [FormsModule, DatePipe, RouterLink],
+  imports: [FormsModule, DatePipe, EmptyState, RouterLink, StatusLabel],
   templateUrl: './today-training.html',
   styleUrl: './today-training.scss',
+  // The player is always drawn on the night colour, so the kit pieces inside it read the dark tokens.
+  host: { 'data-mode': 'dark' },
 })
 export class TodayTraining {
   private readonly api = inject(ApiClient);

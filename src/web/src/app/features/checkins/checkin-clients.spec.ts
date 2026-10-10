@@ -15,17 +15,7 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import {
-  announced,
-  choose,
-  focusedId,
-  leave,
-  leaveAt,
-  press,
-  query,
-  settle,
-  type,
-} from '../../../testing/dom';
+import { announced, choose, focusedId, press, query, settle } from '../../../testing/dom';
 import { CheckInClients } from './checkin-clients';
 
 const SHARED_KEY = 'a'.repeat(32);
@@ -768,11 +758,11 @@ describe('CheckInClients', () => {
     // rather than accusing the user of missing a field they have not reached yet.
     expect(host.textContent).not.toContain('Choose a due date.');
 
-    leave(host, 'Due date');
+    leaveDue(host);
     await settle(fixture);
     expect(host.textContent).toContain('Choose a due date.');
 
-    type(host, 'input[name="dueDate"]', '2026-08-24');
+    dueOn(component, '2026-08-24');
     await settle(fixture);
 
     expect(host.textContent).not.toContain('Choose a due date.');
@@ -789,8 +779,8 @@ describe('CheckInClients', () => {
     await settle(fixture);
 
     choose(host, 'select[name="formVersionId"]', 'version-1');
-    type(host, 'input[name="dueDate"]', '2026-08-21');
-    leave(host, 'Due date');
+    dueOn(component, '2026-08-21');
+    leaveDue(host);
     await settle(fixture);
 
     press(host, 'Assign');
@@ -822,8 +812,8 @@ describe('CheckInClients', () => {
 
       choose(host, 'select[name="formVersionId"]', 'version-1');
       // Workspace-today. Accepted, because the boundary is the workspace's own date.
-      type(host, 'input[name="dueDate"]', '2026-08-23');
-      leave(host, 'Due date');
+      dueOn(component, '2026-08-23');
+      leaveDue(host);
       await settle(fixture);
       expect(host.textContent).not.toContain('The due date cannot be in the past.');
 
@@ -832,8 +822,8 @@ describe('CheckInClients', () => {
       expect(assignCheckIn).toHaveBeenCalledOnce();
 
       // The day before workspace-today is genuinely past and is still refused.
-      type(host, 'input[name="dueDate"]', '2026-08-22');
-      leave(host, 'Due date');
+      dueOn(component, '2026-08-22');
+      leaveDue(host);
       await settle(fixture);
       expect(host.textContent).toContain('The due date cannot be in the past.');
     } finally {
@@ -877,11 +867,23 @@ describe('CheckInClients', () => {
   });
 });
 
-/** The reason rendered against one field, found by the id the field's control points at. */
-function reasonFor(host: HTMLElement, field: string): string {
-  return (host.querySelector(`#assign-${field}-reason`)?.textContent ?? '')
-    .replace(/\s+/g, ' ')
-    .trim();
+/** The reason rendered against one field, found where the field's control points at it. */
+function reasonFor(host: HTMLElement, field: 'version' | 'due-date'): string {
+  const selector =
+    field === 'due-date' ? 'app-date-field .tb-field__support--error' : '#assign-version-error';
+  return (host.querySelector(selector)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/** Gives the due date the way choosing a day in the calendar does. */
+function dueOn(component: { setAssignmentDueDate(dueDate: string): void }, day: string): void {
+  component.setAssignmentDueDate(day);
+}
+
+/** Leaves the due date field the way a person tabbing away does. */
+function leaveDue(host: ParentNode): void {
+  query<HTMLButtonElement>(host, 'app-date-field button.trigger').dispatchEvent(
+    new FocusEvent('focusout', { bubbles: true, relatedTarget: document.body }),
+  );
 }
 
 /**
@@ -914,7 +916,7 @@ describe('CheckInClients validation display', () => {
   it('reveals a field’s reason when that field is left, and only that field’s', async () => {
     const { fixture, host } = await assignForm();
 
-    leave(host, 'Due date');
+    leaveDue(host);
     await settle(fixture);
 
     expect(reasonFor(host, 'due-date')).toContain('Choose a due date.');
@@ -951,20 +953,22 @@ describe('CheckInClients validation display', () => {
   });
 
   it('carries aria-invalid and aria-describedby exactly while the reason is showing', async () => {
-    const { fixture, host } = await assignForm();
-    const control = () => query<HTMLInputElement>(host, 'input[name="dueDate"]');
+    const { fixture, host, component } = await assignForm();
+    const control = () => query<HTMLButtonElement>(host, 'app-date-field button.trigger');
 
     expect(control().getAttribute('aria-invalid')).toBeNull();
     expect(control().getAttribute('aria-describedby')).toBeNull();
 
-    leaveAt(host, 'input[name="dueDate"]');
+    leaveDue(host);
     await settle(fixture);
 
     expect(control().getAttribute('aria-invalid')).toBe('true');
-    expect(control().getAttribute('aria-describedby')).toBe('assign-due-date-reason');
-    expect(query(host, '#assign-due-date-reason').textContent).toContain('Choose a due date.');
+    expect(control().getAttribute('aria-describedby')).toBe(
+      query(host, 'app-date-field .tb-field__support--error').id,
+    );
+    expect(reasonFor(host, 'due-date')).toContain('Choose a due date.');
 
-    type(host, 'input[name="dueDate"]', '2026-08-24');
+    dueOn(component, '2026-08-24');
     await settle(fixture);
 
     expect(control().getAttribute('aria-invalid')).toBeNull();
@@ -1019,7 +1023,7 @@ describe('CheckInClients validation display', () => {
     await settle(fixture);
 
     choose(host, 'select[name="formVersionId"]', 'version-1');
-    type(host, 'input[name="dueDate"]', '2026-08-24');
+    dueOn(component, '2026-08-24');
     await settle(fixture);
 
     press(host, 'Assign');
