@@ -1,0 +1,56 @@
+<p class="calories">
+  <strong class="number">{{ record().calories | number: '1.0-0' }}</strong
+  >&ngsp;<span class="unit" i18n>calories a day</span>
+</p>
+
+<span class="split-bar" aria-hidden="true">
+  <span class="protein" [style.flex-grow]="shares().protein"></span>
+  <span class="carbs" [style.flex-grow]="shares().carbohydrate"></span>
+  <span class="fat" [style.flex-grow]="shares().fat"></span>
+</span>
+
+<dl class="macros">
+  <div class="macro" data-macro="protein">
+    <dt><span class="swatch protein" aria-hidden="true"></span><span i18n>Protein</span></dt>
+    <dd class="grams">{{ record().protein | number: '1.0-0' }} g</dd>
+    <dd class="share">{{ shares().protein }}%</dd>
+  </div>
+  <div class="macro" data-macro="carbohydrate">
+    <dt><span class="swatch carbs" aria-hidden="true"></span><span i18n>Carbs</span></dt>
+    <dd class="grams">{{ record().carbohydrate | number: '1.0-0' }} g</dd>
+    <dd class="share">{{ shares().carbohydrate }}%</dd>
+  </div>
+  <div class="macro" data-macro="fat">
+    <dt><span class="swatch fat" aria-hidden="true"></span><span i18n>Fat</span></dt>
+    <dd class="grams">{{ record().fat | number: '1.0-0' }} g</dd>
+    <dd class="share">{{ shares().fat }}%</dd>
+  </div>
+</dl>
+
+@for (flag of flags(); track flag) {
+  <p class="flag" role="status" data-flag>{{ flag }}</p>
+}
+
+<details class="how">
+  <summary i18n>How this was worked out</summary>
+  <dl class="chain">
+    <div class="step">
+      <dt i18n>What their body burns at rest ({{ formula() }})</dt>
+      <dd>{{ record().restingNeed | number: '1.0-0' }}</dd>
+    </div>
+    <div class="step">
+      <dt i18n>Times {{ record().activity | number: '1.2-2' }} for how active they are</dt>
+      <dd>= {{ record().maintenance | number: '1.0-0' }}</dd>
+    </div>
+    <div class="step">
+      <dt i18n>{{ adjustment() }} for the goal</dt>
+      <dd>= {{ record().calories | number: '1.0-0' }}</dd>
+    </div>
+  </dl>
+  @if (from(); as line) {
+    <p class="from" dir="auto"><span i18n>Worked out from</span>&ngsp;{{ line }}.</p>
+  }
+  <p class="note" i18n>
+    These are estimates, not measurements. The numbers that count are the ones you give the client.
+  </p>
+</details>

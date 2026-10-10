@@ -1,77 +1,179 @@
-import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { Component, effect, inject, input, LOCALE_ID, signal } from '@angular/core';
-import { DatePipe, DecimalPipe, formatDate } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { firstValueFrom } from 'rxjs';
-import { ApiClient } from '../../core/api/api-client';
-import { apiErrorMessage } from '../../core/api/api-error';
-import type {
-  AllergenCode,
-  CalculateNutritionTargetsRequest,
-  FormulaSex,
-  OccupationActivityType,
-} from '../../core/api/generated';
-import { CsrfService } from '../../core/security/csrf.service';
-import { TenantStore } from '../../core/tenancy/tenant.store';
-import { addDays } from '../clients/client-overview.models';
+import { DecimalPipe } from '@angular/common';
 import {
-  ALLERGEN_LABELS,
-  ClientNutritionPlan,
-  MealPlanSummary,
-  NutritionCalculation,
-} from './nutrition.models';
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  LOCALE_ID,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
+import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
+import type { AllergenCode, FeatureAccessReason } from '../../core/api/generated';
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { TenantStore } from '../../core/tenancy/tenant.store';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
+import { Button } from '../../ui/button';
+import { Skeleton } from '../../ui/skeleton';
+import { StatusPill, type StatusPillTone } from '../../ui/status-pill';
+import { ClientWorkspaceContext } from '../clients/client-workspace.context';
+import { ProgressEntriesApi } from '../progress/progress-entries-api';
+import { ClientNutritionApi } from './client-nutrition-api';
+import { ClientNutritionSheets, type NutritionChange } from './client-nutrition-sheets';
+import {
+  addDaysIso,
+  ageOn,
+  allergenList,
+  allergenName,
+  inListOrder,
+  mapPlan,
+  mapWorkedOut,
+  nutritionClosed,
+  nutritionCovers,
+  planDates,
+  planStateWords,
+  splitPlans,
+  workedOutOn,
+  type PlanRow,
+  type PlanState,
+  type Starting,
+  type WorkedOut,
+} from './client-nutrition.models';
+import { TargetsResult } from './targets-result';
 
+type PageState = 'loading' | 'ready' | 'denied' | 'error';
+
+/** A meal plan with its dates and state already in words. */
+interface PlanView {
+  readonly row: PlanRow;
+  readonly dates: string;
+  readonly state: string;
+  readonly tone: StatusPillTone;
+}
+
+const PLAN_TONES: Record<PlanState, StatusPillTone> = {
+  running: 'success',
+  coming: 'info',
+  ended: 'neutral',
+  stopped: 'warning',
+};
+
+/**
+ * A client's Nutrition tab for their coach (C3, C7; R5.3d): the targets worked out, the meal plan they
+ * are on, the allergens declared, and what the client said about food. Each of the three changes is a
+ * sheet. Every number is the server's; this page reads, shows and asks, and a plan that does not
+ * include Nutrition says so instead of "could not be loaded".
+ */
 @Component({
   selector: 'app-client-nutrition',
-  imports: [DatePipe, DecimalPipe, FormsModule],
+  imports: [
+    Button,
+    ClientNutritionSheets,
+    DecimalPipe,
+    RouterLink,
+    Skeleton,
+    StatusPill,
+    TargetsResult,
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './client-nutrition.html',
   styleUrl: './client-nutrition.scss',
 })
 export class ClientNutrition {
-  readonly clientId = input.required<string>();
-  private readonly api = inject(ApiClient);
-  private readonly csrf = inject(CsrfService);
+  protected readonly context = inject(ClientWorkspaceContext);
+  private readonly api = inject(ClientNutritionApi);
+  private readonly progress = inject(ProgressEntriesApi);
+  private readonly calendar = inject(WorkspaceCalendar);
   private readonly tenants = inject(TenantStore);
-  private readonly locale = inject(LOCALE_ID);
+  protected readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
 
-  protected readonly loading = signal(false);
-  protected readonly busy = signal(false);
-  protected readonly error = signal<string | null>(null);
-  protected readonly notice = signal<string | null>(null);
-  protected readonly mealPlans = signal<MealPlanSummary[]>([]);
-  protected readonly assignments = signal<ClientNutritionPlan[]>([]);
-  protected readonly enrollmentOptions = signal<{ id: string; label: string }[]>([]);
-  protected readonly calculation = signal<NutritionCalculation | null>(null);
-  protected readonly selectedAllergens = signal<Set<AllergenCode>>(new Set());
-  protected readonly acknowledgeAllergens = signal(false);
+  private readonly sheets = viewChild.required(ClientNutritionSheets);
 
-  protected bmrMethodKey = 'MifflinStJeor';
-  protected weightKilograms = 80;
-  protected heightCentimeters = 175;
-  protected ageYears = 30;
-  protected sex: FormulaSex = 'Male';
-  protected bodyFatPercentage: number | null = null;
-  protected occupationType: OccupationActivityType = 'Seated';
-  protected averageDailySteps = 6000;
-  protected coachGoalAdjustment = -300;
-  protected proteinGrams = 150;
-  protected fatPercentage = 25;
-  protected isEnergyDeficit = true;
-  protected mealPlanVersionId = '';
-  protected enrollmentId = '';
-  protected startDate = '';
+  protected readonly loadingLabel = $localize`Reading their nutrition`;
+  protected readonly state = signal<PageState>('loading');
+  protected readonly deniedReason = signal<FeatureAccessReason | null>(null);
+  protected readonly loadError = signal<string | null>(null);
+  protected readonly today = signal('');
+  protected readonly calculations = signal<WorkedOut[]>([]);
+  protected readonly planRows = signal<PlanRow[]>([]);
+  protected readonly declared = signal<AllergenCode[]>([]);
+  /** The latest weigh-in, read when the calculation sheet is opened. */
+  private readonly weight = signal<{ value: number; on: string } | null>(null);
+  protected readonly preparing = signal(false);
+  protected readonly refreshFailed = signal(false);
 
-  protected readonly allergens = ALLERGEN_LABELS;
+  protected readonly clientId = computed(() => this.context.clientId());
+  protected readonly firstName = computed(() => this.context.profile()?.firstName ?? '');
+  protected readonly name = computed(() => this.firstName() || $localize`This client`);
+  protected readonly timeZone = computed(() => this.context.workspace()?.timeZoneId ?? 'UTC');
+  protected readonly covers = computed(() =>
+    nutritionCovers(this.context.plans()?.enrollments ?? []),
+  );
+
+  protected readonly latest = computed(() => this.calculations()[0] ?? null);
+  protected readonly earlier = computed(() => this.calculations().slice(1));
+  private readonly split = computed(() => splitPlans(this.planRows()));
+  protected readonly currentPlan = computed(() => this.view(this.split().current));
+  protected readonly otherPlans = computed(() =>
+    this.split()
+      .others.map((row) => this.view(row))
+      .filter((item): item is PlanView => item !== null),
+  );
+  protected readonly earlierWorkedOut = computed(() =>
+    this.earlier().map((item) => ({ item, on: this.workedOn(item) })),
+  );
+  protected readonly declaredNames = computed(() =>
+    inListOrder(this.declared()).map((code) => allergenName(code).replace(/ \(.*\)$/, '')),
+  );
+  protected readonly declaredWords = computed(() => allergenList(this.declared()));
+  protected readonly closedMessage = computed(() => {
+    const reason = this.deniedReason();
+    return reason ? nutritionClosed(reason, this.name()) : '';
+  });
+
+  /** What they said about food, in their own words, left out when empty. */
+  protected readonly theirWords = computed(() => {
+    const profile = this.context.profile();
+    const said = [
+      { label: $localize`Allergies`, text: profile?.allergies },
+      { label: $localize`Likes`, text: profile?.foodPreferences },
+      { label: $localize`Dislikes`, text: profile?.foodAversions },
+      { label: $localize`Their goal`, text: profile?.goals },
+    ];
+    return said
+      .filter((item) => (item.text ?? '').trim() !== '')
+      .map((item) => ({ label: item.label, text: (item.text ?? '').trim() }));
+  });
+  protected readonly allergiesWords = computed(() => {
+    const text = (this.context.profile()?.allergies ?? '').trim();
+    return text === '' ? null : text;
+  });
+
+  protected readonly starting = computed<Starting>(() => {
+    const profile = this.context.profile();
+    const height = profile?.heightCentimeters;
+    const steps = profile?.averageDailySteps;
+    return {
+      weight: this.weight(),
+      height: height === null || height === undefined ? null : Number(height),
+      age: ageOn(profile?.birthDate, this.today()),
+      steps: steps === null || steps === undefined ? null : Number(steps),
+    };
+  });
 
   constructor() {
-    this.scope.onReset(() => this.resetTenantState());
+    this.scope.onReset(() => this.reset());
     effect(() => {
       this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
-      const clientId = this.clientId();
-      const key = tenantId && clientId ? `${tenantId}:${clientId}` : null;
+      const clientId = this.context.clientId();
+      const ready = this.context.workspace() !== null && this.context.profile() !== null;
+      const key = tenantId && clientId && ready ? `${tenantId}:${clientId}` : null;
       if (key && key !== this.loadedKey) {
         this.loadedKey = key;
         void this.load();
@@ -79,186 +181,140 @@ export class ClientNutrition {
     });
   }
 
-  protected async calculate(): Promise<void> {
-    return this.scope.run('calculate', async (owner) => {
-      const request: CalculateNutritionTargetsRequest = {
-        bmrMethodKey: this.bmrMethodKey,
-        weightKilograms: this.weightKilograms,
-        heightCentimeters: this.heightCentimeters,
-        ageYears: this.ageYears,
-        sex: this.sex,
-        bodyFatPercentage: this.bmrMethodKey === 'KatchMcArdle' ? this.bodyFatPercentage : null,
-        occupationType: this.occupationType,
-        averageDailySteps: this.averageDailySteps,
-        coachGoalAdjustment: this.coachGoalAdjustment,
-        calorieTarget: null,
-        proteinGrams: this.proteinGrams,
-        fatPercentage: this.fatPercentage,
-        isEnergyDeficit: this.isEnergyDeficit,
-      };
-      await owner.wait(
-        this.run(
-          async () => {
-            this.calculation.set(
-              await owner.wait(
-                firstValueFrom(this.api.calculateNutritionTargets(this.clientId(), request)),
-              ),
-            );
-          },
-          $localize`Targets calculated.`,
-        ),
-      );
-    });
+  protected workedOn(item: WorkedOut): string {
+    return workedOutOn(item.calculatedAtUtc, this.timeZone(), this.today(), this.locale);
   }
 
-  protected toggleAllergen(code: AllergenCode, checked: boolean): void {
-    const next = new Set(this.selectedAllergens());
-    if (checked) {
-      next.add(code);
-    } else {
-      next.delete(code);
-    }
-    this.selectedAllergens.set(next);
+  private view(row: PlanRow | null): PlanView | null {
+    return row
+      ? {
+          row,
+          dates: planDates(row, this.today(), this.locale),
+          state: planStateWords(row, this.today(), this.locale),
+          tone: PLAN_TONES[row.state],
+        }
+      : null;
   }
 
-  protected async saveAllergens(): Promise<void> {
-    return this.scope.run('saveAllergens', async (owner) => {
-      await owner.wait(
-        this.run(
-          async () => {
-            await owner.wait(
-              firstValueFrom(
-                this.api.replaceClientAllergens(this.clientId(), [...this.selectedAllergens()]),
-              ),
-            );
-          },
-          $localize`Allergens saved.`,
-        ),
-      );
-    });
-  }
-
-  protected async assign(): Promise<void> {
-    return this.scope.run('assign', async (owner) => {
-      const calculation = this.calculation();
-      if (!calculation || !this.mealPlanVersionId || !this.enrollmentId || !this.startDate) {
-        this.error.set(
-          $localize`Calculate targets first, then choose a meal plan, a plan and a start date.`,
-        );
+  protected async load(): Promise<void> {
+    return this.scope.run('load', async (owner) => {
+      this.state.set('loading');
+      this.loadError.set(null);
+      // The plan already says whether Nutrition is included, so a client without it is not asked:
+      // the server would refuse with the same reason.
+      const decision = this.context
+        .plans()
+        ?.featureAccess.find((item) => item.feature === 'Nutrition');
+      if (decision && !decision.isAllowed) {
+        this.deniedReason.set(decision.reason);
+        this.state.set('denied');
         return;
       }
-
-      await owner.wait(
-        this.run(
-          async () => {
-            await owner.wait(
-              firstValueFrom(
-                this.api.assignNutritionPlan(this.clientId(), {
-                  mealPlanTemplateVersionId: this.mealPlanVersionId,
-                  enrollmentId: this.enrollmentId,
-                  calculationSnapshotId: calculation.id,
-                  startDate: this.startDate,
-                  acknowledgeAllergenWarnings: this.acknowledgeAllergens(),
-                }),
-              ),
-            );
-            this.assignments.set(
-              await owner.wait(firstValueFrom(this.api.listClientNutritionPlans(this.clientId()))),
-            );
-          },
-          $localize`Meal plan assigned.`,
-        ),
-      );
-    });
-  }
-
-  /** Meal plans end on a half-open date; people read the last day it covers. */
-  protected lastDay(endDateExclusive: string): string {
-    return addDays(endDateExclusive, -1);
-  }
-
-  private async load(): Promise<void> {
-    return this.scope.run('load', async (owner) => {
-      this.loading.set(true);
-      this.error.set(null);
+      const clientId = this.context.clientId();
       try {
-        const [plans, assignments, commercial] = await owner.wait(
+        const [today, allergens, calculations, plans] = await owner.wait(
           Promise.all([
-            firstValueFrom(this.api.listMealPlans()),
-            firstValueFrom(this.api.listClientNutritionPlans(this.clientId())),
-            firstValueFrom(this.api.getClientCommercialOverview(this.clientId())),
+            this.calendar.resolveToday(),
+            firstValueFrom(this.api.allergens(clientId)),
+            firstValueFrom(this.api.calculations(clientId, 5)),
+            firstValueFrom(this.api.plans(clientId)),
           ]),
         );
-        const published = plans.items.filter((item) => item.status === 'Published');
-        this.mealPlans.set(published);
-        this.assignments.set(assignments);
-        this.enrollmentOptions.set(
-          commercial.enrollments
-            .filter((item) => item.features.includes('Nutrition'))
-            .map((item) => ({
-              id: item.id,
-              label: `${item.productName} · ${formatDate(item.startDate, 'd MMM', this.locale)} – ${formatDate(item.lastActiveDate, 'd MMM y', this.locale)}`,
-            })),
-        );
-        this.mealPlanVersionId ||= published[0]?.versionId ?? '';
-        this.enrollmentId ||= this.enrollmentOptions()[0]?.id ?? '';
+        this.today.set(today);
+        this.declared.set(allergens.codes);
+        this.calculations.set(calculations.map(mapWorkedOut));
+        this.planRows.set(plans.map((plan) => mapPlan(plan, today)));
+        this.state.set('ready');
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`Client nutrition could not be loaded.`));
-      } finally {
-        if (owner.current) {
-          this.loading.set(false);
+        const reason = featureAccessReason(error);
+        if (reason !== null) {
+          this.deniedReason.set(reason);
+          this.state.set('denied');
+        } else {
+          this.loadError.set(
+            apiErrorMessage(error, $localize`Their nutrition could not be loaded.`),
+          );
+          this.state.set('error');
         }
       }
     });
   }
 
-  private async run(action: () => Promise<void>, success: string): Promise<void> {
-    return this.scope.run('run', async (owner) => {
-      this.busy.set(true);
-      this.error.set(null);
-      this.notice.set(null);
+  /** After a sheet saved: read that part again, keeping what is on screen if the read fails. */
+  protected async refresh(change: NutritionChange): Promise<void> {
+    return this.scope.run(`refresh-${change}`, async (owner) => {
+      const clientId = this.context.clientId();
+      this.refreshFailed.set(false);
       try {
-        await owner.wait(this.csrf.refresh());
-        await owner.wait(action());
-        this.notice.set(success);
-      } catch (error) {
-        if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`Nutrition changes could not be saved.`));
-      } finally {
-        if (owner.current) {
-          this.busy.set(false);
+        switch (change) {
+          case 'targets': {
+            const items = await owner.wait(firstValueFrom(this.api.calculations(clientId, 5)));
+            this.calculations.set(items.map(mapWorkedOut));
+            break;
+          }
+          case 'plans': {
+            const items = await owner.wait(firstValueFrom(this.api.plans(clientId)));
+            this.planRows.set(items.map((plan) => mapPlan(plan, this.today())));
+            break;
+          }
+          case 'allergens': {
+            const items = await owner.wait(firstValueFrom(this.api.allergens(clientId)));
+            this.declared.set(items.codes);
+            break;
+          }
         }
+      } catch {
+        if (owner.current) this.refreshFailed.set(true);
       }
     });
   }
 
-  private resetTenantState(): void {
+  protected async workOut(): Promise<void> {
+    if (this.preparing()) return;
+    this.preparing.set(true);
+    await this.scope.run('prepare', async (owner) => {
+      try {
+        const today = this.today();
+        const from = addDaysIso(today, -83);
+        const read = await owner.wait(
+          firstValueFrom(this.progress.weighIns(this.context.clientId(), 'Kilogram', from, null)),
+        );
+        const latest = [...read.days].reverse().find((day) => day.observation !== null);
+        this.weight.set(
+          latest?.observation
+            ? { value: latest.observation.valueKilograms, on: latest.date }
+            : null,
+        );
+      } catch {
+        // No weigh-in to start from is not a reason to stop: the coach types the weight.
+        if (owner.current) this.weight.set(null);
+      } finally {
+        if (owner.current) this.preparing.set(false);
+      }
+    });
+    if (this.state() === 'ready') this.sheets().workOut();
+  }
+
+  protected assign(): void {
+    this.sheets().assign();
+  }
+
+  protected editAllergens(): void {
+    this.sheets().editAllergens();
+  }
+
+  private reset(): void {
     this.loadedKey = null;
-    this.loading.set(false);
-    this.busy.set(false);
-    this.error.set(null);
-    this.notice.set(null);
-    this.mealPlans.set([]);
-    this.assignments.set([]);
-    this.enrollmentOptions.set([]);
-    this.calculation.set(null);
-    this.selectedAllergens.set(new Set());
-    this.acknowledgeAllergens.set(false);
-    this.bmrMethodKey = 'MifflinStJeor';
-    this.weightKilograms = 80;
-    this.heightCentimeters = 175;
-    this.ageYears = 30;
-    this.sex = 'Male';
-    this.bodyFatPercentage = null;
-    this.occupationType = 'Seated';
-    this.averageDailySteps = 6000;
-    this.coachGoalAdjustment = -300;
-    this.proteinGrams = 150;
-    this.fatPercentage = 25;
-    this.isEnergyDeficit = true;
-    this.mealPlanVersionId = '';
-    this.enrollmentId = '';
-    this.startDate = '';
+    this.state.set('loading');
+    this.deniedReason.set(null);
+    this.loadError.set(null);
+    this.today.set('');
+    this.calculations.set([]);
+    this.planRows.set([]);
+    this.declared.set([]);
+    this.weight.set(null);
+    this.preparing.set(false);
+    this.refreshFailed.set(false);
   }
 }

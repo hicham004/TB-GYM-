@@ -7,10 +7,9 @@ import { ClientService } from './client-service';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
 /**
- * The sections of a client's record other than the Overview. Training, Progress and Service & access
- * are rebuilt (R3.3b, R3.4); Nutrition renders the existing screen unchanged. Check-ins and each
- * check-in's review (R4.3) and the intake (R5.3b) have their own files. Each is its own route under
- * `/clients/:clientId`.
+ * The sections of a client's record other than the Overview. Training, Progress, Nutrition (R5.3d)
+ * and Service & access are rebuilt (R3.3b, R3.4). Check-ins and each check-in's review (R4.3) and the
+ * intake (R5.3b) have their own files. Each is its own route under `/clients/:clientId`.
  */
 
 const FORMER_HIDDEN = $localize`This is a former client. Their records are kept but are not shown here.`;
@@ -39,7 +38,7 @@ export class ClientTrainingSection {
     @if (context.isFormer()) {
       <p class="muted">{{ formerHidden }}</p>
     } @else {
-      <app-client-nutrition [clientId]="context.clientId()" />
+      <app-client-nutrition />
     }
   `,
 })

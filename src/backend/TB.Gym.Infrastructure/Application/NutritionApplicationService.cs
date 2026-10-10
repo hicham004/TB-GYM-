@@ -704,6 +704,36 @@ internal sealed partial class NutritionApplicationService(
         return new NutritionCommandResult(NutritionCommandStatus.Success);
     }
 
+    public async Task<ClientAllergensView?> GetClientAllergensAsync(Guid clientProfileId, CancellationToken cancellationToken)
+    {
+        if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
+        {
+            return null;
+        }
+
+        var codes = await dbContext.ClientDeclaredAllergens.AsNoTracking()
+            .Where(item => item.ClientProfileId == clientProfileId && item.IsActive)
+            .Select(item => item.Code)
+            .ToArrayAsync(cancellationToken);
+        return new ClientAllergensView(codes.Order().ToArray());
+    }
+
+    public async Task<NutritionCalculationRecord[]?> ListCalculationsAsync(Guid clientProfileId, int take, CancellationToken cancellationToken)
+    {
+        if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
+        {
+            return null;
+        }
+
+        var rows = await dbContext.NutritionCalculationSnapshots.AsNoTracking()
+            .Where(item => item.ClientProfileId == clientProfileId)
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .ThenByDescending(item => item.Id)
+            .Take(Math.Clamp(take, 1, 20))
+            .ToListAsync(cancellationToken);
+        return rows.Select(ToCalculationRecord).ToArray();
+    }
+
     public async Task<ClientNutritionPlanSummary[]?> ListClientPlansAsync(Guid clientProfileId, CancellationToken cancellationToken)
     {
         if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
@@ -714,9 +744,13 @@ internal sealed partial class NutritionApplicationService(
         return await (from plan in dbContext.ClientNutritionPlans.AsNoTracking()
                       join calculation in dbContext.NutritionCalculationSnapshots.AsNoTracking()
                           on new { plan.TenantId, Id = plan.NutritionCalculationSnapshotId } equals new { calculation.TenantId, calculation.Id }
+                      join version in dbContext.MealPlanTemplateVersions.AsNoTracking()
+                          on new { plan.TenantId, Id = plan.SourceMealPlanTemplateVersionId } equals new { version.TenantId, version.Id }
+                      join template in dbContext.MealPlanTemplates.AsNoTracking()
+                          on new { version.TenantId, Id = version.MealPlanTemplateId } equals new { template.TenantId, template.Id }
                       where plan.ClientProfileId == clientProfileId
                       orderby plan.StartDate descending
-                      select new ClientNutritionPlanSummary(plan.Id, plan.SourceMealPlanTemplateVersionId, plan.EnrollmentId, plan.StartDate, plan.EndDateExclusive, calculation.CalorieTarget, plan.Status, plan.Version))
+                      select new ClientNutritionPlanSummary(plan.Id, plan.SourceMealPlanTemplateVersionId, plan.EnrollmentId, plan.StartDate, plan.EndDateExclusive, calculation.CalorieTarget, plan.Status, plan.Version, template.Name, calculation.ProteinGrams, calculation.CarbohydrateGrams, calculation.FatGrams, calculation.Id))
             .ToArrayAsync(cancellationToken);
     }
 
@@ -803,7 +837,7 @@ internal sealed partial class NutritionApplicationService(
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, ClientPlan: new ClientNutritionPlanSummary(plan.Id, plan.SourceMealPlanTemplateVersionId, plan.EnrollmentId, plan.StartDate, plan.EndDateExclusive, calculation.CalorieTarget, plan.Status, plan.Version));
+            return new NutritionCommandResult(NutritionCommandStatus.Success, ClientPlan: new ClientNutritionPlanSummary(plan.Id, plan.SourceMealPlanTemplateVersionId, plan.EnrollmentId, plan.StartDate, plan.EndDateExclusive, calculation.CalorieTarget, plan.Status, plan.Version, await MealPlanNameAsync(template.Id, cancellationToken), calculation.ProteinGrams, calculation.CarbohydrateGrams, calculation.FatGrams, calculation.Id));
         }
         catch (ArgumentException exception)
         {
@@ -839,10 +873,11 @@ internal sealed partial class NutritionApplicationService(
             return NotFound();
         }
 
-        var calorieTarget = await dbContext.NutritionCalculationSnapshots.AsNoTracking()
+        var calculation = await dbContext.NutritionCalculationSnapshots.AsNoTracking()
             .Where(item => item.Id == plan.NutritionCalculationSnapshotId)
-            .Select(item => item.CalorieTarget)
+            .Select(item => new { item.Id, item.CalorieTarget, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams })
             .SingleAsync(cancellationToken);
+        var mealPlanName = await MealPlanNameAsync(plan.SourceMealPlanTemplateVersionId, cancellationToken);
         var previousStatus = plan.Status;
         dbContext.Entry(plan).Property(item => item.Version).OriginalValue = request.Version;
         try
@@ -860,7 +895,7 @@ internal sealed partial class NutritionApplicationService(
             await dbContext.SaveChangesAsync(cancellationToken);
             return new NutritionCommandResult(
                 NutritionCommandStatus.Success,
-                ClientPlan: new ClientNutritionPlanSummary(plan.Id, plan.SourceMealPlanTemplateVersionId, plan.EnrollmentId, plan.StartDate, plan.EndDateExclusive, calorieTarget, plan.Status, plan.Version));
+                ClientPlan: new ClientNutritionPlanSummary(plan.Id, plan.SourceMealPlanTemplateVersionId, plan.EnrollmentId, plan.StartDate, plan.EndDateExclusive, calculation.CalorieTarget, plan.Status, plan.Version, mealPlanName, calculation.ProteinGrams, calculation.CarbohydrateGrams, calculation.FatGrams, calculation.Id));
         }
         catch (ArgumentException exception)
         {
@@ -1441,6 +1476,13 @@ internal sealed partial class NutritionApplicationService(
         return new CoverageLookup(true, NutritionCoveragePolicy.Evaluate(clientProfileId, startDate, endDateExclusive, authorization), authorization);
     }
 
+    private Task<string> MealPlanNameAsync(Guid mealPlanVersionId, CancellationToken cancellationToken) =>
+        (from version in dbContext.MealPlanTemplateVersions.AsNoTracking()
+         join template in dbContext.MealPlanTemplates.AsNoTracking()
+             on new { version.TenantId, Id = version.MealPlanTemplateId } equals new { template.TenantId, template.Id }
+         where version.Id == mealPlanVersionId
+         select template.Name).SingleAsync(cancellationToken);
+
     private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken)
     {
         var timeZone = await dbContext.Tenants.AsNoTracking().Where(item => item.Id == tenantContext.TenantId).Select(item => item.TimeZoneId).SingleAsync(cancellationToken);
@@ -1549,6 +1591,35 @@ internal sealed partial class NutritionApplicationService(
 
     private static NutritionCalculationView ToCalculationView(NutritionCalculationSnapshot item, IReadOnlyList<string> warnings) =>
         new(item.Id, item.BmrMethodKey, item.BmrMethodVersion, item.BmrEstimate, item.ActivityModelKey, item.ActivityModelVersion, item.ActivityModelPal, item.TdeeMethodKey, item.TdeeMethodVersion, item.TdeeEstimate, item.CoachGoalAdjustment, item.CalorieTarget, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams, item.EnergyPolicyKey, item.EnergyPolicyVersion, warnings);
+
+    private static NutritionCalculationRecord ToCalculationRecord(NutritionCalculationSnapshot item)
+    {
+        CalculateNutritionTargetsRequest? inputs = null;
+        try
+        {
+            inputs = JsonSerializer.Deserialize<CalculateNutritionTargetsRequest>(item.InputJson, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            // An older row whose numbers cannot be read back still lists its result.
+        }
+
+        // The warning depends only on numbers that were stored, so it is worked out again, never kept.
+        IReadOnlyList<string> warnings = [];
+        if (inputs is not null)
+        {
+            try
+            {
+                warnings = MacroTargetCalculator.Calculate(new MacroTargetInput(item.CalorieTarget, item.ProteinGrams, inputs.FatPercentage, inputs.WeightKilograms, inputs.IsEnergyDeficit)).Warnings;
+            }
+            catch (ArgumentException)
+            {
+                // The result stays; only its warning is left out.
+            }
+        }
+
+        return new NutritionCalculationRecord(ToCalculationView(item, warnings), inputs, item.CreatedAtUtc);
+    }
 
     private static AiMealDraftView ToAiDraftView(AiMealDraftOperation item, Guid? recipeVersionId = null, Guid? recipeId = null) =>
         new(item.Id, item.Status, item.PromptVersion, item.SchemaVersion, item.ProviderKey, item.Model, item.ModelVersion, item.ValidatedDraftJson, item.UncertainFieldsJson, item.FailureCode, item.CostAmount, item.CostCurrency, recipeVersionId, recipeId);

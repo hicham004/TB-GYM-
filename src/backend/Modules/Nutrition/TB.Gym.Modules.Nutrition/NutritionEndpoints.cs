@@ -176,6 +176,16 @@ public static class NutritionEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.ReplaceClientAllergensAsync(clientProfileId, request, token));
         }).WithName("ReplaceClientDeclaredAllergens").Produces(StatusCodes.Status200OK).ProducesValidationProblem().Produces(StatusCodes.Status403Forbidden);
+        coach.MapGet("/clients/{clientProfileId:guid}/allergens", async (Guid clientProfileId, INutritionApplicationService service, CancellationToken token) =>
+        {
+            var allergens = await service.GetClientAllergensAsync(clientProfileId, token);
+            return allergens is null ? Results.Forbid() : Results.Ok(allergens);
+        }).WithName("GetClientDeclaredAllergens").Produces<ClientAllergensView>().Produces(StatusCodes.Status403Forbidden);
+        coach.MapGet("/clients/{clientProfileId:guid}/calculations", async (Guid clientProfileId, int? take, INutritionApplicationService service, CancellationToken token) =>
+        {
+            var calculations = await service.ListCalculationsAsync(clientProfileId, Math.Clamp(take ?? 5, 1, 20), token);
+            return calculations is null ? Results.Forbid() : Results.Ok(calculations);
+        }).WithName("ListClientNutritionCalculations").Produces<NutritionCalculationRecord[]>().Produces(StatusCodes.Status403Forbidden);
         coach.MapGet("/clients/{clientProfileId:guid}/plans", async (Guid clientProfileId, INutritionApplicationService service, CancellationToken token) =>
         {
             var plans = await service.ListClientPlansAsync(clientProfileId, token);

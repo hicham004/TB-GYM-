@@ -10,9 +10,6 @@ import { mapRenewalStatus, type RenewalStatus } from '../../features/dashboard/r
 import { mapTrainingWeek, type TrainingWeek } from '../../features/dashboard/today.models';
 import {
   mapAiDraft,
-  mapCalculation,
-  mapClientPlan,
-  mapMealPlanPage,
   mapNutritionDay,
   mapRecipePage,
 } from '../../features/nutrition/nutrition.models';
@@ -882,14 +879,6 @@ export class ApiClient {
     );
   }
 
-  listMealPlans(skip = 0, take = 100) {
-    return this.http
-      .get<Phase3Contracts.MealPlanTemplatePage>('/api/nutrition/meal-plans', {
-        params: { skip, take },
-      })
-      .pipe(map(mapMealPlanPage));
-  }
-
   createMealPlan(request: Phase3Contracts.CreateMealPlanRequest) {
     return this.http.post<Phase3Contracts.MealPlanTemplateSummary>(
       '/api/nutrition/meal-plans',
@@ -902,37 +891,6 @@ export class ApiClient {
       `/api/nutrition/meal-plan-versions/${versionId}/publish`,
       {},
     );
-  }
-
-  calculateNutritionTargets(
-    clientId: string,
-    request: Phase3Contracts.CalculateNutritionTargetsRequest,
-  ) {
-    return this.http
-      .post<Phase3Contracts.NutritionCalculationView>(
-        `/api/nutrition/clients/${clientId}/calculations`,
-        request,
-      )
-      .pipe(map(mapCalculation));
-  }
-
-  replaceClientAllergens(clientId: string, codes: Phase3Contracts.AllergenCode[]) {
-    return this.http.put<void>(`/api/nutrition/clients/${clientId}/allergens`, { codes });
-  }
-
-  listClientNutritionPlans(clientId: string) {
-    return this.http
-      .get<Phase3Contracts.ClientNutritionPlanSummary[]>(`/api/nutrition/clients/${clientId}/plans`)
-      .pipe(map((items) => items.map(mapClientPlan)));
-  }
-
-  assignNutritionPlan(clientId: string, request: Phase3Contracts.AssignNutritionPlanRequest) {
-    return this.http
-      .post<Phase3Contracts.ClientNutritionPlanSummary>(
-        `/api/nutrition/clients/${clientId}/plans`,
-        request,
-      )
-      .pipe(map(mapClientPlan));
   }
 
   getMyNutritionDay(localDate?: string) {

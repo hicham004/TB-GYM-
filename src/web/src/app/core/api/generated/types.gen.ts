@@ -637,6 +637,10 @@ export type CheckInResponseView = {
   answersWithheld?: boolean;
 };
 
+export type ClientAllergensView = {
+  codes: Array<AllergenCode>;
+};
+
 export type ClientCoachAssignmentReason =
   | 'Invitation'
   | 'Reassigned'
@@ -738,6 +742,11 @@ export type ClientNutritionPlanSummary = {
   calorieTarget: number | string;
   status: ClientNutritionPlanStatus;
   version: number | string;
+  mealPlanName: string;
+  proteinGrams: number | string;
+  carbohydrateGrams: number | string;
+  fatGrams: number | string;
+  calculationSnapshotId: string;
 };
 
 export type ClientOnboardingStatus = 'NotStarted' | 'InProgress' | 'Completed';
@@ -2338,6 +2347,12 @@ export type NotificationView = {
   sessionId?: null | string;
   workoutExecutionId?: null | string;
   weekNumber?: null | number | string;
+};
+
+export type NutritionCalculationRecord = {
+  result: NutritionCalculationView;
+  inputs: null | CalculateNutritionTargetsRequest;
+  calculatedAtUtc: string;
 };
 
 export type NutritionCalculationView = {
@@ -8137,6 +8152,34 @@ export type PublishMealPlanDraftResponses = {
 export type PublishMealPlanDraftResponse =
   PublishMealPlanDraftResponses[keyof PublishMealPlanDraftResponses];
 
+export type ListClientNutritionCalculationsData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query?: {
+    take?: number | string;
+  };
+  url: '/api/nutrition/clients/{clientProfileId}/calculations';
+};
+
+export type ListClientNutritionCalculationsErrors = {
+  /**
+   * Forbidden
+   */
+  403: unknown;
+};
+
+export type ListClientNutritionCalculationsResponses = {
+  /**
+   * OK
+   */
+  200: Array<NutritionCalculationRecord>;
+};
+
+export type ListClientNutritionCalculationsResponse =
+  ListClientNutritionCalculationsResponses[keyof ListClientNutritionCalculationsResponses];
+
 export type CalculateClientNutritionTargetsData = {
   body: CalculateNutritionTargetsRequest;
   path: {
@@ -8203,6 +8246,32 @@ export type OverrideClientNutritionMacrosResponses = {
 
 export type OverrideClientNutritionMacrosResponse =
   OverrideClientNutritionMacrosResponses[keyof OverrideClientNutritionMacrosResponses];
+
+export type GetClientDeclaredAllergensData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/clients/{clientProfileId}/allergens';
+};
+
+export type GetClientDeclaredAllergensErrors = {
+  /**
+   * Forbidden
+   */
+  403: unknown;
+};
+
+export type GetClientDeclaredAllergensResponses = {
+  /**
+   * OK
+   */
+  200: ClientAllergensView;
+};
+
+export type GetClientDeclaredAllergensResponse =
+  GetClientDeclaredAllergensResponses[keyof GetClientDeclaredAllergensResponses];
 
 export type ReplaceClientDeclaredAllergensData = {
   body: ReplaceClientAllergensRequest;

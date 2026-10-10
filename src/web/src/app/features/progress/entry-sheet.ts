@@ -16,7 +16,6 @@ import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { Button } from '../../ui/button';
 import type { IsoDate } from '../../ui/calendar';
 import { Control, Field } from '../../ui/field';
 import { ProgressEntriesApi } from './progress-entries-api';
@@ -114,52 +113,8 @@ export abstract class EntrySheet {
   }
 }
 
-/** The sheet's foot: Not now, and the one action. It stays in view while a long form scrolls. */
-@Component({
-  selector: 'app-entry-actions',
-  imports: [Button],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <div class="actions">
-      <button appButton type="button" variant="text" (click)="notNow.emit()">
-        {{ cancelLabel() }}
-      </button>
-      <button appButton type="submit" [loading]="busy()">
-        @if (busy()) {
-          {{ busyLabel() }}
-        } @else {
-          {{ saveLabel() }}
-        }
-      </button>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-    }
-
-    .actions {
-      background: var(--tb-surface);
-      border-block-start: 1px solid var(--tb-line);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      inset-block-end: -1.5rem;
-      justify-content: flex-end;
-      margin-block-end: -1.5rem;
-      margin-inline: -1.5rem;
-      padding: 0.75rem 1.5rem;
-      position: sticky;
-    }
-  `,
-})
-export class EntryActions {
-  readonly saveLabel = input.required<string>();
-  readonly busyLabel = input.required<string>();
-  readonly busy = input(false);
-  readonly cancelLabel = input($localize`Not now`);
-  readonly notNow = output<void>();
-}
+// The sheet's foot and look moved to the kit (R5.3d) so the nutrition sheets share them.
+export { EntryActions, SHEET_STYLES } from '../../ui/sheet-parts';
 
 let nextReasonGroup = 0;
 
@@ -299,71 +254,3 @@ export class ReasonPicker {
     this.pick.set(option);
   }
 }
-
-/** The sheet's own look, shared by every sheet of the three tabs. */
-export const SHEET_STYLES = `
-  :host {
-    display: block;
-  }
-
-  .body {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  p {
-    color: var(--tb-ink);
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .muted {
-    color: var(--tb-muted);
-    font-size: 0.875rem;
-  }
-
-  .about {
-    background: var(--tb-surface-2);
-    border-radius: var(--tb-radius-control);
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
-    padding: 0.75rem 0.875rem;
-  }
-
-  .about strong {
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-  }
-
-  .value-unit {
-    align-items: start;
-    display: grid;
-    gap: 0.5rem;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 10rem);
-  }
-
-  @media (max-width: 26rem) {
-    .value-unit {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
-  .problem-text {
-    background: var(--tb-danger-soft);
-    border-radius: var(--tb-radius-control);
-    color: var(--tb-danger);
-    font-weight: 600;
-    padding: 0.625rem 0.875rem;
-    // Scrolled into view clear of the sticky action bar below it.
-    scroll-margin-block-end: 5rem;
-  }
-
-  // A focused box scrolls clear of the sticky action bar at the sheet's foot.
-  input,
-  textarea,
-  button {
-    scroll-margin-block-end: 5rem;
-  }
-`;

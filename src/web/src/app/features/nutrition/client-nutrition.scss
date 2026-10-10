@@ -1,64 +1,221 @@
-.nutrition-grid {
-  display: grid;
-  gap: 1rem;
+// A client's Nutrition tab for their coach (R5.3d). Brand v2 tokens only, so it follows the coach's
+// brand and the person's mode. Cards and rows match Service & access and Training.
+:host {
+  display: block;
 }
-.panel {
-  display: grid;
-  gap: 0.8rem;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 1rem;
-  background: var(--surface-subtle);
-}
-.field-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  gap: 0.75rem;
-}
-label {
-  display: grid;
-  gap: 0.35rem;
-}
-.check {
+
+.nutrition {
   display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  cursor: pointer;
+  flex-direction: column;
+  gap: 1.125rem;
+  min-inline-size: 0;
 }
-// The global control style gives every input full width and a 42px height, which drew each
-// checkbox as a large empty rectangle.
-.check input {
-  flex: none;
-  inline-size: 1.125rem;
-  block-size: 1.125rem;
-  min-height: 0;
-  margin: 0.2rem 0 0;
-  padding: 0;
-  accent-color: var(--accent);
-}
-.allergens {
+
+.grid {
+  align-items: start;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.35rem;
+  gap: 1.125rem;
+  grid-template-columns: minmax(0, 1fr);
 }
-.safety,
-.warning {
-  color: var(--warning-text, #8a4b08);
+
+@media (min-width: 62rem) {
+  .grid {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
 }
-.result {
-  display: grid;
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+  min-inline-size: 0;
+}
+
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  min-inline-size: 0;
+}
+
+.panel-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  justify-content: space-between;
+  padding: 1rem 1.25rem 0;
+}
+
+.panel-head h2 {
+  color: var(--tb-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem 1.25rem;
+}
+
+.placeholder,
+.load-failed {
+  padding: 1.25rem;
+}
+
+.load-failed {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+
+  p {
+    margin: 0;
+  }
+}
+
+.closed,
+.stale {
+  background: var(--tb-surface-2);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-ink);
+  margin: 0;
+  padding: 0.75rem 1rem;
+}
+
+.when,
+.meta,
+.quiet {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  color: var(--tb-ink);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.current {
+  display: flex;
+  flex-direction: column;
   gap: 0.25rem;
-  padding: 0.8rem;
-  border-inline-start: 0.25rem solid var(--accent);
 }
-.assignment-list {
-  margin-block-start: 1rem;
+
+.current-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
 }
-@media (min-width: 72rem) {
-  .nutrition-grid {
-    grid-template-columns: 2fr 1fr;
-  }
-  .nutrition-grid .panel:first-child {
-    grid-row: span 2;
-  }
+
+.plan-name {
+  color: var(--tb-ink);
+  font-size: 1.125rem;
+  overflow-wrap: anywhere;
+}
+
+.numbers {
+  color: var(--tb-ink);
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+.earlier {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+
+.earlier summary {
+  color: var(--tb-ink);
+  cursor: pointer;
+  font-weight: 600;
+  min-block-size: 2.75rem;
+  padding-block: 0.625rem;
+}
+
+.earlier summary:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.list li {
+  align-items: center;
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  justify-content: space-between;
+  padding-block: 0.625rem;
+}
+
+.what {
+  color: var(--tb-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chip {
+  background: var(--tb-warm-soft);
+  border-radius: 999px;
+  color: var(--tb-warm-ink);
+  font-weight: 600;
+  padding: 0.25rem 0.75rem;
+}
+
+.told {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin: 0;
+}
+
+.told dt {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+
+.told dd {
+  color: var(--tb-ink);
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.link {
+  color: var(--tb-accent-ink);
+  font-weight: 600;
+  min-block-size: 2.75rem;
+  padding-block: 0.625rem;
+}
+
+.link:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
 }

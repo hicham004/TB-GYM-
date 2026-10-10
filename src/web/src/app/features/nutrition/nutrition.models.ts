@@ -2,9 +2,6 @@ import type {
   AiMealDraftView as ContractAiMealDraftView,
   AllergenCode,
   ClientNutritionDayView as ContractClientNutritionDayView,
-  ClientNutritionPlanSummary as ContractClientNutritionPlanSummary,
-  MealPlanTemplatePage as ContractMealPlanTemplatePage,
-  NutritionCalculationView as ContractNutritionCalculationView,
   RecipePage as ContractRecipePage,
 } from '../../core/api/generated';
 
@@ -43,46 +40,6 @@ export interface RecipeSummary {
 export interface RecipePage {
   total: number;
   items: RecipeSummary[];
-}
-
-export interface MealPlanSummary {
-  id: string;
-  versionId: string;
-  revision: number;
-  name: string;
-  dayCount: number;
-  status: 'Draft' | 'Published';
-  targetCalories: number;
-  slotCount: number;
-}
-
-export interface MealPlanPage {
-  total: number;
-  items: MealPlanSummary[];
-}
-
-export interface NutritionCalculation {
-  id: string;
-  bmrMethodKey: string;
-  bmrEstimate: number;
-  activityModelPal: number;
-  tdeeEstimate: number;
-  coachGoalAdjustment: number;
-  calorieTarget: number;
-  protein: number;
-  carbohydrate: number;
-  fat: number;
-  warnings: string[];
-}
-
-export interface ClientNutritionPlan {
-  id: string;
-  sourceMealPlanTemplateVersionId: string;
-  enrollmentId: string;
-  startDate: string;
-  endDateExclusive: string;
-  calorieTarget: number;
-  status: ContractClientNutritionPlanSummary['status'];
 }
 
 export interface NutritionChoice {
@@ -165,42 +122,6 @@ export function mapRecipePage(value: ContractRecipePage): RecipePage {
       allergens: item.declaredAllergens,
     })),
   };
-}
-
-export function mapMealPlanPage(value: ContractMealPlanTemplatePage): MealPlanPage {
-  return {
-    total: numeric(value.total),
-    items: value.items.map((item) => ({
-      id: item.id,
-      versionId: item.versionId,
-      revision: numeric(item.revision),
-      name: item.name,
-      dayCount: numeric(item.dayCount),
-      status: item.status,
-      targetCalories: numeric(item.targetCalories),
-      slotCount: numeric(item.slotCount),
-    })),
-  };
-}
-
-export function mapCalculation(value: ContractNutritionCalculationView): NutritionCalculation {
-  return {
-    id: value.id,
-    bmrMethodKey: value.bmrMethodKey,
-    bmrEstimate: numeric(value.bmrEstimate),
-    activityModelPal: numeric(value.activityModelPal),
-    tdeeEstimate: numeric(value.tdeeEstimate),
-    coachGoalAdjustment: numeric(value.coachGoalAdjustment),
-    calorieTarget: numeric(value.calorieTarget),
-    protein: numeric(value.proteinGrams),
-    carbohydrate: numeric(value.carbohydrateGrams),
-    fat: numeric(value.fatGrams),
-    warnings: value.warnings,
-  };
-}
-
-export function mapClientPlan(value: ContractClientNutritionPlanSummary): ClientNutritionPlan {
-  return { ...value, calorieTarget: numeric(value.calorieTarget) };
 }
 
 export function mapNutritionDay(value: ContractClientNutritionDayView): NutritionDay {

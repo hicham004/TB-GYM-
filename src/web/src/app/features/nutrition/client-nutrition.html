@@ -1,246 +1,212 @@
-<section class="surface-section nutrition-client">
-  <div class="section-heading">
-    <div>
-      <h2 i18n>Nutrition and meal planning</h2>
-      <p class="muted" i18n>
-        Work out their calorie and macro targets, check allergens, then assign a meal plan.
-      </p>
-    </div>
-  </div>
-
-  @if (error()) {
-    <p class="form-error" role="alert">{{ error() }}</p>
-  }
-  @if (notice()) {
-    <p class="form-success" role="status">{{ notice() }}</p>
-  }
-  @if (loading()) {
-    <p i18n>Loading nutrition...</p>
-  } @else {
-    <div class="nutrition-grid">
-      <form (ngSubmit)="calculate()" class="panel">
-        <h3 i18n>Calorie and macro targets</h3>
-        <p class="safety" i18n>BMR and TDEE are estimates, not clinically exact measurements.</p>
-        <label
-          ><span i18n>BMR formula</span
-          ><select [(ngModel)]="bmrMethodKey" name="bmr">
-            <option value="MifflinStJeor">Mifflin-St Jeor</option>
-            <option value="KatchMcArdle">Katch-McArdle</option>
-            <option value="HarrisBenedictRevised">Harris-Benedict (revised)</option>
-          </select></label
-        >
-        <div class="field-row">
-          <label
-            ><span i18n>Weight (kg)</span
-            ><input
-              type="number"
-              min="20"
-              max="500"
-              step="0.1"
-              [(ngModel)]="weightKilograms"
-              name="weight"
-              required
-          /></label>
-          <label
-            ><span i18n>Height (cm)</span
-            ><input
-              type="number"
-              min="50"
-              max="300"
-              step="0.1"
-              [(ngModel)]="heightCentimeters"
-              name="height"
-              required
-          /></label>
-          <label
-            ><span i18n>Age</span
-            ><input type="number" min="18" max="120" [(ngModel)]="ageYears" name="age" required
-          /></label>
-        </div>
-        <div class="field-row">
-          <label
-            ><span i18n>Formula sex</span
-            ><select [(ngModel)]="sex" name="sex">
-              <option value="Female" i18n>Female</option>
-              <option value="Male" i18n>Male</option>
-            </select></label
-          >
-          @if (bmrMethodKey === 'KatchMcArdle') {
-            <label
-              ><span i18n>Body fat (%)</span
-              ><input
-                type="number"
-                min="1"
-                max="70"
-                step="0.1"
-                [(ngModel)]="bodyFatPercentage"
-                name="bodyFat"
-                required
-            /></label>
-          }
-          <label
-            ><span i18n>Occupation</span
-            ><select [(ngModel)]="occupationType" name="occupation">
-              <option value="Seated" i18n>Seated</option>
-              <option value="Mixed" i18n>Mixed</option>
-              <option value="Physical" i18n>Physical</option>
-            </select></label
-          >
-          <label
-            ><span i18n>Average daily steps</span
-            ><input
-              type="number"
-              min="0"
-              max="100000"
-              [(ngModel)]="averageDailySteps"
-              name="steps"
-              required
-          /></label>
-        </div>
-        <div class="field-row">
-          <label
-            ><span i18n>Coach goal adjustment (kcal)</span
-            ><input
-              type="number"
-              step="1"
-              [(ngModel)]="coachGoalAdjustment"
-              name="adjustment"
-              required
-          /></label>
-          <label
-            ><span i18n>Protein (g)</span
-            ><input
-              type="number"
-              min="0"
-              step="1"
-              [(ngModel)]="proteinGrams"
-              name="protein"
-              required
-          /></label>
-          <label
-            ><span i18n>Fat percentage (%)</span
-            ><input
-              type="number"
-              min="0"
-              max="100"
-              step="1"
-              [(ngModel)]="fatPercentage"
-              name="fatPercentage"
-              required
-          /></label>
-        </div>
-        <label class="check"
-          ><input type="checkbox" [(ngModel)]="isEnergyDeficit" name="deficit" /><span i18n
-            >Energy deficit (uses the wider protein warning ceiling)</span
-          ></label
-        >
-        <button class="primary-button" type="submit" [disabled]="busy()" i18n>
-          Calculate targets
-        </button>
-        @if (calculation(); as result) {
-          <div class="result">
-            <strong i18n
-              >Calorie target: {{ result.calorieTarget | number: '1.0-0' }} kcal/day</strong
-            >
-            <span i18n
-              >BMR estimate {{ result.bmrEstimate | number: '1.0-0' }} → PAL
-              {{ result.activityModelPal }} → TDEE estimate
-              {{ result.tdeeEstimate | number: '1.0-0' }}</span
-            >
-            <span i18n
-              >Protein {{ result.protein | number: '1.0-1' }} g · Carbohydrate
-              {{ result.carbohydrate | number: '1.0-1' }} g · Fat
-              {{ result.fat | number: '1.0-1' }} g</span
-            >
-            @for (warning of result.warnings; track warning) {
-              <p class="warning">{{ warning }}</p>
-            }
-          </div>
-        }
-      </form>
-
-      <div class="panel">
-        <h3 i18n>Allergens</h3>
-        <p class="safety" i18n>
-          These warn you about recipe conflicts. An allergen left unticked never proves a recipe is
-          safe.
-        </p>
-        <div class="allergens">
-          @for (allergen of allergens; track allergen.code) {
-            <label class="check"
-              ><input
-                type="checkbox"
-                [checked]="selectedAllergens().has(allergen.code)"
-                (change)="toggleAllergen(allergen.code, $any($event.target).checked)"
-              /><span>{{ allergen.label }}</span></label
-            >
-          }
-        </div>
-        <button
-          type="button"
-          class="secondary-button"
-          (click)="saveAllergens()"
-          [disabled]="busy()"
-          i18n
-        >
-          Save allergens
-        </button>
+<div class="nutrition" [attr.aria-busy]="state() === 'loading' ? 'true' : null">
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel placeholder">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
       </div>
+    }
+    @case ('error') {
+      <div class="panel load-failed" role="alert" data-error>
+        <p>{{ loadError() }}</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @case ('denied') {
+      <p class="closed" role="status" data-closed>{{ closedMessage() }}</p>
+    }
+    @default {
+      @if (refreshFailed()) {
+        <p class="stale" role="status" data-stale i18n>
+          That was saved, but the page could not read it back. Reload to see it.
+        </p>
+      }
+      <div class="grid">
+        <div class="column">
+          <section class="panel" aria-labelledby="targets-title" data-card="targets">
+            <div class="panel-head">
+              <h2 id="targets-title" i18n>Daily targets</h2>
+              <button
+                appButton
+                type="button"
+                [variant]="latest() ? 'outlined' : 'filled'"
+                [loading]="preparing()"
+                (click)="workOut()"
+                data-work-out
+              >
+                @if (latest()) {
+                  <span i18n>Work out again</span>
+                } @else {
+                  <span i18n>Work out targets</span>
+                }
+              </button>
+            </div>
+            <div class="panel-body">
+              @if (latest(); as made) {
+                <p class="when" data-worked-on i18n>Worked out {{ workedOn(made) }}</p>
+                <app-targets-result [record]="made" />
+                @if (earlierWorkedOut().length > 0) {
+                  <details class="earlier" data-earlier-targets>
+                    <summary i18n>Earlier targets ({{ earlierWorkedOut().length }})</summary>
+                    <ul class="list">
+                      @for (entry of earlierWorkedOut(); track entry.item.id) {
+                        <li>
+                          <span class="what">{{ entry.on }}</span>
+                          <span class="numbers" i18n
+                            >{{ entry.item.calories | number: '1.0-0' }} calories ·
+                            {{ entry.item.protein | number: '1.0-0' }} g protein ·
+                            {{ entry.item.carbohydrate | number: '1.0-0' }} g carbs ·
+                            {{ entry.item.fat | number: '1.0-0' }} g fat</span
+                          >
+                        </li>
+                      }
+                    </ul>
+                  </details>
+                }
+              } @else {
+                <p class="empty" data-no-targets i18n>
+                  No targets have been worked out for {{ name() }} yet. Work out their calories and
+                  macros from their weight, height, age and how active they are.
+                </p>
+              }
+            </div>
+          </section>
 
-      <form (ngSubmit)="assign()" class="panel">
-        <h3 i18n>Assign a meal plan</h3>
-        <label
-          ><span i18n>Meal plan</span
-          ><select [(ngModel)]="mealPlanVersionId" name="mealPlan">
-            <option value="" i18n>Select a meal plan</option>
-            @for (plan of mealPlans(); track plan.versionId) {
-              <option [value]="plan.versionId">{{ plan.name }} · {{ plan.dayCount }} days</option>
-            }
-          </select></label
-        >
-        <label
-          ><span i18n>Plan</span
-          ><select [(ngModel)]="enrollmentId" name="enrollment">
-            <option value="" i18n>Select plan</option>
-            @for (option of enrollmentOptions(); track option.id) {
-              <option [value]="option.id">{{ option.label }}</option>
-            }
-          </select></label
-        >
-        <label
-          ><span i18n>Start date</span
-          ><input type="date" [(ngModel)]="startDate" name="startDate" required
-        /></label>
-        <label class="check warning"
-          ><input
-            type="checkbox"
-            [checked]="acknowledgeAllergens()"
-            (change)="acknowledgeAllergens.set($any($event.target).checked)"
-          /><span i18n
-            >I reviewed any declared allergen conflicts. I understand TB Gym does not assert this
-            plan is safe.</span
-          ></label
-        >
-        <button class="primary-button" type="submit" [disabled]="busy()" i18n>
-          Assign meal plan
-        </button>
-      </form>
-    </div>
+          <section class="panel" aria-labelledby="plan-title" data-card="plan">
+            <div class="panel-head">
+              <h2 id="plan-title" i18n>Meal plan</h2>
+              @if (covers().length > 0) {
+                <button
+                  appButton
+                  type="button"
+                  [variant]="currentPlan() ? 'outlined' : 'filled'"
+                  (click)="assign()"
+                  data-assign
+                  i18n
+                >
+                  Assign a meal plan
+                </button>
+              }
+            </div>
+            <div class="panel-body">
+              @if (currentPlan(); as plan) {
+                <div class="current" data-current-plan>
+                  <div class="current-head">
+                    <strong class="plan-name" dir="auto">{{ plan.row.name }}</strong
+                    >&ngsp;<app-status-pill [label]="plan.state" [tone]="plan.tone" />
+                  </div>
+                  <p class="meta">
+                    {{ plan.dates }} · <span i18n>{{ plan.row.days }} days</span>
+                  </p>
+                  <p class="numbers" i18n>
+                    {{ plan.row.calories | number: '1.0-0' }} calories ·
+                    {{ plan.row.protein | number: '1.0-0' }} g protein ·
+                    {{ plan.row.carbohydrate | number: '1.0-0' }} g carbs ·
+                    {{ plan.row.fat | number: '1.0-0' }} g fat
+                  </p>
+                </div>
+              } @else {
+                <p class="empty" data-no-plan>
+                  <span i18n>{{ name() }} has no meal plan running or coming.</span>
+                  @if (covers().length === 0) {
+                    &ngsp;<span i18n>Their plan has no Nutrition to assign one under.</span>
+                  }
+                </p>
+              }
+              @if (otherPlans().length > 0) {
+                <details class="earlier" data-earlier-plans>
+                  <summary i18n>Other meal plans ({{ otherPlans().length }})</summary>
+                  <ul class="list">
+                    @for (plan of otherPlans(); track plan.row.id) {
+                      <li>
+                        <span class="what">
+                          <strong dir="auto">{{ plan.row.name }}</strong
+                          >&ngsp;<span class="meta">{{ plan.dates }}</span>
+                        </span>
+                        &ngsp;<app-status-pill [label]="plan.state" [tone]="plan.tone" />&ngsp;<span
+                          class="numbers"
+                          i18n
+                          >{{ plan.row.calories | number: '1.0-0' }} calories</span
+                        >
+                      </li>
+                    }
+                  </ul>
+                </details>
+              }
+            </div>
+          </section>
+        </div>
 
-    @if (assignments().length) {
-      <div class="assignment-list">
-        <h3 i18n>Meal plan history</h3>
-        @for (plan of assignments(); track plan.id) {
-          <p>
-            <strong
-              >{{ plan.startDate | date: 'd MMM' }} –
-              {{ lastDay(plan.endDateExclusive) | date: 'd MMM y' }}</strong
-            >
-            ·
-            <span i18n>{{ plan.calorieTarget | number: '1.0-0' }} kcal a day</span>
-          </p>
-        }
+        <div class="column">
+          <section class="panel" aria-labelledby="allergens-title" data-card="allergens">
+            <div class="panel-head">
+              <h2 id="allergens-title" i18n>Allergens</h2>
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                (click)="editAllergens()"
+                data-edit-allergens
+                i18n
+              >
+                Edit allergens
+              </button>
+            </div>
+            <div class="panel-body">
+              @if (declaredNames().length > 0) {
+                <ul class="chips" data-declared>
+                  @for (item of declaredNames(); track item) {
+                    <li class="chip">{{ item }}</li>
+                  }
+                </ul>
+              } @else {
+                <p class="empty" data-none-declared i18n>None declared for {{ name() }}.</p>
+              }
+              <p class="quiet" i18n>
+                TB Gym warns you when a recipe lists one of these. An allergen that is not here
+                never proves a recipe is safe.
+              </p>
+            </div>
+          </section>
+
+          @if (theirWords().length > 0) {
+            <section class="panel" aria-labelledby="told-title" data-card="told">
+              <div class="panel-head">
+                <h2 id="told-title" i18n>What {{ name() }} told you</h2>
+                <a class="link" [routerLink]="['/clients', clientId(), 'intake']" i18n>
+                  Their intake
+                </a>
+              </div>
+              <div class="panel-body">
+                <dl class="told">
+                  @for (item of theirWords(); track item.label) {
+                    <div>
+                      <dt>{{ item.label }}</dt>
+                      <dd dir="auto">{{ item.text }}</dd>
+                    </div>
+                  }
+                </dl>
+              </div>
+            </section>
+          }
+        </div>
       </div>
     }
   }
-</section>
+</div>
+
+@if (state() === 'ready') {
+  <app-client-nutrition-sheets
+    [clientId]="clientId()"
+    [firstName]="name()"
+    [today]="today()"
+    [locale]="locale"
+    [timeZone]="timeZone()"
+    [starting]="starting()"
+    [calculations]="calculations()"
+    [plans]="planRows()"
+    [covers]="covers()"
+    [declared]="declared()"
+    [theirWords]="allergiesWords()"
+    (changed)="refresh($event)"
+  />
+}
