@@ -86,7 +86,9 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | P4b | **Adjusting next week from logged performance** (ADR 0036, decided 2026-10-07): the Training maxes panel suggests a new max from the best logged set of the week (1 to 8 reps at RPE 7 to 10), and the coach applies it through the existing preview; never automatic | §2, plus domain reference tests (which sets count, the estimate) and API tests (other coach, released client, kg and lb kept apart) | Done · 2026-10-08 · d9835b2 |
 | P4c | **Suggested maxes, P4b's follow-ups** (owner, 2026-10-08: "do the last session's not-done work"; decided by Claude after comparing competitors, ADR 0036): **Keep this max** on a suggestion (STR-013), Coach Today names the lifts whose logged sets suggest a new max (CLI-018 v2), a newer set during review says so, and demo clients hit their numbers. Its own follow-ups were closed in the same step: a new program starts where the last one ended, with the last program's suggestion one tap away in Assign program and on Coach Today's No program item (STR-014), and the client list has a Maxes to review chip | §2, plus domain tests (the keep, the attention rule, the carried max) and API tests (keep, retry, newer set, other coach, other workspace, released client, Coach Today, append-only, carry from the latest program only, the same client only) | Done · 2026-10-08 · cac5874 |
 | P4d | **P4c's last two follow-ups** (owner, 2026-10-08: "the last session's not-done work"; decided by Claude after comparing competitors, ADR 0036): the client's **Training max history** lists every program's training maxes beside the recorded ones, named with the program and the week they apply from (STR-015, each fact stored once), and Coach Today keeps a number and its unit on one line at 390 px | §2, plus API tests (asked for or not, order, pages, lift filter, other coach, other workspace) | Done · 2026-10-08 |
-| R5.1 | **Products** (C8), **Exercise library** (C10), notifications, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only) | §2 | To do |
+| R5.1a | **Plans you sell** (C8): each plan a card with its price options (shortest first), what they include and the coach's clients on each, now and starting (SUB-015); New plan, Add price option, Change price and Edit name and description in sheets; Stop selling and Sell again with Undo; old price options and plans no longer sold behind a closed disclosure | §2, plus API tests (counts per option and plan, each client once, cancelled and released left out, a Coach's own clients, another workspace) | Done · 2026-10-08 |
+| R5.1b | **Exercise library** (C10) | §2 | To do |
+| R5.1c | **Notifications**, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only) | §2 | To do |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
 | R5.3 | **Delete legacy CSS**, add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
@@ -542,6 +544,22 @@ of the implemented R1.3 screens before production rollout.
   offered them to Assign program as saved maxes. Recorded rows say "Recorded by a coach", "Tested" or
   "Estimated (Epley)" instead of a method code, and the column is "Where from". (9) is the no-break space.
   The history itself is still the older form (see "Older training tools").
+
+- **Plans you sell, R5.1a (built 2026-10-08; screenshots `docs/design/r51a-*.png`). Decided by Claude for
+  the owner on 2026-10-08**, after looking at Everfit (a teammate manages only the clients they are added
+  to; packages are set up once and sold many times) and ADR 0026: (1) **a Coach's counts are their own
+  clients**, the Owner's every client still coached here, never a released one, so the page agrees with
+  each person's client list (SUB-015). (2) **On a plan** means a plan neither cancelled nor expired that
+  has not ended: "now" when it runs today, "starting" when booked for later, each client once, so a booked
+  renewal does not count twice. (3) **Stop selling has Undo and no confirmation**: it never touches a
+  client already on the plan (SUB-002), as archiving a food does. (4) Words follow §6: a product is a plan
+  you sell, an offer a price option; the sidebar keeps "Products". (5) What a plan includes is shown once
+  when all its options for sale agree, else per option. Not built: (a) money per plan (what it brought in
+  this month) needs a payment read of its own; (b) the counts are not yet links to the client list filtered
+  by plan; (c) a length in days (the server accepts it; the sheets offer weeks, as the old page did);
+  (d) choosing per feature whether two plans may overlap (`allowsConcurrentCoverage`) stays off screen, as
+  before; (e) a plan's cover photo, a public page or a checkout link would be a new way to sell, an owner
+  decision.
 
 ---
 
@@ -1116,6 +1134,13 @@ limited to the coach's assigned clients.
 - The heading becomes "Plans you sell": cards with price, duration and icons for the included
   features, plus the number of clients on each plan.
 - Removes: "Step 3B live check"-style internal descriptions from the seed.
+- Built in R5.1a: each plan is a card with its clients ("9 clients", "6 clients · 1 starting"), its
+  description, what it includes and its price options shortest first, each with its own clients and a
+  menu (Change price, Stop selling). New plan opens a sheet with the first price option (an option left
+  unnamed is called by its length); Add price option, Change price and Edit name and description open
+  sheets too, and closing one with something typed asks first. Old price options and plans no longer sold
+  wait behind a closed disclosure. The route follows dark mode. The demo's descriptions were already
+  plain words.
 
 **C9. Settings, Team, Billing**
 - One settings layout with a sub-navigation.

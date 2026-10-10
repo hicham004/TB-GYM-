@@ -1109,6 +1109,7 @@ export type CoachingProductView = {
   isActive: boolean;
   offers: Array<ProductOfferView>;
   version: number | string;
+  clients: PlanClientCount;
 };
 
 export type CoachMaxSuggestionView = {
@@ -2439,6 +2440,11 @@ export type PaymentRecordView = {
 
 export type PaymentSource = 'Manual' | 'Provider';
 
+export type PlanClientCount = {
+  now: number | string;
+  starting: number | string;
+};
+
 export type PlatformInvoiceStatus = 'Open' | 'Overdue' | 'Paid' | 'Void' | 'NothingToPay';
 
 export type PlatformInvoiceView = {
@@ -2576,6 +2582,7 @@ export type ProductOfferView = {
   features: Array<OfferFeatureView>;
   createdAtUtc: string;
   version: number | string;
+  clients: PlanClientCount;
 };
 
 export type ProgramDraftContent = {

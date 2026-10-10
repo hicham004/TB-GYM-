@@ -1065,6 +1065,7 @@ export type {
   PaymentOperation,
   PaymentRecordView,
   PaymentSource,
+  PlanClientCount,
   PlatformInvoiceStatus,
   PlatformInvoiceView,
   PlatformPaymentView,

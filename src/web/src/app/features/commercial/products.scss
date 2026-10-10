@@ -1,211 +1,313 @@
-.product-form {
-  margin-block-end: 24px;
+// Plans you sell (C8): plans as cards, as Programs and Meal plans show theirs. Brand v2 tokens only,
+// so it follows the coach's brand and the person's mode.
+
+:host {
+  container-type: inline-size;
+  display: block;
 }
 
-.joined-fields {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) 120px;
+.plans {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
 }
 
-.price-fields {
-  grid-template-columns: minmax(0, 1fr) 82px;
-}
-
-.feature-picker {
-  border: 0;
+.top {
+  align-items: flex-end;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 22px;
-  margin: 22px 0 0;
-  padding: 0;
-}
-
-.feature-picker legend {
-  color: #344149;
-  font-size: 0.82rem;
-  font-weight: 700;
-  margin-block-end: 8px;
-  width: 100%;
-}
-
-.feature-picker label {
-  align-items: center;
-  display: inline-flex;
-  gap: 7px;
-}
-
-.feature-picker input {
-  min-height: auto;
-  width: auto;
-}
-
-.feature-picker label > span {
-  font-size: 0.88rem;
-  margin: 0;
-}
-
-.product-list {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-}
-
-.product-row {
-  padding: 22px;
-}
-
-.product-row + .product-row {
-  border-block-start: 1px solid var(--border);
-}
-
-.product-row.inactive,
-.offer-row.inactive {
-  background: var(--surface-subtle);
-}
-
-.product-heading,
-.title-line,
-.inline-offer-heading {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  gap: 0.875rem;
   justify-content: space-between;
 }
 
-.title-line {
-  justify-content: flex-start;
+.intro {
+  min-inline-size: 0;
 }
 
-.product-heading h2,
-.product-heading p,
-.inline-offer h3 {
-  margin-block-end: 0;
+h1 {
+  color: var(--tb-ink);
+  font-size: clamp(1.75rem, 4cqi, 2.125rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  outline: none;
 }
 
-.offer-list {
-  border-block-start: 1px solid var(--border);
-  margin-block-start: 18px;
+.lede {
+  color: var(--tb-muted);
+  font-variant-numeric: tabular-nums;
+  margin: 0.375rem 0 0;
+  max-inline-size: 44rem;
 }
 
-.offer-actions {
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  min-inline-size: 0;
+}
+
+.pad {
+  padding: 1.25rem;
+}
+
+.load-failed {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.5rem 1rem;
 }
 
-.price-change {
-  background: var(--tb-surface-2);
-  border-block-start: 1px solid var(--tb-line);
+.load-failed p,
+.none-selling {
   color: var(--tb-ink);
+  margin: 0;
+}
+
+// ---------- the cards ----------
+
+.cards {
+  display: grid;
+  gap: 0.875rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.card {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  margin-block-start: 1rem;
+  gap: 0.75rem;
   min-inline-size: 0;
-  padding: 1rem;
+  padding: 1.125rem 1.25rem 0.75rem;
 }
 
-.price-change h3,
-.price-change p {
+.card.off {
+  background: var(--tb-surface-2);
+  box-shadow: none;
+}
+
+.card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-inline-size: 0;
+}
+
+.card-name {
   color: var(--tb-ink);
+  font-size: 1.1875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
   margin: 0;
   overflow-wrap: anywhere;
 }
 
-.price-change .inline-offer-heading {
-  flex-wrap: wrap;
+.clients {
+  align-items: center;
+  color: var(--tb-muted);
+  display: flex;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  gap: 0.375rem;
   margin: 0;
 }
 
-.offer-row {
-  align-items: center;
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(140px, 0.75fr) 120px minmax(220px, 1.5fr) auto;
-  min-height: 68px;
-  padding: 12px 8px;
+.clients.has-clients {
+  color: var(--tb-ink);
+  font-weight: 600;
 }
 
-.offer-row + .offer-row {
-  border-block-start: 1px solid var(--border);
+.description {
+  color: var(--tb-muted);
+  display: -webkit-box;
+  line-height: 1.45;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
-.offer-price {
+// ---------- price options ----------
+
+.options {
   display: flex;
   flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.offer-price span,
-.offer-duration {
-  color: var(--muted-text);
-  font-size: 0.82rem;
+.option {
+  align-items: center;
+  border-block-start: 1px solid var(--tb-line);
+  column-gap: 0.75rem;
+  display: grid;
+  grid-template-areas: 'main clients menu';
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding-block: 0.75rem;
+  row-gap: 0.5rem;
 }
 
-.feature-tags {
+// Only an option whose features differ from its plan's other options lists them itself.
+.option:has(> .includes) {
+  grid-template-areas:
+    'main clients menu'
+    'includes includes includes';
+}
+
+.option.off .price {
+  color: var(--tb-muted);
+}
+
+.option-main {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 0.125rem 0.625rem;
+  grid-area: main;
+  min-inline-size: 0;
 }
 
-.feature-tags span {
-  background: #eaf5f4;
-  border: 1px solid #b9dcda;
-  border-radius: 4px;
-  color: var(--accent-strong);
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 3px 6px;
+.price {
+  color: var(--tb-ink);
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+  white-space: nowrap;
 }
 
-.inline-offer {
-  background: #f8fafb;
-  border-block-start: 1px solid var(--border);
-  margin-block-start: 14px;
-  padding: 18px 8px 4px;
+.length {
+  align-self: center;
+  color: var(--tb-muted);
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
-.inline-offer-heading {
-  margin-block-end: 14px;
+.option-name {
+  color: var(--tb-muted);
 }
 
-.compact-features {
-  margin-block: 16px;
+.option-clients {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  grid-area: clients;
+  margin: 0;
+  text-align: end;
 }
 
-@media (max-width: 850px) {
-  .offer-row {
-    grid-template-columns: 1fr auto;
-  }
-
-  .feature-tags {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
-  .offer-actions {
-    grid-column: 1 / -1;
-    justify-content: flex-end;
-  }
+.option-clients.has-clients {
+  color: var(--tb-ink);
 }
 
-@media (max-width: 680px) {
-  .product-row {
-    padding: 18px 14px;
-  }
+.option-menu {
+  grid-area: menu;
+}
 
-  .product-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
+.includes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  grid-area: includes;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
 
-  .joined-fields {
-    grid-template-columns: minmax(0, 1fr) 105px;
-  }
+.chip {
+  align-items: center;
+  background: var(--tb-surface-2);
+  border-radius: 999px;
+  color: var(--tb-ink);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  gap: 0.3125rem;
+  padding: 0.25rem 0.625rem 0.25rem 0.5rem;
+}
 
-  .price-fields {
-    grid-template-columns: minmax(0, 1fr) 76px;
+.chip app-icon {
+  color: var(--tb-accent-ink);
+}
+
+.no-options {
+  border-block-start: 1px solid var(--tb-line);
+  color: var(--tb-muted);
+  margin: 0;
+  padding-block: 0.75rem;
+}
+
+// ---------- what is no longer sold ----------
+
+details > summary {
+  align-items: center;
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 600;
+  gap: 0.25rem;
+  list-style: none;
+  min-block-size: 2.75rem;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+details > summary:hover {
+  color: var(--tb-ink);
+}
+
+details > summary:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+details[open] > summary app-icon {
+  transform: rotate(180deg);
+}
+
+.retired {
+  border-block-start: 1px solid var(--tb-line);
+}
+
+.retired > summary {
+  font-size: 0.875rem;
+}
+
+.stopped {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card-foot {
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  padding-block-start: 0.375rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  details > summary app-icon {
+    transition: transform var(--tb-duration-fast) var(--tb-ease);
   }
 }

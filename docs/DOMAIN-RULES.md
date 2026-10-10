@@ -230,6 +230,13 @@ append-only and at most one per client in any 7 workspace calendar days, enforce
 `EX_RenewalRequests_OnePerWindow` exclusion constraint; a repeated or concurrent request answers
 with the stored one. The request and the coach's in-app notice commit together.
 
+**SUB-015** Clients on a plan (R5.1a, decided 2026-10-08). The product catalog counts, for each
+product and each price option, the caller's clients (ADR 0026: a Coach their own, the Owner every client
+still coached here, never a released one) with an enrollment that is neither cancelled nor expired and
+has not ended by the workspace's today: **now** when one of them runs today, else **starting** when one is
+booked to start later. A client counts once per option and once per product, however many enrollments
+they hold. It is a read for the coach; it decides no access.
+
 ### Platform billing (what TB Gym charges workspaces, ADR 0028)
 
 **PBL-001** Each workspace is billed monthly, in USD, for the previous UTC month

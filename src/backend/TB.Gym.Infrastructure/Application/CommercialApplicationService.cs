@@ -826,13 +826,74 @@ internal sealed class CommercialApplicationService(
             .Include(item => item.Entitlements)
             .OrderByDescending(item => item.CreatedAtUtc)
             .ToListAsync(cancellationToken);
+        var clients = await LoadPlanClientsAsync(null, cancellationToken);
 
         return products
             .Select(product => ToProductView(
                 product,
-                offers.Where(offer => offer.ProductId == product.Id).ToArray()))
+                offers.Where(offer => offer.ProductId == product.Id).ToArray(),
+                clients))
             .ToArray();
     }
+
+    /// <summary>
+    /// SUB-015: the caller's clients (ADR 0026; never a former client) with an enrollment that is neither
+    /// cancelled nor expired and has not ended by the workspace's today, on each price option.
+    /// </summary>
+    private async Task<IReadOnlyList<PlanClient>> LoadPlanClientsAsync(
+        Guid? productId,
+        CancellationToken cancellationToken)
+    {
+        var today = (await WorkspaceCalendarReader.ReadAsync(
+            dbContext,
+            clock,
+            tenantContext.TenantId,
+            cancellationToken)).Today;
+        var enrollments = dbContext.ClientEnrollments.AsNoTracking().Where(item =>
+            item.Status != EnrollmentStatus.Cancelled &&
+            item.Status != EnrollmentStatus.Expired &&
+            item.EndDateExclusive > today);
+        if (productId is { } id)
+        {
+            enrollments = enrollments.Where(item => item.ProductId == id);
+        }
+
+        var clients = dbContext.ClientProfiles.AsNoTracking().Where(client => client.ReleasedAtUtc == null);
+        if (await coachClientScope.RestrictedCoachUserIdAsync(cancellationToken) is { } coachUserId)
+        {
+            clients = clients.Where(client => client.AssignedCoachUserId == coachUserId);
+        }
+
+        var rows = await enrollments
+            .Join(
+                clients,
+                enrollment => new { enrollment.TenantId, Id = enrollment.ClientProfileId },
+                client => new { client.TenantId, client.Id },
+                (enrollment, client) => new
+                {
+                    enrollment.ProductId,
+                    enrollment.OfferId,
+                    ClientProfileId = client.Id,
+                    Starts = enrollment.StartDate > today,
+                })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        return rows.Select(row => new PlanClient(row.ProductId, row.OfferId, row.ClientProfileId, row.Starts)).ToArray();
+    }
+
+    /// <summary>A client counts once: on the plan now if any of their enrollments runs today, else starting.</summary>
+    private static PlanClientCount CountClients(IEnumerable<PlanClient> clients)
+    {
+        var now = clients.Where(item => !item.Starts).Select(item => item.ClientProfileId).ToHashSet();
+        var starting = clients
+            .Where(item => item.Starts && !now.Contains(item.ClientProfileId))
+            .Select(item => item.ClientProfileId)
+            .Distinct()
+            .Count();
+        return new PlanClientCount(now.Count, starting);
+    }
+
+    private sealed record PlanClient(Guid ProductId, Guid OfferId, Guid ClientProfileId, bool Starts);
 
     private async Task<CoachingProductView> LoadProductAsync(
         Guid productId,
@@ -847,12 +908,13 @@ internal sealed class CommercialApplicationService(
             .Where(item => item.ProductId == productId)
             .OrderByDescending(item => item.CreatedAtUtc)
             .ToListAsync(cancellationToken);
-        return ToProductView(product, offers);
+        return ToProductView(product, offers, await LoadPlanClientsAsync(productId, cancellationToken));
     }
 
     private static CoachingProductView ToProductView(
         CoachingProduct product,
-        IReadOnlyList<ProductOffer> offers) =>
+        IReadOnlyList<ProductOffer> offers,
+        IReadOnlyList<PlanClient> clients) =>
         new(
             product.Id,
             product.Name,
@@ -872,8 +934,10 @@ internal sealed class CommercialApplicationService(
                     .Select(item => new OfferFeatureView(item.Feature, item.AllowsConcurrentCoverage))
                     .ToArray(),
                 offer.CreatedAtUtc,
-                offer.Version)).ToArray(),
-            product.Version);
+                offer.Version,
+                CountClients(clients.Where(item => item.OfferId == offer.Id)))).ToArray(),
+            product.Version,
+            CountClients(clients.Where(item => item.ProductId == product.Id)));
 
     private async Task<ClientCommercialOverview> BuildOverviewAsync(
         Guid clientProfileId,

@@ -72,13 +72,15 @@ public sealed record ProductCatalog(
     string WorkspaceCurrencyCode,
     IReadOnlyList<CoachingProductView> Products);
 
+/// <param name="Clients">Who is on the product, each client once across its price options (SUB-015).</param>
 public sealed record CoachingProductView(
     Guid Id,
     string Name,
     string? Description,
     bool IsActive,
     IReadOnlyList<ProductOfferView> Offers,
-    uint Version);
+    uint Version,
+    PlanClientCount Clients);
 
 public sealed record ProductOfferView(
     Guid Id,
@@ -91,7 +93,14 @@ public sealed record ProductOfferView(
     bool IsActive,
     IReadOnlyList<OfferFeatureView> Features,
     DateTimeOffset CreatedAtUtc,
-    uint Version);
+    uint Version,
+    PlanClientCount Clients);
+
+/// <summary>
+/// The caller's clients on a plan (SUB-015, ADR 0026: a Coach counts their own, the Owner every client still
+/// coached here): on it today, and booked to start later.
+/// </summary>
+public sealed record PlanClientCount(int Now, int Starting);
 
 public sealed record OfferFeatureView(
     CoachingFeature Feature,

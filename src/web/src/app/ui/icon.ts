@@ -178,6 +178,13 @@ const GLYPHS = {
       'M6 7V3.5H14V7M5.5 14H4.5C3.948 14 3.5 13.552 3.5 13V8C3.5 7.448 3.948 7 4.5 7H15.5' +
       'C16.052 7 16.5 7.448 16.5 8V13C16.5 13.552 16.052 14 15.5 14H14.5M6 11.5H14V16.5H6V11.5Z',
   },
+  // Resources included in a plan you sell (R5.1a): an open book, drawn in code on the same grid.
+  resources: {
+    size: 20,
+    path:
+      'M10 5.25C8.5 4 6.25 3.6 3.25 3.9V15.4C6.25 15.1 8.5 15.5 10 16.75C11.5 15.5 13.75 15.1' +
+      ' 16.75 15.4V3.9C13.75 3.6 11.5 4 10 5.25ZM10 5.25V16.75',
+  },
 } as const satisfies Record<string, { size: number; path: string }>;
 
 export type IconName = keyof typeof GLYPHS;

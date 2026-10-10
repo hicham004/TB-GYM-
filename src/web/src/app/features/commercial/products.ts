@@ -1,95 +1,97 @@
-import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { HttpErrorResponse } from '@angular/common/http';
-import { Component, effect, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { firstValueFrom } from 'rxjs';
-import { ApiClient } from '../../core/api/api-client';
-import { apiErrorMessage } from '../../core/api/api-error';
+import type { DialogRef } from '@angular/cdk/dialog';
+import { NgTemplateOutlet } from '@angular/common';
 import {
-  CoachingFeature,
-  CoachingProduct,
-  CreateProductOfferRequest,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  LOCALE_ID,
+  signal,
+  TemplateRef,
+  viewChild,
+} from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import type {
+  CoachingProductView,
   ProductCatalog,
-  ProductOffer,
-} from '../../core/api/api.models';
+  ProductOfferView,
+} from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
-import { Control, Field } from '../../ui/field';
-import { IntentIdempotencyKey } from '../training/training-assignment-state';
+import { UiConfirm } from '../../ui/confirm';
+import { UiDialog } from '../../ui/dialog';
+import { EmptyState } from '../../ui/empty-state';
+import { Icon } from '../../ui/icon';
+import { UiMenu } from '../../ui/menu';
+import type { ModalSurface } from '../../ui/modal-surface';
+import { UiSheet } from '../../ui/sheet';
+import { Skeleton } from '../../ui/skeleton';
+import { UiToast } from '../../ui/toast';
+import { ProductSheet, type ProductSheetMode } from './product-sheets';
+import { ProductsApi } from './products-api';
+import {
+  catalogSummary,
+  duration,
+  type OptionRow,
+  type PlanCard,
+  planCards,
+  productWriteError,
+} from './products.models';
 
+/**
+ * Plans you sell (C8, R5.1a): each plan a card with its price options, what each includes and how
+ * many of the coach's clients are on it (SUB-015). The first thing on the page is New plan (plan §2
+ * rule 1); everything else sits in a card's menu or a sheet. Stopping a sale has Undo, and clients
+ * already on a plan keep it (SUB-002).
+ */
 @Component({
   selector: 'app-products',
-  imports: [ReactiveFormsModule, Button, Control, Field],
+  imports: [Button, EmptyState, Icon, NgTemplateOutlet, ProductSheet, Skeleton, UiConfirm, UiMenu],
   templateUrl: './products.html',
   styleUrl: './products.scss',
 })
 export class Products {
-  private readonly api = inject(ApiClient);
+  private readonly api = inject(ProductsApi);
   private readonly csrf = inject(CsrfService);
-  private readonly formBuilder = inject(FormBuilder);
+  private readonly sheets = inject(UiSheet);
+  private readonly dialogs = inject(UiDialog);
+  private readonly toast = inject(UiToast);
   private readonly tenants = inject(TenantStore);
+  private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
+  private readonly sheetTemplate = viewChild.required<TemplateRef<unknown>>('productSheet');
+  private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private loadedTenantId: string | null = null;
-  private readonly priceIntent = new IntentIdempotencyKey();
+  private openSheet: DialogRef<unknown, ModalSurface> | null = null;
 
+  protected readonly closeLabel = $localize`Close`;
+  protected readonly loadingLabel = $localize`Loading your plans…`;
   protected readonly catalog = signal<ProductCatalog | null>(null);
-  protected readonly loading = signal(false);
-  protected readonly busy = signal(false);
-  protected readonly createOpen = signal(false);
-  protected readonly offerProductId = signal<string | null>(null);
-  protected readonly changingPrice = signal<{ productId: string; offer: ProductOffer } | null>(
+  protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
+  /** The plan or option a write is changing, so its menu waits. */
+  protected readonly working = signal<string | null>(null);
+  protected readonly sheetMode = signal<ProductSheetMode | null>(null);
+  private readonly sheetDirty = signal(false);
+  protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
     null,
   );
-  protected readonly priceErrors = signal<string[]>([]);
-  protected readonly newPriceLabel = $localize`New price`;
-  protected readonly priceForm = this.formBuilder.nonNullable.group({
-    priceAmount: [0, [Validators.required, Validators.min(0)]],
-  });
-  protected readonly error = signal<string | null>(null);
-  protected readonly notice = signal<string | null>(null);
-  protected readonly features: CoachingFeature[] = [
-    'Training',
-    'Nutrition',
-    'CheckIns',
-    'Messaging',
-    'ResourceLibrary',
-  ];
 
-  protected readonly createForm = this.formBuilder.nonNullable.group({
-    name: ['', [Validators.required, Validators.maxLength(160)]],
-    description: ['', Validators.maxLength(2000)],
-    offerLabel: ['', [Validators.required, Validators.maxLength(120)]],
-    durationCount: [8, [Validators.required, Validators.min(1), Validators.max(3650)]],
-    durationUnit: ['Week' as const, Validators.required],
-    priceAmount: [0, [Validators.required, Validators.min(0)]],
-    // Either case: `toOfferRequest` uppercases before sending, so an uppercase-only pattern only
-    // dead-ended the form.
-    currencyCode: ['', [Validators.required, Validators.pattern(/^[A-Za-z]{3}$/)]],
-    training: [true],
-    nutrition: [false],
-    checkIns: [true],
-    messaging: [false],
-    resourceLibrary: [false],
-  });
-
-  protected readonly offerForm = this.formBuilder.nonNullable.group({
-    offerLabel: ['', [Validators.required, Validators.maxLength(120)]],
-    durationCount: [8, [Validators.required, Validators.min(1), Validators.max(3650)]],
-    durationUnit: ['Week' as const, Validators.required],
-    priceAmount: [0, [Validators.required, Validators.min(0)]],
-    // Either case: `toOfferRequest` uppercases before sending, so an uppercase-only pattern only
-    // dead-ended the form.
-    currencyCode: ['', [Validators.required, Validators.pattern(/^[A-Za-z]{3}$/)]],
-    training: [true],
-    nutrition: [false],
-    checkIns: [true],
-    messaging: [false],
-    resourceLibrary: [false],
-  });
+  protected readonly cards = computed(() => planCards(this.catalog(), this.locale));
+  protected readonly summary = computed(() => catalogSummary(this.catalog()));
+  protected readonly currency = computed(() => this.catalog()?.workspaceCurrencyCode ?? 'USD');
 
   constructor() {
-    this.scope.onReset(() => this.resetTenantState());
+    this.scope.onReset(() => {
+      this.loadedTenantId = null;
+      this.openSheet?.close();
+      this.catalog.set(null);
+      this.state.set('loading');
+      this.working.set(null);
+    });
     effect(() => {
       this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
@@ -100,319 +102,202 @@ export class Products {
     });
   }
 
-  protected async createProduct(): Promise<void> {
-    return this.scope.run('createProduct', async (owner) => {
-      if (this.createForm.invalid) {
-        this.createForm.markAllAsTouched();
-        return;
-      }
-
-      const raw = this.createForm.getRawValue();
-      const offer = this.toOfferRequest(raw);
-      if (offer.features.length === 0) {
-        this.error.set($localize`Choose at least one thing to include.`);
-        return;
-      }
-
-      await owner.wait(
-        this.run(
-          async () => {
-            await owner.wait(
-              firstValueFrom(
-                this.api.createCoachingProduct({
-                  name: raw.name,
-                  description: raw.description || null,
-                  initialOffer: offer,
-                }),
-              ),
-            );
-            this.createForm.reset({
-              name: '',
-              description: '',
-              offerLabel: '',
-              durationCount: 8,
-              durationUnit: 'Week',
-              priceAmount: 0,
-              currencyCode: this.catalog()?.workspaceCurrencyCode ?? '',
-              training: true,
-              nutrition: false,
-              checkIns: true,
-              messaging: false,
-              resourceLibrary: false,
-            });
-            this.createOpen.set(false);
-          },
-          $localize`Coaching product created.`,
-        ),
-      );
-    });
-  }
-
-  protected openOffer(product: CoachingProduct): void {
-    this.changingPrice.set(null);
-    this.clearMessages();
-    this.offerProductId.set(product.id);
-    this.offerForm.reset({
-      offerLabel: '',
-      durationCount: 8,
-      durationUnit: 'Week',
-      priceAmount: 0,
-      currencyCode: this.catalog()?.workspaceCurrencyCode ?? '',
-      training: true,
-      nutrition: false,
-      checkIns: true,
-      messaging: false,
-      resourceLibrary: false,
-    });
-  }
-
-  protected openPriceChange(product: CoachingProduct, offer: ProductOffer): void {
-    this.offerProductId.set(null);
-    this.clearMessages();
-    this.priceErrors.set([]);
-    this.priceIntent.complete();
-    this.priceForm.reset({ priceAmount: offer.priceAmount });
-    this.changingPrice.set({ productId: product.id, offer });
-  }
-
-  protected priceDuration(offer: ProductOffer): string {
-    return offer.durationUnit === 'Week'
-      ? $localize`${offer.durationCount}:count: weeks`
-      : $localize`${offer.durationCount}:count: days`;
-  }
-
-  protected async changePrice(): Promise<void> {
-    if (this.busy()) return;
-    return this.scope.run('changePrice', async (owner) => {
-      const selected = this.changingPrice();
-      if (!selected) return;
-      const amount = this.priceForm.getRawValue().priceAmount;
-      if (this.priceForm.invalid || !Number.isFinite(amount)) {
-        this.priceErrors.set([$localize`Enter a price of zero or more.`]);
-        return;
-      }
-      if (Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
-        this.priceErrors.set([$localize`Use at most two decimals.`]);
-        return;
-      }
-      if (amount === selected.offer.priceAmount) {
-        this.priceErrors.set([$localize`Choose a different price for this option.`]);
-        return;
-      }
-      this.priceErrors.set([]);
-      const payload = {
-        offerId: selected.offer.id,
-        priceAmount: amount,
-        version: selected.offer.version,
-      };
-      await owner.wait(
-        this.run(
-          async () => {
-            await owner.wait(
-              firstValueFrom(
-                this.api.changeProductOfferPrice(selected.offer.id, {
-                  priceAmount: amount,
-                  version: selected.offer.version,
-                  idempotencyKey: this.priceIntent.forPayload(payload),
-                }),
-              ),
-            );
-            this.priceIntent.complete();
-            this.changingPrice.set(null);
-          },
-          $localize`Price changed for new plans. Existing clients keep their agreed price and payments.`,
-        ),
-      );
-    });
-  }
-
-  protected async addOffer(): Promise<void> {
-    return this.scope.run('addOffer', async (owner) => {
-      const productId = this.offerProductId();
-      if (!productId || this.offerForm.invalid) {
-        this.offerForm.markAllAsTouched();
-        return;
-      }
-
-      const offer = this.toOfferRequest(this.offerForm.getRawValue());
-      if (offer.features.length === 0) {
-        this.error.set($localize`Choose at least one thing to include.`);
-        return;
-      }
-
-      await owner.wait(
-        this.run(
-          async () => {
-            await owner.wait(firstValueFrom(this.api.addProductOffer(productId, offer)));
-            this.offerProductId.set(null);
-          },
-          $localize`Price option added. Clients already on a plan keep theirs.`,
-        ),
-      );
-    });
-  }
-
-  protected async toggleProduct(product: CoachingProduct): Promise<void> {
-    return this.scope.run('toggleProduct', async (owner) => {
-      await owner.wait(
-        this.run(
-          async () => {
-            await owner.wait(
-              firstValueFrom(
-                this.api.updateCoachingProduct(product.id, {
-                  name: product.name,
-                  description: product.description,
-                  isActive: !product.isActive,
-                  version: product.version,
-                }),
-              ),
-            );
-          },
-          product.isActive ? $localize`Product archived.` : $localize`Product restored.`,
-        ),
-      );
-    });
-  }
-
-  protected async toggleOffer(product: CoachingProduct, offerId: string): Promise<void> {
-    return this.scope.run('toggleOffer', async (owner) => {
-      const offer = product.offers.find((item) => item.id === offerId);
-      if (!offer) {
-        return;
-      }
-
-      await owner.wait(
-        this.run(
-          async () => {
-            await owner.wait(
-              firstValueFrom(
-                this.api.setOfferAvailability(offer.id, !offer.isActive, offer.version),
-              ),
-            );
-          },
-          offer.isActive ? $localize`Price option retired.` : $localize`Price option restored.`,
-        ),
-      );
-    });
-  }
-
-  protected featureLabel(feature: CoachingFeature): string {
-    const labels: Record<CoachingFeature, string> = {
-      Training: $localize`Training`,
-      Nutrition: $localize`Nutrition`,
-      CheckIns: $localize`Check-ins`,
-      Messaging: $localize`Messaging`,
-      ResourceLibrary: $localize`Resource library`,
-    };
-    return labels[feature];
-  }
-
-  private async load(): Promise<void> {
+  protected async load(): Promise<void> {
     return this.scope.run('load', async (owner) => {
-      this.loading.set(true);
-      this.clearMessages();
+      if (!this.catalog()) this.state.set('loading');
       try {
-        const catalog = await owner.wait(firstValueFrom(this.api.getProductCatalog()));
-        this.catalog.set(catalog);
-        this.createForm.controls.currencyCode.setValue(catalog.workspaceCurrencyCode);
-        if (catalog.products.length === 0) {
-          this.createOpen.set(true);
-        }
-      } catch (error) {
+        this.catalog.set(await owner.wait(firstValueFrom(this.api.getCatalog())));
+        this.state.set('ready');
+      } catch {
         if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`Coaching products could not be loaded.`));
-      } finally {
-        if (owner.current) {
-          this.loading.set(false);
-        }
+        // A reload after a write keeps the cards on screen; only a first load shows the failure.
+        if (!this.catalog()) this.state.set('error');
       }
     });
   }
 
-  /**
-   * The confirmation is set after the reload, not by the command. `load` clears messages, so a
-   * notice set inside `command` was wiped by the refresh that followed it in the same turn and no
-   * success confirmation ever reached the screen.
-   */
-  private async run(command: () => Promise<void>, message: string): Promise<void> {
-    return this.scope.run('run', async (owner) => {
-      this.busy.set(true);
-      this.clearMessages();
-      try {
-        await owner.wait(this.csrf.refresh());
-        await owner.wait(command());
-        await owner.wait(this.load());
-        this.notice.set(message);
-      } catch (error) {
-        if (!owner.current) return;
-        this.error.set(productWriteError(error));
-      } finally {
-        if (owner.current) {
-          this.busy.set(false);
-        }
-      }
+  // ---------- sheets ----------
+
+  protected newPlan(): void {
+    this.open({ kind: 'new' }, $localize`New plan`);
+  }
+
+  protected addOption(card: PlanCard): void {
+    this.open({ kind: 'option', product: card.product }, $localize`New price option`);
+  }
+
+  protected planChosen(card: PlanCard, action: string): void {
+    switch (action) {
+      case 'edit':
+        this.open({ kind: 'details', product: card.product }, $localize`Edit ${card.name}:plan:`);
+        return;
+      case 'archive':
+        void this.setPlanSold(card.product, false);
+        return;
+      case 'restore':
+        void this.setPlanSold(card.product, true);
+        return;
+    }
+  }
+
+  protected optionChosen(card: PlanCard, row: OptionRow, action: string): void {
+    switch (action) {
+      case 'price':
+        this.open(
+          { kind: 'price', product: card.product, offer: row.offer },
+          $localize`Change price`,
+        );
+        return;
+      case 'retire':
+        void this.setOptionSold(card, row.offer, false);
+        return;
+      case 'restore':
+        void this.setOptionSold(card, row.offer, true);
+        return;
+    }
+  }
+
+  private open(mode: ProductSheetMode, title: string): void {
+    this.openSheet?.close();
+    this.sheetMode.set(mode);
+    this.sheetDirty.set(false);
+    const sheet = this.sheets.open(this.sheetTemplate(), {
+      title,
+      closeLabel: this.closeLabel,
+      canClose: () => this.mayDiscard(),
+    });
+    this.openSheet = sheet;
+    sheet.closed.subscribe(() => {
+      if (this.openSheet === sheet) this.openSheet = null;
+      this.sheetMode.set(null);
+      this.sheetDirty.set(false);
     });
   }
 
-  private toOfferRequest(raw: {
-    offerLabel: string;
-    durationCount: number;
-    durationUnit: 'Week';
-    priceAmount: number;
-    currencyCode: string;
-    training: boolean;
-    nutrition: boolean;
-    checkIns: boolean;
-    messaging: boolean;
-    resourceLibrary: boolean;
-  }): CreateProductOfferRequest {
-    const selected: [CoachingFeature, boolean][] = [
-      ['Training', raw.training],
-      ['Nutrition', raw.nutrition],
-      ['CheckIns', raw.checkIns],
-      ['Messaging', raw.messaging],
-      ['ResourceLibrary', raw.resourceLibrary],
-    ];
-    return {
-      label: raw.offerLabel,
-      durationCount: raw.durationCount,
-      durationUnit: raw.durationUnit,
-      priceAmount: raw.priceAmount,
-      priceCurrency: raw.currencyCode.toUpperCase(),
-      features: selected
-        .filter(([, enabled]) => enabled)
-        .map(([feature]) => ({ feature, allowsConcurrentCoverage: false })),
-    };
+  protected sheetChanged(dirty: boolean): void {
+    this.sheetDirty.set(dirty);
   }
 
-  private clearMessages(): void {
-    this.error.set(null);
-    this.notice.set(null);
+  /** The sheet saved (a plan) or the coach chose Not now (null). */
+  protected async sheetClosed(saved: CoachingProductView | null): Promise<void> {
+    const mode = this.sheetMode();
+    if (!saved) {
+      if (await this.mayDiscard()) this.openSheet?.close();
+      return;
+    }
+    this.openSheet?.close();
+    await this.load();
+    if (mode) this.toast.show(savedMessage(mode, saved), { tone: 'success' });
   }
 
-  private resetTenantState(): void {
-    this.loadedTenantId = null;
-    this.catalog.set(null);
-    this.loading.set(false);
-    this.busy.set(false);
-    this.createOpen.set(false);
-    this.offerProductId.set(null);
-    this.changingPrice.set(null);
-    this.priceErrors.set([]);
-    this.priceIntent.complete();
-    this.error.set(null);
-    this.notice.set(null);
-    this.createForm.reset();
-    this.offerForm.reset();
+  /** True when nothing typed would be lost, or the coach chose to lose it. */
+  private async mayDiscard(): Promise<boolean> {
+    if (!this.sheetDirty()) return true;
+    this.asking.set({
+      message: $localize`What you typed isn’t saved. If you close it now, it is lost.`,
+      confirm: $localize`Close without saving`,
+      cancel: $localize`Keep editing`,
+    });
+    const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
+      title: $localize`Close without saving?`,
+      closeLabel: this.closeLabel,
+    });
+    return (await firstValueFrom(dialog.closed)) === true;
+  }
+
+  // ---------- selling and stopping, with Undo ----------
+
+  private async setPlanSold(product: CoachingProductView, sold: boolean): Promise<void> {
+    const saved = await this.write(product.id, () =>
+      this.api.updateProduct(product.id, {
+        name: product.name,
+        description: product.description,
+        isActive: sold,
+        version: product.version,
+      }),
+    );
+    if (!saved) return;
+    this.toast.show(
+      sold
+        ? $localize`${product.name}:plan: is for sale again.`
+        : $localize`You no longer sell ${product.name}:plan:. Clients already on it keep their plan.`,
+      {
+        tone: 'success',
+        action: sold
+          ? undefined
+          : { label: $localize`Undo`, run: () => void this.setPlanSold(saved, true) },
+      },
+    );
+  }
+
+  private async setOptionSold(
+    card: PlanCard,
+    offer: ProductOfferView,
+    sold: boolean,
+  ): Promise<void> {
+    const saved = await this.write(offer.id, () =>
+      this.api.setOfferAvailability(offer.id, sold, Number(offer.version)),
+    );
+    if (!saved) return;
+    const option = $localize`${card.name}:plan: for ${duration(offer)}:length:`;
+    const now = saved.offers.find((item) => item.id === offer.id);
+    this.toast.show(
+      sold
+        ? $localize`${option}:option: is for sale again.`
+        : $localize`You no longer sell ${option}:option:. Clients already on it keep their plan.`,
+      {
+        tone: 'success',
+        action:
+          sold || !now
+            ? undefined
+            : {
+                label: $localize`Undo`,
+                run: () => void this.setOptionSold(card, now, true),
+              },
+      },
+    );
+  }
+
+  /** One write at a time; the cards reload after it so the counts and versions are the server's. */
+  private async write(
+    subject: string,
+    command: () => ReturnType<ProductsApi['updateProduct']>,
+  ): Promise<CoachingProductView | null> {
+    if (this.working()) return null;
+    return this.scope.run<CoachingProductView | null>(
+      'write',
+      async (owner) => {
+        this.working.set(subject);
+        try {
+          await owner.wait(this.csrf.refresh());
+          const saved = await owner.wait(firstValueFrom(command()));
+          await owner.wait(this.load());
+          // The menu that started this may have moved between sections, so focus goes to the page.
+          this.heading()?.nativeElement.focus();
+          return saved;
+        } catch (error) {
+          if (!owner.current) return null;
+          this.toast.show(productWriteError(error), { tone: 'error' });
+          void this.load();
+          return null;
+        } finally {
+          if (owner.current) this.working.set(null);
+        }
+      },
+      null,
+    );
   }
 }
 
-function productWriteError(error: unknown): string {
-  if (error instanceof HttpErrorResponse) {
-    const body = error.error as { code?: string } | undefined;
-    if (body?.code === 'active_offer_slot_conflict') {
-      return $localize`This product already has an active price option for that duration and currency. Use Change price on it, retire it first, or create a separate product for another price.`;
-    }
+function savedMessage(mode: ProductSheetMode, saved: CoachingProductView): string {
+  switch (mode.kind) {
+    case 'new':
+      return $localize`${saved.name}:plan: is ready to sell. Start it for a client from their profile.`;
+    case 'option':
+      return $localize`Price option added to ${saved.name}:plan:.`;
+    case 'price':
+      return $localize`New price saved. Clients already on this option keep their price and payments.`;
+    case 'details':
+      return $localize`${saved.name}:plan: is saved.`;
   }
-  return apiErrorMessage(error, $localize`The change could not be saved.`);
 }

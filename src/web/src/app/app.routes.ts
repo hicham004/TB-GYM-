@@ -56,7 +56,9 @@ export const routes: Routes = [
   {
     path: 'products',
     canActivate: [authGuard, coachGuard],
-    title: $localize`Coaching products | TB Gym`,
+    title: $localize`Plans you sell | TB Gym`,
+    // Plans you sell follows the coach's mode (C8, R5.1a).
+    data: REDESIGNED,
     loadComponent: () => import('./features/commercial/products').then((module) => module.Products),
   },
   {

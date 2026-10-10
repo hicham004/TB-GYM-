@@ -1,313 +1,217 @@
-<section class="page-heading">
-  <div>
-    <p class="eyebrow" i18n>What you sell</p>
-    <h1 i18n>Coaching products</h1>
-    <p i18n>Set up what you sell once, then start a plan for each client from their profile.</p>
-  </div>
-  <button class="primary-button" type="button" (click)="createOpen.set(!createOpen())" i18n>
-    New product
-  </button>
+<section class="plans" aria-labelledby="plans-heading">
+  <header class="top">
+    <div class="intro">
+      <h1 id="plans-heading" #heading tabindex="-1" i18n>Plans you sell</h1>
+      @if (summary(); as line) {
+        <p class="lede">{{ line }}</p>
+      } @else {
+        <p class="lede" i18n>
+          Set each plan up once: its price, how long it runs and what it includes. Then start it for
+          a client from their profile.
+        </p>
+      }
+    </div>
+    <button appButton type="button" (click)="newPlan()">
+      <app-icon name="plus" />
+      <span i18n>New plan</span>
+    </button>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>Your plans could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (cards().selling.length === 0 && cards().stopped.length === 0) {
+        <app-empty-state
+          class="panel"
+          heading="Nothing to sell yet"
+          description="A plan is what a client buys from you: say a 12-week online coaching plan with training, check-ins and chat. Create it once, then start it for each client from their profile."
+          i18n-heading
+          i18n-description
+        >
+          <button appButton empty-state-action type="button" (click)="newPlan()" i18n>
+            Create your first plan
+          </button>
+        </app-empty-state>
+      } @else {
+        @if (cards().selling.length === 0) {
+          <p class="panel pad none-selling" i18n>
+            You sell no plan right now. Sell one again below, or create a new one.
+          </p>
+        }
+        <ul class="cards" role="list">
+          @for (card of cards().selling; track card.id) {
+            <li class="card">
+              <ng-container
+                [ngTemplateOutlet]="planCard"
+                [ngTemplateOutletContext]="{ $implicit: card }"
+              />
+            </li>
+          }
+        </ul>
+
+        @if (cards().stopped.length > 0) {
+          <details class="stopped">
+            <summary>
+              <span i18n>No longer sold ({{ cards().stopped.length }})</span>
+              <app-icon name="chevron-down" />
+            </summary>
+            <ul class="cards" role="list">
+              @for (card of cards().stopped; track card.id) {
+                <li class="card off">
+                  <ng-container
+                    [ngTemplateOutlet]="planCard"
+                    [ngTemplateOutletContext]="{ $implicit: card }"
+                  />
+                </li>
+              }
+            </ul>
+          </details>
+        }
+      }
+    }
+  }
 </section>
 
-@if (error() && !offerProductId() && !changingPrice()) {
-  <p class="form-error" role="alert">{{ error() }}</p>
-}
-@if (notice()) {
-  <p class="form-success" role="status">{{ notice() }}</p>
-}
+<ng-template #planCard let-card>
+  <div class="card-head">
+    <div class="card-title">
+      <h2 class="card-name" dir="auto">{{ card.name }}</h2>
+      <p class="clients" [class.has-clients]="card.hasClients">
+        <app-icon name="clients" />
+        <span>{{ card.clients }}</span>
+      </p>
+    </div>
+    <app-menu
+      icon="more"
+      label="More for {{ card.name }}"
+      i18n-label
+      [items]="card.menu"
+      (chosen)="planChosen(card, $event)"
+    />
+  </div>
+  @if (card.description) {
+    <p class="description" dir="auto">{{ card.description }}</p>
+  }
+  @if (card.includes; as chips) {
+    <ul class="includes" role="list" aria-label="Every option includes" i18n-aria-label>
+      @for (chip of chips; track chip.feature) {
+        <li class="chip"><app-icon [name]="chip.icon" />{{ chip.label }}</li>
+      }
+    </ul>
+  }
 
-@if (createOpen()) {
-  <section class="surface-section product-form">
-    <div class="section-heading">
-      <div>
-        <h2 i18n>Create a coaching product</h2>
-        <p class="muted" i18n>Its first price option is created with it.</p>
-      </div>
-      <button class="quiet-button compact" type="button" (click)="createOpen.set(false)" i18n>
-        Close
+  @if (card.options.length > 0) {
+    <ul class="options" role="list" aria-label="Price options for {{ card.name }}" i18n-aria-label>
+      @for (row of card.options; track row.id) {
+        <li class="option">
+          <ng-container
+            [ngTemplateOutlet]="optionRow"
+            [ngTemplateOutletContext]="{
+              $implicit: row,
+              card: card,
+              shared: card.includes !== null,
+            }"
+          />
+        </li>
+      }
+    </ul>
+  } @else if (card.isActive) {
+    <p class="no-options" i18n>No price option is for sale. Add one, or sell an old one again.</p>
+  }
+
+  @if (card.retired.length > 0) {
+    <details class="retired">
+      <summary>
+        <span i18n>Old price options ({{ card.retired.length }})</span>
+        <app-icon name="chevron-down" />
+      </summary>
+      <ul class="options" role="list">
+        @for (row of card.retired; track row.id) {
+          <li class="option off">
+            <ng-container
+              [ngTemplateOutlet]="optionRow"
+              [ngTemplateOutletContext]="{ $implicit: row, card: card }"
+            />
+          </li>
+        }
+      </ul>
+    </details>
+  }
+
+  @if (card.isActive) {
+    <div class="card-foot">
+      <button
+        appButton
+        type="button"
+        variant="text"
+        [disabled]="working() !== null"
+        (click)="addOption(card)"
+      >
+        <app-icon name="plus" />
+        <span i18n>Add price option</span>
       </button>
     </div>
-    <form [formGroup]="createForm" (ngSubmit)="createProduct()">
-      <div class="form-grid">
-        <label>
-          <span i18n>Product name</span>
-          <input formControlName="name" autocomplete="off" />
-        </label>
-        <label>
-          <span i18n>Price option name</span>
-          <input formControlName="offerLabel" placeholder="8 weeks" i18n-placeholder />
-        </label>
-        <label class="span-full">
-          <span i18n>Description</span>
-          <textarea formControlName="description"></textarea>
-        </label>
-        <label>
-          <span i18n>Duration</span>
-          <div class="joined-fields">
-            <input type="number" min="1" max="3650" formControlName="durationCount" />
-            <select formControlName="durationUnit">
-              <option value="Week" i18n>Weeks</option>
-            </select>
-          </div>
-        </label>
-        <label>
-          <span i18n>Price</span>
-          <div class="joined-fields price-fields">
-            <input type="number" min="0" step="0.01" formControlName="priceAmount" />
-            <input maxlength="3" formControlName="currencyCode" />
-          </div>
-        </label>
-      </div>
-      <fieldset class="feature-picker">
-        <legend i18n>What's included</legend>
-        <label
-          ><input type="checkbox" formControlName="training" /><span i18n>Training</span></label
-        >
-        <label
-          ><input type="checkbox" formControlName="nutrition" /><span i18n>Nutrition</span></label
-        >
-        <label
-          ><input type="checkbox" formControlName="checkIns" /><span i18n>Check-ins</span></label
-        >
-        <label
-          ><input type="checkbox" formControlName="messaging" /><span i18n>Messaging</span></label
-        >
-        <label
-          ><input type="checkbox" formControlName="resourceLibrary" /><span i18n
-            >Resource library</span
-          ></label
-        >
-      </fieldset>
-      <div class="form-actions">
-        <button class="primary-button" type="submit" [disabled]="busy()" i18n>
-          Create product
-        </button>
-      </div>
-    </form>
-  </section>
-}
-
-@if (loading()) {
-  <p class="loading-row" i18n>Loading coaching products...</p>
-} @else if (catalog(); as currentCatalog) {
-  @if (currentCatalog.products.length === 0) {
-    <div class="empty-state">
-      <h2 i18n>No products yet</h2>
-      <p i18n>Create what you sell first. Then you can start a plan for each client.</p>
-    </div>
-  } @else {
-    <section class="product-list" aria-label="Coaching products" i18n-aria-label>
-      @for (product of currentCatalog.products; track product.id) {
-        <article class="product-row" [class.inactive]="!product.isActive">
-          <div class="product-heading">
-            <div>
-              <div class="title-line">
-                <h2>{{ product.name }}</h2>
-                <span class="status-badge" [class.success]="product.isActive">
-                  @if (product.isActive) {
-                    <span i18n>Available</span>
-                  } @else {
-                    <span i18n>Archived</span>
-                  }
-                </span>
-              </div>
-              @if (product.description) {
-                <p class="muted">{{ product.description }}</p>
-              }
-            </div>
-            <div class="button-group">
-              <button
-                class="secondary-button compact"
-                type="button"
-                [disabled]="busy()"
-                (click)="openOffer(product)"
-                i18n
-              >
-                Add price option
-              </button>
-              <button
-                class="quiet-button compact"
-                type="button"
-                [disabled]="busy()"
-                (click)="toggleProduct(product)"
-              >
-                @if (product.isActive) {
-                  <span i18n>Archive</span>
-                } @else {
-                  <span i18n>Restore</span>
-                }
-              </button>
-            </div>
-          </div>
-
-          <div class="offer-list">
-            @for (offer of product.offers; track offer.id) {
-              <div class="offer-row" [class.inactive]="!offer.isActive">
-                <div class="offer-price">
-                  <strong>{{ offer.priceAmount }} {{ offer.priceCurrency }}</strong>
-                  <span>{{ offer.label }}</span>
-                </div>
-                <span class="offer-duration">
-                  @if (offer.durationUnit === 'Week') {
-                    <span i18n>{{ offer.durationCount }} weeks</span>
-                  } @else {
-                    <span i18n>{{ offer.durationCount }} days</span>
-                  }
-                </span>
-                <div class="feature-tags">
-                  @for (feature of offer.features; track feature.feature) {
-                    <span>{{ featureLabel(feature.feature) }}</span>
-                  }
-                </div>
-                <div class="offer-actions">
-                  @if (offer.isActive) {
-                    <button
-                      appButton
-                      variant="outlined"
-                      type="button"
-                      [disabled]="busy()"
-                      (click)="openPriceChange(product, offer)"
-                      i18n
-                    >
-                      Change price
-                    </button>
-                  }
-                  <button
-                    class="quiet-button compact"
-                    type="button"
-                    [disabled]="busy()"
-                    (click)="toggleOffer(product, offer.id)"
-                  >
-                    @if (offer.isActive) {
-                      <span i18n>Retire</span>
-                    } @else {
-                      <span i18n>Restore</span>
-                    }
-                  </button>
-                </div>
-              </div>
-            }
-          </div>
-
-          @if (changingPrice(); as selected) {
-            @if (selected.productId === product.id) {
-              <form class="price-change" [formGroup]="priceForm" (ngSubmit)="changePrice()">
-                <div class="inline-offer-heading">
-                  <h3 i18n>Change price · {{ selected.offer.label }}</h3>
-                  <button
-                    appButton
-                    variant="text"
-                    type="button"
-                    [disabled]="busy()"
-                    (click)="changingPrice.set(null)"
-                    i18n
-                  >
-                    Cancel
-                  </button>
-                </div>
-                <p>{{ priceDuration(selected.offer) }} · {{ selected.offer.priceCurrency }}</p>
-                <p i18n>
-                  This replaces the price for new plans. Existing plans keep their price, dates and
-                  payments.
-                </p>
-                <app-field [label]="newPriceLabel" [errors]="priceErrors()">
-                  <input
-                    appControl
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputmode="decimal"
-                    formControlName="priceAmount"
-                  />
-                </app-field>
-                @if (error(); as message) {
-                  <p class="form-error" role="alert">{{ message }}</p>
-                }
-                <button appButton type="submit" [loading]="busy()">
-                  @if (busy()) {
-                    <ng-container i18n>Changing…</ng-container>
-                  } @else {
-                    <ng-container i18n>Confirm new price</ng-container>
-                  }
-                </button>
-              </form>
-            }
-          }
-
-          @if (offerProductId() === product.id) {
-            <form class="inline-offer" [formGroup]="offerForm" (ngSubmit)="addOffer()">
-              <div class="inline-offer-heading">
-                <h3 i18n>New price option</h3>
-                <button
-                  class="quiet-button compact"
-                  type="button"
-                  (click)="offerProductId.set(null)"
-                  i18n
-                >
-                  Cancel
-                </button>
-              </div>
-              <div class="form-grid">
-                <label><span i18n>Name</span><input formControlName="offerLabel" /></label>
-                <label>
-                  <span i18n>Duration</span>
-                  <div class="joined-fields">
-                    <input type="number" min="1" formControlName="durationCount" />
-                    <select formControlName="durationUnit">
-                      <option value="Week" i18n>Weeks</option>
-                    </select>
-                  </div>
-                </label>
-                <label>
-                  <span i18n>Price</span>
-                  <div class="joined-fields price-fields">
-                    <input type="number" min="0" step="0.01" formControlName="priceAmount" />
-                    <input maxlength="3" formControlName="currencyCode" />
-                  </div>
-                </label>
-              </div>
-              <fieldset class="feature-picker compact-features">
-                <legend i18n>What's included</legend>
-                <label
-                  ><input type="checkbox" formControlName="training" /><span i18n
-                    >Training</span
-                  ></label
-                >
-                <label
-                  ><input type="checkbox" formControlName="nutrition" /><span i18n
-                    >Nutrition</span
-                  ></label
-                >
-                <label
-                  ><input type="checkbox" formControlName="checkIns" /><span i18n
-                    >Check-ins</span
-                  ></label
-                >
-                <label
-                  ><input type="checkbox" formControlName="messaging" /><span i18n
-                    >Messaging</span
-                  ></label
-                >
-                <label
-                  ><input type="checkbox" formControlName="resourceLibrary" /><span i18n
-                    >Resources</span
-                  ></label
-                >
-              </fieldset>
-              <p class="muted" i18n>
-                One active price option per duration and currency. To change an existing price, use
-                Change price above.
-              </p>
-              @if (error(); as message) {
-                <p class="form-error" role="alert">{{ message }}</p>
-              }
-              <button class="primary-button compact" type="submit" [disabled]="busy()" i18n>
-                Save price option
-              </button>
-            </form>
-          }
-        </article>
-      }
-    </section>
   }
-}
+</ng-template>
+
+<ng-template #optionRow let-row let-card="card" let-shared="shared">
+  <div class="option-main">
+    <p class="price">{{ row.price }}</p>
+    <p class="length">
+      {{ row.duration }}
+      @if (row.name) {
+        <span class="option-name" dir="auto">· {{ row.name }}</span>
+      }
+    </p>
+  </div>
+  <p class="option-clients" [class.has-clients]="row.hasClients">{{ row.clients }}</p>
+  @if (card.isActive) {
+    <app-menu
+      class="option-menu"
+      icon="more"
+      label="More for {{ row.duration }} at {{ row.price }}"
+      i18n-label
+      [items]="row.menu"
+      (chosen)="optionChosen(card, row, $event)"
+    />
+  }
+  @if (!shared) {
+    <ul class="includes" role="list" aria-label="Included" i18n-aria-label>
+      @for (chip of row.features; track chip.feature) {
+        <li class="chip"><app-icon [name]="chip.icon" />{{ chip.label }}</li>
+      }
+    </ul>
+  }
+</ng-template>
+
+<ng-template #productSheet>
+  @if (sheetMode(); as mode) {
+    <app-product-sheet
+      [mode]="mode"
+      [currency]="currency()"
+      (closed)="sheetClosed($event)"
+      (dirtyChange)="sheetChanged($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>
