@@ -6,11 +6,12 @@ import {
   effect,
   ElementRef,
   inject,
+  Injector,
   signal,
   untracked,
   viewChild,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
@@ -65,7 +66,17 @@ export class TrainingProgram {
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly injector = inject(Injector);
+  private readonly route = inject(ActivatedRoute, { optional: true });
   private loadedTenantId: string | null = null;
+  /**
+   * A notice's link (R5.1c): `?week=3` opens that week, `?workout=<id>` shows that finished workout.
+   * Each is followed once, the first time its part of the page has loaded.
+   */
+  private linkedWeek = Number(this.route?.snapshot.queryParamMap.get('week') ?? NaN);
+  protected readonly linkedWorkout = signal(
+    this.route?.snapshot.queryParamMap.get('workout') ?? null,
+  );
 
   protected readonly read = signal<TrainingProgramRead | null>(null);
   protected readonly loading = signal(true);
@@ -190,6 +201,7 @@ export class TrainingProgram {
         );
         this.read.set(read);
         this.openWeeks.set(new Set());
+        this.followWeekLink();
       } catch (error) {
         if (owner.current) {
           this.error.set(apiErrorMessage(error, $localize`Your program could not be loaded.`));
@@ -210,6 +222,7 @@ export class TrainingProgram {
         );
         this.history.set(page.isAllowed ? page.items : []);
         this.historyNextSkip.set(page.isAllowed ? page.nextSkip : null);
+        this.followWorkoutLink();
       } catch (error) {
         if (owner.current) {
           this.historyError.set(
@@ -220,6 +233,36 @@ export class TrainingProgram {
         if (owner.current) this.historyLoading.set(false);
       }
     });
+  }
+
+  /** Opens the week a notice named, or its part of the page if it is the week in focus, and brings it into view. */
+  private followWeekLink(): void {
+    const number = this.linkedWeek;
+    this.linkedWeek = NaN;
+    const week = this.program()?.weeks.find((item) => item.number === number);
+    if (!week) return;
+    const inFocus = week === this.focus();
+    if (!inFocus && week.visible && week.sessions.length > 0 && !this.isOpen(week)) {
+      this.toggleWeek(week);
+    }
+
+    this.bringIntoView(inFocus ? 'focus-heading' : `week-row-${week.number}`);
+  }
+
+  /** Shows the finished workout a coach's note is on, beyond the first few if need be. */
+  private followWorkoutLink(): void {
+    const id = this.linkedWorkout();
+    const index = id === null ? -1 : this.history().findIndex((item) => item.id === id);
+    if (index < 0) return;
+    if (index >= HISTORY_PREVIEW) this.showAllHistory.set(true);
+    this.bringIntoView(`workout-${id}`);
+  }
+
+  private bringIntoView(id: string): void {
+    afterNextRender(
+      () => document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+      { injector: this.injector },
+    );
   }
 
   private reset(): void {

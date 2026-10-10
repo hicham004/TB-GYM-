@@ -26,6 +26,12 @@ public sealed record NotificationTemplate(string Key, int Version, string Cultur
 /// coach with many clients could not act on "a client asked". Its title carries
 /// <see cref="ClientNameToken"/>, which the dispatcher replaces with the client's current name as
 /// plain text when the in-app row is written. It is in-app only, so the name never reaches email.
+/// A client's note on a workout names the client the same way (R5.1c).
+/// </para>
+/// <para>
+/// A second exception, decided for ADR 0036: a notice about weeks of a client's program names those
+/// weeks ("week 3", "weeks 3 to 6") through <see cref="WeeksToken"/>. The words come from this class
+/// and the payload carries only the numbers. Training notices are in-app only.
 /// </para>
 /// <para>
 /// Only culture <c>en</c> and template version 1 exist. Arabic and any other locale are deferred:
@@ -40,11 +46,17 @@ public static class NotificationTemplateCatalog
 
     public const int CurrentVersion = 1;
 
-    /// <summary>Where a named template takes the client's name. Only RenewalRequested has one.</summary>
+    /// <summary>Where a named template takes the client's name: RenewalRequested and ClientWorkoutNote.</summary>
     public const string ClientNameToken = "{client}";
+
+    /// <summary>Where a week notice takes the weeks it is about (ADR 0036): numbers only, worded here.</summary>
+    public const string WeeksToken = "{weeks}";
 
     /// <summary>A client's name is cut to this many characters in a title.</summary>
     private const int MaximumNameLength = 120;
+
+    /// <summary>More scattered weeks than this are counted ("6 weeks") rather than listed.</summary>
+    private const int MaximumListedWeeks = 4;
 
     private static readonly Dictionary<CommercialNotificationKind, NotificationTemplate> EnglishV1 = new()
     {
@@ -107,6 +119,38 @@ public static class NotificationTemplateCatalog
             DefaultCulture,
             $"{ClientNameToken} asked to renew",
             "This client's coaching plan has ended. Open the client's page to set up a renewal."),
+        // The training notices (ADR 0036, R5.1c). Each opens the program or the workout it is about.
+        [CommercialNotificationKind.ProgramAssigned] = new NotificationTemplate(
+            "training.program-assigned",
+            CurrentVersion,
+            DefaultCulture,
+            "Your coach set up a new program",
+            "Open Training to see your program and its first workouts."),
+        [CommercialNotificationKind.WeeksShared] = new NotificationTemplate(
+            "training.weeks-shared",
+            CurrentVersion,
+            DefaultCulture,
+            $"Your coach shared {WeeksToken}",
+            "Open Training to see the workouts."),
+        [CommercialNotificationKind.WeeksChanged] = new NotificationTemplate(
+            "training.weeks-changed",
+            CurrentVersion,
+            DefaultCulture,
+            $"Your coach updated {WeeksToken}",
+            "Open Training to see your workouts as they are now."),
+        // Never the note's text, which can be about an injury; the workout it is on says it.
+        [CommercialNotificationKind.CoachWorkoutNote] = new NotificationTemplate(
+            "training.coach-workout-note",
+            CurrentVersion,
+            DefaultCulture,
+            "Your coach left a note on a workout",
+            "Open the workout to read it."),
+        [CommercialNotificationKind.ClientWorkoutNote] = new NotificationTemplate(
+            "training.client-workout-note",
+            CurrentVersion,
+            DefaultCulture,
+            $"{ClientNameToken} left a note on a workout",
+            "Open the workout on the client's Training to read it."),
     };
 
     /// <summary>
@@ -122,6 +166,42 @@ public static class NotificationTemplateCatalog
         }
 
         return template with { Title = template.Title.Replace(ClientNameToken, name, StringComparison.Ordinal) };
+    }
+
+    /// <summary>
+    /// Puts the weeks a notice is about into its title: "week 3", "weeks 3 and 5", "weeks 3 to 6",
+    /// "weeks 2, 4 and 7", or "6 weeks" when more than four are scattered. Only positive numbers are
+    /// read, so nothing a person typed can reach the wording.
+    /// </summary>
+    public static NotificationTemplate NameWeeks(NotificationTemplate template, IEnumerable<int> weeks) =>
+        template with { Title = template.Title.Replace(WeeksToken, DescribeWeeks(weeks), StringComparison.Ordinal) };
+
+    public static string DescribeWeeks(IEnumerable<int> weeks)
+    {
+        var numbers = weeks.Where(week => week > 0).Distinct().Order().ToArray();
+        if (numbers.Length == 0)
+        {
+            throw new ArgumentException("At least one week is required.", nameof(weeks));
+        }
+
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        if (numbers.Length == 1)
+        {
+            return string.Create(culture, $"week {numbers[0]}");
+        }
+
+        if (numbers.Length > 2 && numbers[^1] - numbers[0] == numbers.Length - 1)
+        {
+            return string.Create(culture, $"weeks {numbers[0]} to {numbers[^1]}");
+        }
+
+        if (numbers.Length > MaximumListedWeeks)
+        {
+            return string.Create(culture, $"{numbers.Length} weeks");
+        }
+
+        var listed = string.Join(", ", numbers[..^1].Select(week => week.ToString(culture)));
+        return string.Create(culture, $"weeks {listed} and {numbers[^1]}");
     }
 
     /// <summary>

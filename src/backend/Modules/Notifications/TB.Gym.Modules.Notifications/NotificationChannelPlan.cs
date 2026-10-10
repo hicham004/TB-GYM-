@@ -127,6 +127,11 @@ public static class NotificationPurposeCatalog
         CommercialNotificationKind.ClientLeft => NotificationPurpose.ServiceTransactional,
         CommercialNotificationKind.CoachResigned => NotificationPurpose.ServiceTransactional,
         CommercialNotificationKind.RenewalRequested => NotificationPurpose.ServiceTransactional,
+        CommercialNotificationKind.ProgramAssigned => NotificationPurpose.ServiceTransactional,
+        CommercialNotificationKind.WeeksShared => NotificationPurpose.ServiceTransactional,
+        CommercialNotificationKind.WeeksChanged => NotificationPurpose.ServiceTransactional,
+        CommercialNotificationKind.CoachWorkoutNote => NotificationPurpose.ServiceTransactional,
+        CommercialNotificationKind.ClientWorkoutNote => NotificationPurpose.ServiceTransactional,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), "An unclassified notification kind cannot be planned."),
     };
 
@@ -140,4 +145,15 @@ public static class NotificationPurposeCatalog
             or CommercialNotificationKind.ClientLeft
             or CommercialNotificationKind.CoachResigned
             or CommercialNotificationKind.RenewalRequested;
+
+    /// <summary>
+    /// The training kinds (ADR 0036): in-app only, because they are frequent, never urgent, and say
+    /// nothing a client could act on outside the app.
+    /// </summary>
+    public static bool IsTrainingKind(CommercialNotificationKind kind) =>
+        kind is CommercialNotificationKind.ProgramAssigned
+            or CommercialNotificationKind.WeeksShared
+            or CommercialNotificationKind.WeeksChanged
+            or CommercialNotificationKind.CoachWorkoutNote
+            or CommercialNotificationKind.ClientWorkoutNote;
 }

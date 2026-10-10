@@ -524,13 +524,15 @@ internal sealed partial class TrainingApplicationService
 
         try
         {
-            dbContext.WorkoutNotes.Add(WorkoutNote.Create(
+            var note = WorkoutNote.Create(
                 tenantContext.TenantId,
                 execution.Id,
                 request.ExercisePerformanceId,
                 userId,
                 authorRole.Value,
-                request.Text));
+                request.Text);
+            dbContext.WorkoutNotes.Add(note);
+            await QueueWorkoutNoteNoticeAsync(execution, note, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
             return SuccessWorkout(execution);
         }
@@ -538,6 +540,40 @@ internal sealed partial class TrainingApplicationService
         {
             return Invalid("note", exception.Message);
         }
+    }
+
+    /// <summary>
+    /// Tells the other side of a workout about a note on it, in-app (ADR 0036): a coach's note goes to
+    /// the client, a client's note to the coach who has the client. Never the note's text.
+    /// </summary>
+    private async Task QueueWorkoutNoteNoticeAsync(
+        WorkoutExecution execution,
+        WorkoutNote note,
+        CancellationToken cancellationToken)
+    {
+        var client = await dbContext.ClientProfiles.AsNoTracking()
+            .Where(item => item.Id == execution.ClientProfileId)
+            .Select(item => new { item.UserId, item.AssignedCoachUserId })
+            .SingleOrDefaultAsync(cancellationToken);
+        var fromCoach = note.AuthorRole == WorkoutNoteAuthorRole.Coach;
+        if (client is null || (fromCoach ? client.UserId : client.AssignedCoachUserId) is not { } recipient ||
+            recipient == note.AuthorUserId)
+        {
+            return;
+        }
+
+        TrainingNotices.WorkoutNote(
+            dbContext,
+            tenantContext.TenantId,
+            await WorkspaceRelationshipNotices.TenantTimeZoneAsync(dbContext, tenantContext.TenantId, cancellationToken),
+            recipient,
+            fromCoach,
+            execution.ClientProfileId,
+            execution.MesocycleId,
+            execution.TrainingSessionId,
+            execution.Id,
+            note.Id,
+            clock.UtcNow);
     }
 
     public async Task<ExerciseHistoryPage?> GetExerciseHistoryAsync(

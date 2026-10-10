@@ -80,11 +80,13 @@ public static class NotificationEndpoints
         inbox.MapGet("", async (
             int? skip,
             int? take,
+            bool? unread,
             INotificationApplicationService service,
             CancellationToken token) =>
             Results.Ok(await service.ListOwnAsync(
                 NotificationPaging.NormalizeSkip(skip),
                 NotificationPaging.NormalizeTake(take),
+                unread == true,
                 token)))
         .WithName("ListOwnNotifications")
         .Produces<NotificationPage>();
@@ -111,6 +113,21 @@ public static class NotificationEndpoints
         .Produces<NotificationView>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status404NotFound)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
+
+        // Reading is the reader's own act, so it stays open while an unpaid workspace is read-only.
+        inbox.MapPost("/read-all", async (
+            HttpContext context,
+            IAntiforgery antiforgery,
+            INotificationApplicationService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return Results.Ok(await service.MarkAllOwnReadAsync(token));
+        })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
+        .WithName("MarkAllOwnNotificationsRead")
+        .Produces<NotificationReadAllResult>()
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
     }
 

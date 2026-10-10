@@ -4633,7 +4633,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_NotificationOutboxItems_Cancellation", "(\"Status\" = 'Cancelled') = (\"CancelledAtUtc\" IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_NotificationOutboxItems_Vocabulary", "\"Status\" IN ('Scheduled', 'Cancelled') AND \"Purpose\" = 'ServiceTransactional' AND \"Kind\" IN ('PaymentRequired', 'EnrollmentActivated', 'EnrollmentEndingSoon', 'EnrollmentExpired', 'EnrollmentRenewed', 'CoachDeparted', 'ClientLeft', 'CoachResigned', 'RenewalRequested')");
+                            t.HasCheckConstraint("CK_NotificationOutboxItems_Vocabulary", "\"Status\" IN ('Scheduled', 'Cancelled') AND \"Purpose\" = 'ServiceTransactional' AND \"Kind\" IN ('PaymentRequired', 'EnrollmentActivated', 'EnrollmentEndingSoon', 'EnrollmentExpired', 'EnrollmentRenewed', 'CoachDeparted', 'ClientLeft', 'CoachResigned', 'RenewalRequested', 'ProgramAssigned', 'WeeksShared', 'WeeksChanged', 'CoachWorkoutNote', 'ClientWorkoutNote')");
                         });
                 });
 

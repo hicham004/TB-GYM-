@@ -40,6 +40,14 @@ const BETA: TenantMembership = {
   role: 'Client',
 };
 
+/**
+ * An instant a few seconds before now (each step is ten seconds), so day headings are about today
+ * whatever day the test runs; the inbox orders by these, newest first.
+ */
+function moments(steps: number): string {
+  return new Date(Date.now() - steps * 10_000).toISOString();
+}
+
 function item(
   id: string,
   createdAtUtc: string,
@@ -55,6 +63,9 @@ function item(
     readAtUtc: isRead ? '2026-08-31T09:00:00.000Z' : null,
     isRead,
     clientProfileId: null,
+    sessionId: null,
+    workoutExecutionId: null,
+    weekNumber: null,
   };
 }
 
@@ -69,6 +80,7 @@ interface Harness {
   membership: WritableSignal<TenantMembership | undefined>;
   list: ReturnType<typeof vi.fn>;
   markRead: ReturnType<typeof vi.fn>;
+  markAll: ReturnType<typeof vi.fn>;
   unreadCount: ReturnType<typeof vi.fn>;
   store: NotificationStore;
 }
@@ -76,6 +88,7 @@ interface Harness {
 interface ApiMocks {
   list: ReturnType<typeof vi.fn>;
   markRead: ReturnType<typeof vi.fn>;
+  markAll: ReturnType<typeof vi.fn>;
   unreadCount: ReturnType<typeof vi.fn>;
 }
 
@@ -83,24 +96,29 @@ interface ApiMocks {
  * @param configure sets up the API replies for this test. Omitted, the inbox is empty and the badge
  * is zero, which is what the empty-state test wants.
  */
-async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
+async function render(
+  configure?: (api: ApiMocks) => void,
+  start: TenantMembership = ALPHA,
+): Promise<Harness> {
   const user = signal<CurrentUser | null>(USER);
-  const membership = signal<TenantMembership | undefined>(ALPHA);
+  const membership = signal<TenantMembership | undefined>(start);
   const list = vi.fn(() => of(page(0, 0)));
   const markRead = vi.fn();
+  const markAll = vi.fn(() => of(0));
   const unreadCount = vi.fn(() => of(0));
-  configure?.({ list, markRead, unreadCount });
+  configure?.({ list, markRead, markAll, unreadCount });
 
   await TestBed.configureTestingModule({
     imports: [Notifications],
     providers: [
-      // The inbox links to the settings screen, so RouterLink needs a router to resolve against.
-      provideRouter([]),
+      // Anywhere a notice leads resolves, so following one is a navigation and not an error.
+      provideRouter([{ path: '**', children: [] }]),
       {
         provide: ApiClient,
         useValue: {
           listNotifications: list,
           markNotificationRead: markRead,
+          markAllNotificationsRead: markAll,
           getUnreadNotificationCount: unreadCount,
         },
       },
@@ -110,7 +128,9 @@ async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
         provide: TenantStore,
         useValue: {
           selectedMembership: membership,
-          selectedTenantId: signal(ALPHA.tenantId),
+          selectedTenantId: signal(start.tenantId),
+          isOwner: signal(start.role === 'Owner'),
+          isClient: signal(start.role === 'Client'),
         },
       },
     ],
@@ -125,18 +145,26 @@ async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
     membership,
     list,
     markRead,
+    markAll,
     unreadCount,
     store: TestBed.inject(NotificationStore),
   };
 }
 
-/** The visible titles, with the read/unread marker that shares the heading removed. */
+/** The visible titles, newest first. */
 function rowTitles(host: HTMLElement): string[] {
-  return Array.from(host.querySelectorAll('.feed li h3')).map((heading) => {
-    const clone = heading.cloneNode(true) as HTMLElement;
-    clone.querySelector('.state')?.remove();
-    return (clone.textContent ?? '').replace(/\s+/g, ' ').trim();
-  });
+  return Array.from(host.querySelectorAll('.rows li .row-text strong')).map((title) =>
+    (title.textContent ?? '').replace(/\s+/g, ' ').trim(),
+  );
+}
+
+/** The row of the notice with this title. */
+function row(host: HTMLElement, title: string): HTMLElement {
+  const found = Array.from(host.querySelectorAll<HTMLElement>('.rows li')).find(
+    (li) => li.querySelector('.row-text strong')?.textContent?.trim() === title,
+  );
+  if (!found) throw new Error(`No notice titled "${title}".`);
+  return found;
 }
 
 describe('Notifications', () => {
@@ -145,98 +173,245 @@ describe('Notifications', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders an accessible empty state when the inbox is empty', async () => {
+  it('invites with an empty state that says what will arrive', async () => {
     const { host } = await render();
 
-    expect(host.querySelector('.empty')?.textContent).toContain('no notifications');
-    expect(host.querySelector('.feed')).toBeNull();
-    // The live region exists from first render so a later message can be announced at all, and it
-    // says nothing until something has happened.
+    expect(host.querySelector('app-empty-state')?.textContent).toContain('No notifications yet');
+    expect(host.querySelector('app-empty-state')?.textContent).toContain('your coach');
+    expect(host.querySelector('.rows')).toBeNull();
+    // The live region exists from first render so a later message can be announced at all.
     expect(query(host, '[role="alert"]').textContent?.trim()).toBe('');
+    // Nothing is unread, so there is nothing to mark.
+    expect(host.textContent).not.toContain('Mark all as read');
   });
 
-  it('renders the inbox newest first with its loaded and total counts', async () => {
-    const { host } = await render(({ list }) => {
+  it('says what a coach will be told when the inbox is empty', async () => {
+    const { host } = await render(undefined, { ...ALPHA, role: 'Coach' });
+
+    expect(host.querySelector('app-empty-state')?.textContent).toContain('a client leaves a note');
+  });
+
+  it('lists newest first under Today and says how many are unread', async () => {
+    const { host } = await render(({ list, unreadCount }) => {
+      unreadCount.mockReturnValue(of(2));
       list.mockReturnValue(
         of(
           page(
-            5,
+            3,
             2,
-            item('n3', '2026-08-31T12:00:00.000Z'),
-            item('n2', '2026-08-31T11:00:00.000Z', true),
-            item('n1', '2026-08-31T10:00:00.000Z'),
+            item('n3', moments(0.1)),
+            item('n2', moments(0.2), true),
+            item('n1', moments(0.3)),
           ),
         ),
       );
     });
 
     expect(rowTitles(host)).toEqual(['Notification n3', 'Notification n2', 'Notification n1']);
-    expect(host.querySelector('[role="status"]')?.textContent).toContain('Showing 3 of 5');
-    expect(host.querySelector('[role="status"]')?.textContent).toContain('2 unread');
+    expect(query(host, '.day-title').textContent?.trim()).toBe('Today');
+    expect(query(host, '.lede').textContent).toContain('2 unread');
+    // No Refresh button: the list reads itself again when the tab comes back.
+    expect(host.textContent).not.toContain('Refresh');
   });
 
-  it('links a renewal request to the client it names, and nothing else to a client', async () => {
-    const renewal: NotificationItem = {
-      ...item('r1', '2026-10-05T12:00:00.000Z', false, 'Maya Rahman asked to renew'),
-      kind: 'RenewalRequested',
-      clientProfileId: 'client-maya',
-    };
+  it('opens each notice where it leads, and offers a button for one with nowhere to go', async () => {
+    const at = moments(0.5);
+    const notices: NotificationItem[] = [
+      {
+        ...item('r1', at, false, 'Maya Rahman asked to renew'),
+        kind: 'RenewalRequested',
+        clientProfileId: 'client-maya',
+      },
+      {
+        ...item('w1', at, false, 'Your coach updated week 3'),
+        kind: 'WeeksChanged',
+        weekNumber: 3,
+      },
+      {
+        ...item('c1', at, false, 'Your coach left a note on a workout'),
+        kind: 'CoachWorkoutNote',
+        workoutExecutionId: 'workout-1',
+      },
+      {
+        ...item('k1', at, false, 'Maya Rahman left a note on a workout'),
+        kind: 'ClientWorkoutNote',
+        clientProfileId: 'client-maya',
+        sessionId: 'session-1',
+      },
+      { ...item('p1', at, false, 'Your coach set up a new program'), kind: 'ProgramAssigned' },
+      { ...item('l1', at, false, 'A client left the workspace'), kind: 'ClientLeft' },
+      item('n1', at),
+    ];
     const { host } = await render(({ list }) => {
-      list.mockReturnValue(of(page(2, 2, renewal, item('n1', '2026-10-05T11:00:00.000Z'))));
+      list.mockReturnValue(of(page(notices.length, notices.length, ...notices)));
     });
 
-    const links = [...host.querySelectorAll<HTMLAnchorElement>('.feed a')];
-    expect(links).toHaveLength(1);
-    expect(links[0].getAttribute('href')).toBe('/clients/client-maya/service');
-    expect(links[0].textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      "Open the client's page: Maya Rahman asked to renew",
+    const href = (title: string) => row(host, title).querySelector('a.row')?.getAttribute('href');
+    expect(href('Maya Rahman asked to renew')).toBe('/clients/client-maya/service');
+    expect(href('Your coach updated week 3')).toBe('/training/program?week=3');
+    expect(href('Your coach left a note on a workout')).toBe('/training/program?workout=workout-1');
+    expect(href('Maya Rahman left a note on a workout')).toBe(
+      '/clients/client-maya/training?session=session-1',
     );
+    expect(href('Your coach set up a new program')).toBe('/training/program');
+    // A coach is told a client left but has no list to open; a plan notice has nowhere better to go.
+    expect(href('A client left the workspace')).toBeUndefined();
+    expect(row(host, 'Notification n1').querySelector('button.row')?.textContent).toContain(
+      'mark as read',
+    );
+  });
+
+  it('opens a former client notice on the owner’s Former clients list', async () => {
+    const { host } = await render(
+      ({ list }) => {
+        list.mockReturnValue(
+          of(
+            page(1, 1, {
+              ...item('l1', moments(1), false, 'A client left the workspace'),
+              kind: 'ClientLeft',
+            }),
+          ),
+        );
+      },
+      { ...ALPHA, role: 'Owner' },
+    );
+
+    expect(query(host, 'a.row').getAttribute('href')).toBe('/clients/former');
+  });
+
+  it('marks a linked notice read as it is opened', async () => {
+    const harness = await render(({ list, markRead, unreadCount }) => {
+      unreadCount.mockReturnValue(of(1));
+      const notice: NotificationItem = {
+        ...item('p1', moments(1), false, 'Your coach set up a new program'),
+        kind: 'ProgramAssigned',
+      };
+      list.mockReturnValue(of(page(1, 1, notice)));
+      markRead.mockReturnValue(of({ ...notice, isRead: true }));
+    });
+
+    query<HTMLAnchorElement>(harness.host, 'a.row').click();
+    await settle(harness.fixture);
+
+    expect(harness.markRead).toHaveBeenCalledWith('p1');
+    expect(harness.store.unread()).toBe(0);
   });
 
   it('distinguishes read from unread without relying on colour', async () => {
     const { host } = await render(({ list }) => {
       list.mockReturnValue(
-        of(
-          page(
-            2,
-            1,
-            item('n2', '2026-08-31T12:00:00.000Z'),
-            item('n1', '2026-08-31T11:00:00.000Z', true),
-          ),
-        ),
+        of(page(2, 1, item('n2', moments(0.1)), item('n1', moments(0.2), true))),
       );
     });
 
-    const rows = Array.from(host.querySelectorAll('.feed li'));
-    expect(rows[0].classList.contains('unread')).toBe(true);
-    expect(rows[0].textContent).toContain('Unread');
-    expect(rows[1].classList.contains('read')).toBe(true);
-    expect(rows[1].textContent).toContain('Read');
-    // Only the unread row offers the action, and it names which notification it acts on.
-    const actions = Array.from(host.querySelectorAll('button[aria-label^="Mark as read"]'));
-    expect(actions).toHaveLength(1);
-    expect(actions[0].getAttribute('aria-label')).toBe('Mark as read: Notification n2');
+    const unread = row(host, 'Notification n2');
+    const read = row(host, 'Notification n1');
+    expect(unread.classList.contains('unread')).toBe(true);
+    expect(unread.textContent).toContain(', unread');
+    expect(read.classList.contains('unread')).toBe(false);
+    expect(read.textContent).not.toContain('unread');
+    // A read notice with nowhere to go is not a control at all.
+    expect(read.querySelector('button, a')).toBeNull();
   });
 
-  it('loads more without repeating an identifier already on screen', async () => {
-    const first = page(
-      3,
-      3,
-      item('n3', '2026-08-31T12:00:00.000Z'),
-      item('n2', '2026-08-31T11:00:00.000Z'),
+  it('shows only unread notices when asked, from the server', async () => {
+    const harness = await render(({ list, unreadCount }) => {
+      unreadCount.mockReturnValue(of(1));
+      list
+        .mockReturnValueOnce(of(page(2, 1, item('n2', moments(0.1)), item('n1', moments(1), true))))
+        .mockReturnValueOnce(of(page(1, 1, item('n2', moments(0.1)))));
+    });
+
+    query<HTMLInputElement>(harness.host, 'input[type="radio"][value="unread"]').click();
+    await settle(harness.fixture);
+
+    expect(harness.list).toHaveBeenLastCalledWith(0, 25, true);
+    expect(rowTitles(harness.host)).toEqual(['Notification n2']);
+  });
+
+  it('says all is caught up under Unread and offers the rest', async () => {
+    const harness = await render(({ list }) => {
+      list
+        .mockReturnValueOnce(of(page(1, 0, item('n1', moments(1), true))))
+        .mockReturnValue(of(page(0, 0)));
+    });
+
+    query<HTMLInputElement>(harness.host, 'input[type="radio"][value="unread"]').click();
+    await settle(harness.fixture);
+    expect(harness.host.querySelector('app-empty-state')?.textContent).toContain(
+      "You're all caught up",
     );
+
+    button(harness.host, 'Show all').click();
+    await settle(harness.fixture);
+    expect(harness.list).toHaveBeenLastCalledWith(0, 25, false);
+  });
+
+  it('marks everything read in one go and clears the badge', async () => {
+    const harness = await render(({ list, unreadCount, markAll }) => {
+      unreadCount.mockReturnValue(of(2));
+      list.mockReturnValue(
+        of(
+          page(
+            3,
+            2,
+            item('n3', moments(0.1)),
+            item('n2', moments(0.2)),
+            item('n1', moments(0.3), true),
+          ),
+        ),
+      );
+      markAll.mockReturnValue(of(0));
+    });
+    expect(harness.store.unread()).toBe(2);
+
+    button(harness.host, 'Mark all as read').click();
+    await settle(harness.fixture);
+
+    expect(harness.markAll).toHaveBeenCalledTimes(1);
+    expect(harness.host.querySelectorAll('.rows li.unread')).toHaveLength(0);
+    expect(harness.store.unread()).toBe(0);
+    expect(harness.host.textContent).not.toContain('Mark all as read');
+    expect(query(harness.host, '.lede').textContent).toContain('all caught up');
+  });
+
+  it('keeps notices unread and says so when marking all fails', async () => {
+    const harness = await render(({ list, unreadCount, markAll }) => {
+      unreadCount.mockReturnValue(of(1));
+      list.mockReturnValue(of(page(1, 1, item('n1', moments(0.1)))));
+      markAll.mockReturnValue(throwError(() => new Error('offline')));
+    });
+
+    button(harness.host, 'Mark all as read').click();
+    await settle(harness.fixture);
+
+    expect(harness.host.querySelectorAll('.rows li.unread')).toHaveLength(1);
+    expect(harness.store.unread()).toBe(1);
+    expect(query(harness.host, '[role="alert"]').textContent).toContain('could not be marked');
+  });
+
+  it('reads the first page again when the tab comes back into view', async () => {
+    const harness = await render(({ list }) => {
+      list
+        .mockReturnValueOnce(of(page(1, 1, item('n1', moments(1)))))
+        .mockReturnValueOnce(of(page(2, 2, item('n2', moments(0.1)), item('n1', moments(1)))));
+    });
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    await settle(harness.fixture);
+
+    expect(rowTitles(harness.host)).toEqual(['Notification n2', 'Notification n1']);
+  });
+
+  it('loads earlier notices without repeating an identifier already on screen', async () => {
+    const first = page(3, 3, item('n3', moments(0.1)), item('n2', moments(0.2)));
     // The second page overlaps, as it would if something were delivered between the two requests.
-    const second = page(
-      3,
-      3,
-      item('n2', '2026-08-31T11:00:00.000Z'),
-      item('n1', '2026-08-31T10:00:00.000Z'),
-    );
+    const second = page(3, 3, item('n2', moments(0.2)), item('n1', moments(0.3)));
     const harness = await render(({ list }) => {
       list.mockReturnValueOnce(of(first)).mockReturnValueOnce(of(second));
     });
 
-    button(harness.host, 'Load more notifications').click();
+    button(harness.host, 'Show earlier notifications').click();
     await settle(harness.fixture);
 
     expect(rowTitles(harness.host)).toEqual([
@@ -244,50 +419,30 @@ describe('Notifications', () => {
       'Notification n2',
       'Notification n1',
     ]);
-    expect(harness.list).toHaveBeenLastCalledWith(2, 25);
+    expect(harness.list).toHaveBeenLastCalledWith(2, 25, false);
     // Everything is loaded, so the control is gone rather than left offering nothing.
-    expect(harness.host.querySelector('button.link:not([aria-label])')?.textContent).not.toContain(
-      'Load more',
-    );
+    expect(harness.host.textContent).not.toContain('Show earlier notifications');
   });
 
   it('advances by consumed server positions when an insertion makes pages overlap', async () => {
     const harness = await render(({ list }) => {
       list
-        .mockReturnValueOnce(
-          of(
-            page(
-              4,
-              4,
-              item('n3', '2026-08-31T12:00:00.000Z'),
-              item('n2', '2026-08-31T11:00:00.000Z'),
-            ),
-          ),
-        )
+        .mockReturnValueOnce(of(page(4, 4, item('n3', moments(0.1)), item('n2', moments(0.2)))))
         // A new n4 was inserted ahead of the first page. Offset 2 now overlaps on n2, but both
         // returned rows still consume server positions 2 and 3.
-        .mockReturnValueOnce(
-          of(
-            page(
-              5,
-              5,
-              item('n2', '2026-08-31T11:00:00.000Z'),
-              item('n1', '2026-08-31T10:00:00.000Z'),
-            ),
-          ),
-        )
-        .mockReturnValueOnce(of(page(5, 5, item('n0', '2026-08-31T09:00:00.000Z'))));
+        .mockReturnValueOnce(of(page(5, 5, item('n2', moments(0.2)), item('n1', moments(0.3)))))
+        .mockReturnValueOnce(of(page(5, 5, item('n0', moments(0.4)))));
     });
 
-    button(harness.host, 'Load more notifications').click();
+    button(harness.host, 'Show earlier notifications').click();
     await settle(harness.fixture);
-    button(harness.host, 'Load more notifications').click();
+    button(harness.host, 'Show earlier notifications').click();
     await settle(harness.fixture);
 
     expect(harness.list.mock.calls).toEqual([
-      [0, 25],
-      [2, 25],
-      [4, 25],
+      [0, 25, false],
+      [2, 25, false],
+      [4, 25, false],
     ]);
     const titles = rowTitles(harness.host);
     expect(titles).toEqual([
@@ -297,54 +452,37 @@ describe('Notifications', () => {
       'Notification n0',
     ]);
     expect(new Set(titles).size).toBe(titles.length);
-    expect(harness.host.textContent).not.toContain('Load more notifications');
   });
 
-  it('marks a notification read and decrements the badge', async () => {
+  it('marks a notice read and decrements the badge', async () => {
     const harness = await render(({ list, markRead, unreadCount }) => {
       unreadCount.mockReturnValue(of(2));
-      list.mockReturnValue(
-        of(
-          page(
-            2,
-            2,
-            item('n2', '2026-08-31T12:00:00.000Z'),
-            item('n1', '2026-08-31T11:00:00.000Z'),
-          ),
-        ),
-      );
-      markRead.mockReturnValue(of(item('n2', '2026-08-31T12:00:00.000Z', true)));
+      list.mockReturnValue(of(page(2, 2, item('n2', moments(0.1)), item('n1', moments(0.2)))));
+      markRead.mockReturnValue(of(item('n2', moments(0.1), true)));
     });
     expect(harness.store.unread()).toBe(2);
 
-    query<HTMLButtonElement>(
-      harness.host,
-      'button[aria-label="Mark as read: Notification n2"]',
-    ).click();
+    query<HTMLButtonElement>(row(harness.host, 'Notification n2'), 'button.row').click();
     await settle(harness.fixture);
 
     expect(harness.markRead).toHaveBeenCalledWith('n2');
-    const rows = Array.from(harness.host.querySelectorAll('.feed li'));
-    expect(rows[0].classList.contains('read')).toBe(true);
+    expect(row(harness.host, 'Notification n2').classList.contains('unread')).toBe(false);
     expect(harness.store.unread()).toBe(1);
   });
 
-  it('keeps a notification unread when marking it read fails', async () => {
+  it('keeps a notice unread when marking it read fails', async () => {
     const harness = await render(({ list, markRead, unreadCount }) => {
       unreadCount.mockReturnValue(of(1));
-      list.mockReturnValue(of(page(1, 1, item('n1', '2026-08-31T12:00:00.000Z'))));
+      list.mockReturnValue(of(page(1, 1, item('n1', moments(0.1)))));
       markRead.mockReturnValue(throwError(() => new Error('offline')));
     });
 
-    query<HTMLButtonElement>(
-      harness.host,
-      'button[aria-label="Mark as read: Notification n1"]',
-    ).click();
+    query<HTMLButtonElement>(harness.host, 'button.row').click();
     await settle(harness.fixture);
 
-    const row = query(harness.host, '.feed li');
-    expect(row.classList.contains('unread')).toBe(true);
-    expect(row.textContent).toContain('Unread');
+    const notice = row(harness.host, 'Notification n1');
+    expect(notice.classList.contains('unread')).toBe(true);
+    expect(notice.textContent).toContain(', unread');
     expect(harness.store.unread()).toBe(1);
     expect(query(harness.host, '[role="alert"]').textContent).toContain('could not be marked');
   });
@@ -355,16 +493,14 @@ describe('Notifications', () => {
     });
 
     expect(query(host, '[role="alert"]').textContent).toContain('could not be loaded');
-    expect(host.querySelectorAll('.feed li')).toHaveLength(0);
+    expect(host.querySelectorAll('.rows li')).toHaveLength(0);
   });
 
   it('clears the inbox and the badge when the workspace changes', async () => {
     const harness = await render(({ list, unreadCount }) => {
       unreadCount.mockReturnValueOnce(of(3)).mockReturnValue(of(0));
       list
-        .mockReturnValueOnce(
-          of(page(1, 1, item('alpha', '2026-08-31T12:00:00.000Z', false, 'Alpha notice'))),
-        )
+        .mockReturnValueOnce(of(page(1, 1, item('alpha', moments(0.1), false, 'Alpha notice'))))
         .mockReturnValue(of(page(0, 0)));
     });
     expect(rowTitles(harness.host)).toEqual(['Alpha notice']);
@@ -372,17 +508,15 @@ describe('Notifications', () => {
     harness.membership.set(BETA);
     await settle(harness.fixture);
 
-    expect(harness.host.querySelectorAll('.feed li')).toHaveLength(0);
-    expect(harness.host.querySelector('.empty')).not.toBeNull();
+    expect(harness.host.querySelectorAll('.rows li')).toHaveLength(0);
+    expect(harness.host.querySelector('app-empty-state')).not.toBeNull();
     expect(harness.store.unread()).toBe(0);
   });
 
   it('clears the inbox when the signed-in account changes', async () => {
     const harness = await render(({ list }) => {
       list
-        .mockReturnValueOnce(
-          of(page(1, 1, item('mine', '2026-08-31T12:00:00.000Z', false, 'Mine'))),
-        )
+        .mockReturnValueOnce(of(page(1, 1, item('mine', moments(0.1), false, 'Mine'))))
         .mockReturnValue(of(page(0, 0)));
     });
     expect(rowTitles(harness.host)).toEqual(['Mine']);
@@ -390,26 +524,25 @@ describe('Notifications', () => {
     harness.user.set(OTHER_USER);
     await settle(harness.fixture);
 
-    expect(harness.host.querySelectorAll('.feed li')).toHaveLength(0);
+    expect(harness.host.querySelectorAll('.rows li')).toHaveLength(0);
   });
 
   it('clears the inbox on sign-out and asks for nothing more', async () => {
     const harness = await render(({ list }) => {
-      list.mockReturnValue(of(page(1, 1, item('mine', '2026-08-31T12:00:00.000Z', false, 'Mine'))));
+      list.mockReturnValue(of(page(1, 1, item('mine', moments(0.1), false, 'Mine'))));
     });
     const callsBefore = harness.list.mock.calls.length;
 
     harness.user.set(null);
     await settle(harness.fixture);
 
-    expect(harness.host.querySelectorAll('.feed li')).toHaveLength(0);
+    expect(harness.host.querySelectorAll('.rows li')).toHaveLength(0);
     expect(harness.list.mock.calls.length).toBe(callsBefore);
   });
 
   /**
-   * The defect these three exist for: a reply for the workspace the user has just left arriving
-   * after the current one and being written on top of it. Each resolves the two requests
-   * deliberately out of order, oldest last.
+   * The defect these exist for: a reply for the workspace the user has just left arriving after the
+   * current one and being written on top of it. Each resolves the two requests out of order.
    */
   it('discards a list that resolves after the workspace has changed', async () => {
     const stale = new Subject<NotificationPage>();
@@ -421,38 +554,36 @@ describe('Notifications', () => {
     harness.membership.set(BETA);
     await settle(harness.fixture);
 
-    fresh.next(page(1, 1, item('beta', '2026-08-31T12:00:00.000Z', false, 'Beta notice')));
+    fresh.next(page(1, 1, item('beta', moments(0.1), false, 'Beta notice')));
     fresh.complete();
     await settle(harness.fixture);
     expect(rowTitles(harness.host)).toEqual(['Beta notice']);
 
-    stale.next(page(1, 1, item('alpha', '2026-08-31T11:00:00.000Z', false, 'Alpha notice')));
+    stale.next(page(1, 1, item('alpha', moments(0.2), false, 'Alpha notice')));
     stale.complete();
     await settle(harness.fixture);
 
     expect(rowTitles(harness.host)).toEqual(['Beta notice']);
   });
 
-  it('discards a Load More page that resolves after the workspace has changed', async () => {
+  it('discards an earlier page that resolves after the workspace has changed', async () => {
     const more = new Subject<NotificationPage>();
     const harness = await render(({ list }) => {
       list
-        .mockReturnValueOnce(
-          of(page(2, 2, item('alpha', '2026-08-31T12:00:00.000Z', false, 'Alpha notice'))),
-        )
+        .mockReturnValueOnce(of(page(2, 2, item('alpha', moments(0.1), false, 'Alpha notice'))))
         .mockReturnValueOnce(more)
         .mockReturnValue(of(page(0, 0)));
     });
 
-    button(harness.host, 'Load more notifications').click();
+    button(harness.host, 'Show earlier notifications').click();
     harness.membership.set(BETA);
     await settle(harness.fixture);
 
-    more.next(page(2, 2, item('alpha-2', '2026-08-31T11:00:00.000Z', false, 'Alpha second')));
+    more.next(page(2, 2, item('alpha-2', moments(0.2), false, 'Alpha second')));
     more.complete();
     await settle(harness.fixture);
 
-    expect(harness.host.querySelectorAll('.feed li')).toHaveLength(0);
+    expect(harness.host.querySelectorAll('.rows li')).toHaveLength(0);
   });
 
   it('discards a mark-read success that resolves after the workspace has changed', async () => {
@@ -460,22 +591,14 @@ describe('Notifications', () => {
     const harness = await render(({ list, markRead, unreadCount }) => {
       unreadCount.mockReturnValueOnce(of(1)).mockReturnValue(of(2));
       list
-        .mockReturnValueOnce(
-          of(page(1, 1, item('alpha', '2026-08-31T12:00:00.000Z', false, 'Alpha notice'))),
-        )
+        .mockReturnValueOnce(of(page(1, 1, item('alpha', moments(0.1), false, 'Alpha notice'))))
         // The new workspace has two unread of its own, so a stale decrement would be visible.
-        .mockReturnValue(
-          of(page(1, 2, item('beta', '2026-08-31T12:30:00.000Z', false, 'Beta notice'))),
-        );
+        .mockReturnValue(of(page(1, 2, item('beta', moments(0.05), false, 'Beta notice'))));
       markRead.mockReturnValue(pending);
     });
 
-    query<HTMLButtonElement>(
-      harness.host,
-      'button[aria-label="Mark as read: Alpha notice"]',
-    ).click();
-    // Settled first, so the request is genuinely in flight before the workspace moves. Changing it
-    // in the same turn would only exercise the check made before the call.
+    query<HTMLButtonElement>(row(harness.host, 'Alpha notice'), 'button.row').click();
+    // Settled first, so the request is genuinely in flight before the workspace moves.
     await settle(harness.fixture);
     expect(harness.markRead).toHaveBeenCalledWith('alpha');
 
@@ -484,7 +607,7 @@ describe('Notifications', () => {
     expect(rowTitles(harness.host)).toEqual(['Beta notice']);
     expect(harness.store.unread()).toBe(2);
 
-    pending.next(item('alpha', '2026-08-31T12:00:00.000Z', true, 'Alpha notice'));
+    pending.next(item('alpha', moments(0.1), true, 'Alpha notice'));
     pending.complete();
     await settle(harness.fixture);
 
@@ -497,19 +620,12 @@ describe('Notifications', () => {
     const pending = new Subject<NotificationItem>();
     const harness = await render(({ list, markRead }) => {
       list
-        .mockReturnValueOnce(
-          of(page(1, 1, item('alpha', '2026-08-31T12:00:00.000Z', false, 'Alpha notice'))),
-        )
-        .mockReturnValue(
-          of(page(1, 1, item('beta', '2026-08-31T12:30:00.000Z', false, 'Beta notice'))),
-        );
+        .mockReturnValueOnce(of(page(1, 1, item('alpha', moments(0.1), false, 'Alpha notice'))))
+        .mockReturnValue(of(page(1, 1, item('beta', moments(0.05), false, 'Beta notice'))));
       markRead.mockReturnValue(pending);
     });
 
-    query<HTMLButtonElement>(
-      harness.host,
-      'button[aria-label="Mark as read: Alpha notice"]',
-    ).click();
+    query<HTMLButtonElement>(row(harness.host, 'Alpha notice'), 'button.row').click();
     await settle(harness.fixture);
     expect(harness.markRead).toHaveBeenCalledWith('alpha');
 

@@ -169,7 +169,7 @@
           </div>
           <ol class="weeks">
             @for (week of otherWeeks(); track week.number) {
-              <li class="week">
+              <li class="week" [id]="'week-row-' + week.number">
                 @if (week.visible && week.sessions.length > 0) {
                   <button
                     type="button"
@@ -251,7 +251,11 @@
         } @else {
           <ul class="history">
             @for (item of historyShown(); track item.id) {
-              <li class="history-item">
+              <li
+                class="history-item"
+                [id]="'workout-' + item.id"
+                [class.is-linked]="item.id === linkedWorkout()"
+              >
                 <div class="history-top">
                   <strong dir="auto">{{ item.name }}</strong>
                   <span class="history-date">{{

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, model } from '@angular/core';
+import { booleanAttribute, ChangeDetectionStrategy, Component, input, model } from '@angular/core';
 
 export interface SegmentOption {
   readonly value: string;
@@ -13,7 +13,7 @@ let nextGroupId = 0;
   selector: 'app-segmented-control',
   template: `
     <fieldset>
-      <legend>{{ label() }}</legend>
+      <legend [class.tb-visually-hidden]="hideLabel()">{{ label() }}</legend>
       <div class="track">
         @for (option of options(); track option.value) {
           <label>
@@ -119,6 +119,8 @@ let nextGroupId = 0;
 export class SegmentedControl {
   readonly label = input.required<string>();
   readonly options = input.required<readonly SegmentOption[]>();
+  /** Keeps the label for assistive technology only, where the options name themselves (a filter bar). */
+  readonly hideLabel = input(false, { transform: booleanAttribute });
   readonly selected = model<string>('');
   protected readonly groupName = `tb-segment-${++nextGroupId}`;
 }

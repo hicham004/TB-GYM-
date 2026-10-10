@@ -137,6 +137,21 @@ R5.1, in-app only. A client hears of a new program, a week shared, a change the 
 the client can already see (one notice per apply, naming the weeks, not their contents) and a coach's note
 on a workout ("Your coach left a note on Tuesday's workout", never the note's text).
 
+**Built in R5.1c (2026-10-09), with two decisions taken by Claude for the owner.** The notices follow
+NOT-035: said only when the client can see something new now, one "shared" and one "updated" per
+change, the weeks named by number, and checked again before delivery. (1) The note notice gives no
+day: NOT-006 keeps dates out of notice wording, and a note can come days after the workout, so
+"Tuesday's" could mislead. It says "Your coach left a note on a workout" and opens that workout.
+(2) The coach is told of a client's note too ("Maya Rahman left a note on a workout", opening that
+session on the client's Training). TrueCoach emails the coach on a workout comment, Trainerize's feed
+notifies trainers of client comments, and QuickCoach notifies on client feedback; Coach Today lists
+finished workouts but not notes, so a client's "my knee hurt" would otherwise wait unseen. Finished
+workouts, check-ins and weigh-ins still make no notice: Coach Today is their feed, and a notice for
+each would bury the ones addressed to the coach. Sources:
+[TrueCoach coach notifications](https://help.truecoach.co/en/articles/2403627-coach-s-notification-settings),
+[Trainerize comments and notes](https://www.trainerize.com/blog/trainerize-update-get-your-communication-on-with-comments-and-notes/),
+[QuickCoach client activity](https://help.quickcoach.fit/clients-check-ins/get-notified-about-client-activity.html).
+
 ## Where the chart comes from
 
 RTS publishes a method for building a personal chart, not a fixed table. The table here is the

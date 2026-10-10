@@ -417,6 +417,11 @@ internal sealed class NotificationDispatchService(
             return await EvaluateWorkspaceKindAsync(context, item, delivery, cancellationToken);
         }
 
+        if (NotificationPurposeCatalog.IsTrainingKind(item.Kind))
+        {
+            return await EvaluateTrainingKindAsync(context, item, delivery, now, cancellationToken);
+        }
+
         if (!TryReadPayload(item.PayloadJson, out var payload) || payload.EnrollmentId != item.AggregateId)
         {
             return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
@@ -798,6 +803,158 @@ internal sealed class NotificationDispatchService(
         }
 
         return InAppOnly(item, delivery, audience.Culture);
+    }
+
+    /// <summary>
+    /// A training notice (ADR 0036) is still said while the client is still this workspace's, linked to
+    /// the recipient and not blocked, the program still theirs and not cancelled, and for a week notice
+    /// while at least one of its weeks is still open to the client: only those weeks are named. A
+    /// client's note goes to the coach who has the client now, named as they are today.
+    /// </summary>
+    private static async Task<Eligibility> EvaluateTrainingKindAsync(
+        GymDbContext context,
+        NotificationOutboxItem item,
+        NotificationChannelDelivery delivery,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (!TryReadWorkspacePayload(item.PayloadJson, out TrainingNotificationPayload? payload) ||
+            payload.ClientProfileId == Guid.Empty ||
+            payload.MesocycleId == Guid.Empty ||
+            payload.SchemaVersion != TrainingNotificationPayload.CurrentSchemaVersion)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
+        }
+
+        var isNote = item.Kind is CommercialNotificationKind.CoachWorkoutNote or CommercialNotificationKind.ClientWorkoutNote;
+        var isWeeks = item.Kind is CommercialNotificationKind.WeeksShared or CommercialNotificationKind.WeeksChanged;
+        if (isNote
+                ? payload.WorkoutExecutionId != item.AggregateId || payload.SessionId is null
+                : payload.MesocycleId != item.AggregateId)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
+        }
+
+        if (isWeeks && (payload.Weeks is not { Count: > 0 } || payload.Weeks.Any(week => week < 1)))
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
+        }
+
+        var audience = await ResolveWorkspaceAudienceAsync(context, item, cancellationToken);
+        if (audience.Refusal is { } refusal)
+        {
+            return refusal;
+        }
+
+        var client = await context.ClientProfiles
+            .AsNoTracking()
+            .Where(profile => profile.Id == payload.ClientProfileId)
+            .Select(profile => new
+            {
+                profile.UserId,
+                profile.FirstName,
+                profile.LastName,
+                profile.AssignedCoachUserId,
+                profile.ReleasedAtUtc,
+                profile.IsCoachBlocked,
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        var mesocycle = await context.TrainingMesocycles
+            .AsNoTracking()
+            .Where(block => block.Id == payload.MesocycleId)
+            .Select(block => new { block.ClientProfileId, block.Status, block.StartDate, block.TimeZoneId, block.RevealAllWeeks })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (client is null || mesocycle is null || mesocycle.ClientProfileId != payload.ClientProfileId)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+        }
+
+        if (isNote && !await context.WorkoutExecutions.AsNoTracking().AnyAsync(
+                execution => execution.Id == item.AggregateId &&
+                    execution.MesocycleId == payload.MesocycleId &&
+                    execution.TrainingSessionId == payload.SessionId &&
+                    execution.ClientProfileId == payload.ClientProfileId,
+                cancellationToken))
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+        }
+
+        if (client.ReleasedAtUtc is not null || mesocycle.Status == TB.Gym.Modules.Training.MesocycleStatus.Cancelled)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
+        }
+
+        if (item.Kind == CommercialNotificationKind.ClientWorkoutNote)
+        {
+            if (audience.RecipientRole is not (TenantRole.Owner or TenantRole.Coach))
+            {
+                return Eligibility.Suppress(NotificationSuppressionCodes.MembershipInactive);
+            }
+
+            if (client.AssignedCoachUserId != item.RecipientUserId)
+            {
+                return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
+            }
+
+            if (delivery.Channel != NotificationChannel.InApp)
+            {
+                return Eligibility.Suppress(NotificationSuppressionCodes.EmailChannelUnavailable);
+            }
+
+            return NotificationTemplateCatalog.TryResolve(item.Kind, audience.Culture, out var named)
+                ? Eligibility.InApp(NotificationTemplateCatalog.NameClient(named, $"{client.FirstName} {client.LastName}"))
+                : Eligibility.Permanent(NotificationFailureCodes.TemplateMissing);
+        }
+
+        if (audience.RecipientRole != TenantRole.Client)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.MembershipInactive);
+        }
+
+        if (client.UserId != item.RecipientUserId)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.RecipientUnlinked);
+        }
+
+        if (client.IsCoachBlocked)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.RelationshipBlocked);
+        }
+
+        if (delivery.Channel != NotificationChannel.InApp)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.EmailChannelUnavailable);
+        }
+
+        if (!NotificationTemplateCatalog.TryResolve(item.Kind, audience.Culture, out var template))
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.TemplateMissing);
+        }
+
+        if (!isWeeks)
+        {
+            return Eligibility.InApp(template);
+        }
+
+        // Only weeks the client can still open are named; a week unshared since is left out.
+        var weeks = await context.MesocycleWeeks
+            .AsNoTracking()
+            .Where(week => week.MesocycleId == payload.MesocycleId && payload.Weeks.Contains(week.WeekNumber))
+            .Select(week => new { week.WeekNumber, week.IsPublished })
+            .ToListAsync(cancellationToken);
+        var open = weeks
+            .Where(week => TB.Gym.Modules.Training.TrainingCalendarPolicy.GetWeekAvailability(
+                mesocycle.StartDate,
+                week.WeekNumber,
+                mesocycle.TimeZoneId,
+                now,
+                mesocycle.RevealAllWeeks,
+                week.IsPublished).IsVisible)
+            .Select(week => week.WeekNumber)
+            .ToArray();
+        return open.Length == 0
+            ? Eligibility.Suppress(NotificationSuppressionCodes.StateChanged)
+            : Eligibility.InApp(NotificationTemplateCatalog.NameWeeks(template, open));
     }
 
     /// <summary>

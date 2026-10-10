@@ -112,6 +112,7 @@ internal sealed partial class TrainingApplicationService
             // The record keeps each session as it was, so it is written before an edited one changes in place.
             var changes = ChangesJson(built.Plan);
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = request.MesocycleVersion;
+            var visibleBefore = ClientVisibleWeeks(mesocycle);
             var applied = mesocycle.ApplyProgramEdit(built.Plan, built.Blueprints);
 
             // Taken-out rows go with everything under them. New rows are named explicitly, each one: a key made
@@ -134,6 +135,7 @@ internal sealed partial class TrainingApplicationService
                 built.Plan,
                 mesocycle.EndDateExclusive,
                 changes));
+            await QueueClientWeekNoticesAsync(mesocycle, visibleBefore, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
             return SuccessMesocycle(await ToViewAsync(mesocycle, cancellationToken));
         }

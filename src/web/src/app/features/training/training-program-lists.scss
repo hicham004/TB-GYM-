@@ -161,6 +161,14 @@ button.week-row:focus-visible {
   gap: var(--space-4);
   padding: var(--space-12) var(--space-16);
 }
+// The workout a coach's note links to (R5.1c), marked while the client reads it.
+.history-item.is-linked {
+  background: var(--tb-accent-soft);
+  scroll-margin-block-start: var(--space-24);
+}
+.week {
+  scroll-margin-block-start: var(--space-24);
+}
 .history-top {
   align-items: baseline;
   display: flex;

@@ -556,12 +556,18 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             Assert.AreEqual("en", template.Culture);
             Assert.IsFalse(string.IsNullOrWhiteSpace(template.Title));
             Assert.IsFalse(string.IsNullOrWhiteSpace(template.Body));
-            // No format placeholder, except the one ADR 0029 allows: the client's name in the title
-            // of a renewal request. Everything else is fixed text, so nothing a coach types or a
-            // payload carries can reach the wording, and the body never names anyone.
-            var title = kind == CommercialNotificationKind.RenewalRequested
-                ? template.Title.Replace(NotificationTemplateCatalog.ClientNameToken, string.Empty, StringComparison.Ordinal)
-                : template.Title;
+            // No format placeholder, except the two allowed in a title: the client's name in a renewal
+            // request (ADR 0029) or a client's workout note, and the week numbers of a week notice
+            // (ADR 0036). Everything else is fixed text, so nothing a coach types or a payload carries
+            // can reach the wording, and the body never names anyone.
+            var title = kind switch
+            {
+                CommercialNotificationKind.RenewalRequested or CommercialNotificationKind.ClientWorkoutNote =>
+                    template.Title.Replace(NotificationTemplateCatalog.ClientNameToken, string.Empty, StringComparison.Ordinal),
+                CommercialNotificationKind.WeeksShared or CommercialNotificationKind.WeeksChanged =>
+                    template.Title.Replace(NotificationTemplateCatalog.WeeksToken, string.Empty, StringComparison.Ordinal),
+                _ => template.Title,
+            };
             Assert.DoesNotContain("{", title + template.Body);
 
             foreach (var term in forbidden)

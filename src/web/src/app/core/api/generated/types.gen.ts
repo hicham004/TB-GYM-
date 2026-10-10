@@ -1208,7 +1208,12 @@ export type CommercialNotificationKind =
   | 'CoachDeparted'
   | 'ClientLeft'
   | 'CoachResigned'
-  | 'RenewalRequested';
+  | 'RenewalRequested'
+  | 'ProgramAssigned'
+  | 'WeeksShared'
+  | 'WeeksChanged'
+  | 'CoachWorkoutNote'
+  | 'ClientWorkoutNote';
 
 export type CompleteClientOnboardingRequest = {
   intake: UpdateClientIntakeRequest;
@@ -2309,6 +2314,11 @@ export type NotificationPreferenceView = {
   version: number | string;
 };
 
+export type NotificationReadAllResult = {
+  marked: number | string;
+  unread: number | string;
+};
+
 export type NotificationUnreadCount = {
   unread: number | string;
 };
@@ -2323,6 +2333,9 @@ export type NotificationView = {
   isRead: boolean;
   version: number | string;
   clientProfileId?: null | string;
+  sessionId?: null | string;
+  workoutExecutionId?: null | string;
+  weekNumber?: null | number | string;
 };
 
 export type NutritionCalculationView = {
@@ -11005,6 +11018,7 @@ export type ListOwnNotificationsData = {
   query?: {
     skip?: number | string;
     take?: number | string;
+    unread?: boolean;
   };
   url: '/api/notifications';
 };
@@ -11068,6 +11082,23 @@ export type MarkOwnNotificationReadResponses = {
 
 export type MarkOwnNotificationReadResponse =
   MarkOwnNotificationReadResponses[keyof MarkOwnNotificationReadResponses];
+
+export type MarkAllOwnNotificationsReadData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/notifications/read-all';
+};
+
+export type MarkAllOwnNotificationsReadResponses = {
+  /**
+   * OK
+   */
+  200: NotificationReadAllResult;
+};
+
+export type MarkAllOwnNotificationsReadResponse =
+  MarkAllOwnNotificationsReadResponses[keyof MarkAllOwnNotificationsReadResponses];
 
 export type GetOwnNotificationPreferencesData = {
   body?: never;

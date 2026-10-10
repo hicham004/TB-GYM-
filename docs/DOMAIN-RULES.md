@@ -1070,11 +1070,16 @@ and no user-controlled format string. The rendered title and body are snapshotte
 notification, so a later template version never rewrites what somebody was already told. A renewal
 notice must not imply paid or active access, because a renewal may still be awaiting payment. One
 exception (ADR 0029): a client's renewal request names that client in the coach's in-app title,
-read when the row is written and never kept in the payload; that notice is never emailed.
+read when the row is written and never kept in the payload; that notice is never emailed. A client's
+note on a workout names the client to their coach the same way (R5.1c), and a week notice names the
+weeks by number ("week 3", "weeks 3 to 6", "6 weeks" when more than four are scattered), worded by the
+catalogue from the numbers the payload holds (ADR 0036, NOT-035).
 
 **NOT-007** A notification belongs to one recipient in one workspace. Only that recipient may list
 or mark it, and workspace membership alone — including the owner's — grants no access to another
-member's notifications. Marking read is idempotent and one-way. Dead-letter visibility is owner-only,
+member's notifications. Marking read is idempotent and one-way, and so is Mark all as read, which
+marks only the caller's own unread notices in the active workspace and stays open while an unpaid
+workspace is read-only, like marking one. Dead-letter visibility is owner-only,
 bounded, and carries no recipient, payload, wording or exception.
 
 **NOT-008** Account confirmation, password-reset and invitation delivery stay outside the generic
@@ -1379,6 +1384,18 @@ database identifier beyond what the link itself must carry. Recipient, raw token
 rendered content exist only in memory during one materialization and inside controlled captured test
 adapters; no durable row, dead-letter view or operator surface exposes them, and logs carry stable
 identifiers and codes only.
+
+**NOT-035** Training notices (ADR 0036, R5.1c) are in-app only and say only what the client can see
+now. A client hears of a new program when it is assigned; of weeks shared when a coach's change lets
+them open weeks they could not before (a week shared before its day says nothing: it opens on its day,
+as every week does); of weeks updated when a coach's change touches weeks they could already open and
+still can (a week's sessions, exercises, sets, name or dates; sharing alone is not a change); and of a
+coach's note on one of their workouts. A coach hears of a client's note on a workout, if they are still
+that client's coach. One change makes at most one "shared" and one "updated" notice, keyed by the
+change; a note's notice is keyed by the note. The payload holds identifiers and week numbers only,
+never a note's text, a weight or a date. Before delivery the dispatcher checks again: the client still
+this workspace's, linked to the recipient and not blocked, the program still theirs and not cancelled,
+and for a week notice at least one of its weeks still open to the client; only those weeks are named.
 
 **MED-001** Object bytes live in object storage; the database owns metadata, tenant, purpose,
 content type, size, checksum, status, and retention. Upload authorization validates type and

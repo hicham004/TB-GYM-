@@ -1268,10 +1268,21 @@ export class ApiClient {
       .pipe(map(mapMeasurementHistory));
   }
 
-  listNotifications(skip = 0, take = 25): Observable<NotificationPage> {
+  /** A page of the reader's own inbox, newest first; `unreadOnly` leaves out what was read. */
+  listNotifications(skip = 0, take = 25, unreadOnly = false): Observable<NotificationPage> {
+    const params: Record<string, number | boolean> = unreadOnly
+      ? { skip, take, unread: true }
+      : { skip, take };
     return this.http
-      .get<Phase3Contracts.NotificationPage>('/api/notifications', { params: { skip, take } })
+      .get<Phase3Contracts.NotificationPage>('/api/notifications', { params })
       .pipe(map(mapNotificationPage));
+  }
+
+  /** Marks every unread notice of the reader's read, in this workspace; answers the unread left. */
+  markAllNotificationsRead(): Observable<number> {
+    return this.http
+      .post<Phase3Contracts.NotificationReadAllResult>('/api/notifications/read-all', null)
+      .pipe(map((result) => Number(result.unread)));
   }
 
   getUnreadNotificationCount(): Observable<number> {

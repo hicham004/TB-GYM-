@@ -23,8 +23,13 @@ export interface NotificationItem {
   readonly createdAtUtc: string;
   readonly readAtUtc: string | null;
   readonly isRead: boolean;
-  /** The client a staff notice is about (a renewal request), for a link to their page. */
+  /** The client a staff notice is about (a renewal request, a client's note), for a link to their page. */
   readonly clientProfileId: string | null;
+  /** The workout a note is on: its session in the program, and the client's logged workout. */
+  readonly sessionId: string | null;
+  readonly workoutExecutionId: string | null;
+  /** The first week a week notice names, so Training can open at it. */
+  readonly weekNumber: number | null;
 }
 
 export interface NotificationPage {
@@ -43,6 +48,12 @@ export function mapNotification(value: ContractNotificationView): NotificationIt
     readAtUtc: value.readAtUtc ?? null,
     isRead: value.isRead,
     clientProfileId: value.clientProfileId ?? null,
+    sessionId: value.sessionId ?? null,
+    workoutExecutionId: value.workoutExecutionId ?? null,
+    weekNumber:
+      value.weekNumber === null || value.weekNumber === undefined
+        ? null
+        : toCount(value.weekNumber),
   };
 }
 

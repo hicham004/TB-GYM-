@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Notifications;
@@ -26,9 +27,12 @@ internal sealed class NotificationApplicationService(
     ITenantContext tenantContext)
     : INotificationApplicationService
 {
+    private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
+
     public async Task<NotificationPage> ListOwnAsync(
         int skip,
         int take,
+        bool unreadOnly,
         CancellationToken cancellationToken)
     {
         if (!TryResolveRecipient(out var recipientUserId))
@@ -39,35 +43,59 @@ internal sealed class NotificationApplicationService(
         var own = dbContext.Notifications
             .AsNoTracking()
             .Where(item => item.RecipientUserId == recipientUserId);
-        var total = await own.LongCountAsync(cancellationToken);
         var unread = await own.LongCountAsync(item => item.ReadAtUtc == null, cancellationToken);
+        var listed = unreadOnly ? own.Where(item => item.ReadAtUtc == null) : own;
+        var total = unreadOnly ? unread : await own.LongCountAsync(cancellationToken);
 
         // Newest first, with the identifier as the tiebreaker. UUIDv7 identifiers are time-ordered,
         // so two notifications written in the same instant still page deterministically instead of
         // swapping places between requests and duplicating or skipping a row.
-        var items = await own
+        var items = await listed
             .OrderByDescending(item => item.CreatedAtUtc)
             .ThenByDescending(item => item.Id)
             .Skip(skip)
             .Take(take)
-            .Select(item => new NotificationView(
-                item.Id,
-                item.Kind,
-                item.Title,
-                item.Body,
-                item.CreatedAtUtc,
-                item.ReadAtUtc,
-                item.ReadAtUtc != null,
-                item.Version,
-                item.Kind == CommercialNotificationKind.RenewalRequested
-                    ? dbContext.NotificationOutboxItems
-                        .Where(outbox => outbox.Id == item.SourceOutboxItemId)
-                        .Select(outbox => (Guid?)outbox.AggregateId)
-                        .FirstOrDefault()
-                    : null))
             .ToListAsync(cancellationToken);
+        var links = await ReadLinksAsync(items, cancellationToken);
 
-        return new NotificationPage(total, unread, items);
+        return new NotificationPage(
+            total,
+            unread,
+            items.Select(item => ToView(item, links.GetValueOrDefault(item.SourceOutboxItemId))).ToList());
+    }
+
+    public async Task<NotificationReadAllResult> MarkAllOwnReadAsync(CancellationToken cancellationToken)
+    {
+        if (!TryResolveRecipient(out var recipientUserId))
+        {
+            return new NotificationReadAllResult(0, 0);
+        }
+
+        var now = clock.UtcNow;
+        int marked;
+        // A notice marked read on its own at the same moment makes the save conflict; reading again and
+        // marking what is still unread settles it, since read is one-way and its first instant is kept.
+        for (var attempt = 1; ; attempt++)
+        {
+            var unread = await dbContext.Notifications
+                .Where(item => item.RecipientUserId == recipientUserId && item.ReadAtUtc == null)
+                .ToListAsync(cancellationToken);
+            marked = unread.Count(item => item.MarkRead(now));
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                break;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < 3)
+            {
+                dbContext.ChangeTracker.Clear();
+            }
+        }
+
+        var left = await dbContext.Notifications
+            .AsNoTracking()
+            .LongCountAsync(item => item.RecipientUserId == recipientUserId && item.ReadAtUtc == null, cancellationToken);
+        return new NotificationReadAllResult(marked, left);
     }
 
     public async Task<NotificationUnreadCount> CountOwnUnreadAsync(CancellationToken cancellationToken)
@@ -120,13 +148,9 @@ internal sealed class NotificationApplicationService(
             }
         }
 
-        var clientProfileId = notification.Kind == CommercialNotificationKind.RenewalRequested
-            ? await dbContext.NotificationOutboxItems.AsNoTracking()
-                .Where(outbox => outbox.Id == notification.SourceOutboxItemId)
-                .Select(outbox => (Guid?)outbox.AggregateId)
-                .FirstOrDefaultAsync(cancellationToken)
-            : null;
-        return NotificationCommandResult.Success(ToView(notification, clientProfileId));
+        var links = await ReadLinksAsync([notification], cancellationToken);
+        return NotificationCommandResult.Success(
+            ToView(notification, links.GetValueOrDefault(notification.SourceOutboxItemId)));
     }
 
     public async Task<NotificationDeadLetterPage> ListDeadLettersAsync(
@@ -178,7 +202,67 @@ internal sealed class NotificationApplicationService(
         return tenantContext.HasTenant && recipientUserId != Guid.Empty;
     }
 
-    private static NotificationView ToView(Notification notification, Guid? clientProfileId) => new(
+    /// <summary>
+    /// Where each linked notice leads: identifiers its intent holds, read from the outbox row and never
+    /// returned as a payload. Only the kinds a screen links to are read.
+    /// </summary>
+    private async Task<Dictionary<Guid, NotificationLink>> ReadLinksAsync(
+        IReadOnlyCollection<Notification> notifications,
+        CancellationToken cancellationToken)
+    {
+        var sources = notifications
+            .Where(item => item.Kind == CommercialNotificationKind.RenewalRequested ||
+                NotificationPurposeCatalog.IsTrainingKind(item.Kind))
+            .Select(item => item.SourceOutboxItemId)
+            .ToArray();
+        if (sources.Length == 0)
+        {
+            return [];
+        }
+
+        var rows = await dbContext.NotificationOutboxItems.AsNoTracking()
+            .Where(outbox => sources.Contains(outbox.Id))
+            .Select(outbox => new { outbox.Id, outbox.Kind, outbox.AggregateId, outbox.PayloadJson })
+            .ToListAsync(cancellationToken);
+        var links = new Dictionary<Guid, NotificationLink>();
+        foreach (var row in rows)
+        {
+            if (row.Kind == CommercialNotificationKind.RenewalRequested)
+            {
+                links[row.Id] = new NotificationLink(row.AggregateId, null, null, null);
+                continue;
+            }
+
+            if (ReadTrainingPayload(row.PayloadJson) is not { } payload)
+            {
+                continue;
+            }
+
+            // A client's note links the coach to that client; every other training notice is the reader's own.
+            var weeks = payload.Weeks?.Where(week => week > 0).ToArray() ?? [];
+            links[row.Id] = new NotificationLink(
+                row.Kind == CommercialNotificationKind.ClientWorkoutNote ? payload.ClientProfileId : null,
+                payload.SessionId,
+                payload.WorkoutExecutionId,
+                weeks.Length > 0 ? weeks.Min() : null);
+        }
+
+        return links;
+    }
+
+    private static TrainingNotificationPayload? ReadTrainingPayload(string payloadJson)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<TrainingNotificationPayload>(payloadJson, PayloadJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static NotificationView ToView(Notification notification, NotificationLink? link) => new(
         notification.Id,
         notification.Kind,
         notification.Title,
@@ -187,5 +271,10 @@ internal sealed class NotificationApplicationService(
         notification.ReadAtUtc,
         notification.IsRead,
         notification.Version,
-        clientProfileId);
+        link?.ClientProfileId,
+        link?.SessionId,
+        link?.WorkoutExecutionId,
+        link?.WeekNumber);
+
+    private sealed record NotificationLink(Guid? ClientProfileId, Guid? SessionId, Guid? WorkoutExecutionId, int? WeekNumber);
 }

@@ -88,7 +88,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | P4d | **P4c's last two follow-ups** (owner, 2026-10-08: "the last session's not-done work"; decided by Claude after comparing competitors, ADR 0036): the client's **Training max history** lists every program's training maxes beside the recorded ones, named with the program and the week they apply from (STR-015, each fact stored once), and Coach Today keeps a number and its unit on one line at 390 px | §2, plus API tests (asked for or not, order, pages, lift filter, other coach, other workspace) | Done · 2026-10-08 |
 | R5.1a | **Plans you sell** (C8): each plan a card with its price options (shortest first), what they include and the coach's clients on each, now and starting (SUB-015); New plan, Add price option, Change price and Edit name and description in sheets; Stop selling and Sell again with Undo; old price options and plans no longer sold behind a closed disclosure | §2, plus API tests (counts per option and plan, each client once, cancelled and released left out, a Coach's own clients, another workspace) | Done · 2026-10-08 |
 | R5.1b | **Exercise library** (C10): the coach's exercises as cards with their first picture or video (or a lettered tile), or as a list; a search and four filter chips (muscle, pattern, type, equipment) plus Archived too, all in the address; New exercise as a quick add (name, a YouTube or Vimeo link, what it trains) with More details (how to do it, other muscles, tags, swaps, pictures and videos, uploads) in one sheet that Edit opens too; Archive with Undo. Two server bugs found on the way were fixed: a video link added twice answered 500 (MED-015), and editing an exercise to add a muscle or a second video answered a conflict (LIB-002) | §2, plus API tests (the same link twice, by a colleague, after removal, at the same moment, another workspace, a client refused; an edit adding and dropping every kind of row) | Done · 2026-10-09 |
-| R5.1c | **Notifications**, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only) | §2 | To do |
+| R5.1c | **Notifications**, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only). The inbox for coaches and clients in days (Today, Yesterday, the weekday, the date), All and Unread, Mark all as read, and each notice opening what it is about (a week or a finished workout in Training, a session on a client's Training, a client's plan); no Refresh button, the badge reads itself again. The client hears only what they can see now (NOT-035), and the coach hears of a client's note on a workout (decided by Claude, ADR 0036). Notification settings rebuilt in cards, with the leave warning (§9). The demo delivers its notices as it is built | §2, plus domain tests (the week wording, the kinds) and API tests (each notice, only what the client can open, a note both ways without its text, a notice no longer true left unsaid, unread filter, mark all only the reader's own, another workspace, signed out) | Done · 2026-10-09 |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
 | R5.3 | **Delete legacy CSS**, add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
@@ -195,7 +195,7 @@ of the implemented R1.3 screens before production rollout.
 - **Old screens behind Me (from R2.5c).** My profile (the intake form, which the coach's client page
   reuses), Password and security and Notification settings are still the old screens. Rebuild each
   with its unsaved-changes guard (§9): the intake form with R3.3, notifications with R5.1 and
-  security with R5.2.
+  security with R5.2. Notifications was rebuilt in R5.1c.
 - **The brand hero (from R2.5c).** Training and Me each carry their own copy of the hero's gradient,
   glow and dots. Move it into one shared style when a third screen needs it.
 - **Coach Today extras (from R3.1).** The prototype's "+3 this month", "↑ 6% vs this point last
@@ -381,7 +381,7 @@ of the implemented R1.3 screens before production rollout.
   keeps the one it has, as decision 1 of ADR 0036 says the coach picks it per program in the builder);
   (2) the new weeks are shared as their source week is, as before, so a coach who wants them private
   unshares them on the timeline; (3) a client is not told when a shared week changes, here or in the
-  session swap: decided 2026-10-07, it comes with R5.1's training notices (ADR 0036); (4) the old RPE-only wording
+  session swap: decided 2026-10-07, it came with R5.1c's training notices (ADR 0036, NOT-035); (4) the old RPE-only wording
   moved warm-up sets too, the builder's rule does not (TRN-025), so warm-ups now stay as they are;
   (5) a program only grows inside the plan it was assigned under (TRN-011), so on the Atlas demo, where
   every program ends with its plan, the sheet says "run past the end of the plan" for all but Sara
@@ -410,7 +410,7 @@ of the implemented R1.3 screens before production rollout.
   workouts list every note ("You", "Your coach"). The player already had both. The kit's modal title bar
   is no longer a `<header>`, so two stacked modals no longer make two page banners (axe). Left for later:
   (1) the Atlas demo has no exercise media, so playback was checked with mocks and the grant test, not a
-  real video; (2) a client is not notified of a coach's workout note (R5.1's training notices, ADR
+  real video; (2) a client is not notified of a coach's workout note (closed in R5.1c, ADR
   0036); (3) the coach's workout view keeps its older look (plain "Target:"/"Actual:" lines and
   hand-built units); (4) the client sees notes on finished workouts in Training, not on Today after the day.
 - **Meal plans, left for later (from R4.4a, built 2026-10-07; screenshots `docs/design/r44a-*.png`).**
@@ -576,6 +576,29 @@ of the implemented R1.3 screens before production rollout.
   tiles; (b) exercise pictures have no thumbnail of their own (only progress and recipe photos do), so a
   card loads the full picture; (c) choosing the order of an exercise's media (the first is its card's); (d)
   "Show more" pages by 48; a library of thousands would want a count per chip.
+- **Notifications, R5.1c (built 2026-10-09; screenshots `docs/design/r51c-*.png`). Decided by Claude for
+  the owner on 2026-10-09**, after looking at Trainerize (clients are told only when a program is added;
+  its users ask for phase and workout notices, and complain that a coach's reply to a comment sends no
+  alert), Everfit (a Notification Center with categories and an "Only show unread" toggle), TrueCoach and
+  QuickCoach (the coach is notified of a client's workout comment): (1) **the coach hears of a client's
+  note on a workout**, by the client's name, opening that session; not of finished workouts, check-ins or
+  weigh-ins, which Coach Today already lists. (2) **A notice says only what the client can see now**: a
+  week shared before its day says nothing, and a change to weeks still hidden says nothing. (3) **The note
+  notice gives no day** (NOT-006 keeps dates out of wording; it opens the workout instead). (4) **All and
+  Unread, no categories**: TB Gym makes a handful of kinds, so Everfit's category menu would be empty
+  rooms. (5) **One notice per change**, not merged: changes are deliberate applies, never autosaves. Not
+  built: (a) push or email for training notices (in-app only, ADR 0036; a phone push needs a service
+  worker and consent, a later decision); (b) no notice when a coach cancels or completes a program; (c) a
+  client's plan notices (payment, ending soon) open nothing, as there is no client plan page yet, and
+  their wording still says "workspace" (see "Backend words"); (d) a coach's note on a workout still in
+  progress opens Training without marking it, as only finished workouts are listed there; (e) the badge
+  is read on a timer, not pushed: the notification Worker has no realtime hub; (f) on the live demo every
+  coach note reads the same in the client's inbox ("Your coach left a note on a workout"): Claude recommends
+  naming the session ("on Upper B"), an owner decision because NOT-006 keeps typed text out of wording.
+  The demo now delivers its notices as it is built and has everyone read them three days before today, so
+  only recent ones are new; checked live with the Worker running (a coach's note and a shared week each
+  reached the client in seconds and opened the right place).
+
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1259,13 +1282,25 @@ limited to the coach's assigned clients.
 - Built in R2.5c at `/me`, reached from the avatar on Today (Me is not a tab). A brand card holds the
   client's initials, name and email, and their coach as a pill with a face that opens the chat (plain
   text when messaging is not in the plan, left out when the coach cannot be read). Rows lead to My
-  profile, Notifications and Password and security, which are still the old screens. Appearance
+  profile, Notifications (rebuilt in R5.1c) and Password and security; the first and last are still
+  the old screens. Appearance
   (Device, Light, Dark) and Body weight (kg, lb) are inline and save as they are chosen, one at a
   time, on the account (CLI-017), so they follow the client to a new phone or the installed app; a
   refused save puts the control back and says so. Body weight is the starting unit of weigh-ins and
   the Progress screens only: stored weights stay kilograms (ADR 0009) and the workout player still
   asks for its own unit (TRN-016). With more than one coach, "Your coaches" switches between them.
   Me follows dark mode (marked `REDESIGNED`), and the install card sits above Sign out.
+
+**Notifications (coach and client, R5.1c)**
+- Reached from the bell in the coach's top bar and on the client's Today. One screen for both, in
+  the person's mode: notices in days, newest first, each with a small picture of what it is about,
+  its title, one line of detail and the time; unread ones tinted with a dot and "unread" for screen
+  readers. All and Unread (the server filters), Mark all as read while anything is unread, Settings
+  top right, and "Show earlier notifications" for the next 25. A notice with somewhere to go is a
+  link that marks it read on the way; one with nowhere better (a plan reminder) is a button that
+  marks it read. Coming back to the tab reads the first page again, and the badge reads its count
+  again then and once a minute while shown. Settings is one card per channel (in the app, always
+  on; email; quiet hours, whose times appear once switched on) with Save and the leave warning.
 
 **M9. Share cards (R6)**
 - A branded image of a PR, a finished program or a before/after. **Created only by the client,

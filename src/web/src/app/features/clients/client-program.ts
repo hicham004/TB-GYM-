@@ -10,6 +10,7 @@ import {
   LOCALE_ID,
   signal,
   TemplateRef,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -282,6 +283,28 @@ export class ClientProgram {
         replaceUrl: true,
       });
       this.revealMaxes.set(true);
+    });
+
+    // A client's note on a workout links here as `?session=<id>` (R5.1c): that session's sheet opens
+    // once the program has loaded, and the word leaves the address so Back does not reopen it.
+    effect(() => {
+      const sessionId = this.query().get('session');
+      if (!sessionId || this.state() !== 'ready') return;
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { session: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+      untracked(() => {
+        for (const week of this.card()?.weeks ?? []) {
+          const session = week.sessions.find((item) => item.id === sessionId);
+          if (session) {
+            this.openSession(week, session);
+            return;
+          }
+        }
+      });
     });
 
     // On a wide screen the weeks overflow sideways; bring the current one into view, once per program.

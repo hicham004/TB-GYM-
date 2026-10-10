@@ -126,10 +126,10 @@ internal static class WorkspaceRelationshipNotices
             .Select(tenant => tenant.TimeZoneId)
             .SingleAsync(cancellationToken);
 
-    private static string Payload<TPayload>(TPayload payload) =>
+    internal static string Payload<TPayload>(TPayload payload) =>
         JsonSerializer.Serialize(payload, PayloadJsonOptions);
 
-    private static void ScheduleInApp(
+    internal static void ScheduleInApp(
         GymDbContext dbContext,
         Guid tenantId,
         string tenantTimeZoneId,

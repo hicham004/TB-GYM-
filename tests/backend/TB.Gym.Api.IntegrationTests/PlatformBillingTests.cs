@@ -503,6 +503,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         "CreatePrivateMediaAccessBatch",
         "EstimateMaxFromRpeChart",
         "EstimateOneRepMax",
+        "MarkAllOwnNotificationsRead",
         "MarkOwnNotificationRead",
         "PreviewProgramEdit",
         "PreviewTrainingMaxes",

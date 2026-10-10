@@ -1,5 +1,5 @@
 import { TenantAsyncScope } from '../tenancy/tenant-async-scope';
-import { computed, effect, inject, Injectable, signal } from '@angular/core';
+import { computed, DestroyRef, effect, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../api/api-client';
 import { AuthStore } from '../auth/auth.store';
@@ -16,7 +16,13 @@ import { TenantStore } from '../tenancy/tenant.store';
  * Every fetch carries a generation. A reply that arrives after the context has moved on is discarded
  * rather than written, which is what stops a slow request for the previous workspace from landing on
  * top of the current one.
+ *
+ * The count stays live without a Refresh button (R5.1c): it is read again when the tab comes back into
+ * view and once a minute while it is in view. A hidden tab asks for nothing.
  */
+/** How often a shown tab reads the unread count again. */
+const refreshEveryMs = 60_000;
+
 @Injectable({ providedIn: 'root' })
 export class NotificationStore {
   private readonly api = inject(ApiClient);
@@ -51,6 +57,7 @@ export class NotificationStore {
 
   constructor() {
     this.scope.onReset(() => this.resetTenantState());
+    this.keepLive();
     effect(() => {
       this.scope.epoch();
       const key = this.contextKey();
@@ -127,6 +134,24 @@ export class NotificationStore {
           }
         }
       }
+    });
+  }
+
+  private keepLive(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const readIfShown = () => {
+      if (document.visibilityState === 'visible' && this.contextKey() !== null && !this.loading()) {
+        void this.refresh();
+      }
+    };
+    const timer = setInterval(readIfShown, refreshEveryMs);
+    document.addEventListener('visibilitychange', readIfShown);
+    inject(DestroyRef).onDestroy(() => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', readIfShown);
     });
   }
 

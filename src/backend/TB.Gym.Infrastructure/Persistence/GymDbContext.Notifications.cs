@@ -36,7 +36,7 @@ public sealed partial class GymDbContext
                 "(\"Status\" = 'Cancelled') = (\"CancelledAtUtc\" IS NOT NULL)"));
             entity.ToTable(table => table.HasCheckConstraint(
                 "CK_NotificationOutboxItems_Vocabulary",
-                "\"Status\" IN ('Scheduled', 'Cancelled') AND \"Purpose\" = 'ServiceTransactional' AND \"Kind\" IN ('PaymentRequired', 'EnrollmentActivated', 'EnrollmentEndingSoon', 'EnrollmentExpired', 'EnrollmentRenewed', 'CoachDeparted', 'ClientLeft', 'CoachResigned', 'RenewalRequested')"));
+                "\"Status\" IN ('Scheduled', 'Cancelled') AND \"Purpose\" = 'ServiceTransactional' AND \"Kind\" IN ('PaymentRequired', 'EnrollmentActivated', 'EnrollmentEndingSoon', 'EnrollmentExpired', 'EnrollmentRenewed', 'CoachDeparted', 'ClientLeft', 'CoachResigned', 'RenewalRequested', 'ProgramAssigned', 'WeeksShared', 'WeeksChanged', 'CoachWorkoutNote', 'ClientWorkoutNote')"));
             ConfigureAuditable(entity);
         });
 

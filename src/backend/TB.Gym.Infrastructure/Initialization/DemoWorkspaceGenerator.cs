@@ -5,6 +5,7 @@ using TB.Gym.Modules.CheckIns;
 using TB.Gym.Modules.ExerciseLibrary;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
+using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.Nutrition;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
@@ -43,6 +44,7 @@ internal sealed partial class DemoWorkspaceGenerator
     private readonly Dictionary<DemoOffer, Guid> offerIds = [];
     private readonly Dictionary<string, Guid> templateVersionIds = [];
     private readonly DemoWorkspaceTally tally = new();
+    private readonly List<DemoClientState> states = [];
     private Guid tenantId;
     private Guid checkInFormVersionId;
     private Guid mealPlanVersionId;
@@ -71,12 +73,50 @@ internal sealed partial class DemoWorkspaceGenerator
         foreach (var client in clients)
         {
             // Each client keeps their place in the cast, so their story is the same in any subset.
-            PlanClient(new DemoClientState(client), IndexOf(client));
+            var state = new DemoClientState(client);
+            states.Add(state);
+            PlanClient(state, IndexOf(client));
         }
 
         PlanPendingInvitations();
-        tally.Steps = await timeline.RunAsync(output, cancellationToken);
+        // Everyone opened their notifications three days ago: what came since is still new (R5.1c).
+        timeline.At(calendar.At(-3, 21, 0), "everyone reads their notifications", ReadNotificationsAsync);
+        tally.Steps = await timeline.RunAsync(output, DeliverNotificationsAsync, cancellationToken);
         return tally;
+    }
+
+    private async Task ReadNotificationsAsync()
+    {
+        var people = staffUserIds.Values
+            .Concat(states.Select(state => state.UserId))
+            .Where(userId => userId != Guid.Empty)
+            .Distinct();
+        foreach (var userId in people)
+        {
+            await As<INotificationApplicationService, NotificationReadAllResult>(
+                new DemoActor(userId, tenantId),
+                (service, token) => service.MarkAllOwnReadAsync(token));
+        }
+    }
+
+    /// <summary>
+    /// Delivers the notices due at this moment of the story, as the Worker does within seconds, so each
+    /// inbox row is dated when its change happened and the demo's inboxes look lived in (R5.1c).
+    /// </summary>
+    private async Task DeliverNotificationsAsync()
+    {
+        await using var scope = services.CreateAsyncScope();
+        var dispatcher = scope.ServiceProvider.GetRequiredService<INotificationDispatchService>();
+        // A retry is due a minute later at the earliest, so this ends; the bound is a guard.
+        for (var round = 0; round < 20; round++)
+        {
+            var outcome = await dispatcher.DispatchDueAsync(cancellationToken);
+            tally.Notifications += outcome.Materialized;
+            if (outcome.Claimed == 0)
+            {
+                return;
+            }
+        }
     }
 
     private void PlanWorkspace()
@@ -398,4 +438,6 @@ internal sealed class DemoWorkspaceTally
     public int CheckInsReviewed { get; set; }
 
     public int Messages { get; set; }
+
+    public int Notifications { get; set; }
 }

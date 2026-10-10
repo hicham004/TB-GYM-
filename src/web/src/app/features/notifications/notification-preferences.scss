@@ -1,118 +1,158 @@
+// Notification settings (R5.1c): one card per channel, like the inbox's rows. Brand v2 tokens only,
+// so it follows the coach's brand and the person's mode.
+
+:host {
+  color: var(--tb-ink);
+  container-type: inline-size;
+  display: block;
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
 .preferences {
   display: grid;
-  gap: 1rem;
-  max-width: 720px;
+  gap: var(--space-16);
+  margin-inline: auto;
+  max-inline-size: 40rem;
+}
+h1,
+h2,
+p {
+  margin: 0;
 }
 
-.page-head {
+.top {
+  display: grid;
+  gap: var(--space-4);
+}
+.back {
   align-items: center;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
+  border-radius: 999px;
+  color: var(--tb-accent-ink);
+  display: inline-flex;
+  font-weight: 600;
+  gap: var(--space-4);
+  justify-self: start;
+  margin-inline-start: calc(-1 * var(--space-8));
+  min-block-size: 2.75rem;
+  padding-inline: var(--space-8) var(--space-12);
+  text-decoration: none;
+  touch-action: manipulation;
+}
+.back:hover {
+  background: var(--tb-surface-2);
+}
+.back:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--tb-focus);
+  outline-offset: 2px;
+}
+.back-icon {
+  transform: scaleX(-1);
+}
+.back-icon:dir(rtl) {
+  transform: none;
+}
+h1 {
+  font-size: clamp(1.75rem, 6cqi, 2.25rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  outline: none;
+}
+.lede {
+  color: var(--tb-muted);
 }
 
-.page-head h2 {
-  margin: 0;
+.error {
+  color: var(--tb-danger);
 }
-
-fieldset {
-  border: 1px solid var(--border, #d8dde3);
-  border-radius: 0.75rem;
-  margin: 0;
-  padding-block: 0.75rem 1rem;
-  padding-inline: 1rem;
+.notice {
+  color: var(--tb-success, var(--tb-accent-ink));
+  font-weight: 600;
 }
-
-legend {
-  font-size: 0.82rem;
-  font-weight: 700;
-  padding-inline: 0.35rem;
-  text-transform: uppercase;
+.error:empty,
+.notice:empty {
+  display: none;
 }
 
 form {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-12);
 }
-
-.field {
+.card {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: 18px;
   display: grid;
-  gap: 0.25rem;
+  gap: var(--space-12);
+  margin: 0;
+  min-inline-size: 0;
+  padding: var(--space-16);
 }
-
-/* A checkbox and its label read as one control, side by side and baseline-aligned, so the label is
-   a real click target rather than decoration beside one. */
-.check {
-  align-items: center;
+.pad {
+  padding: var(--space-16);
+}
+.card-head {
+  align-items: flex-start;
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-12);
 }
-
-.check input {
-  inline-size: auto;
-  margin: 0;
+.card-head h2 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  padding-block-start: 0.4rem;
 }
-
-.check span {
-  font-weight: 500;
-  margin: 0;
+.card-head div {
+  display: grid;
+  gap: var(--space-4);
 }
-
+.card-icon {
+  background: var(--tb-surface-2);
+  block-size: 2.25rem;
+  border-radius: 12px;
+  color: var(--tb-accent-ink);
+  display: grid;
+  flex: none;
+  inline-size: 2.25rem;
+  place-items: center;
+}
+.card-body {
+  display: grid;
+  gap: var(--space-8);
+  padding-inline-start: calc(2.25rem + var(--space-12));
+}
+@container (max-width: 30rem) {
+  .card-body {
+    padding-inline-start: 0;
+  }
+}
+.hint {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.warning,
+.suppressed {
+  background: var(--tb-surface-2);
+  border-radius: 12px;
+  color: var(--tb-ink);
+  padding: var(--space-8) var(--space-12);
+}
 .times {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-block-start: 0.75rem;
-}
-
-.times .field {
-  min-inline-size: 9rem;
-}
-
-.detail {
-  color: var(--muted-text, #4c565f);
-  font-size: 0.9rem;
-  margin-block: 0.35rem 0;
-}
-
-/* Carried by a border and by its own words, never by colour alone. */
-.detail.warning {
-  border-inline-start: 3px solid var(--warning, #8a6100);
-  padding-inline-start: 0.6rem;
-}
-
-/* Heavier than a warning because it describes something that has already stopped, and still carried
-   by the wording rather than by the colour: "Email to your address is paused" says it without any
-   styling at all. */
-.detail.suppressed {
-  border-inline-start: 4px solid var(--danger, #a02020);
-  padding-inline-start: 0.6rem;
-  font-weight: 500;
+  display: grid;
+  gap: var(--space-12);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-block-start: var(--space-4);
 }
 
 .actions {
   display: flex;
-  gap: 0.75rem;
+  justify-content: flex-end;
 }
-
-.error,
-.notice {
-  font-size: 0.9rem;
-  margin: 0;
-}
-
-.error {
-  color: var(--danger, #a3271c);
-  font-weight: 500;
-}
-
-.notice {
-  color: var(--success, #1c6b3a);
-}
-
-/* An empty live region must not reserve space or draw a border; it exists so a screen reader has
-   somewhere to hear about a change that has not happened yet. */
-.error:empty,
-.notice:empty {
-  display: none;
+@container (max-width: 30rem) {
+  .actions button {
+    inline-size: 100%;
+    justify-content: center;
+  }
 }

@@ -196,6 +196,8 @@ internal sealed partial class TrainingApplicationService
             return NotFound();
         }
 
+        // What the client can open before the new weights land, to tell them which of those weeks changed.
+        var visibleBefore = ClientVisibleWeeks(mesocycle);
         string reason;
         string fingerprint;
         try
@@ -253,6 +255,7 @@ internal sealed partial class TrainingApplicationService
                 plan.Lifts.Count,
                 sessions,
                 sets));
+            await QueueClientWeekNoticesAsync(mesocycle, visibleBefore, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
             return SuccessMesocycle(await ToViewAsync(mesocycle, cancellationToken));
         }

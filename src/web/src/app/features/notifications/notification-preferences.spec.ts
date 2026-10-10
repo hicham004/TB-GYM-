@@ -1,6 +1,7 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
+import { provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
@@ -74,6 +75,8 @@ async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
   await TestBed.configureTestingModule({
     imports: [NotificationPreferencesPage],
     providers: [
+      // The page links back to the inbox.
+      provideRouter([]),
       {
         provide: ApiClient,
         useValue: {
@@ -120,7 +123,8 @@ describe('NotificationPreferencesPage', () => {
   it('states that in-app notifications are on and cannot be switched off here', async () => {
     const { host } = await render();
 
-    expect(host.textContent).toContain('In-app notifications are always on');
+    expect(host.textContent).toContain('Always on.');
+    expect(host.textContent).toContain('nothing here can be switched off');
     // Stated, not implied: there is no in-app control to find.
     expect(() => field(host, 'In-app notifications')).toThrow();
     // The live regions exist from first render and say nothing yet.
@@ -142,10 +146,10 @@ describe('NotificationPreferencesPage', () => {
       );
     });
 
-    expect(field<HTMLInputElement>(host, 'Email me about my coaching service').checked).toBe(true);
+    expect(field<HTMLInputElement>(host, 'Email me about my coaching plan').checked).toBe(true);
     expect(field<HTMLInputElement>(host, 'Hold emails during quiet hours').checked).toBe(true);
-    expect(field<HTMLInputElement>(host, 'Quiet hours start').value).toBe('22:00');
-    expect(field<HTMLInputElement>(host, 'Quiet hours end').value).toBe('07:00');
+    expect(field<HTMLInputElement>(host, 'From').value).toBe('22:00');
+    expect(field<HTMLInputElement>(host, 'Until').value).toBe('07:00');
     // A local time is meaningless without the zone it is local to.
     expect(host.textContent).toContain('Asia/Beirut');
   });
@@ -153,7 +157,7 @@ describe('NotificationPreferencesPage', () => {
   it('saves the member’s own choices with an idempotency key and the version it read', async () => {
     const { host, fixture, update } = await render();
 
-    tick(host, 'Email me about my coaching service');
+    tick(host, 'Email me about my coaching plan');
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);
@@ -187,7 +191,7 @@ describe('NotificationPreferencesPage', () => {
     // a disabled ancestor fieldset satisfies. Reading the input's own `disabled` property would
     // not: that reflects the attribute on the input, which nothing here sets.
     expect(
-      field<HTMLInputElement>(host, 'Email me about my coaching service').matches(':disabled'),
+      field<HTMLInputElement>(host, 'Email me about my coaching plan').matches(':disabled'),
     ).toBe(true);
     expect(
       field<HTMLInputElement>(host, 'Hold emails during quiet hours').matches(':disabled'),
@@ -198,26 +202,28 @@ describe('NotificationPreferencesPage', () => {
     await settle(fixture);
 
     expect(
-      field<HTMLInputElement>(host, 'Email me about my coaching service').matches(':disabled'),
+      field<HTMLInputElement>(host, 'Email me about my coaching plan').matches(':disabled'),
     ).toBe(false);
     expect(
       field<HTMLInputElement>(host, 'Hold emails during quiet hours').matches(':disabled'),
     ).toBe(false);
   });
 
-  it('enables the quiet-hours times only while the window is switched on', async () => {
+  it('shows the quiet-hours times only while the window is switched on', async () => {
     const { host, fixture } = await render();
 
-    expect(field<HTMLInputElement>(host, 'Quiet hours start').disabled).toBe(true);
+    expect(() => field(host, 'From')).toThrow();
 
     tick(host, 'Hold emails during quiet hours');
     await settle(fixture);
-    expect(field<HTMLInputElement>(host, 'Quiet hours start').disabled).toBe(false);
-    expect(field<HTMLInputElement>(host, 'Quiet hours end').disabled).toBe(false);
+    expect(field<HTMLInputElement>(host, 'From').disabled).toBe(false);
+    expect(field<HTMLInputElement>(host, 'Until').disabled).toBe(false);
+    // The defaults are there to adjust, so switching the window on is not a typing exercise.
+    expect(field<HTMLInputElement>(host, 'From').value).toBe('22:00');
 
     tick(host, 'Hold emails during quiet hours', false);
     await settle(fixture);
-    expect(field<HTMLInputElement>(host, 'Quiet hours start').disabled).toBe(true);
+    expect(() => field(host, 'From')).toThrow();
   });
 
   it('sends the quiet-hours window when it is switched on', async () => {
@@ -239,7 +245,7 @@ describe('NotificationPreferencesPage', () => {
 
     tick(host, 'Hold emails during quiet hours');
     await settle(fixture);
-    const end = field<HTMLInputElement>(host, 'Quiet hours end');
+    const end = field<HTMLInputElement>(host, 'Until');
     end.value = '22:00';
     end.dispatchEvent(new Event('input'));
     await settle(fixture);
@@ -255,10 +261,10 @@ describe('NotificationPreferencesPage', () => {
       save.mockReturnValue(throwError(() => conflict()));
     });
 
-    tick(host, 'Email me about my coaching service');
+    tick(host, 'Email me about my coaching plan');
     tick(host, 'Hold emails during quiet hours');
     await settle(fixture);
-    const end = field<HTMLInputElement>(host, 'Quiet hours end');
+    const end = field<HTMLInputElement>(host, 'Until');
     end.value = '06:30';
     end.dispatchEvent(new Event('input'));
     await settle(fixture);
@@ -269,9 +275,9 @@ describe('NotificationPreferencesPage', () => {
     expect(update).toHaveBeenCalledTimes(1);
     // The server refused; the edit is still on screen, so the fix is one press away rather than a
     // retype.
-    expect(field<HTMLInputElement>(host, 'Email me about my coaching service').checked).toBe(true);
+    expect(field<HTMLInputElement>(host, 'Email me about my coaching plan').checked).toBe(true);
     expect(field<HTMLInputElement>(host, 'Hold emails during quiet hours').checked).toBe(true);
-    expect(field<HTMLInputElement>(host, 'Quiet hours end').value).toBe('06:30');
+    expect(field<HTMLInputElement>(host, 'Until').value).toBe('06:30');
     expect(query(host, '[role="alert"]').textContent).toContain('changed by another request');
     expect(query(host, '[role="status"]').textContent?.trim()).toBe('');
   });
@@ -282,7 +288,7 @@ describe('NotificationPreferencesPage', () => {
       save.mockReturnValue(of(preferences({ emailServiceEnabled: true, version: 4 })));
     });
 
-    tick(host, 'Email me about my coaching service');
+    tick(host, 'Email me about my coaching plan');
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);
@@ -294,7 +300,7 @@ describe('NotificationPreferencesPage', () => {
     expect(second.idempotencyKey).toBe(first.idempotencyKey);
 
     // Once one settles, the next edit is a new command against the version the server returned.
-    tick(host, 'Email me about my coaching service', false);
+    tick(host, 'Email me about my coaching plan', false);
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);
@@ -308,7 +314,7 @@ describe('NotificationPreferencesPage', () => {
       save.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
     });
 
-    tick(host, 'Email me about my coaching service');
+    tick(host, 'Email me about my coaching plan');
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);
@@ -330,7 +336,7 @@ describe('NotificationPreferencesPage', () => {
       save.mockReturnValue(of(preferences({ emailServiceEnabled: true })));
     });
 
-    tick(host, 'Email me about my coaching service');
+    tick(host, 'Email me about my coaching plan');
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);
@@ -352,7 +358,17 @@ describe('NotificationPreferencesPage', () => {
     const slow = new Subject<NotificationPreferences>();
     const { host, fixture, membership, get } = await render(({ get: read }) => {
       read.mockReturnValueOnce(slow.asObservable());
-      read.mockReturnValue(of(preferences({ emailServiceEnabled: false, version: 9 })));
+      read.mockReturnValue(
+        of(
+          preferences({
+            emailServiceEnabled: false,
+            version: 9,
+            quietHoursEnabled: true,
+            quietHoursStartLocal: '22:00',
+            quietHoursEndLocal: '07:00',
+          }),
+        ),
+      );
     });
 
     // Alpha's reply is still in flight when the user switches workspace.
@@ -360,23 +376,42 @@ describe('NotificationPreferencesPage', () => {
     await settle(fixture);
     expect(get).toHaveBeenCalledTimes(2);
 
-    slow.next(preferences({ emailServiceEnabled: true, version: 1, tenantTimeZoneId: 'UTC' }));
+    slow.next(
+      preferences({
+        emailServiceEnabled: true,
+        version: 1,
+        tenantTimeZoneId: 'UTC',
+        quietHoursEnabled: true,
+        quietHoursStartLocal: '22:00',
+        quietHoursEndLocal: '07:00',
+      }),
+    );
     slow.complete();
     await settle(fixture);
 
     // Beta's answer is what is on screen, and Alpha's cannot overwrite it.
-    expect(field<HTMLInputElement>(host, 'Email me about my coaching service').checked).toBe(false);
+    expect(field<HTMLInputElement>(host, 'Email me about my coaching plan').checked).toBe(false);
     expect(host.textContent).toContain('Asia/Beirut');
     expect(host.textContent).not.toContain('UTC');
   });
 
   it('never applies a save reply for a workspace the user has left', async () => {
     const pending = new Subject<NotificationPreferences>();
-    const { host, fixture, membership, update } = await render(({ update: save }) => {
+    const { host, fixture, membership, update } = await render(({ get: read, update: save }) => {
+      // Quiet hours on, so the workspace's zone is on screen to compare.
+      read.mockReturnValue(
+        of(
+          preferences({
+            quietHoursEnabled: true,
+            quietHoursStartLocal: '22:00',
+            quietHoursEndLocal: '07:00',
+          }),
+        ),
+      );
       save.mockReturnValue(pending.asObservable());
     });
 
-    tick(host, 'Email me about my coaching service');
+    tick(host, 'Email me about my coaching plan');
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);
@@ -384,11 +419,20 @@ describe('NotificationPreferencesPage', () => {
 
     membership.set(BETA);
     await settle(fixture);
-    pending.next(preferences({ emailServiceEnabled: true, tenantTimeZoneId: 'UTC', version: 44 }));
+    pending.next(
+      preferences({
+        emailServiceEnabled: true,
+        tenantTimeZoneId: 'UTC',
+        version: 44,
+        quietHoursEnabled: true,
+        quietHoursStartLocal: '22:00',
+        quietHoursEndLocal: '07:00',
+      }),
+    );
     pending.complete();
     await settle(fixture);
 
-    expect(field<HTMLInputElement>(host, 'Email me about my coaching service').checked).toBe(false);
+    expect(field<HTMLInputElement>(host, 'Email me about my coaching plan').checked).toBe(false);
     expect(host.textContent).toContain('Asia/Beirut');
     expect(host.textContent).not.toContain('Your notification settings were saved');
   });
@@ -400,14 +444,14 @@ describe('NotificationPreferencesPage', () => {
       read.mockReturnValue(held.asObservable());
     });
 
-    expect(field<HTMLInputElement>(host, 'Email me about my coaching service').checked).toBe(true);
+    expect(field<HTMLInputElement>(host, 'Email me about my coaching plan').checked).toBe(true);
 
     membership.set(BETA);
     await settle(fixture);
 
     // Nothing from the previous workspace is on screen while the new one is loading, so nothing
     // from it can be saved by accident either.
-    expect(() => field(host, 'Email me about my coaching service')).toThrow();
+    expect(() => field(host, 'Email me about my coaching plan')).toThrow();
     expect(host.textContent).toContain('Loading your notification settings');
     held.complete();
   });
@@ -420,7 +464,7 @@ describe('NotificationPreferencesPage', () => {
 
     membership.set(BETA);
     await settle(fixture);
-    tick(host, 'Email me about my coaching service');
+    tick(host, 'Email me about my coaching plan');
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);
@@ -433,11 +477,9 @@ describe('NotificationPreferencesPage', () => {
       get.mockReturnValue(of(preferences({ emailChannelAvailable: false })));
     });
 
-    expect(host.textContent).toContain('Email delivery is not switched on');
+    expect(host.textContent).toContain("Email isn't switched on for TB Gym yet");
     // The setting is still offered, because it is the member's decision either way.
-    expect(field<HTMLInputElement>(host, 'Email me about my coaching service').disabled).toBe(
-      false,
-    );
+    expect(field<HTMLInputElement>(host, 'Email me about my coaching plan').disabled).toBe(false);
   });
 
   /**
@@ -466,10 +508,8 @@ describe('NotificationPreferencesPage', () => {
     expect(notice.textContent).toContain('in-app notifications are unaffected');
 
     // The member's own decision is not rewritten by a bounce, and the switch stays theirs to set.
-    expect(field<HTMLInputElement>(host, 'Email me about my coaching service').checked).toBe(true);
-    expect(field<HTMLInputElement>(host, 'Email me about my coaching service').disabled).toBe(
-      false,
-    );
+    expect(field<HTMLInputElement>(host, 'Email me about my coaching plan').checked).toBe(true);
+    expect(field<HTMLInputElement>(host, 'Email me about my coaching plan').disabled).toBe(false);
 
     // And there is deliberately no control that resumes mail to an address that bounced.
     expect(host.textContent).not.toContain('Resume');
@@ -510,24 +550,66 @@ describe('NotificationPreferencesPage', () => {
    * Every control is reachable and named. A checkbox whose caption is not its label, or a time input
    * with no accessible name, is a control a screen-reader user cannot find.
    */
+  it('asks before leaving changes that are not saved, and lets an unchanged page go', async () => {
+    const { host, fixture } = await render();
+    const page = fixture.componentInstance;
+    await expect(page.canLeave()).resolves.toBe(true);
+
+    tick(host, 'Email me about my coaching plan');
+    await settle(fixture);
+    const staying = page.canLeave();
+    await settle(fixture);
+    // The question opens in a dialog above the page, so it is found in the document.
+    press(document.body, 'Stay');
+    await expect(staying).resolves.toBe(false);
+
+    const leaving = page.canLeave();
+    await settle(fixture);
+    press(document.body, 'Leave without saving');
+    await expect(leaving).resolves.toBe(true);
+  });
+
+  it('asks the browser to hold a reload over unsaved changes only', async () => {
+    const { host, fixture } = await render();
+    const clean = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(clean);
+    expect(clean.defaultPrevented).toBe(false);
+
+    tick(host, 'Email me about my coaching plan');
+    await settle(fixture);
+    const dirty = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(dirty);
+    expect(dirty.defaultPrevented).toBe(true);
+  });
+
   it('labels and describes every control it renders', async () => {
-    const { host } = await render();
+    const { host } = await render(({ get }) => {
+      get.mockReturnValue(
+        of(
+          preferences({
+            quietHoursEnabled: true,
+            quietHoursStartLocal: '22:00',
+            quietHoursEndLocal: '07:00',
+          }),
+        ),
+      );
+    });
 
     for (const label of [
-      'Email me about my coaching service',
+      'Email me about my coaching plan',
       'Hold emails during quiet hours',
-      'Quiet hours start',
-      'Quiet hours end',
+      'From',
+      'Until',
     ]) {
       expect(() => field(host, label)).not.toThrow();
     }
 
-    const email = field<HTMLInputElement>(host, 'Email me about my coaching service');
+    const email = field<HTMLInputElement>(host, 'Email me about my coaching plan');
     const emailHelp = email.getAttribute('aria-describedby');
     expect(emailHelp).toBe('emailServiceHelp');
     expect(query(host, `#${emailHelp}`).textContent).toContain('sign in to read it');
 
-    const start = field<HTMLInputElement>(host, 'Quiet hours start');
+    const start = field<HTMLInputElement>(host, 'From');
     expect(start.getAttribute('aria-describedby')).toBe('quietHoursZone');
     expect(query(host, '#quietHoursZone').textContent).toContain('Asia/Beirut');
 
@@ -544,7 +626,7 @@ describe('NotificationPreferencesPage', () => {
   it('writes nothing to browser storage', async () => {
     const { host, fixture } = await render();
 
-    tick(host, 'Email me about my coaching service');
+    tick(host, 'Email me about my coaching plan');
     await settle(fixture);
     press(host, 'Save settings');
     await settle(fixture);

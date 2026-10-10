@@ -1,6 +1,17 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { DatePipe } from '@angular/common';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  LOCALE_ID,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -9,35 +20,60 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { NotificationStore } from '../../core/notifications/notification.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { Button } from '../../ui/button';
+import { EmptyState } from '../../ui/empty-state';
+import { Icon } from '../../ui/icon';
+import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
+import { Skeleton } from '../../ui/skeleton';
+import {
+  groupByDay,
+  noticeIcon,
+  noticeTarget,
+  type NoticeTarget,
+} from './notification-inbox.models';
 import { appendPage, type NotificationItem } from './notification.models';
 
 const pageSize = 25;
 
+type InboxFilter = 'all' | 'unread';
+
 /**
- * The signed-in member's own inbox for one workspace.
+ * The signed-in member's own inbox for one workspace (R5.1c), for coaches and clients alike.
  *
- * Everything on this screen belongs to one recipient in one workspace, so every piece of state is
- * discarded the moment that pair changes and every asynchronous result checks which pair it was
- * asked for before it writes anything. Without that, a slow list for the previous workspace lands on
- * top of the current one and the user reads somebody else's notifications — which the API would
- * never have returned, but the screen would have shown.
+ * Notices sit in days, newest first. Opening one marks it read and takes the reader to what it is
+ * about; "Mark all as read" clears the rest. There is no Refresh button: the list reads itself again
+ * when the reader comes back to the tab, and the badge keeps its own count (NotificationStore).
  *
- * There is no polling and no realtime channel in this slice. The inbox is passive persisted state:
- * it is read when the screen is opened and when the user asks for more.
+ * Everything here belongs to one recipient in one workspace, so every piece of state is discarded
+ * the moment that pair changes, and every reply checks which pair it was asked for before it writes.
+ * Without that, a slow list for the previous workspace would land on top of the current one.
  */
 @Component({
   selector: 'app-notifications',
-  imports: [DatePipe, RouterLink],
+  imports: [
+    Button,
+    DatePipe,
+    EmptyState,
+    Icon,
+    NgTemplateOutlet,
+    RouterLink,
+    SegmentedControl,
+    Skeleton,
+  ],
   templateUrl: './notifications.html',
   styleUrl: './notifications.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(document:visibilitychange)': 'onVisibilityChange()' },
 })
 export class Notifications {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
+  private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly notifications = inject(NotificationStore);
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
   /** Bumped whenever the recipient or the workspace changes; every reply is checked against it. */
   private contextGeneration = 0;
@@ -51,11 +87,20 @@ export class Notifications {
   private readonly serverExhausted = signal(false);
   protected readonly loading = signal(false);
   protected readonly loadingMore = signal(false);
+  protected readonly markingAll = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly busyId = signal<string | null>(null);
-  protected readonly pageSize = pageSize;
+  protected readonly filter = signal<InboxFilter>('all');
+  /** When the list was read, so "Today" means the day it was read on. */
+  private readonly readAt = signal(new Date());
 
   protected readonly unread = this.notifications.unread;
+  protected readonly filterOptions: readonly SegmentOption[] = [
+    { value: 'all', label: $localize`All` },
+    { value: 'unread', label: $localize`Unread` },
+  ];
+  protected readonly filterLabel = $localize`Show`;
+  protected readonly loadingLabel = $localize`Loading your notifications…`;
   protected readonly loadedCount = computed(() => this.items().length);
   protected readonly hasMore = computed(
     () => !this.serverExhausted() && this.consumedOffset() < this.total(),
@@ -63,6 +108,17 @@ export class Notifications {
   protected readonly isEmpty = computed(
     () => !this.loading() && this.error() === null && this.loadedCount() === 0,
   );
+  protected readonly days = computed(() => groupByDay(this.items(), this.readAt(), this.locale));
+  protected readonly summary = computed(() => {
+    const unread = this.unread();
+    return unread === 0
+      ? $localize`You're all caught up.`
+      : unread === 1
+        ? $localize`1 unread`
+        : $localize`${unread}:count: unread`;
+  });
+  private readonly isOwner = this.tenants.isOwner;
+  protected readonly isClient = this.tenants.isClient;
 
   private readonly contextKey = computed(() => {
     const userId = this.auth.user()?.id ?? null;
@@ -88,6 +144,43 @@ export class Notifications {
         void this.load(generation);
       }
     });
+    afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
+  }
+
+  protected target(item: NotificationItem): NoticeTarget | null {
+    return noticeTarget(item, this.isOwner());
+  }
+
+  protected icon(item: NotificationItem) {
+    return noticeIcon(item.kind);
+  }
+
+  protected setFilter(value: string): void {
+    const next: InboxFilter = value === 'unread' ? 'unread' : 'all';
+    if (next === this.filter()) {
+      return;
+    }
+
+    this.filter.set(next);
+    void this.reload();
+  }
+
+  /** A notice with somewhere to go is a link; following it marks it read on the way. */
+  protected opened(item: NotificationItem): void {
+    if (!item.isRead) {
+      void this.markRead(item);
+    }
+  }
+
+  /** Coming back to the tab reads the first page again, quietly, so new notices appear without a button. */
+  protected onVisibilityChange(): void {
+    if (document.visibilityState !== 'visible' || this.loading() || this.loadingMore()) {
+      return;
+    }
+
+    if (this.contextKey() !== null && this.consumedOffset() <= pageSize) {
+      void this.load(this.contextGeneration, true);
+    }
   }
 
   protected async reload(): Promise<void> {
@@ -117,7 +210,9 @@ export class Notifications {
       this.loadingMore.set(true);
       this.error.set(null);
       try {
-        const page = await owner.wait(firstValueFrom(this.api.listNotifications(skip, pageSize)));
+        const page = await owner.wait(
+          firstValueFrom(this.api.listNotifications(skip, pageSize, this.filter() === 'unread')),
+        );
         if (!this.owns(generation, request)) {
           return;
         }
@@ -193,17 +288,77 @@ export class Notifications {
     });
   }
 
-  private async load(generation: number): Promise<void> {
-    return this.scope.run('notifications', async (owner) => {
-      const request = ++this.listGeneration;
-      this.loading.set(true);
+  protected async markAllRead(): Promise<void> {
+    return this.scope.run('markAllRead', async (owner) => {
+      const generation = this.contextGeneration;
+      if (this.markingAll() || this.unread() === 0) {
+        return;
+      }
+
+      this.markingAll.set(true);
       this.error.set(null);
       try {
-        const page = await owner.wait(firstValueFrom(this.api.listNotifications(0, pageSize)));
+        await owner.wait(this.csrf.refresh());
+        if (this.contextGeneration !== generation) {
+          return;
+        }
+
+        const left = await owner.wait(firstValueFrom(this.api.markAllNotificationsRead()));
+        if (this.contextGeneration !== generation) {
+          return;
+        }
+
+        this.notifications.set(left);
+        const now = new Date().toISOString();
+        if (this.filter() === 'unread') {
+          // Everything listed was unread and now is not: the filter shows what came in since, if anything.
+          this.items.set([]);
+          this.consumedOffset.set(0);
+          this.total.set(0);
+          this.serverExhausted.set(left === 0);
+          if (left > 0) {
+            await owner.wait(this.load(generation, true));
+          }
+        } else {
+          this.items.update((loaded) =>
+            loaded.map((item) =>
+              item.isRead ? item : { ...item, isRead: true, readAtUtc: item.readAtUtc ?? now },
+            ),
+          );
+        }
+      } catch (error) {
+        if (!owner.current) return;
+        if (this.contextGeneration === generation) {
+          this.error.set(
+            apiErrorMessage(error, $localize`Your notifications could not be marked as read.`),
+          );
+        }
+      } finally {
+        if (owner.current && this.contextGeneration === generation) {
+          this.markingAll.set(false);
+        }
+      }
+    });
+  }
+
+  /** Reads the first page. A quiet read keeps what is on screen until the answer replaces it. */
+  private async load(generation: number, quiet = false): Promise<void> {
+    return this.scope.run('notifications', async (owner) => {
+      const request = ++this.listGeneration;
+      if (!quiet) {
+        this.loading.set(true);
+      }
+
+      this.error.set(null);
+      try {
+        const page = await owner.wait(
+          firstValueFrom(this.api.listNotifications(0, pageSize, this.filter() === 'unread')),
+        );
         if (!this.owns(generation, request)) {
           return;
         }
 
+        this.readAt.set(new Date());
         this.items.set(page.items);
         this.consumedOffset.set(page.items.length);
         this.total.set(page.total);
@@ -211,7 +366,7 @@ export class Notifications {
         this.notifications.set(page.unreadTotal);
       } catch (error) {
         if (!owner.current) return;
-        if (this.owns(generation, request)) {
+        if (this.owns(generation, request) && !quiet) {
           this.items.set([]);
           this.consumedOffset.set(0);
           this.total.set(0);
@@ -241,21 +396,14 @@ export class Notifications {
     this.serverExhausted.set(false);
     this.loading.set(false);
     this.loadingMore.set(false);
+    this.markingAll.set(false);
     this.busyId.set(null);
     this.error.set(null);
   }
 
   private resetTenantState(): void {
     ++this.contextGeneration;
-    ++this.listGeneration;
     this.context = null;
-    this.items.set([]);
-    this.consumedOffset.set(0);
-    this.total.set(0);
-    this.serverExhausted.set(false);
-    this.loading.set(false);
-    this.loadingMore.set(false);
-    this.error.set(null);
-    this.busyId.set(null);
+    this.reset();
   }
 }

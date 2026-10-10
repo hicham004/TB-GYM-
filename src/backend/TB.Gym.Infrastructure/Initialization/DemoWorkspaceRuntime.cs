@@ -155,7 +155,8 @@ internal sealed class DemoTimeline(DemoClock clock)
         }
     }
 
-    public async Task<int> RunAsync(TextWriter output, CancellationToken cancellationToken)
+    /// <param name="afterEachStep">Runs at each step's moment once it is done (the Worker's notice delivery).</param>
+    public async Task<int> RunAsync(TextWriter output, Func<Task> afterEachStep, CancellationToken cancellationToken)
     {
         var completed = 0;
         var reportedDate = default(DateOnly);
@@ -172,6 +173,7 @@ internal sealed class DemoTimeline(DemoClock clock)
                 throw new DemoStepFailedException(step.Label, exception.Message, exception);
             }
 
+            await afterEachStep();
             completed++;
             var date = DateOnly.FromDateTime(priority.At.UtcDateTime);
             if (date.DayNumber - reportedDate.DayNumber >= 7)

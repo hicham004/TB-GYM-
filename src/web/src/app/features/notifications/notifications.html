@@ -1,86 +1,159 @@
-<section class="notifications">
-  <div class="page-head">
-    <h2 i18n>Notifications</h2>
-    <div class="page-actions">
-      <a routerLink="/notifications/settings" i18n>Notification settings</a>
-      <button type="button" class="link" [disabled]="loading()" (click)="reload()" i18n>
-        Refresh
-      </button>
+<section class="inbox tb-theme" aria-labelledby="inbox-heading">
+  <header class="top">
+    <div class="intro">
+      <h1 id="inbox-heading" #heading tabindex="-1" i18n>Notifications</h1>
+      @if (!loading() && error() === null) {
+        <p class="lede">{{ summary() }}</p>
+      }
     </div>
+    <a class="settings" routerLink="/notifications/settings">
+      <app-icon name="settings" />
+      <span i18n>Settings</span>
+    </a>
+  </header>
+
+  <div class="bar">
+    <app-segmented-control
+      class="filter"
+      hideLabel
+      [label]="filterLabel"
+      [options]="filterOptions"
+      [selected]="filter()"
+      (selectedChange)="setFilter($event)"
+    />
+    @if (unread() > 0) {
+      <button
+        appButton
+        type="button"
+        variant="text"
+        [loading]="markingAll()"
+        (click)="markAllRead()"
+      >
+        <app-icon name="check-circle" />
+        <span i18n>Mark all as read</span>
+      </button>
+    }
   </div>
 
-  <!-- Present from first render so the live region is registered before anything lands in it, and
-       populated only when the server actually refused something. -->
+  <!-- Present from first render so the live region is registered before anything lands in it. -->
   <p class="error" role="alert">{{ error() }}</p>
 
-  <p class="detail" role="status">
-    @if (loading()) {
-      <span i18n>Loading your notifications…</span>
-    } @else if (loadedCount() > 0) {
-      <span i18n
-        >Showing {{ loadedCount() }} of {{ total() }} notifications, newest first.
-        {{ unread() }} unread.</span
+  @if (loading()) {
+    <div class="panel pad" aria-busy="true">
+      <app-skeleton [label]="loadingLabel" [lines]="4" [avatar]="true" />
+    </div>
+  } @else if (isEmpty()) {
+    @if (filter() === 'unread') {
+      <app-empty-state
+        class="panel"
+        heading="You're all caught up"
+        description="Nothing is waiting for you. Earlier notifications are under All."
+        i18n-heading
+        i18n-description
       >
+        <button
+          appButton
+          empty-state-action
+          type="button"
+          variant="outlined"
+          (click)="setFilter('all')"
+          i18n
+        >
+          Show all
+        </button>
+      </app-empty-state>
+    } @else if (isClient()) {
+      <app-empty-state
+        class="panel"
+        heading="No notifications yet"
+        description="When your coach sets up a program, shares a week or leaves a note on a workout, it shows here."
+        i18n-heading
+        i18n-description
+      />
+    } @else {
+      <app-empty-state
+        class="panel"
+        heading="No notifications yet"
+        description="When a client leaves a note on a workout or asks to renew, it shows here, as does news about your team."
+        i18n-heading
+        i18n-description
+      />
     }
-  </p>
-
-  @if (isEmpty()) {
-    <p class="empty" i18n>You have no notifications yet.</p>
-  } @else {
-    <ul class="feed">
-      @for (item of items(); track item.id) {
-        <li [class.unread]="!item.isRead" [class.read]="item.isRead">
-          <article>
-            <h3>
-              {{ item.title }}
-              <!-- Read state is announced in words as well as shown by the marker and the weight,
-                   so it never depends on colour alone. -->
-              <span class="state" [class.state-unread]="!item.isRead">
-                @if (item.isRead) {
-                  <span i18n>Read</span>
-                } @else {
-                  <span aria-hidden="true">&#9679;</span>
-                  <span i18n>Unread</span>
-                }
-              </span>
-            </h3>
-            <p>{{ item.body }}</p>
-            <p class="detail">
-              <time [attr.datetime]="item.createdAtUtc">{{
-                item.createdAtUtc | date: 'medium'
-              }}</time>
-            </p>
-            @if (item.clientProfileId) {
-              <!-- A renewal request: the client's plan page is where the coach renews (ADR 0029).
-                   The page itself decides whether this coach may open that client. -->
-              <p>
-                <a [routerLink]="['/clients', item.clientProfileId, 'service']"
-                  ><ng-container i18n>Open the client's page</ng-container
-                  ><span class="tb-visually-hidden">: {{ item.title }}</span></a
+  } @else if (items().length > 0) {
+    @for (day of days(); track day.key) {
+      <section class="day" [attr.aria-labelledby]="'day-' + day.key">
+        <h2 class="day-title" [id]="'day-' + day.key">{{ day.heading }}</h2>
+        <ul class="rows" role="list">
+          @for (item of day.items; track item.id) {
+            <li [class.unread]="!item.isRead">
+              @if (target(item); as link) {
+                <a
+                  class="row"
+                  [routerLink]="link.commands"
+                  [queryParams]="link.queryParams"
+                  (click)="opened(item)"
                 >
-              </p>
-            }
-            @if (!item.isRead) {
-              <button
-                type="button"
-                class="link"
-                [disabled]="busyId() === item.id"
-                [attr.aria-label]="'Mark as read: ' + item.title"
-                (click)="markRead(item)"
-                i18n
-              >
-                Mark as read
-              </button>
-            }
-          </article>
-        </li>
-      }
-    </ul>
+                  <ng-container
+                    [ngTemplateOutlet]="notice"
+                    [ngTemplateOutletContext]="{ $implicit: item }"
+                  />
+                </a>
+              } @else if (!item.isRead) {
+                <button
+                  type="button"
+                  class="row"
+                  [disabled]="busyId() === item.id"
+                  (click)="markRead(item)"
+                >
+                  <ng-container
+                    [ngTemplateOutlet]="notice"
+                    [ngTemplateOutletContext]="{ $implicit: item }"
+                  />
+                  <span class="tb-visually-hidden" i18n>, mark as read</span>
+                </button>
+              } @else {
+                <div class="row">
+                  <ng-container
+                    [ngTemplateOutlet]="notice"
+                    [ngTemplateOutletContext]="{ $implicit: item }"
+                  />
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    }
 
     @if (hasMore()) {
-      <button type="button" class="link" [disabled]="loadingMore()" (click)="loadMore()" i18n>
-        Load more notifications
+      <button
+        appButton
+        type="button"
+        variant="outlined"
+        class="more"
+        [loading]="loadingMore()"
+        (click)="loadMore()"
+        i18n
+      >
+        Show earlier notifications
       </button>
     }
   }
 </section>
+
+<ng-template #notice let-item>
+  <span class="row-icon" [class.is-unread]="!item.isRead"><app-icon [name]="icon(item)" /></span>
+  <span class="row-text">
+    <strong dir="auto">{{ item.title }}</strong
+    ><span class="tb-visually-hidden">. </span>
+    <small>{{ item.body }}</small>
+  </span>
+  <span class="row-meta">
+    <time [attr.datetime]="item.createdAtUtc">{{ item.createdAtUtc | date: 'shortTime' }}</time>
+    @if (!item.isRead) {
+      <!-- Unread in words as well as by the dot and the weight, so it never rests on colour alone. -->
+      <span class="dot" aria-hidden="true"></span>
+      <span class="tb-visually-hidden" i18n>, unread</span>
+    }
+  </span>
+</ng-template>

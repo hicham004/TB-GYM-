@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../../core/access/client-access.store';
@@ -15,6 +15,7 @@ import { TrainingProgram } from './training-program';
 async function render(
   api: Partial<Record<keyof ApiClient, unknown>> = {},
   access = fakeClientAccess(),
+  url = '/',
 ) {
   const selectedTenantId = signal<string | null>('tenant-1');
   const client = {
@@ -31,6 +32,8 @@ async function render(
       { provide: ClientAccessStore, useValue: access },
     ],
   }).compileComponents();
+  // A notice's link arrives in the address (`?week=2`), read when the page is created.
+  await TestBed.inject(Router).navigateByUrl(url);
   const fixture = TestBed.createComponent(TrainingProgram);
   await settle(fixture);
   const host = fixture.nativeElement as HTMLElement;
@@ -53,8 +56,14 @@ async function render(
   };
 }
 
+// jsdom has no scrolling; the link tests stub it and put back what was there.
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+
 describe('TrainingProgram', () => {
-  afterEach(() => TestBed.resetTestingModule());
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+  });
 
   it('leads with the program, its week, what is done and missed, and today’s workout', async () => {
     const { host, read, textOf } = await render();
@@ -115,6 +124,39 @@ describe('TrainingProgram', () => {
     second.click();
     await settle();
     expect(host.querySelector('#week-2')).toBeNull();
+  });
+
+  it('opens the week a notice names and brings it into view', async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    const { host } = await render({}, fakeClientAccess(), '/?week=2');
+
+    const rows = [...host.querySelectorAll<HTMLElement>('.weeks .week-row')];
+    expect(rows[1].getAttribute('aria-expanded')).toBe('true');
+    expect(rows[0].getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector('#week-2')).not.toBeNull();
+    expect(scrolled).toHaveBeenCalledTimes(1);
+    expect((scrolled.mock.contexts[0] as HTMLElement).id).toBe('week-row-2');
+  });
+
+  it('shows the finished workout a coach’s note is on, beyond the first few', async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    const page = Array.from({ length: 5 }, (_, index) =>
+      historyItem({ workoutExecutionId: `w${index}`, name: `Workout ${index}` }),
+    );
+    const { host } = await render(
+      { getMyWorkoutHistory: vi.fn(() => of(historyPage(page))) },
+      fakeClientAccess(),
+      '/?workout=w4',
+    );
+
+    const items = [...host.querySelectorAll('.history-item')];
+    expect(items).toHaveLength(5);
+    expect(
+      items.filter((item) => item.classList.contains('is-linked')).map((item) => item.id),
+    ).toEqual(['workout-w4']);
+    expect((scrolled.mock.contexts[0] as HTMLElement).id).toBe('workout-w4');
   });
 
   it('shows finished workouts with their records, a few at a time', async () => {

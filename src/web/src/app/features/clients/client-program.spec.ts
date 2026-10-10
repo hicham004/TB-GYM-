@@ -885,6 +885,18 @@ describe('a client’s Training', () => {
       expect(textOf(sheet.querySelector('.swap summary'))).toBe('Swap this session');
     });
 
+    it('opens the session a client’s note is on when a notice links to it, once', async () => {
+      const { harness, router } = await render({
+        url: '/clients/client-1/training?session=block-lean-s33',
+        api: { getTrainingMesocycle: vi.fn(() => of(blockView())) },
+      });
+      await settle(harness.fixture);
+
+      expect(textOf(dialog()!.querySelector('h2'))).toBe('Lower B');
+      // The word leaves the address, so Back and a reload do not open it again.
+      expect(router.url).toBe('/clients/client-1/training');
+    });
+
     it('shows what the client did for a finished session, and offers no swap', async () => {
       const { harness, host } = await render({
         api: { getTrainingMesocycle: vi.fn(() => of(blockView())) },

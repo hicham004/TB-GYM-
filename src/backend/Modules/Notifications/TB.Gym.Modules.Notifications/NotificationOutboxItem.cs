@@ -178,6 +178,26 @@ public enum CommercialNotificationKind
     /// and the one notice whose title names someone: the client, resolved when it is delivered.
     /// </summary>
     RenewalRequested = 9,
+
+    // The training kinds (ADR 0036, R5.1c) carry a TrainingNotificationPayload. All are in-app only.
+
+    /// <summary>To a client: their coach set up a new program for them.</summary>
+    ProgramAssigned = 10,
+
+    /// <summary>To a client: weeks of their program they could not see before are open to them now.</summary>
+    WeeksShared = 11,
+
+    /// <summary>To a client: their coach changed weeks they could already see. The title names the weeks.</summary>
+    WeeksChanged = 12,
+
+    /// <summary>To a client: their coach left a note on one of their workouts. Never the note's text.</summary>
+    CoachWorkoutNote = 13,
+
+    /// <summary>
+    /// To a client's coach: the client left a note on a workout. The title names the client, read when
+    /// it is delivered, as for a renewal request; never the note's text.
+    /// </summary>
+    ClientWorkoutNote = 14,
 }
 
 /// <summary>

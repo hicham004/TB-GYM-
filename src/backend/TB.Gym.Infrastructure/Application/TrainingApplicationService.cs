@@ -394,6 +394,16 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
                 mesocycle.GetEffectiveStatus(clock.UtcNow),
                 "Assigned from a published program template.",
                 clock.UtcNow));
+            // The client hears of it in-app (ADR 0036), in the same transaction as the program itself.
+            if (await dbContext.ClientProfiles.AsNoTracking()
+                    .Where(item => item.Id == clientProfileId)
+                    .Select(item => item.UserId)
+                    .SingleOrDefaultAsync(cancellationToken) is { } clientUserId)
+            {
+                TrainingNotices.ProgramAssigned(dbContext, tenantContext.TenantId, timeZoneId, clientUserId,
+                    clientProfileId, mesocycle.Id, clock.UtcNow);
+            }
+
             await dbContext.SaveChangesAsync(cancellationToken);
             return SuccessMesocycle(await ToViewAsync(mesocycle, cancellationToken));
         }
@@ -484,7 +494,9 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
             }
 
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = request.Version;
+            var visibleBefore = ClientVisibleWeeks(mesocycle);
             mesocycle.Reschedule(request.StartDate);
+            await QueueClientWeekNoticesAsync(mesocycle, visibleBefore, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
             return SuccessMesocycle(await ToViewAsync(mesocycle, cancellationToken));
         }
@@ -609,8 +621,10 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
             var workingMaxes = await LoadWorkingMaxDictionaryAsync(mesocycle.Id, cancellationToken);
             var calculated = CalculateSessionBlueprint(baseBlueprint, mesocycle, workingMaxes);
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = request.Version;
+            var visibleBefore = ClientVisibleWeeks(mesocycle);
             mesocycle.ReplaceFutureSession(sessionId, calculated);
             dbContext.ExercisePrescriptions.AddRange(session.Exercises);
+            await QueueClientWeekNoticesAsync(mesocycle, visibleBefore, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
             return SuccessMesocycle(await ToViewAsync(mesocycle, cancellationToken));
         }
@@ -643,7 +657,9 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         try
         {
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = version;
+            var visibleBefore = ClientVisibleWeeks(mesocycle);
             mutation(mesocycle);
+            await QueueClientWeekNoticesAsync(mesocycle, visibleBefore, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
             return SuccessMesocycle(await ToViewAsync(mesocycle, cancellationToken));
         }

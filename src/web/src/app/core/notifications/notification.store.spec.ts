@@ -223,4 +223,38 @@ describe('NotificationStore', () => {
     context.store.decrement();
     expect(context.store.unread()).toBe(0);
   });
+
+  it('reads the count again when the tab comes back into view, so no button is needed', async () => {
+    const context = harness();
+    context.unreadCount.mockReturnValueOnce(of(1)).mockReturnValue(of(3));
+    flush();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(context.store.unread()).toBe(1);
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(context.store.unread()).toBe(3);
+  });
+
+  it('reads the count once a minute while shown, and asks nothing once signed out', async () => {
+    vi.useFakeTimers();
+    try {
+      const context = harness();
+      context.unreadCount.mockReturnValue(of(2));
+      flush();
+      await vi.advanceTimersByTimeAsync(0);
+      const before = context.unreadCount.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(context.unreadCount.mock.calls.length).toBe(before + 1);
+
+      context.user.set(null);
+      flush();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(context.unreadCount.mock.calls.length).toBe(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

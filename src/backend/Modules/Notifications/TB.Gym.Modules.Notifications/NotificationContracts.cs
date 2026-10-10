@@ -46,11 +46,30 @@ public sealed record CoachNotificationPayload(
     public const int CurrentSchemaVersion = 1;
 }
 
+/// <summary>
+/// The versioned payload of a training notice (ADR 0036): the client, their program, the weeks the
+/// notice names, and for a note the session and workout it is on. Identifiers and week numbers only;
+/// never a note's text, a weight or a date. The outbox aggregate is the program, or the workout for a
+/// note.
+/// </summary>
+public sealed record TrainingNotificationPayload(
+    Guid ClientProfileId,
+    Guid MesocycleId,
+    IReadOnlyList<int> Weeks,
+    Guid? SessionId = null,
+    Guid? WorkoutExecutionId = null,
+    int SchemaVersion = TrainingNotificationPayload.CurrentSchemaVersion)
+{
+    public const int CurrentSchemaVersion = 1;
+}
+
 /// <summary>The signed-in recipient view of one of their own notifications.</summary>
 /// <remarks>
-/// <see cref="ClientProfileId"/> is set only for a notice about one client that staff act on from that
-/// client's page (a renewal request, ADR 0029). It is a link target, not an authorization: the page
-/// still decides whether this coach may open that client.
+/// The last four are link targets, not authorizations: the page each one opens still decides what its
+/// reader may see. <see cref="ClientProfileId"/> is set for a notice about one client that staff act
+/// on from that client's page (a renewal request, ADR 0029, or a client's workout note).
+/// <see cref="SessionId"/> and <see cref="WorkoutExecutionId"/> name the workout a note is on, and
+/// <see cref="WeekNumber"/> the first week a week notice names (R5.1c).
 /// </remarks>
 public sealed record NotificationView(
     Guid Id,
@@ -61,7 +80,13 @@ public sealed record NotificationView(
     DateTimeOffset? ReadAtUtc,
     bool IsRead,
     uint Version,
-    Guid? ClientProfileId = null);
+    Guid? ClientProfileId = null,
+    Guid? SessionId = null,
+    Guid? WorkoutExecutionId = null,
+    int? WeekNumber = null);
+
+/// <summary>What "Mark all as read" did: how many it marked, and the unread count left (0 unless one arrived meanwhile).</summary>
+public sealed record NotificationReadAllResult(int Marked, long Unread);
 
 /// <summary>One newest-first page of the caller's own inbox.</summary>
 public sealed record NotificationPage(long Total, long UnreadTotal, IReadOnlyList<NotificationView> Items);
@@ -123,11 +148,15 @@ public sealed record NotificationCommandResult(
 /// </summary>
 public interface INotificationApplicationService
 {
-    Task<NotificationPage> ListOwnAsync(int skip, int take, CancellationToken cancellationToken);
+    /// <summary>A newest-first page of the caller's own inbox; <paramref name="unreadOnly"/> leaves out what was read.</summary>
+    Task<NotificationPage> ListOwnAsync(int skip, int take, bool unreadOnly, CancellationToken cancellationToken);
 
     Task<NotificationUnreadCount> CountOwnUnreadAsync(CancellationToken cancellationToken);
 
     Task<NotificationCommandResult> MarkOwnReadAsync(Guid notificationId, CancellationToken cancellationToken);
+
+    /// <summary>Marks every unread notification of the caller's read, in this workspace only. Idempotent.</summary>
+    Task<NotificationReadAllResult> MarkAllOwnReadAsync(CancellationToken cancellationToken);
 
     Task<NotificationDeadLetterPage> ListDeadLettersAsync(int skip, int take, CancellationToken cancellationToken);
 }

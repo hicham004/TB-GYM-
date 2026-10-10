@@ -1,13 +1,33 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  signal,
+  TemplateRef,
+  viewChild,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
+import { Button } from '../../ui/button';
+import { Checkbox } from '../../ui/checkbox';
+import { UiConfirm } from '../../ui/confirm';
+import { UiDialog } from '../../ui/dialog';
+import { Control, Field } from '../../ui/field';
+import { Icon } from '../../ui/icon';
+import { Skeleton } from '../../ui/skeleton';
 import type { NotificationPreferences } from './notification.models';
 
 /** 24-hour `HH:mm`, which is the only shape the API accepts. */
@@ -32,17 +52,37 @@ const localTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
  */
 @Component({
   selector: 'app-notification-preferences',
-  imports: [ReactiveFormsModule],
+  imports: [
+    Button,
+    Checkbox,
+    Control,
+    Field,
+    Icon,
+    ReactiveFormsModule,
+    RouterLink,
+    Skeleton,
+    UiConfirm,
+  ],
   templateUrl: './notification-preferences.html',
   styleUrl: './notification-preferences.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
 })
-export class NotificationPreferencesPage {
+export class NotificationPreferencesPage implements HoldsUnsavedWork {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly formBuilder = inject(FormBuilder);
+  private readonly dialogs = inject(UiDialog);
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly leaveDialog = viewChild.required<TemplateRef<unknown>>('leaveDialog');
+
+  protected readonly loadingLabel = $localize`Loading your notification settings…`;
+  protected readonly leaveMessage = $localize`Your changes to these settings are not saved. If you leave now, they are lost.`;
+  protected readonly leaveConfirm = $localize`Leave without saving`;
+  protected readonly leaveCancel = $localize`Stay`;
 
   /** Bumped whenever the member or the workspace changes; every reply is checked against it. */
   private contextGeneration = 0;
@@ -115,6 +155,7 @@ export class NotificationPreferencesPage {
       .pipe(takeUntilDestroyed())
       .subscribe((enabled) => this.applyQuietHoursEnabled(enabled));
 
+    afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
     effect(() => {
       this.scope.epoch();
       const key = this.contextKey();
@@ -131,6 +172,27 @@ export class NotificationPreferencesPage {
         void this.load(generation);
       }
     });
+  }
+
+  /** Asks before the router takes the person away from changes they have not saved (plan §9). */
+  async canLeave(): Promise<boolean> {
+    if (!this.form.dirty || this.saving()) {
+      return true;
+    }
+
+    const dialog = this.dialogs.open<boolean>(this.leaveDialog(), {
+      title: $localize`Leave without saving?`,
+      closeLabel: $localize`Close`,
+      closeOnNavigation: false,
+    });
+    return (await firstValueFrom(dialog.closed)) === true;
+  }
+
+  protected onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.form.dirty) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
   }
 
   protected async reload(): Promise<void> {

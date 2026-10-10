@@ -1,79 +1,233 @@
-.notifications {
+// Notifications (R5.1c), for coaches and clients: notices in days, as rows in cards like Me's. Brand
+// v2 tokens only, so it follows the coach's brand and the person's mode.
+
+:host {
+  color: var(--tb-ink);
+  container-type: inline-size;
+  display: block;
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+.inbox {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-16);
+  margin-inline: auto;
+  max-inline-size: 48rem;
 }
-
-.page-head {
-  align-items: center;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-}
-
-.page-head h2 {
+h1,
+h2,
+p,
+ul {
   margin: 0;
 }
-
-.feed {
-  display: grid;
-  gap: 0.75rem;
+ul {
   list-style: none;
-  margin: 0;
   padding: 0;
 }
 
-.feed li {
-  border: 1px solid var(--border, #d8dde3);
-  border-radius: 0.75rem;
-  padding-block: 0.75rem;
-  padding-inline: 1rem;
-}
-
-/* Unread is carried by a border weight, a marker glyph and the word "Unread", never by colour
-   alone: a reader who cannot distinguish the two colours still sees which is which. Logical
-   properties so a right-to-left locale needs no rewrite. */
-.feed li.unread {
-  border-inline-start-width: 4px;
-}
-
-.feed li.read h3 {
-  font-weight: 500;
-}
-
-.feed h3 {
-  align-items: baseline;
+.top {
+  align-items: flex-end;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-block: 0 0.25rem;
+  gap: var(--space-12);
+  justify-content: space-between;
+}
+h1 {
+  font-size: clamp(1.75rem, 6cqi, 2.25rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  outline: none;
+}
+.lede {
+  color: var(--tb-muted);
+  font-variant-numeric: tabular-nums;
+  margin-block-start: var(--space-4);
+}
+.settings {
+  align-items: center;
+  border-radius: 999px;
+  color: var(--tb-accent-ink);
+  display: inline-flex;
+  font-weight: 600;
+  gap: var(--space-8);
+  min-block-size: 2.75rem;
+  padding-inline: var(--space-12);
+  text-decoration: none;
+  touch-action: manipulation;
+}
+.settings:hover {
+  background: var(--tb-surface-2);
+}
+.settings:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--tb-focus);
+  outline-offset: 2px;
 }
 
-.feed p {
-  margin-block: 0 0.25rem;
+.bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+  justify-content: space-between;
 }
-
-.state {
-  font-size: 0.8rem;
-  font-weight: 500;
-  text-transform: uppercase;
+.filter {
+  inline-size: min(100%, 15rem);
 }
-
-.state-unread {
-  font-weight: 700;
-}
-
-.detail,
-.empty {
-  color: var(--muted, #4c565f);
-  font-size: 0.9rem;
-}
-
 .error:empty {
   display: none;
 }
+.error {
+  color: var(--tb-danger);
+}
 
-.page-actions {
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card, 18px);
+}
+.pad {
+  padding: var(--space-16);
+}
+
+.day {
+  display: grid;
+  gap: var(--space-8);
+}
+.day-title {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  padding-inline: var(--space-4);
+  text-transform: uppercase;
+}
+.rows {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.rows li + li {
+  border-block-start: 1px solid var(--tb-line);
+}
+// Icon, words, time. On a phone the time moves under the words, so a title keeps the width it needs.
+.row {
+  align-items: start;
+  background: none;
+  border: 0;
+  color: inherit;
+  column-gap: var(--space-12);
+  display: grid;
+  font: inherit;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  inline-size: 100%;
+  margin: 0;
+  min-block-size: 4rem;
+  padding: var(--space-12) var(--space-16);
+  text-align: start;
+  text-decoration: none;
+}
+a.row,
+button.row {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+a.row:hover,
+button.row:hover {
+  background: var(--tb-surface-2);
+}
+// Inside the row: the card clips what it holds, so an outer ring would be cut off.
+a.row:focus-visible,
+button.row:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--tb-focus);
+  outline-offset: calc(-1 * var(--focus-ring-width, 3px));
+}
+button.row:disabled {
+  cursor: progress;
+}
+.unread .row {
+  background: color-mix(in srgb, var(--tb-accent-soft) 55%, var(--tb-surface));
+}
+.unread a.row:hover,
+.unread button.row:hover {
+  background: var(--tb-accent-soft);
+}
+.row-icon {
+  background: var(--tb-surface-2);
+  block-size: 2.5rem;
+  border-radius: 12px;
+  color: var(--tb-muted);
+  display: grid;
+  flex: none;
+  inline-size: 2.5rem;
+  place-items: center;
+}
+.row-icon.is-unread {
+  background: var(--tb-surface);
+  color: var(--tb-accent-ink);
+}
+.row-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  padding-block-start: 2px;
+}
+.row-text strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+.unread .row-text strong {
+  font-weight: 650;
+}
+.row-text small {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+.row-meta {
   align-items: center;
+  color: var(--tb-muted);
   display: flex;
-  gap: 1rem;
+  flex: none;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  gap: var(--space-8);
+  padding-block-start: 3px;
+  white-space: nowrap;
+}
+@container (max-width: 30rem) {
+  .row {
+    row-gap: var(--space-4);
+  }
+  .row-icon {
+    grid-row: span 2;
+  }
+  .row-meta {
+    grid-column: 2;
+    grid-row: 2;
+    padding-block-start: 0;
+  }
+}
+.dot {
+  background: var(--tb-accent-ink);
+  block-size: 0.5rem;
+  border-radius: 50%;
+  inline-size: 0.5rem;
+}
+
+.more {
+  justify-self: center;
+}
+
+@media (forced-colors: active) {
+  .dot {
+    background: CanvasText;
+  }
+  .unread .row {
+    border-inline-start: 4px solid Highlight;
+  }
 }
