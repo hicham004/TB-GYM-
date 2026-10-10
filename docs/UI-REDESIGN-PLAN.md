@@ -90,7 +90,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.1b | **Exercise library** (C10): the coach's exercises as cards with their first picture or video (or a lettered tile), or as a list; a search and four filter chips (muscle, pattern, type, equipment) plus Archived too, all in the address; New exercise as a quick add (name, a YouTube or Vimeo link, what it trains) with More details (how to do it, other muscles, tags, swaps, pictures and videos, uploads) in one sheet that Edit opens too; Archive with Undo. Two server bugs found on the way were fixed: a video link added twice answered 500 (MED-015), and editing an exercise to add a muscle or a second video answered a conflict (LIB-002) | §2, plus API tests (the same link twice, by a colleague, after removal, at the same moment, another workspace, a client refused; an edit adding and dropping every kind of row) | Done · 2026-10-09 |
 | R5.1c | **Notifications**, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only). The inbox for coaches and clients in days (Today, Yesterday, the weekday, the date), All and Unread, Mark all as read, and each notice opening what it is about (a week or a finished workout in Training, a session on a client's Training, a client's plan); no Refresh button, the badge reads itself again. The client hears only what they can see now (NOT-035), and the coach hears of a client's note on a workout (decided by Claude, ADR 0036). Notification settings rebuilt in cards, with the leave warning (§9). The demo delivers its notices as it is built | §2, plus domain tests (the week wording, the kinds) and API tests (each notice, only what the client can open, a note both ways without its text, a notice no longer true left unsaid, unread filter, mark all only the reader's own, another workspace, signed out) | Done · 2026-10-09 |
 | R5.2a | **Settings, Team, Billing** (C9): one Settings layout for staff, the coaching space's pages (the owner's: Name and region, Brand, Nutrition, Team, Billing) and the person's own (Notifications, Appearance, Password and security), a column on a wide page and a row that scrolls on a phone; Name and region rebuilt (the time zone from a searchable sheet, the week's first day, the currency new plans start in, the leave warning); Team with faces, Invite a coach in a sheet and each row's actions in a menu; Billing with what is owed first, how to pay with copy buttons, this month so far and a clean list of invoices that open in a sheet; Password and security rebuilt for staff and clients, Sign out everywhere asked first, leaving in a kit dialog | §2 | Done · 2026-10-09 |
-| R5.2b | **The platform admin screen** (ADR 0028) | §2 | To do |
+| R5.2b | **The platform admin screen** (ADR 0028): every coaching space in the order that needs the admin first, with what it owes, when it falls due and when it locks; a page for each space (invoices, this month, discounts); sheets to record a payment dated the day the money arrived, void with or without a corrected invoice, grant and revoke a discount, and publish a price plan version after seeing what changes; and the kit's new date field instead of the browser's date inputs | §2, plus API tests (a payment's date in the service and the database, the list's due and lock days) | Done · 2026-10-10 |
 | R5.3 | **Delete legacy CSS**, add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
 | R6.2 | **Homepage** pre-render, GSAP scroll story, Jitter hero video (the owner makes the assets) | §2 | Optional |
@@ -625,6 +625,39 @@ of the implemented R1.3 screens before production rollout.
   list; (d) an invitation whose link ran out can only be cancelled (the server refuses a resend), so the owner
   invites again; (e) the platform admin screen is R5.2b.
 
+- **Platform billing, R5.2b (built 2026-10-10; screenshots `docs/design/r52b-*.png`). Decided by Claude for the
+  owner on 2026-10-10**, after looking at Chargebee (Record payment takes a reference number, a comment and a
+  date that may be in the past; its amount may be partial), Stripe (an invoice list filtered by chips with a
+  "Past due" badge and an accounts-receivable aging report; only an open or uncollectible invoice can be voided,
+  and a voided one keeps its paper trail), TrueCoach and FITR (a coach's client keeps access when a payment
+  fails; FITR waits 7 days) and the W3C and GOV.UK guidance on date fields: (1) **the list is triage, not a
+  table**: read-only first, then overdue, owing, a trial ending within 7 days, paid up, other trials, each with
+  what it owes and what happens next ("Was due Oct 5, read-only from Oct 12"), four tiles above it, and a
+  search and chips in the address. The list read gained each space's earliest due day and read-only day. (2) **A
+  payment is dated the day the money arrived** (default today; from the invoice's day to today, UTC days, PBL-007),
+  as Chargebee's date: a Whish transfer is often recorded a day later and an append-only record can never be
+  corrected afterwards. The amount is shown, not typed, because partial payments stay unsupported (ADR 0028).
+  (3) **Voiding offers a corrected invoice by default** and says first what it does: it counts again as of today
+  at the voided invoice's plan, is due after the plan's payment days, and is emailed to the owner. A paid invoice
+  has no Void. (4) **Discounts have no preset offers**: the old form started at "30%, Founding coach", an offer
+  the owner has deferred; the sheet offers only lengths (3 months, 6 months, a year) and says, before asking the
+  server, when a discount would overlap one in force. (5) **A price plan version is published after the list of
+  what changes** ("Price per seat $15.00 → $20.00"); a new trial length is said to apply only to spaces created
+  after it. (6) **The kit gained its date field** (`ui/date-field.ts`, with `ui/calendar.ts`): a button that says
+  the day in words and opens a month calendar in the flow of the page, so a sheet can never clip it; the W3C date
+  picker's keys (arrows, Home and End, Page Up and Down, with Shift a year, Escape closes the calendar before the
+  sheet); days outside the range greyed; right-to-left arrows. A typed day, which GOV.UK prefers for dates a
+  person knows by heart such as a birth date, came in R5.3a as the kit's `DateInput`. Not built: partial
+  payments, refunds and credit (they need a ledger design), a trial extension, MRR figures, CSV export, an
+  invoice PDF (no legal details yet), a reminder to chase an owner. Seen, not fixed: seven other screens still
+  use the browser's date input (check-in clients, progress, Start a plan and Record payment for a client,
+  Assign program, program block dialogs, client nutrition); swapping each for the kit's date field is its own
+  step.
+  The initial bundle is 543.08 kB (R5.2a: 542.60; two routes and two icons) and `platform-space.scss` is 5.45 kB, 453
+  bytes over its 5 kB warning budget. Checked with `/ui-review`: touch-action, a hover on Today and Clear, the
+  textareas' autocomplete, a scroll margin so the sheet's sticky bar never covers a field, and the owner's email
+  left untranslated were fixed; the spaces list is not virtualized (fine below about 200 spaces).
+
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -819,6 +852,9 @@ Tokens are theme-ready from R1, so this costs little later.
   - Charts: `ProgressRing`, `Sparkline`, `TrendChart`, `BarChart`, `PhotoCompare`.
   - Chat: `ChatThread`, `Composer`.
   - Workout: `SetRow`, `RestTimer`.
+- Built in R5.2b: `DateField` (the `DatePicker` above, `ui/date-field.ts`) with its calendar maths in `ui/calendar.ts`
+  (a day is a `YYYY-MM-DD` string, every step in UTC). Its value is a calendar day, never an instant. `today`,
+  `min`, `max` and `firstDay` are inputs; messages come through `errors` as `app-field` takes them.
 - **Retire:** the pre-foundation palette and globals in `styles.scss`, the `--accent/--surface`
   legacy variables, and every browser-default button. The migration is finished when a lint check
   finds no legacy variable and no unstyled `<button>`.
@@ -1230,6 +1266,18 @@ limited to the coach's assigned clients.
   its reissue. **Password and security**, for staff and clients: field errors in words with focus on the first,
   Sign out everywhere asked first, and leaving the coaching space in a kit dialog. Appearance and Notification
   settings sit in the same layout. All of it follows dark mode; Billing keeps TB Gym's colours.
+- Built in R5.2b: the platform admin's two screens, outside any workspace (a platform admin needs none), in TB
+  Gym's colours and the person's mode. **Platform billing** (`/admin/billing`): four tiles (what is owed and by how
+  many spaces, read-only now, overdue, trials ending within 7 days), then the coaching spaces as faces with their
+  owner, seats and clients, a status and the sentence for what happens next, what they owe and a chevron, ordered
+  worst first; search by space, owner or email and the chips All, Needs payment, On trial and Paid up (`?show=`);
+  then the Price plan with each term on its own line, Earlier versions closed, and Publish a new version, a sheet
+  of eight terms with a "What changes" list. "Issue last month's invoices" asks first (it emails each owner).
+  **A coaching space** (`/admin/billing/:tenantId`): where it stands and what it owes, its invoices (reference,
+  total, when due or what became of it, what it counted; Record payment and Void on an unpaid one, the payment's
+  reference and note on a paid one, a voided one struck through and linked to its replacement), this month so far
+  line by line, and its discounts (running, starts later, ended, revoked) with Grant a discount and Revoke after
+  asking. Closing a sheet that holds typed work asks first.
 
 **C10. Exercise library**
 - A grid/list toggle with media thumbnails, filter chips instead of three dropdowns plus an

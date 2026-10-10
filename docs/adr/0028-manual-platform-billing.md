@@ -77,6 +77,12 @@ Chosen by the implementer, to confirm:
   allow-list on purpose.
 - Prices can change without a deploy; trial, due and grace periods apply per plan version.
 - Whish automation (Step 5) records payments through the same append-only payment row.
+- The platform admin's screen (R5.2b, 2026-10-10) orders coaching spaces by how soon each needs the admin
+  (read-only, overdue, owing, a trial ending within 7 days, paid up, other trials), shows a payment's amount
+  as fixed because partial payments stay unsupported, and dates each payment with the day the money arrived
+  (PBL-007, decided by Claude for the owner after Chargebee's Record payment, whose date may be in the past).
+  A void offers a corrected invoice by default and says it recounts usage today, is due after the plan's
+  payment days and is emailed to the owner. Dates there are UTC days, like every invoice date.
 - The owner's Billing page (R5.2a, 2026-10-09) shows each invoice's reference, lines, total and payment and
   copies the reference for the transfer note. There is no printable or PDF invoice until TB Gym's legal name,
   address and tax number are decided: a formal invoice carries them, and TB Gym does not invent that wording.

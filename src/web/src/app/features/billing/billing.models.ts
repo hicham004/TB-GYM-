@@ -104,6 +104,9 @@ export interface AdminWorkspace {
   unpaidTotal: number;
   currencyCode: string;
   currentDiscountPercent: number;
+  /** The earliest due day among its unpaid invoices, and the day it goes read-only; null when nothing is owed. */
+  oldestUnpaidDueOn: string | null;
+  readOnlyFrom: string | null;
 }
 
 export interface BillingDiscount {

@@ -1,258 +1,359 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
-import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { of, throwError } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
-import { button, fill, press, settle, text } from '../../../testing/dom';
-import type {
-  AdminWorkspace,
-  AdminWorkspaceDetail,
-  BillingAmounts,
-  BillingInvoice,
-  PricePlan,
-} from '../billing/billing.models';
-import { PlatformAdmin, shiftDate } from './platform-admin';
+import { fill, press, settle } from '../../../testing/dom';
+import {
+  NOW,
+  plan,
+  platformSpaces,
+  pricePlans,
+  SPACE_IDS,
+} from '../../../testing/platform-admin-fixtures';
+import type { AdminWorkspace, PricePlan } from '../billing/billing.models';
+import { PlatformAdmin } from './platform-admin';
 import { PlatformAdminApi } from './platform-admin-api';
 import { isPlatformAdmin } from './platform-admin.guard';
 
-const amounts: BillingAmounts = {
-  seats: 1,
-  billableClients: 3,
-  includedClients: 5,
-  extraClients: 0,
-  seatAmount: 15,
-  extraClientAmount: 0,
-  gymFeeAmount: 0,
-  subtotal: 15,
-  discountPercent: 0,
-  discountAmount: 0,
-  total: 15,
-  currencyCode: 'USD',
-};
+type Api = { [K in keyof PlatformAdminApi]: ReturnType<typeof vi.fn> };
 
-const workspace: AdminWorkspace = {
-  tenantId: 'tenant-1',
-  name: 'Cedar Gym',
-  ownerName: 'Olivia Owner',
-  ownerEmail: 'owner@example.test',
-  createdAtUtc: '2026-06-01T09:00:00Z',
-  status: 'Overdue',
-  trialEndsAtUtc: '2026-07-01T09:00:00Z',
-  seatsThisMonth: 1,
-  billableClientsThisMonth: 3,
-  unpaidTotal: 15,
-  currencyCode: 'USD',
-  currentDiscountPercent: 0,
-};
-
-const invoice: BillingInvoice = {
-  id: 'invoice-1',
-  referenceCode: 'TBG-202607-ABC234',
-  periodStart: '2026-07-01',
-  periodEndExclusive: '2026-08-01',
-  usageFromUtc: '2026-07-01T09:00:00Z',
-  issuedAtUtc: '2026-08-01T00:10:00Z',
-  dueOn: '2026-08-08',
-  readOnlyFrom: '2026-08-15',
-  pricePlanVersion: 1,
-  planSeatPrice: 15,
-  planIncludedClientsPerSeat: 5,
-  planExtraClientPrice: 2,
-  planGymFee: 10,
-  planGymFeeMinimumSeats: 2,
-  amounts,
-  status: 'Overdue',
-  locksWorkspace: false,
-  payment: null,
-  voidedAtUtc: null,
-  voidReason: null,
-  replacesInvoiceId: null,
-  replacedByInvoiceId: null,
-};
-
-const detail: AdminWorkspaceDetail = {
-  summary: workspace,
-  currentMonth: {
-    periodStart: '2026-08-01',
-    usageFromUtc: '2026-08-01T00:00:00Z',
-    usageToUtc: '2026-08-10T00:00:00Z',
-    inTrial: false,
-    pricePlanVersion: 1,
-    amounts,
-  },
-  invoices: [invoice],
-  discounts: [],
-};
-
-const plan: PricePlan = {
-  id: 'plan-1',
-  versionNumber: 1,
-  currencyCode: 'USD',
-  seatPrice: 15,
-  includedClientsPerSeat: 5,
-  extraClientPrice: 2,
-  gymFee: 10,
-  gymFeeMinimumSeats: 2,
-  trialDays: 30,
-  paymentTermDays: 7,
-  graceDays: 7,
-  note: 'Placeholder',
-  publishedAtUtc: '2026-09-24T00:00:00Z',
-  isCurrent: true,
-};
-
-async function render() {
-  const api = {
-    getWorkspaces: vi.fn(() => of([workspace])),
-    getWorkspace: vi.fn(() => of(detail)),
-    getPricePlans: vi.fn(() => of([plan])),
-    publishPricePlan: vi.fn(() => of({ ...plan, id: 'plan-2', versionNumber: 2, seatPrice: 20 })),
-    issueInvoices: vi.fn(() =>
-      of({ periodStart: '2026-08-01', issued: 1, alreadyIssued: 0, inTrial: 2 }),
+async function render(
+  spaces: () => AdminWorkspace[] = platformSpaces,
+  overrides: Partial<Api> = {},
+) {
+  const api: Api = {
+    getWorkspaces: vi.fn(() => of(spaces())),
+    getWorkspace: vi.fn(),
+    getPricePlans: vi.fn(() => of(pricePlans())),
+    publishPricePlan: vi.fn(() =>
+      of(plan({ id: 'plan-3', versionNumber: 3, seatPrice: 20 }) satisfies PricePlan),
     ),
-    recordPayment: vi.fn(() => of({})),
-    voidInvoice: vi.fn(() => of({})),
-    grantDiscount: vi.fn(() => of({})),
-    revokeDiscount: vi.fn(() => of({})),
+    issueInvoices: vi.fn(() =>
+      of({ periodStart: '2026-09-01', issued: 1, alreadyIssued: 0, inTrial: 2 }),
+    ),
+    recordPayment: vi.fn(),
+    voidInvoice: vi.fn(),
+    grantDiscount: vi.fn(),
+    revokeDiscount: vi.fn(),
+    ...overrides,
   };
-  await TestBed.configureTestingModule({
+  TestBed.configureTestingModule({
     imports: [PlatformAdmin],
     providers: [
       provideRouter([]),
       { provide: PlatformAdminApi, useValue: api },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
     ],
-  }).compileComponents();
-
+  });
   const fixture = TestBed.createComponent(PlatformAdmin);
   await settle(fixture);
   return { fixture, host: fixture.nativeElement as HTMLElement, api };
 }
 
-async function openWorkspace(
-  host: HTMLElement,
-  fixture: Awaited<ReturnType<typeof render>>['fixture'],
-) {
-  press(host, 'Open Cedar Gym');
-  await settle(fixture);
-}
+const textOf = (element: Element | null | undefined) =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
-describe('PlatformAdmin', () => {
+/** The sheet or dialog on top, which the CDK draws outside the page. */
+const dialog = () => {
+  const open = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+  return open.length ? open[open.length - 1] : null;
+};
+
+const toast = () => textOf(document.querySelector('.tb-toast-host, app-toast-host'));
+
+const rowNames = (host: HTMLElement) =>
+  Array.from(host.querySelectorAll('.space .name')).map((link) => textOf(link));
+
+describe('Platform billing', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(NOW));
+  });
+
   afterEach(() => {
+    vi.useRealTimers();
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
   });
 
-  it('lists every workspace with its status, usage this month and unpaid total', async () => {
+  it('shows what is owed, what is locked and overdue, and which trials end soon', async () => {
     const { host } = await render();
 
-    const row = host.querySelector('[data-workspace="tenant-1"]')?.textContent ?? '';
-    expect(row).toContain('Cedar Gym');
-    expect(row).toContain('owner@example.test');
-    expect(row).toContain('Overdue');
-    expect(row).toContain('$15.00');
-    expect(host.querySelector('[data-current-plan]')?.textContent).toContain('Version 1');
+    const tiles = Array.from(host.querySelectorAll('app-stat-tile')).map((tile) =>
+      [
+        tile.querySelector('.label'),
+        tile.querySelector('.value'),
+        tile.querySelector('.context'),
+      ].map(textOf),
+    );
+    expect(tiles).toEqual([
+      ['Owed to TB Gym', '$155.00', 'By 3 coaching spaces'],
+      ['Read-only now', '1', 'Their coaches cannot edit until they pay'],
+      ['Overdue', '1', 'Past their due date, not yet read-only'],
+      ['Trials ending', '1', 'In the next 7 days'],
+    ]);
   });
 
-  it('brings the opened workspace into view and moves focus to it', async () => {
-    const scrollIntoView = vi.fn();
-    const original = HTMLElement.prototype.scrollIntoView;
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
-    onTestFinished(() => {
-      HTMLElement.prototype.scrollIntoView = original;
-    });
+  it('says so plainly when nothing is owed', async () => {
+    const { host } = await render(() => platformSpaces().filter((s) => s.unpaidTotal === 0));
+
+    const tiles = Array.from(host.querySelectorAll('app-stat-tile')).map((tile) =>
+      [tile.querySelector('.value'), tile.querySelector('.context')].map(textOf),
+    );
+    expect(tiles).toEqual([
+      ['$0.00', 'Nothing is owed'],
+      ['0', 'No coaching space is locked'],
+      ['0', 'Nothing is overdue'],
+      ['1', 'In the next 7 days'],
+    ]);
+  });
+
+  it('names what is missing when a filter has nobody in it, and shows everyone again', async () => {
+    const { fixture, host } = await render(() =>
+      platformSpaces().filter((s) => s.unpaidTotal === 0),
+    );
+
+    host.querySelector<HTMLInputElement>('input[name="space-filter"][value="owing"]')!.click();
+    await settle(fixture);
+    expect(textOf(host.querySelector('app-empty-state h2'))).toBe('Nobody owes anything right now');
+    press(host, 'Show all');
+    await settle(fixture);
+    expect(rowNames(host)).toHaveLength(4);
+    expect(host.querySelector('app-empty-state')).toBeNull();
+  });
+
+  it('lists the coaching spaces worst first, each with its status, what happens next and what it owes', async () => {
+    const { host } = await render();
+
+    expect(rowNames(host)).toEqual([
+      'Cedar Barbell Club',
+      'Atlas Performance',
+      'Beirut Barbell',
+      'Strength Lab',
+      'Nour Fitness',
+      'نادي الأرز',
+      'Maya Rahme Coaching',
+    ]);
+    const row = (id: string) => host.querySelector(`[data-space="${id}"]`)!;
+    const cedar = row(SPACE_IDS.cedar);
+    expect(textOf(cedar.querySelector('.owner'))).toBe(
+      'Olivia Haddad · olivia@cedarbarbell.example',
+    );
+    expect(textOf(cedar.querySelector('.usage'))).toBe('3 seats · 22 clients');
+    expect(textOf(cedar.querySelector('app-status-pill'))).toBe('Read-only until paid');
+    expect(textOf(cedar.querySelector('.next'))).toBe('Read-only since Oct 1');
+    expect(textOf(cedar.querySelector('.owes'))).toBe('$70.00 owed');
+    expect(textOf(row(SPACE_IDS.atlas).querySelector('.next'))).toBe(
+      'Was due Oct 5, read-only from Oct 12',
+    );
+    expect(textOf(row(SPACE_IDS.beirut).querySelector('.next'))).toBe('Due Oct 14');
+    expect(textOf(row(SPACE_IDS.strength).querySelector('.next'))).toBe('Trial ends in 3 days');
+    const nour = row(SPACE_IDS.nour);
+    expect(textOf(nour.querySelector('app-status-pill'))).toBe('Active');
+    expect(textOf(nour.querySelector('.next'))).toBe('Paid up');
+    expect(textOf(nour.querySelector('.owes'))).toBe('—Nothing owed');
+    // The face marks the two spaces in trouble; the pill says it in words.
+    expect(cedar.querySelector('app-avatar')!.classList.contains('client-danger')).toBe(true);
+    expect(
+      row(SPACE_IDS.atlas).querySelector('app-avatar')!.classList.contains('client-warning'),
+    ).toBe(true);
+  });
+
+  it('opens a space from its name', async () => {
+    const { host } = await render();
+
+    const link = host.querySelector<HTMLAnchorElement>(`[data-space="${SPACE_IDS.atlas}"] .name`)!;
+    expect(link.getAttribute('href')).toBe(`/admin/billing/${SPACE_IDS.atlas}`);
+  });
+
+  it('narrows the list with a filter and a search, and says when nothing matches', async () => {
     const { fixture, host } = await render();
-    await openWorkspace(host, fixture);
+    const chips = () => Array.from(host.querySelectorAll('.chip')).map((chip) => textOf(chip));
+    expect(chips()).toEqual(['All 7', 'Needs payment 3', 'On trial 2', 'Paid up 2']);
 
-    const title = host.querySelector<HTMLElement>('#admin-detail-title');
-    expect(title?.textContent).toContain('Cedar Gym');
-    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'start' }));
-    expect(document.activeElement).toBe(title);
+    host.querySelector<HTMLInputElement>('input[name="space-filter"][value="owing"]')!.click();
+    await settle(fixture);
+    expect(rowNames(host)).toEqual(['Cedar Barbell Club', 'Atlas Performance', 'Beirut Barbell']);
+
+    fill(host, 'Search coaching spaces', 'atlas');
+    await settle(fixture);
+    expect(rowNames(host)).toEqual(['Atlas Performance']);
+    expect(textOf(host.querySelector('[role="status"]'))).toBe('1 coaching space shown');
+
+    fill(host, 'Search coaching spaces', 'zzz');
+    await settle(fixture);
+    expect(textOf(host.querySelector('app-empty-state h2'))).toBe(
+      'No coaching space matches “zzz”',
+    );
+    press(host, 'Clear search');
+    await settle(fixture);
+    expect(rowNames(host)).toHaveLength(3);
+
+    host.querySelector<HTMLInputElement>('input[name="space-filter"][value="all"]')!.click();
+    await settle(fixture);
+    expect(rowNames(host)).toHaveLength(7);
   });
 
-  it('records a payment for the exact total with its Whish reference', async () => {
-    const { fixture, host, api } = await render();
-    await openWorkspace(host, fixture);
+  it('shows the price plan in force with each of its terms, and the earlier versions', async () => {
+    const { host } = await render();
 
-    press(host, 'Record payment');
-    await settle(fixture);
-    fill(host, 'Whish or transfer reference', ' WHISH-99 ');
-    await settle(fixture);
-    const submit = Array.from(host.querySelectorAll('form button[type="submit"]')).find((item) =>
-      item.textContent?.includes('Record payment'),
-    ) as HTMLButtonElement;
-    submit.click();
-    await settle(fixture);
-
-    expect(api.recordPayment).toHaveBeenCalledWith('invoice-1', 15, 'WHISH-99', null);
-    expect(text(fixture)).toContain('Payment recorded for TBG-202607-ABC234.');
-  });
-
-  it('voids and reissues an invoice with a reason', async () => {
-    const { fixture, host, api } = await render();
-    await openWorkspace(host, fixture);
-
-    press(host, 'Void');
-    await settle(fixture);
-    fill(host, 'Why is it void?', 'Wrong seat count');
-    await settle(fixture);
-    press(host, 'Void invoice');
-    await settle(fixture);
-
-    expect(api.voidInvoice).toHaveBeenCalledWith('invoice-1', 'Wrong seat count', true);
-  });
-
-  it('grants a discount through its last day, sent as a half-open end', async () => {
-    const { fixture, host, api } = await render();
-    await openWorkspace(host, fixture);
-
-    fill(host, 'Percent off', '100');
-    fill(host, 'First day', '2026-09-01');
-    fill(host, 'Last day', '2026-11-30');
-    await settle(fixture);
-    press(host, 'Grant discount');
-    await settle(fixture);
-
-    expect(api.grantDiscount).toHaveBeenCalledWith(
-      'tenant-1',
-      100,
-      '2026-09-01',
-      '2026-12-01',
-      'Founding coach',
+    const section = host.querySelector('[data-price-plan]')!;
+    expect(textOf(section.querySelector('.panel-head .quiet'))).toBe(
+      'Version 2 · in force since Sep 20, 2026',
+    );
+    const terms = Array.from(section.querySelectorAll('[data-current-plan] > div')).map((row) => [
+      textOf(row.querySelector('dt')),
+      textOf(row.querySelector('dd')),
+    ]);
+    expect(terms).toEqual([
+      ['Price per seat', '$15.00, with 5 clients included'],
+      ['Price per extra client', '$2.00'],
+      ['Gym fee', '$10.00, from 2 seats'],
+      ['Free trial', '30 days'],
+      ['To pay an invoice', '7 days after it is issued'],
+      ['Read-only', '7 days after it is due'],
+    ]);
+    expect(textOf(section)).toContain('“Launch prices”');
+    const earlier = section.querySelector<HTMLDetailsElement>('details.versions')!;
+    expect(earlier.open).toBe(false);
+    expect(textOf(earlier.querySelector('summary'))).toBe('Earlier versions (1)');
+    expect(textOf(earlier.querySelector('[data-plan="1"]'))).toBe(
+      'v1 Sep 1, 2026 $12.00 a seat · 5 included · $2.00 extra · $10.00 gym fee — Placeholder',
     );
   });
 
-  it('publishes a new plan version against the version it was shown', async () => {
+  it('publishes a new version after showing exactly what changes', async () => {
     const { fixture, host, api } = await render();
 
-    fill(host, 'Seat price', '20');
+    press(host, 'Publish a new version');
     await settle(fixture);
-    press(host, 'Publish new version');
+    const sheet = dialog()!;
+    expect(textOf(sheet.querySelector('h2'))).toBe('Publish a price plan version');
+    expect(textOf(sheet)).toContain('Version 2 is in force.');
+    expect(textOf(sheet)).toContain('Nothing has changed yet.');
+    expect(
+      Array.from(sheet.querySelectorAll('button')).find((b) => textOf(b) === 'Publish version 3')!
+        .disabled,
+    ).toBe(true);
+
+    fill(sheet, 'Price per seat', '20');
+    fill(sheet, 'Free trial (days)', '14');
+    await settle(fixture);
+    expect(
+      Array.from(sheet.querySelectorAll('.changes li')).map((row) =>
+        ['.what', '.from', '.to'].map((part) => textOf(row.querySelector(part))),
+      ),
+    ).toEqual([
+      ['Price per seat', '$15.00', '$20.00'],
+      ['Free trial (days)', '30', '14'],
+    ]);
+
+    press(sheet, 'Publish version 3');
     await settle(fixture);
 
     expect(api.publishPricePlan).toHaveBeenCalledWith(
-      expect.objectContaining({
-        seatPrice: 20,
-        includedClientsPerSeat: 5,
-        expectedCurrentVersion: 1,
-      }),
+      expect.objectContaining({ seatPrice: 20, trialDays: 14, expectedCurrentVersion: 2 }),
     );
-    expect(text(fixture)).toContain('Price plan version 2 is published.');
+    expect(dialog()).toBeNull();
+    expect(toast()).toContain('Price plan version 3 is published.');
+    expect(api.getPricePlans).toHaveBeenCalledTimes(2);
   });
 
-  it('issues last month’s invoices on demand and says what happened', async () => {
-    const { fixture, host, api } = await render();
+  it('keeps a refused version on screen with the server’s words', async () => {
+    const conflict = new HttpErrorResponse({
+      status: 409,
+      error: {
+        code: 'price_plan_changed',
+        message: 'A newer price plan was published since this page loaded. Refresh and try again.',
+      },
+    });
+    const { fixture, host } = await render(platformSpaces, {
+      publishPricePlan: vi.fn(() => throwError(() => conflict)),
+    });
 
-    expect(button(host, "Issue last month's invoices")).toBeTruthy();
-    press(host, "Issue last month's invoices");
+    press(host, 'Publish a new version');
+    await settle(fixture);
+    fill(dialog()!, 'Price per seat', '20');
+    await settle(fixture);
+    press(dialog()!, 'Publish version 3');
     await settle(fixture);
 
-    expect(api.issueInvoices).toHaveBeenCalled();
-    expect(text(fixture)).toContain('1 issued, 0 already issued, 2 in trial.');
+    expect(textOf(dialog()!.querySelector('[role="alert"]'))).toBe(
+      'A newer price plan was published since this page loaded. Refresh and try again.',
+    );
   });
 
-  it('shifts calendar dates without a time zone moving them', () => {
-    expect(shiftDate('2026-12-31', 1)).toBe('2027-01-01');
-    expect(shiftDate('2026-03-01', -1)).toBe('2026-02-28');
+  it('checks the terms before sending them and puts focus on the first that is wrong', async () => {
+    const { fixture, host, api } = await render();
+
+    press(host, 'Publish a new version');
+    await settle(fixture);
+    const sheet = dialog()!;
+    fill(sheet, 'Price per seat', '-4');
+    fill(sheet, 'Days to pay an invoice', '120');
+    await settle(fixture);
+    press(sheet, 'Publish version 3');
+    await settle(fixture);
+
+    expect(api.publishPricePlan).not.toHaveBeenCalled();
+    expect(textOf(sheet)).toContain('Enter an amount from 0 to 100000.');
+    expect(textOf(sheet)).toContain('Enter a whole number from 0 to 90.');
+    expect(document.activeElement?.id).toBe(
+      sheet.querySelector<HTMLInputElement>('input[name="seatPrice"]')!.id,
+    );
+  });
+
+  it('asks before issuing last month’s invoices, then says what the run did', async () => {
+    const { fixture, host, api } = await render();
+
+    press(host, 'Issue last month’s invoices');
+    await settle(fixture);
+    expect(textOf(dialog()!)).toContain('Issue the invoices for September 2026 now?');
+    press(dialog()!, 'Not now');
+    await settle(fixture);
+    expect(api.issueInvoices).not.toHaveBeenCalled();
+
+    press(host, 'Issue last month’s invoices');
+    await settle(fixture);
+    press(dialog()!, 'Issue invoices');
+    await settle(fixture);
+
+    expect(api.issueInvoices).toHaveBeenCalledTimes(1);
+    expect(toast()).toContain(
+      'Invoices for September 2026: 1 issued, 0 already issued, 2 in trial.',
+    );
+    expect(api.getWorkspaces).toHaveBeenCalledTimes(2);
+  });
+
+  it('says so when billing cannot be loaded, and tries again', async () => {
+    let failing = true;
+    const { fixture, host, api } = await render(platformSpaces, {
+      getWorkspaces: vi.fn(() =>
+        failing ? throwError(() => new HttpErrorResponse({ status: 500 })) : of(platformSpaces()),
+      ),
+    });
+
+    expect(textOf(host.querySelector('[role="alert"]'))).toBe(
+      'Platform billing couldn’t be loaded.',
+    );
+    failing = false;
+    press(host, 'Try again');
+    await settle(fixture);
+
+    expect(api.getWorkspaces).toHaveBeenCalledTimes(2);
+    expect(rowNames(host)).toHaveLength(7);
+  });
+
+  it('invites nothing when there are no coaching spaces yet', async () => {
+    const { host } = await render(() => []);
+
+    expect(textOf(host.querySelector('app-empty-state h2'))).toBe('No coaching spaces yet');
+    expect(host.querySelector('.toolbar')).toBeNull();
+  });
+
+  it('knows the platform admin role', () => {
     expect(isPlatformAdmin(['PlatformAdmin'])).toBe(true);
     expect(isPlatformAdmin([])).toBe(false);
     expect(isPlatformAdmin(undefined)).toBe(false);

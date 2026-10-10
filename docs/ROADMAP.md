@@ -1076,7 +1076,9 @@ Work follows this order; anything outside it needs the user's approval first.
 - Step 2, manual platform billing (complete, 2026-09-24): versioned placeholder price plan, monthly
   invoices from seats and covered clients, owner Billing page, platform admin screen (payments,
   void and reissue, discounts, new plan versions), email notices, and read-only for staff when
-  unpaid. See ADR 0028. Prices are placeholders until validated with founding coaches.
+  unpaid. See ADR 0028. Prices are placeholders until validated with founding coaches. The admin screen
+  was rebuilt on the new kit in R5.2b (2026-10-10): the list orders spaces by who needs the admin
+  first, and a payment is dated the day the money arrived (PBL-007).
 - Step 3, redesign of Client Today and the coach client workspace: in progress. Part A, the coach's
   client record (Figma 131:419), built 2026-09-25: one route per section, an Overview of this week,
   a coach-only "This week isn't shared yet" line, and a renewal prompt 14 days before a plan ends.

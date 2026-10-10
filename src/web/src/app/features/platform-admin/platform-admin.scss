@@ -1,109 +1,173 @@
-// Platform billing (ADR 0028), for the platform admin. The settings pages' header and card patterns.
-:host {
-  display: block;
+// Platform billing (R5.2b, ADR 0028): the admin's overview. The search and chips come from the
+// Clients list's toolbar, which this component loads beside this file.
+@use '../../ui/page';
+
+.tiles {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
 }
 
-.page-header {
-  align-items: start;
+.spaces {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.list {
+  padding: 0.25rem 1.25rem;
+}
+
+.space {
+  align-items: center;
+  display: grid;
+  gap: 0.25rem 0.875rem;
+  grid-template-areas:
+    'face who owes'
+    'face usage owes'
+    'face state state';
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-block: 0.875rem;
+  position: relative;
+}
+
+.space app-avatar {
+  align-self: start;
+  grid-area: face;
+}
+
+.who {
+  grid-area: who;
+  min-inline-size: 0;
+}
+
+.who p {
+  margin: 0;
+}
+
+.owner {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.usage {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  grid-area: usage;
+  margin: 0;
+}
+
+.state {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-16);
-  justify-content: space-between;
-}
-
-.page-title {
-  display: flex;
-  flex: 1 1 24rem;
-  flex-direction: column;
-  gap: var(--space-4);
+  gap: 0.25rem 0.625rem;
+  grid-area: state;
   min-inline-size: 0;
 }
 
-.page-title h1 {
+.next {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+
+.owes {
+  align-self: start;
+  font-size: 1rem;
+  grid-area: owes;
+  justify-self: end;
   margin: 0;
+  text-align: end;
 }
 
-.scope,
-.meta {
-  color: var(--color-text-secondary);
-  margin: 0;
+.owes strong {
+  font-variant-numeric: tabular-nums;
 }
 
-.scope {
-  max-inline-size: var(--content-width-720);
+.owes .none {
+  color: var(--tb-muted);
 }
 
-.page-error,
-.page-notice {
-  margin: 0;
+.open {
+  color: var(--tb-muted);
+  display: none;
 }
 
-.page-error:not(:empty),
-.page-notice:not(:empty) {
-  border-radius: var(--radius-6);
-  margin-block-start: var(--space-16);
-  padding: var(--space-8) var(--space-12);
+@container (min-width: 48rem) {
+  .space {
+    grid-template-areas: 'face who usage state owes open';
+    grid-template-columns: auto minmax(0, 1.4fr) 8.5rem minmax(0, 1.3fr) 6.5rem 1.25rem;
+  }
+
+  .space app-avatar {
+    align-self: center;
+  }
+
+  .owes {
+    align-self: center;
+  }
+
+  .open {
+    display: inline-flex;
+    grid-area: open;
+  }
 }
 
-.page-error:not(:empty) {
-  background-color: var(--color-danger-subtle);
-  color: var(--color-danger);
+:host-context([dir='rtl']) .open {
+  transform: scaleX(-1);
 }
 
-.page-notice:not(:empty) {
-  background-color: var(--color-success-subtle);
-  color: var(--color-success);
-}
+// ---------- the price plan ----------
 
-.card {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-8);
-  margin-block-start: var(--space-24);
-  min-inline-size: 0;
-}
-
-.card-title {
-  margin: 0;
-  overflow-wrap: anywhere;
-  padding: var(--space-16) var(--space-24) var(--space-8);
-}
-
-.card-body {
+.terms {
   display: grid;
-  gap: var(--space-12);
-  padding: 0 var(--space-24) var(--space-16);
-}
-
-.card-body p,
-.card-body h3 {
+  gap: 0.625rem 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   margin: 0;
+
+  dt {
+    color: var(--tb-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  dd {
+    color: var(--tb-ink);
+    font-variant-numeric: tabular-nums;
+    margin: 0.125rem 0 0;
+  }
 }
 
-.card-state {
-  color: var(--color-text-secondary);
+.versions summary {
+  color: var(--tb-ink);
+  cursor: pointer;
+  font-weight: 600;
+  min-block-size: 2.5rem;
+  padding-block: 0.5rem;
+}
+
+.versions summary:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.versions ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
   margin: 0;
-  padding: 0 var(--space-24) var(--space-16);
+  padding: 0;
 }
 
-.table-wrap {
-  overflow-x: auto;
-  padding: 0 var(--space-24) var(--space-16);
-}
-
-.name {
-  display: block;
-  font-weight: var(--font-weight-strong);
+.versions li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
   overflow-wrap: anywhere;
 }
 
-td .meta {
-  display: block;
-  font-size: var(--text-compact-size);
-  overflow-wrap: anywhere;
-}
-
-code {
-  font-family: var(--font-family-mono, monospace);
-  overflow-wrap: anywhere;
+.versions .quiet {
+  font-size: inherit;
 }

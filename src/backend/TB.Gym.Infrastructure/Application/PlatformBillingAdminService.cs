@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -171,12 +172,20 @@ internal sealed class PlatformBillingAdminService(
             }
 
             var now = clock.UtcNow;
+            var receivedOn = request.ReceivedOn ?? PaymentSchedule.Today(now);
+            if (!PaymentSchedule.IsValidReceivedOn(receivedOn, invoice.IssuedAtUtc, now))
+            {
+                return BillingCommand.Invalid<PlatformPaymentView>(
+                    nameof(request.ReceivedOn),
+                    $"Choose a day from {PaymentSchedule.Today(invoice.IssuedAtUtc).ToString("d MMM yyyy", CultureInfo.InvariantCulture)} (when the invoice was issued) up to today.");
+            }
+
             var payment = PlatformPayment.Record(
                 invoice,
                 request.Amount,
                 reference,
                 note,
-                request.ReceivedOn ?? PaymentSchedule.Today(now),
+                receivedOn,
                 RequiredAdmin(),
                 now);
             dbContext.PlatformPayments.Add(payment);
@@ -380,7 +389,9 @@ internal sealed class PlatformBillingAdminService(
         state.CurrentMonth.Amounts.BillableClients,
         state.UnpaidTotal,
         state.CurrentMonth.Amounts.CurrencyCode,
-        WorkspaceDiscount.ApplicableTo(state.Discounts, new UsageWindow(now, now.AddTicks(1)))?.Percent ?? 0m);
+        WorkspaceDiscount.ApplicableTo(state.Discounts, new UsageWindow(now, now.AddTicks(1)))?.Percent ?? 0m,
+        state.OldestUnpaidDueOn,
+        state.ReadOnlyFrom);
 
     private static PricePlanView ToView(PlatformPricePlan plan, bool isCurrent) => new(
         plan.Id,

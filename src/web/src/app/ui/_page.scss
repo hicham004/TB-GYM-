@@ -1,0 +1,135 @@
+// What a redesigned coach page shares (R5.2b, R5.3a): the heading and its lede, cards ("panels"), a quiet
+// line, a load failure and the rows of a list. A page `@use`s this and adds only its own parts. Brand v2
+// tokens only, so a page follows the person's light or dark mode.
+
+:host {
+  container-type: inline-size;
+  display: block;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.top {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.875rem;
+  justify-content: space-between;
+}
+
+.intro {
+  min-inline-size: 0;
+}
+
+h1 {
+  color: var(--tb-ink);
+  font-size: clamp(1.75rem, 4cqi, 2.125rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  // Focused on arrival so a screen reader starts here (§9); it is a landing place, not a control.
+  outline: none;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+h2 {
+  color: var(--tb-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.lede {
+  color: var(--tb-muted);
+  margin: 0.375rem 0 0;
+  max-inline-size: 44rem;
+}
+
+.quiet {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-inline-size: 0;
+  padding: 1.25rem;
+}
+
+.load-failed {
+  align-items: center;
+  flex-flow: row wrap;
+  justify-content: space-between;
+
+  p {
+    color: var(--tb-ink);
+    margin: 0;
+  }
+}
+
+.panel-head {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rows > li + li {
+  border-block-start: 1px solid var(--tb-line);
+}
+
+// A name that is a link covers its whole row, so the row is the target (plan §2 rule 6).
+.rows .name {
+  color: var(--tb-ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.rows .name::after {
+  content: '';
+  inset: 0;
+  position: absolute;
+}
+
+.rows .name:hover {
+  text-decoration: underline;
+}
+
+.rows .name:focus-visible {
+  outline: none;
+}
+
+.rows li:has(.name:focus-visible) {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: -3px;
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}

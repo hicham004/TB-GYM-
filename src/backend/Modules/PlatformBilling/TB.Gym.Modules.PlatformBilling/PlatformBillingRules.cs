@@ -326,6 +326,13 @@ public static class PaymentSchedule
     public static DateOnly ReadOnlyFrom(DateOnly dueOn, int graceDays) => dueOn.AddDays(Math.Max(1, graceDays));
 
     public static DateOnly Today(DateTimeOffset now) => DateOnly.FromDateTime(now.UtcDateTime);
+
+    /// <summary>
+    /// A payment is dated the day the money arrived: no earlier than the day its invoice was issued and
+    /// no later than the day it is recorded, both UTC days like every other billing date (PBL-007).
+    /// </summary>
+    public static bool IsValidReceivedOn(DateOnly receivedOn, DateTimeOffset invoiceIssuedAtUtc, DateTimeOffset recordedAtUtc) =>
+        receivedOn >= Today(invoiceIssuedAtUtc) && receivedOn <= Today(recordedAtUtc);
 }
 
 public enum PlatformInvoiceStatus

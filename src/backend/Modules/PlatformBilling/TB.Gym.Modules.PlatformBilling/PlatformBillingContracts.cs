@@ -131,6 +131,12 @@ public sealed record WorkspaceBillingView(
 
 public sealed record WorkspaceBillingAccessView(bool IsReadOnly, bool HasOverdueInvoice, DateOnly? ReadOnlyFrom);
 
+/// <summary>
+/// One workspace as the platform admin's list shows it. <see cref="OldestUnpaidDueOn"/> and
+/// <see cref="ReadOnlyFrom"/> come from the workspace's unpaid invoices (the earliest of each), so the
+/// list can say what falls due next and when the workspace becomes read-only; both are null when
+/// nothing is owed.
+/// </summary>
 public sealed record AdminWorkspaceSummary(
     Guid TenantId,
     string Name,
@@ -143,7 +149,9 @@ public sealed record AdminWorkspaceSummary(
     int BillableClientsThisMonth,
     decimal UnpaidTotal,
     string CurrencyCode,
-    decimal CurrentDiscountPercent);
+    decimal CurrentDiscountPercent,
+    DateOnly? OldestUnpaidDueOn,
+    DateOnly? ReadOnlyFrom);
 
 public sealed record WorkspaceDiscountView(
     Guid Id,

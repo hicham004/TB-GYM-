@@ -185,6 +185,15 @@ const GLYPHS = {
       'M10 5.25C8.5 4 6.25 3.6 3.25 3.9V15.4C6.25 15.1 8.5 15.5 10 16.75C11.5 15.5 13.75 15.1' +
       ' 16.75 15.4V3.9C13.75 3.6 11.5 4 10 5.25ZM10 5.25V16.75',
   },
+  // The kit's date field (R5.2b): the calendar on its button and the month arrows, on the same grid.
+  calendar: {
+    size: 20,
+    path:
+      'M6 3.5V5.5M14 3.5V5.5M4.75 5.5H15.25C15.802 5.5 16.25 5.948 16.25 6.5V15.5C16.25 16.052' +
+      ' 15.802 16.5 15.25 16.5H4.75C4.198 16.5 3.75 16.052 3.75 15.5V6.5C3.75 5.948 4.198 5.5' +
+      ' 4.75 5.5ZM3.75 8.75H16.25',
+  },
+  'chevron-left': { size: 20, path: 'M12 6L8 10L12 14' },
 } as const satisfies Record<string, { size: number; path: string }>;
 
 export type IconName = keyof typeof GLYPHS;

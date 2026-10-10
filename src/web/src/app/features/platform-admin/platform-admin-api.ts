@@ -85,17 +85,19 @@ export class PlatformAdminApi {
       );
   }
 
+  /** `receivedOn` is the day the money arrived (PBL-007); null lets the server use today. */
   recordPayment(
     invoiceId: string,
     amount: number,
     reference: string,
     note: string | null,
+    receivedOn: string | null,
   ): Observable<unknown> {
     return this.http.post(`/api/platform-admin/invoices/${invoiceId}/payments`, {
       amount,
       reference,
       note,
-      receivedOn: null,
+      receivedOn,
     });
   }
 

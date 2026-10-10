@@ -264,6 +264,14 @@ payment lifts it at once.
 **PBL-006** Platform admin is a global role granted only by the `platform-admin` command, checked
 against the database on every request, and never implied by any workspace role.
 
+**PBL-007** A payment is dated the day the money arrived, which the admin chooses: no earlier than the
+day its invoice was issued and no later than the day it is recorded, both UTC days
+(`PaymentSchedule.IsValidReceivedOn`). The service answers 400 for another date and the payment
+table's guard refuses it from the row's own record time. Left blank, the date is today. The admin's
+list of workspaces also carries the earliest due day and the earliest read-only day among a
+workspace's unpaid invoices (null when nothing is owed), so it can say what falls due next and when a
+workspace locks.
+
 ## 4. Program templates and assigned snapshots
 
 **TRN-001** A training template is coach-owned reusable content. Assigning it creates a deep,

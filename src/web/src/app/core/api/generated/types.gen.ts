@@ -103,6 +103,8 @@ export type AdminWorkspaceSummary = {
   unpaidTotal: number | string;
   currencyCode: string;
   currentDiscountPercent: number | string;
+  oldestUnpaidDueOn: null | string;
+  readOnlyFrom: null | string;
 };
 
 export type AdvanceReadCursorRequest = {

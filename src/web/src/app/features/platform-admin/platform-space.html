@@ -1,0 +1,302 @@
+<div class="page">
+  <a class="back" routerLink="/admin/billing" data-back>
+    <app-icon name="chevron-left" />
+    <span i18n>All coaching spaces</span>
+  </a>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="6" />
+      </div>
+    }
+    @case ('missing') {
+      <app-empty-state
+        class="panel"
+        heading="That coaching space isn’t here"
+        description="It may have been mistyped, or it does not exist."
+        i18n-heading
+        i18n-description
+      >
+        <a appButton empty-state-action routerLink="/admin/billing" i18n
+          >Back to platform billing</a
+        >
+      </app-empty-state>
+    }
+    @case ('error') {
+      <div class="panel load-failed">
+        <p role="alert" i18n>This coaching space couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (detail(); as detail) {
+        <header class="top">
+          <app-avatar [initials]="initials()" presentation="mobile-account" />
+          <div class="intro">
+            <h1 #heading tabindex="-1">
+              <span dir="auto">{{ detail.summary.name }}</span>
+            </h1>
+            <p class="lede">
+              <span dir="auto">{{ detail.summary.ownerName }}</span> ·
+              <a class="mail" [href]="mailto()" dir="ltr" translate="no">{{
+                detail.summary.ownerEmail
+              }}</a>
+            </p>
+          </div>
+        </header>
+
+        <section
+          class="panel hero"
+          [class.owing]="owes()"
+          aria-labelledby="stands-heading"
+          data-space-status
+        >
+          <h2 id="stands-heading" class="tb-visually-hidden" i18n>Where it stands</h2>
+          <div class="hero-head">
+            <app-status-pill
+              [label]="statusLabel(detail.summary.status)"
+              [tone]="statusTone(detail.summary.status)"
+            />
+            <span class="next">{{ next() }}</span>
+          </div>
+          @if (owes()) {
+            <p class="owed" data-unpaid>
+              <span class="owed-label" i18n>Owes</span>&ngsp;
+              <strong class="owed-amount">{{
+                money(detail.summary.unpaidTotal, detail.summary.currencyCode)
+              }}</strong>
+            </p>
+          }
+          <p class="sentence">{{ sentence() }}</p>
+          <p class="quiet" i18n>
+            {{ detail.summary.seatsThisMonth }} seats and
+            {{ detail.summary.billableClientsThisMonth }} clients so far this month
+            @if (detail.summary.currentDiscountPercent > 0) {
+              · {{ detail.summary.currentDiscountPercent }}% discount in force
+            }
+          </p>
+        </section>
+
+        <section class="panel" aria-labelledby="invoices-heading">
+          <h2 id="invoices-heading" i18n>Invoices</h2>
+          @if (invoices().length === 0) {
+            <p class="quiet" data-no-invoices i18n>
+              No invoices yet. The first one comes on the 1st of the month after the free trial
+              ends.
+            </p>
+          } @else {
+            <ul class="rows invoices" role="list">
+              @for (invoice of invoices(); track invoice.id) {
+                <li
+                  class="invoice"
+                  [attr.data-invoice]="invoice.id"
+                  [class.void]="invoice.status === 'Void'"
+                >
+                  <div class="inv-main">
+                    <span class="inv-month">{{ month(invoice.periodStart) }}</span>
+                    <code class="inv-ref" dir="ltr" translate="no">{{
+                      invoice.referenceCode
+                    }}</code>
+                  </div>
+                  <span class="inv-total money">{{
+                    money(invoice.amounts.total, invoice.amounts.currencyCode)
+                  }}</span>
+                  <app-status-pill
+                    class="inv-status"
+                    [label]="invoiceLabel(invoice.status)"
+                    [tone]="invoiceTone(invoice.status)"
+                  />
+                  <p class="inv-detail">{{ invoiceWhen(invoice) }} · {{ invoiceUsage(invoice) }}</p>
+                  <div class="inv-notes">
+                    @if (invoice.payment; as payment) {
+                      <p class="inv-note" dir="auto">
+                        <ng-container i18n>Reference</ng-container>&ngsp;
+                        <code dir="ltr" translate="no">{{ payment.reference }}</code>
+                        @if (payment.note) {
+                          — {{ payment.note }}
+                        }
+                      </p>
+                    }
+                    @if (invoice.voidReason) {
+                      <p class="inv-note" dir="auto" i18n>Voided: {{ invoice.voidReason }}</p>
+                    }
+                    @if (invoice.replacedByInvoiceId; as replacement) {
+                      <p class="inv-note" i18n>
+                        Replaced by
+                        <code dir="ltr" translate="no">{{ referenceOf(replacement) }}</code>
+                      </p>
+                    }
+                    @if (invoice.replacesInvoiceId; as original) {
+                      <p class="inv-note" i18n>
+                        Replaces <code dir="ltr" translate="no">{{ referenceOf(original) }}</code>
+                      </p>
+                    }
+                  </div>
+                  @if (isUnpaid(invoice)) {
+                    <div class="inv-actions">
+                      <button
+                        appButton
+                        type="button"
+                        (click)="recordPayment(invoice)"
+                        data-record-payment
+                      >
+                        <ng-container i18n>Record payment</ng-container>
+                        <span class="tb-visually-hidden"> {{ month(invoice.periodStart) }}</span>
+                      </button>
+                      <button
+                        appButton
+                        type="button"
+                        variant="text"
+                        (click)="voidInvoice(invoice)"
+                        data-void
+                      >
+                        <ng-container i18n>Void</ng-container>
+                        <span class="tb-visually-hidden"> {{ month(invoice.periodStart) }}</span>
+                      </button>
+                    </div>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        </section>
+
+        <section class="panel" aria-labelledby="month-heading" data-current-month>
+          <h2 id="month-heading">{{ monthTitle() }}</h2>
+          @if (detail.currentMonth.inTrial) {
+            <p class="sentence" i18n>
+              On a free trial: nothing is charged for this month. It has
+              {{ detail.currentMonth.amounts.seats }} seats and
+              {{ detail.currentMonth.amounts.billableClients }} clients with a coaching plan so far.
+            </p>
+          } @else {
+            <dl class="lines">
+              @for (line of monthLines(); track line.label) {
+                <div [class.discount]="line.discount">
+                  <dt>{{ line.label }}</dt>
+                  <dd>{{ line.amount }}</dd>
+                </div>
+              }
+              <div class="total">
+                <dt i18n>Estimate so far</dt>
+                <dd>
+                  {{
+                    money(
+                      detail.currentMonth.amounts.total,
+                      detail.currentMonth.amounts.currencyCode
+                    )
+                  }}
+                </dd>
+              </div>
+            </dl>
+            <p class="quiet" i18n>
+              An estimate at plan version {{ detail.currentMonth.pricePlanVersion }}. The invoice on
+              the 1st counts everyone who had a seat or an unpaused plan at any time this month.
+            </p>
+          }
+        </section>
+
+        <section class="panel" aria-labelledby="discounts-heading">
+          <div class="panel-head">
+            <h2 id="discounts-heading" i18n>Discounts</h2>
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              (click)="grantDiscount()"
+              data-grant-discount
+              i18n
+            >
+              Grant a discount
+            </button>
+          </div>
+          @if (discounts().length === 0) {
+            <p class="quiet" i18n>
+              No discounts. A discount comes off every invoice for a month it touches.
+            </p>
+          } @else {
+            <ul class="rows" role="list">
+              @for (entry of discounts(); track entry.discount.id) {
+                <li class="discount-row" [attr.data-discount]="entry.discount.id">
+                  <strong class="percent">{{ entry.discount.percent }}%</strong>
+                  <div class="discount-main">
+                    <span i18n>{{ day(entry.discount.startsOn) }} to {{ day(entry.last) }}</span>
+                    <span class="quiet"
+                      ><span dir="auto">{{ entry.discount.note }}</span></span
+                    >
+                  </div>
+                  <app-status-pill
+                    [label]="discountStateLabel(entry.state)"
+                    [tone]="discountTone(entry.state)"
+                  />
+                  @if (entry.state === 'running' || entry.state === 'upcoming') {
+                    <button
+                      appButton
+                      type="button"
+                      variant="text"
+                      [loading]="busy() === entry.discount.id"
+                      (click)="revokeDiscount(entry.discount)"
+                    >
+                      <ng-container i18n>Revoke</ng-container>
+                      <span class="tb-visually-hidden">
+                        {{ entry.discount.percent }}% {{ entry.discount.note }}</span
+                      >
+                    </button>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        </section>
+      }
+    }
+  }
+</div>
+
+<ng-template #paymentSheet let-sheet>
+  @if (subject(); as invoice) {
+    <app-platform-payment
+      [invoice]="invoice"
+      [spaceName]="summary()?.name ?? ''"
+      [today]="today"
+      (dirtyChange)="setDirty($event)"
+      (closed)="sheet.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #voidSheet let-sheet>
+  @if (subject(); as invoice) {
+    <app-platform-void
+      [invoice]="invoice"
+      [spaceName]="summary()?.name ?? ''"
+      (dirtyChange)="setDirty($event)"
+      (closed)="sheet.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #discountSheet let-sheet>
+  @if (summary(); as space) {
+    <app-platform-discount
+      [tenantId]="space.tenantId"
+      [spaceName]="space.name"
+      [today]="today"
+      [existing]="detail()?.discounts ?? []"
+      (dirtyChange)="setDirty($event)"
+      (closed)="sheet.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

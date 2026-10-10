@@ -178,13 +178,22 @@ export const routes: Routes = [
     loadComponent: () => import('./features/billing/billing').then((module) => module.Billing),
   },
   {
-    // The platform admin's screen (ADR 0028): a global role, needing no workspace at all.
+    // The platform admin's screens (ADR 0028, rebuilt in R5.2b): a global role, needing no
+    // workspace at all. The overview lists every coaching space; each opens on its own page.
     path: 'admin/billing',
     canActivate: [authGuard, platformAdminGuard],
-    data: HOUSE_BRAND,
+    data: { ...HOUSE_BRAND, ...REDESIGNED },
     title: $localize`Platform billing | TB Gym`,
     loadComponent: () =>
       import('./features/platform-admin/platform-admin').then((module) => module.PlatformAdmin),
+  },
+  {
+    path: 'admin/billing/:tenantId',
+    canActivate: [authGuard, platformAdminGuard],
+    data: { ...HOUSE_BRAND, ...REDESIGNED },
+    title: $localize`Coaching space | Platform billing | TB Gym`,
+    loadComponent: () =>
+      import('./features/platform-admin/platform-space').then((module) => module.PlatformSpace),
   },
   {
     // Rebuilt in R5.2a for staff and clients; a half-typed password change asks before it is lost.

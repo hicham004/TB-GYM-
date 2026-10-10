@@ -33,7 +33,8 @@ internal sealed record WorkspaceBillingState(
     CurrentMonthEstimateView CurrentMonth,
     WorkspaceBillingStatus Status,
     decimal UnpaidTotal,
-    DateOnly? ReadOnlyFrom);
+    DateOnly? ReadOnlyFrom,
+    DateOnly? OldestUnpaidDueOn);
 
 /// <summary>
 /// The reads and the one calculation path platform billing shares between the owner's page, the admin
@@ -266,7 +267,8 @@ internal static class PlatformBillingReader
             estimate,
             status,
             unpaid.Sum(item => item.Invoice.Total),
-            unpaid.Count == 0 ? null : unpaid.Min(item => item.Invoice.ReadOnlyFrom));
+            unpaid.Count == 0 ? null : unpaid.Min(item => item.Invoice.ReadOnlyFrom),
+            unpaid.Count == 0 ? null : unpaid.Min(item => item.Invoice.DueOn));
     }
 
     public static bool IsUnpaid(InvoiceFacts facts) =>

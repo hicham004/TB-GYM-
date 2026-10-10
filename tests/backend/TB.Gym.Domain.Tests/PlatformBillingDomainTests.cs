@@ -349,6 +349,24 @@ public sealed class PlatformBillingDomainTests
         Assert.AreEqual("USD", payment.CurrencyCode);
     }
 
+    [TestMethod]
+    public void APaymentIsDatedFromTheDayItsInvoiceWasIssuedUpToTheDayItIsRecorded()
+    {
+        var issued = new DateTimeOffset(2026, 10, 1, 0, 10, 0, TimeSpan.Zero);
+        var recorded = new DateTimeOffset(2026, 10, 5, 23, 59, 0, TimeSpan.Zero);
+
+        Assert.IsTrue(PaymentSchedule.IsValidReceivedOn(new DateOnly(2026, 10, 1), issued, recorded), "The day it was issued.");
+        Assert.IsTrue(PaymentSchedule.IsValidReceivedOn(new DateOnly(2026, 10, 3), issued, recorded));
+        Assert.IsTrue(PaymentSchedule.IsValidReceivedOn(new DateOnly(2026, 10, 5), issued, recorded), "The day it is recorded.");
+        Assert.IsFalse(PaymentSchedule.IsValidReceivedOn(new DateOnly(2026, 9, 30), issued, recorded), "Before the invoice existed.");
+        Assert.IsFalse(PaymentSchedule.IsValidReceivedOn(new DateOnly(2026, 10, 6), issued, recorded), "Money cannot arrive tomorrow.");
+
+        // Days are UTC days: an invoice issued just before midnight UTC counts from that day.
+        var lateIssue = new DateTimeOffset(2026, 10, 1, 23, 50, 0, TimeSpan.FromHours(-3));
+        Assert.IsTrue(PaymentSchedule.IsValidReceivedOn(new DateOnly(2026, 10, 2), lateIssue, recorded));
+        Assert.IsFalse(PaymentSchedule.IsValidReceivedOn(new DateOnly(2026, 10, 1), lateIssue, recorded));
+    }
+
     // ---- discounts and plans ----
 
     [TestMethod]
