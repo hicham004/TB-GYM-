@@ -7,9 +7,6 @@
       <p i18n>Small entries add up. See what has changed.</p>
     </header>
   }
-  @if (weightNotice()) {
-    <p role="status" class="notice">{{ weightNotice() }}</p>
-  }
   @if (error(); as message) {
     <p role="alert" class="error">{{ message }}</p>
   }
@@ -44,7 +41,7 @@
       </div>
     }
     @if (!coachMode()) {
-      <button type="button" class="log-button" (click)="openWeightSheet()" i18n>
+      <button appButton type="button" class="log-button" (click)="sheets.logWeight()" i18n>
         + Log weight
       </button>
     }
@@ -124,7 +121,7 @@
             <h2 id="measurements-heading" i18n>Measurements</h2>
           </div>
           @if (!coachMode()) {
-            <a routerLink="/progress" i18n>Manage</a>
+            <a routerLink="/progress" [queryParams]="{ tab: 'measurements' }" i18n>Manage</a>
           }
         </div>
         @if (!view.measurements.length) {
@@ -168,7 +165,7 @@
             <h2 id="photos-heading" i18n>Photos</h2>
           </div>
           @if (!coachMode()) {
-            <a routerLink="/progress" i18n>View all</a>
+            <a routerLink="/progress" [queryParams]="{ tab: 'photos' }" i18n>View all</a>
           }
         </div>
         @if (photoPair(); as pair) {
@@ -337,32 +334,11 @@
   }
 </div>
 
-<ng-template #weightTemplate>
-  <form class="weight-form" (submit)="$event.preventDefault(); saveWeight()">
-    <p i18n>Today's weight</p>
-    <label
-      ><span i18n>Weight</span
-      ><input
-        type="number"
-        min="1"
-        max="500"
-        step="0.1"
-        inputmode="decimal"
-        required
-        [ngModel]="weightValue()"
-        (ngModelChange)="weightValue.set($event)"
-        name="weight"
-    /></label>
-    <label
-      ><span i18n>Unit</span
-      ><select [ngModel]="weightUnit()" (ngModelChange)="weightUnit.set($event)" name="unit">
-        <option value="Kilogram">kg</option>
-        <option value="Pound">lb</option>
-      </select></label
-    >
-    @if (weightError()) {
-      <p role="alert" class="error">{{ weightError() }}</p>
-    }
-    <button type="submit" [disabled]="savingWeight()" i18n>Save weight</button>
-  </form>
-</ng-template>
+<app-entry-sheets
+  #sheets
+  [audience]="audience()"
+  [today]="today()"
+  [weightUnit]="startUnit()"
+  [weights]="weights()"
+  (changed)="reload()"
+/>

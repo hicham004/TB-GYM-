@@ -1461,8 +1461,9 @@ reclaimed, and is refused by grant creation and both content routes throughout, 
 decided on the scan outcome and not on the otherwise-readable tombstoned status.
 
 **PRG-007** A progress photo belongs to one tenant, client, workspace-local date, and pose,
-enforced by a unique index, and exists only once its media asset is `Ready` — a refused or
-unscannable upload records no photo and leaves the date and pose free for a retry. It is readable
+enforced by a unique index over active photos (PRG-012), and exists only once its media asset is
+`Ready` — a refused or unscannable upload records no photo and leaves the date and pose free for
+a retry. It is readable
 by the client it depicts while they hold an active membership of that workspace, and, only while
 the coaching relationship is not blocked, by an Owner/Coach of it; it never appears
 in the coach exercise-media library. Uploads are images only. Removal is one-way and audited:
@@ -1627,6 +1628,13 @@ voided. Every current-truth read — duplicate-date check, value correction, day
 projection, dashboard bodyweight section, and the onboarding earliest-observation lookup — excludes
 voided rows, while the audit read still resolves them with the void attached so the correction stays
 visible rather than erased.
+
+**PRG-012** A removed progress photo frees its date and pose (R5.3c, decided 2026-10-10). The unique
+index that allows one photo per client, date and pose covers active photos only, so a wrong shot can be
+removed and taken again the same day, by the client or by their coach, as PRG-011 frees a voided
+weigh-in's date. The removed row, its media association and its removal record are kept; the client still
+sees it in their own history and a coach never does. Two active photos for one date and pose still
+conflict, whether they arrive one after the other or together.
 
 **MED-009** A storage allowance counts the original and every derivative, counts tombstoned bytes
 that are not yet purged because they are still physically stored, and excludes purged bytes. Uploads

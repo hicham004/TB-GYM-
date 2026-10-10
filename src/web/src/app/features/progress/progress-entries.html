@@ -1,0 +1,352 @@
+<div class="page" [class.coach]="coachMode()">
+  @if (!coachMode()) {
+    <header class="top">
+      <div class="intro">
+        <a class="back" routerLink="/progress/dashboard">
+          <app-icon name="chevron-left" class="back-icon" />
+          <span i18n>Progress</span>
+        </a>
+        <h1 #heading tabindex="-1" i18n>Your entries</h1>
+        <p class="lede" i18n>Everything you have logged, and a way to put a mistake right.</p>
+      </div>
+    </header>
+  }
+
+  <app-tabs [selected]="tab()" (selectedChange)="selectTab($event)">
+    <!-- Weight -->
+    <ng-template appTabPane value="weight" [label]="names.weight">
+      <div class="pane" data-pane="weight">
+        <div class="toolbar">
+          <button appButton type="button" (click)="sheets.logWeight()" data-log-weight i18n>
+            Log weight
+          </button>
+          <app-segmented-control
+            [label]="weightUnitLabel"
+            [options]="massUnits"
+            [selected]="unit()"
+            (selectedChange)="changeUnit($any($event))"
+          />
+        </div>
+        @switch (weightState()) {
+          @case ('error') {
+            <div class="panel load-failed">
+              <p role="alert" i18n>Weights couldn’t be loaded.</p>
+              <button appButton type="button" variant="outlined" (click)="loadWeight()" i18n>
+                Try again
+              </button>
+            </div>
+          }
+          @case ('ready') {
+            @if (weightRows().length === 0) {
+              <app-empty-state
+                class="panel"
+                [heading]="coachMode() ? noWeightsCoach() : noWeightsClient"
+                [description]="coachMode() ? noWeightsCoachHelp : noWeightsClientHelp"
+              >
+                <button
+                  appButton
+                  empty-state-action
+                  type="button"
+                  (click)="sheets.logWeight()"
+                  i18n
+                >
+                  Log weight
+                </button>
+              </app-empty-state>
+            } @else {
+              <ul class="rows panel" role="list" aria-label="Weights" i18n-aria-label>
+                @for (row of weightRows(); track row.id) {
+                  <li class="row" [attr.data-weighin]="row.id">
+                    <div class="what">
+                      <time class="when" [attr.datetime]="row.date">{{ day(row.date) }}</time
+                      >&ngsp;
+                      <span class="meta">
+                        {{ row.addedBy }}
+                        @if (row.entered) {
+                          <ng-container>&ngsp;·&ngsp;{{ row.entered }}</ng-container>
+                        }
+                      </span>
+                    </div>
+                    <strong class="value">{{ row.value }}</strong>
+                    <app-menu
+                      [label]="moreFor(row.date)"
+                      icon="more"
+                      [items]="weighInMenu"
+                      (chosen)="weighInAction($event, row, sheets)"
+                    />
+                  </li>
+                }
+              </ul>
+              @if (weightMore()) {
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  class="earlier"
+                  [loading]="weightEarlierBusy()"
+                  (click)="showEarlierWeight()"
+                  data-earlier-weight
+                  i18n
+                >
+                  Show earlier weights
+                </button>
+              }
+              @if (trend(); as facts) {
+                <details class="how">
+                  <summary i18n>How the trend is worked out</summary>
+                  <p>{{ facts.method }}</p>
+                  <p>{{ facts.how }}</p>
+                  @if (facts.window; as covered) {
+                    <p class="quiet" i18n>Days covered: {{ covered }}</p>
+                  }
+                </details>
+              }
+            }
+          }
+          @default {
+            <div class="panel" aria-busy="true">
+              <app-skeleton [label]="loadingWeights" [lines]="4" />
+            </div>
+          }
+        }
+      </div>
+    </ng-template>
+
+    <!-- Measurements -->
+    <ng-template appTabPane value="measurements" [label]="names.measurements">
+      <div class="pane" data-pane="measurements">
+        <div class="toolbar">
+          <button
+            appButton
+            type="button"
+            (click)="sheets.logMeasurements()"
+            data-log-measurements
+            i18n
+          >
+            Log measurements
+          </button>
+          <app-segmented-control
+            [label]="girthUnitLabel"
+            [options]="girthUnits"
+            [selected]="girth()"
+            (selectedChange)="changeGirth($any($event))"
+          />
+        </div>
+        @switch (measurementState()) {
+          @case ('error') {
+            <div class="panel load-failed">
+              <p role="alert" i18n>Measurements couldn’t be loaded.</p>
+              <button appButton type="button" variant="outlined" (click)="loadMeasurements()" i18n>
+                Try again
+              </button>
+            </div>
+          }
+          @case ('ready') {
+            @if (measurementList().length === 0) {
+              <app-empty-state
+                class="panel"
+                [heading]="coachMode() ? noMeasurementsCoach() : noMeasurementsClient"
+                [description]="coachMode() ? noMeasurementsCoachHelp : noMeasurementsClientHelp"
+              >
+                <button
+                  appButton
+                  empty-state-action
+                  type="button"
+                  (click)="sheets.logMeasurements()"
+                  i18n
+                >
+                  Log measurements
+                </button>
+              </app-empty-state>
+            } @else {
+              @for (group of measurementList(); track group.date) {
+                <section class="panel day" [attr.data-day]="group.date">
+                  <h2>
+                    <time [attr.datetime]="group.date">{{ dayLong(group.date) }}</time>
+                  </h2>
+                  <ul class="rows" role="list">
+                    @for (row of group.rows; track row.id) {
+                      <li class="row" [attr.data-measurement]="row.id">
+                        <div class="what">
+                          <span class="when">{{ row.name }}</span
+                          >&ngsp;
+                          <span class="meta">
+                            {{ row.addedBy }}
+                            @if (row.entered) {
+                              <ng-container>&ngsp;·&ngsp;{{ row.entered }}</ng-container>
+                            }
+                          </span>
+                        </div>
+                        <strong class="value">{{ row.value }}</strong>
+                        <app-menu
+                          [label]="moreForMeasurement(row)"
+                          icon="more"
+                          [items]="measurementMenu"
+                          (chosen)="measurementAction($event, row, sheets)"
+                        />
+                      </li>
+                    }
+                  </ul>
+                </section>
+              }
+              @if (measurementMore()) {
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  class="earlier"
+                  [loading]="measurementEarlierBusy()"
+                  (click)="showEarlierMeasurements()"
+                  data-earlier-measurements
+                  i18n
+                >
+                  Show earlier measurements
+                </button>
+              } @else {
+                <p class="quiet" i18n>Nothing earlier was recorded in the year before these.</p>
+              }
+            }
+          }
+          @default {
+            <div class="panel" aria-busy="true">
+              <app-skeleton [label]="loadingMeasurements" [lines]="4" />
+            </div>
+          }
+        }
+      </div>
+    </ng-template>
+
+    <!-- Photos -->
+    <ng-template appTabPane value="photos" [label]="names.photos">
+      <div class="pane" data-pane="photos">
+        <div class="toolbar">
+          <button appButton type="button" (click)="sheets.addPhotos()" data-add-photos i18n>
+            Add photos
+          </button>
+        </div>
+        @switch (photoState()) {
+          @case ('error') {
+            <div class="panel load-failed">
+              <p role="alert" i18n>Photos couldn’t be loaded.</p>
+              <button appButton type="button" variant="outlined" (click)="loadPhotos()" i18n>
+                Try again
+              </button>
+            </div>
+          }
+          @case ('ready') {
+            @if (photoLists().days.length === 0 && photoLists().removed.length === 0) {
+              <app-empty-state
+                class="panel"
+                [heading]="coachMode() ? noPhotosCoach() : noPhotosClient"
+                [description]="coachMode() ? noPhotosCoachHelp : noPhotosClientHelp"
+              >
+                <button
+                  appButton
+                  empty-state-action
+                  type="button"
+                  (click)="sheets.addPhotos()"
+                  i18n
+                >
+                  Add photos
+                </button>
+              </app-empty-state>
+            }
+            @for (group of photoLists().days; track group.date) {
+              <section class="panel day" [attr.data-day]="group.date">
+                <h2>
+                  <time [attr.datetime]="group.date">{{ dayLong(group.date) }}</time>
+                </h2>
+                <ul class="tiles" role="list">
+                  @for (tile of group.tiles; track tile.photo.id) {
+                    <li>
+                      <button
+                        class="tile"
+                        type="button"
+                        (click)="sheets.viewPhoto(tile)"
+                        [attr.data-photo]="tile.photo.id"
+                      >
+                        @if (thumbnail(tile); as source) {
+                          <img [src]="source" alt="" loading="lazy" />
+                        } @else {
+                          <span class="no-preview" aria-hidden="true" i18n>No preview</span>
+                        }
+                        <span class="pose">{{ tile.pose }}</span>
+                        <span class="tb-visually-hidden">
+                          {{ photoWord }} {{ day(group.date) }}</span
+                        >
+                      </button>
+                    </li>
+                  }
+                </ul>
+              </section>
+            }
+            @if (photoLists().removed.length > 0) {
+              <details class="panel removed" data-removed>
+                <summary i18n>Photos you removed ({{ photoLists().removed.length }})</summary>
+                <p class="quiet" i18n>
+                  Your coach cannot see these. They stay in your own history.
+                </p>
+                <ul class="rows" role="list">
+                  @for (tile of photoLists().removed; track tile.photo.id) {
+                    <li class="row" [attr.data-removed-photo]="tile.photo.id">
+                      <div class="what">
+                        <span class="when">{{ tile.pose }}</span>
+                        <time class="meta" [attr.datetime]="tile.photo.photoDate">{{
+                          day(tile.photo.photoDate)
+                        }}</time>
+                      </div>
+                      <button
+                        appButton
+                        type="button"
+                        variant="text"
+                        (click)="sheets.viewPhoto(tile)"
+                      >
+                        <ng-container i18n>View</ng-container>
+                        <span class="tb-visually-hidden">
+                          {{ tile.pose }} {{ day(tile.photo.photoDate) }}</span
+                        >
+                      </button>
+                    </li>
+                  }
+                </ul>
+              </details>
+            }
+            @if (photoMore()) {
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                class="earlier"
+                [loading]="photoEarlierBusy()"
+                (click)="showEarlierPhotos()"
+                data-earlier-photos
+                i18n
+              >
+                Show earlier photos
+              </button>
+            } @else if (photoLists().days.length > 0) {
+              <p class="quiet" i18n>Nothing earlier was saved in the year before these.</p>
+            }
+          }
+          @default {
+            <div class="panel" aria-busy="true">
+              <app-skeleton [label]="loadingPhotos" [lines]="4" />
+            </div>
+          }
+        }
+      </div>
+    </ng-template>
+  </app-tabs>
+
+  <app-entry-sheets
+    #sheets
+    [clientId]="clientId()"
+    [audience]="audience()"
+    [today]="today()"
+    [firstDay]="firstDay()"
+    [weightUnit]="startUnit()"
+    [girthUnit]="girth()"
+    [weights]="weightRows()"
+    (changed)="changed($event)"
+  />
+</div>

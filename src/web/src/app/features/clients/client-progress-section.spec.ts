@@ -16,9 +16,13 @@ class DashboardStub {
   readonly clientName = input<string | null>(null);
 }
 
-@Component({ selector: 'app-progress-view', template: 'entries for {{ clientId() }}' })
+@Component({
+  selector: 'app-progress-entries',
+  template: 'entries for {{ clientId() }} / {{ clientName() }}',
+})
 class EntriesStub {
   readonly clientId = input<string | null>(null);
+  readonly clientName = input<string | null>(null);
 }
 
 async function render(release: CoachClientDetails['release'] = null) {
@@ -51,19 +55,20 @@ describe('ClientProgressSection', () => {
 
     expect(details.open).toBe(false);
     expect(host.querySelector('summary')?.textContent).toContain('Entries and corrections');
-    expect(host.querySelector('app-progress-view')).toBeNull();
+    expect(host.querySelector('app-progress-entries')).toBeNull();
 
     details.open = true;
     details.dispatchEvent(new Event('toggle'));
     await settle(fixture);
-    expect(host.querySelector('app-progress-view')?.textContent).toBe('entries for client-1');
-    expect(host.querySelector('.entries-body')?.getAttribute('data-mode')).toBe('light');
+    expect(host.querySelector('app-progress-entries')?.textContent).toBe(
+      'entries for client-1 / Maya',
+    );
 
     // Closing it again keeps what it loaded, so reopening is instant and nothing is lost.
     details.open = false;
     details.dispatchEvent(new Event('toggle'));
     await settle(fixture);
-    expect(host.querySelector('app-progress-view')).not.toBeNull();
+    expect(host.querySelector('app-progress-entries')).not.toBeNull();
   });
 
   it('offers no entry tools for a former client, whose record is read-only', async () => {

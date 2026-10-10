@@ -5,6 +5,14 @@ import type {
   LengthUnit,
   UpdateClientIntakeRequest,
 } from '../../core/api/api.models';
+import {
+  CENTIMETERS_PER_INCH,
+  HEIGHT_CM,
+  lengthCentimeters,
+  POUNDS_TO_KILOGRAMS,
+  WEIGHT_KG,
+  weightKilograms,
+} from '../../core/units/body-units';
 import { addYears, adultCutoff, isIsoDate, type IsoDate } from '../../ui/calendar';
 import type { DateInputStatus } from '../../ui/date-input';
 
@@ -309,11 +317,6 @@ export interface IntakeCheck {
   required: boolean;
 }
 
-const CENTIMETERS_PER_INCH = 2.54;
-const POUNDS_TO_KILOGRAMS = 0.45359237;
-/** The server's own limits (ClientProfile, ProgressModule). */
-const HEIGHT_CM = { min: 50, max: 300 } as const;
-const WEIGHT_KG = { min: 20, max: 500 } as const;
 const STEPS = { min: 0, max: 100_000 } as const;
 
 function tooLong(errors: IntakeErrors, field: string, value: string, limit: number): void {
@@ -325,13 +328,10 @@ function tooLong(errors: IntakeErrors, field: string, value: string, limit: numb
 
 /** Centimetres in a typed height, for the server's 50 to 300 cm rule. */
 export function heightCentimeters(value: number, unit: LengthUnit): number {
-  return unit === 'Inch' ? value * CENTIMETERS_PER_INCH : value;
+  return lengthCentimeters(value, unit);
 }
 
-/** Kilograms in a typed weight, for the server's 20 to 500 kg rule. */
-export function weightKilograms(value: number, unit: BodyweightUnit): number {
-  return unit === 'Pound' ? value * POUNDS_TO_KILOGRAMS : value;
-}
+export { weightKilograms };
 
 function range(low: number, high: number, locale = 'en'): string {
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });

@@ -64,7 +64,8 @@ public sealed class ProgressPhoto : TenantEntity
 
     /// <summary>
     /// Withdraws the photo from coach-facing views. The client who owns it keeps access, and the
-    /// row is retained so the removal itself stays auditable.
+    /// row is retained so the removal itself stays auditable. A removed photo no longer holds its
+    /// date and pose, so the same shot can be taken again (PRG-012).
     /// </summary>
     public void Remove()
     {

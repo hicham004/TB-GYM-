@@ -964,10 +964,12 @@ internal sealed partial class ProgressApplicationService(
             return PhotoInvalid("photoDate", "A progress photo cannot be dated in the future.");
         }
 
+        // A removed photo has given up its slot (PRG-012); only an active one counts.
         if (await dbContext.ProgressPhotos.AnyAsync(
                 item => item.ClientProfileId == clientProfileId &&
                         item.PhotoDate == photoDate &&
-                        item.Pose == upload.Pose,
+                        item.Pose == upload.Pose &&
+                        item.Status == ProgressPhotoStatus.Active,
                 cancellationToken))
         {
             return PhotoConflict(
@@ -1155,6 +1157,8 @@ internal sealed partial class ProgressApplicationService(
                 (includeRemoved || item.Status == ProgressPhotoStatus.Active))
             .OrderBy(item => item.PhotoDate)
             .ThenBy(item => item.Pose)
+            // A retake after a removal puts two rows on one date and pose: the older one first.
+            .ThenBy(item => item.CreatedAtUtc)
             .ToArrayAsync(cancellationToken);
         return new ProgressPhotosView(
             clientProfileId,

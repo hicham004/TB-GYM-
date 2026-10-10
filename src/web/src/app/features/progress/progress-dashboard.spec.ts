@@ -631,3 +631,49 @@ describe('ProgressDashboardView media grants', () => {
     expect(previewAssetIds(mapProgressDashboard(contract(emptySections)))).toEqual([]);
   });
 });
+
+describe('ProgressDashboardView logging', () => {
+  const answerRead = () => of(mapProgressDashboard(contract()));
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('opens the one Log weight sheet every entries screen uses, in the unit saved in Me', async () => {
+    const open = vi.fn(() => ({ close: vi.fn(), closed: new Subject<unknown>() }));
+    const { fixture, host } = await renderWith(
+      answerRead(),
+      {},
+      {
+        providers: [
+          { provide: AuthStore, useValue: { weightUnit: signal('Pound') } },
+          { provide: UiSheet, useValue: { open } },
+        ],
+      },
+    );
+
+    host.querySelector<HTMLButtonElement>('.log-button')!.click();
+    await settle(fixture);
+
+    expect(open).toHaveBeenCalledTimes(1);
+    expect((open.mock.calls[0] as unknown as [unknown, { title: string }])[1].title).toBe(
+      'Log weight',
+    );
+  });
+
+  it('sends the measurements and photos panels to their own tab of the entries page', async () => {
+    const host = await render(answerRead());
+
+    const link = (words: string) =>
+      Array.from(host.querySelectorAll('a')).find((item) => item.textContent?.trim() === words);
+    expect(link('Manage')?.getAttribute('href')).toBe('/progress?tab=measurements');
+    expect(link('View all')?.getAttribute('href')).toBe('/progress?tab=photos');
+    expect(link('Open the full entry history and corrections')?.getAttribute('href')).toBe(
+      '/progress',
+    );
+  });
+
+  it('offers a coach no way to log here: they record through the client’s entries', async () => {
+    const { host } = await renderWith(answerRead(), {}, { clientId: 'client-9' });
+
+    expect(host.querySelector('.log-button')).toBeNull();
+  });
+});

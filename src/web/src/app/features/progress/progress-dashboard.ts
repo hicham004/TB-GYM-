@@ -1,17 +1,6 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { DialogRef } from '@angular/cdk/dialog';
-import {
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  signal,
-  TemplateRef,
-  viewChild,
-} from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Component, computed, effect, inject, input, LOCALE_ID, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -20,22 +9,32 @@ import type {
   ClientPersonalRecordsResult,
   FeatureAccessReason,
   MeasurementType,
-  RecordedMassUnit,
 } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { previewAssetIds, type ProgressDashboard } from './progress-dashboard.models';
 import type { ProgressViewModel } from './progress.models';
-import { UiSheet } from '../../ui/sheet';
+import { Button } from '../../ui/button';
+import { addDays, deviceToday } from '../../ui/calendar';
 import { TrendChart } from '../../ui/trend-chart';
 import { BarChart } from '../../ui/bar-chart';
 import { PhotoCompare } from '../../ui/photo-compare';
-import { ModalSurface } from '../../ui/modal-surface';
+import { EntrySheets } from './entry-sheets';
+import { weighInRows, type Audience } from './progress-entries.models';
 
 @Component({
   selector: 'app-progress-dashboard',
-  imports: [DatePipe, DecimalPipe, FormsModule, RouterLink, TrendChart, BarChart, PhotoCompare],
+  imports: [
+    Button,
+    DatePipe,
+    DecimalPipe,
+    EntrySheets,
+    RouterLink,
+    TrendChart,
+    BarChart,
+    PhotoCompare,
+  ],
   templateUrl: './progress-dashboard.html',
   styleUrl: './progress-dashboard.scss',
 })
@@ -46,7 +45,7 @@ export class ProgressDashboardView {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
-  private readonly sheet = inject(UiSheet);
+  private readonly locale = inject(LOCALE_ID);
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
@@ -56,16 +55,22 @@ export class ProgressDashboardView {
   protected readonly progress = signal<ProgressViewModel | null>(null);
   protected readonly personalRecords = signal<ClientPersonalRecordsResult | null>(null);
   protected readonly range = signal<'4w' | '12w' | 'all'>('12w');
-  protected readonly weightValue = signal<number | null>(null);
-  protected readonly weightUnit = signal<RecordedMassUnit>('Kilogram');
-  protected readonly savingWeight = signal(false);
-  protected readonly weightNotice = signal<string | null>(null);
-  protected readonly weightError = signal<string | null>(null);
-  private readonly weightTemplate = viewChild<TemplateRef<unknown>>('weightTemplate');
-  private weightDialog: DialogRef<unknown, ModalSurface> | null = null;
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly coachMode = computed(() => this.clientId() !== null);
+  /** The client logging their own weight; a coach records through the entries page. */
+  protected readonly audience = computed<Audience>(() => ({
+    coach: this.coachMode(),
+    firstName: this.clientName(),
+    locale: this.locale,
+  }));
+  protected readonly startUnit = this.auth.weightUnit;
+  /** Today in the coaching space: the dashboard's window ends the day after it. */
+  protected readonly today = computed(() => {
+    const view = this.dashboard();
+    return view ? addDays(view.toExclusive, -1) : deviceToday();
+  });
+  protected readonly weights = computed(() => weighInRows(this.progress(), this.audience()));
   protected readonly who = computed(() => this.clientName() ?? $localize`This client`);
   /** Only exact asset ids returned by the batch are eligible to bind protected image paths. */
   protected readonly grantedPreviewIds = signal<ReadonlySet<string>>(new Set());
@@ -137,8 +142,6 @@ export class ProgressDashboardView {
       this.progress.set(null);
       this.personalRecords.set(null);
       this.range.set('12w');
-      this.weightDialog?.close();
-      this.weightDialog = null;
       this.grantedPreviewIds.set(new Set());
       this.error.set(null);
       this.loading.set(false);
@@ -154,43 +157,9 @@ export class ProgressDashboardView {
     void this.load();
   }
 
-  protected openWeightSheet(): void {
-    const template = this.weightTemplate();
-    if (!template) return;
-    this.weightError.set(null);
-    this.weightUnit.set(this.dashboard()?.displayUnit ?? 'Kilogram');
-    this.weightDialog = this.sheet.open(template, { title: $localize`Log weight` });
-  }
-
-  protected async saveWeight(): Promise<void> {
-    return this.scope.run('saveWeight', async (owner) => {
-      const value = this.weightValue();
-      if (value === null || !Number.isFinite(value) || value <= 0) {
-        this.weightError.set($localize`Enter a valid weight.`);
-        return;
-      }
-      this.savingWeight.set(true);
-      this.weightError.set(null);
-      try {
-        await owner.wait(this.csrf.refresh());
-        await owner.wait(
-          firstValueFrom(
-            this.api.recordMyBodyweight({ value, unit: this.weightUnit(), measurementDate: null }),
-          ),
-        );
-        if (!owner.current) return;
-        this.weightDialog?.close();
-        this.weightDialog = null;
-        this.weightValue.set(null);
-        this.weightNotice.set($localize`Weight logged for today.`);
-        await owner.wait(this.load());
-      } catch (error) {
-        if (owner.current)
-          this.weightError.set(apiErrorMessage(error, $localize`Weight could not be saved.`));
-      } finally {
-        if (owner.current) this.savingWeight.set(false);
-      }
-    });
+  /** A weight was logged, corrected or found stale: read the numbers again. */
+  protected reload(): void {
+    void this.load();
   }
 
   /**
@@ -354,8 +323,6 @@ export class ProgressDashboardView {
     this.loadedKey = null;
     ++this.loadGeneration;
     this.dashboard.set(null);
-    this.weightDialog?.close();
-    this.weightDialog = null;
     this.progress.set(null);
     this.personalRecords.set(null);
     this.loading.set(false);

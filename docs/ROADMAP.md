@@ -1058,7 +1058,10 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
   Coach Today names the lifts to review, the demo's clients hit their numbers, and a new program starts
   where the last one ended (STR-014), with a "Maxes to review" chip on the client list. P4d, its last
   two follow-ups: the client's max history lists every program's training maxes beside the recorded ones
-  (STR-015), and Coach Today keeps a number and its unit together on a phone.
+  (STR-015), and Coach Today keeps a number and its unit together on a phone. R5.3c, weight, measurements
+  and photos (2026-10-10): the client's Your entries page and a coach's Entries and corrections are one
+  screen with sheets for logging and correcting, and a removed progress photo frees its date and pose
+  (PRG-012).
 
 Work follows this order; anything outside it needs the user's approval first.
 

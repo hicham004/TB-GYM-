@@ -257,13 +257,16 @@ const progress = {
     },
   ],
   trend: {
+    isEstimate: true,
     availability: 'Available',
     methodKey: 'BodyweightTrendEwma',
-    methodVersion: 2,
+    methodVersion: '2.0',
     timeConstantDays: 10,
     warmupDays: 7,
     minimumSampleCount: 3,
     sampleCount: 7,
+    windowStart: '2026-08-10',
+    windowEndExclusive: '2026-10-05',
     latestEstimateKilograms: 71.5,
     latestDisplayEstimate: 71.5,
   },
@@ -280,6 +283,8 @@ async function openProfile(
     overview?: ClientProfileOverviewView;
     details?: Record<string, unknown>;
     requests?: string[];
+    /** More reads and writes for the page under test, answered like the rest. */
+    extra?: Handlers;
   } = {},
 ) {
   await page.clock.setFixedTime(new Date(COACH_NOW));
@@ -322,6 +327,7 @@ async function openProfile(
           checkInItem('next', '2026-10-08', null),
         ],
       }),
+    ...options.extra,
   };
   if (options.requests) {
     page.on('request', (request) => {
@@ -525,6 +531,76 @@ for (const [width, height] of [
     await page.screenshot({ path: `test-results/r33b-progress-${width}.png`, fullPage: true });
   });
 }
+
+test('a coach logs a weight for the client from Entries and corrections, in the client’s name', async ({
+  page,
+}) => {
+  const posted: unknown[] = [];
+  await openProfile(page, 1440, 900, {
+    path: `/clients/${ID}/progress`,
+    extra: {
+      [`GET /api/progress/clients/${ID}/measurements`]: (route) =>
+        json(route, 200, {
+          clientProfileId: ID,
+          timeZoneId: 'Asia/Beirut',
+          displayUnit: 'Centimetre',
+          from: '2025-10-02',
+          toExclusive: '2026-10-02',
+          days: [],
+        }),
+      [`GET /api/progress/clients/${ID}/photos`]: (route) =>
+        json(route, 200, {
+          clientProfileId: ID,
+          from: '2025-10-02',
+          toExclusive: '2026-10-02',
+          photos: [],
+        }),
+      [`POST /api/progress/clients/${ID}/bodyweight`]: (route) => {
+        const body = route.request().postDataJSON() as { measurementDate: string | null };
+        posted.push(body);
+        return json(route, 200, {
+          id: 'weight-new',
+          measurementDate: body.measurementDate ?? '2026-10-01',
+          valueKilograms: 71,
+          enteredValue: 71,
+          enteredUnit: 'Kilogram',
+          source: 'Coach',
+          recordedByUserId: OWNER_ID,
+          recordedAtUtc: '2026-10-01T12:00:00Z',
+          status: 'Active',
+          version: 1,
+        });
+      },
+    },
+  });
+
+  await page.locator('details.entries summary').click();
+  await expect(page.getByRole('tab', { name: 'Weight' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Measurements' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Photos' })).toBeVisible();
+  // Added by the client, in a coach's words; and how the trend is worked out, without the method code.
+  await expect(page.locator('[data-weighin]').first()).toContainText('Added by Maya');
+  await page.locator('details.how summary').click();
+  await expect(page.locator('details.how')).toContainText('Smoothed average, version 2.0');
+  await expect(page.locator('details.how')).not.toContainText('BodyweightTrendEwma');
+
+  await page.locator('[data-log-weight]').click();
+  const sheet = page.getByRole('dialog', { name: 'Log weight for Maya' });
+  await expect(sheet).toContainText('Recorded as a coach’s entry for Maya.');
+  await sheet.getByLabel('Weight').fill('71');
+  // Today already has a weigh-in, and the sheet says so rather than adding a second.
+  await expect(sheet).toContainText('71.2 kg is already logged for Thu 1 Oct.');
+  await expect(sheet.getByRole('button', { name: 'Correct that weight' })).toBeVisible();
+  await sheet.getByRole('button', { name: /Day you weighed/ }).click();
+  await sheet.locator('button.day[data-date="2026-09-30"]').click();
+  await sheet.getByRole('button', { name: 'Save weight' }).click();
+
+  await expect(sheet).toBeHidden();
+  await expect(page.locator('app-toast-host')).toContainText('Weight logged for Wed 30 Sep.');
+  expect(posted).toEqual([{ value: 71, unit: 'Kilogram', measurementDate: '2026-09-30' }]);
+  await page.screenshot({ path: 'test-results/r53c-coach-entries-1440.png', fullPage: true });
+  await axe(page);
+});
 
 test('a former client’s Overview shows how coaching ended and offers nothing to change', async ({
   page,

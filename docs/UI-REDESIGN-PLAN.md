@@ -93,7 +93,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.2b | **The platform admin screen** (ADR 0028): every coaching space in the order that needs the admin first, with what it owes, when it falls due and when it locks; a page for each space (invoices, this month, discounts); sheets to record a payment dated the day the money arrived, void with or without a corrected invoice, grant and revoke a discount, and publish a price plan version after seeing what changes; and the kit's new date field instead of the browser's date inputs | §2, plus API tests (a payment's date in the service and the database, the list's due and lock days) | Done · 2026-10-10 · cb30bd1 |
 | R5.3a | **Invitations** (C2): who is waiting to join first with what happens next, Invite a client in a sheet (a name and an email, an optional phone and a birth date typed in three boxes), Send again, and Cancel after asking, Invite again when a link ran out or was cancelled, everyone earlier behind a closed disclosure; the kit's typed date input | §2, plus Vitest (the invitation tenant-ownership tests moved to the sheet) | Done · 2026-10-10 · ad46000 |
 | R5.3b | **My profile and the intake form** (M8, C3): the client's first-run questions as five short steps, each saved as they go and resumed where they stopped, then their answers as cards with an Edit sheet on each; the coach's view of the same answers with the same sheets, what a client still needs, and Finish setting up for the starting weight; the typed birth date; and the unsaved-changes guard on the steps and the sheets (§9) | §2, plus Vitest (steps, resume, validation in words, refusals, the guard, a late answer after a workspace switch) | Done · 2026-10-10 · a865fce |
-| R5.3c | **Weigh-ins, photos and measurements** (M5): the client's logging pages on the kit | §2 | To do |
+| R5.3c | **Weigh-ins, photos and measurements** (M5, C3): one Your entries page for the client with Weight, Measurements and Photos tabs (the tab kept in the address), and the same tabs for a coach inside a client's Progress; Log weight, Correct (a one-tap reason), Wrong day and See changes in sheets with the kit's date field, the client's saved kg or lb and a number out of range told in words; one sheet logs several measurements at once and another adds a photo set (front, side, back); a photo opens small and is removed with a reason; each entry says who added it; Show earlier reads the year before; Progress follows dark mode. A removed photo frees its date and pose, so a wrong shot can be retaken the same day (PRG-012) | §2, plus Vitest (the rules, every sheet, the page, the dashboard) and an API test (a retake after a removal, by the client and by the coach) | Built, not committed · 2026-10-10 |
 | R5.3d | **The coach's client nutrition and training tools** (C3, C7): the targets calculator and the max history | §2 | To do |
 | R5.3e | **The leftovers**: check-in forms and assignment buttons, the coach's workout page, the empty and status styles on Training, the plan dialogs' notes, the top bar's sign-out | §2 | To do |
 | R5.3f | **Delete the legacy CSS** (the global rules and variables in `styles.scss`), add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
@@ -262,7 +262,10 @@ of the implemented R1.3 screens before production rollout.
   with its two sheets), and the older library page and the food calls `ApiClient` carried are gone.
   R5.2a measures 542.60 kB: every Settings page and `SettingsFrame` load lazily with their routes, and only
   the route guards, the sidebar's Settings addresses and a menu word changed at start-up; `billing.scss`
-  warns at 5.85 kB (the error is at 8 kB).
+  warns at 5.85 kB (the error is at 8 kB). R5.3c measures 546.02 kB (R5.3b's build reads 542.92 kB): the
+  build's stats show all of the +3.1 kB is Angular's own runtime moving into the start-up chunks, and the
+  app's code in them is unchanged to within 13 bytes (the API client grew 42, for the date range on two
+  reads). The Entries page, its three sheet files and their models are lazy chunks.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -272,14 +275,12 @@ of the implemented R1.3 screens before production rollout.
 - **A very large client list (from R3.3a).** Clients draws every row; fine for founding coaches (10
   to 80 clients). A gym with several hundred would want CDK virtual scroll or paging on the
   server. The search text is not kept in the address, so typing never navigates.
-- **Entry and correction tools (from R3.3b).** Recording a weigh-in, measurement or photo for a
-  client, and correcting or re-dating one, are still the older forms (browser selects and date
-  inputs) behind "Entries and corrections", in a light scope inside a dark page. Rebuild them as
-  sheets with the unsaved-changes guard (§9); the client's own `/progress` page opens the same
-  screen.
+- **Entry and correction tools (from R3.3b), closed in R5.3c.** Recording a weigh-in, measurement or
+  photo, and correcting or re-dating one, are sheets with the unsaved-changes guard (§9); the client's
+  own `/progress` page and a coach's "Entries and corrections" are one screen.
 - **Client Progress in dark (from R3.3b).** The weight, bar and photo-compare pieces now draw with
   `--tb-accent-ink` and `--tb-chart-band`, and the dashboard's own colours are tokens, so the
-  client's Progress can be marked `REDESIGNED` after one dark screenshot pass (see "Client dark
+  client's Progress can be marked `REDESIGNED` after one dark screenshot pass (done in R5.3c; see "Client dark
   mode"). Its "Personal records" list shows all 12 at once; the coach's does too, and both could
   show five with "Show all".
 - **An unsaved coach note (from R3.3b).** A refresh or closed tab asks first, but moving to another
@@ -655,10 +656,10 @@ of the implemented R1.3 screens before production rollout.
   sheet); days outside the range greyed; right-to-left arrows. A typed day, which GOV.UK prefers for dates a
   person knows by heart such as a birth date, came in R5.3a as the kit's `DateInput`. Not built: partial
   payments, refunds and credit (they need a ledger design), a trial extension, MRR figures, CSV export, an
-  invoice PDF (no legal details yet), a reminder to chase an owner. Seen, not fixed: seven other screens still
-  use the browser's date input (check-in clients, progress, Start a plan and Record payment for a client,
-  Assign program, program block dialogs, client nutrition); swapping each for the kit's date field is its own
-  step.
+  invoice PDF (no legal details yet), a reminder to chase an owner. Seen, not fixed: six other screens still
+  use the browser's date input (check-in clients, Start a plan and Record payment for a client, Assign
+  program, program block dialogs, client nutrition); swapping each for the kit's date field is its own step
+  (the weigh-in, measurement and photo sheets took it in R5.3c).
   The initial bundle is 543.08 kB (R5.2a: 542.60; two routes and two icons) and `platform-space.scss` is 5.45 kB, 453
   bytes over its 5 kB warning budget. Checked with `/ui-review`: touch-action, a hover on Today and Clear, the
   textareas' autocomplete, a scroll margin so the sheet's sticky bar never covers a field, and the owner's email
@@ -722,6 +723,45 @@ of the implemented R1.3 screens before production rollout.
   brought up behind a phone's tab bar. Checked live on the real API as a new client: invited, accepted,
   answered the steps with a reload half way that resumed at step 3, finished, changed a group in a sheet, and
   the coach read and corrected the same answers.
+
+- **Weight, measurements and photos, R5.3c (built 2026-10-10; screenshots `docs/design/r53c-*.png`). Decided by
+  Claude for the owner on 2026-10-10**, after looking at Everfit (a client logs all their metrics in one
+  go; photos are added in a batch of up to ten, tagged front, left, right or back, with one date; an entry
+  or a photo can be deleted), Trainerize (front, side and back photos, body stats a coach can add for the
+  client, an entry can be edited or deleted; its users asked to tell a coach's entries from a client's),
+  TrueCoach (weight, body fat and waist, hip and chest in one Metrics tool) and the W3C and GOV.UK guidance on
+  forms, file uploads and dates: (1) **measurements are logged in one sheet**, a box for each line with only
+  the filled ones saved, as Everfit's "Log all metrics": a client measures them in one go, and one sheet each
+  would be six. (2) **Photos are added as a set**: one day, a place for the front, side and back, each its own
+  upload, so one refused (a front already saved for that day) never loses the others. (3) **Corrections stay
+  append-only with a reason**, but the reason is one tap ("Typed the wrong number", "Wrong day", "Wrong
+  pose", or "Something else" typed): the server keeps a reason with every correction and removal (PRG-007,
+  PRG-009, PRG-011), and a blank box would make the person invent one. (4) **A removed photo frees its date and
+  pose** (PRG-012, a server change): the first shot could never be retaken on the same day, because the
+  one-photo-a-day index still counted it, and the server's own "Remove it before adding another" was
+  untrue. A voided weigh-in already frees its day (PRG-011). (5) **Each entry says who added it**, as
+  Trainerize's users asked. (6) **The number is checked in words in the unit typed**, with the server's own
+  limits (20 to 500 kg, 10 to 300 cm for a girth, 1 to 75 % for body fat), and the shared unit rules now
+  live in `core/units/body-units.ts`, which the intake uses too. (7) **The day is the coaching space's**, never
+  the browser's, and today is left to the server. (8) **A day that already has a weight** is said before
+  anything is sent, and Save becomes Correct that weight, because the server keeps one weigh-in a day.
+  (9) **Photos are chosen as JPEG or PNG** (Safari turns a HEIC picked from Photos into a JPEG when JPEG is
+  the first type listed), up to 15 MB. (10) **A chosen photo is not previewed before it is sent**: the app's
+  pages allow images from TB Gym only (nginx `img-src 'self'`), so a preview would need `blob:` allowed
+  for every page; the file's name and size are shown instead, and the saved photo appears with its
+  thumbnail. Not built: (a) **deleting a weigh-in or a measurement** (Everfit and Trainerize both allow it;
+  here a wrong entry is corrected or moved, never erased, and a mistaken entry on a day nothing was
+  weighed can only be moved to a real day or corrected). A "Remove" that voids an entry with no replacement
+  (the void record already allows it, PRG-011) would be a server operation, its tests and a say-so from the
+  owner; Claude recommends it, with the same one-tap reasons; (b) more measurement types (neck, calf,
+  shoulders: the type is a server list); (c) photo tags, reordering and the before/after slider on the entries
+  page (the dashboard compares two photos of one pose); (d) a reminder to log a weight or to take photos
+  (no notice kind exists); (e) **reaching a measurement or a photo from before a year with none**: Show
+  earlier for weights knows where the first weigh-in is (a read of the first day), but the measurement
+  and photo reads have no such day, so their Show earlier stops at the first empty year ("Nothing earlier
+  was recorded in the year before these"). A client back after more than a year away would not reach
+  the older ones from this page; a first-date field on those two reads, like the weight one, is the
+  fix.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1060,9 +1100,10 @@ limited to the coach's assigned clients.
     says why ("Elie's plan has ended, so their training isn't shown", "Check-ins aren't part of Karl's
     plan") instead of "could not be loaded", and a blocked client reads nothing and says so.
   - Progress: the weight trend with a range switch, measurements, photos, strength records, training
-    and nutrition logging, in coach words (no "Your…", no self-service links). The older entry,
-    correction and photo tools sit behind one collapsed "Entries and corrections", loaded only when
-    opened, and list only days with a weigh-in. The page is about 2,600 px; it was 10,400.
+    and nutrition logging, in coach words (no "Your…", no self-service links). The entry, correction and
+    photo tools sit behind one collapsed "Entries and corrections", loaded only when opened (since R5.3c
+    the client's own Weight, Measurements and Photos tabs and sheets, with how the trend is worked out in
+    words), and list only days with a weigh-in. The page is about 2,600 px; it was 10,400.
   - Both follow dark mode; the other sections stay light. Screenshots on the Atlas demo:
     `docs/design/r33b-profile-*.png` and `r33b-progress-*.png`.
 - Built in R3.4a (Training; Service & access is R3.4b). One new coach read, `GET
@@ -1434,6 +1475,23 @@ limited to the coach's assigned clients.
 - A strength PR list.
 - The full history sits behind "All entries" and never renders empty days. Estimation method names
   are never shown to clients.
+- Built in R5.3c: the dashboard's Log weight, Manage and View all lead to **Your entries** (`/progress`,
+  follows dark mode, a column as wide as Today): Weight, Measurements and Photos as tabs, the one in the
+  address (`?tab=`). Weight lists the days with a weigh-in, newest first, in the unit chosen (kg or lb,
+  starting from Me's), each with who added it ("Added by you", "Added by your coach") and "Entered as 175.9
+  lb" when it was typed in the other unit; a row's menu has Correct the weight, Wrong day and See changes.
+  Measurements list each day's lines in the order a tape is taken (waist, chest, hips, thigh, arm, body fat)
+  in centimetres or inches. Photos show each day's front, side and back side by side, with what the client
+  removed in a closed list of their own. Each tab reads the last year and Show earlier reads the year before.
+  Log weight, Log measurements (one sheet, a box for each line, only the ones with a number are saved) and
+  Add photos (a place for each pose) open as sheets; a number out of range is told in words with the server's
+  limits, a day cannot be in the future, and a sheet with typed work asks before it closes. Correcting and
+  removing ask what was wrong with one tap (the server always keeps a reason). A line or photo the server
+  refuses stays marked with its reason while the others are saved, and pressing Save again sends only what
+  is still to do. A photo opens small and loads its full size only on request; removing it says who will no
+  longer see it. A coach sees the same tabs inside the client's Progress, with the client named, and a short
+  "How the trend is worked out" in words (method, version, settings and the days it covers) that a client
+  never sees.
 
 **M6. Check-in**
 - A step-by-step form (one question per screen, a progress bar), photo capture, and a
@@ -1464,8 +1522,8 @@ limited to the coach's assigned clients.
 - Built in R2.5c at `/me`, reached from the avatar on Today (Me is not a tab). A brand card holds the
   client's initials, name and email, and their coach as a pill with a face that opens the chat (plain
   text when messaging is not in the plan, left out when the coach cannot be read). Rows lead to My
-  profile, Notifications (rebuilt in R5.1c) and Password and security; the first and last are still
-  the old screens. Appearance
+  profile (rebuilt in R5.3b), Notifications (rebuilt in R5.1c) and Password and security (rebuilt in R5.2a).
+  Appearance
   (Device, Light, Dark) and Body weight (kg, lb) are inline and save as they are chosen, one at a
   time, on the account (CLI-017), so they follow the client to a new phone or the installed app; a
   refused save puts the control back and says so. Body weight is the starting unit of weigh-ins and

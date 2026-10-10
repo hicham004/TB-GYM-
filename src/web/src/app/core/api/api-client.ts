@@ -1139,15 +1139,19 @@ export class ApiClient {
       .pipe(map(mapProgressDashboard));
   }
 
-  getMyProgressPhotos() {
+  getMyProgressPhotos(from: string | null = null, to: string | null = null) {
     return this.http
-      .get<Phase3Contracts.ProgressPhotosView>('/api/progress/me/photos')
+      .get<Phase3Contracts.ProgressPhotosView>('/api/progress/me/photos', {
+        params: progressWindowParams(from, to),
+      })
       .pipe(map(mapProgressPhotos));
   }
 
-  getClientProgressPhotos(clientId: string) {
+  getClientProgressPhotos(clientId: string, from: string | null = null, to: string | null = null) {
     return this.http
-      .get<Phase3Contracts.ProgressPhotosView>(`/api/progress/clients/${clientId}/photos`)
+      .get<Phase3Contracts.ProgressPhotosView>(`/api/progress/clients/${clientId}/photos`, {
+        params: progressWindowParams(from, to),
+      })
       .pipe(map(mapProgressPhotos));
   }
 
@@ -1193,18 +1197,27 @@ export class ApiClient {
       .pipe(map(mapProgressPhoto));
   }
 
-  getMyBodyMeasurements(displayUnit: Phase3Contracts.MeasurementUnit) {
+  getMyBodyMeasurements(
+    displayUnit: Phase3Contracts.MeasurementUnit,
+    from: string | null = null,
+    to: string | null = null,
+  ) {
     return this.http
       .get<Phase3Contracts.BodyMeasurementsView>('/api/progress/me/measurements', {
-        params: { displayUnit },
+        params: { displayUnit, ...progressWindowParams(from, to) },
       })
       .pipe(map(mapMeasurements));
   }
 
-  getClientBodyMeasurements(clientId: string, displayUnit: Phase3Contracts.MeasurementUnit) {
+  getClientBodyMeasurements(
+    clientId: string,
+    displayUnit: Phase3Contracts.MeasurementUnit,
+    from: string | null = null,
+    to: string | null = null,
+  ) {
     return this.http
       .get<Phase3Contracts.BodyMeasurementsView>(`/api/progress/clients/${clientId}/measurements`, {
-        params: { displayUnit },
+        params: { displayUnit, ...progressWindowParams(from, to) },
       })
       .pipe(map(mapMeasurements));
   }

@@ -1,0 +1,457 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  input,
+  output,
+  signal,
+  TemplateRef,
+  viewChild,
+} from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import type { GirthUnit, MassUnit } from '../../core/units/body-units';
+import type { IsoDate } from '../../ui/calendar';
+import { UiConfirm } from '../../ui/confirm';
+import { UiDialog } from '../../ui/dialog';
+import { UiSheet } from '../../ui/sheet';
+import { UiToast } from '../../ui/toast';
+import { CorrectMeasurement, LogMeasurements, MeasurementChanges } from './measurement-sheets';
+import { AddPhotos, PhotoView } from './photo-sheets';
+import {
+  dayWords,
+  type Audience,
+  type MeasurementRow,
+  type PhotoTile,
+  type WeighInRow,
+} from './progress-entries.models';
+import type {
+  BodyMeasurementHistory,
+  BodyweightDateCorrection,
+  BodyweightHistory,
+  BodyweightObservation,
+  ProgressPhoto,
+} from './progress.models';
+import { CorrectWeight, LogWeight, MoveWeighIn, WeighInChanges } from './weigh-in-sheets';
+
+/** What an entry sheet changed, so the page reads that list again. */
+export type EntryKind = 'weight' | 'measurements' | 'photos';
+
+/**
+ * Every sheet of the weigh-in, measurement and photo screens, opened from one place (R5.3c): the entries
+ * page, the Progress dashboard's Log weight, and a coach's page for a client all open the same sheets.
+ * A sheet that holds typed work asks before it closes, and a sheet that saved says so in a toast and
+ * tells the page which list to read again.
+ */
+@Component({
+  selector: 'app-entry-sheets',
+  imports: [
+    AddPhotos,
+    CorrectMeasurement,
+    CorrectWeight,
+    LogMeasurements,
+    LogWeight,
+    MeasurementChanges,
+    MoveWeighIn,
+    PhotoView,
+    UiConfirm,
+    WeighInChanges,
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { style: 'display: none' },
+  template: `
+    <ng-template #logWeightSheet let-sheet>
+      <app-log-weight
+        [clientId]="clientId()"
+        [audience]="audience()"
+        [today]="today()"
+        [firstDay]="firstDay()"
+        [startUnit]="weightUnit()"
+        [existing]="existingWeights()"
+        (dirtyChange)="dirty = $event"
+        (stale)="changed.emit('weight')"
+        (correct)="correctInstead($event, sheet)"
+        (closed)="weightLogged($event, sheet)"
+      />
+    </ng-template>
+
+    <ng-template #correctWeightSheet let-sheet>
+      @if (weighIn(); as row) {
+        <app-correct-weight
+          [clientId]="clientId()"
+          [audience]="audience()"
+          [today]="today()"
+          [firstDay]="firstDay()"
+          [row]="row"
+          (dirtyChange)="dirty = $event"
+          (stale)="changed.emit('weight')"
+          (closed)="weightCorrected($event, sheet)"
+        />
+      }
+    </ng-template>
+
+    <ng-template #moveWeighInSheet let-sheet>
+      @if (weighIn(); as row) {
+        <app-move-weigh-in
+          [clientId]="clientId()"
+          [audience]="audience()"
+          [today]="today()"
+          [firstDay]="firstDay()"
+          [row]="row"
+          [taken]="takenDays()"
+          (dirtyChange)="dirty = $event"
+          (stale)="changed.emit('weight')"
+          (closed)="weightMoved($event, sheet)"
+        />
+      }
+    </ng-template>
+
+    <ng-template #weighInChangesSheet let-sheet>
+      @if (weighIn(); as row) {
+        <app-weigh-in-changes
+          [clientId]="clientId()"
+          [audience]="audience()"
+          [today]="today()"
+          [row]="row"
+          (closed)="sheet.close()"
+        />
+      }
+    </ng-template>
+
+    <ng-template #logMeasurementsSheet let-sheet>
+      <app-log-measurements
+        [clientId]="clientId()"
+        [audience]="audience()"
+        [today]="today()"
+        [firstDay]="firstDay()"
+        [startUnit]="girthUnit()"
+        (dirtyChange)="dirty = $event"
+        (stale)="changed.emit('measurements')"
+        (changed)="changed.emit('measurements')"
+        (closed)="measurementsLogged($event, sheet)"
+      />
+    </ng-template>
+
+    <ng-template #correctMeasurementSheet let-sheet>
+      @if (measurement(); as row) {
+        <app-correct-measurement
+          [clientId]="clientId()"
+          [audience]="audience()"
+          [today]="today()"
+          [row]="row"
+          (dirtyChange)="dirty = $event"
+          (stale)="changed.emit('measurements')"
+          (closed)="measurementCorrected($event, sheet)"
+        />
+      }
+    </ng-template>
+
+    <ng-template #measurementChangesSheet let-sheet>
+      @if (measurement(); as row) {
+        <app-measurement-changes
+          [clientId]="clientId()"
+          [audience]="audience()"
+          [today]="today()"
+          [row]="row"
+          (closed)="sheet.close()"
+        />
+      }
+    </ng-template>
+
+    <ng-template #addPhotosSheet let-sheet>
+      <app-add-photos
+        [clientId]="clientId()"
+        [audience]="audience()"
+        [today]="today()"
+        [firstDay]="firstDay()"
+        (dirtyChange)="dirty = $event"
+        (stale)="changed.emit('photos')"
+        (changed)="changed.emit('photos')"
+        (closed)="photosAdded($event, sheet)"
+      />
+    </ng-template>
+
+    <ng-template #photoSheet let-sheet>
+      @if (photo(); as tile) {
+        <app-photo-view
+          [clientId]="clientId()"
+          [audience]="audience()"
+          [today]="today()"
+          [tile]="tile"
+          (dirtyChange)="dirty = $event"
+          (stale)="changed.emit('photos')"
+          (closed)="photoClosed($event, sheet)"
+        />
+      }
+    </ng-template>
+
+    <ng-template #confirmDialog let-dialog>
+      @if (asking(); as question) {
+        <app-confirm
+          [message]="question.message"
+          [confirmLabel]="question.confirm"
+          [cancelLabel]="question.cancel"
+          (answer)="dialog.close($event)"
+        />
+      }
+    </ng-template>
+  `,
+})
+export class EntrySheets {
+  private readonly sheets = inject(UiSheet);
+  private readonly dialogs = inject(UiDialog);
+  private readonly toast = inject(UiToast);
+
+  /** The client a coach is entering for; null on the client's own pages. */
+  readonly clientId = input<string | null>(null);
+  readonly audience = input.required<Audience>();
+  /** Today in the coaching space, never the browser's. */
+  readonly today = input.required<IsoDate>();
+  readonly firstDay = input<number | null>(null);
+  /** The unit weights are logged in to begin with, and the tape the measurements start on. */
+  readonly weightUnit = input<MassUnit>('Kilogram');
+  readonly girthUnit = input<GirthUnit>('Centimetre');
+  /** The weigh-ins the page has read, so a day that has one can be checked before anything is sent. */
+  readonly weights = input<readonly WeighInRow[]>([]);
+  /** A sheet saved something (or found the list stale): read that list again. */
+  readonly changed = output<EntryKind>();
+
+  private readonly logWeightSheet = viewChild.required<TemplateRef<unknown>>('logWeightSheet');
+  private readonly correctWeightSheet =
+    viewChild.required<TemplateRef<unknown>>('correctWeightSheet');
+  private readonly moveWeighInSheet = viewChild.required<TemplateRef<unknown>>('moveWeighInSheet');
+  private readonly weighInChangesSheet =
+    viewChild.required<TemplateRef<unknown>>('weighInChangesSheet');
+  private readonly logMeasurementsSheet =
+    viewChild.required<TemplateRef<unknown>>('logMeasurementsSheet');
+  private readonly correctMeasurementSheet =
+    viewChild.required<TemplateRef<unknown>>('correctMeasurementSheet');
+  private readonly measurementChangesSheet =
+    viewChild.required<TemplateRef<unknown>>('measurementChangesSheet');
+  private readonly addPhotosSheet = viewChild.required<TemplateRef<unknown>>('addPhotosSheet');
+  private readonly photoSheet = viewChild.required<TemplateRef<unknown>>('photoSheet');
+  private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
+
+  protected readonly weighIn = signal<WeighInRow | null>(null);
+  protected readonly measurement = signal<MeasurementRow | null>(null);
+  protected readonly photo = signal<PhotoTile | null>(null);
+  protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
+    null,
+  );
+  /** Whether the open sheet holds something typed that closing would lose. */
+  protected dirty = false;
+  private open: { close: () => void } | null = null;
+
+  protected readonly existingWeights = computed<ReadonlyMap<string, BodyweightObservation>>(
+    () => new Map(this.weights().map((row) => [row.date, row.observation])),
+  );
+  protected readonly takenDays = computed<ReadonlySet<string>>(
+    () => new Set(this.weights().map((row) => row.date)),
+  );
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.open?.close());
+  }
+
+  // ---- opening ----
+
+  logWeight(): void {
+    const first = this.audience().firstName;
+    this.show(
+      this.logWeightSheet(),
+      this.audience().coach && first
+        ? $localize`Log weight for ${first}:name:`
+        : $localize`Log weight`,
+    );
+  }
+
+  correctWeight(row: WeighInRow): void {
+    this.weighIn.set(row);
+    this.show(this.correctWeightSheet(), $localize`Correct this weight`);
+  }
+
+  moveWeighIn(row: WeighInRow): void {
+    this.weighIn.set(row);
+    this.show(this.moveWeighInSheet(), $localize`Move it to the right day`);
+  }
+
+  weighInChanges(row: WeighInRow): void {
+    this.weighIn.set(row);
+    this.show(this.weighInChangesSheet(), $localize`Changes to this weight`);
+  }
+
+  logMeasurements(): void {
+    const first = this.audience().firstName;
+    this.show(
+      this.logMeasurementsSheet(),
+      this.audience().coach && first
+        ? $localize`Log measurements for ${first}:name:`
+        : $localize`Log measurements`,
+    );
+  }
+
+  correctMeasurement(row: MeasurementRow): void {
+    this.measurement.set(row);
+    this.show(this.correctMeasurementSheet(), $localize`Correct this measurement`);
+  }
+
+  measurementChanges(row: MeasurementRow): void {
+    this.measurement.set(row);
+    this.show(this.measurementChangesSheet(), $localize`Changes to this measurement`);
+  }
+
+  addPhotos(): void {
+    const first = this.audience().firstName;
+    this.show(
+      this.addPhotosSheet(),
+      this.audience().coach && first
+        ? $localize`Add photos for ${first}:name:`
+        : $localize`Add photos`,
+    );
+  }
+
+  viewPhoto(tile: PhotoTile): void {
+    this.photo.set(tile);
+    this.show(this.photoSheet(), $localize`${tile.pose}:pose: photo`);
+  }
+
+  // ---- what the sheets say back ----
+
+  protected weightLogged(saved: BodyweightObservation | null, sheet: Closable): void {
+    if (saved === null) return void this.closeAsking(sheet);
+    const day =
+      saved.measurementDate === this.today()
+        ? $localize`today`
+        : dayWords(saved.measurementDate, this.today(), this.audience().locale);
+    this.done(sheet, $localize`Weight logged for ${day}:day:.`, 'weight');
+  }
+
+  /** The chosen day already has a weight: close this sheet and open that one's correction. */
+  protected correctInstead(logged: BodyweightObservation, sheet: Closable): void {
+    const row = this.weights().find((item) => item.id === logged.id);
+    if (!row) return;
+    this.dirty = false;
+    sheet.close(null);
+    this.correctWeight(row);
+  }
+
+  protected weightCorrected(history: BodyweightHistory | null, sheet: Closable): void {
+    if (history === null) return void this.closeAsking(sheet);
+    this.done(
+      sheet,
+      $localize`Weight corrected. The earlier number stays in its history.`,
+      'weight',
+    );
+  }
+
+  protected weightMoved(moved: BodyweightDateCorrection | null, sheet: Closable): void {
+    if (moved === null) return void this.closeAsking(sheet);
+    const day = dayWords(moved.replacement.measurementDate, this.today(), this.audience().locale);
+    this.done(
+      sheet,
+      $localize`Moved to ${day}:day:. The old entry is kept, marked as replaced.`,
+      'weight',
+    );
+  }
+
+  protected measurementsLogged(count: number, sheet: Closable): void {
+    if (count === 0) return void this.closeAsking(sheet);
+    this.done(
+      sheet,
+      count === 1 ? $localize`Measurement saved.` : $localize`${count}:count: measurements saved.`,
+      'measurements',
+    );
+  }
+
+  protected measurementCorrected(history: BodyMeasurementHistory | null, sheet: Closable): void {
+    if (history === null) return void this.closeAsking(sheet);
+    this.done(
+      sheet,
+      $localize`Measurement corrected. The earlier number stays in its history.`,
+      'measurements',
+    );
+  }
+
+  protected photosAdded(count: number, sheet: Closable): void {
+    if (count === 0) return void this.closeAsking(sheet);
+    this.done(
+      sheet,
+      count === 1 ? $localize`Photo saved.` : $localize`${count}:count: photos saved.`,
+      'photos',
+    );
+  }
+
+  protected photoClosed(removed: ProgressPhoto | null, sheet: Closable): void {
+    if (removed === null) return void this.closeAsking(sheet);
+    this.done(
+      sheet,
+      this.audience().coach
+        ? $localize`Photo removed. The client keeps it in their own history.`
+        : $localize`Photo removed. Your coach can no longer see it.`,
+      'photos',
+    );
+  }
+
+  // ---- the sheet itself ----
+
+  private show(content: TemplateRef<unknown>, title: string): void {
+    this.open?.close();
+    this.dirty = false;
+    const sheet = this.sheets.open<unknown>(content, {
+      title,
+      closeLabel: $localize`Close`,
+      canClose: () => this.canClose(),
+    });
+    this.open = sheet;
+    sheet.closed.subscribe(() => {
+      if (this.open === sheet) this.open = null;
+      this.dirty = false;
+    });
+  }
+
+  /** The close button, Escape, the backdrop and Not now all ask the same question. */
+  private canClose(): boolean | Promise<boolean> {
+    return (
+      !this.dirty ||
+      this.ask(
+        $localize`Close without saving? What you typed will be lost.`,
+        $localize`Close`,
+        $localize`Keep editing`,
+        $localize`Discard what you typed?`,
+      )
+    );
+  }
+
+  private async closeAsking(sheet: Closable): Promise<void> {
+    if (await this.canClose()) sheet.close(null);
+  }
+
+  private done(sheet: Closable, message: string, kind: EntryKind): void {
+    this.dirty = false;
+    sheet.close(true);
+    this.toast.show(message, { tone: 'success' });
+    this.changed.emit(kind);
+  }
+
+  private async ask(
+    message: string,
+    confirm: string,
+    cancel: string,
+    title: string,
+  ): Promise<boolean> {
+    this.asking.set({ message, confirm, cancel });
+    const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
+      title,
+      closeLabel: $localize`Close`,
+    });
+    const answer = await firstValueFrom(dialog.closed);
+    this.asking.set(null);
+    return answer === true;
+  }
+}
+
+/** The sheet a template is given as `let-sheet`. */
+interface Closable {
+  close(result?: unknown): void;
+}

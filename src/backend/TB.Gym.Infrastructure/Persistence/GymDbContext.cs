@@ -864,6 +864,8 @@ public sealed partial class GymDbContext(
             entity.Property(item => item.Pose).HasConversion<string>().HasMaxLength(16);
             entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(16);
             entity.Property(item => item.Source).HasConversion<string>().HasMaxLength(16);
+            // One ACTIVE photo per client, date and pose: a removed photo keeps its row but frees its
+            // slot, so a wrong shot can be retaken the same day (PRG-012, as PRG-011 frees a voided date).
             entity.HasIndex(item => new
             {
                 item.TenantId,
@@ -872,6 +874,7 @@ public sealed partial class GymDbContext(
                 item.Pose,
             })
                 .IsUnique()
+                .HasFilter("\"Status\" = 'Active'")
                 .HasDatabaseName(DatabaseConstraintNames.OneProgressPhotoPerDateAndPose);
             entity.HasIndex(item => new { item.TenantId, item.MediaAssetId }).IsUnique();
             entity.HasOne<ClientProfile>()

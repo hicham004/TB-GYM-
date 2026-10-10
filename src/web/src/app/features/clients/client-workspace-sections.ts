@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { ClientNutrition } from '../nutrition/client-nutrition';
 import { ProgressDashboardView } from '../progress/progress-dashboard';
-import { ProgressView } from '../progress/progress-view';
+import { ProgressEntries } from '../progress/progress-entries';
 import { ClientProgram } from './client-program';
 import { ClientService } from './client-service';
 import { ClientWorkspaceContext } from './client-workspace.context';
@@ -51,12 +51,12 @@ export class ClientNutritionSection {
 /**
  * A client's Progress (C3): charts and a photo compare first, in coach words. Recording a weigh-in
  * or measurement for the client, correcting one, and adding or removing photos stay behind one
- * collapsed "Entries and corrections", and are only loaded once it is opened. That part is the
- * older screen, so it keeps its own light colours inside a dark page.
+ * collapsed "Entries and corrections", and are only loaded once it is opened (R5.3c: the same weight,
+ * measurement and photo tabs and sheets the client uses on their own page).
  */
 @Component({
   selector: 'app-client-progress-section',
-  imports: [ProgressDashboardView, ProgressView],
+  imports: [ProgressDashboardView, ProgressEntries],
   template: `
     <app-progress-dashboard
       [clientId]="context.clientId()"
@@ -71,8 +71,11 @@ export class ClientNutritionSection {
           >
         </summary>
         @if (entriesOpened()) {
-          <div class="entries-body" data-mode="light">
-            <app-progress-view [clientId]="context.clientId()" />
+          <div class="entries-body">
+            <app-progress-entries
+              [clientId]="context.clientId()"
+              [clientName]="context.profile()?.firstName ?? null"
+            />
           </div>
         }
       </details>
@@ -116,7 +119,6 @@ export class ClientNutritionSection {
       font-size: 0.875rem;
     }
 
-    // The older entry screen only has light colours, so it keeps a light scope inside a dark page.
     .entries-body {
       background: var(--tb-surface);
       border-block-start: 1px solid var(--tb-line);

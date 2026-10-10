@@ -1,0 +1,198 @@
+// Weight, measurements and photos (R5.3c). Brand v2 tokens only, so the page follows the person's mode.
+@use '../../ui/page';
+
+.back {
+  align-items: center;
+  border-radius: 999px;
+  color: var(--tb-accent-ink);
+  display: inline-flex;
+  font-weight: 600;
+  gap: 0.25rem;
+  margin-block-end: 0.25rem;
+  margin-inline-start: -0.5rem;
+  min-block-size: 2.75rem;
+  padding-inline: 0.5rem 0.75rem;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+.back:hover {
+  background: var(--tb-surface-2);
+}
+
+.back:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.back-icon:dir(rtl) {
+  transform: scaleX(-1);
+}
+
+// The client's own page is a column, as Today and My profile are; a coach's sits inside a client's page.
+.page:not(.coach) {
+  margin-inline: auto;
+  max-inline-size: 44rem;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+}
+
+.panel {
+  padding: 0.5rem 1.25rem;
+}
+
+.panel.day {
+  gap: 0.5rem;
+  padding-block: 1rem;
+}
+
+.panel.load-failed,
+app-empty-state.panel,
+.panel[aria-busy='true'] {
+  padding: 1.25rem;
+}
+
+.day h2 {
+  font-size: 1rem;
+}
+
+.row {
+  align-items: center;
+  display: grid;
+  gap: 0.25rem 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding-block: 0.75rem;
+}
+
+.what {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+
+.when {
+  color: var(--tb-ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.value {
+  color: var(--tb-ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.earlier {
+  align-self: center;
+}
+
+.how {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+
+.how summary {
+  color: var(--tb-ink);
+  cursor: pointer;
+  font-weight: 600;
+  min-block-size: 2.75rem;
+  padding-block: 0.625rem;
+}
+
+.how p {
+  margin: 0.25rem 0 0;
+}
+
+.tiles {
+  display: grid;
+  gap: 0.75rem;
+  // A day's front, side and back sit side by side on a phone.
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 8.5rem));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tile {
+  aspect-ratio: 3 / 4;
+  background: var(--tb-surface-2);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-control);
+  cursor: pointer;
+  display: block;
+  inline-size: 100%;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+}
+
+.tile:hover {
+  border-color: var(--tb-ink);
+}
+
+.tile:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.tile img {
+  block-size: 100%;
+  display: block;
+  inline-size: 100%;
+  object-fit: cover;
+}
+
+.no-preview {
+  align-items: center;
+  color: var(--tb-muted);
+  display: flex;
+  font-size: 0.8125rem;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+
+.pose {
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.65));
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  inset-block-end: 0;
+  inset-inline: 0;
+  padding: 1.5rem 0.5rem 0.375rem;
+  position: absolute;
+  text-align: start;
+}
+
+.removed summary {
+  color: var(--tb-ink);
+  cursor: pointer;
+  font-weight: 600;
+  min-block-size: 2.75rem;
+  padding-block: 0.625rem;
+}
+
+// Inside a coach's client page the page's own heading and tabs say where they are.
+.coach .panel {
+  box-shadow: none;
+}

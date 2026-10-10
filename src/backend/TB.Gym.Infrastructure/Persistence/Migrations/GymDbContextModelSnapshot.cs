@@ -8091,7 +8091,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ClientProfileId", "PhotoDate", "Pose")
                         .IsUnique()
-                        .HasDatabaseName("IX_ProgressPhotos_TenantId_ClientProfileId_PhotoDate_Pose");
+                        .HasDatabaseName("IX_ProgressPhotos_TenantId_ClientProfileId_PhotoDate_Pose")
+                        .HasFilter("\"Status\" = 'Active'");
 
                     b.ToTable("ProgressPhotos", "progress");
                 });

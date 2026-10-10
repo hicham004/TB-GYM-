@@ -124,8 +124,10 @@ export const routes: Routes = [
       import('./features/account/client-account').then((module) => module.ClientAccount),
   },
   {
+    // Progress follows the client's mode (R5.3c): its Log weight sheet opens over the page.
     path: 'progress/dashboard',
     canActivate: [authGuard, clientGuard],
+    data: REDESIGNED,
     title: $localize`My progress dashboard | TB Gym`,
     loadComponent: () =>
       import('./features/progress/progress-dashboard').then(
@@ -133,11 +135,13 @@ export const routes: Routes = [
       ),
   },
   {
+    // Weight, measurements and photos (R5.3c); `?tab=` names the one that opens.
     path: 'progress',
     canActivate: [authGuard, clientGuard],
-    title: $localize`My bodyweight progress | TB Gym`,
+    data: REDESIGNED,
+    title: $localize`Your entries | TB Gym`,
     loadComponent: () =>
-      import('./features/progress/progress-view').then((module) => module.ProgressView),
+      import('./features/progress/progress-entries').then((module) => module.ProgressEntries),
   },
   {
     // The coach's brand (R3.5a, plan §3.1), a Settings page beside the coaching space's details.
