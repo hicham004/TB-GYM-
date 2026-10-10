@@ -597,7 +597,9 @@ history lists every training max of their programs (STR-011, STR-014) beside the
 newest first, each named with its program, the week it applies from and where it came from, and dated the
 day the coach set it in that program's time zone. Each fact stays stored once: a program's max is never
 copied into the recorded maxes, and its id is the program max's, which Assign program never sends as a
-saved max, so the plain list (and Assign program) stays the recorded maxes alone.
+saved max, so the plain list (and Assign program) stays the recorded maxes alone. The coach's Strength
+history (R5.3d2) groups that list by lift; a coach records a training max or a tested one, because the
+server refuses a typed estimate (STR-001: an estimate needs a calculation or a workout).
 
 ## 6. Nutrition, recipes, and calorie targets
 
@@ -719,7 +721,12 @@ the simple 4/4/9 policy must be extended explicitly.
 
 **NUT-009** If the coach enters no calorie target, calculations use the current approved TDEE
 estimate. Entering a target creates a new calculation snapshot; old diet assignments retain
-the snapshot they were based on.
+the snapshot they were based on. A coach reads a client's declared allergens
+(`GET /api/nutrition/clients/{clientProfileId}/allergens`) and their last work-outs with the inputs and
+warnings (`.../calculations?take=`, newest first, 1 to 20, default 5), and the plan list names each plan and
+carries its snapshot macros (R5.3d1). All three follow the nutrition feature gate and the coach's assigned
+clients (ADR 0026): a closed feature, a client of another workspace or a released client (ADR 0027) is 403,
+and another coach's client is 404.
 
 **NUT-010** Allergy and medication data may warn the coach but the app must not claim medical
 diagnosis or guarantee recipe safety. Ingredient/allergen completeness and clinical scope

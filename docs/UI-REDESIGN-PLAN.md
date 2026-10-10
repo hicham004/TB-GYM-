@@ -94,7 +94,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.3a | **Invitations** (C2): who is waiting to join first with what happens next, Invite a client in a sheet (a name and an email, an optional phone and a birth date typed in three boxes), Send again, and Cancel after asking, Invite again when a link ran out or was cancelled, everyone earlier behind a closed disclosure; the kit's typed date input | §2, plus Vitest (the invitation tenant-ownership tests moved to the sheet) | Done · 2026-10-10 · ad46000 |
 | R5.3b | **My profile and the intake form** (M8, C3): the client's first-run questions as five short steps, each saved as they go and resumed where they stopped, then their answers as cards with an Edit sheet on each; the coach's view of the same answers with the same sheets, what a client still needs, and Finish setting up for the starting weight; the typed birth date; and the unsaved-changes guard on the steps and the sheets (§9) | §2, plus Vitest (steps, resume, validation in words, refusals, the guard, a late answer after a workspace switch) | Done · 2026-10-10 · a865fce |
 | R5.3c | **Weigh-ins, photos and measurements** (M5, C3): one Your entries page for the client with Weight, Measurements and Photos tabs (the tab kept in the address), and the same tabs for a coach inside a client's Progress; Log weight, Correct (a one-tap reason), Wrong day and See changes in sheets with the kit's date field, the client's saved kg or lb and a number out of range told in words; one sheet logs several measurements at once and another adds a photo set (front, side, back); a photo opens small and is removed with a reason; each entry says who added it; Show earlier reads the year before; Progress follows dark mode. A removed photo frees its date and pose, so a wrong shot can be retaken the same day (PRG-012) | §2, plus Vitest (the rules, every sheet, the page, the dashboard) and an API test (a retake after a removal, by the client and by the coach) | Done · 2026-10-10 · 2648962 |
-| R5.3d | **The coach's client nutrition and training tools** (C3, C7): the targets calculator and the max history | §2 | To do |
+| R5.3d1 | **The coach's client Nutrition tab** (C3): the latest targets with the numbers they came from, Work out targets in a sheet that starts from what the record knows (weight, height, age, steps, each with where it came from), the meal plans (current, coming, earlier) with their calories and macros, Assign a meal plan in a sheet that says in words what overlaps or is not covered before sending, and the client's allergens in a sheet; two new coach reads (the declared allergens, the last work-outs with their inputs and warnings) and the plan list now names each plan | §2, plus Vitest (the rules, every sheet, the page) and API tests (the two reads, plan names and macros, tenant, coach and released scoping) | Done · 2026-10-10 · 31ffbde |
+| R5.3d2 | **The coach's Strength history** (C7), replacing "More training tools" at the foot of Training: every max on record by lift (a program's training maxes beside the recorded ones, STR-015) with how it moved, a Record a max sheet (a training max or a tested one; a manual estimate is refused by the server, so it is not offered), and How they have done on a lift (their sets newest first, the best estimated max, a chart) | §2, plus Vitest (the rules, the picker, both sheets, the card, the date defaults moved to it) | Done · 2026-10-10 · 4d5b514 |
 | R5.3e | **The leftovers**: check-in forms and assignment buttons, the coach's workout page, the empty and status styles on Training, the plan dialogs' notes, the top bar's sign-out | §2 | To do |
 | R5.3f | **Delete the legacy CSS** (the global rules and variables in `styles.scss`), add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
@@ -265,7 +266,9 @@ of the implemented R1.3 screens before production rollout.
   warns at 5.85 kB (the error is at 8 kB). R5.3c measures 546.02 kB (R5.3b's build reads 542.92 kB): the
   build's stats show all of the +3.1 kB is Angular's own runtime moving into the start-up chunks, and the
   app's code in them is unchanged to within 13 bytes (the API client grew 42, for the date range on two
-  reads). The Entries page, its three sheet files and their models are lazy chunks.
+  reads). The Entries page, its three sheet files and their models are lazy chunks. R5.3d measures 544.91 kB (−1.1 kB):
+  the nutrition calls and models the old client page used left `ApiClient`, and the new Nutrition page and the
+  Strength history card load with their routes.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -291,9 +294,9 @@ of the implemented R1.3 screens before production rollout.
 - **Numbers in right-to-left (from R3.3b).** With English text in an RTL layout "60 kg × 5" and
   "2 of 5" reorder their pieces, as they already do on Today and Clients. Settle it with the
   translation work (locale number formatting, isolating each figure).
-- **Older training tools (from R3.4a).** Training max history (with the form to record one) and an
-  exercise's history are still the older forms, behind "More training tools" in a light scope inside
-  a dark page. Rebuild them as a sheet and a chart with the unsaved-changes guard (§9).
+- **Older training tools (from R3.4a), closed in R5.3d2.** Training max history, the form to record one and an
+  exercise's history are the Strength history card at the foot of Training: sheets and a chart with the
+  unsaved-changes guard (§9).
 - **Sheets on a wide screen (from R3.4a).** Every sheet opens from the bottom, centred, 40 rem wide,
   at every width. A side drawer from about 960 px would suit the long ones, Assign program and Build
   next block.
@@ -430,7 +433,7 @@ of the implemented R1.3 screens before production rollout.
   options at their average ("≈ 1,792 kcal"). A "main option" would need an order column and an owner
   decision. (2) Days are numbered, not weekdays: a plan runs from the day the coach picks when assigning
   it, as many days as it holds, so a month is four weeks (Add week copies the last seven days). (3)
-  Assigning a plan stays in the client's older Nutrition section, which reads the same plans. (4) Publish
+  Assigning a plan stays in the client's Nutrition section, which reads the same plans (rebuilt in R5.3d1). (4) Publish
   has no preview sheet: the grid with every day's total is the preview, and the checks run first, taking
   the coach to the name, the targets, the day or the meal at fault. (5) A plan cannot be archived or
   deleted, as before. (6) The recipe panel lists published recipes only; Manage opens the older Recipes
@@ -554,7 +557,7 @@ of the implemented R1.3 screens before production rollout.
   fact stored once (STR-015, ADR 0036); copying them into the recorded maxes would have stored them twice and
   offered them to Assign program as saved maxes. Recorded rows say "Recorded by a coach", "Tested" or
   "Estimated (Epley)" instead of a method code, and the column is "Where from". (9) is the no-break space.
-  The history itself is still the older form (see "Older training tools").
+  The history itself became the Strength history card in R5.3d2.
 
 - **Plans you sell, R5.1a (built 2026-10-08; screenshots `docs/design/r51a-*.png`). Decided by Claude for
   the owner on 2026-10-08**, after looking at Everfit (a teammate manages only the clients they are added
@@ -658,8 +661,8 @@ of the implemented R1.3 screens before production rollout.
   payments, refunds and credit (they need a ledger design), a trial extension, MRR figures, CSV export, an
   invoice PDF (no legal details yet), a reminder to chase an owner. Seen, not fixed: six other screens still
   use the browser's date input (check-in clients, Start a plan and Record payment for a client, Assign
-  program, program block dialogs, client nutrition); swapping each for the kit's date field is its own step
-  (the weigh-in, measurement and photo sheets took it in R5.3c).
+  program, program block dialogs); swapping each for the kit's date field is its own step
+  (the weigh-in, measurement and photo sheets took it in R5.3c, the nutrition sheets and Record a max in R5.3d).
   The initial bundle is 543.08 kB (R5.2a: 542.60; two routes and two icons) and `platform-space.scss` is 5.45 kB, 453
   bytes over its 5 kB warning budget. Checked with `/ui-review`: touch-action, a hover on Today and Clear, the
   textareas' autocomplete, a scroll margin so the sheet's sticky bar never covers a field, and the owner's email
@@ -762,6 +765,43 @@ of the implemented R1.3 screens before production rollout.
   was recorded in the year before these"). A client back after more than a year away would not reach
   the older ones from this page; a first-date field on those two reads, like the weight one, is the
   fix.
+
+- **The coach's client Nutrition tab and Strength history, R5.3d (built 2026-10-10; screenshots
+  `docs/design/r53d-*.png` and `r53d2-*.png`). Decided by Claude for the owner on 2026-10-10**, after
+  looking at Trainerize (its smart nutrition calculator takes age, gender, height, weight and activity and
+  works BMR (Mifflin-St Jeor), TDEE and a goal), Everfit (auto-calculated macro goals from Mifflin-St Jeor,
+  every number editable, and a choice of all macros, calories only, or protein and calories), CoachRx
+  (targets pulled from the client's profile and applied in one click), TrainHeroic (a Lift History with a
+  Working Max, tested entries and an estimated-max graph), a Trainerize idea (466 votes, unresolved) for
+  each client's 1RM, 3RM and 5RM history with a search, and the ISSN position stands on protein (1.4 to 2.0
+  g/kg a day, more in a deficit) and on body composition.
+  *Nutrition:* (1) **The calculator starts from the client's record and says where each number came from**
+  (the latest weigh-in, their height, their age on today's date, their steps), as CoachRx does; **sex and
+  work type are never guessed**, because the formulas depend on them and a wrong default is a wrong
+  target. The engine is the existing named, versioned strategies (NUT-007 to NUT-009); the page only asks and
+  words them. (2) **The goal is a quick pick** (lose 500 or 300, hold, gain 250 or 400 kcal a day) or a
+  typed number, and protein is a pick of 1.6, 1.8, 2.0 or 2.2 g/kg with fat picks beside it, as Trainerize
+  and Everfit offer presets with every number editable. (3) **A deficit is derived from the goal being below
+  zero**, never a separate tick that can disagree with it. (4) **Every plan carries all macros**, because the
+  snapshot stores them (NUT-008); Everfit's "calories only" and "protein and calories" are not built. (5)
+  **The client's allergens are read before a plan is assigned, and again before they are saved**: if
+  they changed in between, the coach is told instead of overwriting them. The server still takes the last
+  write. (6) **Assign checks for an overlap or a gap in words before anything is sent**, and a plan whose
+  allergens were not reviewed shows the review first (the server's `allergen_review_required`).
+  *Strength:* (1) **One card per lift**: the headline is the newest training max, a tested max sits
+  beside it, and the change since the earlier one of the same kind and unit is said in words, never
+  between kilograms and pounds. (2) **A coach records a training max or a tested one only**: the server
+  refuses a typed estimate ("An estimated max requires a calculation or a workout source"), and the
+  older form offered it and always failed. (3) **How they have done** lists their sets newest first, the
+  best estimated max and a chart of the estimates, in pages of 50. (4) **A lift is chosen from the ones
+  with a max first, then by searching the library** on the server (two letters, 8 matches), so a large
+  library is never loaded whole.
+  Not built: (a) **nutrition reads open only once a plan has started** (the training reads open earlier,
+  TRN-023), so a coach cannot work out targets for a client whose plan starts next week; (b) the calculator
+  takes kilograms and centimetres only (a client's saved pounds are shown, not converted); (c) targets with
+  no meal plan, carb cycling, typing the macros over the calculation, and stopping a plan early; (d) the
+  server checking that an allergen save was made from what is stored now; (e) the Strength history lists the 1,000 newest maxes
+  and the search the first 8 matches; (f) a chart of a lift's maxes across kinds.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1136,7 +1176,7 @@ limited to the coach's assigned clients.
     program yet" and the Overview's all open the same sheet (`?action=assign`).
   - Other programs: the ones running or coming and the earlier ones, each opening on a tap (a program
     past its last day that never closed reads "Ended"). Training max history and an exercise's history
-    are the older forms behind one collapsed "More training tools".
+    were the older forms behind one collapsed "More training tools" until R5.3d2 replaced them.
   - Follows dark mode. Screenshots on the Atlas demo: `docs/design/r34a-*.png`.
 - Built in R3.4b (Service & access), on the existing plan, payment and access endpoints; no backend
   change.

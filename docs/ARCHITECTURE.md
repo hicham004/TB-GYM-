@@ -593,8 +593,9 @@ dialogs (Assign program, Build next block, a session; Reschedule, Close program,
 and the Overview arrive as `?action=assign` and open the same sheet. The read sits in a feature-local
 `ClientProgramApi`, not `ApiClient`, so it stays out of the initial bundle. The server's refusals
 (overlap, coverage, a stale version, a started program) are worded for a coach in `programWriteError`,
-and the old stylesheet-and-form screen is gone; training max history and an exercise's history keep
-their older forms in `ClientTrainingTools`, behind one collapsed section in a light scope.
+and the old stylesheet-and-form screen is gone; training max history and an exercise's history are
+the Strength history card (`ClientStrength`, R5.3d): every max by lift, a Record a max sheet and a
+How they have done sheet.
 The coach's program, workout and records reads ask `CoachTrainingReadPolicy` (TRN-023, Training
 module) of the same access decision, so they also open before a booked plan begins; the client's own
 reads do not.

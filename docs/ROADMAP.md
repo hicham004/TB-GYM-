@@ -1061,7 +1061,9 @@ Launch fixes requested 2026-10-05 come before the next redesign row.
   (STR-015), and Coach Today keeps a number and its unit together on a phone. R5.3c, weight, measurements
   and photos (2026-10-10): the client's Your entries page and a coach's Entries and corrections are one
   screen with sheets for logging and correcting, and a removed progress photo frees its date and pose
-  (PRG-012).
+  (PRG-012). R5.3d, the coach's client Nutrition tab and Strength history (2026-10-10): the targets
+  calculator starts from the client's record, plans are assigned from a sheet that checks overlap first,
+  allergens are read and saved in a sheet, and a lift's maxes and sets are read and recorded from Training.
 
 Work follows this order; anything outside it needs the user's approval first.
 
