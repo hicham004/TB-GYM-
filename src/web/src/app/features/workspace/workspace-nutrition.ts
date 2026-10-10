@@ -11,12 +11,11 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
-import { SectionNav } from '../../ui/section-nav';
 import { Skeleton } from '../../ui/skeleton';
 import { UiToast } from '../../ui/toast';
 import { FoodApi } from '../nutrition/food-api';
 import { numeric } from '../training/training-builder.models';
-import { SETTINGS_SECTIONS } from './settings-sections';
+import { SettingsFrame } from '../settings/settings-frame';
 
 export const MAX_TOLERANCE = 500;
 
@@ -64,7 +63,7 @@ export function nutritionFormIssues(
  */
 @Component({
   selector: 'app-workspace-nutrition',
-  imports: [Button, Control, Field, FormsModule, SectionNav, Skeleton],
+  imports: [Button, Control, Field, FormsModule, SettingsFrame, Skeleton],
   templateUrl: './workspace-nutrition.html',
   styleUrl: './workspace-nutrition.scss',
   host: { class: 'tb-theme' },
@@ -78,7 +77,6 @@ export class WorkspaceNutrition {
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
 
-  protected readonly sections = SETTINGS_SECTIONS;
   protected readonly attempt = new FormAttempt();
   protected readonly saved = signal<NutritionWorkspaceSettingsView | null>(null);
   protected readonly loadFailed = signal(false);

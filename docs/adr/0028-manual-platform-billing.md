@@ -77,3 +77,6 @@ Chosen by the implementer, to confirm:
   allow-list on purpose.
 - Prices can change without a deploy; trial, due and grace periods apply per plan version.
 - Whish automation (Step 5) records payments through the same append-only payment row.
+- The owner's Billing page (R5.2a, 2026-10-09) shows each invoice's reference, lines, total and payment and
+  copies the reference for the transfer note. There is no printable or PDF invoice until TB Gym's legal name,
+  address and tax number are decided: a formal invoice carries them, and TB Gym does not invent that wording.

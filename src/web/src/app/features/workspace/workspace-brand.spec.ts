@@ -55,7 +55,11 @@ async function render(
     ...options.brandApi,
   };
   const csrf = { refresh: vi.fn(() => Promise.resolve()) };
-  const tenants = { selectedTenantId: signal('tenant-1'), load: vi.fn(() => Promise.resolve()) };
+  const tenants = {
+    selectedTenantId: signal('tenant-1'),
+    selectedMembership: signal({ tenantId: 'tenant-1', role: 'Owner' }),
+    load: vi.fn(() => Promise.resolve()),
+  };
   const toast = { show: vi.fn() };
   await TestBed.configureTestingModule({
     imports: [WorkspaceBrand],

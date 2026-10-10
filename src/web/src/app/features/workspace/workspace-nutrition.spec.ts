@@ -25,7 +25,13 @@ async function render(settings: NutritionWorkspaceSettingsView = nutritionSettin
       provideRouter([]),
       { provide: FoodApi, useValue: api },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
-      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      {
+        provide: TenantStore,
+        useValue: {
+          selectedTenantId: signal('tenant-1'),
+          selectedMembership: signal({ tenantId: 'tenant-1', role: 'Owner' }),
+        },
+      },
     ],
   });
   const fixture = TestBed.createComponent(WorkspaceNutrition);

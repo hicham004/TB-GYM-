@@ -24,6 +24,7 @@ import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { UiConfirm } from '../../ui/confirm';
+import { SettingsFrame } from '../settings/settings-frame';
 import { UiDialog } from '../../ui/dialog';
 import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
@@ -61,6 +62,7 @@ const localTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
     ReactiveFormsModule,
     RouterLink,
     Skeleton,
+    SettingsFrame,
     UiConfirm,
   ],
   templateUrl: './notification-preferences.html',

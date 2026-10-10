@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { confirmBeforeLeaving } from './core/forms/leave-guard';
 import {
   authGuard,
   clientGuard,
@@ -153,22 +154,26 @@ export const routes: Routes = [
       ),
   },
   {
+    // Settings › Name and region (R5.2a): rebuilt in the Settings layout, asks before changes are lost.
     path: 'workspace',
     canActivate: [authGuard, ownerGuard],
-    title: $localize`Coaching space | TB Gym`,
+    canDeactivate: [confirmBeforeLeaving],
+    data: REDESIGNED,
+    title: $localize`Name and region | TB Gym`,
     loadComponent: () =>
       import('./features/workspace/workspace-settings').then((module) => module.WorkspaceSettings),
   },
   {
     path: 'team',
     canActivate: [authGuard, ownerGuard],
+    data: REDESIGNED,
     title: $localize`Team | TB Gym`,
     loadComponent: () => import('./features/team/team').then((module) => module.Team),
   },
   {
     path: 'billing',
     canActivate: [authGuard, ownerGuard],
-    data: HOUSE_BRAND,
+    data: { ...HOUSE_BRAND, ...REDESIGNED },
     title: $localize`Billing | TB Gym`,
     loadComponent: () => import('./features/billing/billing').then((module) => module.Billing),
   },
@@ -182,9 +187,12 @@ export const routes: Routes = [
       import('./features/platform-admin/platform-admin').then((module) => module.PlatformAdmin),
   },
   {
+    // Rebuilt in R5.2a for staff and clients; a half-typed password change asks before it is lost.
     path: 'account/security',
     canActivate: [authGuard],
-    title: $localize`Account security | TB Gym`,
+    canDeactivate: [confirmBeforeLeaving],
+    data: REDESIGNED,
+    title: $localize`Password and security | TB Gym`,
     loadComponent: () =>
       import('./features/account/account-security').then((module) => module.AccountSecurity),
   },

@@ -5,7 +5,8 @@ import { of, throwError } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { settle, text } from '../../../testing/dom';
+import { UiToast } from '../../ui/toast';
+import { press, settle, text } from '../../../testing/dom';
 import { Billing } from './billing';
 import { BillingApi } from './billing-api';
 import type { BillingAmounts, BillingInvoice, WorkspaceBilling } from './billing.models';
@@ -78,70 +79,156 @@ function billing(overrides: Partial<WorkspaceBilling> = {}): WorkspaceBilling {
 }
 
 async function render(getWorkspaceBilling: () => unknown) {
+  const toast = { show: vi.fn() };
   await TestBed.configureTestingModule({
     imports: [Billing],
     providers: [
       provideRouter([]),
       { provide: BillingApi, useValue: { getWorkspaceBilling: vi.fn(getWorkspaceBilling) } },
-      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      { provide: UiToast, useValue: toast },
+      {
+        provide: TenantStore,
+        useValue: {
+          selectedTenantId: signal('tenant-1'),
+          selectedMembership: signal({ tenantId: 'tenant-1', role: 'Owner' }),
+        },
+      },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(Billing);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement };
+  return { fixture, host: fixture.nativeElement as HTMLElement, toast };
 }
 
-describe('Billing', () => {
+const textOf = (element: Element | null | undefined) =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+/** A bill line as read: its term, then its amount. */
+const line = (row: Element) =>
+  `${textOf(row.querySelector('dt'))} ${textOf(row.querySelector('dd'))}`;
+
+/** The sheet on top, which the CDK draws outside the page. */
+const sheet = () => {
+  const open = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+  return open.length ? open[open.length - 1] : null;
+};
+
+const PAYMENT = {
+  id: 'payment-1',
+  amount: 30.8,
+  currencyCode: 'USD',
+  reference: 'WHISH-1',
+  note: null,
+  receivedOn: '2026-08-03',
+  recordedAtUtc: '2026-08-03T10:00:00Z',
+};
+
+describe('Settings › Billing', () => {
   afterEach(() => {
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
+    vi.unstubAllGlobals();
   });
 
-  it('shows how to pay each unpaid invoice with its Whish number and reference code', async () => {
-    const { fixture, host } = await render(() => of(billing()));
+  it('leads with what is owed, then how to pay each unpaid invoice by its reference', async () => {
+    const { host } = await render(() => of(billing()));
 
-    const pay = host.querySelector('[data-how-to-pay]');
-    expect(pay?.textContent).toContain('+961 70 123 456');
-    expect(pay?.textContent).toContain('TBG-202607-ABC234');
-    expect(pay?.textContent).toContain('$44.00');
-    expect(host.querySelector('[data-unpaid]')?.textContent).toContain('$44.00');
-    expect(text(fixture)).toContain('Awaiting payment');
+    expect(textOf(host.querySelector('[data-unpaid]'))).toBe('To pay $44.00');
+    expect(textOf(host.querySelector('[data-billing-status] app-status-pill'))).toBe('Active');
+    const pay = host.querySelector('[data-how-to-pay]')!;
+    expect(textOf(pay.querySelector('.copyable .code'))).toBe('+961 70 123 456');
+    const owing = Array.from(pay.querySelectorAll('[data-owing]'));
+    expect(owing).toHaveLength(1);
+    expect(
+      ['.owing-month', '.owing-total', '.code', '.owing-due'].map((part) =>
+        textOf(owing[0].querySelector(part)),
+      ),
+    ).toEqual(['July 2026', '$44.00', 'TBG-202607-ABC234', 'Due Aug 8, 2026']);
+  });
+
+  it('copies the Whish number and a reference, and says so', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    const { fixture, host, toast } = await render(() => of(billing()));
+
+    (host.querySelector('[data-copy-whish]') as HTMLButtonElement).click();
+    await settle(fixture);
+    expect(writeText).toHaveBeenCalledWith('+961 70 123 456');
+    expect(toast.show).toHaveBeenCalledWith('Whish number copied.', { tone: 'success' });
+
+    press(host, 'Copy the reference for July 2026');
+    await settle(fixture);
+    expect(writeText).toHaveBeenCalledWith('TBG-202607-ABC234');
+    expect(toast.show).toHaveBeenCalledWith('Reference copied.', { tone: 'success' });
   });
 
   it('breaks this month so far down the way the invoice will be', async () => {
     const { host } = await render(() => of(billing()));
 
-    const month = host.querySelector('[data-current-month]')?.textContent ?? '';
-    expect(month).toContain('Seats (2)');
-    expect(month).toContain('Gym fee');
-    expect(month).toContain('$40.00');
-    expect(month).not.toContain('Discount');
+    const lines = Array.from(host.querySelectorAll('[data-current-month] .lines > div')).map(line);
+    expect(lines).toEqual([
+      '2 seats $30.00',
+      'Clients with a plan: 12, 10 included with your seats $0.00',
+      'Gym fee $10.00',
+      'Estimate so far $40.00',
+    ]);
   });
 
-  it('shows the invoice lines, the discount and the payment once paid', async () => {
+  it('lists each invoice on one line and opens its lines, discount and payment in a sheet', async () => {
     const paid = invoice({
       status: 'Paid',
       amounts: amounts({ discountPercent: 30, discountAmount: 13.2, total: 30.8 }),
-      payment: {
-        id: 'payment-1',
-        amount: 30.8,
-        currencyCode: 'USD',
-        reference: 'WHISH-1',
-        note: null,
-        receivedOn: '2026-08-03',
-        recordedAtUtc: '2026-08-03T10:00:00Z',
-      },
+      payment: PAYMENT,
     });
     const { fixture, host } = await render(() =>
       of(billing({ invoices: [paid], unpaidTotal: 0, readOnlyFrom: null })),
     );
 
     expect(host.querySelector('[data-how-to-pay]')).toBeNull();
-    const row = host.querySelector('[data-invoice="invoice-1"]')?.textContent ?? '';
-    expect(row).toContain('Discount (30%)');
-    expect(row).toContain('−$13.20');
-    expect(row).toContain('WHISH-1');
-    expect(text(fixture)).toContain('Paid');
+    expect(textOf(host.querySelector('[data-billing-status] .sentence'))).toBe(
+      'You’re all paid up. An invoice comes on the 1st of each month for the month before.',
+    );
+    const row = host.querySelector<HTMLButtonElement>('[data-invoice="invoice-1"] button')!;
+    expect(textOf(row)).toBe('July 2026 TBG-202607-ABC234 · paid Aug 3, 2026 $30.80 Paid');
+
+    row.click();
+    await settle(fixture);
+    expect(textOf(sheet()?.querySelector('h2'))).toBe('July 2026 invoice');
+    const lines = Array.from(sheet()!.querySelectorAll('.lines > div')).map(line);
+    expect(lines).toEqual([
+      'Seats: 2 × $15.00 $30.00',
+      'Clients with a plan: 12, 10 included with your seats, 2 more × $2.00 $4.00',
+      'Gym fee, from 2 seats $10.00',
+      'Discount (30%) −$13.20',
+      'Total $30.80',
+    ]);
+    expect(textOf(sheet())).toContain('Aug 3, 2026, transfer WHISH-1');
+  });
+
+  it('links a voided invoice to the one that replaced it', async () => {
+    const voided = invoice({
+      status: 'Void',
+      voidReason: 'Counted a coach twice.',
+      replacedByInvoiceId: 'invoice-2',
+    });
+    const reissued = invoice({
+      id: 'invoice-2',
+      referenceCode: 'TBG-202607-XYZ789',
+      replacesInvoiceId: 'invoice-1',
+    });
+    const { fixture, host } = await render(() => of(billing({ invoices: [reissued, voided] })));
+
+    expect(textOf(host.querySelector('[data-invoice="invoice-1"] .invoice-detail'))).toBe(
+      'TBG-202607-ABC234 · replaced, nothing to pay',
+    );
+    host.querySelector<HTMLButtonElement>('[data-invoice="invoice-1"] button')!.click();
+    await settle(fixture);
+    expect(textOf(sheet())).toContain('Voided by TB Gym: Counted a coach twice.');
+
+    press(sheet()!, 'Open the invoice that replaced it');
+    await settle(fixture);
+    expect(textOf(sheet()?.querySelector('.facts .code'))).toBe('TBG-202607-XYZ789');
   });
 
   it('explains the trial, and that nothing is charged for it', async () => {
@@ -159,13 +246,13 @@ describe('Billing', () => {
     );
 
     expect(text(fixture)).toContain('Free trial');
-    expect(text(fixture)).toContain('Nothing is charged for it.');
-    expect(text(fixture)).toContain('nothing to pay for this month so far');
+    expect(text(fixture)).toContain('Nothing is charged for it');
+    expect(text(fixture)).toContain('nothing to pay this month so far');
     expect(text(fixture)).toContain('No invoices yet.');
   });
 
   it('says plainly what read-only means for coaches and clients', async () => {
-    const { fixture } = await render(() =>
+    const { host } = await render(() =>
       of(
         billing({
           status: 'ReadOnly',
@@ -174,15 +261,28 @@ describe('Billing', () => {
       ),
     );
 
-    expect(text(fixture)).toContain('Read-only until paid');
-    expect(text(fixture)).toContain('Your clients keep full access, and nothing is deleted.');
+    expect(textOf(host.querySelector('[data-billing-status] app-status-pill'))).toBe(
+      'Read-only until paid',
+    );
+    expect(textOf(host.querySelector('[data-billing-status] .sentence'))).toContain(
+      'Your clients keep full use, and nothing is deleted.',
+    );
+    expect(textOf(host.querySelector('[data-invoice="invoice-1"] .invoice-detail'))).toBe(
+      'TBG-202607-ABC234 · was due Aug 8, 2026',
+    );
   });
 
-  it('reports a failed load instead of an empty page', async () => {
-    const { fixture } = await render(() =>
-      throwError(() => new HttpErrorResponse({ status: 500, error: {} })),
+  it('offers another try instead of an empty page when billing cannot be read', async () => {
+    let calls = 0;
+    const { fixture, host } = await render(() =>
+      ++calls === 1
+        ? throwError(() => new HttpErrorResponse({ status: 500, error: {} }))
+        : of(billing()),
     );
 
-    expect(text(fixture)).toContain('Billing could not be loaded.');
+    expect(textOf(host.querySelector('[role="alert"]'))).toBe('Billing couldn’t be loaded.');
+    press(host, 'Try again');
+    await settle(fixture);
+    expect(host.querySelector('[data-how-to-pay]')).not.toBeNull();
   });
 });

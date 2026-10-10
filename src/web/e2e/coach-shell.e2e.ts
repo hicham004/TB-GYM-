@@ -271,7 +271,7 @@ test('the workspace switcher and the account menu are keyboard operable', async 
   await account.focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#account-menu')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Account security' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Password and security' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('#account-menu')).toBeHidden();
   await expect(account).toBeFocused();

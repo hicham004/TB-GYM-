@@ -1,68 +1,146 @@
-import { DatePipe } from '@angular/common';
-import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import type { DialogRef } from '@angular/cdk/dialog';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
+  LOCALE_ID,
+  signal,
+  TemplateRef,
+  viewChild,
+} from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { TeamApi } from './team-api';
 import { apiErrorMessage } from '../../core/api/api-error';
-import { ClientInvitation, TeamMember } from '../../core/api/api.models';
+import type { ClientInvitation, TeamMember } from '../../core/api/api.models';
+import { AuthStore } from '../../core/auth/auth.store';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { Avatar } from '../../ui/avatar';
 import { Button } from '../../ui/button';
+import { UiConfirm } from '../../ui/confirm';
+import { UiDialog } from '../../ui/dialog';
+import { EmptyState } from '../../ui/empty-state';
 import { Control, Field } from '../../ui/field';
-import { SectionNav } from '../../ui/section-nav';
-import { StatusLabel } from '../../ui/status-label';
-import { SETTINGS_SECTIONS } from '../workspace/settings-sections';
+import { Icon } from '../../ui/icon';
+import { UiMenu } from '../../ui/menu';
+import type { ModalSurface } from '../../ui/modal-surface';
+import { UiSheet } from '../../ui/sheet';
+import { Skeleton } from '../../ui/skeleton';
+import { StatusPill } from '../../ui/status-pill';
+import { UiToast } from '../../ui/toast';
+import { SettingsFrame } from '../settings/settings-frame';
+import { TeamApi } from './team-api';
+import {
+  type InvitationRow,
+  invitationRows,
+  type MemberRow,
+  memberRows,
+  teamSummary,
+} from './team.models';
 
 type InviteField = 'email' | 'firstName' | 'lastName';
 
+interface InviteDraft {
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
+const EMPTY_INVITE: InviteDraft = { email: '', firstName: '', lastName: '' };
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /**
- * The owner's team (ADR 0026): who coaches in this workspace, inviting a coach, and removing one.
+ * Settings › Team (C9, R5.2a; ADR 0026): who coaches here, each with a face, their clients and when
+ * they joined; inviting a coach in a sheet; who is still to accept, with a new link or a cancel in
+ * each row's menu; and removing a coach, asked first because their clients move to the owner.
  *
- * Presentation only. The API refuses every call here to anyone but the owner, and removal moves the
- * coach's clients to the owner in the same transaction — this page just says so before asking.
+ * Presentation only. The API refuses every call here to anyone but the owner, and moves a removed
+ * coach's clients in the same transaction.
  */
 @Component({
   selector: 'app-team',
-  imports: [DatePipe, ReactiveFormsModule, Button, Control, Field, SectionNav, StatusLabel],
+  imports: [
+    Avatar,
+    Button,
+    Control,
+    EmptyState,
+    Field,
+    Icon,
+    SettingsFrame,
+    Skeleton,
+    StatusPill,
+    UiConfirm,
+    UiMenu,
+  ],
   templateUrl: './team.html',
   styleUrl: './team.scss',
 })
 export class Team {
   private readonly api = inject(TeamApi);
+  private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
-  private readonly formBuilder = inject(FormBuilder);
   private readonly tenants = inject(TenantStore);
+  private readonly sheets = inject(UiSheet);
+  private readonly dialogs = inject(UiDialog);
+  private readonly toast = inject(UiToast);
+  private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
-  private readonly removeDialog = viewChild<ElementRef<HTMLDialogElement>>('removeDialog');
-  private readonly removeCancel = viewChild<ElementRef<HTMLButtonElement>>('removeCancel');
-  private removeTrigger: HTMLElement | null = null;
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly inviteSheet = viewChild.required<TemplateRef<unknown>>('inviteSheet');
+  private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private loadedTenant: string | null = null;
+  private openInvite: DialogRef<unknown, ModalSurface> | null = null;
 
-  protected readonly sections = SETTINGS_SECTIONS;
-  protected readonly members = signal<TeamMember[]>([]);
-  protected readonly invitations = signal<ClientInvitation[]>([]);
-  protected readonly loading = signal(false);
-  protected readonly inviting = signal(false);
-  protected readonly removing = signal(false);
-  protected readonly pendingRow = signal<string | null>(null);
-  protected readonly pendingRemoval = signal<TeamMember | null>(null);
-  protected readonly error = signal<string | null>(null);
-  protected readonly notice = signal<string | null>(null);
-  protected readonly lastLink = signal<string | null>(null);
-  protected readonly pendingInvitations = computed(() =>
-    this.invitations().filter((invitation) => invitation.status === 'Pending'),
+  protected readonly closeLabel = $localize`Close`;
+  protected readonly loadingLabel = $localize`Loading your team…`;
+  protected readonly invitedLabel = $localize`Invited`;
+  protected readonly expiredLabel = $localize`Link ran out`;
+
+  protected readonly members = signal<readonly TeamMember[]>([]);
+  protected readonly invitations = signal<readonly ClientInvitation[]>([]);
+  protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
+  /** The member or invitation a write is changing, so its menu waits. */
+  protected readonly working = signal<string | null>(null);
+  protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
+    null,
   );
+
+  protected readonly invite = signal<InviteDraft>(EMPTY_INVITE);
+  protected readonly inviting = signal(false);
+  protected readonly inviteError = signal<string | null>(null);
   protected readonly attempt = new FormAttempt();
-  protected readonly inviteForm = this.formBuilder.nonNullable.group({
-    email: ['', [Validators.required, Validators.email, Validators.maxLength(320)]],
-    firstName: ['', [Validators.required, Validators.maxLength(100)]],
-    lastName: ['', [Validators.required, Validators.maxLength(100)]],
-  });
+  /** The last invitation's link, shown only by a development server (it never emails). */
+  protected readonly devLink = signal<string | null>(null);
+
+  protected readonly rows = computed(() =>
+    memberRows(this.members(), this.auth.user()?.id ?? null, this.locale),
+  );
+  protected readonly waiting = computed(() =>
+    invitationRows(this.invitations(), new Date(), this.locale),
+  );
+  protected readonly summary = computed(() => teamSummary(this.members()));
+  protected readonly coachCount = computed(
+    () => this.members().filter((member) => member.role === 'Coach').length,
+  );
+  protected readonly inviteErrors = computed(() => inviteErrors(this.invite()));
 
   constructor() {
-    this.scope.onReset(() => this.resetTenantState());
+    inject(DestroyRef).onDestroy(() => this.openInvite?.close());
+    this.scope.onReset(() => {
+      this.loadedTenant = null;
+      this.openInvite?.close();
+      this.members.set([]);
+      this.invitations.set([]);
+      this.state.set('loading');
+      this.working.set(null);
+      this.devLink.set(null);
+    });
+    afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
     effect(() => {
       this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
@@ -73,159 +151,9 @@ export class Team {
     });
   }
 
-  protected errorsFor(field: InviteField): readonly string[] {
-    const control = this.inviteForm.controls[field];
-    if (control.hasError('required')) {
-      return field === 'email'
-        ? [$localize`Enter the coach’s email address.`]
-        : field === 'firstName'
-          ? [$localize`Enter the coach’s first name.`]
-          : [$localize`Enter the coach’s last name.`];
-    }
-    if (control.hasError('email')) {
-      return [$localize`Enter an email address like name@example.com.`];
-    }
-    if (control.hasError('maxlength')) {
-      return [$localize`This is too long.`];
-    }
-    return [];
-  }
-
-  protected shownErrors(field: InviteField): readonly string[] | null {
-    const errors = this.errorsFor(field);
-    return this.attempt.shows(field, errors) ? errors : null;
-  }
-
-  protected roleLabel(member: TeamMember): string {
-    return member.role === 'Owner' ? $localize`Owner` : $localize`Coach`;
-  }
-
-  protected async invite(): Promise<void> {
-    if (this.inviteForm.invalid) {
-      this.attempt.attempt();
-      return;
-    }
-
-    return this.scope.run('invite', async (owner) => {
-      this.inviting.set(true);
-      this.clearMessages();
-      try {
-        await owner.wait(this.csrf.refresh());
-        const value = this.inviteForm.getRawValue();
-        const invitation = await owner.wait(
-          firstValueFrom(
-            this.api.createCoachInvitation({
-              email: value.email.trim(),
-              firstName: value.firstName.trim(),
-              lastName: value.lastName.trim(),
-            }),
-          ),
-        );
-        this.invitations.update((items) => [invitation, ...items]);
-        this.lastLink.set(invitation.developmentActionUrl);
-        this.notice.set($localize`Invitation sent to ${invitation.email}:email:.`);
-        this.inviteForm.reset();
-        this.attempt.reset();
-      } catch (error) {
-        if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`The invitation could not be sent.`));
-      } finally {
-        if (owner.current) this.inviting.set(false);
-      }
-    });
-  }
-
-  protected async resend(invitation: ClientInvitation): Promise<void> {
-    return this.runInvitationAction(
-      invitation,
-      () => this.api.resendCoachInvitation(invitation.id, crypto.randomUUID(), invitation.version),
-      $localize`A new invitation link was sent. Any earlier link no longer works.`,
-    );
-  }
-
-  protected async revoke(invitation: ClientInvitation): Promise<void> {
-    return this.runInvitationAction(
-      invitation,
-      () => this.api.revokeCoachInvitation(invitation.id, invitation.version),
-      $localize`Invitation revoked.`,
-    );
-  }
-
-  /** Removal asks first. Only the dialog's own Remove coach button calls the API. */
-  protected requestRemoval(member: TeamMember, event: Event): void {
-    if (this.removing() || member.role !== 'Coach') return;
-    this.removeTrigger = event.currentTarget as HTMLElement | null;
-    this.pendingRemoval.set(member);
-    this.clearMessages();
-    const dialog = this.removeDialog()?.nativeElement;
-    if (dialog && !dialog.open) dialog.showModal();
-    // The least destructive action holds focus once the dialog's content has rendered.
-    setTimeout(() => this.removeCancel()?.nativeElement.focus());
-  }
-
-  /** Cancel and Escape both land here: nothing is sent, and focus returns to Remove. */
-  protected cancelRemoval(event?: Event): void {
-    event?.preventDefault();
-    if (this.removing()) return;
-    this.closeRemoveDialog(true);
-  }
-
-  protected async confirmRemoval(): Promise<void> {
-    const member = this.pendingRemoval();
-    if (member === null || this.removing()) return;
-
-    return this.scope.run('remove', async (owner) => {
-      this.removing.set(true);
-      this.clearMessages();
-      try {
-        await owner.wait(this.csrf.refresh());
-        const outcome = await owner.wait(
-          firstValueFrom(this.api.removeTeamCoach(member.userId, member.version)),
-        );
-        this.notice.set(
-          $localize`${member.displayName}:name: was removed from the team. Clients moved to you: ${outcome.reassignedClientCount}:count:.`,
-        );
-        await owner.wait(this.load());
-      } catch (error) {
-        if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`The coach could not be removed.`));
-      } finally {
-        if (owner.current) {
-          this.removing.set(false);
-          this.closeRemoveDialog(false);
-        }
-      }
-    });
-  }
-
-  private async runInvitationAction(
-    invitation: ClientInvitation,
-    request: () => ReturnType<TeamApi['revokeCoachInvitation']>,
-    successMessage: string,
-  ): Promise<void> {
-    return this.scope.run('invitation', async (owner) => {
-      this.pendingRow.set(invitation.id);
-      this.clearMessages();
-      try {
-        await owner.wait(this.csrf.refresh());
-        const updated = await owner.wait(firstValueFrom(request()));
-        this.invitations.update((items) =>
-          items.map((item) => (item.id === updated.id ? updated : item)),
-        );
-        this.lastLink.set(updated.status === 'Pending' ? updated.developmentActionUrl : null);
-        this.notice.set(successMessage);
-      } catch (error) {
-        if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`The invitation could not be updated.`));
-      } finally {
-        if (owner.current) this.pendingRow.set(null);
-      }
-    });
-  }
-
-  private async load(): Promise<void> {
+  protected async load(): Promise<void> {
     return this.scope.run('load', async (owner) => {
-      this.loading.set(true);
+      if (this.members().length === 0) this.state.set('loading');
       try {
         const [members, invitations] = await owner.wait(
           Promise.all([
@@ -235,40 +163,235 @@ export class Team {
         );
         this.members.set(members);
         this.invitations.set(invitations);
-      } catch (error) {
+        this.state.set('ready');
+      } catch {
         if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`The team could not be loaded.`));
-      } finally {
-        if (owner.current) this.loading.set(false);
+        // A reload after a write keeps the rows on screen; only a first load shows the failure.
+        if (this.members().length === 0) this.state.set('error');
       }
     });
   }
 
-  private closeRemoveDialog(returnFocus: boolean): void {
-    const dialog = this.removeDialog()?.nativeElement;
-    if (dialog?.open) dialog.close();
-    this.pendingRemoval.set(null);
-    if (returnFocus) this.removeTrigger?.focus();
-    this.removeTrigger = null;
-  }
+  // ---------- inviting ----------
 
-  private clearMessages(): void {
-    this.error.set(null);
-    this.notice.set(null);
-  }
-
-  private resetTenantState(): void {
-    this.loadedTenant = null;
-    this.members.set([]);
-    this.invitations.set([]);
-    this.loading.set(false);
-    this.inviting.set(false);
-    this.removing.set(false);
-    this.pendingRow.set(null);
-    this.lastLink.set(null);
-    this.closeRemoveDialog(false);
-    this.clearMessages();
-    this.inviteForm.reset();
+  protected openInviteSheet(): void {
+    this.invite.set(EMPTY_INVITE);
+    this.inviteError.set(null);
     this.attempt.reset();
+    this.openInvite?.close();
+    const sheet = this.sheets.open(this.inviteSheet(), {
+      title: $localize`Invite a coach`,
+      closeLabel: this.closeLabel,
+      canClose: () => this.mayDiscardInvite(),
+    });
+    this.openInvite = sheet;
+    sheet.closed.subscribe(() => {
+      if (this.openInvite === sheet) this.openInvite = null;
+    });
   }
+
+  protected setInvite(change: Partial<InviteDraft>): void {
+    this.invite.update((draft) => ({ ...draft, ...change }));
+    this.inviteError.set(null);
+  }
+
+  protected shownInviteErrors(field: InviteField): readonly string[] | null {
+    const errors = this.inviteErrors()[field];
+    return this.attempt.shows(field, errors) ? errors : null;
+  }
+
+  protected async cancelInvite(): Promise<void> {
+    if (await this.mayDiscardInvite()) this.openInvite?.close();
+  }
+
+  protected async sendInvite(): Promise<void> {
+    if (this.inviting()) return;
+    const errors = this.inviteErrors();
+    const invalid = (['email', 'firstName', 'lastName'] as const).find(
+      (field) => errors[field].length > 0,
+    );
+    if (invalid) {
+      this.attempt.attempt();
+      setTimeout(() => document.getElementById(`invite-${invalid}`)?.focus());
+      return;
+    }
+
+    return this.scope.run('invite', async (owner) => {
+      this.inviting.set(true);
+      this.inviteError.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        const draft = this.invite();
+        const invitation = await owner.wait(
+          firstValueFrom(
+            this.api.createCoachInvitation({
+              email: draft.email.trim(),
+              firstName: draft.firstName.trim(),
+              lastName: draft.lastName.trim(),
+            }),
+          ),
+        );
+        this.invitations.update((items) => [invitation, ...items]);
+        this.devLink.set(invitation.developmentActionUrl);
+        this.invite.set(EMPTY_INVITE);
+        this.openInvite?.close();
+        this.toast.show($localize`Invitation sent to ${invitation.email}:email:.`, {
+          tone: 'success',
+        });
+      } catch (error) {
+        if (!owner.current) return;
+        this.inviteError.set(apiErrorMessage(error, $localize`The invitation couldn’t be sent.`));
+      } finally {
+        if (owner.current) this.inviting.set(false);
+      }
+    });
+  }
+
+  /** True when nothing typed would be lost, or the owner chose to lose it. */
+  private async mayDiscardInvite(): Promise<boolean> {
+    const draft = this.invite();
+    if (!draft.email.trim() && !draft.firstName.trim() && !draft.lastName.trim()) return true;
+    return this.ask(
+      $localize`What you typed isn’t sent. If you close it now, it is lost.`,
+      $localize`Close without sending`,
+      $localize`Keep editing`,
+      $localize`Close without sending?`,
+    );
+  }
+
+  // ---------- rows ----------
+
+  protected memberChosen(row: MemberRow, action: string): void {
+    if (action === 'remove') void this.remove(row.member);
+  }
+
+  protected invitationChosen(row: InvitationRow, action: string): void {
+    if (action === 'resend') void this.resend(row.invitation);
+    if (action === 'revoke') void this.revoke(row.invitation);
+  }
+
+  private async remove(member: TeamMember): Promise<void> {
+    if (this.working()) return;
+    const clients = member.assignedClientCount;
+    const yes = await this.ask(
+      clients === 0
+        ? $localize`${member.displayName}:name: loses access right away. Any client invitation they sent lands with you. Nothing is deleted.`
+        : $localize`${member.displayName}:name: loses access right away. Their ${clients}:count: clients move to you with all their history, and any client invitation they sent lands with you. Nothing is deleted, and you can give each client another coach afterwards.`,
+      $localize`Remove coach`,
+      $localize`Keep them`,
+      $localize`Remove ${member.displayName}:name:?`,
+    );
+    if (!yes) return;
+
+    return this.scope.run('remove', async (owner) => {
+      this.working.set(member.userId);
+      try {
+        await owner.wait(this.csrf.refresh());
+        const outcome = await owner.wait(
+          firstValueFrom(this.api.removeTeamCoach(member.userId, member.version)),
+        );
+        await owner.wait(this.load());
+        this.toast.show(
+          outcome.reassignedClientCount === 0
+            ? $localize`${member.displayName}:name: left the team.`
+            : $localize`${member.displayName}:name: left the team. ${outcome.reassignedClientCount}:count: clients moved to you.`,
+          { tone: 'success' },
+        );
+      } catch (error) {
+        if (!owner.current) return;
+        this.toast.show(apiErrorMessage(error, $localize`The coach couldn’t be removed.`), {
+          tone: 'error',
+        });
+      } finally {
+        if (owner.current) this.working.set(null);
+      }
+    });
+  }
+
+  private async resend(invitation: ClientInvitation): Promise<void> {
+    await this.invitationWrite(
+      invitation,
+      () => this.api.resendCoachInvitation(invitation.id, crypto.randomUUID(), invitation.version),
+      $localize`A new link went to ${invitation.email}:email:. The one sent before no longer works.`,
+    );
+  }
+
+  private async revoke(invitation: ClientInvitation): Promise<void> {
+    const name = `${invitation.firstName} ${invitation.lastName}`.trim();
+    const yes = await this.ask(
+      $localize`The link sent to ${invitation.email}:email: stops working. You can invite ${name}:name: again later.`,
+      $localize`Cancel the invitation`,
+      $localize`Keep it`,
+      $localize`Cancel the invitation to ${name}:name:?`,
+    );
+    if (!yes) return;
+    await this.invitationWrite(
+      invitation,
+      () => this.api.revokeCoachInvitation(invitation.id, invitation.version),
+      $localize`The invitation to ${invitation.email}:email: is cancelled. Its link no longer works.`,
+    );
+  }
+
+  private async invitationWrite(
+    invitation: ClientInvitation,
+    request: () => ReturnType<TeamApi['revokeCoachInvitation']>,
+    done: string,
+  ): Promise<void> {
+    if (this.working()) return;
+    return this.scope.run('invitation', async (owner) => {
+      this.working.set(invitation.id);
+      try {
+        await owner.wait(this.csrf.refresh());
+        const updated = await owner.wait(firstValueFrom(request()));
+        this.invitations.update((items) =>
+          items.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        this.devLink.set(updated.status === 'Pending' ? updated.developmentActionUrl : null);
+        this.toast.show(done, { tone: 'success' });
+      } catch (error) {
+        if (!owner.current) return;
+        this.toast.show(apiErrorMessage(error, $localize`The invitation couldn’t be changed.`), {
+          tone: 'error',
+        });
+        await owner.wait(this.load());
+      } finally {
+        if (owner.current) this.working.set(null);
+      }
+    });
+  }
+
+  private async ask(message: string, confirm: string, cancel: string, title: string) {
+    this.asking.set({ message, confirm, cancel });
+    const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
+      title,
+      closeLabel: this.closeLabel,
+    });
+    const answer = await firstValueFrom(dialog.closed);
+    this.asking.set(null);
+    return answer === true;
+  }
+}
+
+function inviteErrors(draft: InviteDraft): Record<InviteField, readonly string[]> {
+  const email = draft.email.trim();
+  return {
+    email:
+      email.length === 0
+        ? [$localize`Type the coach’s email address.`]
+        : email.length > 320 || !EMAIL.test(email)
+          ? [$localize`Type an email address like name@example.com.`]
+          : [],
+    firstName:
+      draft.firstName.trim().length === 0
+        ? [$localize`Type the coach’s first name.`]
+        : draft.firstName.trim().length > 100
+          ? [$localize`Keep it to 100 characters.`]
+          : [],
+    lastName:
+      draft.lastName.trim().length === 0
+        ? [$localize`Type the coach’s last name.`]
+        : draft.lastName.trim().length > 100
+          ? [$localize`Keep it to 100 characters.`]
+          : [],
+  };
 }

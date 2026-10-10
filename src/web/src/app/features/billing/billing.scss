@@ -1,164 +1,376 @@
-// Settings / Billing (ADR 0028). The Team page's header and card patterns; no new visual language.
-:host {
-  display: block;
+// Settings › Billing (R5.2a). Brand v2 tokens only; the route keeps TB Gym's own colours (HOUSE_BRAND).
+@use '../settings/settings-page';
+
+.panel {
+  max-inline-size: 48rem;
 }
 
-.page-header {
-  display: grid;
-  gap: var(--space-16);
+// ---------- where the bill stands ----------
+
+.hero {
+  gap: 0.75rem;
+
+  &.owing {
+    border-color: var(--tb-warm);
+    box-shadow:
+      inset 4px 0 var(--tb-warm),
+      var(--tb-shadow-card);
+  }
 }
 
-.page-title {
+:host-context([dir='rtl']) .hero.owing {
+  box-shadow:
+    inset -4px 0 var(--tb-warm),
+    var(--tb-shadow-card);
+}
+
+.hero-head {
+  display: flex;
+}
+
+.owed {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  min-inline-size: 0;
-}
-
-.page-title h1 {
+  gap: 0.125rem;
   margin: 0;
 }
 
-.scope {
-  color: var(--color-text-secondary);
+.owed-label {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.owed-amount {
+  color: var(--tb-ink);
+  font-size: clamp(2rem, 1.6rem + 1.6vw, 2.5rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.sentence {
+  color: var(--tb-ink);
   margin: 0;
-  max-inline-size: var(--content-width-720);
+  max-inline-size: 40rem;
 }
 
-.page-error {
-  margin: 0;
-}
+// ---------- how to pay ----------
 
-.page-error:not(:empty) {
-  background-color: var(--color-danger-subtle);
-  border-radius: var(--radius-6);
-  color: var(--color-danger);
-  margin-block-start: var(--space-16);
-  padding: var(--space-8) var(--space-12);
-}
-
-.card {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-8);
-  margin-block-start: var(--space-24);
-  min-inline-size: 0;
-  overflow: hidden;
-}
-
-.card-title {
-  margin: 0;
-  padding: var(--space-16) var(--space-24) var(--space-8);
-}
-
-.card-body {
-  display: grid;
-  gap: var(--space-12);
-  padding: 0 var(--space-24) var(--space-16);
-}
-
-.card-body p {
-  margin: 0;
-  max-inline-size: var(--content-width-720);
-}
-
-.card-help,
-.card-state {
-  color: var(--color-text-secondary);
-  font-size: var(--text-compact-size);
-  line-height: var(--text-compact-line-height);
-  margin: 0;
-}
-
-.card-state {
-  padding: 0 var(--space-24) var(--space-16);
-}
-
-.unpaid {
+.steps {
+  counter-reset: step;
   display: flex;
-  gap: var(--space-8);
-}
-
-code,
-.whish {
-  font-family: var(--font-family-mono, monospace);
-  overflow-wrap: anywhere;
-}
-
-.pay-list,
-.invoices {
-  display: grid;
-  gap: var(--space-8);
+  flex-direction: column;
+  gap: 1rem;
   list-style: none;
   margin: 0;
   padding: 0;
+
+  > li {
+    counter-increment: step;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding-inline-start: 2.25rem;
+    position: relative;
+
+    &::before {
+      align-items: center;
+      background: var(--tb-accent-soft);
+      block-size: 1.5rem;
+      border-radius: 50%;
+      color: var(--tb-ink);
+      content: counter(step);
+      display: flex;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      inline-size: 1.5rem;
+      inset-block-start: 0;
+      inset-inline-start: 0;
+      justify-content: center;
+      position: absolute;
+    }
+  }
+
+  p {
+    color: var(--tb-ink);
+    margin: 0;
+  }
 }
 
-.pay-list li {
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-6);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4) var(--space-16);
-  padding: var(--space-8) var(--space-12);
-}
-
-.due {
-  color: var(--color-text-secondary);
-}
-
-.invoices {
-  padding: 0 var(--space-24) var(--space-16);
-}
-
-.invoices li {
-  border-block-start: 1px solid var(--color-border-subtle);
-}
-
-summary {
+.copyable {
   align-items: center;
-  cursor: pointer;
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: var(--space-8) var(--space-16);
-  padding-block: var(--space-12);
+  gap: 0.25rem 0.5rem;
 }
 
-.invoice-month {
-  flex: 1 1 10rem;
-  font-weight: var(--font-weight-strong);
+.code {
+  background: var(--tb-surface-2);
+  border: 1px solid var(--tb-line);
+  border-radius: 0.375rem;
+  color: var(--tb-ink);
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  padding: 0.125rem 0.5rem;
+}
+
+.owing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  li {
+    align-items: center;
+    border: 1px solid var(--tb-line);
+    border-radius: var(--tb-radius-control);
+    display: grid;
+    gap: 0.25rem 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 0.625rem 0.875rem;
+  }
+}
+
+.owing-month {
+  color: var(--tb-ink);
+  font-weight: 600;
+}
+
+.owing-total {
+  color: var(--tb-ink);
+  font-variant-numeric: tabular-nums;
+  justify-self: end;
+}
+
+.owing-due {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  justify-self: end;
+}
+
+// ---------- lines of a bill ----------
+
+.trial {
+  color: var(--tb-ink);
+  margin: 0;
 }
 
 .lines {
-  display: grid;
-  gap: var(--space-4);
-  margin: 0 0 var(--space-12);
-}
-
-.lines div {
   display: flex;
-  gap: var(--space-16);
-  justify-content: space-between;
+  flex-direction: column;
+  margin: 0;
+
+  > div {
+    align-items: baseline;
+    border-block-end: 1px solid var(--tb-line);
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding-block: 0.5rem;
+  }
+
+  dt {
+    color: var(--tb-muted);
+    font-size: 0.9375rem;
+  }
+
+  dd {
+    color: var(--tb-ink);
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .discount dd {
+    color: var(--tb-success);
+  }
+
+  .total {
+    border-block-end: 0;
+    padding-block-start: 0.75rem;
+
+    dt,
+    dd {
+      color: var(--tb-ink);
+      font-size: 1.0625rem;
+      font-weight: 600;
+    }
+  }
 }
 
-.lines dt {
-  color: var(--color-text-secondary);
+// ---------- the invoice list ----------
+
+.invoices {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: -0.5rem 0 0;
+  padding: 0;
+
+  li + li {
+    border-block-start: 1px solid var(--tb-line);
+  }
+}
+
+.invoice-row {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-ink);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 0.25rem 1rem;
+  grid-template-areas: 'main total status open';
+  grid-template-columns: minmax(0, 1fr) auto auto 1.25rem;
+  inline-size: 100%;
+  min-block-size: 3.5rem;
+  padding: 0.75rem 0.25rem;
+  text-align: start;
+
+  &:hover {
+    background: var(--tb-surface-2);
+  }
+
+  &:focus-visible {
+    outline: 3px solid var(--tb-focus);
+    outline-offset: -3px;
+  }
+}
+
+.invoice-main {
+  display: flex;
+  flex-direction: column;
+  grid-area: main;
   min-inline-size: 0;
+}
+
+.invoice-month {
+  font-weight: 600;
+}
+
+.invoice-detail {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
   overflow-wrap: anywhere;
 }
 
-.lines dd {
+.invoice-total {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  grid-area: total;
+  justify-self: end;
+}
+
+.invoice-status {
+  grid-area: status;
+}
+
+.invoice-open {
+  color: var(--tb-muted);
+  grid-area: open;
+}
+
+:host-context([dir='rtl']) .invoice-open {
+  transform: scaleX(-1);
+}
+
+.void .invoice-month,
+.void .invoice-total {
+  color: var(--tb-muted);
+  text-decoration: line-through;
+}
+
+// ---------- the invoice sheet ----------
+
+.invoice-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sheet-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+}
+
+.sheet-total {
+  color: var(--tb-ink);
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
   margin: 0;
-  text-align: end;
-  white-space: nowrap;
 }
 
-.lines .total {
-  border-block-start: 1px solid var(--color-border-subtle);
-  font-weight: var(--font-weight-strong);
-  padding-block-start: var(--space-4);
+.facts {
+  display: grid;
+  gap: 0.5rem 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  margin: 0;
+
+  dt {
+    color: var(--tb-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  dd {
+    color: var(--tb-ink);
+    margin: 0.125rem 0 0;
+  }
 }
 
-.lines .total dt {
-  color: inherit;
+.note {
+  background: var(--tb-surface-2);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-ink);
+  margin: 0;
+  padding: 0.75rem 1rem;
+}
+
+// A phone: an invoice row keeps its month, total and status, and the reference wraps under.
+@container (max-width: 30rem) {
+  .invoice-row {
+    grid-template-areas:
+      'month total open'
+      'detail detail open'
+      'status status open';
+    grid-template-columns: minmax(0, 1fr) auto 1.25rem;
+  }
+
+  .invoice-main {
+    display: contents;
+  }
+
+  .invoice-month {
+    grid-area: month;
+  }
+
+  .invoice-detail {
+    grid-area: detail;
+  }
+
+  .invoice-status {
+    justify-self: start;
+    margin-block-start: 0.25rem;
+  }
+
+  .owing-list li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .owing-total,
+  .owing-due {
+    justify-self: start;
+  }
 }

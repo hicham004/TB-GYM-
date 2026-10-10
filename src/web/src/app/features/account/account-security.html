@@ -1,74 +1,121 @@
-<section class="page-heading">
-  <div>
-    <p class="eyebrow" i18n>Account</p>
-    <h1 i18n>Security</h1>
-    <p i18n>Signed in as {{ auth.user()?.email }}</p>
-  </div>
-</section>
+<app-settings-frame>
+  <header settingsHead class="top">
+    @if (isClient()) {
+      <a class="back" routerLink="/me">
+        <app-icon name="chevron-right" class="back-icon" />
+        <span i18n>Me</span>
+      </a>
+    }
+    <h1 #heading tabindex="-1" i18n>Password and security</h1>
+    <p class="lede" i18n>
+      Signed in as <span class="email" dir="ltr" translate="no">{{ auth.user()?.email }}</span
+      >.
+    </p>
+  </header>
 
-@if (error()) {
-  <p class="form-error" role="alert">{{ error() }}</p>
-}
-@if (notice()) {
-  <p class="form-success" role="status">{{ notice() }}</p>
-}
-
-<section class="surface-section security-section">
-  <div class="section-heading">
-    <h2 i18n>Change password</h2>
-  </div>
-  <form [formGroup]="form" (ngSubmit)="changePassword()" novalidate>
-    <div class="form-grid">
-      <div class="span-full">
-        <label for="account-current-password"><span i18n>Current password</span></label>
+  <div class="stack">
+    <form
+      class="panel"
+      novalidate
+      (submit)="$event.preventDefault(); changePassword()"
+      aria-labelledby="password-heading"
+    >
+      <h2 id="password-heading" i18n>Change your password</h2>
+      <app-field label="Current password" i18n-label [errors]="shownErrors('current')">
         <app-password-reveal>
           <input
-            id="account-current-password"
+            appControl
+            id="password-current"
+            name="current-password"
             type="password"
-            formControlName="currentPassword"
             autocomplete="current-password"
+            [value]="draft().current"
+            (input)="set({ current: $any($event.target).value })"
+            (blur)="attempt.touch('current')"
           />
         </app-password-reveal>
+      </app-field>
+      <div class="pair">
+        <app-field
+          label="New password"
+          i18n-label
+          help="At least 12 characters with upper, lower, number, and symbol."
+          i18n-help
+          [errors]="shownErrors('next')"
+        >
+          <app-password-reveal>
+            <input
+              appControl
+              id="password-next"
+              name="new-password"
+              type="password"
+              autocomplete="new-password"
+              [value]="draft().next"
+              (input)="set({ next: $any($event.target).value })"
+              (blur)="attempt.touch('next')"
+            />
+          </app-password-reveal>
+        </app-field>
+        <app-field label="New password again" i18n-label [errors]="shownErrors('confirm')">
+          <app-password-reveal>
+            <input
+              appControl
+              id="password-confirm"
+              name="new-password-again"
+              type="password"
+              autocomplete="new-password"
+              [value]="draft().confirm"
+              (input)="set({ confirm: $any($event.target).value })"
+              (blur)="attempt.touch('confirm')"
+            />
+          </app-password-reveal>
+        </app-field>
       </div>
-      <div>
-        <label for="account-new-password"><span i18n>New password</span></label>
-        <app-password-reveal>
-          <input
-            id="account-new-password"
-            type="password"
-            formControlName="newPassword"
-            autocomplete="new-password"
-          />
-        </app-password-reveal>
+      <div class="actions">
+        <p class="save-error" role="alert">{{ passwordError() }}</p>
+        <button appButton type="submit" [loading]="changing()">
+          @if (changing()) {
+            <ng-container i18n>Changing…</ng-container>
+          } @else {
+            <ng-container i18n>Change password</ng-container>
+          }
+        </button>
       </div>
-      <div>
-        <label for="account-confirm-password"><span i18n>Confirm new password</span></label>
-        <app-password-reveal>
-          <input
-            id="account-confirm-password"
-            type="password"
-            formControlName="confirmPassword"
-            autocomplete="new-password"
-          />
-        </app-password-reveal>
-      </div>
-    </div>
-    <div class="form-actions">
-      <button class="primary-button" type="submit" [disabled]="busy()" i18n>Change password</button>
-    </div>
-  </form>
-</section>
+    </form>
 
-<section class="surface-section security-section">
-  <div class="section-heading">
-    <div>
-      <h2 i18n>Active sessions</h2>
-      <p class="muted" i18n>Sign out this account on every device, including this one.</p>
-    </div>
+    <section class="panel" aria-labelledby="sessions-heading">
+      <h2 id="sessions-heading" i18n>Signed in somewhere else?</h2>
+      <p class="quiet" i18n>
+        If you lost a phone or signed in on a computer that isn’t yours, sign out everywhere. Every
+        device has to sign in again with your password, this one too.
+      </p>
+      <div class="actions">
+        <p class="save-error" role="alert">{{ sessionsError() }}</p>
+        <button
+          appButton
+          type="button"
+          variant="outlined"
+          [loading]="signingOut()"
+          (click)="signOutEverywhere()"
+          data-sign-out-everywhere
+          i18n
+        >
+          Sign out everywhere
+        </button>
+      </div>
+    </section>
+
+    <app-leave-workspace />
   </div>
-  <button class="danger-button" type="button" [disabled]="busy()" (click)="revokeSessions()" i18n>
-    Sign out everywhere
-  </button>
-</section>
+</app-settings-frame>
 
-<app-leave-workspace />
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

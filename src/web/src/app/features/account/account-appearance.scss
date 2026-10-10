@@ -1,73 +1,69 @@
-:host {
-  display: block;
-}
+// Settings › Appearance: light, dark or the device's choice, saved on the account. Brand v2 tokens.
+@use '../settings/settings-page';
+
 .appearance {
   max-inline-size: 36rem;
-  margin-inline: auto;
-  padding: 1.5rem;
-  color: var(--color-text-primary);
 }
-header {
-  margin-block-end: 2rem;
-}
-.eyebrow {
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-h1 {
-  font-family: var(--font-display, serif);
-  font-size: clamp(2rem, 5vw, 3rem);
-  margin: 0.25rem 0;
-}
-header p:last-child {
-  color: var(--color-text-secondary);
-  line-height: 1.5;
-}
+
 fieldset {
   border: 0;
-  padding: 0;
-  margin: 0;
   display: grid;
   gap: 0.75rem;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
 }
+
 legend {
-  font-weight: 700;
+  color: var(--tb-ink);
+  font-weight: 600;
   margin-block-end: 0.75rem;
+  padding: 0;
 }
+
 .mode {
-  display: flex;
   align-items: center;
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-control);
+  cursor: pointer;
+  display: flex;
   gap: 1rem;
   min-block-size: 4.25rem;
   padding: 0.75rem 1rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
-  cursor: pointer;
+
+  &:hover {
+    border-color: var(--tb-line-strong);
+  }
+
+  &.selected {
+    border-color: var(--tb-accent-ink);
+    box-shadow: inset 0 0 0 1px var(--tb-accent-ink);
+  }
+
+  input {
+    accent-color: var(--tb-brand);
+    block-size: 1.25rem;
+    flex: none;
+    inline-size: 1.25rem;
+  }
 }
-.mode.selected {
-  border-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
-}
-.mode input {
-  inline-size: 1.25rem;
-  block-size: 1.25rem;
-  accent-color: var(--color-accent);
-}
+
+// Every property the legacy `label > span` rule sets is set here, so it never shows through.
 .mode > .mode-copy {
+  color: var(--tb-ink);
   display: grid;
+  font-size: 1rem;
+  font-weight: 400;
   gap: 0.2rem;
   margin: 0;
-  color: var(--color-text-primary);
-  font-size: 1rem;
-}
-.mode-copy small {
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
-}
-[role='alert'] {
-  color: var(--color-danger);
+
+  strong {
+    font-weight: 600;
+  }
+
+  small {
+    color: var(--tb-muted);
+    font-size: 0.875rem;
+  }
 }

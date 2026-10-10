@@ -267,7 +267,7 @@ test.describe('a TB Gym screen', () => {
     await expect(page.locator('aside .brand-name')).toHaveText('Atlas Performance');
 
     await page.getByRole('link', { name: 'Settings' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Coaching space' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Name and region' })).toBeVisible();
     await expect.poll(() => rootToken(page, '--tb-brand')).toBe('#15233f');
   });
 });

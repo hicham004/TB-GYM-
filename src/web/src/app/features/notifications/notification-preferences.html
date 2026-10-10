@@ -1,5 +1,5 @@
-<section class="preferences tb-theme" aria-labelledby="preferences-heading">
-  <header class="top">
+<app-settings-frame>
+  <header settingsHead class="top">
     <a class="back" routerLink="/notifications">
       <app-icon name="chevron-right" class="back-icon" />
       <span i18n>Notifications</span>
@@ -8,130 +8,134 @@
     <p class="lede" i18n>Choose what reaches you outside the app, and when.</p>
   </header>
 
-  <!-- Present from first render so the live regions are registered before anything lands in them. -->
-  <p class="error" role="alert">{{ error() }}</p>
-  <p class="notice" role="status">{{ notice() }}</p>
+  <section class="preferences" aria-labelledby="preferences-heading">
+    <!-- Present from first render so the live regions are registered before anything lands in them. -->
+    <p class="error" role="alert">{{ error() }}</p>
+    <p class="notice" role="status">{{ notice() }}</p>
 
-  @if (loading() && !isReady()) {
-    <div class="card pad" aria-busy="true">
-      <app-skeleton [label]="loadingLabel" [lines]="5" />
-    </div>
-  } @else if (!isReady() && error() !== null) {
-    <div class="card pad load-failed">
-      <button appButton type="button" variant="outlined" (click)="reload()" i18n>Try again</button>
-    </div>
-  }
-
-  @if (isReady()) {
-    <form [formGroup]="form" (ngSubmit)="save()" novalidate>
-      <section class="card" aria-labelledby="in-app-heading">
-        <div class="card-head">
-          <span class="card-icon"><app-icon name="bell" /></span>
-          <div>
-            <h2 id="in-app-heading" i18n>In the app</h2>
-            <p class="hint" i18n>
-              Always on. Notices wait under the bell until you open them, so nothing here can be
-              switched off.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <fieldset class="card" [disabled]="saving()">
-        <legend class="tb-visually-hidden" i18n>Email</legend>
-        <div class="card-head" aria-hidden="true">
-          <span class="card-icon"><app-icon name="messages" /></span>
-          <h2 i18n>Email</h2>
-        </div>
-        <div class="card-body">
-          <app-checkbox label="Email me about my coaching plan" i18n-label>
-            <input
-              type="checkbox"
-              appControl
-              formControlName="emailServiceEnabled"
-              aria-describedby="emailServiceHelp"
-            />
-          </app-checkbox>
-          <p id="emailServiceHelp" class="hint" i18n>
-            Payment, activation, renewal and plan-ending notices. The email only says something is
-            waiting; you sign in to read it. Training notices stay in the app.
-          </p>
-          @if (!emailChannelAvailable()) {
-            <p class="hint warning" i18n>
-              Email isn't switched on for TB Gym yet. You can choose now; nothing is emailed until
-              it is.
-            </p>
-          }
-          <!-- Stated rather than hidden: a switch left on beside a channel that has stopped would be
-               worse than saying so. -->
-          @if (emailSuppressed()) {
-            <p class="hint suppressed" role="status" data-testid="email-suppressed">
-              <span i18n>Email to your address is paused.</span>
-              {{ emailSuppressionReason() }}
-              <span i18n>
-                We stopped sending so that other people's mail from TB Gym keeps arriving. Your
-                in-app notifications are unaffected. Update the email address on your account to
-                start receiving them again.
-              </span>
-            </p>
-          }
-        </div>
-      </fieldset>
-
-      <fieldset class="card" [disabled]="saving()">
-        <legend class="tb-visually-hidden" i18n>Quiet hours</legend>
-        <div class="card-head" aria-hidden="true">
-          <span class="card-icon"><app-icon name="lock" /></span>
-          <h2 i18n>Quiet hours</h2>
-        </div>
-        <div class="card-body">
-          <app-checkbox label="Hold emails during quiet hours" i18n-label>
-            <input
-              type="checkbox"
-              appControl
-              formControlName="quietHoursEnabled"
-              aria-describedby="quietHoursHelp"
-            />
-          </app-checkbox>
-          <p id="quietHoursHelp" class="hint" i18n>
-            An email due in this window waits until it ends. Notices in the app are unaffected.
-          </p>
-
-          @if (quietHoursEnabled()) {
-            <div class="times">
-              <app-field label="From" i18n-label>
-                <input
-                  type="time"
-                  appControl
-                  formControlName="quietHoursStartLocal"
-                  aria-describedby="quietHoursZone"
-                />
-              </app-field>
-              <app-field label="Until" i18n-label>
-                <input
-                  type="time"
-                  appControl
-                  formControlName="quietHoursEndLocal"
-                  aria-describedby="quietHoursZone"
-                />
-              </app-field>
-            </div>
-            <!-- The zone is stated rather than assumed: these are workspace times, and a member
-                 abroad would otherwise read them as their own. -->
-            <p id="quietHoursZone" class="hint" i18n>
-              {{ timeZoneId() }} time. A window may run past midnight, and it ends at the "until"
-              time.
-            </p>
-          }
-        </div>
-      </fieldset>
-
-      <div class="actions">
-        <button appButton type="submit" [loading]="saving()" i18n>Save settings</button>
+    @if (loading() && !isReady()) {
+      <div class="card pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="5" />
       </div>
-    </form>
-  }
-</section>
+    } @else if (!isReady() && error() !== null) {
+      <div class="card pad load-failed">
+        <button appButton type="button" variant="outlined" (click)="reload()" i18n>
+          Try again
+        </button>
+      </div>
+    }
+
+    @if (isReady()) {
+      <form [formGroup]="form" (ngSubmit)="save()" novalidate>
+        <section class="card" aria-labelledby="in-app-heading">
+          <div class="card-head">
+            <span class="card-icon"><app-icon name="bell" /></span>
+            <div>
+              <h2 id="in-app-heading" i18n>In the app</h2>
+              <p class="hint" i18n>
+                Always on. Notices wait under the bell until you open them, so nothing here can be
+                switched off.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <fieldset class="card" [disabled]="saving()">
+          <legend class="tb-visually-hidden" i18n>Email</legend>
+          <div class="card-head" aria-hidden="true">
+            <span class="card-icon"><app-icon name="messages" /></span>
+            <h2 i18n>Email</h2>
+          </div>
+          <div class="card-body">
+            <app-checkbox label="Email me about my coaching plan" i18n-label>
+              <input
+                type="checkbox"
+                appControl
+                formControlName="emailServiceEnabled"
+                aria-describedby="emailServiceHelp"
+              />
+            </app-checkbox>
+            <p id="emailServiceHelp" class="hint" i18n>
+              Payment, activation, renewal and plan-ending notices. The email only says something is
+              waiting; you sign in to read it. Training notices stay in the app.
+            </p>
+            @if (!emailChannelAvailable()) {
+              <p class="hint warning" i18n>
+                Email isn't switched on for TB Gym yet. You can choose now; nothing is emailed until
+                it is.
+              </p>
+            }
+            <!-- Stated rather than hidden: a switch left on beside a channel that has stopped would be
+               worse than saying so. -->
+            @if (emailSuppressed()) {
+              <p class="hint suppressed" role="status" data-testid="email-suppressed">
+                <span i18n>Email to your address is paused.</span>
+                {{ emailSuppressionReason() }}
+                <span i18n>
+                  We stopped sending so that other people's mail from TB Gym keeps arriving. Your
+                  in-app notifications are unaffected. Update the email address on your account to
+                  start receiving them again.
+                </span>
+              </p>
+            }
+          </div>
+        </fieldset>
+
+        <fieldset class="card" [disabled]="saving()">
+          <legend class="tb-visually-hidden" i18n>Quiet hours</legend>
+          <div class="card-head" aria-hidden="true">
+            <span class="card-icon"><app-icon name="lock" /></span>
+            <h2 i18n>Quiet hours</h2>
+          </div>
+          <div class="card-body">
+            <app-checkbox label="Hold emails during quiet hours" i18n-label>
+              <input
+                type="checkbox"
+                appControl
+                formControlName="quietHoursEnabled"
+                aria-describedby="quietHoursHelp"
+              />
+            </app-checkbox>
+            <p id="quietHoursHelp" class="hint" i18n>
+              An email due in this window waits until it ends. Notices in the app are unaffected.
+            </p>
+
+            @if (quietHoursEnabled()) {
+              <div class="times">
+                <app-field label="From" i18n-label>
+                  <input
+                    type="time"
+                    appControl
+                    formControlName="quietHoursStartLocal"
+                    aria-describedby="quietHoursZone"
+                  />
+                </app-field>
+                <app-field label="Until" i18n-label>
+                  <input
+                    type="time"
+                    appControl
+                    formControlName="quietHoursEndLocal"
+                    aria-describedby="quietHoursZone"
+                  />
+                </app-field>
+              </div>
+              <!-- The zone is stated rather than assumed: these are workspace times, and a member
+                 abroad would otherwise read them as their own. -->
+              <p id="quietHoursZone" class="hint" i18n>
+                {{ timeZoneId() }} time. A window may run past midnight, and it ends at the "until"
+                time.
+              </p>
+            }
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button appButton type="submit" [loading]="saving()" i18n>Save settings</button>
+        </div>
+      </form>
+    }
+  </section>
+</app-settings-frame>
 
 <ng-template #leaveDialog let-dialog>
   <app-confirm

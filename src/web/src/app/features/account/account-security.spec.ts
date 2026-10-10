@@ -8,7 +8,9 @@ import { ApiClient } from '../../core/api/api-client';
 import type { CurrentUser } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
-import { button, field, fill, press, query, settle } from '../../../testing/dom';
+import { TenantStore } from '../../core/tenancy/tenant.store';
+import { UiToast } from '../../ui/toast';
+import { announced, field, fill, focusedId, press, settle } from '../../../testing/dom';
 import { AccountSecurity } from './account-security';
 import { LeaveWorkspaceApi } from './leave-workspace-api';
 
@@ -23,7 +25,9 @@ const USER: CurrentUser = {
   roles: [],
 };
 
-async function render(api: Partial<ApiClient> = {}) {
+async function render(api: Partial<Record<keyof ApiClient, unknown>> = {}, role = 'Owner') {
+  const toast = { show: vi.fn() };
+  const isClient = role === 'Client';
   await TestBed.configureTestingModule({
     imports: [AccountSecurity],
     providers: [
@@ -42,6 +46,15 @@ async function render(api: Partial<ApiClient> = {}) {
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: LeaveWorkspaceApi, useValue: {} },
+      { provide: UiToast, useValue: toast },
+      {
+        provide: TenantStore,
+        useValue: {
+          selectedTenantId: signal('tenant-1'),
+          selectedMembership: signal({ tenantId: 'tenant-1', tenantName: 'Atlas', role }),
+          isClient: signal(isClient),
+        },
+      },
     ],
   }).compileComponents();
 
@@ -50,129 +63,131 @@ async function render(api: Partial<ApiClient> = {}) {
   return {
     fixture,
     host: fixture.nativeElement as HTMLElement,
-    api: TestBed.inject(ApiClient),
+    api: TestBed.inject(ApiClient) as unknown as Record<string, ReturnType<typeof vi.fn>>,
+    auth: TestBed.inject(AuthStore) as unknown as { initialize: ReturnType<typeof vi.fn> },
     router: TestBed.inject(Router),
+    toast,
   };
 }
 
-describe('AccountSecurity', () => {
+const textOf = (element: Element | null | undefined) =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+/** The dialog on top, which the CDK draws outside the page. */
+const dialog = () => {
+  const open = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+  return open.length ? open[open.length - 1] : null;
+};
+
+async function typePasswords(
+  fixture: Awaited<ReturnType<typeof render>>['fixture'],
+  host: HTMLElement,
+  current: string,
+  next: string,
+  again: string,
+) {
+  fill(host, 'Current password', current);
+  fill(host, 'New password', next);
+  fill(host, 'New password again', again);
+  await settle(fixture);
+}
+
+describe('Settings › Password and security', () => {
   afterEach(() => {
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
   });
 
   /**
    * A password change needs the current password as well as the new one. A control that never
-   * reaches the model would send the wrong pair, and the server's refusal would look like the
-   * user misremembering their own password.
+   * reaches the request would send the wrong pair, and the server's refusal would look like the
+   * person misremembering their own password.
    */
-  it('changes the password using both the old and the new one', async () => {
-    const { fixture, host, api } = await render();
+  it('changes the password using both the old and the new one, then clears the form', async () => {
+    const { fixture, host, api, toast } = await render();
 
-    fill(host, 'Current password', 'old-horse-battery');
-    fill(host, 'New password', 'correct-horse-battery');
-    fill(host, 'Confirm new password', 'correct-horse-battery');
-    await settle(fixture);
-
-    expect(button(host, 'Change password').disabled).toBe(false);
+    expect(textOf(host.querySelector('.lede'))).toBe('Signed in as coach@example.test.');
+    await typePasswords(fixture, host, 'Old-horse-1!', 'Correct-horse-2!', 'Correct-horse-2!');
     press(host, 'Change password');
     await settle(fixture);
 
-    expect(api.changePassword).toHaveBeenCalledWith('old-horse-battery', 'correct-horse-battery');
-    expect(host.textContent).toContain('Password changed.');
-  });
-
-  /** The typed passwords must not survive on screen once they have been used. */
-  it('clears the form after a successful change', async () => {
-    const { fixture, host } = await render();
-
-    fill(host, 'Current password', 'old-horse-battery');
-    fill(host, 'New password', 'correct-horse-battery');
-    fill(host, 'Confirm new password', 'correct-horse-battery');
-    await settle(fixture);
-    press(host, 'Change password');
-    await settle(fixture);
-
+    expect(api['changePassword']).toHaveBeenCalledWith('Old-horse-1!', 'Correct-horse-2!');
     expect(field(host, 'Current password').value).toBe('');
     expect(field(host, 'New password').value).toBe('');
-    expect(field(host, 'Confirm new password').value).toBe('');
+    expect(toast.show).toHaveBeenCalledWith(
+      'Password changed. Use the new one next time you sign in.',
+      { tone: 'success' },
+    );
   });
 
-  it('refuses two different new passwords without calling the server', async () => {
+  it('says what is wrong beside each field and moves focus there, without calling the server', async () => {
     const { fixture, host, api } = await render();
 
-    fill(host, 'Current password', 'old-horse-battery');
-    fill(host, 'New password', 'correct-horse-battery');
-    fill(host, 'Confirm new password', 'correct-horse-batteryy');
-    await settle(fixture);
     press(host, 'Change password');
     await settle(fixture);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(api['changePassword']).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Type the password you use now.');
+    expect(focusedId()).toBe('password-current');
 
-    expect(api.changePassword).not.toHaveBeenCalled();
-    expect(query(host, '[role="alert"]').textContent).toContain('Passwords do not match.');
-  });
-
-  it('does not submit a new password shorter than the policy allows', async () => {
-    const { fixture, host, api } = await render();
-
-    fill(host, 'Current password', 'old-horse-battery');
-    fill(host, 'New password', 'short');
-    fill(host, 'Confirm new password', 'short');
-    await settle(fixture);
+    await typePasswords(fixture, host, 'Old-horse-1!', 'short', 'short');
     press(host, 'Change password');
     await settle(fixture);
+    expect(host.textContent).toContain(
+      'Use at least 12 characters with upper, lower, number, and symbol.',
+    );
 
-    expect(api.changePassword).not.toHaveBeenCalled();
-  });
-
-  it('does not submit without the current password', async () => {
-    const { fixture, host, api } = await render();
-
-    fill(host, 'New password', 'correct-horse-battery');
-    fill(host, 'Confirm new password', 'correct-horse-battery');
-    await settle(fixture);
+    await typePasswords(fixture, host, 'Old-horse-1!', 'Correct-horse-2!', 'Correct-horse-3!');
     press(host, 'Change password');
     await settle(fixture);
-
-    expect(api.changePassword).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('This doesn’t match the new password. Type it again.');
+    expect(api['changePassword']).not.toHaveBeenCalled();
   });
 
   it('reports a wrong current password rather than claiming the change succeeded', async () => {
-    const wrong = new HttpErrorResponse({
-      status: 400,
-      error: { message: 'The current password is incorrect.' },
-    });
-    const { fixture, host } = await render({
-      changePassword: vi.fn(() => throwError(() => wrong)),
+    const { fixture, host, toast } = await render({
+      changePassword: vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 400,
+              error: { message: 'The current password is incorrect.' },
+            }),
+        ),
+      ),
     });
 
-    fill(host, 'Current password', 'wrong');
-    fill(host, 'New password', 'correct-horse-battery');
-    fill(host, 'Confirm new password', 'correct-horse-battery');
-    await settle(fixture);
+    await typePasswords(fixture, host, 'Wrong-horse-1!', 'Correct-horse-2!', 'Correct-horse-2!');
     press(host, 'Change password');
     await settle(fixture);
 
-    expect(query(host, '[role="alert"]').textContent).toContain(
-      'The current password is incorrect.',
-    );
-    expect(host.textContent).not.toContain('Password changed.');
-    // The typed values survive a failure, so the attempt can be corrected rather than retyped.
-    expect(field(host, 'New password').value).toBe('correct-horse-battery');
+    expect(announced(host)).toBe('The current password is incorrect.');
+    expect(toast.show).not.toHaveBeenCalled();
+    expect(field(host, 'New password').value).toBe('Correct-horse-2!');
   });
 
-  /** Revoking signs out this device too, so it has to end on the sign-in screen. */
-  it('revokes every session and returns to sign in', async () => {
-    const { fixture, host, api, router } = await render();
+  it('asks before signing out everywhere, then ends every session and goes to sign in', async () => {
+    const { fixture, host, api, auth, router } = await render();
     const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     press(host, 'Sign out everywhere');
     await settle(fixture);
+    expect(textOf(dialog()?.querySelector('h2'))).toBe('Sign out everywhere?');
+    press(dialog()!, 'Cancel');
+    await settle(fixture);
+    expect(api['revokeAllSessions']).not.toHaveBeenCalled();
 
-    expect(api.revokeAllSessions).toHaveBeenCalled();
+    press(host, 'Sign out everywhere');
+    await settle(fixture);
+    press(dialog()!, 'Sign out everywhere');
+    await settle(fixture);
+
+    expect(api['revokeAllSessions']).toHaveBeenCalled();
+    expect(auth.initialize).toHaveBeenCalledWith(true);
     expect(navigate).toHaveBeenCalledWith('/auth/sign-in');
   });
 
-  it('stays put and reports a failed revocation', async () => {
+  it('stays put and says so when signing out everywhere fails', async () => {
     const { fixture, host, router } = await render({
       revokeAllSessions: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
     });
@@ -180,8 +195,44 @@ describe('AccountSecurity', () => {
 
     press(host, 'Sign out everywhere');
     await settle(fixture);
+    press(dialog()!, 'Sign out everywhere');
+    await settle(fixture);
 
-    expect(query(host, '[role="alert"]').textContent).toContain('Sessions could not be revoked.');
+    expect(announced(host)).toBe('You couldn’t be signed out everywhere. Try again.');
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('asks before a half-typed password change is left behind', async () => {
+    const { fixture, host } = await render();
+    const page = fixture.componentInstance;
+
+    await expect(page.canLeave()).resolves.toBe(true);
+    fill(host, 'New password', 'Correct-horse');
+    await settle(fixture);
+
+    const leaving = page.canLeave();
+    await settle(fixture);
+    expect(textOf(dialog()?.querySelector('h2'))).toBe('Leave without saving?');
+    press(dialog()!, 'Stay');
+    await expect(leaving).resolves.toBe(false);
+  });
+
+  it('gives a client the way back to Me instead of the Settings pages', async () => {
+    const { host } = await render({}, 'Client');
+
+    expect(host.querySelector('nav[aria-label="Settings"]')).toBeNull();
+    expect(host.querySelector('a.back')?.getAttribute('href')).toBe('/me');
+  });
+
+  it('shows a coach their own account pages only', async () => {
+    const { host } = await render({}, 'Coach');
+
+    const nav = host.querySelector('nav[aria-label="Settings"]')!;
+    expect(Array.from(nav.querySelectorAll('a')).map(textOf)).toEqual([
+      'Notifications',
+      'Appearance',
+      'Password and security',
+    ]);
+    expect(host.querySelector('a.back')).toBeNull();
   });
 });

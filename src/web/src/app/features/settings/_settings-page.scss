@@ -1,0 +1,94 @@
+// The pieces every Settings page shares (C9, R5.2a): its heading, a lede, cards ("panels"), a quiet
+// line, a load failure and the row of actions under a form. Brand v2 tokens only, so each page
+// follows the person's light or dark mode. A page `@use`s this and adds only its own parts.
+
+:host {
+  display: block;
+}
+
+.top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-inline-size: 48rem;
+}
+
+h1 {
+  color: var(--tb-ink);
+  font-size: clamp(1.75rem, 1.4rem + 1.2vw, 2.125rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  // Focused on arrival so a screen reader starts here (§9); it is a landing place, not a control.
+  outline: none;
+  text-wrap: balance;
+}
+
+h2 {
+  color: var(--tb-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.lede {
+  color: var(--tb-muted);
+  margin: 0;
+  max-inline-size: 44rem;
+}
+
+.quiet {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-inline-size: 0;
+  padding: 1.25rem;
+}
+
+.load-failed {
+  align-items: center;
+  flex-flow: row wrap;
+  justify-content: space-between;
+
+  p {
+    color: var(--tb-ink);
+    margin: 0;
+  }
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: flex-end;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.save-error {
+  color: var(--tb-danger);
+  flex: 1 1 16rem;
+  font-size: 0.875rem;
+  margin: 0;
+
+  &:empty {
+    display: none;
+  }
+}

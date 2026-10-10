@@ -1,6 +1,7 @@
 import { Component, computed, ElementRef, inject, signal, viewChildren } from '@angular/core';
 import { AuthStore } from '../../core/auth/auth.store';
 import { type ThemeMode } from '../../core/theme/personal-mode.store';
+import { SettingsFrame } from '../settings/settings-frame';
 
 const modes: readonly { value: ThemeMode; label: string; description: string }[] = [
   {
@@ -14,9 +15,9 @@ const modes: readonly { value: ThemeMode; label: string; description: string }[]
 
 @Component({
   selector: 'app-account-appearance',
+  imports: [SettingsFrame],
   templateUrl: './account-appearance.html',
   styleUrl: './account-appearance.scss',
-  host: { class: 'tb-theme' },
 })
 export class AccountAppearance {
   private readonly auth = inject(AuthStore);

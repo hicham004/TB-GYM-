@@ -1,31 +1,55 @@
-import { Component, computed, effect, inject, LOCALE_ID, signal } from '@angular/core';
+import type { DialogRef } from '@angular/cdk/dialog';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
+  LOCALE_ID,
+  signal,
+  TemplateRef,
+  viewChild,
+} from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { apiErrorMessage } from '../../core/api/api-error';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { SectionNav } from '../../ui/section-nav';
-import { StatusLabel } from '../../ui/status-label';
-import { SETTINGS_SECTIONS } from '../workspace/settings-sections';
+import { Button } from '../../ui/button';
+import { Icon } from '../../ui/icon';
+import type { ModalSurface } from '../../ui/modal-surface';
+import { UiSheet } from '../../ui/sheet';
+import { Skeleton } from '../../ui/skeleton';
+import { StatusPill } from '../../ui/status-pill';
+import { UiToast } from '../../ui/toast';
+import { SettingsFrame } from '../settings/settings-frame';
 import { BillingApi } from './billing-api';
 import {
-  BillingAmounts,
   billingStatusLabel,
   billingStatusTone,
+  billLines,
+  type BillingInvoice,
   formatDay,
   formatMoney,
   formatMonth,
+  invoicePrices,
   invoiceStatusLabel,
   invoiceStatusTone,
-  WorkspaceBilling,
+  isUnpaid,
+  type WorkspaceBilling,
 } from './billing.models';
 
 /**
- * Settings / Billing (ADR 0028): what this workspace owes TB Gym. This month so far, past invoices and
- * how to pay. Presentation only: the API calculates every number and shows the bill to the owner alone.
+ * Settings › Billing (C9, R5.2a; ADR 0028): what this coaching space pays TB Gym. The state of the
+ * bill and what is owed come first, then how to pay with each reference one tap from the clipboard,
+ * this month so far, and a clean list of invoices that each open in a sheet with their lines.
+ *
+ * Presentation only: the API works out every number and shows the bill to the owner alone. It keeps
+ * TB Gym's own colours whatever the coach's brand (plan §3.1).
  */
 @Component({
   selector: 'app-billing',
-  imports: [SectionNav, StatusLabel],
+  imports: [Button, Icon, SettingsFrame, Skeleton, StatusPill],
   templateUrl: './billing.html',
   styleUrl: './billing.scss',
 })
@@ -33,36 +57,64 @@ export class Billing {
   private readonly api = inject(BillingApi);
   private readonly locale = inject(LOCALE_ID);
   private readonly tenants = inject(TenantStore);
+  private readonly sheets = inject(UiSheet);
+  private readonly toast = inject(UiToast);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly invoiceSheet = viewChild.required<TemplateRef<unknown>>('invoiceSheet');
   private loadedTenant: string | null = null;
+  private openSheet: DialogRef<unknown, ModalSurface> | null = null;
 
-  protected readonly sections = SETTINGS_SECTIONS;
+  protected readonly closeLabel = $localize`Close`;
+  protected readonly loadingLabel = $localize`Loading billing…`;
   protected readonly billing = signal<WorkspaceBilling | null>(null);
-  protected readonly loading = signal(false);
-  protected readonly error = signal<string | null>(null);
-  protected readonly unpaid = computed(() =>
-    (this.billing()?.invoices ?? []).filter(
-      (invoice) => invoice.status === 'Open' || invoice.status === 'Overdue',
-    ),
-  );
+  protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
+  /** The invoice open in the sheet. */
+  protected readonly shown = signal<BillingInvoice | null>(null);
+
+  protected readonly unpaid = computed(() => (this.billing()?.invoices ?? []).filter(isUnpaid));
+  protected readonly monthLines = computed(() => {
+    const billing = this.billing();
+    return billing ? billLines(billing.currentMonth.amounts, this.locale) : [];
+  });
+  protected readonly shownLines = computed(() => {
+    const invoice = this.shown();
+    return invoice ? billLines(invoice.amounts, this.locale, invoicePrices(invoice)) : [];
+  });
+
   protected readonly statusLabel = billingStatusLabel;
   protected readonly statusTone = billingStatusTone;
   protected readonly invoiceLabel = invoiceStatusLabel;
   protected readonly invoiceTone = invoiceStatusTone;
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.openSheet?.close());
     this.scope.onReset(() => {
       this.loadedTenant = null;
+      this.openSheet?.close();
       this.billing.set(null);
-      this.error.set(null);
-      this.loading.set(false);
+      this.state.set('loading');
     });
+    afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
     effect(() => {
       this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       if (tenantId && tenantId !== this.loadedTenant) {
         this.loadedTenant = tenantId;
         void this.load();
+      }
+    });
+  }
+
+  protected async load(): Promise<void> {
+    return this.scope.run('load', async (owner) => {
+      this.state.set('loading');
+      try {
+        this.billing.set(await owner.wait(firstValueFrom(this.api.getWorkspaceBilling())));
+        this.state.set('ready');
+      } catch {
+        if (!owner.current) return;
+        this.state.set('error');
       }
     });
   }
@@ -79,39 +131,70 @@ export class Billing {
     return formatMonth(periodStart, this.locale);
   }
 
-  /** A plain sentence for the workspace's state, naming the next date that matters. */
+  /** One plain sentence for the bill's state, naming the next date that matters. */
   protected statusSentence(billing: WorkspaceBilling): string {
     switch (billing.status) {
       case 'Trial':
-        return $localize`Your free trial runs until ${this.day(billing.trialEndsAtUtc)}:date:. Nothing is charged for it.`;
+        return $localize`Your free trial runs until ${this.day(billing.trialEndsAtUtc)}:date:. Nothing is charged for it, and your first invoice comes the month after.`;
       case 'Overdue':
         return billing.readOnlyFrom
-          ? $localize`An invoice is overdue. Pay it before ${this.day(billing.readOnlyFrom)}:date: to keep editing. After that, your coaching space is read-only for you and your coaches until it is paid.`
-          : $localize`An invoice is overdue.`;
+          ? $localize`An invoice is overdue. Pay it before ${this.day(billing.readOnlyFrom)}:date: to keep editing; after that your coaching space is read-only for you and your coaches until it is paid. Your clients keep full use.`
+          : $localize`An invoice is overdue. Pay it to keep editing.`;
       case 'ReadOnly':
-        return $localize`Your coaching space is read-only for you and your coaches until the overdue invoice is paid. Your clients keep full access, and nothing is deleted.`;
+        return $localize`Your coaching space is read-only for you and your coaches until the overdue invoice is paid. Your clients keep full use, and nothing is deleted.`;
       default:
-        return $localize`Your coaching space is billed monthly, for the previous month.`;
+        return this.unpaid().length > 0
+          ? $localize`A new invoice is waiting. Pay it by its due date below.`
+          : $localize`You’re all paid up. An invoice comes on the 1st of each month for the month before.`;
     }
   }
 
-  protected hasDiscount(amounts: BillingAmounts): boolean {
-    return amounts.discountAmount > 0;
+  /** The line under an invoice in the list: its reference and what happens next. */
+  protected invoiceDetail(invoice: BillingInvoice): string {
+    switch (invoice.status) {
+      case 'Open':
+        return $localize`${invoice.referenceCode}:reference: · due ${this.day(invoice.dueOn)}:date:`;
+      case 'Overdue':
+        return $localize`${invoice.referenceCode}:reference: · was due ${this.day(invoice.dueOn)}:date:`;
+      case 'Paid':
+        return invoice.payment
+          ? $localize`${invoice.referenceCode}:reference: · paid ${this.day(invoice.payment.receivedOn)}:date:`
+          : invoice.referenceCode;
+      case 'Void':
+        return $localize`${invoice.referenceCode}:reference: · replaced, nothing to pay`;
+      default:
+        return invoice.referenceCode;
+    }
   }
 
-  private async load(): Promise<void> {
-    return this.scope.run('load', async (owner) => {
-      this.loading.set(true);
-      this.error.set(null);
-      try {
-        const billing = await owner.wait(firstValueFrom(this.api.getWorkspaceBilling()));
-        this.billing.set(billing);
-      } catch (error) {
-        if (!owner.current) return;
-        this.error.set(apiErrorMessage(error, $localize`Billing could not be loaded.`));
-      } finally {
-        if (owner.current) this.loading.set(false);
-      }
+  protected openInvoice(invoice: BillingInvoice): void {
+    this.shown.set(invoice);
+    this.openSheet?.close();
+    const sheet = this.sheets.open(this.invoiceSheet(), {
+      title: $localize`${this.month(invoice.periodStart)}:month: invoice`,
+      closeLabel: this.closeLabel,
+    });
+    this.openSheet = sheet;
+    sheet.closed.subscribe(() => {
+      if (this.openSheet === sheet) this.openSheet = null;
     });
   }
+
+  /** Opens the invoice another one replaced or was replaced by, in the same sheet. */
+  protected openLinked(id: string | null): void {
+    const invoice = this.billing()?.invoices.find((item) => item.id === id);
+    if (invoice) this.openInvoice(invoice);
+  }
+
+  protected async copy(value: string, what: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(value);
+      this.toast.show($localize`${what}:what: copied.`, { tone: 'success' });
+    } catch {
+      this.toast.show($localize`Couldn’t copy. Select it and copy it yourself.`, { tone: 'error' });
+    }
+  }
+
+  protected readonly referenceWord = $localize`Reference`;
+  protected readonly whishWord = $localize`Whish number`;
 }

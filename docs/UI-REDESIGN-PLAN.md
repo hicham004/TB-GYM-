@@ -89,7 +89,8 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.1a | **Plans you sell** (C8): each plan a card with its price options (shortest first), what they include and the coach's clients on each, now and starting (SUB-015); New plan, Add price option, Change price and Edit name and description in sheets; Stop selling and Sell again with Undo; old price options and plans no longer sold behind a closed disclosure | §2, plus API tests (counts per option and plan, each client once, cancelled and released left out, a Coach's own clients, another workspace) | Done · 2026-10-08 |
 | R5.1b | **Exercise library** (C10): the coach's exercises as cards with their first picture or video (or a lettered tile), or as a list; a search and four filter chips (muscle, pattern, type, equipment) plus Archived too, all in the address; New exercise as a quick add (name, a YouTube or Vimeo link, what it trains) with More details (how to do it, other muscles, tags, swaps, pictures and videos, uploads) in one sheet that Edit opens too; Archive with Undo. Two server bugs found on the way were fixed: a video link added twice answered 500 (MED-015), and editing an exercise to add a muscle or a second video answered a conflict (LIB-002) | §2, plus API tests (the same link twice, by a colleague, after removal, at the same moment, another workspace, a client refused; an edit adding and dropping every kind of row) | Done · 2026-10-09 |
 | R5.1c | **Notifications**, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only). The inbox for coaches and clients in days (Today, Yesterday, the weekday, the date), All and Unread, Mark all as read, and each notice opening what it is about (a week or a finished workout in Training, a session on a client's Training, a client's plan); no Refresh button, the badge reads itself again. The client hears only what they can see now (NOT-035), and the coach hears of a client's note on a workout (decided by Claude, ADR 0036). Notification settings rebuilt in cards, with the leave warning (§9). The demo delivers its notices as it is built | §2, plus domain tests (the week wording, the kinds) and API tests (each notice, only what the client can open, a note both ways without its text, a notice no longer true left unsaid, unread filter, mark all only the reader's own, another workspace, signed out) | Done · 2026-10-09 |
-| R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
+| R5.2a | **Settings, Team, Billing** (C9): one Settings layout for staff, the coaching space's pages (the owner's: Name and region, Brand, Nutrition, Team, Billing) and the person's own (Notifications, Appearance, Password and security), a column on a wide page and a row that scrolls on a phone; Name and region rebuilt (the time zone from a searchable sheet, the week's first day, the currency new plans start in, the leave warning); Team with faces, Invite a coach in a sheet and each row's actions in a menu; Billing with what is owed first, how to pay with copy buttons, this month so far and a clean list of invoices that open in a sheet; Password and security rebuilt for staff and clients, Sign out everywhere asked first, leaving in a kit dialog | §2 | Done · 2026-10-09 |
+| R5.2b | **The platform admin screen** (ADR 0028) | §2 | To do |
 | R5.3 | **Delete legacy CSS**, add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
 | R6.2 | **Homepage** pre-render, GSAP scroll story, Jitter hero video (the owner makes the assets) | §2 | Optional |
@@ -195,7 +196,7 @@ of the implemented R1.3 screens before production rollout.
 - **Old screens behind Me (from R2.5c).** My profile (the intake form, which the coach's client page
   reuses), Password and security and Notification settings are still the old screens. Rebuild each
   with its unsaved-changes guard (§9): the intake form with R3.3, notifications with R5.1 and
-  security with R5.2. Notifications was rebuilt in R5.1c.
+  security with R5.2. Notifications was rebuilt in R5.1c and Password and security in R5.2a.
 - **The brand hero (from R2.5c).** Training and Me each carry their own copy of the hero's gradient,
   glow and dots. Move it into one shared style when a third screen needs it.
 - **Coach Today extras (from R3.1).** The prototype's "+3 this month", "↑ 6% vs this point last
@@ -253,6 +254,9 @@ of the implemented R1.3 screens before production rollout.
   542.23 kB: the recipe pages are lazy chunks (the editor about 50 kB), the old library page shrank, and
   `recipe-editor.scss` warns at 6.3 kB. R4.4c measures 540.42 kB: Foods is a lazy chunk (about 47 kB
   with its two sheets), and the older library page and the food calls `ApiClient` carried are gone.
+  R5.2a measures 542.60 kB: every Settings page and `SettingsFrame` load lazily with their routes, and only
+  the route guards, the sidebar's Settings addresses and a menu word changed at start-up; `billing.scss`
+  warns at 5.85 kB (the error is at 8 kB).
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -598,6 +602,28 @@ of the implemented R1.3 screens before production rollout.
   The demo now delivers its notices as it is built and has everyone read them three days before today, so
   only recent ones are new; checked live with the Worker running (a coach's note and a shared week each
   reached the client in seconds and opened the right place).
+
+- **Settings, Team, Billing, R5.2a (built 2026-10-09; screenshots `docs/design/r52a-*.png`). Decided by Claude
+  for the owner on 2026-10-09**, after looking at Everfit (personal settings, timezone included, for everyone
+  from the avatar; Team settings with the team's name, timezone, billing and teammates for owners and admins
+  only; an invitation can be resent or revoked while pending), TrueCoach (a coach's invoices are PDFs carrying
+  the issuer's details and an invoice number, offered in four countries only) and Lebanon's tax rules (a
+  VAT-registered issuer's tax number belongs on every invoice): (1) **one Settings for all staff**, the coaching
+  space's pages for the owner alone as their APIs are, and Your account for every coach; TB Gym has no admin
+  role (ADR 0026). (2) **No printable or PDF invoice yet**: a formal invoice needs TB Gym's legal name, address
+  and Ministry of Finance number, which are not set, and wording TB Gym does not invent; the page shows each
+  invoice's reference, month, lines, total and payment, and copies the Whish number and the reference. (3)
+  **New plans are priced in US dollars or Lebanese pounds first, any ISO code under Another**: services in
+  Lebanon are billed more and more in dollars, the pound has held near 89,500 to the dollar since mid-2023, and
+  a coach with Gulf clients may sell in AED. (4) **The language is not offered**: emails and invitations exist
+  in English only (`NotificationTemplateCatalog`), so an Arabic choice would change nothing; the stored value is
+  kept on save. (5) **Sign out everywhere asks first**, since it signs this device out too. (6) **Faces are
+  initials**: no profile photo exists yet. Not built: (a) a profile photo for staff (Everfit and Trainerize
+  coaches have one, shown to clients; it needs the media pipeline and a consent line); (b) an admin role between
+  owner and coach (Everfit's Admin manages every client and all settings): an authorization change for the
+  owner to decide; (c) the server accepts any three letters as a currency, the screen checks the browser's ISO
+  list; (d) an invitation whose link ran out can only be cancelled (the server refuses a resend), so the owner
+  invites again; (e) the platform admin screen is R5.2b.
 
 ---
 
@@ -1184,6 +1210,26 @@ limited to the coach's assigned clients.
 - One settings layout with a sub-navigation.
 - Team shows faces.
 - Billing shows a clean invoice list.
+- Built in R5.2a: `SettingsFrame` (`features/settings`) puts each Settings page's own heading beside one
+  navigation in two groups: Coaching space (the owner's: Name and region `/workspace`, Brand, Nutrition, Team,
+  Billing) and Your account (every member of staff: Notifications, Appearance, Password and security). From
+  50 rem of page it is a sticky column; on a phone a row under the heading that scrolls sideways with the open
+  page in view. A client gets no Settings section: their account pages open from Me and keep their way back.
+  Every address stays as it was (emails and the billing banner link to them), and the sidebar's Settings is
+  marked on all of them. **Name and region**: the name; the time zone shown as "Beirut, Asia · GMT+3 · 8:03 PM"
+  with Change opening a sheet that searches every zone by city or region (the device's zone offered first); the
+  week's first day and the currency new plans start in as segmented choices (US dollar, Lebanese pound, Another
+  with a code checked against the browser's ISO list); the stored language is kept and not offered (see
+  follow-ups); Save changes, Undo changes and the leave warning. **Team**: the owner first, then each coach with
+  initials for a face, the role, clients and when they joined; Invite a coach opens a sheet; who is still to
+  accept sits under Waiting to join with how long the link works; Send a new link, Cancel the invitation and
+  Remove from the team wait in each row's menu, removal asked first. **Billing**: where the bill stands and what
+  is owed, then How to pay as three steps with Copy beside the Whish number and each reference, this month so
+  far line by line, and the invoices one row each (month, reference and what happens next, total, status) that
+  open a sheet with the invoice's own prices line by line, the payment, and a link between a voided invoice and
+  its reissue. **Password and security**, for staff and clients: field errors in words with focus on the first,
+  Sign out everywhere asked first, and leaving the coaching space in a kit dialog. Appearance and Notification
+  settings sit in the same layout. All of it follows dark mode; Billing keeps TB Gym's colours.
 
 **C10. Exercise library**
 - A grid/list toggle with media thumbnails, filter chips instead of three dropdowns plus an

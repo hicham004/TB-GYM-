@@ -3,16 +3,13 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { installDialogSupport } from '../../../testing/dialog';
 import { fill, press, settle } from '../../../testing/dom';
 import { LeaveWorkspace } from './leave-workspace';
 import { LeaveWorkspaceApi } from './leave-workspace-api';
-
-let uninstallDialog: () => void = () => undefined;
 
 async function render(
   role: 'Owner' | 'Coach' | 'Client',
@@ -50,14 +47,13 @@ async function render(
   return { fixture, host: fixture.nativeElement as HTMLElement, api, load, navigate };
 }
 
-describe('LeaveWorkspace', () => {
-  beforeEach(() => {
-    uninstallDialog = installDialogSupport();
-  });
+/** The dialog, which the CDK draws outside the page. */
+const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
 
+describe('LeaveWorkspace', () => {
   afterEach(() => {
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
-    uninstallDialog();
   });
 
   it('offers nothing to the owner, since a workspace always has one', async () => {
@@ -73,9 +69,10 @@ describe('LeaveWorkspace', () => {
     expect(host.textContent).toContain('Leave Cedar Gym');
     press(host, 'Leave Cedar Gym');
     await settle(fixture);
-    expect(host.textContent).toContain('each client is told their coach has changed');
-    expect(host.querySelector('textarea')).toBeNull();
-    press(host, 'Leave permanently');
+    expect(dialog()?.querySelector('h2')?.textContent?.trim()).toBe('Leave Cedar Gym?');
+    expect(dialog()?.textContent).toContain('each client is told their coach has changed');
+    expect(dialog()?.querySelector('textarea')).toBeNull();
+    press(dialog()!, 'Leave permanently');
     await settle(fixture);
 
     expect(api.resignFromTeam).toHaveBeenCalledTimes(1);
@@ -89,9 +86,10 @@ describe('LeaveWorkspace', () => {
 
     press(host, 'Leave Cedar Gym');
     await settle(fixture);
-    expect(host.textContent).toContain('including your history there');
-    fill(host, 'Reason (optional)', '  Moving abroad  ');
-    press(host, 'Leave permanently');
+    expect(dialog()?.textContent).toContain('including your history there');
+    fill(dialog()!, 'Reason (optional)', '  Moving abroad  ');
+    await settle(fixture);
+    press(dialog()!, 'Leave permanently');
     await settle(fixture);
 
     expect(api.leaveAsClient).toHaveBeenCalledWith('Moving abroad', 4);
@@ -103,7 +101,7 @@ describe('LeaveWorkspace', () => {
 
     press(host, 'Leave Cedar Gym');
     await settle(fixture);
-    press(host, 'Leave permanently');
+    press(dialog()!, 'Leave permanently');
     await settle(fixture);
 
     expect(api.leaveAsClient).toHaveBeenCalledWith(null, 4);
@@ -120,11 +118,23 @@ describe('LeaveWorkspace', () => {
 
     press(host, 'Leave Cedar Gym');
     await settle(fixture);
-    press(host, 'Leave permanently');
+    press(dialog()!, 'Leave permanently');
     await settle(fixture);
 
-    expect(host.querySelector('dialog')?.open).toBe(true);
-    expect(host.querySelector('[role="alert"]')?.textContent?.trim()).not.toBe('');
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent?.trim()).toBe('Changed.');
     expect(load).not.toHaveBeenCalled();
+  });
+
+  it('lets the person stay without sending anything', async () => {
+    const { fixture, host, api } = await render('Coach');
+
+    press(host, 'Leave Cedar Gym');
+    await settle(fixture);
+    press(dialog()!, 'Stay');
+    await settle(fixture);
+
+    expect(dialog()).toBeNull();
+    expect(api.resignFromTeam).not.toHaveBeenCalled();
   });
 });

@@ -8,28 +8,39 @@ import { ApiClient } from '../../core/api/api-client';
 import type { WorkspaceDetails } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, field, fill, press, query, settle } from '../../../testing/dom';
+import { UiToast } from '../../ui/toast';
+import {
+  announced,
+  button,
+  field,
+  fill,
+  focusedId,
+  press,
+  settle,
+  tick,
+} from '../../../testing/dom';
 import { WorkspaceSettings } from './workspace-settings';
 
 function workspace(overrides: Partial<WorkspaceDetails> = {}): WorkspaceDetails {
   return {
     id: 'tenant-1',
-    name: 'TB Gym',
-    slug: 'tb-gym',
+    name: 'Atlas Performance',
+    slug: 'atlas-performance',
     timeZoneId: 'Asia/Beirut',
-    defaultCulture: 'en-LB',
+    defaultCulture: 'ar-LB',
     defaultCurrencyCode: 'USD',
     weekStartsOn: 'Monday',
-    currentDate: '2026-08-22',
+    currentDate: '2026-10-09',
     version: 5,
     brandColor: null,
     accentColor: null,
     logoAssetId: null,
     ...overrides,
-  };
+  } as WorkspaceDetails;
 }
 
-async function render(api: Partial<ApiClient> = {}) {
+async function render(api: Partial<Record<keyof ApiClient, unknown>> = {}) {
+  const toast = { show: vi.fn() };
   await TestBed.configureTestingModule({
     imports: [WorkspaceSettings],
     providers: [
@@ -37,15 +48,22 @@ async function render(api: Partial<ApiClient> = {}) {
         provide: ApiClient,
         useValue: {
           getWorkspace: vi.fn(() => of(workspace())),
-          updateWorkspace: vi.fn(() => of(workspace({ version: 6 }))),
+          updateWorkspace: vi.fn((request: Partial<WorkspaceDetails>) =>
+            of(workspace({ ...request, version: 6 })),
+          ),
           ...api,
         },
       },
       provideRouter([]),
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: UiToast, useValue: toast },
       {
         provide: TenantStore,
-        useValue: { selectedTenantId: signal('tenant-1'), load: vi.fn(() => Promise.resolve()) },
+        useValue: {
+          selectedTenantId: signal('tenant-1'),
+          selectedMembership: signal({ tenantId: 'tenant-1', role: 'Owner' }),
+          load: vi.fn(() => Promise.resolve()),
+        },
       },
     ],
   }).compileComponents();
@@ -55,122 +73,230 @@ async function render(api: Partial<ApiClient> = {}) {
   return {
     fixture,
     host: fixture.nativeElement as HTMLElement,
-    api: TestBed.inject(ApiClient),
-    tenants: TestBed.inject(TenantStore),
+    api: TestBed.inject(ApiClient) as unknown as Record<string, ReturnType<typeof vi.fn>>,
+    tenants: TestBed.inject(TenantStore) as unknown as { load: ReturnType<typeof vi.fn> },
+    toast,
   };
 }
 
-describe('WorkspaceSettings', () => {
+const textOf = (element: Element | null | undefined) =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+/** The sheet or dialog on top, which the CDK draws outside the page. */
+const dialog = () => {
+  const open = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+  return open.length ? open[open.length - 1] : null;
+};
+
+describe('Settings › Name and region', () => {
   afterEach(() => {
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
   });
 
-  it('opens on the workspace as it is stored', async () => {
+  it('opens on the coaching space as it is stored, with nothing to save yet', async () => {
     const { host } = await render();
 
-    expect(field(host, 'Name').value).toBe('TB Gym');
-    expect(field(host, 'Time zone').value).toBe('Asia/Beirut');
-    expect(field(host, 'Default currency').value).toBe('USD');
-    expect(field<HTMLSelectElement>(host, 'Week starts on').value).toBe('Monday');
+    expect(textOf(host.querySelector('h1'))).toBe('Name and region');
+    expect(field(host, 'Coaching space name').value).toBe('Atlas Performance');
+    expect(textOf(host.querySelector('[data-zone] strong'))).toBe('Beirut, Asia');
+    expect(field(host, 'Monday').checked).toBe(true);
+    expect(field(host, 'US dollar').checked).toBe(true);
+    expect(textOf(host.querySelector('[data-currency-line]'))).toBe(
+      'New plans are priced in US Dollar (USD). Plans you already sell keep their own currency, and so do your clients’ plans and payments.',
+    );
+    // The short name never shows: it is an identifier, not something the owner manages.
+    expect(host.textContent).not.toContain('atlas-performance');
+    expect(button(host, 'Save changes').disabled).toBe(true);
+    expect(announced(host)).toBe('');
   });
 
   /**
-   * These settings decide the tenant time zone, week boundary and currency that every dated
-   * calculation downstream reads. A control that never reaches the model would keep the workspace
-   * on defaults the owner believes they changed.
+   * These settings decide the time zone, week boundary and currency that every dated or priced rule
+   * downstream reads. Each control must reach the request, with the version the page was loaded at.
    */
-  it('saves every changed setting with the version it was loaded at', async () => {
-    const { fixture, host, api, tenants } = await render();
+  it('saves every changed setting with the version it was loaded at, then repaints the shell', async () => {
+    const { fixture, host, api, tenants, toast } = await render();
 
-    fill(host, 'Name', 'TB Strength');
-    fill(host, 'Time zone', 'Europe/Paris');
-    fill(host, 'Default language and region', 'ar-LB');
-    fill(host, 'Default currency', 'eur');
-    fill(host, 'Week starts on', 'Sunday');
+    fill(host, 'Coaching space name', '  Atlas Strength  ');
+    tick(host, 'Sunday');
+    tick(host, 'Lebanese pound');
+    await settle(fixture);
+    press(host, 'Save changes');
     await settle(fixture);
 
-    expect(button(host, 'Save settings').disabled).toBe(false);
-    press(host, 'Save settings');
-    await settle(fixture);
-
-    expect(api.updateWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'TB Strength',
-        timeZoneId: 'Europe/Paris',
-        defaultCulture: 'ar-LB',
-        // Normalised to the ISO code, as elsewhere in the app.
-        defaultCurrencyCode: 'EUR',
-        weekStartsOn: 'Sunday',
-        // The version it was loaded at, so a concurrent edit conflicts rather than being lost.
-        version: 5,
-      }),
-    );
-    // The workspace name is shown in the shell, so the membership list is refreshed with it.
+    expect(api['updateWorkspace']).toHaveBeenCalledWith({
+      name: 'Atlas Strength',
+      timeZoneId: 'Asia/Beirut',
+      // Emails exist only in English, so the page keeps whatever language was stored.
+      defaultCulture: 'ar-LB',
+      defaultCurrencyCode: 'LBP',
+      weekStartsOn: 'Sunday',
+      version: 5,
+    });
     expect(tenants.load).toHaveBeenCalledWith('tenant-1');
-    expect(host.textContent).toContain('Settings saved.');
+    expect(toast.show).toHaveBeenCalledWith('Settings saved.', { tone: 'success' });
+    expect(button(host, 'Save changes').disabled).toBe(true);
   });
 
-  it('does not save a workspace with no name', async () => {
+  it('finds a time zone by city in a sheet and takes it into the draft', async () => {
     const { fixture, host, api } = await render();
 
-    fill(host, 'Name', '');
+    press(host, 'Change');
     await settle(fixture);
-    press(host, 'Save settings');
+    expect(textOf(dialog()?.querySelector('h2'))).toBe('Time zone');
+    // The saved zone is marked in the list.
+    expect(textOf(dialog()!.querySelector('[aria-current="true"] .zone-name'))).toBe('Beirut Asia');
+
+    fill(dialog()!, 'Search by city', 'dubai');
+    await settle(fixture);
+    const options = Array.from(dialog()!.querySelectorAll<HTMLButtonElement>('.zone-option'));
+    expect(options.map((option) => textOf(option.querySelector('.zone-name')))).toEqual([
+      'Dubai Asia',
+    ]);
+    options[0].click();
     await settle(fixture);
 
-    expect(api.updateWorkspace).not.toHaveBeenCalled();
+    expect(dialog()).toBeNull();
+    expect(textOf(host.querySelector('[data-zone] strong'))).toBe('Dubai, Asia');
+    press(host, 'Save changes');
+    await settle(fixture);
+    expect(api['updateWorkspace']).toHaveBeenCalledWith(
+      expect.objectContaining({ timeZoneId: 'Asia/Dubai' }),
+    );
   });
 
-  /** The identifier is what existing links resolve through, so it is shown but never edited. */
-  it('shows the workspace identifier without offering to change it', async () => {
+  it('takes another currency by its code, and refuses one that is not a currency', async () => {
+    const { fixture, host, api } = await render();
+
+    tick(host, 'Another');
+    await settle(fixture);
+    fill(host, 'Currency code', 'zzq');
+    await settle(fixture);
+    press(host, 'Save changes');
+    await settle(fixture);
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(api['updateWorkspace']).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('ZZQ isn’t a currency code. Try one like EUR or AED.');
+    expect(focusedId()).toBe('space-currency');
+
+    fill(host, 'Currency code', 'eur');
+    await settle(fixture);
+    expect(textOf(host.querySelector('[data-currency-line]'))).toContain(
+      'New plans are priced in Euro (EUR).',
+    );
+    press(host, 'Save changes');
+    await settle(fixture);
+    expect(api['updateWorkspace']).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultCurrencyCode: 'EUR' }),
+    );
+  });
+
+  it('keeps a space with no name from being saved, and says why beside the field', async () => {
+    const { fixture, host, api } = await render();
+
+    fill(host, 'Coaching space name', '   ');
+    await settle(fixture);
+    press(host, 'Save changes');
+    await settle(fixture);
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(api['updateWorkspace']).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Give your coaching space a name.');
+    expect(focusedId()).toBe('space-name');
+  });
+
+  it('says why a save was refused and keeps what the owner typed', async () => {
+    const { fixture, host } = await render({
+      updateWorkspace: vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 403,
+              error: { code: 'workspace_read_only' },
+            }),
+        ),
+      ),
+    });
+
+    fill(host, 'Coaching space name', 'Atlas Strength');
+    await settle(fixture);
+    press(host, 'Save changes');
+    await settle(fixture);
+
+    expect(announced(host)).toBe(
+      'Your coaching space is read-only until its TB Gym bill is paid. You can still view everything.',
+    );
+    expect(field(host, 'Coaching space name').value).toBe('Atlas Strength');
+    expect(button(host, 'Save changes').disabled).toBe(false);
+  });
+
+  it('puts the saved settings back with Undo changes', async () => {
+    const { fixture, host } = await render();
+
+    fill(host, 'Coaching space name', 'Atlas Strength');
+    tick(host, 'Saturday');
+    await settle(fixture);
+    press(host, 'Undo changes');
+    await settle(fixture);
+
+    expect(field(host, 'Coaching space name').value).toBe('Atlas Performance');
+    expect(field(host, 'Monday').checked).toBe(true);
+    expect(button(host, 'Save changes').disabled).toBe(true);
+  });
+
+  it('asks before leaving with changes, and lets the page go without them', async () => {
+    const { fixture, host } = await render();
+    const page = fixture.componentInstance;
+
+    await expect(page.canLeave()).resolves.toBe(true);
+
+    fill(host, 'Coaching space name', 'Atlas Strength');
+    await settle(fixture);
+    const staying = page.canLeave();
+    await settle(fixture);
+    expect(textOf(dialog()?.querySelector('h2'))).toBe('Leave without saving?');
+    press(dialog()!, 'Stay');
+    await expect(staying).resolves.toBe(false);
+
+    const leaving = page.canLeave();
+    await settle(fixture);
+    press(dialog()!, 'Leave without saving');
+    await expect(leaving).resolves.toBe(true);
+  });
+
+  it('offers another try when the coaching space cannot be read', async () => {
+    const getWorkspace = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 500 })))
+      .mockReturnValue(of(workspace()));
+    const { fixture, host } = await render({ getWorkspace });
+
+    expect(announced(host)).toBe('Your coaching space couldn’t be loaded.');
+    expect(host.querySelector('form')).toBeNull();
+    press(host, 'Try again');
+    await settle(fixture);
+    expect(field(host, 'Coaching space name').value).toBe('Atlas Performance');
+  });
+
+  it('lists the coaching space’s pages and the owner’s own in one Settings navigation', async () => {
     const { host } = await render();
 
-    const slug = field(host, 'Short name');
-    expect(slug.value).toBe('tb-gym');
-    expect(slug.hasAttribute('readonly')).toBe(true);
-    expect(slug.disabled).toBe(true);
-  });
-
-  it('reports a rejected save instead of claiming the settings were stored', async () => {
-    const conflict = new HttpErrorResponse({
-      status: 409,
-      error: { title: 'The workspace was changed by someone else.' },
-    });
-    const { fixture, host } = await render({
-      updateWorkspace: vi.fn(() => throwError(() => conflict)),
-    });
-
-    fill(host, 'Name', 'TB Strength');
-    await settle(fixture);
-    press(host, 'Save settings');
-    await settle(fixture);
-
-    expect(query(host, '[role="alert"]').textContent).toContain(
-      'The workspace was changed by someone else.',
-    );
-    expect(host.textContent).not.toContain('Settings saved.');
-  });
-
-  it('reports a failed load rather than offering an empty form to save', async () => {
-    const { host, api } = await render({
-      getWorkspace: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
-    });
-
-    expect(query(host, '[role="alert"]').textContent).toContain('Settings could not be loaded.');
-    expect(api.updateWorkspace).not.toHaveBeenCalled();
-  });
-
-  /** Nothing was loaded, so there is no version to save against and no save may be attempted. */
-  it('refuses to save when no workspace was ever loaded', async () => {
-    const { fixture, host, api } = await render({
-      getWorkspace: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
-    });
-
-    fill(host, 'Name', 'TB Strength');
-    await settle(fixture);
-    press(host, 'Save settings');
-    await settle(fixture);
-
-    expect(api.updateWorkspace).not.toHaveBeenCalled();
+    const nav = host.querySelector('nav[aria-label="Settings"]')!;
+    expect(Array.from(nav.querySelectorAll('.group-label')).map(textOf)).toEqual([
+      'Coaching space',
+      'Your account',
+    ]);
+    expect(Array.from(nav.querySelectorAll('a')).map(textOf)).toEqual([
+      'Name and region',
+      'Brand',
+      'Nutrition',
+      'Team',
+      'Billing',
+      'Notifications',
+      'Appearance',
+      'Password and security',
+    ]);
   });
 });

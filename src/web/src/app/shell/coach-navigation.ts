@@ -100,8 +100,8 @@ export const COACH_NAVIGATION: readonly CoachNavigationGroup[] = [
         label: $localize`Settings`,
         icon: 'settings',
         link: '/workspace',
-        // Team and Billing are Settings pages, opened from the section links on each of them.
-        section: ['/workspace', '/team', '/billing'],
+        // Every page of the Settings layout (R5.2a), the owner's account pages included.
+        section: ['/workspace', '/team', '/billing', '/account', '/notifications/settings'],
         ownerOnly: true,
       },
     ],

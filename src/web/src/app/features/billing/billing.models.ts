@@ -334,3 +334,77 @@ export function billingStatusTone(
       return 'danger';
   }
 }
+
+export interface BillLine {
+  readonly label: string;
+  /** Formatted, with a minus sign for a discount. */
+  readonly amount: string;
+  readonly discount?: boolean;
+}
+
+/** The prices an issued invoice kept from its plan version, to show how each line was worked out. */
+export interface BillPrices {
+  readonly seatPrice: number;
+  readonly extraClientPrice: number;
+  readonly gymFeeMinimumSeats: number;
+}
+
+/**
+ * A bill's lines in words, before its total: seats, clients with a plan, the gym fee when charged and
+ * a discount when given. With an invoice's own prices each line says how it was worked out; the month
+ * so far has only the amounts. Every number is the API's (ADR 0028); nothing is added up here.
+ */
+export function billLines(
+  amounts: BillingAmounts,
+  locale: string,
+  prices: BillPrices | null = null,
+): readonly BillLine[] {
+  const money = (value: number) => formatMoney(value, amounts.currencyCode, locale);
+  const lines: BillLine[] = [
+    {
+      label: prices
+        ? $localize`Seats: ${amounts.seats}:seats: × ${money(prices.seatPrice)}:price:`
+        : amounts.seats === 1
+          ? $localize`1 seat`
+          : $localize`${amounts.seats}:seats: seats`,
+      amount: money(amounts.seatAmount),
+    },
+    {
+      label:
+        amounts.extraClients > 0 && prices
+          ? $localize`Clients with a plan: ${amounts.billableClients}:clients:, ${amounts.includedClients}:included: included with your seats, ${amounts.extraClients}:extra: more × ${money(prices.extraClientPrice)}:price:`
+          : $localize`Clients with a plan: ${amounts.billableClients}:clients:, ${amounts.includedClients}:included: included with your seats`,
+      amount: money(amounts.extraClientAmount),
+    },
+  ];
+  if (amounts.gymFeeAmount > 0) {
+    lines.push({
+      label: prices
+        ? $localize`Gym fee, from ${prices.gymFeeMinimumSeats}:seats: seats`
+        : $localize`Gym fee`,
+      amount: money(amounts.gymFeeAmount),
+    });
+  }
+  if (amounts.discountAmount > 0) {
+    lines.push({
+      label: $localize`Discount (${amounts.discountPercent}:percent:%)`,
+      amount: `−${money(amounts.discountAmount)}`,
+      discount: true,
+    });
+  }
+  return lines;
+}
+
+/** An invoice's own prices, as it was issued. */
+export function invoicePrices(invoice: BillingInvoice): BillPrices {
+  return {
+    seatPrice: invoice.planSeatPrice,
+    extraClientPrice: invoice.planExtraClientPrice,
+    gymFeeMinimumSeats: invoice.planGymFeeMinimumSeats,
+  };
+}
+
+/** Whether an invoice still asks for money. */
+export function isUnpaid(invoice: BillingInvoice): boolean {
+  return invoice.status === 'Open' || invoice.status === 'Overdue';
+}

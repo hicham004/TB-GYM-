@@ -1,5 +1,5 @@
-<section class="nutrition-page" aria-labelledby="nutrition-heading">
-  <header class="top">
+<app-settings-frame>
+  <header settingsHead class="top">
     <h1 id="nutrition-heading" i18n>Nutrition</h1>
     <p class="lede" i18n>
       How calories are counted for every food and recipe in your workspace, and the AI recipe
@@ -7,146 +7,146 @@
     </p>
   </header>
 
-  <app-section-nav label="Settings sections" i18n-label [links]="sections" />
-
-  @if (loadFailed()) {
-    <div class="panel load-failed" role="alert">
-      <p i18n>Your nutrition settings couldn’t be loaded.</p>
-      <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
-    </div>
-  } @else if (saved() === null) {
-    <app-skeleton label="Loading your nutrition settings" i18n-label [lines]="6" />
-  } @else {
-    @let current = form();
-    <form class="settings" novalidate (ngSubmit)="save()">
-      <section class="panel" aria-labelledby="counting-heading">
-        <h2 id="counting-heading" i18n>Counting calories</h2>
-        <fieldset class="choices">
-          <legend class="tb-visually-hidden" i18n>How calories are counted</legend>
-          <label class="choice" [class.selected]="current.policy === 'Atwater'">
-            <input
-              type="radio"
-              name="policy"
-              value="Atwater"
-              [checked]="current.policy === 'Atwater'"
-              (change)="setPolicy('Atwater')"
-            />
-            <span class="choice-title" i18n>4/4/9 from the macros</span>
-            <span class="choice-text" i18n
-              >Protein and carbs count 4 kcal a gram and fat 9, with fibre inside the carbs. The
-              usual way in the US and in most apps.</span
-            >
-          </label>
-          <label class="choice" [class.selected]="current.policy === 'Eu1169'">
-            <input
-              type="radio"
-              name="policy"
-              value="Eu1169"
-              [checked]="current.policy === 'Eu1169'"
-              (change)="setPolicy('Eu1169')"
-            />
-            <span class="choice-title" i18n>As on EU food labels</span>
-            <span class="choice-text" i18n
-              >Fibre counts 2 kcal a gram, sugar alcohols 2.4 and alcohol 7, as EU law sets for
-              labels.</span
-            >
-          </label>
-        </fieldset>
-        <p class="quiet" i18n>
-          A change counts the foods and recipes saved from now on. Saved ones keep their calories.
-        </p>
-      </section>
-
-      <section class="panel" aria-labelledby="label-heading">
-        <h2 id="label-heading" i18n>Label check</h2>
-        <app-field
-          label="Flag a food when its label calories are off by more than (kcal)"
-          i18n-label
-          help="A typo in a label’s numbers shows up this way."
-          i18n-help
-          [errors]="shown('tolerance')"
-        >
-          <input
-            appControl
-            type="number"
-            inputmode="decimal"
-            name="tolerance"
-            min="0"
-            max="500"
-            step="any"
-            [ngModel]="current.tolerance"
-            (ngModelChange)="setNumber('tolerance', $event)"
-            (blur)="attempt.touch('tolerance')"
-          />
-        </app-field>
-      </section>
-
-      <section class="panel" aria-labelledby="ai-heading">
-        <h2 id="ai-heading" i18n>AI recipe suggestions</h2>
-        @if (aiOff()) {
-          <p class="quiet" i18n>
-            TB Gym hasn’t turned on AI suggestions for workspaces yet. Your coaches write recipes
-            themselves until then.
-          </p>
-        } @else {
-          <p class="quiet" i18n>
-            Your coaches can start a recipe from a description. Every suggestion is checked by the
-            coach before it is saved.
-          </p>
-          <div class="pair">
-            <app-field
-              label="Suggestions a month"
-              i18n-label
-              [help]="ceilingRequests()"
-              [errors]="shown('requests')"
-            >
-              <input
-                appControl
-                type="number"
-                inputmode="numeric"
-                name="requests"
-                min="0"
-                step="1"
-                [ngModel]="current.requests"
-                (ngModelChange)="setNumber('requests', $event)"
-                (blur)="attempt.touch('requests')"
-              />
-            </app-field>
-            <app-field
-              label="Spending limit a month (USD)"
-              i18n-label
-              [help]="ceilingCost()"
-              [errors]="shown('cost')"
-            >
-              <input
-                appControl
-                type="number"
-                inputmode="decimal"
-                name="cost"
-                min="0"
-                step="0.01"
-                [ngModel]="current.cost"
-                (ngModelChange)="setNumber('cost', $event)"
-                (blur)="attempt.touch('cost')"
-              />
-            </app-field>
-          </div>
-        }
-      </section>
-
-      <div class="actions">
-        <p class="error" role="alert">
-          @if (conflict()) {
-            <span i18n>Someone saved these settings after you opened them.</span>&ngsp;
-            <button appButton type="button" variant="text" (click)="load()" i18n>
-              Show their settings
-            </button>
-          } @else if (saveError(); as message) {
-            {{ message }}
-          }
-        </p>
-        <button appButton type="submit" [loading]="saving()" i18n>Save settings</button>
+  <section class="nutrition-page" aria-labelledby="nutrition-heading">
+    @if (loadFailed()) {
+      <div class="panel load-failed" role="alert">
+        <p i18n>Your nutrition settings couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
       </div>
-    </form>
-  }
-</section>
+    } @else if (saved() === null) {
+      <app-skeleton label="Loading your nutrition settings" i18n-label [lines]="6" />
+    } @else {
+      @let current = form();
+      <form class="settings" novalidate (ngSubmit)="save()">
+        <section class="panel" aria-labelledby="counting-heading">
+          <h2 id="counting-heading" i18n>Counting calories</h2>
+          <fieldset class="choices">
+            <legend class="tb-visually-hidden" i18n>How calories are counted</legend>
+            <label class="choice" [class.selected]="current.policy === 'Atwater'">
+              <input
+                type="radio"
+                name="policy"
+                value="Atwater"
+                [checked]="current.policy === 'Atwater'"
+                (change)="setPolicy('Atwater')"
+              />
+              <span class="choice-title" i18n>4/4/9 from the macros</span>
+              <span class="choice-text" i18n
+                >Protein and carbs count 4 kcal a gram and fat 9, with fibre inside the carbs. The
+                usual way in the US and in most apps.</span
+              >
+            </label>
+            <label class="choice" [class.selected]="current.policy === 'Eu1169'">
+              <input
+                type="radio"
+                name="policy"
+                value="Eu1169"
+                [checked]="current.policy === 'Eu1169'"
+                (change)="setPolicy('Eu1169')"
+              />
+              <span class="choice-title" i18n>As on EU food labels</span>
+              <span class="choice-text" i18n
+                >Fibre counts 2 kcal a gram, sugar alcohols 2.4 and alcohol 7, as EU law sets for
+                labels.</span
+              >
+            </label>
+          </fieldset>
+          <p class="quiet" i18n>
+            A change counts the foods and recipes saved from now on. Saved ones keep their calories.
+          </p>
+        </section>
+
+        <section class="panel" aria-labelledby="label-heading">
+          <h2 id="label-heading" i18n>Label check</h2>
+          <app-field
+            label="Flag a food when its label calories are off by more than (kcal)"
+            i18n-label
+            help="A typo in a label’s numbers shows up this way."
+            i18n-help
+            [errors]="shown('tolerance')"
+          >
+            <input
+              appControl
+              type="number"
+              inputmode="decimal"
+              name="tolerance"
+              min="0"
+              max="500"
+              step="any"
+              [ngModel]="current.tolerance"
+              (ngModelChange)="setNumber('tolerance', $event)"
+              (blur)="attempt.touch('tolerance')"
+            />
+          </app-field>
+        </section>
+
+        <section class="panel" aria-labelledby="ai-heading">
+          <h2 id="ai-heading" i18n>AI recipe suggestions</h2>
+          @if (aiOff()) {
+            <p class="quiet" i18n>
+              TB Gym hasn’t turned on AI suggestions for workspaces yet. Your coaches write recipes
+              themselves until then.
+            </p>
+          } @else {
+            <p class="quiet" i18n>
+              Your coaches can start a recipe from a description. Every suggestion is checked by the
+              coach before it is saved.
+            </p>
+            <div class="pair">
+              <app-field
+                label="Suggestions a month"
+                i18n-label
+                [help]="ceilingRequests()"
+                [errors]="shown('requests')"
+              >
+                <input
+                  appControl
+                  type="number"
+                  inputmode="numeric"
+                  name="requests"
+                  min="0"
+                  step="1"
+                  [ngModel]="current.requests"
+                  (ngModelChange)="setNumber('requests', $event)"
+                  (blur)="attempt.touch('requests')"
+                />
+              </app-field>
+              <app-field
+                label="Spending limit a month (USD)"
+                i18n-label
+                [help]="ceilingCost()"
+                [errors]="shown('cost')"
+              >
+                <input
+                  appControl
+                  type="number"
+                  inputmode="decimal"
+                  name="cost"
+                  min="0"
+                  step="0.01"
+                  [ngModel]="current.cost"
+                  (ngModelChange)="setNumber('cost', $event)"
+                  (blur)="attempt.touch('cost')"
+                />
+              </app-field>
+            </div>
+          }
+        </section>
+
+        <div class="actions">
+          <p class="error" role="alert">
+            @if (conflict()) {
+              <span i18n>Someone saved these settings after you opened them.</span>&ngsp;
+              <button appButton type="button" variant="text" (click)="load()" i18n>
+                Show their settings
+              </button>
+            } @else if (saveError(); as message) {
+              {{ message }}
+            }
+          </p>
+          <button appButton type="submit" [loading]="saving()" i18n>Save settings</button>
+        </div>
+      </form>
+    }
+  </section>
+</app-settings-frame>

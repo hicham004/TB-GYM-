@@ -23,12 +23,11 @@ import { PersonalModeStore } from '../../core/theme/personal-mode.store';
 import { initialsOf } from '../../shell/initials';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
-import { SectionNav } from '../../ui/section-nav';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import { UiToast } from '../../ui/toast';
 import { BrandPreview } from './brand-preview';
-import { SETTINGS_SECTIONS } from './settings-sections';
+import { SettingsFrame } from '../settings/settings-frame';
 import { WorkspaceBrandApi } from './workspace-brand-api';
 import {
   type BrandChoice,
@@ -55,7 +54,7 @@ interface DraftLogo {
  */
 @Component({
   selector: 'app-workspace-brand',
-  imports: [BrandPreview, Button, Control, Field, SectionNav, SegmentedControl, Skeleton],
+  imports: [BrandPreview, Button, Control, Field, SettingsFrame, SegmentedControl, Skeleton],
   templateUrl: './workspace-brand.html',
   styleUrl: './workspace-brand.scss',
   host: {
@@ -77,7 +76,6 @@ export class WorkspaceBrand {
   private readonly injector = inject(Injector);
   private loadedTenantId: string | null = null;
 
-  protected readonly sections = SETTINGS_SECTIONS;
   protected readonly presets = BRAND_PRESETS;
   protected readonly logoTypes = LOGO_TYPES.join(',');
   protected readonly modeOptions = [

@@ -1,70 +1,224 @@
-<section class="page-heading">
-  <div>
-    <p class="eyebrow" i18n>Owner settings</p>
-    <h1 i18n>Coaching space</h1>
-    <p i18n>Your coaching space’s name and regional defaults.</p>
+<app-settings-frame>
+  <header settingsHead class="top">
+    <h1 id="space-heading" #heading tabindex="-1" i18n>Name and region</h1>
+    <p class="lede" i18n>
+      Your coaching space’s name, and the clock and calendar that every plan, program and check-in
+      follows.
+    </p>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="5" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel load-failed">
+        <p role="alert" i18n>Your coaching space couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (draft(); as current) {
+        <form
+          class="settings"
+          novalidate
+          (submit)="$event.preventDefault(); save()"
+          aria-labelledby="space-heading"
+        >
+          <section class="panel" aria-labelledby="name-heading">
+            <h2 id="name-heading" i18n>Name</h2>
+            <app-field
+              label="Coaching space name"
+              i18n-label
+              help="Your clients and coaches see it in the app and in the emails TB Gym sends."
+              i18n-help
+              [errors]="shownErrors('name')"
+            >
+              <input
+                appControl
+                id="space-name"
+                name="name"
+                type="text"
+                dir="auto"
+                autocomplete="organization"
+                [value]="current.name"
+                (input)="set({ name: $any($event.target).value })"
+                (blur)="attempt.touch('name')"
+              />
+            </app-field>
+            <p class="quiet" i18n>
+              Emails and invitations go out in English for now. Arabic comes with the translation
+              work.
+            </p>
+          </section>
+
+          <section class="panel" aria-labelledby="calendar-heading">
+            <h2 id="calendar-heading" i18n>Time and calendar</h2>
+            <div class="zone-row">
+              <div class="zone-text">
+                <p class="row-label" id="zone-label" i18n>Time zone</p>
+                @if (zone(); as tz) {
+                  <p class="zone-value" data-zone>
+                    <strong>{{ zoneLabel(tz) }}</strong
+                    >&ngsp;
+                    <span class="zone-meta">{{ tz.offset }} · {{ tz.now }}</span>
+                  </p>
+                }
+                <p class="quiet" id="zone-help" i18n>
+                  Days in programs, check-ins and plans start and end at midnight here, and
+                  reminders follow this clock.
+                </p>
+              </div>
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                aria-describedby="zone-label"
+                (click)="openTimeZones()"
+                i18n
+              >
+                Change
+              </button>
+            </div>
+            <app-segmented-control
+              label="Weeks start on"
+              i18n-label
+              [options]="weekOptions"
+              [selected]="current.weekStartsOn"
+              (selectedChange)="setWeek($event)"
+            />
+          </section>
+
+          <section class="panel" aria-labelledby="money-heading">
+            <h2 id="money-heading" i18n>Money</h2>
+            <app-segmented-control
+              label="Price new plans in"
+              i18n-label
+              [options]="currencyOptions"
+              [selected]="current.currencyChoice"
+              (selectedChange)="setCurrency($event)"
+            />
+            @if (current.currencyChoice === 'other') {
+              <app-field
+                class="code"
+                label="Currency code"
+                i18n-label
+                help="Three letters, like EUR or AED."
+                i18n-help
+                [errors]="shownErrors('currency')"
+              >
+                <input
+                  appControl
+                  id="space-currency"
+                  name="currency"
+                  type="text"
+                  maxlength="3"
+                  autocomplete="off"
+                  autocapitalize="characters"
+                  spellcheck="false"
+                  [value]="current.otherCurrency"
+                  (input)="set({ otherCurrency: $any($event.target).value })"
+                  (blur)="attempt.touch('currency')"
+                />
+              </app-field>
+            }
+            @if (currencyLine(); as line) {
+              <p class="quiet" data-currency-line>{{ line }}</p>
+            }
+          </section>
+
+          <div class="actions">
+            <p class="save-error" role="alert">{{ saveError() }}</p>
+            <div class="buttons">
+              @if (dirty()) {
+                <button appButton type="button" variant="text" (click)="discard()" i18n>
+                  Undo changes
+                </button>
+              }
+              <button appButton type="submit" [loading]="saving()" [disabled]="!dirty()">
+                @if (saving()) {
+                  <ng-container i18n>Saving…</ng-container>
+                } @else {
+                  <ng-container i18n>Save changes</ng-container>
+                }
+              </button>
+            </div>
+          </div>
+        </form>
+      }
+    }
+  }
+</app-settings-frame>
+
+<ng-template #zoneSheet>
+  <div class="zones">
+    <app-field label="Search by city" i18n-label>
+      <input
+        appControl
+        id="zone-search"
+        name="zone-search"
+        type="search"
+        autocomplete="off"
+        spellcheck="false"
+        [value]="zoneQuery()"
+        (input)="zoneQuery.set($any($event.target).value)"
+      />
+    </app-field>
+    @if (deviceZone(); as device) {
+      @if (device.id !== draft()?.timeZoneId && zoneQuery() === '') {
+        <button class="device" type="button" (click)="chooseZone(device.id)" data-device-zone>
+          <span i18n>Use this device’s time zone: {{ zoneLabel(device) }}</span>
+        </button>
+      }
+    }
+    <p class="tb-visually-hidden" role="status">
+      @if (zoneQuery() !== '') {
+        <ng-container i18n>{zoneResults().length, plural,
+          =0 {No time zone matches}
+          =1 {1 time zone matches}
+          other {{{ zoneResults().length }} time zones match}
+        }</ng-container>
+      }
+    </p>
+    @if (zoneResults().length === 0) {
+      <p class="quiet none" i18n>
+        No time zone matches “{{ zoneQuery() }}”. Try the nearest big city.
+      </p>
+    }
+    <ul class="zone-list" role="list" tabindex="-1">
+      @for (option of zoneResults(); track option.id) {
+        <li>
+          <button
+            type="button"
+            class="zone-option"
+            [class.chosen]="option.id === draft()?.timeZoneId"
+            [attr.aria-current]="option.id === draft()?.timeZoneId ? 'true' : null"
+            (click)="chooseZone(option.id)"
+          >
+            <span class="zone-name">
+              <strong>{{ option.city }}</strong>
+              @if (option.area) {
+                &ngsp;<span class="zone-area">{{ option.area }}</span>
+              }
+            </span>
+            &ngsp;<span class="zone-offset">{{ option.offset }} · {{ option.now }}</span>
+            @if (option.id === draft()?.timeZoneId) {
+              <app-icon name="check-circle" class="zone-check" />
+            }
+          </button>
+        </li>
+      }
+    </ul>
   </div>
-</section>
+</ng-template>
 
-<app-section-nav
-  class="settings-sections tb-theme"
-  label="Settings sections"
-  i18n-label
-  [links]="sections"
-/>
-
-@if (error()) {
-  <p class="form-error" role="alert">{{ error() }}</p>
-}
-@if (notice()) {
-  <p class="form-success" role="status">{{ notice() }}</p>
-}
-
-@if (loading()) {
-  <p class="loading-row" i18n>Loading settings...</p>
-} @else {
-  <form class="surface-section settings-form" [formGroup]="form" (ngSubmit)="save()" novalidate>
-    <div class="form-grid">
-      <label>
-        <span i18n>Name</span>
-        <input type="text" formControlName="name" />
-      </label>
-      <label>
-        <span i18n>Short name</span>
-        <input type="text" formControlName="slug" readonly />
-      </label>
-      <label>
-        <span i18n>Time zone</span>
-        <input type="text" formControlName="timeZoneId" />
-      </label>
-      <label>
-        <span i18n>Default language and region</span>
-        <select formControlName="defaultCulture">
-          <option value="en-LB" i18n>English (Lebanon)</option>
-          <option value="ar-LB" i18n>Arabic (Lebanon)</option>
-        </select>
-      </label>
-      <label>
-        <span i18n>Default currency</span>
-        <input type="text" maxlength="3" formControlName="defaultCurrencyCode" />
-      </label>
-      <label>
-        <span i18n>Week starts on</span>
-        <select formControlName="weekStartsOn">
-          <option value="Monday" i18n>Monday</option>
-          <option value="Sunday" i18n>Sunday</option>
-          <option value="Saturday" i18n>Saturday</option>
-        </select>
-      </label>
-    </div>
-    <div class="form-actions">
-      <button class="primary-button" type="submit" [disabled]="saving()">
-        @if (saving()) {
-          <span i18n>Saving...</span>
-        } @else {
-          <span i18n>Save settings</span>
-        }
-      </button>
-    </div>
-  </form>
-}
+<ng-template #leaveDialog let-dialog>
+  <app-confirm
+    [message]="leaveMessage"
+    [confirmLabel]="leaveConfirm"
+    [cancelLabel]="leaveCancel"
+    (answer)="dialog.close($event)"
+  />
+</ng-template>
