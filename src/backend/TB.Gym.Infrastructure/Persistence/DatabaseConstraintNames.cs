@@ -5,6 +5,10 @@ namespace TB.Gym.Infrastructure.Persistence;
 /// </summary>
 internal static class DatabaseConstraintNames
 {
+    /// <summary>One asset per YouTube or Vimeo video in a workspace (MED-015); a second add returns the first.</summary>
+    public const string OneAssetPerVideoLink =
+        "IX_Assets_TenantId_ExternalProvider_ExternalMediaId";
+
     public const string OneActiveOfferPerDurationAndCurrency =
         "IX_ProductOffers_ActiveDurationCurrency";
 

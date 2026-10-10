@@ -30,6 +30,24 @@ public sealed class Phase5B5MediaPurgeDomainTests
     }
 
     [TestMethod]
+    public void ARemovedVideoLinkComesBackReadyAndNothingElseCanBeRestored()
+    {
+        // MED-015: a video link has no bytes, so adding the same video again restores the removed one.
+        var link = MediaAsset.RegisterExternalEmbed(TenantId, OwnerId, "Squat demo", ExternalMediaProvider.YouTube, "dQw4w9WgXcQ");
+        Assert.ThrowsExactly<InvalidOperationException>(link.RestoreExternalEmbed);
+        link.MarkTombstoned(Now, TimeSpan.FromDays(30), isHistoricallyReferenced: false);
+        Assert.IsFalse(link.IsPurgeDue(Now.AddDays(31)));
+
+        link.RestoreExternalEmbed();
+        Assert.AreEqual((MediaAssetStatus.Ready, (DateTimeOffset?)null, (DateTimeOffset?)null), (link.Status, link.TombstonedAtUtc, link.PurgeAfterUtc));
+
+        // An upload's bytes may already be scheduled for deletion: it is never restored this way.
+        var upload = Ready();
+        upload.MarkTombstoned(Now, TimeSpan.FromDays(30), isHistoricallyReferenced: false);
+        Assert.ThrowsExactly<InvalidOperationException>(upload.RestoreExternalEmbed);
+    }
+
+    [TestMethod]
     public void HistoricallyReferencedMediaIsRetainedIndefinitelyAndCannotBePurged()
     {
         var asset = Ready();

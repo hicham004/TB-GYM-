@@ -268,6 +268,22 @@ public sealed class MediaAsset : TenantEntity
     }
 
     /// <summary>
+    /// A video link removed from the library comes back when the coach adds the same video again
+    /// (MED-015). It has no bytes, so nothing was scheduled for deletion and nothing is lost.
+    /// </summary>
+    public void RestoreExternalEmbed()
+    {
+        if (Source != MediaSource.ExternalEmbed || Status != MediaAssetStatus.Tombstoned)
+        {
+            throw new InvalidOperationException("Only a removed video link can be restored.");
+        }
+
+        Status = MediaAssetStatus.Ready;
+        TombstonedAtUtc = null;
+        PurgeAfterUtc = null;
+    }
+
+    /// <summary>
     /// Whether the bytes may be physically deleted at <paramref name="now"/>. An asset that is not
     /// tombstoned, one retained indefinitely because history references it, and one whose retention
     /// has not elapsed are all ineligible.

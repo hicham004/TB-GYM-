@@ -121,7 +121,15 @@ internal sealed class ExerciseLibraryApplicationService(
         {
             await ValidateReferencesAsync(request.Alternatives, request.MediaAssetIds, cancellationToken);
             dbContext.Entry(exercise).Property(item => item.Version).OriginalValue = request.Version;
+            var loaded = ChildrenOf(exercise).ToHashSet(ReferenceEqualityComparer.Instance);
             exercise.Update(ToDefinition(request));
+            // A child the update adds carries a key the app made, so EF, meeting it through a tracked
+            // collection, would take it for an existing row and UPDATE nothing: say it is new.
+            foreach (var added in ChildrenOf(exercise).Where(child => !loaded.Contains(child)))
+            {
+                dbContext.Entry(added).State = EntityState.Added;
+            }
+
             await dbContext.SaveChangesAsync(cancellationToken);
             return Success(await GetRequiredViewAsync(exercise.Id, cancellationToken));
         }
@@ -181,6 +189,12 @@ internal sealed class ExerciseLibraryApplicationService(
             return Conflict("concurrency_conflict", "The exercise was changed by another request.");
         }
     }
+
+    private static IEnumerable<object> ChildrenOf(Exercise exercise) =>
+        exercise.Muscles.Cast<object>()
+            .Concat(exercise.Tags)
+            .Concat(exercise.Alternatives)
+            .Concat(exercise.Media);
 
     private async Task<Exercise?> LoadAsync(
         Guid exerciseId,

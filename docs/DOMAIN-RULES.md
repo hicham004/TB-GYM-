@@ -1645,9 +1645,22 @@ R4.4d) and purged on the same sweep; a save may name such an upload only until 4
 sweep never removes a photo a save is naming. A client reads a recipe photo only through their own copy
 of a recipe in an active plan of theirs (NUT-006), while their nutrition access lasts, and nothing else.
 
+**MED-015** One asset per video link (R5.1b, decided 2026-10-09). A workspace holds one media asset per
+YouTube or Vimeo video: adding a video it already has returns that asset with its first title, a removed
+one is brought back ready (a link has no bytes, so it is never purged and nothing was lost), and two
+coaches adding it at the same moment end with the one that committed first (the unique index
+`IX_Assets_TenantId_ExternalProvider_ExternalMediaId` settles the race). So several exercises can share
+one demo. It used to answer 500. Another workspace keeps its own asset for the same video. The exercise
+library shows a link as a play tile and never loads the provider's picture: the app's pages allow images
+from TB Gym only.
+
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and
 cannot leak one coach's private library into another tenant.
+
+**LIB-002** Editing an exercise (R5.1b, fixed 2026-10-09) adds and removes its muscles, tags, swaps and
+media in one save. Rows the save adds are written as new: before, a second video or a new muscle made the
+save answer `concurrency_conflict`, because the database was asked to update rows that did not exist yet.
 
 ## 9. Theme and gamification
 

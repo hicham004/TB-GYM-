@@ -55,8 +55,9 @@ let nextId = 0;
       } @else {
         <button
           #trigger
-          class="tb-button tb-button--outlined"
           type="button"
+          [class]="variant() === 'chip' ? 'chip' : 'tb-button tb-button--outlined'"
+          [class.selected]="selected()"
           [attr.aria-expanded]="open()"
           [attr.aria-controls]="panelId"
           (click)="toggle()"
@@ -66,13 +67,15 @@ let nextId = 0;
         </button>
       }
       @if (open()) {
-        <ul class="panel" [class.start]="align() === 'start'" [id]="panelId">
+        <ul class="panel" [class.start]="(align() === 'start') !== flipped()" [id]="panelId">
           @for (item of items(); track item.action) {
             <li>
               <button
                 class="item"
                 type="button"
                 [class.danger]="item.danger"
+                [class.current]="current() === item.action"
+                [attr.aria-current]="current() === item.action ? 'true' : null"
                 [attr.aria-disabled]="item.disabled ? 'true' : null"
                 (click)="choose(item)"
               >
@@ -101,6 +104,38 @@ let nextId = 0;
       inline-size: 2.25rem;
     }
 
+    .chip {
+      align-items: center;
+      background: var(--tb-surface);
+      border: 1px solid var(--tb-line-strong);
+      border-radius: 999px;
+      color: var(--tb-ink);
+      cursor: pointer;
+      display: inline-flex;
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 500;
+      gap: 0.25rem;
+      min-block-size: 2.5rem;
+      padding: 0.25rem 0.625rem 0.25rem 0.875rem;
+    }
+
+    .chip:hover {
+      border-color: var(--tb-ink);
+    }
+
+    .chip:focus-visible {
+      outline: 2px solid var(--tb-focus);
+      outline-offset: 2px;
+    }
+
+    .chip.selected {
+      background: var(--tb-brand);
+      border-color: var(--tb-brand);
+      color: var(--tb-on-brand);
+      font-weight: 700;
+    }
+
     .panel {
       background: var(--tb-surface);
       border: 1px solid var(--tb-line);
@@ -113,7 +148,11 @@ let nextId = 0;
       list-style: none;
       margin: 0;
       max-inline-size: min(18rem, calc(100vw - 2rem));
-      min-inline-size: 12rem;
+      min-inline-size: min(12rem, calc(100vw - 2rem));
+      // A long list (fifteen muscles) scrolls inside the menu instead of off the screen.
+      max-block-size: min(24rem, 70dvh);
+      overflow-y: auto;
+      overscroll-behavior: contain;
       padding: 0.375rem;
       position: absolute;
       z-index: 40;
@@ -147,6 +186,11 @@ let nextId = 0;
 
     .item.danger .item-title {
       color: var(--tb-danger);
+    }
+
+    // The choice in effect, as a filter chip's menu marks it.
+    .item.current {
+      background: var(--tb-accent-soft);
     }
 
     .item[aria-disabled='true'] {
@@ -190,9 +234,16 @@ export class UiMenu {
   readonly icon = input<IconName | null>(null);
   /** Which edge of the button the list lines up with; the end suits a button at a row's end. */
   readonly align = input<'start' | 'end'>('end');
+  /** `chip` draws the button as a filter pill (the exercise library's filters), filled when `selected`. */
+  readonly variant = input<'button' | 'chip'>('button');
+  readonly selected = input(false);
+  /** The `action` of the item in effect, marked in the list. */
+  readonly current = input<string | null>(null);
   /** The `action` of the item chosen, once the menu has closed and focus is back on the button. */
   readonly chosen = output<string>();
   protected readonly open = signal(false);
+  /** The list opens from the button's other edge, because the usual one would leave the screen. */
+  protected readonly flipped = signal(false);
   protected readonly panelId = `tb-menu-${nextId++}`;
 
   /** Puts focus back on the button, for a page whose chosen action removed what had focus. */
@@ -202,10 +253,29 @@ export class UiMenu {
 
   protected toggle(): void {
     const opening = !this.open();
+    this.flipped.set(false);
     this.open.set(opening);
     if (opening) {
-      afterNextRender(() => this.itemElements()[0]?.focus(), { injector: this.injector });
+      afterNextRender(
+        () => {
+          this.keepOnScreen();
+          this.itemElements()[0]?.focus();
+        },
+        { injector: this.injector },
+      );
     }
+  }
+
+  /**
+   * A list that would run past the screen's edge opens from the button's other edge instead, as a
+   * filter chip near the end of a row on a phone needs. Read once, when the list opens.
+   */
+  private keepOnScreen(): void {
+    const panel = this.host.nativeElement.querySelector<HTMLElement>('.panel');
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    const width = this.host.nativeElement.ownerDocument.documentElement.clientWidth;
+    if (rect.left < 0 || rect.right > width) this.flipped.set(true);
   }
 
   /**

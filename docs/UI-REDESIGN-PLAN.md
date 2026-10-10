@@ -87,7 +87,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | P4c | **Suggested maxes, P4b's follow-ups** (owner, 2026-10-08: "do the last session's not-done work"; decided by Claude after comparing competitors, ADR 0036): **Keep this max** on a suggestion (STR-013), Coach Today names the lifts whose logged sets suggest a new max (CLI-018 v2), a newer set during review says so, and demo clients hit their numbers. Its own follow-ups were closed in the same step: a new program starts where the last one ended, with the last program's suggestion one tap away in Assign program and on Coach Today's No program item (STR-014), and the client list has a Maxes to review chip | §2, plus domain tests (the keep, the attention rule, the carried max) and API tests (keep, retry, newer set, other coach, other workspace, released client, Coach Today, append-only, carry from the latest program only, the same client only) | Done · 2026-10-08 · cac5874 |
 | P4d | **P4c's last two follow-ups** (owner, 2026-10-08: "the last session's not-done work"; decided by Claude after comparing competitors, ADR 0036): the client's **Training max history** lists every program's training maxes beside the recorded ones, named with the program and the week they apply from (STR-015, each fact stored once), and Coach Today keeps a number and its unit on one line at 390 px | §2, plus API tests (asked for or not, order, pages, lift filter, other coach, other workspace) | Done · 2026-10-08 |
 | R5.1a | **Plans you sell** (C8): each plan a card with its price options (shortest first), what they include and the coach's clients on each, now and starting (SUB-015); New plan, Add price option, Change price and Edit name and description in sheets; Stop selling and Sell again with Undo; old price options and plans no longer sold behind a closed disclosure | §2, plus API tests (counts per option and plan, each client once, cancelled and released left out, a Coach's own clients, another workspace) | Done · 2026-10-08 |
-| R5.1b | **Exercise library** (C10) | §2 | To do |
+| R5.1b | **Exercise library** (C10): the coach's exercises as cards with their first picture or video (or a lettered tile), or as a list; a search and four filter chips (muscle, pattern, type, equipment) plus Archived too, all in the address; New exercise as a quick add (name, a YouTube or Vimeo link, what it trains) with More details (how to do it, other muscles, tags, swaps, pictures and videos, uploads) in one sheet that Edit opens too; Archive with Undo. Two server bugs found on the way were fixed: a video link added twice answered 500 (MED-015), and editing an exercise to add a muscle or a second video answered a conflict (LIB-002) | §2, plus API tests (the same link twice, by a colleague, after removal, at the same moment, another workspace, a client refused; an edit adding and dropping every kind of row) | Done · 2026-10-09 |
 | R5.1c | **Notifications**, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only) | §2 | To do |
 | R5.2 | **Settings, Team, Billing** (C9) and the platform admin screen | §2 | To do |
 | R5.3 | **Delete legacy CSS**, add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
@@ -561,6 +561,21 @@ of the implemented R1.3 screens before production rollout.
   before; (e) a plan's cover photo, a public page or a checkout link would be a new way to sell, an owner
   decision.
 
+- **Exercise library, R5.1b (built 2026-10-09; screenshots `docs/design/r51b-*.png`). Decided by Claude for
+  the owner on 2026-10-09**, after looking at TrueCoach (Add New Exercise asks for a name and a video URL or
+  an upload, then Save) and Everfit (its library filters by modality, muscle group and movement pattern;
+  equipment sits under advanced settings): (1) **quick add asks for the name and a video link first**, then
+  type, main muscle, pattern and equipment, starting from the filters in use; everything else is under More
+  details. (2) **Four filter chips** (muscle, pattern, type, equipment) and Archived too, applied at once and
+  kept in the address, replace the three selects and Apply. (3) **A video link added twice is one asset**
+  (MED-015): coaches reuse one demo across variations, and the server answered 500 before. (4) **Archive has
+  Undo, no confirmation**: programs already built keep the exercise, as before. (5) **No YouTube or Vimeo
+  pictures** on cards: the app's pages allow images from TB Gym only (nginx `img-src 'self'`), and loading
+  them would send every coach's library view to Google; a link shows a play tile. Not built: (a) the demo
+  still has no exercise media (licensed footage only, see "Demo data gaps"), so its cards are lettered
+  tiles; (b) exercise pictures have no thumbnail of their own (only progress and recipe photos do), so a
+  card loads the full picture; (c) choosing the order of an exercise's media (the first is its card's); (d)
+  "Show more" pages by 48; a library of thousands would want a count per chip.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1150,6 +1165,14 @@ limited to the coach's assigned clients.
 **C10. Exercise library**
 - A grid/list toggle with media thumbnails, filter chips instead of three dropdowns plus an
   "Apply" button, and a quick-add drawer.
+- Built in R5.1b: Exercises (`/training/exercises`, follows dark mode) shows cards with each exercise's
+  first media: a picture through one batch grant per 32 cards, a play tile for a video or a link (read
+  from the coach's media list, no grant needed), else a lettered tile tinted by what the pattern trains.
+  On a phone the cards go two a row. The search and the chips apply at once and live in the address
+  (`?q=&muscle=&pattern=&type=&equipment=&archived=1&view=list`). New exercise and Edit open one sheet;
+  the legacy inline editor, its media panel and the archive dialog are gone. The kit's menu gained a
+  `chip` look, a marked current choice, a scrolling list and opening from its other edge when it would
+  leave the screen.
 
 ### Client (phone first)
 

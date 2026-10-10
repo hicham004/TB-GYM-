@@ -14,6 +14,7 @@ import { ClientListApi } from '../../features/clients/client-list-api';
 import { Clients } from '../../features/clients/clients';
 import { Invitations } from '../../features/invitations/invitations';
 import { ExerciseLibrary } from '../../features/training/exercise-library';
+import { ExerciseLibraryApi } from '../../features/training/exercise-library-api';
 import { TenantStore } from './tenant.store';
 import { tenantInterceptor } from './tenant.interceptor';
 import { settle } from '../../../testing/dom';
@@ -30,10 +31,13 @@ describe('tenant ownership in migrated screens', () => {
     getTenants: vi.fn(() => of(['A', 'B'].map((tenantId) => ({ tenantId, role: 'Owner' })))),
     getInvitations: vi.fn(() => of<ClientInvitation[]>([])),
     createInvitation: vi.fn(() => of(invitation('created'))),
-    searchExercises: vi.fn(() => of({ items: [], total: 0 })),
-    listMedia: vi.fn(() => of({ items: [], total: 0 })),
   };
   const clientList = { getOverview: vi.fn(() => of(directory('none'))) };
+  const exercises = {
+    search: vi.fn(() => of({ items: [], total: 0 })),
+    listMedia: vi.fn(() => of({ items: [], total: 0, skip: 0, take: 100 })),
+    grant: vi.fn(() => of({ items: [] })),
+  };
   const csrf = { refresh: vi.fn(async (): Promise<void> => undefined) };
 
   beforeEach(async () => {
@@ -44,6 +48,7 @@ describe('tenant ownership in migrated screens', () => {
         provideRouter([]),
         { provide: ApiClient, useValue: api },
         { provide: ClientListApi, useValue: clientList },
+        { provide: ExerciseLibraryApi, useValue: exercises },
         { provide: AuthStore, useValue: { user: signal(null) } },
         { provide: CsrfService, useValue: csrf },
         provideHttpClient(withInterceptors([tenantInterceptor])),
@@ -200,19 +205,17 @@ describe('tenant ownership in migrated screens', () => {
     await settle(fixture);
     const old = new Subject<{ items: []; total: number }>();
     const newest = new Subject<{ items: []; total: number }>();
-    api.searchExercises.mockReturnValueOnce(old).mockReturnValueOnce(newest);
+    exercises.search.mockReturnValueOnce(old).mockReturnValueOnce(newest);
     const view = fixture.componentInstance;
-    view['query'].set('old');
-    const first = view['search']();
-    view['query'].set('new');
-    const second = view['search']();
+    // Two reads in flight, as two filters chosen quickly make: the older answer arrives last.
+    const first = view['load']();
+    const second = view['load']();
     newest.next({ items: [], total: 2 });
     await second;
     old.next({ items: [], total: 99 });
     await first;
     expect(view['total']()).toBe(2);
     TestBed.inject(TenantStore).select('B');
-    expect(view['query']()).toBe('');
     expect(view['total']()).toBe(0);
   });
 

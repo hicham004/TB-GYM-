@@ -369,14 +369,61 @@ internal sealed class MediaApplicationService(
                 request.Title,
                 request.Provider,
                 request.ExternalMediaId);
+
+            // MED-015: one asset per video in a workspace. Adding a video already there returns it, and
+            // brings it back if it was removed, so several exercises can share one demo.
+            if (await FindVideoLinkAsync(asset, cancellationToken) is { } existing)
+            {
+                return await ReuseVideoLinkAsync(existing, cancellationToken);
+            }
+
             dbContext.MediaAssets.Add(asset);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (CheckInResponseApplicationService.IsConstraintViolation(
+                exception,
+                DatabaseConstraintNames.OneAssetPerVideoLink))
+            {
+                // The same video was added at the same moment: the one that committed stands.
+                dbContext.Entry(asset).State = EntityState.Detached;
+                return await FindVideoLinkAsync(asset, cancellationToken) is { } winner
+                    ? await ReuseVideoLinkAsync(winner, cancellationToken)
+                    : throw new InvalidOperationException("The video link that won the race could not be read.", exception);
+            }
+
             return Success(asset);
         }
         catch (ArgumentException exception)
         {
             return Invalid("media", exception.Message);
         }
+    }
+
+    private Task<MediaAsset?> FindVideoLinkAsync(MediaAsset link, CancellationToken cancellationToken) =>
+        dbContext.MediaAssets.SingleOrDefaultAsync(
+            item => item.ExternalProvider == link.ExternalProvider && item.ExternalMediaId == link.ExternalMediaId,
+            cancellationToken);
+
+    private async Task<MediaCommandResult> ReuseVideoLinkAsync(MediaAsset existing, CancellationToken cancellationToken)
+    {
+        if (existing.Status != MediaAssetStatus.Tombstoned)
+        {
+            return Success(existing);
+        }
+
+        existing.RestoreExternalEmbed();
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return new MediaCommandResult(MediaCommandStatus.Conflict);
+        }
+
+        return Success(existing);
     }
 
     public async Task<MediaAssetPage> ListAsync(

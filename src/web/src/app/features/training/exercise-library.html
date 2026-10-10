@@ -1,513 +1,222 @@
-<!-- The summary is written once and used twice: visibly above the table, and as the table's
-     caption. `total` is the server's count for the current query; the loaded rows are at most the
-     100 the server returns, so the two are never conflated. Counts are isolated for RTL. -->
-<ng-template #summaryText>
-  @if (loadedAll()) {
-    <ng-container i18n>{total(), plural,
-      =0 {No exercises}
-      =1 {1 exercise · sorted by name}
-      other {<bdi>{{ totalText() }}</bdi> exercises · sorted by name}
-    }</ng-container>
-  } @else {
-    <ng-container i18n
-      >Showing the first <bdi>{{ loadedText() }}</bdi> of <bdi>{{ totalText() }}</bdi
-      >. Refine the search.</ng-container
-    >
-  }
-</ng-template>
-
-<div class="exercises tb-theme">
-  <header class="page-header">
-    <div class="page-title">
-      <h1 class="tb-text-section-title" i18n>Training</h1>
-      <p class="scope tb-text-compact" i18n>
-        The exercises your programs are built from. Saved programs, assigned programs and logged
-        workouts keep the exercise name they were saved with.
+<section class="library" aria-labelledby="library-heading">
+  <header class="top">
+    <div class="intro">
+      <h1 id="library-heading" #heading tabindex="-1" i18n>Exercises</h1>
+      <p class="lede" role="status">
+        @if (summary(); as line) {
+          {{ line }}
+        } @else {
+          <ng-container i18n>The exercises your programs are built from.</ng-container>
+        }
       </p>
     </div>
-
-    <app-section-nav
-      class="page-sections"
-      label="Training sections"
-      i18n-label
-      [links]="sections"
-    />
-
-    <!-- The one dominant action on this screen. -->
-    <div class="page-actions">
-      <button appButton type="button" (click)="newExercise()">
-        <app-icon name="plus" />
-        <ng-container i18n>New exercise</ng-container>
-      </button>
-    </div>
+    <button appButton type="button" (click)="newExercise()">
+      <app-icon name="plus" />
+      <span i18n>New exercise</span>
+    </button>
   </header>
 
-  <p class="page-error" role="alert">{{ error() }}</p>
-  <p class="page-notice" role="status">{{ notice() }}</p>
-</div>
-
-@if (editor(); as form) {
-  <!-- The existing editor, unchanged: same form, same payload, same media management. It is the
-       legacy state this screen enters from New exercise and Edit; only the library list around it
-       has been migrated. -->
-  <section class="surface-section editor-section">
-    <div class="section-heading">
-      @if (form.id) {
-        <h2 i18n>Edit exercise</h2>
-      } @else {
-        <h2 i18n>Create exercise</h2>
-      }
-      <button class="quiet-button compact" type="button" (click)="editor.set(null)" i18n>
-        Close
-      </button>
-    </div>
-    <div class="editor-grid">
-      <label>
-        <span i18n>Name</span>
-        <input [(ngModel)]="form.name" maxlength="180" />
-      </label>
-      <label>
-        <span i18n>Classification</span>
-        <select [(ngModel)]="form.classification">
-          @for (item of classifications; track item) {
-            <option [value]="item">{{ classificationLabel(item) }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        <span i18n>Equipment</span>
-        <select [(ngModel)]="form.equipment">
-          @for (item of equipment; track item) {
-            <option [value]="item">{{ equipmentLabel(item) }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        <span i18n>Movement pattern</span>
-        <select [(ngModel)]="form.movementPattern">
-          @for (item of patterns; track item) {
-            <option [value]="item">{{ patternLabel(item) }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        <span i18n>Primary muscle</span>
-        <select [(ngModel)]="form.primaryMuscle">
-          @for (muscle of muscles; track muscle) {
-            <option [value]="muscle">{{ muscle }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        <span i18n>Secondary muscles</span>
-        <select multiple [(ngModel)]="form.secondaryMuscles">
-          @for (muscle of muscles; track muscle) {
-            @if (muscle !== form.primaryMuscle) {
-              <option [value]="muscle">{{ muscle }}</option>
-            }
-          }
-        </select>
-      </label>
-      <label>
-        <span i18n>Tags</span>
-        <input [(ngModel)]="form.tags" maxlength="500" />
-      </label>
-      <label>
-        <span i18n>Approved alternatives</span>
-        <select multiple [(ngModel)]="form.alternativeIds">
-          @for (exercise of exercises(); track exercise.id) {
-            @if (!exercise.isArchived && exercise.id !== form.id) {
-              <option [value]="exercise.id">{{ exercise.name }}</option>
-            }
-          }
-        </select>
-      </label>
-      <label class="span-full">
-        <span i18n>Instructions</span>
-        <textarea [(ngModel)]="form.instructions" maxlength="8000"></textarea>
-      </label>
-      <fieldset class="span-full media-picker">
-        <legend i18n>Exercise media</legend>
-        @for (asset of media(); track asset.id) {
-          @if (asset.status === 'Ready') {
-            <label>
-              <input
-                type="checkbox"
-                [checked]="form.mediaAssetIds.includes(asset.id)"
-                (change)="
-                  $any($event.target).checked
-                    ? form.mediaAssetIds.push(asset.id)
-                    : form.mediaAssetIds.splice(form.mediaAssetIds.indexOf(asset.id), 1)
-                "
-              />
-              <span
-                >{{ asset.title }} <small>{{ kindLabel(asset.kind) }}</small></span
-              >
-            </label>
-          }
-        }
-      </fieldset>
-    </div>
-    <div class="form-actions">
-      <button class="primary-button" type="button" [disabled]="busy()" (click)="save()" i18n>
-        Save exercise
-      </button>
-      <button class="quiet-button" type="button" (click)="editor.set(null)" i18n>Cancel</button>
-    </div>
-  </section>
-
-  <section class="surface-section media-section">
-    <div class="section-heading">
-      <h2 i18n>Media</h2>
-      <span class="muted">{{ media().length }} / {{ mediaTotal() }}</span>
-    </div>
-    <!-- A media read that failed is reported here, beside the media it is about. The exercise list
-         is read separately and is unaffected. -->
-    @if (mediaError(); as message) {
-      <p class="form-error" role="alert">{{ message }}</p>
-    }
-    <div class="media-commands">
-      <div class="media-command">
-        <label>
-          <span i18n>Upload title</span>
-          <input [ngModel]="uploadTitle()" (ngModelChange)="uploadTitle.set($event)" />
-        </label>
-        <label>
-          <span i18n>Image or video</span>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
-            (change)="fileSelected($event)"
-          />
-        </label>
-        <button class="secondary-button" type="button" [disabled]="busy()" (click)="upload()" i18n>
-          Upload
-        </button>
-      </div>
-      <div class="media-command">
-        <label>
-          <span i18n>External title</span>
-          <input [ngModel]="externalTitle()" (ngModelChange)="externalTitle.set($event)" />
-        </label>
-        <label class="provider-field">
-          <span i18n>Provider</span>
-          <select [ngModel]="externalProvider()" (ngModelChange)="externalProvider.set($event)">
-            <option value="YouTube">YouTube</option>
-            <option value="Vimeo">Vimeo</option>
-          </select>
-        </label>
-        <label>
-          <span i18n>Video ID or URL</span>
-          <input [ngModel]="externalValue()" (ngModelChange)="externalValue.set($event)" />
-        </label>
-        <button
-          class="secondary-button"
-          type="button"
-          [disabled]="busy()"
-          (click)="registerExternal()"
-          i18n
-        >
-          Register
-        </button>
-      </div>
-    </div>
-    @if (media().length > 0) {
-      <div class="media-list">
-        @for (asset of media(); track asset.id) {
-          <div>
-            <strong>{{ asset.title }}</strong>
-            <span>
-              {{ mediaSourceLabel(asset.source) }} &middot; {{ kindLabel(asset.kind) }} &middot;
-              {{ mediaStatusLabel(asset.status) }}
-            </span>
-            <button
-              class="quiet-button compact"
-              type="button"
-              [disabled]="busy() || asset.status === 'Tombstoned'"
-              (click)="deleteMedia(asset)"
-              i18n
-            >
-              Delete
-            </button>
-          </div>
-        }
-      </div>
-    }
-    @if (media().length < mediaTotal()) {
-      <button
-        class="quiet-button compact"
-        type="button"
-        [disabled]="busy()"
-        (click)="loadMoreMedia()"
-        i18n
-      >
-        Load more media
-      </button>
-    }
-  </section>
-}
-
-<section
-  #libraryRegion
-  class="library tb-table-scope tb-theme"
-  tabindex="-1"
-  aria-labelledby="exercise-library-heading"
->
-  <h2 id="exercise-library-heading" class="tb-visually-hidden" i18n>Exercise library</h2>
+  <!-- Programs and Exercises are the two pages of Training; the sidebar links to Programs. -->
+  <app-section-nav label="Training sections" i18n-label [links]="sections" />
 
   <div class="toolbar">
-    <!-- Search and filters are the server's: query, equipment, movement pattern, classification
-         and include-archived all travel to GET /api/exercises. Apply, or Enter in the search
-         field, runs the request; changing a select on its own does not. -->
-    <form
-      class="filters"
-      role="search"
-      aria-label="Exercise search and filters"
-      i18n-aria-label
-      (ngSubmit)="search()"
-    >
-      <app-field class="filter search-filter" label="Search exercises" i18n-label hideLabel>
+    <div class="find" role="search" aria-label="Find exercises" i18n-aria-label>
+      <app-field class="search" [label]="searchLabel" hideLabel>
         <input
           appControl
           type="search"
-          name="query"
-          placeholder="Search by name or tag"
-          i18n-placeholder
-          [ngModel]="query()"
-          (ngModelChange)="query.set($event)"
+          name="exercise-search"
+          autocomplete="off"
+          [placeholder]="searchPlaceholder"
+          [value]="searchText()"
+          (input)="typed($any($event.target).value)"
         />
       </app-field>
-      <app-field class="filter equipment-filter" label="Equipment" i18n-label>
-        <select
-          appControl
-          name="equipment"
-          [ngModel]="equipmentFilter()"
-          (ngModelChange)="equipmentFilter.set($event)"
+      <div class="chips" role="group" aria-label="Filters" i18n-aria-label>
+        @for (chip of chips(); track chip.key) {
+          <app-menu
+            variant="chip"
+            align="start"
+            [label]="chip.name"
+            [selected]="chip.active"
+            [current]="chip.active ? (filters()[chip.key] ?? '') : ''"
+            [items]="chip.items"
+            (chosen)="setFilter(chip.key, $event)"
+          />
+        }
+        <button
+          type="button"
+          class="toggle-chip"
+          [attr.aria-pressed]="filters().archived"
+          (click)="toggleArchived()"
+          i18n
         >
-          <option value="" i18n>All</option>
-          @for (item of equipment; track item) {
-            <option [value]="item">{{ equipmentLabel(item) }}</option>
-          }
-        </select>
-      </app-field>
-      <app-field class="filter pattern-filter" label="Movement pattern" i18n-label>
-        <select
-          appControl
-          name="movementPattern"
-          [ngModel]="patternFilter()"
-          (ngModelChange)="patternFilter.set($event)"
-        >
-          <option value="" i18n>All</option>
-          @for (item of patterns; track item) {
-            <option [value]="item">{{ patternLabel(item) }}</option>
-          }
-        </select>
-      </app-field>
-      <app-field class="filter classification-filter" label="Classification" i18n-label>
-        <select
-          appControl
-          name="classification"
-          [ngModel]="classificationFilter()"
-          (ngModelChange)="classificationFilter.set($event)"
-        >
-          <option value="" i18n>All</option>
-          @for (item of classifications; track item) {
-            <option [value]="item">{{ classificationLabel(item) }}</option>
-          }
-        </select>
-      </app-field>
-      <app-checkbox class="archived-filter" label="Include archived" i18n-label>
-        <input
-          type="checkbox"
-          appControl
-          name="includeArchived"
-          [ngModel]="includeArchived()"
-          (ngModelChange)="includeArchived.set($event)"
-        />
-      </app-checkbox>
-      <button appButton variant="outlined" type="submit" class="apply" [loading]="loading()" i18n>
-        Apply
-      </button>
-    </form>
-
-    <p class="summary" role="status">
-      @if (!listError()) {
-        <ng-container [ngTemplateOutlet]="summaryText" />
-      }
-    </p>
-  </div>
-
-  @if (listError(); as message) {
-    <div class="list-state">
-      <p class="list-error" role="alert">{{ message }}</p>
+          Archived too
+        </button>
+        @if (filtered()) {
+          <button appButton type="button" variant="text" (click)="clearFilters()" i18n>
+            Clear filters
+          </button>
+        }
+      </div>
+    </div>
+    <div class="views" role="group" aria-label="Show as" i18n-aria-label>
       <button
-        appButton
-        variant="outlined"
         type="button"
-        [loading]="loading()"
-        (click)="retryList()"
+        class="view"
+        [attr.aria-pressed]="filters().view === 'grid'"
+        (click)="setView('grid')"
         i18n
       >
-        Try again
+        Cards
+      </button>
+      <button
+        type="button"
+        class="view"
+        [attr.aria-pressed]="filters().view === 'list'"
+        (click)="setView('list')"
+        i18n
+      >
+        List
       </button>
     </div>
-  } @else if (loading() && rows().length === 0) {
-    <p class="list-state" i18n>Loading exercises…</p>
-  } @else if (rows().length === 0) {
-    <div class="list-state">
-      <p class="tb-text-body-strong" i18n>No exercises found</p>
-      <p class="tb-text-compact" i18n>
-        Clear the search or widen the filters. Archived exercises are left out unless you include
-        them.
-      </p>
-    </div>
-  } @else {
-    <!-- A real table. The explicit roles keep it a table for assistive technology at narrow
-         widths, where the rows are laid out as stacked blocks. -->
-    <div class="rows-scroll">
-      <table
-        class="tb-table exercise-table"
-        role="table"
-        [attr.aria-busy]="loading() ? 'true' : null"
-      >
-        <caption class="tb-visually-hidden">
-          <ng-container i18n>Exercises</ng-container
-          >&ngsp;
-          <ng-container [ngTemplateOutlet]="summaryText" />
-        </caption>
-        <thead role="rowgroup">
-          <tr role="row">
-            <th role="columnheader" scope="col" class="col-exercise" i18n>Exercise</th>
-            <th role="columnheader" scope="col" class="col-pattern" i18n>Movement pattern</th>
-            <th role="columnheader" scope="col" class="col-muscle" i18n>Primary muscle</th>
-            <th role="columnheader" scope="col" class="col-equipment" i18n>Equipment</th>
-            <th role="columnheader" scope="col" class="col-classification" i18n>Classification</th>
-            <th role="columnheader" scope="col" class="col-status" i18n>Status</th>
-            <th role="columnheader" scope="col" class="col-actions">
-              <span class="tb-visually-hidden" i18n>Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody role="rowgroup">
-          @for (row of rows(); track row.id) {
-            <tr role="row" [attr.data-exercise]="row.id" [class.archived]="row.isArchived">
-              <td role="cell" class="col-exercise">
-                <span class="exercise-name" dir="auto" [title]="row.name">{{ row.name }}</span>
-                @if (row.tags) {
-                  <span class="exercise-tags" dir="auto" [title]="row.tags">{{ row.tags }}</span>
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>Your exercises could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (cards().length === 0) {
+        @if (filtered()) {
+          <app-empty-state
+            class="panel"
+            heading="No exercise matches"
+            description="Try another word, or clear the filters. Archived exercises show only with Archived too."
+            i18n-heading
+            i18n-description
+          >
+            <button appButton empty-state-action type="button" (click)="clearFilters()" i18n>
+              Show all exercises
+            </button>
+          </app-empty-state>
+        } @else {
+          <app-empty-state
+            class="panel"
+            heading="Build your exercise library"
+            description="Add the movements you coach, each with a video link if you have one. Your programs are built from them, and clients see the video in their workout."
+            i18n-heading
+            i18n-description
+          >
+            <button appButton empty-state-action type="button" (click)="newExercise()" i18n>
+              Add your first exercise
+            </button>
+          </app-empty-state>
+        }
+      } @else {
+        <ul class="exercises" role="list" [class.as-list]="filters().view === 'list'">
+          @for (card of cards(); track card.id) {
+            <li class="exercise" [class.archived]="card.isArchived" [attr.data-exercise]="card.id">
+              <div class="cover" [attr.data-tone]="card.tone" aria-hidden="true">
+                @if (coverOf(card); as cover) {
+                  @if (cover.kind === 'image') {
+                    <img
+                      [src]="cover.url"
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      width="320"
+                      height="180"
+                    />
+                  } @else {
+                    <span class="play">
+                      <app-icon name="play" />
+                      <span class="play-label">{{ cover.label }}</span>
+                    </span>
+                  }
+                } @else {
+                  <span class="initials">{{ card.initials }}</span>
                 }
-              </td>
-              <td role="cell" class="col-pattern">
-                <span class="tb-table__label" aria-hidden="true" i18n>Movement pattern</span>
-                <span class="cell-value">{{ row.movementPattern }}</span>
-              </td>
-              <td role="cell" class="col-muscle">
-                <span class="tb-table__label" aria-hidden="true" i18n>Primary muscle</span>
-                <span class="cell-value">
-                  @if (row.primaryMuscle) {
-                    {{ row.primaryMuscle }}
-                  } @else {
-                    <span i18n>Not recorded</span>
+              </div>
+              <div class="body">
+                <h2 class="name" dir="auto">{{ card.name }}</h2>
+                <p class="detail">{{ card.detail }}</p>
+                <p class="meta">
+                  <span class="type">{{ card.type }}</span>
+                  @if (card.mediaCount > 0) {
+                    <span class="has-media">
+                      <app-icon name="play" />
+                      @if (card.mediaCount === 1) {
+                        <ng-container i18n>1 video or picture</ng-container>
+                      } @else {
+                        <ng-container i18n>{{ card.mediaCount }} videos or pictures</ng-container>
+                      }
+                    </span>
                   }
-                </span>
-              </td>
-              <td role="cell" class="col-equipment">
-                <span class="tb-table__label" aria-hidden="true" i18n>Equipment</span>
-                <span class="cell-value">{{ row.equipment }}</span>
-              </td>
-              <td role="cell" class="col-classification">
-                <span class="tb-table__label" aria-hidden="true" i18n>Classification</span>
-                <span class="cell-value">{{ row.classification }}</span>
-              </td>
-              <td role="cell" class="col-status">
-                <span class="tb-table__label" aria-hidden="true" i18n>Status</span>
-                <span class="cell-value status-cell">
-                  @if (row.isArchived) {
-                    <app-status-label label="Archived" i18n-label tone="neutral" marker="dot" />
-                    <span class="status-note" i18n>Not in new programs</span>
-                  } @else {
-                    <app-status-label label="Active" i18n-label tone="success" marker="check" />
+                  @if (card.isArchived) {
+                    <span class="archived-tag" i18n>Archived</span>
                   }
-                </span>
-              </td>
-              <td role="cell" class="col-actions">
-                <span class="row-actions">
-                  <!-- An archived exercise cannot be edited: the server refuses it, so the row
-                       offers Restore alone. -->
-                  @if (row.isArchived) {
-                    <button
-                      appButton
-                      variant="text"
-                      type="button"
-                      [loading]="pendingRow() === row.id"
-                      (click)="restore(row.source)"
-                    >
-                      <ng-container i18n
-                        >Restore<span class="tb-visually-hidden">
-                          {{ row.name }}</span
-                        ></ng-container
-                      >
-                    </button>
-                  } @else {
-                    <button appButton variant="text" type="button" (click)="edit(row.source)">
-                      <ng-container i18n
-                        >Edit<span class="tb-visually-hidden"> {{ row.name }}</span></ng-container
-                      >
-                    </button>
-                    <button
-                      appButton
-                      variant="text"
-                      type="button"
-                      [loading]="pendingRow() === row.id"
-                      (click)="requestArchive(row.source, $event)"
-                    >
-                      <ng-container i18n
-                        >Archive<span class="tb-visually-hidden">
-                          {{ row.name }}</span
-                        ></ng-container
-                      >
-                    </button>
-                  }
-                </span>
-              </td>
-            </tr>
+                </p>
+                @if (card.tags) {
+                  <p class="tags" dir="auto">{{ card.tags }}</p>
+                }
+              </div>
+              <app-menu
+                class="card-menu"
+                icon="more"
+                label="More for {{ card.name }}"
+                i18n-label
+                [items]="card.menu"
+                (chosen)="cardChosen(card, $event)"
+              />
+            </li>
           }
-        </tbody>
-      </table>
-    </div>
+        </ul>
+        @if (hasMore()) {
+          <div class="more">
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="loadingMore()"
+              (click)="loadMore()"
+              i18n
+            >
+              Show more exercises
+            </button>
+          </div>
+        }
+      }
+    }
   }
 </section>
 
-<!-- Archiving is confirmed before anything is sent. Only "Archive exercise" calls the endpoint. -->
-<dialog
-  #archiveDialog
-  class="tb-dialog tb-theme"
-  aria-labelledby="archive-dialog-title"
-  (cancel)="cancelArchive($event)"
-  (close)="pendingArchive.set(null)"
->
-  @if (pendingArchive(); as target) {
-    <h2 id="archive-dialog-title" class="tb-text-section-title" i18n>Archive {{ target.name }}?</h2>
-    <p class="tb-text-compact" i18n>
-      It stops being offered when you build or change a program, or choose an alternative. Saved
-      programs, assigned programs and logged workouts keep it, with the name and history they were
-      saved with.
-    </p>
-    <p class="tb-text-compact" i18n>You can restore it from this list at any time.</p>
-    <div class="tb-dialog__actions">
-      <button
-        #archiveCancel
-        appButton
-        variant="outlined"
-        type="button"
-        (click)="cancelArchive($event)"
-        i18n
-      >
-        Cancel
-      </button>
-      <button appButton type="button" [loading]="archiving()" (click)="confirmArchive()" i18n>
-        Archive exercise
-      </button>
-    </div>
+<ng-template #exerciseSheet>
+  @if (sheetExercise() !== undefined) {
+    <app-exercise-sheet
+      [exercise]="sheetExercise() ?? null"
+      [filters]="filters()"
+      (closed)="sheetClosed($event)"
+      (dirtyChange)="sheetChanged($event)"
+    />
   }
-</dialog>
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>
