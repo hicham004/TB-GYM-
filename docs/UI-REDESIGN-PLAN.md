@@ -91,7 +91,12 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.1c | **Notifications**, including the client's training notices (ADR 0036: a new program, a week shared, a shared week changed, a coach's workout note; in-app only). The inbox for coaches and clients in days (Today, Yesterday, the weekday, the date), All and Unread, Mark all as read, and each notice opening what it is about (a week or a finished workout in Training, a session on a client's Training, a client's plan); no Refresh button, the badge reads itself again. The client hears only what they can see now (NOT-035), and the coach hears of a client's note on a workout (decided by Claude, ADR 0036). Notification settings rebuilt in cards, with the leave warning (§9). The demo delivers its notices as it is built | §2, plus domain tests (the week wording, the kinds) and API tests (each notice, only what the client can open, a note both ways without its text, a notice no longer true left unsaid, unread filter, mark all only the reader's own, another workspace, signed out) | Done · 2026-10-09 |
 | R5.2a | **Settings, Team, Billing** (C9): one Settings layout for staff, the coaching space's pages (the owner's: Name and region, Brand, Nutrition, Team, Billing) and the person's own (Notifications, Appearance, Password and security), a column on a wide page and a row that scrolls on a phone; Name and region rebuilt (the time zone from a searchable sheet, the week's first day, the currency new plans start in, the leave warning); Team with faces, Invite a coach in a sheet and each row's actions in a menu; Billing with what is owed first, how to pay with copy buttons, this month so far and a clean list of invoices that open in a sheet; Password and security rebuilt for staff and clients, Sign out everywhere asked first, leaving in a kit dialog | §2 | Done · 2026-10-09 |
 | R5.2b | **The platform admin screen** (ADR 0028): every coaching space in the order that needs the admin first, with what it owes, when it falls due and when it locks; a page for each space (invoices, this month, discounts); sheets to record a payment dated the day the money arrived, void with or without a corrected invoice, grant and revoke a discount, and publish a price plan version after seeing what changes; and the kit's new date field instead of the browser's date inputs | §2, plus API tests (a payment's date in the service and the database, the list's due and lock days) | Done · 2026-10-10 |
-| R5.3 | **Delete legacy CSS**, add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
+| R5.3a | **Invitations** (C2): who is waiting to join first with what happens next, Invite a client in a sheet (a name and an email, an optional phone and a birth date typed in three boxes), Send again, and Cancel after asking, Invite again when a link ran out or was cancelled, everyone earlier behind a closed disclosure; the kit's typed date input | §2, plus Vitest (the invitation tenant-ownership tests moved to the sheet) | Done · 2026-10-10 |
+| R5.3b | **My profile and the intake form** (M8, C3) | §2 | To do |
+| R5.3c | **Weigh-ins, photos and measurements** (M5): the client's logging pages on the kit | §2 | To do |
+| R5.3d | **The coach's client nutrition and training tools** (C3, C7): the targets calculator and the max history | §2 | To do |
+| R5.3e | **The leftovers**: check-in forms and assignment buttons, the coach's workout page, the empty and status styles on Training, the plan dialogs' notes, the top bar's sign-out | §2 | To do |
+| R5.3f | **Delete the legacy CSS** (the global rules and variables in `styles.scss`), add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
 | R6.2 | **Homepage** pre-render, GSAP scroll story, Jitter hero video (the owner makes the assets) | §2 | Optional |
 
@@ -658,6 +663,35 @@ of the implemented R1.3 screens before production rollout.
   textareas' autocomplete, a scroll margin so the sheet's sticky bar never covers a field, and the owner's email
   left untranslated were fixed; the spaces list is not virtualized (fine below about 200 spaces).
 
+- **Invitations, R5.3a (built 2026-10-10; screenshots `docs/design/r53a-*.png`). Decided by Claude for the owner
+  on 2026-10-10**, after looking at TrueCoach (an invitation email goes out at once; a coach can copy the invite
+  link to send it by hand, or resend), Everfit (Invite sends the email at once; the link can be copied and sent
+  by text; a Resend Invitation icon sits beside a client who has not set up yet; also a public invite link and
+  adding several clients at once) and the GOV.UK date input (three labelled boxes in one group for a date a
+  person knows by heart, such as a birth date): (1) **the page is a to-do list**: Waiting to join first, each
+  row with what is true now and what happens next ("Sent once · the newest link works until Oct 16") and Send
+  again and Cancel one press away; everyone else sits behind a closed "Earlier invitations (n)" with the plain
+  words Joined, Link ran out and Cancelled, and Invite again fills in the same name and email. The old page was
+  a table of every invitation ever, with "Sent 2 time(s)" and the server's status words. (2) **Send again says
+  what it did, not what it might do**: a new link replaces every earlier one, so the press carries the version
+  the coach was shown (a stale list conflicts instead of killing a link they did not know about) and the answer
+  reads "A new link was sent to … The earlier link no longer works." Cancel asks first. (3) **The birth date is
+  typed in three boxes** (day, month, year), refused in words before anything is sent when it is not a real day,
+  under 18 or over 120 years ago; the server still decides who is an adult. (4) **The phone number no longer
+  promises more than is true**: "So you can reach them. Only your coaching space's staff see it." (5) **A refusal
+  stays in the sheet in the server's own words** with what was typed kept, and is scrolled into view above the
+  Send bar (found in the live pass: on a short phone it sat below the bar, out of sight). Not built: (a) **Copy
+  invite link**, which TrueCoach and Everfit both offer and which WhatsApp, the main channel in Lebanon, would
+  use: the API never gives the link out except by email (and to the development build), so it needs a
+  server-side "show the link once to staff, and record it" rule, which Claude recommends and the owner decides;
+  (b) inviting several clients at once and a public invite link (Everfit); the second needs a consent and
+  abuse design first; (c) whether the email arrived: the page says "We will email … shortly" and shows no
+  delivery result, as the invitation read holds none. The sticky Send bar of this sheet and of the platform
+  billing sheets now sits flush with the sheet's foot (`inset-block-end: -1.5rem`), as the Plans you sell,
+  exercise and food sheets already did: with `0` the next field showed through a 24 px strip beneath it. Still
+  `0` in four older sheets (the client's plan sheets, Assign program, Update maxes, Build next block): to check
+  in R5.3f whether the strip shows there too.
+
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -855,6 +889,11 @@ Tokens are theme-ready from R1, so this costs little later.
 - Built in R5.2b: `DateField` (the `DatePicker` above, `ui/date-field.ts`) with its calendar maths in `ui/calendar.ts`
   (a day is a `YYYY-MM-DD` string, every step in UTC). Its value is a calendar day, never an instant. `today`,
   `min`, `max` and `firstDay` are inputs; messages come through `errors` as `app-field` takes them.
+- Built in R5.3a: `DateInput` (`ui/date-input.ts`), the typed date for a day a person knows by heart (a birth
+  date): three labelled boxes in one `fieldset` (day, month, year; GOV.UK's pattern), numeric keypad, all three
+  marked invalid with the message in words (the screen's submit then focuses the first). Its `value` is `''` or a real
+  `YYYY-MM-DD`; `status` says `empty`, `incomplete`, `invalid` or `valid` so the screen decides what to do with
+  a half-typed date. The browser's date input stays off every redesigned screen.
 - **Retire:** the pre-foundation palette and globals in `styles.scss`, the `--accent/--surface`
   legacy variables, and every browser-default button. The migration is finished when a lint check
   finds no legacy variable and no unstyled `<button>`.
@@ -948,6 +987,15 @@ limited to the coach's assigned clients.
     `?show=`. Search covers names and goals, ignoring case and accents.
   - Former clients (`/clients/former`, Owner) use the same rows: how and when coaching ended, and why.
   - Both lists follow dark mode. Screenshots on the Atlas demo: `docs/design/r33a-clients-*.png`.
+- Built in R5.3a at `/invitations` (follows dark mode): **Waiting to join** with a count, then one row per
+  person (face, name and email, the status pill, "Sent once · the newest link works until Oct 16", Send again
+  and Cancel); **Earlier invitations (n)** closed, newest first, each Joined, Link ran out or Cancelled, the last
+  two with Invite again. **Invite a client** is a sheet (first and last name, email, an optional phone number
+  and a birth date typed in three boxes) that says what happens, keeps a refusal on screen in the server's
+  words, and asks before it closes with typed work in it. Cancel asks first; Send again states that the earlier
+  link no longer works. An empty page offers Invite your first client. In the development build a waiting
+  invitation also shows "Open local link". Screenshots: `docs/design/r53a-*.png`, and `r53a-live-*.png` from the
+  real API on the Atlas demo.
 
 **C3. Client profile**
 - Job: "The whole story of this client in 10 seconds."

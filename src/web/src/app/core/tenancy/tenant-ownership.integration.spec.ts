@@ -17,14 +17,15 @@ import { ExerciseLibrary } from '../../features/training/exercise-library';
 import { ExerciseLibraryApi } from '../../features/training/exercise-library-api';
 import { TenantStore } from './tenant.store';
 import { tenantInterceptor } from './tenant.interceptor';
-import { settle } from '../../../testing/dom';
+import { fill, press, settle } from '../../../testing/dom';
 import { clientListView, overviewRow } from '../../../testing/client-list-fixtures';
 import { coachClient } from '../../../testing/coach-today-fixtures';
 
 /** A client list holding one client, whose first name says which workspace it came from. */
 const directory = (id: string): ClientOverviewView =>
   clientListView({ clients: [overviewRow(coachClient(id, id, 'Client'))] });
-const invitation = (id: string) => ({ id, status: 'Pending' }) as ClientInvitation;
+const invitation = (id: string, email = '') =>
+  ({ id, status: 'Pending', email }) as ClientInvitation;
 
 describe('tenant ownership in migrated screens', () => {
   const api = {
@@ -138,7 +139,31 @@ describe('tenant ownership in migrated screens', () => {
     expect(fixture.componentInstance['failed']()).toBeNull();
   });
 
-  it('invitation writes keep their initiating tenant and suppress late notices and finally', async () => {
+  /** The sheet on top, which the CDK draws outside the page. */
+  const openSheet = () => {
+    const open = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+    return open.length ? open[open.length - 1] : null;
+  };
+  const toastText = () =>
+    document.querySelector('.tb-toast-host, app-toast-host')?.textContent ?? '';
+
+  /** Opens the invite sheet, fills in a client of workspace `who` and presses Send. */
+  async function sendInvitation(
+    fixture: { componentInstance: Invitations; detectChanges(): void },
+    who: string,
+  ) {
+    fixture.componentInstance['openInvite']();
+    await settle(fixture as never);
+    const sheet = openSheet()!;
+    fill(sheet, 'First name', who);
+    fill(sheet, 'Last name', 'Client');
+    fill(sheet, 'Email', `${who.toLowerCase()}@example.test`);
+    await settle(fixture as never);
+    press(sheet, 'Send invitation');
+    await settle(fixture as never);
+  }
+
+  it('invitation writes keep their initiating tenant and a late answer changes nothing', async () => {
     const firstResponse = new Subject<ClientInvitation>();
     const secondResponse = new Subject<ClientInvitation>();
     const tenants = TestBed.inject(TenantStore);
@@ -154,26 +179,24 @@ describe('tenant ownership in migrated screens', () => {
       });
     const fixture = TestBed.createComponent(Invitations);
     await settle(fixture);
-    const view = fixture.componentInstance;
-    view['form'].patchValue({ firstName: 'A', lastName: 'Client', email: 'a@example.test' });
-    const firstWrite = view['create']();
-    await settle(fixture);
+    await sendInvitation(fixture, 'A');
+    expect(openSheet()).not.toBeNull();
+
+    // The workspace changes while A's answer is on its way: the sheet goes with it.
     tenants.select('B');
-    expect(view['form'].getRawValue().firstName).toBe('');
-    expect(view['submitting']()).toBe(false);
     await settle(fixture);
-    view['form'].patchValue({ firstName: 'B', lastName: 'Client', email: 'b@example.test' });
-    const secondWrite = view['create']();
+    expect(openSheet()).toBeNull();
+    await sendInvitation(fixture, 'B');
+    firstResponse.next(invitation('A', 'a@example.test'));
     await settle(fixture);
-    firstResponse.next(invitation('A'));
-    await firstWrite;
-    expect(view['invitations']()).toEqual([]);
-    expect(view['notice']()).toBeNull();
-    expect(view['submitting']()).toBe(true);
-    secondResponse.next(invitation('B'));
-    await secondWrite;
+    expect(toastText()).not.toContain('a@example.test');
+    expect(openSheet()).not.toBeNull();
+
+    secondResponse.next(invitation('B', 'b@example.test'));
+    await settle(fixture);
     expect(dispatched).toEqual(['A', 'B']);
-    expect(view['invitations']()[0].id).toBe('B');
+    expect(toastText()).toContain('b@example.test');
+    expect(openSheet()).toBeNull();
   });
 
   it('invitation CSRF wait cannot retarget a write, including A -> B -> A', async () => {
@@ -186,17 +209,12 @@ describe('tenant ownership in migrated screens', () => {
     );
     const fixture = TestBed.createComponent(Invitations);
     await settle(fixture);
-    fixture.componentInstance['form'].patchValue({
-      firstName: 'A',
-      lastName: 'Client',
-      email: 'a@example.test',
-    });
-    const write = fixture.componentInstance['create']();
+    await sendInvitation(fixture, 'A');
     const tenants = TestBed.inject(TenantStore);
     tenants.select('B');
     tenants.select('A');
     resume();
-    await write;
+    await settle(fixture);
     expect(api.createInvitation).not.toHaveBeenCalled();
   });
 

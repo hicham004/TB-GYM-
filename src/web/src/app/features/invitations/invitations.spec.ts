@@ -3,49 +3,31 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
-import type { ClientInvitation } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, fill, press, query, settle } from '../../../testing/dom';
+import { fill, press, settle, type } from '../../../testing/dom';
+import { atlasInvitations, invitation, NOW } from '../../../testing/invitation-fixtures';
 import { Invitations } from './invitations';
 
-function invitation(overrides: Partial<ClientInvitation> = {}): ClientInvitation {
-  return {
-    id: 'invitation-1',
-    email: 'rana@example.test',
-    firstName: 'Rana',
-    lastName: 'Haddad',
-    status: 'Pending',
-    expiresAtUtc: '2026-09-01T09:00:00Z',
-    sendCount: 1,
-    logicalSendGeneration: 1,
-    createdAtUtc: '2026-08-25T09:00:00Z',
-    version: 7,
-    developmentActionUrl: null,
-    kind: 'Client',
+type Api = Partial<Record<keyof ApiClient, ReturnType<typeof vi.fn>>>;
+
+async function render(overrides: Api = {}) {
+  const api: Api = {
+    getInvitations: vi.fn(() => of([])),
+    createInvitation: vi.fn(() => of(invitation())),
+    resendInvitation: vi.fn(() =>
+      of(invitation({ sendCount: 2, logicalSendGeneration: 2, version: 8 })),
+    ),
+    revokeInvitation: vi.fn(() => of(invitation({ status: 'Revoked', version: 8 }))),
     ...overrides,
   };
-}
-
-async function render(api: Partial<ApiClient> = {}) {
   await TestBed.configureTestingModule({
     imports: [Invitations],
     providers: [
       provideRouter([]),
-      {
-        provide: ApiClient,
-        useValue: {
-          getInvitations: vi.fn(() => of([])),
-          createInvitation: vi.fn(() => of(invitation())),
-          resendInvitation: vi.fn(() =>
-            of(invitation({ sendCount: 2, logicalSendGeneration: 2, version: 8 })),
-          ),
-          revokeInvitation: vi.fn(() => of(invitation({ status: 'Revoked' }))),
-          ...api,
-        },
-      },
+      { provide: ApiClient, useValue: api },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
     ],
@@ -53,34 +35,79 @@ async function render(api: Partial<ApiClient> = {}) {
 
   const fixture = TestBed.createComponent(Invitations);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api: TestBed.inject(ApiClient) };
+  return { fixture, host: fixture.nativeElement as HTMLElement, api };
 }
 
+const textOf = (element: Element | null | undefined) =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+const dialog = () => {
+  const open = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+  return open.length ? open[open.length - 1] : null;
+};
+
+const toast = () => textOf(document.querySelector('.tb-toast-host, app-toast-host'));
+
+const names = (host: HTMLElement, scope: string) =>
+  Array.from(host.querySelectorAll(`${scope} .invitation .name`)).map(textOf);
+
 describe('Invitations', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(NOW));
+  });
+
   afterEach(() => {
+    vi.useRealTimers();
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
   });
 
-  /**
-   * The coach side of the client's only door. The form is behind a disclosure button, so this
-   * drives the whole path a coach takes: open it, fill it, send it, and see the invitation appear.
-   */
-  it('creates an invitation from the form the coach opens and fills', async () => {
+  it('lists who is waiting to join first, with what happens next, and the rest behind a closed disclosure', async () => {
+    const { host } = await render({ getInvitations: vi.fn(() => of(atlasInvitations())) });
+
+    expect(textOf(host.querySelector('h1'))).toBe('Invitations');
+    expect(textOf(host.querySelector('[data-waiting] h2'))).toBe('Waiting to join 2');
+    expect(names(host, '[data-waiting]')).toEqual(['Rana Haddad', 'Karl Bou Saab']);
+    const rana = host.querySelector('[data-invitation="invitation-1"]')!;
+    expect(textOf(rana.querySelector('.email'))).toBe('rana@example.test');
+    expect(textOf(rana.querySelector('app-status-pill'))).toBe('Waiting to join');
+    expect(textOf(rana.querySelector('.line'))).toBe(
+      'Sent once · the newest link works until Oct 14',
+    );
+    expect(textOf(host.querySelector('[data-invitation="invitation-2"] .line'))).toBe(
+      'Sent twice · the newest link works until Oct 13',
+    );
+
+    const earlier = host.querySelector<HTMLDetailsElement>('[data-earlier]')!;
+    expect(earlier.open).toBe(false);
+    expect(textOf(earlier.querySelector('summary'))).toBe('Earlier invitations (3)');
+    expect(names(host, '[data-earlier]')).toEqual(['Lynn Bou Khalil', 'Maya Fakhoury', 'Ali Nasr']);
+    expect(Array.from(earlier.querySelectorAll('app-status-pill')).map(textOf)).toEqual([
+      'Link ran out',
+      'Joined',
+      'Cancelled',
+    ]);
+  });
+
+  it('invites the first client from an empty page', async () => {
     const { fixture, host, api } = await render();
 
-    expect(host.querySelector('form')).toBeNull();
-    press(host, 'Invite client');
+    expect(textOf(host.querySelector('app-empty-state h2'))).toBe('No invitations yet');
+    press(host, 'Invite your first client');
     await settle(fixture);
+    const sheet = dialog()!;
+    expect(textOf(sheet.querySelector('h2'))).toBe('Invite a client');
 
-    fill(host, 'First name', 'Rana');
-    fill(host, 'Last name', 'Haddad');
-    fill(host, 'Email', 'rana@example.test');
-    fill(host, 'Phone number', '+96170123456');
-    fill(host, 'Date of birth', '1996-04-02');
+    fill(sheet, 'First name', 'Rana');
+    fill(sheet, 'Last name', 'Haddad');
+    fill(sheet, 'Email', ' rana@example.test ');
+    fill(sheet, 'Phone number (optional)', '+96170123456');
+    type(sheet, 'input.day', '2');
+    type(sheet, 'input.month', '4');
+    type(sheet, 'input.year', '1996');
     await settle(fixture);
-
-    expect(button(host, 'Send invitation').disabled).toBe(false);
-    press(host, 'Send invitation');
+    press(sheet, 'Send invitation');
     await settle(fixture);
 
     expect(api.createInvitation).toHaveBeenCalledWith({
@@ -89,115 +116,50 @@ describe('Invitations', () => {
       lastName: 'Haddad',
       phoneNumber: '+96170123456',
       birthDate: '1996-04-02',
+      idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i),
     });
-    // The new invitation is on screen and the form has closed behind it.
-    expect(host.textContent).toContain('Rana Haddad');
-    expect(host.textContent).toContain('Invitation created and queued for delivery.');
-    expect(host.querySelector('form')).toBeNull();
+    expect(dialog()).toBeNull();
+    expect(toast()).toContain('Invitation created. We will email rana@example.test shortly.');
+    expect(api.getInvitations).toHaveBeenCalledTimes(2);
   });
 
   it('sends the optional fields as absent rather than as empty strings', async () => {
     const { fixture, host, api } = await render();
 
-    press(host, 'Invite client');
+    press(host, 'Invite a client');
     await settle(fixture);
-    fill(host, 'First name', 'Rana');
-    fill(host, 'Last name', 'Haddad');
-    fill(host, 'Email', 'rana@example.test');
+    const sheet = dialog()!;
+    fill(sheet, 'First name', 'Rana');
+    fill(sheet, 'Last name', 'Haddad');
+    fill(sheet, 'Email', 'rana@example.test');
     await settle(fixture);
-    press(host, 'Send invitation');
+    press(sheet, 'Send invitation');
     await settle(fixture);
 
-    expect(api.createInvitation).toHaveBeenCalledWith({
-      email: 'rana@example.test',
-      firstName: 'Rana',
-      lastName: 'Haddad',
-      phoneNumber: null,
-      birthDate: null,
-    });
+    expect(api.createInvitation).toHaveBeenCalledWith(
+      expect.objectContaining({ phoneNumber: null, birthDate: null }),
+    );
   });
 
-  it('does not send an invitation with no email address', async () => {
+  it('asks for what is missing before sending, and puts focus on the first thing wrong', async () => {
     const { fixture, host, api } = await render();
 
-    press(host, 'Invite client');
+    press(host, 'Invite a client');
     await settle(fixture);
-    fill(host, 'First name', 'Rana');
-    fill(host, 'Last name', 'Haddad');
+    const sheet = dialog()!;
+    fill(sheet, 'First name', 'Rana');
     await settle(fixture);
-    press(host, 'Send invitation');
+    press(sheet, 'Send invitation');
     await settle(fixture);
 
     expect(api.createInvitation).not.toHaveBeenCalled();
+    expect(textOf(sheet)).toContain('Type their last name.');
+    expect(textOf(sheet)).toContain('Type their email address.');
+    expect(textOf(sheet.querySelector('[role="alert"]'))).toBe('Check the fields marked above.');
+    expect(document.activeElement).toBe(sheet.querySelector('input[name="lastName"]'));
   });
 
-  /**
-   * A deliberate resend is a different operation from the dispatcher's own transport retry: it kills
-   * the previous link. So the screen sends an idempotency key, so a double click is one command
-   * rather than two generations, and the version it last saw, so a press against a stale list
-   * conflicts instead of silently revoking a link the coach did not know existed. It also says out
-   * loud what pressing it did.
-   */
-  it('resends with an idempotency key and the version it last saw, and says the old link is dead', async () => {
-    const { fixture, host, api } = await render({
-      getInvitations: vi.fn(() => of([invitation()])),
-    });
-
-    expect(host.textContent).toContain('Sent 1 time(s)');
-    press(host, 'Resend');
-    await settle(fixture);
-
-    expect(api.resendInvitation).toHaveBeenCalledTimes(1);
-    const [invitationId, idempotencyKey, version] = vi.mocked(api.resendInvitation).mock.calls[0];
-    expect(invitationId).toBe('invitation-1');
-    expect(version).toBe(7);
-    expect(idempotencyKey).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    );
-    expect(host.textContent).toContain('Sent 2 time(s)');
-    expect(host.textContent).toContain('A new invitation link was sent.');
-    expect(host.textContent).toContain('Any earlier link no longer works.');
-  });
-
-  it('sends a fresh idempotency key per press, so two presses are two commands', async () => {
-    const { fixture, host, api } = await render({
-      getInvitations: vi.fn(() => of([invitation()])),
-    });
-
-    press(host, 'Resend');
-    await settle(fixture);
-    press(host, 'Resend');
-    await settle(fixture);
-
-    const calls = vi.mocked(api.resendInvitation).mock.calls;
-    expect(calls).toHaveLength(2);
-    expect(calls[0][1]).not.toBe(calls[1][1]);
-  });
-
-  it('revokes a pending invitation and withdraws the actions with it', async () => {
-    const { fixture, host, api } = await render({
-      getInvitations: vi.fn(() => of([invitation()])),
-    });
-
-    press(host, 'Revoke');
-    await settle(fixture);
-
-    expect(api.revokeInvitation).toHaveBeenCalledWith('invitation-1', 7);
-    expect(host.textContent).toContain('Invitation revoked.');
-    // A revoked invitation can no longer be resent, so neither control is still offered.
-    expect(host.querySelector('.button-group')).toBeNull();
-  });
-
-  it('offers no resend or revoke for an invitation that was already accepted', async () => {
-    const { host } = await render({
-      getInvitations: vi.fn(() => of([invitation({ status: 'Accepted' })])),
-    });
-
-    expect(host.textContent).toContain('Rana Haddad');
-    expect(host.querySelector('.button-group')).toBeNull();
-  });
-
-  it('reports the server’s refusal instead of listing an invitation that was never created', async () => {
+  it('keeps the sheet open and says why when the server refuses', async () => {
     const duplicate = new HttpErrorResponse({
       status: 409,
       error: { title: 'That client already has a pending invitation.' },
@@ -205,30 +167,216 @@ describe('Invitations', () => {
     const { fixture, host, api } = await render({
       createInvitation: vi.fn(() => throwError(() => duplicate)),
     });
+    const scrolled = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrolled;
 
-    press(host, 'Invite client');
-    await settle(fixture);
-    fill(host, 'First name', 'Rana');
-    fill(host, 'Last name', 'Haddad');
-    fill(host, 'Email', 'rana@example.test');
-    await settle(fixture);
-    press(host, 'Send invitation');
-    await settle(fixture);
+    try {
+      press(host, 'Invite a client');
+      await settle(fixture);
+      const sheet = dialog()!;
+      fill(sheet, 'First name', 'Rana');
+      fill(sheet, 'Last name', 'Haddad');
+      fill(sheet, 'Email', 'rana@example.test');
+      await settle(fixture);
+      press(sheet, 'Send invitation');
+      await settle(fixture);
 
-    expect(api.createInvitation).toHaveBeenCalled();
-    expect(query(host, '[role="alert"]').textContent).toContain(
-      'That client already has a pending invitation.',
-    );
-    expect(host.textContent).toContain('No invitations yet');
-    // The filled form is still open to correct rather than discarded.
-    expect(host.querySelector('form')).not.toBeNull();
+      expect(api.createInvitation).toHaveBeenCalled();
+      expect(dialog()).toBe(sheet);
+      expect(textOf(sheet.querySelector('[role="alert"]'))).toBe(
+        'That client already has a pending invitation.',
+      );
+      expect(sheet.querySelector<HTMLInputElement>('input[name="email"]')!.value).toBe(
+        'rana@example.test',
+      );
+      // The message is at the foot of a scrolling sheet, so it is brought into view above the bar.
+      expect(scrolled).toHaveBeenCalledWith({ block: 'nearest' });
+      expect(scrolled.mock.contexts[0]).toBe(sheet.querySelector('.refusal'));
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
   });
 
-  it('reports a failed load instead of claiming there are no invitations', async () => {
-    const { host } = await render({
-      getInvitations: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
+  it('retries the same entry with the same key, and a changed entry with a new one', async () => {
+    const refused = new HttpErrorResponse({ status: 500 });
+    let attempts = 0;
+    const { fixture, host, api } = await render({
+      createInvitation: vi.fn(() =>
+        ++attempts < 3 ? throwError(() => refused) : of(invitation()),
+      ),
+    });
+    press(host, 'Invite a client');
+    await settle(fixture);
+    const sheet = dialog()!;
+    fill(sheet, 'First name', 'Rana');
+    fill(sheet, 'Last name', 'Haddad');
+    fill(sheet, 'Email', 'rana@example.test');
+    await settle(fixture);
+
+    press(sheet, 'Send invitation');
+    await settle(fixture);
+    press(sheet, 'Send invitation');
+    await settle(fixture);
+    fill(sheet, 'First name', 'Ranya');
+    await settle(fixture);
+    press(sheet, 'Send invitation');
+    await settle(fixture);
+
+    const keys = vi.mocked(api.createInvitation!).mock.calls.map((call) => call[0].idempotencyKey);
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('asks before closing an invitation that is half typed', async () => {
+    const { fixture, host } = await render();
+    press(host, 'Invite a client');
+    await settle(fixture);
+    fill(dialog()!, 'First name', 'Rana');
+    await settle(fixture);
+
+    dialog()!.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+    await settle(fixture);
+    expect(textOf(dialog()!.querySelector('h2'))).toBe('Discard what you typed?');
+    press(dialog()!, 'Keep editing');
+    await settle(fixture);
+    expect(textOf(dialog()!.querySelector('h2'))).toBe('Invite a client');
+  });
+
+  it('asks before Not now closes an invitation that is half typed, as the close button does', async () => {
+    const { fixture, host } = await render();
+    press(host, 'Invite a client');
+    await settle(fixture);
+    const sheet = dialog()!;
+
+    press(sheet, 'Not now');
+    await settle(fixture);
+    // Nothing was typed, so nothing is asked.
+    expect(dialog()).toBeNull();
+
+    press(host, 'Invite a client');
+    await settle(fixture);
+    fill(dialog()!, 'First name', 'Rana');
+    await settle(fixture);
+    press(dialog()!, 'Not now');
+    await settle(fixture);
+    expect(textOf(dialog()!.querySelector('h2'))).toBe('Discard what you typed?');
+    press(dialog()!, 'Close');
+    await settle(fixture);
+    expect(dialog()).toBeNull();
+  });
+
+  it('sends a new link with an idempotency key and the version it last saw, and says the old link is dead', async () => {
+    const { fixture, host, api } = await render({
+      getInvitations: vi.fn(() => of([invitation()])),
     });
 
-    expect(query(host, '[role="alert"]').textContent).toContain('Invitations could not be loaded.');
+    press(host, 'Send again to Rana Haddad');
+    await settle(fixture);
+
+    expect(api.resendInvitation).toHaveBeenCalledTimes(1);
+    const [invitationId, idempotencyKey, version] = vi.mocked(api.resendInvitation!).mock.calls[0];
+    expect(invitationId).toBe('invitation-1');
+    expect(version).toBe(7);
+    expect(idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(toast()).toContain('A new link was sent to rana@example.test.');
+    expect(toast()).toContain('The earlier link no longer works.');
+    expect(textOf(host.querySelector('.line'))).toContain('Sent twice');
+  });
+
+  it('sends a fresh key per press, so two presses are two commands', async () => {
+    const { fixture, host, api } = await render({
+      getInvitations: vi.fn(() => of([invitation()])),
+    });
+
+    press(host, 'Send again to Rana Haddad');
+    await settle(fixture);
+    press(host, 'Send again to Rana Haddad');
+    await settle(fixture);
+
+    const calls = vi.mocked(api.resendInvitation!).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][1]).not.toBe(calls[1][1]);
+  });
+
+  it('cancels an invitation only after asking, and keeps it as cancelled', async () => {
+    const { fixture, host, api } = await render({
+      getInvitations: vi.fn(() => of([invitation()])),
+    });
+
+    press(host, 'Cancel the invitation for Rana Haddad');
+    await settle(fixture);
+    expect(textOf(dialog()!)).toContain('Cancel the invitation for Rana Haddad?');
+    press(dialog()!, 'Keep it');
+    await settle(fixture);
+    expect(api.revokeInvitation).not.toHaveBeenCalled();
+
+    press(host, 'Cancel the invitation for Rana Haddad');
+    await settle(fixture);
+    press(dialog()!, 'Cancel invitation');
+    await settle(fixture);
+
+    expect(api.revokeInvitation).toHaveBeenCalledWith('invitation-1', 7);
+    expect(toast()).toContain('The invitation for Rana Haddad was cancelled.');
+    // A cancelled invitation can no longer be sent again or cancelled, so the actions go with it.
+    expect(host.querySelector('[data-send-again]')).toBeNull();
+    expect(host.querySelector('[data-cancel]')).toBeNull();
+  });
+
+  it('offers no new link or cancel for someone who joined, and invites again someone whose link ran out', async () => {
+    const { fixture, host } = await render({
+      getInvitations: vi.fn(() => of(atlasInvitations())),
+    });
+    const joined = host.querySelector('[data-invitation="invitation-3"]')!;
+    expect(joined.querySelector('button')).toBeNull();
+
+    press(host, 'Invite again Lynn Bou Khalil');
+    await settle(fixture);
+    const sheet = dialog()!;
+    expect(textOf(sheet.querySelector('h2'))).toBe('Invite Lynn Bou Khalil again');
+    expect(sheet.querySelector<HTMLInputElement>('input[name="firstName"]')!.value).toBe('Lynn');
+    expect(sheet.querySelector<HTMLInputElement>('input[name="lastName"]')!.value).toBe(
+      'Bou Khalil',
+    );
+    expect(sheet.querySelector<HTMLInputElement>('input[name="email"]')!.value).toBe(
+      'lynn@mail.example',
+    );
+    // Nothing new has been typed, so closing needs no question.
+    sheet.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+    await settle(fixture);
+    expect(dialog()).toBeNull();
+  });
+
+  it('shows the development link only where the API holds one', async () => {
+    const { host } = await render({
+      getInvitations: vi.fn(() =>
+        of([
+          invitation({ developmentActionUrl: 'http://localhost:4200/invite?token=x' }),
+          invitation({ id: 'invitation-2', email: 'karl@mail.example' }),
+        ]),
+      ),
+    });
+
+    const links = Array.from(host.querySelectorAll<HTMLAnchorElement>('.dev-link'));
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute('href')).toBe('http://localhost:4200/invite?token=x');
+  });
+
+  it('reports a failed load instead of claiming there are no invitations, and tries again', async () => {
+    let failing = true;
+    const { fixture, host, api } = await render({
+      getInvitations: vi.fn(() =>
+        failing ? throwError(() => new HttpErrorResponse({ status: 500 })) : of([invitation()]),
+      ),
+    });
+
+    expect(textOf(host.querySelector('[role="alert"]'))).toBe('Invitations couldn’t be loaded.');
+    expect(host.querySelector('app-empty-state')).toBeNull();
+    failing = false;
+    press(host, 'Try again');
+    await settle(fixture);
+
+    expect(api.getInvitations).toHaveBeenCalledTimes(2);
+    expect(names(host, '[data-waiting]')).toEqual(['Rana Haddad']);
   });
 });

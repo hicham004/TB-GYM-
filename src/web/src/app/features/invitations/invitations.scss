@@ -1,29 +1,115 @@
-.invite-form {
-  margin-block-end: 20px;
+// Invitations (R5.3a): who is waiting to join and the rows behind them. Brand v2 tokens only.
+@use '../../ui/page';
+
+h2 {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
 }
 
-td strong,
-td small,
-td a {
-  display: block;
+.count {
+  background: var(--tb-surface-2);
+  border-radius: 999px;
+  color: var(--tb-ink);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-inline-size: 1.5rem;
+  padding: 0 0.5rem;
+  text-align: center;
 }
 
-td small {
-  color: var(--muted-text);
-  margin-block-start: 2px;
+.panel {
+  gap: 0.5rem;
 }
 
-td a {
-  font-size: 0.78rem;
-  margin-block-start: 4px;
+.invitation {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem 0.875rem;
+  grid-template-areas:
+    'face who'
+    'face state'
+    'face actions';
+  grid-template-columns: auto minmax(0, 1fr);
+  padding-block: 0.875rem;
+  position: relative;
 }
 
-.visually-hidden {
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  height: 1px;
-  overflow: hidden;
-  position: absolute;
-  white-space: nowrap;
-  width: 1px;
+.invitation app-avatar {
+  align-self: start;
+  grid-area: face;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  grid-area: who;
+  min-inline-size: 0;
+}
+
+.name {
+  color: var(--tb-ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.email {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.state {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.625rem;
+  grid-area: state;
+}
+
+.line {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  grid-area: actions;
+}
+
+.dev-link {
+  color: var(--tb-accent-ink);
+  font-size: 0.875rem;
+}
+
+@container (min-width: 44rem) {
+  .invitation {
+    grid-template-areas: 'face who state actions';
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  }
+
+  .invitation app-avatar {
+    align-self: center;
+  }
+
+  .actions {
+    justify-content: flex-end;
+  }
+}
+
+.earlier summary {
+  color: var(--tb-ink);
+  cursor: pointer;
+  font-weight: 600;
+  min-block-size: 2.5rem;
+  padding-block: 0.5rem;
+}
+
+.earlier summary:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
 }

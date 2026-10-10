@@ -50,6 +50,8 @@ export const routes: Routes = [
   {
     path: 'invitations',
     canActivate: [authGuard, coachGuard],
+    // Rebuilt in R5.3a: follows the coach's mode, invites in a sheet.
+    data: REDESIGNED,
     title: $localize`Invitations | TB Gym`,
     loadComponent: () =>
       import('./features/invitations/invitations').then((module) => module.Invitations),

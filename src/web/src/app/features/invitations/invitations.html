@@ -1,147 +1,149 @@
-<section class="page-heading">
-  <div>
-    <p class="eyebrow" i18n>Client access</p>
-    <h1 i18n>Invitations</h1>
-    <p i18n>Invite a new client by email.</p>
-  </div>
-  <button class="primary-button" type="button" (click)="showForm.set(!showForm())">
-    @if (showForm()) {
-      <span i18n>Close form</span>
-    } @else {
-      <span i18n>Invite client</span>
+<div class="page">
+  <header class="top">
+    <div class="intro">
+      <h1 #heading tabindex="-1" i18n>Invitations</h1>
+      <p class="lede" i18n>
+        Invite a client by email. They set up their own account from the link, and you can send it
+        again if it gets lost.
+      </p>
+    </div>
+    <button appButton type="button" (click)="openInvite()" data-invite i18n>Invite a client</button>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
     }
-  </button>
-</section>
-
-@if (showForm()) {
-  <form class="surface-section invite-form" [formGroup]="form" (ngSubmit)="create()" novalidate>
-    <div class="section-heading">
-      <h2 i18n>New client invitation</h2>
-    </div>
-    <div class="form-grid">
-      <label>
-        <span i18n>First name</span>
-        <input type="text" formControlName="firstName" autocomplete="given-name" />
-      </label>
-      <label>
-        <span i18n>Last name</span>
-        <input type="text" formControlName="lastName" autocomplete="family-name" />
-      </label>
-      <label>
-        <span i18n>Email</span>
-        <input type="email" formControlName="email" autocomplete="email" />
-      </label>
-      <label>
-        <span i18n>Phone number</span>
-        <input type="tel" formControlName="phoneNumber" autocomplete="tel" />
-      </label>
-      <label>
-        <span i18n>Date of birth</span>
-        <input type="date" formControlName="birthDate" [max]="maximumBirthDate" />
-      </label>
-    </div>
-    <div class="form-actions">
-      <button class="primary-button" type="submit" [disabled]="submitting()">
-        @if (submitting()) {
-          <span i18n>Sending...</span>
-        } @else {
-          <span i18n>Send invitation</span>
-        }
-      </button>
-    </div>
-  </form>
-}
-
-@if (error()) {
-  <p class="form-error" role="alert">{{ error() }}</p>
-}
-@if (notice()) {
-  <p class="form-success" role="status">{{ notice() }}</p>
-}
-
-<section class="surface-section">
-  <div class="section-heading">
-    <h2 i18n>Invitation history</h2>
-    <a routerLink="/clients" i18n>View accepted clients</a>
-  </div>
-
-  @if (loading()) {
-    <p class="loading-row" i18n>Loading invitations...</p>
-  } @else if (invitations().length === 0) {
-    <div class="empty-state">
-      <h2 i18n>No invitations yet</h2>
-      <p i18n>Your first client invitation will appear here.</p>
-    </div>
-  } @else {
-    <div class="table-scroll">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th scope="col" i18n>Client</th>
-            <th scope="col" i18n>Status</th>
-            <th scope="col" i18n>Expires</th>
-            <th scope="col" i18n>Delivery</th>
-            <th scope="col"><span class="visually-hidden" i18n>Actions</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (invitation of invitations(); track invitation.id) {
-            <tr>
-              <td>
-                <strong>{{ invitation.firstName }} {{ invitation.lastName }}</strong>
-                <small>{{ invitation.email }}</small>
-              </td>
-              <td>
-                <span
-                  class="status-badge"
-                  [class.success]="invitation.status === 'Accepted'"
-                  [class.warning]="invitation.status === 'Pending'"
-                >
-                  {{ invitationStatusLabel(invitation.status) }}
-                </span>
-              </td>
-              <td>{{ invitation.expiresAtUtc | date: 'medium' }}</td>
-              <td>
-                <span i18n>Sent {{ invitation.sendCount }} time(s)</span>
-                <span class="hint" i18n>
-                  Only the newest link works; resending cancels the previous one.
-                </span>
-                @if (invitation.developmentActionUrl) {
-                  <a [href]="invitation.developmentActionUrl" i18n>Open local link</a>
-                } @else if (invitation.status === 'Pending') {
-                  <span class="hint" i18n>
-                    No local link is held for this invitation. Resend to issue a new one.
-                  </span>
-                }
-              </td>
-              <td>
-                @if (invitation.status === 'Pending') {
-                  <div class="button-group">
-                    <button
-                      class="secondary-button compact"
-                      type="button"
-                      [disabled]="actingOn() === invitation.id"
-                      (click)="resend(invitation)"
-                      i18n
-                    >
-                      Resend
-                    </button>
-                    <button
-                      class="danger-button compact"
-                      type="button"
-                      [disabled]="actingOn() === invitation.id"
-                      (click)="revoke(invitation)"
-                      i18n
-                    >
-                      Revoke
-                    </button>
-                  </div>
-                }
-              </td>
-            </tr>
+    @case ('error') {
+      <div class="panel load-failed">
+        <p role="alert" i18n>Invitations couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (invitations().length === 0) {
+        <app-empty-state
+          class="panel"
+          heading="No invitations yet"
+          description="Invite your first client. They get an email with a link to set up their profile."
+          i18n-heading
+          i18n-description
+        >
+          <button appButton empty-state-action type="button" (click)="openInvite()" i18n>
+            Invite your first client
+          </button>
+        </app-empty-state>
+      } @else {
+        <section class="panel" aria-labelledby="waiting-heading" data-waiting>
+          <h2 id="waiting-heading">
+            <ng-container i18n>Waiting to join</ng-container>&ngsp;
+            <span class="count">{{ waiting().length }}</span>
+          </h2>
+          @if (waiting().length === 0) {
+            <p class="quiet" i18n>
+              Nobody is waiting. Everyone you invited has joined, or their link ran out.
+            </p>
+          } @else {
+            <ul class="rows" role="list">
+              @for (row of waiting(); track row.id) {
+                <ng-container *ngTemplateOutlet="invitationRow; context: { $implicit: row }" />
+              }
+            </ul>
           }
-        </tbody>
-      </table>
-    </div>
+        </section>
+
+        @if (earlier().length > 0) {
+          <details class="panel earlier" data-earlier>
+            <summary i18n>Earlier invitations ({{ earlier().length }})</summary>
+            <ul class="rows" role="list">
+              @for (row of earlier(); track row.id) {
+                <ng-container *ngTemplateOutlet="invitationRow; context: { $implicit: row }" />
+              }
+            </ul>
+          </details>
+        }
+      }
+    }
   }
-</section>
+</div>
+
+<ng-template #invitationRow let-row>
+  <li class="invitation" [attr.data-invitation]="row.id">
+    <app-avatar [initials]="row.initials" presentation="client" />
+    <div class="who">
+      <span class="name"
+        ><span dir="auto">{{ row.name }}</span></span
+      >&ngsp;
+      <span class="email" dir="ltr">{{ row.email }}</span>
+    </div>
+    <div class="state">
+      <app-status-pill [label]="row.statusLabel" [tone]="row.tone" />&ngsp;
+      <span class="line">{{ row.line }}</span>
+    </div>
+    <div class="actions">
+      @if (row.canSendAgain) {
+        <button
+          appButton
+          type="button"
+          variant="outlined"
+          [loading]="acting() === row.id"
+          (click)="sendAgain(row)"
+          data-send-again
+        >
+          <ng-container i18n>Send again</ng-container>
+          <span class="tb-visually-hidden" i18n> to {{ row.name }}</span>
+        </button>
+      }
+      @if (row.canCancel) {
+        <button
+          appButton
+          type="button"
+          variant="text"
+          [disabled]="acting() === row.id"
+          (click)="cancel(row)"
+          data-cancel
+        >
+          <ng-container i18n>Cancel</ng-container>
+          <span class="tb-visually-hidden" i18n> the invitation for {{ row.name }}</span>
+        </button>
+      }
+      @if (row.canInviteAgain) {
+        <button
+          appButton
+          type="button"
+          variant="outlined"
+          (click)="openInvite(row)"
+          data-invite-again
+        >
+          <ng-container i18n>Invite again</ng-container>
+          <span class="tb-visually-hidden"> {{ row.name }}</span>
+        </button>
+      }
+      @if (row.developmentLink; as link) {
+        <a class="dev-link" [href]="link" i18n>Open local link</a>
+      }
+    </div>
+  </li>
+</ng-template>
+
+<ng-template #inviteSheet let-sheet>
+  <app-invite-client
+    [today]="today"
+    [prefill]="prefill()"
+    (dirtyChange)="setDirty($event)"
+    (closed)="closeInvite($event, sheet)"
+  />
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>
