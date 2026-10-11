@@ -131,6 +131,23 @@
             </p>
           }
         }
+
+        @if (canShareProgram()) {
+          <button
+            appButton
+            type="button"
+            variant="accent"
+            size="touch"
+            class="hero-action"
+            [loading]="sharing()"
+            (click)="shareProgram()"
+          >
+            <app-icon name="share" /><ng-container i18n>Share your program</ng-container>
+          </button>
+          @if (shareProblem(); as message) {
+            <p class="hero-problem" role="alert">{{ message }}</p>
+          }
+        }
       </section>
 
       @if (focus(); as week) {
@@ -336,6 +353,10 @@
     }
   }
 </div>
+
+<ng-template #shareSheet>
+  <app-share-sheet [facts]="shareFacts()" />
+</ng-template>
 
 <ng-template #weekBody let-week>
   @if (!week.visible) {

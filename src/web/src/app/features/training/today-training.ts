@@ -35,6 +35,8 @@ import { EmptyState } from '../../ui/empty-state';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { StatusLabel } from '../../ui/status-label';
+import type { ShareFact } from '../share-cards/share-card.models';
+import { ShareTeaser } from '../share-cards/share-teaser';
 import { RestTimer } from './rest-timer';
 import { nullableNumeric, numeric } from './training-builder.models';
 import {
@@ -71,6 +73,7 @@ const UNIT_OPTIONS: readonly SegmentOption[] = [
     RestTimer,
     RouterLink,
     SegmentedControl,
+    ShareTeaser,
     StatusLabel,
     UiMenu,
   ],
@@ -110,6 +113,17 @@ export class TodayTraining {
   protected readonly editingSetIds = signal<ReadonlySet<string>>(new Set());
   protected readonly finishConfirmation = signal<string | null>(null);
   protected readonly finishSummary = signal<WorkoutFinishSummaryView | null>(null);
+  /** What the finish summary offers to share (M9): the program this workout finished, then its records. */
+  protected readonly shareFacts = computed<ShareFact[]>(() => {
+    const summary = this.finishSummary();
+    if (!summary) return [];
+    return [
+      ...(summary.finishedProgram
+        ? [{ kind: 'program' as const, program: summary.finishedProgram }]
+        : []),
+      ...summary.personalRecords.map((record) => ({ kind: 'record' as const, record })),
+    ];
+  });
   protected readonly finishedWorkoutName = signal('');
   protected readonly activeExerciseIndex = signal(0);
   protected readonly workoutUnit = signal<TrainingLoadUnit | null>(null);

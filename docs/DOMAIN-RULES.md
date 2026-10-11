@@ -483,6 +483,20 @@ stay on screen as a reference. The workout's kg or lb choice starts on the presc
 unit last time's loads brought into the sets, else on neither (TRN-016). Web only: the server records
 what it is sent.
 
+**TRN-030** Share cards of records and programs (R6.1a, M9; the owner's decision of 2026-10-11). A client
+may turn a personal record from a workout's finish summary (TRN-019) or a finished program into a picture
+in their coach's brand. The client taps every time after seeing the picture; it is made on their device
+from facts the server already gives them, and the server uploads, stores and posts nothing of it and keeps
+no trace that it was made (records and programs are not CLI-008 data; a progress-photo export is, R6.1b).
+A finished program is one of the signed-in client's own (their current profile, in this workspace) that
+has started, is not cancelled, and is completed or past its last day: the one the Training page calls
+finished. Its facts (`GET /api/training/me/programs/{programId}/summary`) are its name and dates, its
+weeks, the workouts finished in it, and the records those workouts set, each counted as the finish
+summary and history showed it, so a record beaten twice counts twice. The finish summary of the workout
+that completes a program carries the same facts. Another client's or workspace's program, a cancelled
+one and one still running answer 404; a closed plan answers with its reason and no facts; a former
+client is refused at the workspace (ADR 0027).
+
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated

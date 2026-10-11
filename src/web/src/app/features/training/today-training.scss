@@ -358,7 +358,7 @@ summary:focus-visible {
   margin: 0.4rem 0;
 }
 .finish-summary em {
-  font-family: 'Instrument Serif', Georgia, serif;
+  font-family: var(--tb-font-serif);
   font-weight: 400;
   color: var(--tb-accent, #d9ed94);
 }

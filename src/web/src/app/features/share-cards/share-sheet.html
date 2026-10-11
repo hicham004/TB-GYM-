@@ -1,0 +1,65 @@
+@if (card(); as current) {
+  <div class="share">
+    @if (cards().length > 1) {
+      <app-segmented-control
+        label="Which card"
+        i18n-label
+        [options]="choices()"
+        [selected]="current.id"
+        (selectedChange)="choose($event)"
+      />
+    }
+
+    <div class="preview" [attr.aria-busy]="image() ? null : 'true'">
+      @if (image(); as made) {
+        <img [src]="made.dataUrl" [alt]="current.description" width="1080" height="1920" />
+      } @else if (failed()) {
+        <div class="state" role="alert">
+          <p i18n>This card couldn’t be made on this device.</p>
+          <button appButton type="button" variant="outlined" (click)="retry()" i18n>
+            Try again
+          </button>
+        </div>
+      } @else {
+        <p class="making" role="status" i18n>Making your card…</p>
+      }
+    </div>
+
+    <p class="note" i18n>
+      Only you can share this, and your coach never posts for you. The picture is made on this
+      device; <span translate="no">TB Gym</span> doesn’t upload or keep it.
+    </p>
+
+    <div class="actions">
+      @if (canShare) {
+        <button
+          appButton
+          type="button"
+          size="touch"
+          [loading]="!image() && !failed()"
+          [disabled]="failed()"
+          (click)="share()"
+        >
+          <app-icon name="share" /><ng-container i18n>Share</ng-container>
+        </button>
+      }
+      <button
+        appButton
+        type="button"
+        size="touch"
+        [variant]="canShare ? 'outlined' : 'filled'"
+        [loading]="!image() && !failed()"
+        [disabled]="failed()"
+        (click)="save()"
+        i18n
+      >
+        Save image
+      </button>
+    </div>
+
+    @if (problem(); as message) {
+      <p class="problem" role="alert">{{ message }}</p>
+    }
+    <p class="status" role="status">{{ status() }}</p>
+  </div>
+}

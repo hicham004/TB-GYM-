@@ -11,6 +11,7 @@ import { UiSheet } from './sheet';
       <button id="open-dialog" type="button" (click)="openDialog()">Open dialog</button>
       <button id="open-sheet" type="button" (click)="openSheet()">Open sheet</button>
       <button id="open-guarded" type="button" (click)="openGuarded()">Open guarded sheet</button>
+      <button id="open-dark" type="button" (click)="openDark()">Open dark sheet</button>
     </div>
     <ng-template #content let-modal>
       <p>Changes to this plan are ready.</p>
@@ -35,6 +36,10 @@ class Host {
   openSheet(): void {
     const ref = this.sheets.open<string>(this.content(), { title: 'Plan changes' });
     ref.closed.subscribe((result) => (this.result = result));
+  }
+
+  openDark(): void {
+    this.sheets.open<string>(this.content(), { title: 'Plan changes', mode: 'dark' });
   }
 
   openGuarded(): void {
@@ -121,6 +126,23 @@ describe('UI modal surfaces', () => {
     await settle(fixture);
     expect(fixture.componentInstance.asked).toBe(3);
     expect(document.querySelector('.tb-modal-pane--sheet')).toBeNull();
+  });
+
+  it('draws a sheet in the mode asked for, and in the person’s mode otherwise', async () => {
+    const { fixture, host } = await render();
+    press(host, 'Open dark sheet');
+    await settle(fixture);
+    const dark = query<HTMLElement>(document, '.tb-modal-pane--sheet');
+    expect(dark.dataset['mode']).toBe('dark');
+    press(query<HTMLElement>(dark, '[role="dialog"]'), 'Save plan');
+    await settle(fixture);
+
+    press(host, 'Open sheet');
+    await settle(fixture);
+    const plain = query<HTMLElement>(document, '.tb-modal-pane--sheet');
+    expect(plain.dataset['mode']).toBeUndefined();
+    press(query<HTMLElement>(plain, '[role="dialog"]'), 'Save plan');
+    await settle(fixture);
   });
 
   it('still closes when the page closes it itself, without asking', async () => {

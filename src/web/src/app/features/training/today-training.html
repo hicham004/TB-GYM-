@@ -67,6 +67,9 @@
           }
         </ul>
       }
+      @if (shareFacts().length) {
+        <app-share-teaser [facts]="shareFacts()" />
+      }
       <a routerLink="/" class="finish-home" i18n>Back to Today</a>
     </section>
   } @else if (loading()) {

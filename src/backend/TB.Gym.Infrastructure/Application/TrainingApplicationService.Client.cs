@@ -463,6 +463,17 @@ internal sealed partial class TrainingApplicationService
             }
             await dbContext.SaveChangesAsync(cancellationToken);
             var summary = await BuildFinishSummaryAsync(execution, cancellationToken);
+            if (mesocycleCompleted)
+            {
+                summary = summary with
+                {
+                    FinishedProgram = await SummarizeProgramAsync(
+                        new FinishedProgramRow(mesocycle.Id, mesocycle.ClientProfileId, mesocycle.Name,
+                            mesocycle.StartDate, mesocycle.EndDateExclusive),
+                        cancellationToken),
+                };
+            }
+
             return SuccessWorkout(execution, summary);
         }
         catch (InvalidOperationException exception)

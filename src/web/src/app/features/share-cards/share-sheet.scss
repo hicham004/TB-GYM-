@@ -1,0 +1,104 @@
+:host {
+  display: block;
+}
+
+.share {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+// The picture in a story's shape, 9 wide for 16 high, short enough that the note and both buttons
+// stay in a phone's sheet with it.
+.preview {
+  aspect-ratio: 9 / 16;
+  background: var(--tb-surface-2);
+  block-size: min(44dvh, 34rem);
+  border-radius: var(--tb-radius-card);
+  display: grid;
+  isolation: isolate;
+  margin-inline: auto;
+  max-inline-size: 100%;
+  overflow: hidden;
+  place-items: center;
+  position: relative;
+}
+
+// While the picture is made, a layer behind the words pulses, as the kit's skeleton does; the words
+// themselves keep their contrast.
+.preview[aria-busy='true']::before {
+  animation: share-making 1.4s ease-in-out infinite alternate;
+  background: var(--tb-line);
+  content: '';
+  inset: 0;
+  opacity: 0;
+  position: absolute;
+  z-index: -1;
+}
+
+@keyframes share-making {
+  to {
+    opacity: 0.6;
+  }
+}
+
+img {
+  block-size: 100%;
+  display: block;
+  inline-size: 100%;
+  object-fit: contain;
+}
+
+.making,
+.state p {
+  color: var(--tb-muted);
+  margin: 0;
+  padding-inline: 1rem;
+  text-align: center;
+}
+
+.state {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+
+  button {
+    flex: 1 1 10rem;
+  }
+}
+
+.problem {
+  background: var(--tb-danger-soft);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-danger);
+  font-weight: 600;
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+}
+
+.status {
+  font-weight: 600;
+  margin: 0;
+  text-align: center;
+}
+
+.note {
+  color: var(--tb-muted);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  margin: 0;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview[aria-busy='true']::before {
+    animation: none;
+    opacity: 0.3;
+  }
+}

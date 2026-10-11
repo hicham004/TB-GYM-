@@ -35,9 +35,8 @@ internal sealed partial class TrainingApplicationService
             .FirstOrDefault();
         var next = open.FirstOrDefault(item => item.StartDate > today);
         var described = current ?? next ?? await dbContext.TrainingMesocycles.AsNoTracking()
-            .Where(item => item.ClientProfileId == client.Id && item.Status != MesocycleStatus.Cancelled &&
-                item.StartDate <= today &&
-                (item.Status == MesocycleStatus.Completed || item.EndDateExclusive <= today))
+            .Where(item => item.ClientProfileId == client.Id)
+            .Where(FinishedBy(today))
             .OrderByDescending(item => item.StartDate).ThenByDescending(item => item.Id)
             .Select(item => new ProgramBlockRow(item.Id, item.Name, item.Kind, item.StartDate,
                 item.EndDateExclusive, item.TimeZoneId, item.RevealAllWeeks))

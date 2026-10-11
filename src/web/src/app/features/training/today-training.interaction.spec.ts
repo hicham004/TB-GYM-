@@ -15,6 +15,9 @@ import type {
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, field, fill, press, query, settle } from '../../../testing/dom';
+import { personalRecord, programSummary } from '../../../testing/share-card-fixtures';
+import { fakeShareCardMaker } from '../../../testing/share-card-maker-fake';
+import { ShareCardMaker } from '../share-cards/share-card-maker';
 import { TodayTraining } from './today-training';
 
 function set(overrides: Partial<ClientSetView> = {}): ClientSetView {
@@ -147,6 +150,7 @@ async function render(
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: tenant } },
+      { provide: ShareCardMaker, useValue: fakeShareCardMaker() },
     ],
   }).compileComponents();
 
@@ -224,6 +228,73 @@ describe('TodayTraining interactions', () => {
 
     // Completion carries the version the last save returned, not the one first rendered.
     expect(api.completeMyWorkout).toHaveBeenCalledWith('execution-1', { version: 4 });
+  });
+
+  it('offers the program a workout finished and its records as share cards on the summary', async () => {
+    const summary = {
+      durationSeconds: 3000,
+      completedSetCount: 1,
+      totalSetCount: 1,
+      volume: [{ unit: 'Kilogram' as const, loadTimesRepetitions: 500 }],
+      personalRecords: [personalRecord()],
+      finishedProgram: programSummary(),
+    };
+    const { fixture, host } = await render({
+      completeMyWorkout: vi.fn(() =>
+        of({
+          id: 'execution-1',
+          status: 'Completed' as const,
+          version: 5,
+          startedAtUtc: '2026-08-25T10:00:00Z',
+          completedAtUtc: '2026-08-25T11:00:00Z',
+          finishSummary: summary,
+        }),
+      ),
+    });
+    press(host, 'Log set');
+    await settle(fixture);
+    press(host, 'Finish workout');
+    await settle(fixture);
+    press(host, 'Confirm finish');
+    await settle(fixture);
+
+    const teaser = query(host, '.finish-summary app-share-teaser');
+    expect(teaser.querySelector('.kicker')?.textContent?.trim()).toBe('Program complete');
+    expect(button(teaser, 'Share your progress').disabled).toBe(false);
+    // The teaser sits before the way back, which stays the summary's one main action.
+    expect(
+      teaser.compareDocumentPosition(query(host, '.finish-home')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('offers no share card after a workout that set no record and finished no program', async () => {
+    const { fixture, host } = await render({
+      completeMyWorkout: vi.fn(() =>
+        of({
+          id: 'execution-1',
+          status: 'Completed' as const,
+          version: 5,
+          startedAtUtc: '2026-08-25T10:00:00Z',
+          completedAtUtc: '2026-08-25T11:00:00Z',
+          finishSummary: {
+            durationSeconds: 3000,
+            completedSetCount: 1,
+            totalSetCount: 1,
+            volume: [],
+            personalRecords: [],
+          },
+        }),
+      ),
+    });
+    press(host, 'Log set');
+    await settle(fixture);
+    press(host, 'Finish workout');
+    await settle(fixture);
+    press(host, 'Confirm finish');
+    await settle(fixture);
+    expect(query(host, '.finish-summary').textContent).toContain('Workout done.');
+    expect(host.querySelector('app-share-teaser')).toBeNull();
   });
 
   /** An edited set that was never saved must not be silently dropped by completing the workout. */

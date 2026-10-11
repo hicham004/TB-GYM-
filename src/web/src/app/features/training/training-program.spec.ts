@@ -7,9 +7,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { settle } from '../../../testing/dom';
+import { button, settle } from '../../../testing/dom';
+import { programSummary } from '../../../testing/share-card-fixtures';
+import { fakeShareCardMaker } from '../../../testing/share-card-maker-fake';
 import { fakeClientAccess } from '../../../testing/today-fixtures';
 import { historyItem, historyPage, programView } from '../../../testing/training-program-fixtures';
+import { ShareCardMaker } from '../share-cards/share-card-maker';
 import { TrainingProgram } from './training-program';
 
 async function render(
@@ -30,6 +33,7 @@ async function render(
       { provide: ApiClient, useValue: client },
       { provide: TenantStore, useValue: { selectedTenantId } },
       { provide: ClientAccessStore, useValue: access },
+      { provide: ShareCardMaker, useValue: fakeShareCardMaker() },
     ],
   }).compileComponents();
   // A notice's link arrives in the address (`?week=2`), read when the page is created.
@@ -311,6 +315,76 @@ describe('TrainingProgram', () => {
     const next = await render({ getMyTrainingProgram: vi.fn(() => of(upcoming)) });
     expect(next.textOf(next.host.querySelector('.hero-eyebrow'))).toBe('Starts Mon 5 Oct');
     expect(next.read()).toContain('Your coach hasn’t shared this week yet');
+  });
+
+  it('shares a finished program as a card, reading its facts only when asked', async () => {
+    const finished = programView();
+    finished.program!.phase = 'Finished';
+    finished.program!.currentWeekNumber = null;
+    finished.program!.weeks[2].sessions[1].state = 'Completed';
+    const getMyProgramSummary = vi.fn(() =>
+      of({ isAllowed: true, accessReason: 'Granted', program: programSummary() }),
+    );
+    const { host, settle } = await render({
+      getMyTrainingProgram: vi.fn(() => of(finished)),
+      getMyProgramSummary,
+    });
+    expect(getMyProgramSummary).not.toHaveBeenCalled();
+
+    button(host, 'Share your program').click();
+    await settle();
+    await settle();
+    expect(getMyProgramSummary).toHaveBeenCalledWith('block-1');
+    const pane = document.querySelector<HTMLElement>('.tb-modal-pane--sheet')!;
+    expect(pane.querySelector('h2')?.textContent?.trim()).toBe('Share your program');
+    // Training follows the person's own light or dark, and so does its sheet.
+    expect(pane.dataset['mode']).toBeUndefined();
+    expect(pane.querySelector('.preview img')?.getAttribute('alt')).toContain(
+      'Strength Foundations, 8 weeks. 30 workouts, 7 personal records.',
+    );
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
+  });
+
+  it('offers no card for a program still running, or finished with nothing done', async () => {
+    const running = await render();
+    expect(() => button(running.host, 'Share your program')).toThrow();
+
+    TestBed.resetTestingModule();
+    const untouched = programView();
+    untouched.program!.phase = 'Finished';
+    untouched.program!.currentWeekNumber = null;
+    untouched.program!.completedCount = 0;
+    const idle = await render({ getMyTrainingProgram: vi.fn(() => of(untouched)) });
+    expect(() => button(idle.host, 'Share your program')).toThrow();
+  });
+
+  it('says why a finished program’s card cannot be made, and lets the client try again', async () => {
+    const finished = programView();
+    finished.program!.phase = 'Finished';
+    finished.program!.currentWeekNumber = null;
+    let answer: 'closed' | 'broken' = 'closed';
+    const getMyProgramSummary = vi.fn(() =>
+      answer === 'closed'
+        ? of({ isAllowed: false, accessReason: 'Expired', program: null })
+        : throwError(() => new HttpErrorResponse({ status: 500 })),
+    );
+    const { host, settle, textOf } = await render({
+      getMyTrainingProgram: vi.fn(() => of(finished)),
+      getMyProgramSummary,
+    });
+
+    button(host, 'Share your program').click();
+    await settle();
+    expect(textOf(host.querySelector('.hero-problem[role="alert"]'))).toBe(
+      'Your coaching plan has ended. Contact your coach.',
+    );
+    answer = 'broken';
+    button(host, 'Share your program').click();
+    await settle();
+    expect(textOf(host.querySelector('.hero-problem'))).toBe(
+      'Your program’s card couldn’t be made. Try again.',
+    );
+    expect(document.querySelector('.tb-modal-pane--sheet')).toBeNull();
   });
 
   it('retries a failed program read, and starts over in another workspace', async () => {

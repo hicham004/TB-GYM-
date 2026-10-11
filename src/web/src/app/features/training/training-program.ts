@@ -8,6 +8,7 @@ import {
   inject,
   Injector,
   signal,
+  TemplateRef,
   untracked,
   viewChild,
 } from '@angular/core';
@@ -21,7 +22,10 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button, ButtonLink } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
+import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
+import type { ShareFact } from '../share-cards/share-card.models';
+import { ShareSheet, shareSheetTitle } from '../share-cards/share-sheet';
 import { trainingReadAccessLabel } from './training-read.models';
 import {
   focusWeek,
@@ -55,6 +59,7 @@ const HISTORY_PREVIEW = 4;
     ButtonLink,
     EmptyState,
     Icon,
+    ShareSheet,
     Skeleton,
   ],
   templateUrl: './training-program.html',
@@ -66,6 +71,8 @@ export class TrainingProgram {
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly sheets = inject(UiSheet);
+  private readonly shareSheet = viewChild.required<TemplateRef<unknown>>('shareSheet');
   private readonly injector = inject(Injector);
   private readonly route = inject(ActivatedRoute, { optional: true });
   private loadedTenantId: string | null = null;
@@ -112,6 +119,14 @@ export class TrainingProgram {
   protected readonly historyShown = computed(() =>
     this.showAllHistory() ? this.history() : this.history().slice(0, HISTORY_PREVIEW),
   );
+  /** A finished program with a workout in it can be shared as a card (M9, TRN-030). */
+  protected readonly canShareProgram = computed(() => {
+    const program = this.program();
+    return program?.phase === 'Finished' && program.completedCount > 0;
+  });
+  protected readonly sharing = signal(false);
+  protected readonly shareProblem = signal<string | null>(null);
+  protected readonly shareFacts = signal<readonly ShareFact[]>([]);
   protected readonly canShowMoreHistory = computed(
     () =>
       (!this.showAllHistory() && this.history().length > HISTORY_PREVIEW) ||
@@ -154,6 +169,37 @@ export class TrainingProgram {
 
   protected retryProgram(): void {
     void this.loadProgram();
+  }
+
+  /** Reads the finished program's facts, then opens the card in a sheet to see before sharing. */
+  protected async shareProgram(): Promise<void> {
+    const program = this.program();
+    if (!program || this.sharing()) return;
+    return this.scope.run('share', async (owner) => {
+      this.sharing.set(true);
+      this.shareProblem.set(null);
+      try {
+        const read = await owner.wait(firstValueFrom(this.api.getMyProgramSummary(program.id)));
+        if (!read.isAllowed || !read.program) {
+          this.shareProblem.set(this.accessLabel(read.accessReason));
+          return;
+        }
+        const facts: ShareFact[] = [{ kind: 'program', program: read.program }];
+        this.shareFacts.set(facts);
+        this.sheets.open(this.shareSheet(), {
+          title: shareSheetTitle(facts),
+          closeLabel: $localize`Close`,
+        });
+      } catch (error) {
+        if (owner.current) {
+          this.shareProblem.set(
+            apiErrorMessage(error, $localize`Your program’s card couldn’t be made. Try again.`),
+          );
+        }
+      } finally {
+        if (owner.current) this.sharing.set(false);
+      }
+    });
   }
 
   protected retryHistory(): void {
@@ -278,5 +324,7 @@ export class TrainingProgram {
     this.loadingMore.set(false);
     this.showAllHistory.set(false);
     this.openWeeks.set(new Set());
+    this.sharing.set(false);
+    this.shareProblem.set(null);
   }
 }

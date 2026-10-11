@@ -108,7 +108,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.4a | **The player logs what the coach prescribed** (review doc, "Slice 1"): a set's draft starts from the prescription and last time's numbers are the reference, a "Rest is over" cue, the kit's controls instead of the player's three browser selects, and nothing under the client tab bar in the player | §2, plus Vitest for the draft precedence, the rest end and the controls, the player's Playwright spec, and one TRN line in `DOMAIN-RULES.md` | Done · 2026-10-11 · e03aeb6 |
 | R5.4b | **One client, one mode, and honest failures** (review doc, "Slice 2"): client Today, Training and Check-ins marked `REDESIGNED` after a dark pass, a "This client isn't here" state for a 404, and a toast with Retry when a page fails to load | §2, plus the theme e2e for the three client routes and Vitest for the 404 state and the toast | Done · 2026-10-11 · b538386 |
 | R5.4c | **Sheet hosts on one base, and the small fixes** (review doc, "Slice 3"): Products, Service & access, Intake and Your entries on `GuardedSheets`; week-notice links read in two queries; the Strength history card reloads after Update maxes; suggested maxes in plate steps; the calories step, two wording fixes and the inbox line | §2, plus the folded hosts' specs green unchanged, one backend command-count test, and Vitest for the rounding and the wording | Done · 2026-10-11 · 6dc3088 |
-| R6.1a | **Share cards, records and programs** (M9; the owner opened R6 on 2026-10-11): a client turns a new personal record (from the workout's finish summary, by the server's record rule) or a finished program into an image in the coach's brand, sees it first, then shares it through the phone's share sheet or saves it. The client taps every time; the image is made on the phone, and TB Gym uploads, stores and posts nothing | §2, plus Vitest (the card from the record and program facts, the preview, share and save) and API tests for any new read (other tenant, other client, released client) | Open |
+| R6.1a | **Share cards, records and programs** (M9; the owner opened R6 on 2026-10-11): a client turns a new personal record (from the workout's finish summary, by the server's record rule) or a finished program into an image in the coach's brand, sees it first, then shares it through the phone's share sheet or saves it. The client taps every time; the image is made on the phone, and TB Gym uploads, stores and posts nothing | §2, plus Vitest (the card from the record and program facts, the preview, share and save) and API tests for any new read (other tenant, other client, released client) | Done · 2026-10-12 |
 | R6.1b | **Share cards, before and after** (M9, CLI-008): a client picks two of their own progress photos of one pose and makes a before-and-after image in the coach's brand. Each time, a confirmation names the photos and their dates before anything is made, and nothing is remembered. The server records every photo export (who, when, which photos; never the image), because photo exports are auditable (CLI-008); a removed photo cannot be used | §2, plus API tests (own photos only, another client, another tenant, a removed photo, a released client, the record append-only) and Vitest (the picker, the confirmation, the card) | Open |
 | R6.2a | **Homepage pre-render** (website): the homepage is built as finished HTML at build time, so Google and link previews read it. Every other route keeps the app shell, so a deep link never shows the homepage first (nginx falls back to the client-only page). Browser-only code waits for the browser, and the homepage's words, offers and prices stay as they are. A new package is explained and documented as `AGENTS.md` asks | §2, plus a check that the built homepage holds its headline and meta tags, Playwright for a deep link and the homepage, and the nginx architecture test kept green | Open |
 | R6.2b | **The homepage, one of one** (website; the owner, 2026-10-11: "something extraordinary, something I have never seen"): research first, then rebuild. Study at least 15 of the best homepages in and beyond fitness (award winners, the best product sites, coaching and training apps, the competitors) and write one page, `docs/design/homepage-research.md`, with links: what each does best, what TB Gym can own that none of them has, three concepts and the one chosen. Then build it as the real homepage with a GSAP scroll story at its heart, from the app's real screens on the Atlas demo (no AI-made people; only licensed images and fonts), and polish at least twice by setting its screenshots beside the references. Everything may change except money terms (prices, offers, the trial) and legal statements, which stay as they are. The hero works without the video R6.2c adds later. Install the tools you need: packages (each explained and documented as `AGENTS.md` asks), browsers and connectors (at user scope, not in the repo; a connector that needs a sign-in, such as Figma, cannot be used unattended) | §2, plus the research page, Lighthouse on a phone (performance 90 or more, accessibility 100, best practices and SEO 95 or more), reduced motion and keyboard paths, the pre-render kept, Vitest for the motion set-up and clean-up, and Playwright at 390 and 1440 px | Open |
@@ -287,6 +287,8 @@ of the implemented R1.3 screens before production rollout.
   error line (it shrank when the older global classes it borrowed were removed).
   R5.3f measures 541.89 kB (−5.06 kB): the older globals are gone; the heading-focus fallback and the
   standalone empty heading are the only new start-up behavior. The 520 kB target remains a follow-up.
+  R6.1a measures 544.39 kB, +0.06 kB on 0580f99's 544.33 kB. The share cards load with Training and the
+  player; only the API client's new read and the kit's `mode` option are in the start-up files.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -927,6 +929,35 @@ of the implemented R1.3 screens before production rollout.
   make the three wordings of the question one in a words pass; (2) the Renew plan and Start a plan sheets
   still use the browser's date input (§2 rule 8); (3) a sign-out with a sheet open cannot be reached
   from the screen (the sheet covers the account menu), so only the unit tests exercise it.
+- **Share cards of records and programs, R6.1a (built 2026-10-12; screenshots `docs/design/r61a-*.png`).
+  Decided by Claude for the owner on 2026-10-12**, after looking at three things. Hevy offers a row of
+  share cards after a workout (records, volume, muscles) aimed at Instagram Stories, with light, dark
+  and transparent backgrounds, and past workouts can be shared from the profile. ABC Trainerize lets
+  clients post personal bests and finished workouts to Facebook; its users asked on its ideas forum for
+  shares that name the trainer or their company, which is not built. The Web Share API shares files from
+  Safari on iOS 14+ and Chrome on Android, and a download is the way elsewhere. The decisions:
+  (1) **one story-sized picture**, 1080 × 1920 (9:16), the size Instagram, WhatsApp and Facebook stories
+  fill, because stories are where clients post; (2) **the card names the client by first name and the
+  coach's space**, in the space's colours with its logo or initials and no TB Gym mark (§3.1), which is
+  what Trainerize's users asked for; (3) **a program's records are counted as the finish summaries showed
+  them**, so a record beaten twice in a program counts twice (TRN-030); (4) **the cards are offered where
+  the moment is**: the finish summary (its records, and the program when that workout finished it) and
+  Training's finished program; (5) **Share appears only where the device can hand a picture to its share
+  sheet**, and Save image always. Also fixed on the same screen: the finish summary's "done." named a
+  face the app never loads (`'Instrument Serif'`, which the app calls `TB Home Serif`), so it fell back
+  to Georgia; it now reads `--tb-font-serif`. Not built:
+  - (a) sharing a record later from Finished workouts, as Hevy does; the row asked for the finish summary;
+  - (b) square and feed sizes, and light or transparent backgrounds;
+  - (c) the coach's Instagram handle on a card, which needs a brand setting the owner decides;
+  - (d) a program that ended while the next one already runs is not on Training, which describes the
+    running one. Its card is offered only on the summary of a last workout that finished every
+    session; a list of past programs would offer the rest;
+  - (e) `progress-dashboard.scss` names `'Instrument Serif'` too, so Progress's serif moment still falls
+    back to Georgia;
+  - (f) the player's clock keeps counting on the finish summary;
+  - (g) `R25bHistoryListsFinishedWorkoutsNewestFirstWithTheRecordsEachSet` fails like R34a's when a run
+    starts in the hour after midnight in Beirut before 25 Oct: whole-day steps across the clock change
+    land a day short. R6.1a's tests start their clock at midday instead.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1129,6 +1160,9 @@ Tokens are theme-ready from R1, so this costs little later.
   marked invalid with the message in words (the screen's submit then focuses the first). Its `value` is `''` or a real
   `YYYY-MM-DD`; `status` says `empty`, `incomplete`, `invalid` or `valid` so the screen decides what to do with
   a half-typed date. The browser's date input stays off every redesigned screen.
+- Built in R6.1a: `UiSheet` and `UiDialog` take `mode: 'light' | 'dark'`, which starts that mode's tokens
+  on the overlay pane. A sheet over a screen that is always one mode (the workout player) then matches
+  it; without the option a modal follows the person's mode.
 - **Retire:** the pre-foundation palette and globals in `styles.scss`, the `--accent/--surface`
   legacy variables, and every browser-default button. The migration is finished when a lint check
   finds no legacy variable and no unstyled `<button>`.
@@ -1715,6 +1749,20 @@ limited to the coach's assigned clients.
   asked every time and never remembered; a before-and-after first names its photos and dates. The
   image is made on the phone, and TB Gym uploads, stores and posts nothing. A photo export is
   recorded on the server (CLI-008). The words are the app's own, not a legal document.
+- Built in R6.1a (records and programs): the workout's finish summary shows the prototype's tilted card
+  in the coach's accent, for the program the workout finished (every session done) or else its first new
+  record, with one button that names what it offers (Share your record, Share a record, Share your
+  program or Share your progress). On Training, a finished program's hero offers Share your program.
+  Either opens a sheet holding the picture itself: a 1080 × 1920 story PNG drawn on the device, with the
+  coach's brand behind and the accent card, which mirrors on a right-to-left page. The card
+  carries the kicker, the number in Instrument Serif, the lift or the program, the client's first name,
+  "coached by" the coaching space, and its logo on a white tile (or its initials). The sheet has a choice
+  when the workout gave several cards, Share through the phone's share sheet where the device can share
+  pictures, Save image (a download named for the card), and above the buttons "Only you can share this,
+  and your coach never posts for you. The picture is made on this device; TB Gym doesn't upload or keep
+  it." Over the player the sheet is dark; on Training it follows the person's mode. A record's card says
+  the load in the unit lifted, never converted. A program's card gives its weeks, the workouts finished in
+  it and the records they set, read from the server (TRN-030).
 
 ### Signed-out and website
 - These are already the strongest part.
@@ -1852,7 +1900,7 @@ Historical week notices without structured targets open Training without guessin
 history. The review of 2026-10-11 checked five of them live in a browser; Browser Back on a sheet is
 proved in Vitest. R5.3g ran every regression written for them, fixed the two bugs they found (the swap
 search box and Show earlier after an empty year) and committed R5.3f and the repairs. These close the
-six named findings, not every editor or access state for good. R6 has not started.
+six named findings, not every editor or access state for good. R6 began on 2026-10-12 with R6.1a.
 
 ---
 

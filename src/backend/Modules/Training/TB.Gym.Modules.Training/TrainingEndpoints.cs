@@ -605,6 +605,18 @@ public static class TrainingEndpoints
             .WithName("GetMyWorkoutHistory")
             .Produces<ClientWorkoutHistoryPage>();
 
+        client.MapGet("/programs/{programId:guid}/summary", async (
+            Guid programId,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await service.GetMyProgramSummaryAsync(programId, cancellationToken);
+            return result is null ? Results.NotFound() : Results.Ok(result);
+        })
+        .WithName("GetMyProgramSummary")
+        .Produces<ClientProgramSummaryResult>()
+        .Produces(StatusCodes.Status404NotFound);
+
         client.MapPost("/sessions/{sessionId:guid}/start", async (
             Guid sessionId,
             HttpContext context,

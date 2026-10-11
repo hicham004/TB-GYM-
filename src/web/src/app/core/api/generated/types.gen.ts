@@ -850,6 +850,24 @@ export type ClientProgramSessionView = {
   setCount: number | string;
 };
 
+export type ClientProgramSummaryResult = {
+  isAllowed: boolean;
+  accessReason: string;
+  program: null | ClientProgramSummaryView;
+};
+
+export type ClientProgramSummaryView = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDateExclusive: string;
+  weekCount: number | string;
+  workoutCount: number | string;
+  personalRecordCount: number | string;
+  personalRecordRuleKey: string;
+  personalRecordRuleVersion: number | string;
+};
+
 export type ClientProgramView = {
   id: string;
   name: string;
@@ -3716,6 +3734,7 @@ export type WorkoutFinishSummaryView = {
   totalSetCount: number | string;
   volume: Array<WorkoutVolumeView>;
   personalRecords: Array<WorkoutPersonalRecordView>;
+  finishedProgram?: null | ClientProgramSummaryView;
 };
 
 export type WorkoutNoteAuthorRole = 'Coach' | 'Client';
@@ -7248,6 +7267,32 @@ export type GetMyWorkoutHistoryResponses = {
 
 export type GetMyWorkoutHistoryResponse =
   GetMyWorkoutHistoryResponses[keyof GetMyWorkoutHistoryResponses];
+
+export type GetMyProgramSummaryData = {
+  body?: never;
+  path: {
+    programId: string;
+  };
+  query?: never;
+  url: '/api/training/me/programs/{programId}/summary';
+};
+
+export type GetMyProgramSummaryErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetMyProgramSummaryResponses = {
+  /**
+   * OK
+   */
+  200: ClientProgramSummaryResult;
+};
+
+export type GetMyProgramSummaryResponse =
+  GetMyProgramSummaryResponses[keyof GetMyProgramSummaryResponses];
 
 export type StartMyWorkoutData = {
   body?: never;

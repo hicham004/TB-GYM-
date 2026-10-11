@@ -34,6 +34,22 @@ export interface ModalOptions {
    * many pages as they take (the client's recipe, R4.4d). Content marked `tb-print-hide` is left out.
    */
   printable?: boolean;
+  /**
+   * Draws the modal in this mode whatever the person chose, for a screen that is always one mode: a
+   * sheet over the workout player, which is always dark (§3), is dark too (R6.1a).
+   */
+  mode?: 'light' | 'dark';
+}
+
+/**
+ * Starts the modal's own mode scope on its overlay pane (`_tokens.scss`), so its surface and
+ * controls read that mode's tokens.
+ */
+export function applyModalMode<R>(
+  ref: DialogRef<R, ModalSurface>,
+  mode: ModalOptions['mode'],
+): void {
+  if (mode) ref.overlayRef.overlayElement.dataset['mode'] = mode;
 }
 
 /** The overlay pane's classes for a modal of this kind and these options. */

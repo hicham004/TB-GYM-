@@ -3,6 +3,7 @@ import { Dialog as CdkDialog, DialogRef } from '@angular/cdk/dialog';
 import { Overlay } from '@angular/cdk/overlay';
 import { inject, Injectable, TemplateRef } from '@angular/core';
 import {
+  applyModalMode,
   guardClose,
   guardedConfig,
   ModalData,
@@ -52,6 +53,7 @@ export class UiSheet {
       closeOnNavigation: options.closeOnNavigation ?? true,
       ...guardedConfig(options),
     });
+    applyModalMode(ref, options.mode);
     guardClose(ref, data, options.canClose);
     return ref;
   }

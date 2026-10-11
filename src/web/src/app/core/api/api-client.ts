@@ -746,6 +746,13 @@ export class ApiClient {
     });
   }
 
+  /** A finished program's facts for the client's share card (R6.1a, TRN-030); 404 for any other. */
+  getMyProgramSummary(programId: string): Observable<Phase3Contracts.ClientProgramSummaryResult> {
+    return this.http.get<Phase3Contracts.ClientProgramSummaryResult>(
+      `/api/training/me/programs/${programId}/summary`,
+    );
+  }
+
   /**
    * The client's recorded maxes; with `includeProgramMaxes` also every training max of their programs
    * (STR-015), whose ids are never recorded maxes, so Assign program leaves it off.

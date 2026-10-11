@@ -2,6 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import { Dialog as CdkDialog, DialogRef } from '@angular/cdk/dialog';
 import { inject, Injectable, TemplateRef } from '@angular/core';
 import {
+  applyModalMode,
   guardClose,
   guardedConfig,
   ModalData,
@@ -48,6 +49,7 @@ export class UiDialog {
       closeOnNavigation: options.closeOnNavigation ?? true,
       ...guardedConfig(options),
     });
+    applyModalMode(ref, options.mode);
     guardClose(ref, data, options.canClose);
     return ref;
   }

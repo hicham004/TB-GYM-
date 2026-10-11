@@ -212,6 +212,14 @@ public interface ITrainingApplicationService
 
     Task<ClientWorkoutHistoryPage> GetMyWorkoutHistoryAsync(int skip, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// One of the signed-in client's finished programs, for their share card (R6.1a, TRN-030). Null when
+    /// it is not theirs in this workspace, not finished yet, or cancelled.
+    /// </summary>
+    Task<ClientProgramSummaryResult?> GetMyProgramSummaryAsync(
+        Guid programId,
+        CancellationToken cancellationToken);
+
     Task<ClientTrainingUpcomingView> GetUpcomingAsync(int skip, CancellationToken cancellationToken);
 
     Task<CoachWorkoutDetailResult?> GetCoachWorkoutAsync(
@@ -1144,12 +1152,42 @@ public sealed record ClientWorkoutHistoryItemView(
 
 public sealed record WorkoutVolumeView(TrainingLoadUnit Unit, decimal LoadTimesRepetitions);
 
+/// <param name="FinishedProgram">
+/// Set only when this workout finished its program, every session done (TRN-013): the program's facts
+/// for the client's share card (R6.1a, TRN-030).
+/// </param>
 public sealed record WorkoutFinishSummaryView(
     int DurationSeconds,
     int CompletedSetCount,
     int TotalSetCount,
     IReadOnlyList<WorkoutVolumeView> Volume,
-    IReadOnlyList<WorkoutPersonalRecordView> PersonalRecords);
+    IReadOnlyList<WorkoutPersonalRecordView> PersonalRecords,
+    ClientProgramSummaryView? FinishedProgram = null);
+
+/// <summary>
+/// A finished program as the client's share card tells it (R6.1a, TRN-030). A closed feature carries its
+/// reason and no program, never an empty one.
+/// </summary>
+public sealed record ClientProgramSummaryResult(
+    bool IsAllowed,
+    string AccessReason,
+    ClientProgramSummaryView? Program);
+
+/// <summary>
+/// One finished program's facts (TRN-030): its weeks, the workouts the client finished in it, and the
+/// personal records those workouts set, each counted as the finish summary and history showed it
+/// (TRN-019), so a record beaten twice in the program counts twice.
+/// </summary>
+public sealed record ClientProgramSummaryView(
+    Guid Id,
+    string Name,
+    DateOnly StartDate,
+    DateOnly EndDateExclusive,
+    int WeekCount,
+    int WorkoutCount,
+    int PersonalRecordCount,
+    string PersonalRecordRuleKey,
+    int PersonalRecordRuleVersion);
 
 public sealed record WorkoutExecutionView(
     Guid Id,

@@ -1109,7 +1109,8 @@ Work follows this order; anything outside it needs the user's approval first.
   (`docs/UI-REVIEW-2026-10-11.md`) led to six repairs, verified and committed in R5.3g, and to three
   slices before the demo, R5.4a to R5.4c, all done on 2026-10-11. The owner then opened optional R6
   the same day: share cards (R6.1a, R6.1b), the homepage's pre-render (R6.2a) and a homepage rebuilt
-  after research (R6.2b); the hero video (R6.2c) waits for the owner's Jitter assets. The owner's product review and
+  after research (R6.2b); the hero video (R6.2c) waits for the owner's Jitter assets. R6.1a, a client's
+  share cards of records and finished programs, was built on 2026-10-12. The owner's product review and
   the founding-coach demo follow.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
