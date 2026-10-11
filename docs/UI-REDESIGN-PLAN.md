@@ -37,6 +37,11 @@ What the chat does:
 6. **Too big for one session?** Split the row (for example R2.2a and R2.2b), finish the first part,
    and leave the rest as the next step.
 
+**Unattended runs.** `scripts/plan-runner.ps1` starts one fresh chat per Open row at max effort (Opus;
+R6.2 on Fable, the owner's choice on 2026-10-11). Such a chat commits its step once every check is
+green and never pushes. The runner stops at gates, Optional rows and any step that doesn't end Done,
+and writes its logs and `summary.md` to `artifacts/plan-runner/`.
+
 The clickable prototype that R1 and R2 match is committed at
 [`docs/design/prototype/tb-gym-prototype.html`](design/prototype/tb-gym-prototype.html) (open it in a
 browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
