@@ -1107,9 +1107,10 @@ Work follows this order; anything outside it needs the user's approval first.
   R5 is built through R5.3f (2026-10-10, committed 2026-10-11): legacy styling is removed and the
   remaining editor, focus and reflow fixes are verified. A UI review on 2026-10-11
   (`docs/UI-REVIEW-2026-10-11.md`) led to six repairs, verified and committed in R5.3g, and to three
-  slices before the demo: R5.4a (the workout player logs what the coach prescribed) is done, R5.4b
-  and R5.4c are next. Then come the owner's product review and the founding-coach demo; optional R6
-  is not started.
+  slices before the demo, R5.4a to R5.4c, all done on 2026-10-11. The owner then opened optional R6
+  the same day: share cards (R6.1a, R6.1b), the homepage's pre-render (R6.2a) and a homepage rebuilt
+  after research (R6.2b); the hero video (R6.2c) waits for the owner's Jitter assets. The owner's product review and
+  the founding-coach demo follow.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
 
