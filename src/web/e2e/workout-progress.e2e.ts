@@ -259,13 +259,14 @@ const workoutExercise = (name: string, id: string) => ({
   alternatives: [],
   coachNotes: 'Use a steady pace.',
   mediaAssetIds: [],
+  // Last time differs from today's target, so the row shows which one it starts from (TRN-029).
   previousPerformance: {
     date: '2026-09-23',
-    bestLoad: 100,
+    bestLoad: 95,
     unit: 'Kilogram',
-    repetitions: 5,
+    repetitions: 6,
     rpe: 8,
-    sets: [{ position: 1, repetitions: 5, load: 100, loadUnit: 'Kilogram', rpe: 8 }],
+    sets: [{ position: 1, repetitions: 6, load: 95, loadUnit: 'Kilogram', rpe: 8 }],
   },
   sets: [workoutSet(1, id)],
 });
@@ -282,96 +283,121 @@ const workout = {
   notes: [],
 };
 
-for (const width of [390, 1440]) {
-  test(`Workout player at ${width}px logs a PR and finishes`, async ({ page }) => {
-    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-    await session(page, {
-      'GET /api/training/me/today': (route) =>
-        json(route, 200, {
-          isAllowed: true,
-          accessReason: 'Granted',
-          localDate: '2026-09-30',
-          workouts: [workout],
-        }),
-      'GET /api/training/me/upcoming': (route) =>
-        json(route, 200, {
-          isAllowed: true,
-          accessReason: 'Granted',
-          localDate: '2026-09-30',
-          timeZoneId: 'Asia/Beirut',
-          hasAssignedProgram: true,
-          hasVisibleSessions: true,
-          searchThrough: '2026-12-29',
-          nextSession: null,
-          unfinishedWorkouts: [],
-          nextSkip: null,
-          todayCoverage: null,
-        }),
-      'PUT /api/training/me/workouts/workout-1/sets/set-squat': (route) =>
-        json(route, 200, {
-          workoutExecutionId: 'workout-1',
-          executionVersion: 2,
-          setPerformanceId: 'set-squat',
-          actualRepetitions: 5,
-          actualLoad: 105,
-          actualLoadUnit: 'Kilogram',
-          actualRpe: null,
-          actualRir: null,
-          isCompleted: true,
-          clientNote: null,
-          isPersonalRecord: true,
-          personalRecordRuleKey: 'ExactRepsLoad',
-          personalRecordRuleVersion: 1,
-        }),
-      'POST /api/training/me/workouts/workout-1/complete': (route) =>
-        json(route, 200, {
-          id: 'workout-1',
-          status: 'Completed',
-          version: 3,
-          finishSummary: {
-            durationSeconds: 1800,
-            completedSetCount: 1,
-            totalSetCount: 2,
-            volume: [{ unit: 'Kilogram', loadTimesRepetitions: 525 }],
-            personalRecords: [
-              {
-                setPerformanceId: 'set-squat',
-                exerciseName: 'Back squat',
-                load: 105,
-                unit: 'Kilogram',
-                repetitions: 5,
-              },
-            ],
-          },
-        }),
-    });
-    await page.goto('/training/today');
-    await expect(page.getByRole('heading', { name: 'Back squat' })).toBeVisible();
-    await expect(page.locator('.previous-performance')).toBeVisible();
-    await expect(page.getByRole('spinbutton', { name: 'Actual load', exact: true })).toHaveValue(
-      '100',
-    );
-    await waitForFonts(page);
-    await accessible(page);
-    await page.screenshot({ path: `../../docs/design/r22-workout-${width}.png`, fullPage: true });
-    await page.getByRole('spinbutton', { name: 'Actual load', exact: true }).fill('105');
-    await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('PR', { exact: true })).toBeVisible();
-    await expect(page.getByRole('timer')).toBeVisible();
-    await page.getByRole('button', { name: 'Skip' }).click();
-    await page.getByRole('button', { name: /Next exercise/ }).click();
-    await expect(page.getByRole('heading', { name: 'Row' })).toBeVisible();
-    await page.getByRole('button', { name: 'Finish workout' }).click();
-    await page.getByRole('button', { name: 'Confirm finish' }).click();
-    await expect(page.getByRole('heading', { name: /Workout done/ })).toBeVisible();
-    await expect(page.getByText('525')).toBeVisible();
-    await waitForFonts(page);
-    await accessible(page);
-    await page.screenshot({
-      path: `../../docs/design/r22-workout-finish-${width}.png`,
-      fullPage: true,
-    });
-    await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
-    await accessible(page);
+test.describe('Workout player', () => {
+  // Fast-forwarding the page clock through a rest skips a minute in which the realtime hub sends
+  // nothing, so SignalR logs its server timeout and reconnects, as it does after a phone was locked.
+  test.use({
+    allowedConsoleErrors: {
+      patterns: [
+        /status of 401 .*\/api\/auth\/me/,
+        /Server timeout elapsed without receiving a message from the server/,
+      ],
+    },
   });
-}
+
+  for (const width of [390, 1440]) {
+    test(`Workout player at ${width}px logs a PR and finishes`, async ({ page }) => {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await session(page, {
+        'GET /api/training/me/today': (route) =>
+          json(route, 200, {
+            isAllowed: true,
+            accessReason: 'Granted',
+            localDate: '2026-09-30',
+            workouts: [workout],
+          }),
+        'GET /api/training/me/upcoming': (route) =>
+          json(route, 200, {
+            isAllowed: true,
+            accessReason: 'Granted',
+            localDate: '2026-09-30',
+            timeZoneId: 'Asia/Beirut',
+            hasAssignedProgram: true,
+            hasVisibleSessions: true,
+            searchThrough: '2026-12-29',
+            nextSession: null,
+            unfinishedWorkouts: [],
+            nextSkip: null,
+            todayCoverage: null,
+          }),
+        'PUT /api/training/me/workouts/workout-1/sets/set-squat': (route) =>
+          json(route, 200, {
+            workoutExecutionId: 'workout-1',
+            executionVersion: 2,
+            setPerformanceId: 'set-squat',
+            actualRepetitions: 5,
+            actualLoad: 105,
+            actualLoadUnit: 'Kilogram',
+            actualRpe: null,
+            actualRir: null,
+            isCompleted: true,
+            clientNote: null,
+            isPersonalRecord: true,
+            personalRecordRuleKey: 'ExactRepsLoad',
+            personalRecordRuleVersion: 1,
+          }),
+        'POST /api/training/me/workouts/workout-1/complete': (route) =>
+          json(route, 200, {
+            id: 'workout-1',
+            status: 'Completed',
+            version: 3,
+            finishSummary: {
+              durationSeconds: 1800,
+              completedSetCount: 1,
+              totalSetCount: 2,
+              volume: [{ unit: 'Kilogram', loadTimesRepetitions: 525 }],
+              personalRecords: [
+                {
+                  setPerformanceId: 'set-squat',
+                  exerciseName: 'Back squat',
+                  load: 105,
+                  unit: 'Kilogram',
+                  repetitions: 5,
+                },
+              ],
+            },
+          }),
+      });
+      // The clock runs as usual until the rest below is fast-forwarded.
+      await page.clock.install({ time: new Date('2026-09-30T08:30:00Z') });
+      await page.goto('/training/today');
+      await expect(page.getByRole('heading', { name: 'Back squat' })).toBeVisible();
+      await expect(page.locator('.previous-performance')).toContainText('95 kg × 6');
+      // The row starts at the coach's 100 kg × 5, not last time's 95 × 6.
+      await expect(page.getByRole('spinbutton', { name: 'Actual load', exact: true })).toHaveValue(
+        '100',
+      );
+      await expect(
+        page.getByRole('spinbutton', { name: 'Actual repetitions', exact: true }),
+      ).toHaveValue('5');
+      await expect(page.getByRole('radio', { name: 'kg' })).toBeChecked();
+      // The player fills the screen: no tab bar over Finish workout.
+      await expect(page.getByRole('navigation', { name: 'Client navigation' })).toHaveCount(0);
+      await waitForFonts(page);
+      await accessible(page);
+      await page.screenshot({ path: `../../docs/design/r22-workout-${width}.png`, fullPage: true });
+      await page.getByRole('spinbutton', { name: 'Actual load', exact: true }).fill('105');
+      await page.getByRole('button', { name: 'Log set' }).click();
+      await expect(page.getByText('PR', { exact: true })).toBeVisible();
+      await expect(page.getByRole('timer')).toBeVisible();
+      await page.clock.fastForward(61_000);
+      await expect(page.getByText('Rest is over', { exact: true })).toBeVisible();
+      await accessible(page);
+      await page.getByRole('button', { name: 'Dismiss' }).click();
+      await page.getByRole('button', { name: /Next exercise/ }).click();
+      await expect(page.getByRole('heading', { name: 'Row' })).toBeVisible();
+      await page.getByRole('button', { name: 'Finish workout' }).click();
+      await page.getByRole('button', { name: 'Confirm finish' }).click();
+      await expect(page.getByRole('heading', { name: /Workout done/ })).toBeVisible();
+      await expect(page.getByText('525')).toBeVisible();
+      await waitForFonts(page);
+      await accessible(page);
+      await page.screenshot({
+        path: `../../docs/design/r22-workout-finish-${width}.png`,
+        fullPage: true,
+      });
+      await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
+      await accessible(page);
+    });
+  }
+});

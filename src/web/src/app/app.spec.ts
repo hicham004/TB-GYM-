@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router, type Routes } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
 import { ClientAccessStore } from './core/access/client-access.store';
@@ -8,6 +8,7 @@ import { AuthStore } from './core/auth/auth.store';
 import { MessageUnreadStore } from './core/messaging/message-unread.store';
 import { NotificationStore } from './core/notifications/notification.store';
 import { TenantStore } from './core/tenancy/tenant.store';
+import { FULL_SCREEN } from './core/theme/redesigned-route';
 import { settle } from '../testing/dom';
 import { fakeClientAccess } from '../testing/today-fixtures';
 
@@ -38,6 +39,7 @@ async function render(
     loading?: boolean;
     memberships?: (typeof MEMBERSHIP)[];
     selectedTenantId?: string;
+    routes?: Routes;
   } = {},
 ) {
   const clear = vi.fn();
@@ -54,7 +56,7 @@ async function render(
     providers: [
       // A catch-all so signing out can navigate to /auth/sign-in without the router rejecting the
       // URL. The shell itself is what is under test; where it navigates to is a routing concern.
-      provideRouter([{ path: '**', children: [] }]),
+      provideRouter(options.routes ?? [{ path: '**', children: [] }]),
       { provide: ClientAccessStore, useValue: fakeClientAccess() },
       {
         provide: NotificationStore,
@@ -161,6 +163,29 @@ describe('App', () => {
     );
     expect(host.querySelector('main')?.classList).toContain('client-main');
     expect(host.classList).toContain('client-layout');
+  });
+
+  /** The workout player fills the screen (R5.4a): no tab bar over Finish workout, no page margin. */
+  it('takes the tabs and the page margin away on a full-screen route, and brings them back', async () => {
+    const { fixture, host } = await render({
+      signedIn: true,
+      client: true,
+      routes: [
+        { path: 'training/today', data: FULL_SCREEN, children: [] },
+        { path: '**', children: [] },
+      ],
+    });
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/training/today');
+    await settle(fixture);
+    expect(host.querySelector('app-client-tabs')).toBeNull();
+    expect(host.querySelector('main')?.classList).toContain('full-screen');
+
+    await router.navigateByUrl('/');
+    await settle(fixture);
+    expect(host.querySelector('app-client-tabs')).not.toBeNull();
+    expect(host.querySelector('main')?.classList).not.toContain('full-screen');
   });
 
   it('lets a client skip to the page, without a fragment navigation', async () => {

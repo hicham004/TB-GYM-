@@ -1,10 +1,12 @@
 import type { ActivatedRouteSnapshot, Data } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 import {
+  FULL_SCREEN,
   HOUSE_BRAND,
   REDESIGNED,
   REDESIGNED_FOR_STAFF,
   redesignedFor,
+  wantsFullScreen,
   wantsHouseBrand,
 } from './redesigned-route';
 
@@ -30,5 +32,13 @@ describe('wantsHouseBrand', () => {
     expect(wantsHouseBrand(chain({}, HOUSE_BRAND))).toBe(true);
     expect(wantsHouseBrand(chain(HOUSE_BRAND, {}))).toBe(true);
     expect(wantsHouseBrand(chain({}, REDESIGNED))).toBe(false);
+  });
+});
+
+describe('wantsFullScreen', () => {
+  it('fills the screen on a marked route or below one, and nowhere else', () => {
+    expect(wantsFullScreen(chain({}, FULL_SCREEN))).toBe(true);
+    expect(wantsFullScreen(chain(FULL_SCREEN, {}))).toBe(true);
+    expect(wantsFullScreen(chain({}, REDESIGNED))).toBe(false);
   });
 });

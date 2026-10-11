@@ -71,15 +71,13 @@
   color: #a8bbaf;
 }
 button,
-select,
 input,
 textarea {
   font: inherit;
 }
 button,
 a,
-summary,
-select {
+summary {
   touch-action: manipulation;
 }
 button {
@@ -96,7 +94,6 @@ button:disabled {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
   outline: 3px solid var(--tb-accent, #d9ed94);
@@ -117,28 +114,11 @@ summary:focus-visible {
 }
 .workout-picker,
 .unit-choice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  display: block;
   margin-block: 0.75rem;
 }
-.unit-choice > span {
-  color: #fff;
-}
-.workout-picker select,
-.unit-choice select,
-.swap-picker {
-  color: #fff;
-  background: #ffffff16;
-  border: 1px solid #ffffff35;
-  border-radius: 0.65rem;
-  padding: 0.6rem;
-  min-block-size: 2.75rem;
-}
-select option {
-  color: #1c3027;
-  background: #fff;
+.unit-choice {
+  max-inline-size: 14rem;
 }
 .player-body {
   margin-block-start: 1rem;
@@ -294,8 +274,12 @@ select option {
   grid-column: 1 / -1;
   margin: 0.15rem 0 0;
   padding-inline-start: 0.25rem;
-  color: #52645a;
+  color: #a5b8aa;
   font-size: 0.75rem;
+}
+// The set being entered is a light card; a logged one stays on the night colour.
+.set-card:has(.set-step) .prescription {
+  color: #52645a;
 }
 .set-note,
 .set-card .player-error {
@@ -329,15 +313,10 @@ select option {
 .exercise-actions button,
 .player-actions button:not(.next-button):not(.finish-button),
 .workout-footer button,
-.rest-timer button,
 .more-workouts {
   background: #ffffff1c;
   color: #fff;
   padding: 0.6rem;
-}
-.exercise-actions label {
-  display: grid;
-  gap: 0.2rem;
 }
 .workout-footer {
   border-block-start: 1px solid #ffffff24;
@@ -370,29 +349,6 @@ select option {
 .finish-confirmation button:last-of-type {
   color: #1e281e;
   background: #ffffff80;
-}
-.rest-timer {
-  position: fixed;
-  z-index: 21;
-  inset-inline: 1rem;
-  inset-block-end: calc(6rem + env(safe-area-inset-bottom));
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 0.8rem;
-  border-radius: 1.25rem;
-  color: #fff;
-  background: var(--tb-brand-strong);
-  box-shadow: 0 1rem 2rem #0007;
-}
-.rest-timer div {
-  display: grid;
-}
-.rest-timer strong {
-  font-size: 1.6rem;
-}
-.rest-timer button:first-of-type {
-  margin-inline-start: auto;
 }
 .finish-summary {
   padding-block: 3rem;
@@ -530,8 +486,5 @@ select option {
   }
   .previous-performance {
     font-size: 0.8rem;
-  }
-  .rest-timer {
-    inset-inline: 0.5rem;
   }
 }

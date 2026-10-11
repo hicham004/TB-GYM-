@@ -100,7 +100,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.3f | **Delete the legacy CSS** (the global rules and variables in `styles.scss`), add the lint check and final words pass; later review limits §9 closure | No legacy variables, no default buttons; review findings repaired and verified in R5.3g | Done · 2026-10-11 |
 | R5 review | **Six repairs**: tenant-owned plan/exercise/media operations; sheet edits across route/session/browser exits; unread cursor pagination; delivered and visible week shortcuts; server-paged swaps retaining selections; measurement/photo history across empty years | Repairs and focused regressions built; five repairs checked live in the review of 2026-10-11 (`docs/UI-REVIEW-2026-10-11.md`, "Step 0") and every regression run green in R5.3g | Done · 2026-10-11 |
 | R5.3g | **Verify and commit R5.3f and the review repairs** (`docs/UI-REVIEW-2026-10-11.md`, "Step 0"): run the Vitest, Playwright and backend regressions written for them, then commit them as two commits on the owner's go | Every regression named in Step 0 has run green and the two rows above carry their hashes | Done · 2026-10-11 |
-| R5.4a | **The player logs what the coach prescribed** (review doc, "Slice 1"): a set's draft starts from the prescription and last time's numbers are the reference, a "Rest is over" cue, the kit's controls instead of the player's three browser selects, and nothing under the client tab bar in the player | §2, plus Vitest for the draft precedence, the rest end and the controls, the player's Playwright spec, and one TRN line in `DOMAIN-RULES.md` | Open |
+| R5.4a | **The player logs what the coach prescribed** (review doc, "Slice 1"): a set's draft starts from the prescription and last time's numbers are the reference, a "Rest is over" cue, the kit's controls instead of the player's three browser selects, and nothing under the client tab bar in the player | §2, plus Vitest for the draft precedence, the rest end and the controls, the player's Playwright spec, and one TRN line in `DOMAIN-RULES.md` | Done · 2026-10-11 |
 | R5.4b | **One client, one mode, and honest failures** (review doc, "Slice 2"): client Today, Training and Check-ins marked `REDESIGNED` after a dark pass, a "This client isn't here" state for a 404, and a toast with Retry when a page fails to load | §2, plus the theme e2e for the three client routes and Vitest for the 404 state and the toast | Open |
 | R5.4c | **Sheet hosts on one base, and the small fixes** (review doc, "Slice 3"): Products, Service & access, Intake and Your entries on `GuardedSheets`; week-notice links read in two queries; the Strength history card reloads after Update maxes; suggested maxes in plate steps; the calories step, two wording fixes and the inbox line | §2, plus the folded hosts' specs green unchanged, one backend command-count test, and Vitest for the rounding and the wording | Open |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
@@ -180,10 +180,11 @@ of the implemented R1.3 screens before production rollout.
     card opening into the player, set tick, PR burst, rest ring or count-ups (§3 signature moments).
   - **Rest timer.** It works (starts after a ticked set, keeps time while the phone is locked,
     +15 s, Skip, screen kept awake), but at zero it just disappears; the prototype buzzes and says
-    "Rest is over".
+    "Rest is over". Closed in R5.4a.
   - **Workout player.** The kg/lb choice is a browser `<select>` (forbidden by §2), the client tabs
     show inside the player, and the prototype's set table with a "previous" column and the pill
-    tools (Watch demo, Note, Swap) are not there.
+    tools (Watch demo, Note, Swap) are not there. R5.4a closed the select and the tabs; the set table
+    and the pill tools remain.
   - **Type and accent.** Today, Check-in and other pages use small italic serif titles; the
     prototype uses bold sans headings, lime for done days, ticked sets and the active tab, and a
     coach pill with a face. R2.5b's Training page follows the prototype, so it can serve as the
@@ -847,6 +848,28 @@ of the implemented R1.3 screens before production rollout.
   listener and waited on a navigation its own question held (it now also checks that the address
   comes back), the intake test retyped the phone number already saved, and the history test read
   units without the suite's string-enum options. R5.3f and the repairs were then committed apart.
+- **The player logs what the coach prescribed, R5.4a (built 2026-10-11; screenshots
+  `docs/design/r54a-*.png`).** A set starts at the prescription and last time's numbers fill only what
+  it leaves open (TRN-029); the review's live case, a 52.5 kg target logged as last time's 50 kg, now
+  logs 52.5. Decided by Claude while building, written into TRN-029: a rep range starts at its lowest
+  number, as it already did with no history; a swapped exercise keeps the prescribed reps but starts its
+  load from last time on the new exercise (the coach's load was for another lift), and its Target line
+  leaves that load out; the Previous column reads last time's set by position, as the sets do. The rest
+  timer is `features/training/rest-timer.ts`: it ends on the clock, says "Rest is over" on screen and in
+  a polite live region, buzzes where the phone can, and plays two short beeps where a tap allowed sound
+  (silent on an iPhone's silent switch); a stale end (a phone left locked) is shown without a buzz, and
+  Next exercise no longer cuts a rest short. kg/lb is the kit's segmented control, Choose workout and
+  Swap exercise are kit menus (Swap lists the prescribed lift first, so a swap can be undone, and stays
+  closed while a set saves; the kit menu gained `disabled`). The player route is `FULL_SCREEN`: no tab
+  bar and no page margin, as in the prototype. Found and fixed on the way: a load typed before kg or lb
+  was chosen was wiped by the choice; the inputs showed the target while ✓ would have sent an empty
+  load; a logged set's Target line read at 2.4:1 on its dark card (axe). Not built: (1) choosing kg
+  or lb still marks every set not yet logged as edited, so Finish refuses until each is logged (older
+  behaviour); a unit-only change should not count as unsaved work; (2) a locked phone hears nothing
+  at the end of a rest, since the page's timers sleep; that needs a push from a service worker, which
+  §4 rules out for now; (3) no setting to turn the beeps off; (4) `RestTimer` stays a player part, not
+  yet in `ui/` and the lab (§4 lists it in the kit), so the lab's baselines are not rewritten; (5) the
+  prototype's set table and pill tools (review: not in this slice).
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1516,8 +1539,8 @@ limited to the coach's assigned clients.
 
 **M2. Workout player (full rebuild of the logger)**
 - One exercise at a time, with a swipe or Next.
-- Set rows are **pre-filled with the target and last time's numbers**. **One tap ✓** logs a set as
-  prescribed, and steppers adjust load and reps. The unit is chosen once per workout.
+- Set rows **start at the target, with last time's numbers beside them** (TRN-029). **One tap ✓** logs
+  a set as prescribed, and steppers adjust load and reps. The unit is chosen once per workout.
 - A **rest timer ring** starts automatically, keeps time while the phone is locked, and keeps the
   screen awake (Wake Lock).
 - Exercise demo media, a note to the coach, and a PR badge with a vibration on Android.

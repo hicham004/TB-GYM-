@@ -111,14 +111,16 @@
       }
     } @else {
       @if (currentDay.workouts.length > 1) {
-        <label class="workout-picker"
-          ><span i18n>Choose workout</span
-          ><select [ngModel]="activeWorkout()?.sessionId" (ngModelChange)="selectWorkout($event)">
-            @for (workout of currentDay.workouts; track workout.sessionId) {
-              <option [value]="workout.sessionId">{{ workout.name }}</option>
-            }
-          </select></label
-        >
+        <app-menu
+          class="workout-picker"
+          label="Choose workout"
+          i18n-label
+          variant="chip"
+          align="start"
+          [items]="workoutChoices()"
+          [current]="activeWorkout()?.sessionId ?? null"
+          (chosen)="selectWorkout($event)"
+        />
       }
       @for (workout of shownWorkouts(); track workout.sessionId) {
         @let readOnly = !workout.workoutExecutionId || workout.status === 'Completed';
@@ -154,19 +156,14 @@
             />
           }
           @if (workout.workoutExecutionId && workout.status !== 'Completed') {
-            <label class="unit-choice"
-              ><span i18n>Load unit for this workout</span
-              ><select
-                aria-label="Actual load unit"
-                i18n-aria-label
-                [ngModel]="workoutUnit()"
-                (ngModelChange)="chooseUnit($event)"
-              >
-                <option [ngValue]="null" i18n>Choose unit</option>
-                <option value="Kilogram">kg</option>
-                <option value="Pound">lb</option>
-              </select></label
-            >
+            <app-segmented-control
+              class="unit-choice"
+              label="Weights in"
+              i18n-label
+              [options]="unitOptions"
+              [selected]="workoutUnit() ?? ''"
+              (selectedChange)="chooseUnit($event)"
+            />
           }
           <div class="player-body">
             @for (
@@ -214,7 +211,7 @@
                   <div class="sets">
                     @for (set of exercise.sets; track set.prescriptionId; let setIndex = $index) {
                       @let draft = setDraft(set);
-                      @let priorSet = exercise.previousPerformance?.sets?.[setIndex];
+                      @let priorSet = previousSet(exercise, set);
                       <section
                         class="set-card"
                         [class.done]="collapsed(set)"
@@ -275,7 +272,7 @@
                                 inputmode="decimal"
                                 aria-label="Actual load"
                                 i18n-aria-label
-                                [ngModel]="draft?.actualLoad ?? set.prescribedLoad"
+                                [ngModel]="draft ? draft.actualLoad : set.prescribedLoad"
                                 (ngModelChange)="
                                   updateSetDraft(set, {
                                     actualLoad: $event,
@@ -317,7 +314,7 @@
                                 aria-label="Actual repetitions"
                                 i18n-aria-label
                                 [ngModel]="
-                                  draft?.actualRepetitions ?? set.prescribedRepetitionsMinimum
+                                  draft ? draft.actualRepetitions : set.prescribedRepetitionsMinimum
                                 "
                                 (ngModelChange)="updateSetDraft(set, { actualRepetitions: $event })"
                                 [disabled]="readOnly"
@@ -349,7 +346,8 @@
                         }
                         <p class="prescription">
                           <span i18n>Target:</span> {{ prescribedReps(set) }} <span i18n>reps</span>
-                          @if (set.prescribedLoad !== null) {
+                          <!-- The coach's load is for the prescribed lift, not a swap (TRN-029). -->
+                          @if (set.prescribedLoad !== null && !exercise.wasSubstituted) {
                             · {{ set.prescribedLoad }}
                             {{ set.prescribedLoadUnit === 'Kilogram' ? 'kg' : 'lb' }}
                           }
@@ -417,24 +415,17 @@
                       exercise.alternatives.length > 0 &&
                       !readOnly
                     ) {
-                      <label
-                        ><span i18n>Swap exercise</span
-                        ><select
-                          class="swap-picker"
-                          aria-label="Approved exercise alternative"
-                          i18n-aria-label
-                          [disabled]="busy() || isWorkoutSaving(workout)"
-                          (change)="substitute(workout, exercise, $event)"
-                        >
-                          <option value="" i18n>Choose approved alternative</option>
-                          @for (
-                            alternative of exercise.alternatives;
-                            track alternative.exerciseId
-                          ) {
-                            <option [value]="alternative.exerciseId">{{ alternative.name }}</option>
-                          }
-                        </select></label
-                      >
+                      <app-menu
+                        class="swap-picker"
+                        label="Swap exercise"
+                        i18n-label
+                        variant="chip"
+                        align="start"
+                        [items]="swapChoices(exercise)"
+                        [current]="exercise.actualExerciseId"
+                        [disabled]="busy() || isWorkoutSaving(workout)"
+                        (chosen)="substitute(workout, exercise, $event)"
+                      />
                     }
                   </div>
                   @if (exerciseIndex + 1 < workout.exercises.length) {
@@ -537,30 +528,7 @@
       }
     }
   }
-  @if (restRemaining() > 0) {
-    <aside class="rest-timer" role="timer" aria-label="Rest timer" i18n-aria-label>
-      <svg viewBox="0 0 60 60" width="60" height="60" aria-hidden="true">
-        <circle cx="30" cy="30" r="25" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="6" />
-        <circle
-          cx="30"
-          cy="30"
-          r="25"
-          fill="none"
-          stroke="var(--workout-accent, #d9ed94)"
-          stroke-width="6"
-          stroke-linecap="round"
-          transform="rotate(-90 30 30)"
-          stroke-dasharray="157"
-          [attr.stroke-dashoffset]="157 * (1 - restRemaining() / restTotal())"
-        />
-      </svg>
-      <div>
-        <small i18n>Rest</small><strong>{{ clockLabel(restRemaining()) }}</strong>
-      </div>
-      <button type="button" (click)="addRest()" i18n>+15 s</button
-      ><button type="button" (click)="skipRest()" i18n>Skip</button>
-    </aside>
-  }
+  <app-rest-timer />
 </section>
 @if (activeMedia(); as media) {
   <div

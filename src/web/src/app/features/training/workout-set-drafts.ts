@@ -1,8 +1,11 @@
 import type {
+  ClientExerciseView,
   ClientSetView,
   ClientTrainingDayResult,
+  ClientWorkoutView,
   PreviousSetPerformanceView,
   RecordSetActualRequest,
+  TrainingLoadUnit,
   WorkoutSetSaveView,
 } from '../../core/api/generated';
 import { nullableNumeric } from './training-builder.models';
@@ -46,12 +49,9 @@ export function reconcileWorkoutSetDrafts(
         }
 
         const draft = current[set.performanceId];
-        const previous = exercise.previousPerformance?.sets?.find(
-          (item) => item.position === set.position,
-        );
         next[set.performanceId] = draft?.dirty
           ? draft
-          : draftFromSet(set, previous, draft?.revision ?? 0);
+          : draftFromSet(set, exercise, draft?.revision ?? 0);
       }
     }
   }
@@ -189,25 +189,74 @@ export function applyWorkoutSetSaveToDay(
   };
 }
 
+/** What the client did on this set last time: the same set position, on the exercise done now. */
+export function previousSetFor(
+  exercise: ClientExerciseView,
+  set: ClientSetView,
+): PreviousSetPerformanceView | null {
+  return exercise.previousPerformance?.sets?.find((item) => item.position === set.position) ?? null;
+}
+
+/**
+ * The unit the workout's kg/lb choice starts on: the coach's, else the one last time's loads
+ * brought into the drafts. With neither the choice starts empty, never on a guess (TRN-016).
+ */
+export function startingWorkoutUnit(
+  workout: ClientWorkoutView,
+  drafts: WorkoutSetDrafts,
+): TrainingLoadUnit | null {
+  const sets = workout.exercises.flatMap((exercise) => exercise.sets);
+  return (
+    sets.find((set) => set.prescribedLoadUnit)?.prescribedLoadUnit ??
+    sets
+      .filter((set) => !set.isCompleted && set.performanceId)
+      .map((set) => drafts[set.performanceId!])
+      .find((draft) => draft?.actualLoad != null && draft.actualLoadUnit)?.actualLoadUnit ??
+    null
+  );
+}
+
+/** A logged set keeps exactly what was logged; any other starts as `startingValues` say. */
 function draftFromSet(
   set: ClientSetView,
-  previous: PreviousSetPerformanceView | undefined,
+  exercise: ClientExerciseView,
   revision: number,
 ): WorkoutSetDraft {
-  const matchingPrevious =
-    previous && (!set.prescribedLoadUnit || previous.loadUnit === set.prescribedLoadUnit)
-      ? previous
-      : null;
+  const start = set.isCompleted ? null : startingValues(set, exercise);
   return {
-    actualRepetitions:
-      set.actualRepetitions ?? matchingPrevious?.repetitions ?? set.prescribedRepetitionsMinimum,
-    actualLoad: set.actualLoad ?? matchingPrevious?.load ?? set.prescribedLoad,
-    actualLoadUnit: set.actualLoadUnit ?? matchingPrevious?.loadUnit ?? set.prescribedLoadUnit,
+    actualRepetitions: set.actualRepetitions ?? start?.repetitions ?? null,
+    actualLoad: set.actualLoad ?? start?.load ?? null,
+    actualLoadUnit: set.actualLoadUnit ?? start?.loadUnit ?? null,
     actualRpe: set.actualRpe,
     actualRir: set.actualRir,
     isCompleted: set.isCompleted,
     clientNote: set.clientNote,
     revision,
     dirty: false,
+  };
+}
+
+/**
+ * Where a set not yet logged starts (TRN-029, `PrescriptionThenLastTime` v1), so one tap on ✓ logs
+ * it as the coach prescribed: the prescribed load and unit, and the prescribed reps (the lowest of a
+ * range). Last time's numbers on the same set fill only what the prescription leaves open, and a
+ * load only in the set's own unit. A swapped exercise keeps the prescribed reps but not the load,
+ * which the coach wrote for another lift.
+ */
+function startingValues(set: ClientSetView, exercise: ClientExerciseView) {
+  const previous = previousSetFor(exercise, set);
+  const previousLoad =
+    previous?.load != null &&
+    (!set.prescribedLoadUnit || previous.loadUnit === set.prescribedLoadUnit)
+      ? previous
+      : null;
+  return {
+    repetitions:
+      set.prescribedRepetitionsMinimum ??
+      set.prescribedRepetitionsMaximum ??
+      previous?.repetitions ??
+      null,
+    load: (exercise.wasSubstituted ? null : set.prescribedLoad) ?? previousLoad?.load ?? null,
+    loadUnit: set.prescribedLoadUnit ?? previousLoad?.loadUnit ?? null,
   };
 }

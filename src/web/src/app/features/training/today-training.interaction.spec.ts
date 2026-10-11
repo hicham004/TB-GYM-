@@ -176,7 +176,8 @@ describe('TodayTraining interactions', () => {
     const { fixture, host, api } = await render();
 
     fill(host, 'Actual load', '62.5');
-    fill(host, 'Actual load unit', 'Kilogram');
+    // The coach prescribed kilograms, so the workout's choice starts there.
+    expect(field(host, 'kg').checked).toBe(true);
     fill(host, 'Actual repetitions', '8');
     query<HTMLElement>(host, '.set-note summary').click();
     fill(host, 'Actual RPE', '8.5');
@@ -252,6 +253,9 @@ describe('TodayTraining interactions', () => {
     });
     const { fixture, host, api } = await render({}, noPrescribedUnit);
 
+    // Nothing says kg or lb, so neither is chosen (TRN-016).
+    expect(field(host, 'kg').checked).toBe(false);
+    expect(field(host, 'lb').checked).toBe(false);
     fill(host, 'Actual load', '60');
     await settle(fixture);
     press(host, 'Log set');
@@ -260,6 +264,18 @@ describe('TodayTraining interactions', () => {
     expect(api.recordMyTrainingSet).not.toHaveBeenCalled();
     expect(query(host, '[role="alert"]').textContent).toContain(
       'Select kg or lb before saving a load.',
+    );
+
+    // Choosing the unit then keeps the 60 typed before it, now in pounds.
+    field(host, 'lb').click();
+    await settle(fixture);
+    expect(field(host, 'Actual load').value).toBe('60');
+    press(host, 'Log set');
+    await settle(fixture);
+    expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+      'execution-1',
+      'performance-1',
+      expect.objectContaining({ load: 60, loadUnit: 'Pound' }),
     );
   });
 
@@ -333,7 +349,13 @@ describe('TodayTraining interactions', () => {
     });
     const { fixture, host, api } = await render({}, swappable);
 
-    fill(host, 'Approved exercise alternative', 'exercise-2');
+    press(host, 'Swap exercise');
+    await settle(fixture);
+    // The prescribed lift is listed first and marked as the one in use.
+    expect(
+      button(host, 'Back squatThe one your coach prescribed').getAttribute('aria-current'),
+    ).toBe('true');
+    press(host, 'Hack squat');
     await settle(fixture);
 
     expect(api.substituteMyTrainingExercise).toHaveBeenCalledWith(
@@ -341,6 +363,67 @@ describe('TodayTraining interactions', () => {
       'exercise-performance-1',
       { exerciseId: 'exercise-2', version: 3 },
     );
+    expect(host.textContent).toContain('Swapped to Hack squat.');
+  });
+
+  it('offers the way back to the prescribed lift after a swap', async () => {
+    const swapped = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              modificationPolicy: 'CoachApprovedSwap',
+              alternatives: [{ exerciseId: 'exercise-2', name: 'Hack squat' }],
+              wasSubstituted: true,
+              actualExerciseId: 'exercise-2',
+              actualExerciseName: 'Hack squat',
+            }),
+          ],
+        }),
+      ],
+    });
+    const { fixture, host, api } = await render({}, swapped);
+
+    press(host, 'Swap exercise');
+    await settle(fixture);
+    expect(button(host, 'Hack squat').getAttribute('aria-current')).toBe('true');
+    press(host, 'Back squatThe one your coach prescribed');
+    await settle(fixture);
+
+    expect(api.substituteMyTrainingExercise).toHaveBeenCalledWith(
+      'execution-1',
+      'exercise-performance-1',
+      { exerciseId: 'exercise-1', version: 3 },
+    );
+  });
+
+  it('keeps Swap closed while a set is still being saved', async () => {
+    const pending = new Subject<WorkoutSetSaveView>();
+    const swappable = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              modificationPolicy: 'CoachApprovedSwap',
+              alternatives: [{ exerciseId: 'exercise-2', name: 'Hack squat' }],
+            }),
+          ],
+        }),
+      ],
+    });
+    const { fixture, host } = await render(
+      { recordMyTrainingSet: vi.fn(() => pending) },
+      swappable,
+    );
+
+    press(host, 'Log set');
+    await settle(fixture);
+    expect(button(host, 'Swap exercise').disabled).toBe(true);
+
+    pending.next(saved());
+    pending.complete();
+    await settle(fixture);
+    expect(button(host, 'Swap exercise').disabled).toBe(false);
   });
 
   it('offers no swap control for a locked main lift', async () => {
@@ -660,6 +743,119 @@ describe('TodayTraining interactions', () => {
     await settle(fixture);
 
     expect(document.activeElement).toBe(secondRepetitions);
+  });
+
+  /**
+   * TRN-029, the review's D1: one tap logs what the coach prescribed. Last time's numbers stay on
+   * screen as a reference, and the row shows exactly what ✓ sends.
+   */
+  it('logs the prescription in one tap, with last time as a reference', async () => {
+    const withHistory = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              previousPerformance: {
+                date: '2026-08-18',
+                bestLoad: 57.5,
+                unit: 'Kilogram',
+                repetitions: 7,
+                rpe: 8,
+                sets: [{ position: 1, repetitions: 7, load: 57.5, loadUnit: 'Kilogram', rpe: 8 }],
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+    const { fixture, host, api } = await render({}, withHistory);
+
+    expect(field(host, 'Actual load').value).toBe('60');
+    expect(field(host, 'Actual repetitions').value).toBe('6');
+    expect(query(host, '.set-previous').textContent).toContain('57.5 × 7');
+    expect(query(host, '.previous-performance').textContent).toContain('57.5');
+
+    press(host, 'Log set');
+    await settle(fixture);
+
+    expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+      'execution-1',
+      'performance-1',
+      expect.objectContaining({ load: 60, loadUnit: 'Kilogram', repetitions: 6 }),
+    );
+  });
+
+  /** The rest after an exercise's last set is the rest before the next one. */
+  it('starts the rest after a logged set and keeps it through Next exercise', async () => {
+    const twoExercises = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise(),
+            exercise({
+              prescriptionId: 'prescription-row',
+              performanceId: 'exercise-performance-2',
+              prescribedExerciseId: 'exercise-3',
+              prescribedExerciseName: 'Row',
+              actualExerciseId: 'exercise-3',
+              actualExerciseName: 'Row',
+              sets: [
+                set({
+                  prescriptionId: 'prescription-row-1',
+                  performanceId: 'performance-row-1',
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const { fixture, host } = await render({}, twoExercises);
+    expect(host.querySelector('[role="timer"]')).toBeNull();
+
+    press(host, 'Log set');
+    await settle(fixture);
+    expect(query(host, '[role="timer"]').textContent).toContain('2:00');
+
+    press(host, 'Next exercise →');
+    await settle(fixture);
+    expect(host.querySelector('h2')?.textContent).toContain('Row');
+    expect(host.querySelector('[role="timer"]')).not.toBeNull();
+  });
+
+  it('switches between today’s workout and an unfinished earlier one from a menu', async () => {
+    const earlier = workout({
+      sessionId: 'yesterday',
+      name: 'Upper B',
+      exercises: [exercise({ actualExerciseName: 'Bench press' })],
+    });
+    const { fixture, host } = await render({
+      getMyUpcomingTraining: vi.fn(() =>
+        of({
+          isAllowed: true,
+          accessReason: 'Granted',
+          localDate: '2026-08-25',
+          hasAssignedProgram: true,
+          hasVisibleSessions: true,
+          searchThrough: '2026-11-23',
+          nextSession: null,
+          unfinishedWorkouts: [{ date: '2026-08-24', workout: earlier, hasMoreNotes: false }],
+          nextSkip: null,
+          todayCoverage: null,
+        }),
+      ),
+    });
+    expect(host.querySelector('h1')?.textContent).toContain('Lower A');
+    expect(host.querySelector('select')).toBeNull();
+
+    press(host, 'Choose workout');
+    await settle(fixture);
+    expect(button(host, 'Lower AToday · in progress').getAttribute('aria-current')).toBe('true');
+    press(host, 'Upper BStarted for Mon 24 Aug');
+    await settle(fixture);
+
+    expect(host.querySelector('h1')?.textContent).toContain('Upper B');
+    expect(host.querySelector('h2')?.textContent).toContain('Bench press');
   });
 
   it('drops a stale workout-start response after leaving the tenant', async () => {

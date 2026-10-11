@@ -16,7 +16,7 @@ import { filter, map } from 'rxjs';
 import { AuthStore } from './core/auth/auth.store';
 import { SessionActions } from './core/auth/session-actions';
 import { TenantStore } from './core/tenancy/tenant.store';
-import { redesignedFor, wantsHouseBrand } from './core/theme/redesigned-route';
+import { redesignedFor, wantsFullScreen, wantsHouseBrand } from './core/theme/redesigned-route';
 import { WorkspaceBrandStore } from './core/theme/workspace-brand.store';
 import { BillingBanner } from './features/billing/billing-banner';
 import { ClientTabs } from './shell/client-tabs';
@@ -100,6 +100,15 @@ export class App implements OnInit {
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
       map(() => wantsHouseBrand(this.router.routerState.snapshot.root)),
+    ),
+    { initialValue: false },
+  );
+
+  /** The workout player fills the screen: the client's tabs and the page margin step aside. */
+  protected readonly fullScreen = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => wantsFullScreen(this.router.routerState.snapshot.root)),
     ),
     { initialValue: false },
   );

@@ -472,6 +472,17 @@ program's version (STR-009); apply checks training coverage and primary overlap 
 changed or removed session as it was before. An edit is reviewed and applied in one sitting: nothing is
 kept until it is applied (owner's question, decided 2026-10-06, ADR 0036).
 
+**TRN-029** Where a set starts in the workout player (`PrescriptionThenLastTime` v1, R5.4a, UI review of
+2026-10-11). A set not yet logged starts at what the coach prescribed, the load with its unit and the
+reps (the lowest of a range), so one tap logs it as prescribed. Last time's numbers on the same set (the
+same position, on the exercise done now) fill only what the prescription leaves open, a load only in the
+set's own unit; otherwise the field stays empty. A swapped exercise keeps the prescribed reps but not the
+load, which the coach wrote for another lift, and its Target line leaves that load out. A logged set keeps
+what was logged, typing wins over all of it, and the row shows exactly what ✓ sends; last time's numbers
+stay on screen as a reference. The workout's kg or lb choice starts on the prescribed unit, else on the
+unit last time's loads brought into the sets, else on neither (TRN-016). Web only: the server records
+what it is sent.
+
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated

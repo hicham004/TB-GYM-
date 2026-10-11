@@ -63,6 +63,7 @@
   [attr.tabindex]="shell() === 'client' ? -1 : null"
   [class.app-main]="shell() !== 'coach' && auth.user()"
   [class.client-main]="shell() === 'client'"
+  [class.full-screen]="shell() === 'client' && fullScreen()"
   [class.coach-main]="shell() === 'coach'"
 >
   @if (shell() === 'coach') {
@@ -73,7 +74,8 @@
   }
   <router-outlet />
 </main>
-@if (shell() === 'client') {
-  <!-- After <main>, so the tabs come last in reading and focus order (339:2140). -->
+@if (shell() === 'client' && !fullScreen()) {
+  <!-- After <main>, so the tabs come last in reading and focus order (339:2140). The workout player
+       fills the screen and leads back with its own ×. -->
   <app-client-tabs />
 }

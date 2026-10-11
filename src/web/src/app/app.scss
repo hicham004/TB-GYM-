@@ -202,6 +202,12 @@ nav,
   }
 }
 
+// A screen that fills the whole screen (FULL_SCREEN: the workout player) has no page margin, and the
+// tabs are not drawn under it.
+.client-main.full-screen {
+  padding: 0;
+}
+
 // The skip link's target; focus lands on the region, which needs no ring of its own.
 .client-main:focus {
   outline: none;

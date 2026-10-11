@@ -2,46 +2,181 @@ import { describe, expect, it } from 'vitest';
 import type {
   ClientSetView,
   ClientTrainingDayResult,
+  PreviousExercisePerformanceView,
+  PreviousSetPerformanceView,
   WorkoutSetSaveView,
 } from '../../core/api/generated';
 import {
   applyWorkoutSetSave,
   hasLoadUnitForActualLoad,
+  previousSetFor,
   reconcileWorkoutSetDrafts,
   snapshotWorkoutSetDraft,
+  startingWorkoutUnit,
   updateWorkoutSetDraft,
 } from './workout-set-drafts';
 
 describe('workout set drafts', () => {
-  it('prefills the matching previous set while preserving actuals and explicit units', () => {
+  /**
+   * TRN-029: one tap logs the set as prescribed. Live, Maya's squat target was 52.5 kg × 5 while
+   * her rows started at last time's 50 × 5, so ✓ logged 50 kg under a Target line saying 52.5.
+   */
+  it('starts every set at the prescription, whatever was done last time', () => {
     const day = trainingDay();
     const exercise = day.workouts[0].exercises[0];
-    exercise.previousPerformance = {
-      date: '2026-08-19',
-      bestLoad: 105,
-      unit: 'Kilogram',
-      repetitions: 9,
-      rpe: 8,
-      sets: [
-        { position: 1, repetitions: 9, load: 105, loadUnit: 'Kilogram', rpe: 8 },
-        { position: 2, repetitions: 7, load: 230, loadUnit: 'Pound', rpe: 9 },
-      ],
-    };
-    exercise.sets[2].actualLoad = 110;
+    exercise.previousPerformance = lastTime([
+      { position: 1, repetitions: 9, load: 105, loadUnit: 'Kilogram', rpe: 8 },
+      { position: 2, repetitions: 7, load: 230, loadUnit: 'Pound', rpe: 9 },
+    ]);
 
     const drafts = reconcileWorkoutSetDrafts(day, {});
+
+    for (const id of ['set-1', 'set-2', 'set-3', 'set-4']) {
+      // The lowest of the 8–10 range, the coach's load and the coach's unit.
+      expect(drafts[id]).toMatchObject({
+        actualRepetitions: 8,
+        actualLoad: 100,
+        actualLoadUnit: 'Kilogram',
+        dirty: false,
+      });
+    }
+  });
+
+  it('fills from last time only what the prescription leaves open, on the same set', () => {
+    const day = trainingDay();
+    const exercise = day.workouts[0].exercises[0];
+    exercise.sets = exercise.sets.map((set) => ({
+      ...set,
+      prescribedLoad: null,
+      prescribedLoadUnit: null,
+      prescribedRepetitionsMinimum: null,
+      prescribedRepetitionsMaximum: null,
+      actualLoadUnit: null,
+    }));
+    exercise.sets[1].prescribedRepetitionsMinimum = 12;
+    exercise.previousPerformance = lastTime([
+      { position: 1, repetitions: 9, load: 40, loadUnit: 'Kilogram', rpe: 8 },
+      { position: 2, repetitions: 7, load: 45, loadUnit: 'Kilogram', rpe: 8 },
+      { position: 3, repetitions: 6, load: 100, loadUnit: 'Pound', rpe: 9 },
+    ]);
+
+    const drafts = reconcileWorkoutSetDrafts(day, {});
+
     expect(drafts['set-1']).toMatchObject({
       actualRepetitions: 9,
-      actualLoad: 105,
+      actualLoad: 40,
+      actualLoadUnit: 'Kilogram',
+    });
+    // The coach's 12 reps still win; only the open load comes from last time.
+    expect(drafts['set-2']).toMatchObject({ actualRepetitions: 12, actualLoad: 45 });
+    // With no prescribed unit, last time's own unit comes with its load.
+    expect(drafts['set-3']).toMatchObject({
+      actualRepetitions: 6,
+      actualLoad: 100,
+      actualLoadUnit: 'Pound',
+    });
+    // Nothing prescribed and nothing last time: empty, and no unit is guessed (TRN-016).
+    expect(drafts['set-4']).toMatchObject({
+      actualRepetitions: null,
+      actualLoad: null,
+      actualLoadUnit: null,
+    });
+  });
+
+  it('never brings last time’s load into a set prescribed in the other unit', () => {
+    const day = trainingDay();
+    const exercise = day.workouts[0].exercises[0];
+    exercise.sets[0] = { ...exercise.sets[0], prescribedLoad: null, actualLoadUnit: null };
+    exercise.previousPerformance = lastTime([
+      { position: 1, repetitions: 8, load: 225, loadUnit: 'Pound', rpe: 8 },
+    ]);
+
+    const drafts = reconcileWorkoutSetDrafts(day, {});
+
+    expect(drafts['set-1']).toMatchObject({ actualLoad: null, actualLoadUnit: 'Kilogram' });
+  });
+
+  /** The coach wrote 100 kg for the squat; on the approved swap that number means nothing. */
+  it('starts a swapped exercise from last time on it, keeping the prescribed reps', () => {
+    const day = trainingDay();
+    const exercise = day.workouts[0].exercises[0];
+    exercise.wasSubstituted = true;
+    exercise.actualExerciseId = 'exercise-2';
+    exercise.actualExerciseName = 'Leg press';
+    exercise.sets = exercise.sets.map((set) => ({ ...set, actualLoadUnit: null }));
+    exercise.previousPerformance = lastTime([
+      { position: 1, repetitions: 10, load: 160, loadUnit: 'Kilogram', rpe: 8 },
+    ]);
+
+    const drafts = reconcileWorkoutSetDrafts(day, {});
+
+    expect(drafts['set-1']).toMatchObject({
+      actualRepetitions: 8,
+      actualLoad: 160,
       actualLoadUnit: 'Kilogram',
     });
     expect(drafts['set-2']).toMatchObject({
       actualRepetitions: 8,
-      actualLoad: 100,
+      actualLoad: null,
       actualLoadUnit: 'Kilogram',
     });
+  });
+
+  it('keeps a logged set exactly as logged, and a typed draft over a reload', () => {
+    const day = trainingDay();
+    const exercise = day.workouts[0].exercises[0];
+    // A bodyweight set logged with no load must not grow the prescribed 100 kg when edited.
+    exercise.sets[0] = {
+      ...exercise.sets[0],
+      isCompleted: true,
+      actualRepetitions: 12,
+      actualLoad: null,
+      actualLoadUnit: null,
+    };
+    exercise.sets[2].actualLoad = 110;
+
+    let drafts = reconcileWorkoutSetDrafts(day, {});
+    expect(drafts['set-1']).toMatchObject({
+      actualRepetitions: 12,
+      actualLoad: null,
+      actualLoadUnit: null,
+    });
     expect(drafts['set-3'].actualLoad).toBe(110);
-    expect(drafts['set-4'].actualLoad).toBe(100);
+
+    drafts = updateWorkoutSetDraft(drafts, 'set-2', { actualLoad: 97.5 });
+    drafts = reconcileWorkoutSetDrafts(day, drafts);
+    expect(drafts['set-2']).toMatchObject({ actualLoad: 97.5, dirty: true });
+  });
+
+  it('starts the kg or lb choice on the coach’s unit, else last time’s, else on neither', () => {
+    const day = trainingDay();
+    const workout = day.workouts[0];
+    expect(startingWorkoutUnit(workout, reconcileWorkoutSetDrafts(day, {}))).toBe('Kilogram');
+
+    const exercise = workout.exercises[0];
+    exercise.sets = exercise.sets.map((set) => ({
+      ...set,
+      prescribedLoad: null,
+      prescribedLoadUnit: null,
+      actualLoadUnit: null,
+    }));
+    expect(startingWorkoutUnit(workout, reconcileWorkoutSetDrafts(day, {}))).toBeNull();
+
+    exercise.previousPerformance = lastTime([
+      { position: 2, repetitions: 8, load: 135, loadUnit: 'Pound', rpe: 8 },
+    ]);
+    expect(startingWorkoutUnit(workout, reconcileWorkoutSetDrafts(day, {}))).toBe('Pound');
+  });
+
+  it('reads last time’s set by its position, not its place in the list', () => {
+    const exercise = trainingDay().workouts[0].exercises[0];
+    exercise.previousPerformance = lastTime([
+      { position: 1, repetitions: 9, load: 40, loadUnit: 'Kilogram', rpe: 8 },
+      { position: 3, repetitions: 6, load: 50, loadUnit: 'Kilogram', rpe: 9 },
+    ]);
+
+    expect(previousSetFor(exercise, exercise.sets[1])).toBeNull();
+    expect(previousSetFor(exercise, exercise.sets[2])?.load).toBe(50);
   });
 
   it('applies an authoritative save only to the submitted set', () => {
@@ -164,6 +299,17 @@ function setView(index: number): ClientSetView {
     actualRir: null,
     isCompleted: false,
     clientNote: null,
+  };
+}
+
+function lastTime(sets: PreviousSetPerformanceView[]): PreviousExercisePerformanceView {
+  return {
+    date: '2026-08-19',
+    bestLoad: null,
+    unit: null,
+    repetitions: null,
+    rpe: null,
+    sets,
   };
 }
 

@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 import { clientGuard, coachGuard } from '../../core/auth/auth.guards';
 import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
-import { REDESIGNED } from '../../core/theme/redesigned-route';
+import { FULL_SCREEN, REDESIGNED } from '../../core/theme/redesigned-route';
 
 export const trainingRoutes: Routes = [
   {
@@ -40,6 +40,8 @@ export const trainingRoutes: Routes = [
     path: 'today',
     canActivate: [clientGuard],
     title: $localize`Today's training | TB Gym`,
+    // The player fills the screen: no tab bar over Finish, as in the prototype (R5.4a).
+    data: FULL_SCREEN,
     loadComponent: () => import('./today-training').then((module) => module.TodayTraining),
   },
   { path: '', redirectTo: 'programs', pathMatch: 'full' },

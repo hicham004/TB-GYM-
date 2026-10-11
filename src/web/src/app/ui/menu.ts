@@ -45,6 +45,7 @@ let nextId = 0;
           #trigger
           class="tb-icon-button trigger-icon"
           type="button"
+          [disabled]="disabled()"
           [attr.aria-label]="label()"
           [attr.aria-expanded]="open()"
           [attr.aria-controls]="panelId"
@@ -58,6 +59,7 @@ let nextId = 0;
           type="button"
           [class]="variant() === 'chip' ? 'chip' : 'tb-button tb-button--outlined'"
           [class.selected]="selected()"
+          [disabled]="disabled()"
           [attr.aria-expanded]="open()"
           [attr.aria-controls]="panelId"
           (click)="toggle()"
@@ -134,6 +136,11 @@ let nextId = 0;
       border-color: var(--tb-brand);
       color: var(--tb-on-brand);
       font-weight: 700;
+    }
+
+    .chip:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
     }
 
     .panel {
@@ -237,6 +244,8 @@ export class UiMenu {
   /** `chip` draws the button as a filter pill (the exercise library's filters), filled when `selected`. */
   readonly variant = input<'button' | 'chip'>('button');
   readonly selected = input(false);
+  /** The button cannot open the menu, as while the change it offers is still being saved. */
+  readonly disabled = input(false);
   /** The `action` of the item in effect, marked in the list. */
   readonly current = input<string | null>(null);
   /** The `action` of the item chosen, once the menu has closed and focus is back on the button. */

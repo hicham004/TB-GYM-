@@ -1,5 +1,5 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { DatePipe } from '@angular/common';
+import { DatePipe, formatDate } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
@@ -10,6 +10,7 @@ import {
   ElementRef,
   inject,
   Injector,
+  LOCALE_ID,
   signal,
   viewChild,
 } from '@angular/core';
@@ -31,7 +32,10 @@ import { workoutStatusLabel } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { EmptyState } from '../../ui/empty-state';
+import { UiMenu, type UiMenuItem } from '../../ui/menu';
+import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { StatusLabel } from '../../ui/status-label';
+import { RestTimer } from './rest-timer';
 import { nullableNumeric, numeric } from './training-builder.models';
 import {
   trainingReadAccessLabel,
@@ -42,17 +46,34 @@ import {
   applyWorkoutSetSave,
   applyWorkoutSetSaveToDay,
   hasLoadUnitForActualLoad,
+  previousSetFor,
   reconcileWorkoutSetDrafts,
   snapshotWorkoutSetDraft,
+  startingWorkoutUnit,
   toRecordSetRequest,
   updateWorkoutSetDraft,
   type WorkoutSetDraft,
   type WorkoutSetDrafts,
 } from './workout-set-drafts';
 
+/** The workout's kg or lb choice; neither is chosen until the coach or last time says (TRN-016). */
+const UNIT_OPTIONS: readonly SegmentOption[] = [
+  { value: 'Kilogram', label: 'kg' },
+  { value: 'Pound', label: 'lb' },
+];
+
 @Component({
   selector: 'app-today-training',
-  imports: [FormsModule, DatePipe, EmptyState, RouterLink, StatusLabel],
+  imports: [
+    FormsModule,
+    DatePipe,
+    EmptyState,
+    RestTimer,
+    RouterLink,
+    SegmentedControl,
+    StatusLabel,
+    UiMenu,
+  ],
   templateUrl: './today-training.html',
   styleUrl: './today-training.scss',
   // The player is always drawn on the night colour, so the kit pieces inside it read the dark tokens.
@@ -64,6 +85,7 @@ export class TodayTraining {
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly route = inject(ActivatedRoute, { optional: true });
+  private readonly locale = inject(LOCALE_ID);
   private loadedTenantId: string | null = null;
   private contextGeneration = 0;
   private loadGeneration = 0;
@@ -93,11 +115,8 @@ export class TodayTraining {
   protected readonly workoutUnit = signal<TrainingLoadUnit | null>(null);
   protected readonly prSetIds = signal<ReadonlySet<string>>(new Set());
   protected readonly now = signal(Date.now());
-  protected readonly restUntil = signal<number | null>(null);
-  protected readonly restTotal = signal(0);
-  protected readonly restRemaining = computed(() =>
-    Math.max(0, Math.ceil(((this.restUntil() ?? 0) - this.now()) / 1000)),
-  );
+  private readonly restTimer = viewChild(RestTimer);
+  protected readonly unitOptions = UNIT_OPTIONS;
   protected readonly selectedSession = signal(
     this.route?.snapshot.queryParamMap.get('sessionId') ?? null,
   );
@@ -110,6 +129,20 @@ export class TodayTraining {
   protected readonly activeExercise = computed(
     () => this.activeWorkout()?.exercises[this.activeExerciseIndex()] ?? null,
   );
+  /** Today's workouts and the unfinished earlier ones, for Choose workout. */
+  protected readonly workoutChoices = computed<UiMenuItem[]>(() => {
+    const startedFor = new Map(
+      (this.upcoming()?.unfinishedWorkouts ?? []).map((item) => [
+        item.workout.sessionId,
+        item.date,
+      ]),
+    );
+    return (this.day()?.workouts ?? []).map((workout) => ({
+      label: workout.name,
+      hint: this.workoutHint(workout, startedFor.get(workout.sessionId)),
+      action: workout.sessionId,
+    }));
+  });
   protected readonly activeMedia = signal<MediaAccessView | null>(null);
   protected readonly setDrafts = signal<WorkoutSetDrafts>({});
   protected readonly savingSetIds = signal<ReadonlySet<string>>(new Set());
@@ -322,12 +355,13 @@ export class TodayTraining {
         return;
       const trigger = event.currentTarget as HTMLElement | null;
       const restoreFocus = trigger !== null && document.activeElement === trigger;
+      const rest = Number(set.restSeconds ?? 0);
+      // Still inside the tap: a phone plays the rest's closing tone only once a tap allowed sound.
+      if (rest > 0) this.restTimer()?.prepareSound();
       this.updateSetDraft(set, { isCompleted: true, actualRir: null });
       const saved = await owner.wait(this.saveSet(workout, set));
       if (saved && set.performanceId) {
-        if (set.restSeconds && Number(set.restSeconds) > 0) {
-          this.startRest(Number(set.restSeconds));
-        }
+        if (rest > 0) this.restTimer()?.start(rest);
         this.restoreSetFocus(set.performanceId, 'edit', trigger, restoreFocus);
       }
     });
@@ -386,25 +420,11 @@ export class TodayTraining {
       : 0;
   }
 
-  protected startRest(seconds: number): void {
-    this.restTotal.set(seconds);
-    this.restUntil.set(Date.now() + seconds * 1000);
-  }
-
-  protected addRest(): void {
-    this.restUntil.update((until) => (until ?? Date.now()) + 15_000);
-    this.restTotal.update((total) => total + 15);
-  }
-
-  protected skipRest(): void {
-    this.restUntil.set(null);
-  }
-
+  /** The rest after an exercise's last set is the rest before the next, so it keeps running. */
   protected showExercise(index: number): void {
     const workout = this.activeWorkout();
     if (!workout || index < 0 || index >= workout.exercises.length) return;
     this.activeExerciseIndex.set(index);
-    this.skipRest();
   }
 
   protected touchStart(event: TouchEvent): void {
@@ -419,7 +439,8 @@ export class TodayTraining {
     this.showExercise(this.activeExerciseIndex() + (delta < 0 ? 1 : -1));
   }
 
-  protected chooseUnit(unit: TrainingLoadUnit | null): void {
+  protected chooseUnit(value: string): void {
+    const unit = (value || null) as TrainingLoadUnit | null;
     this.workoutUnit.set(unit);
     const workout = this.activeWorkout();
     if (!workout) return;
@@ -428,22 +449,52 @@ export class TodayTraining {
       if (!set.performanceId || set.isCompleted) continue;
       const draft = this.setDrafts()[set.performanceId];
       if (!draft) continue;
+      // A load typed before any unit was chosen is in the unit chosen now; one in the other unit goes.
       this.updateSetDraft(set, {
         actualLoadUnit: unit,
-        actualLoad: draft.actualLoadUnit === unit ? draft.actualLoad : null,
+        actualLoad:
+          draft.actualLoadUnit === null || draft.actualLoadUnit === unit ? draft.actualLoad : null,
       });
     }
   }
 
   protected selectWorkout(sessionId: string): void {
+    if (sessionId === this.activeWorkout()?.sessionId) return;
     this.selectedSession.set(sessionId);
     this.activeExerciseIndex.set(0);
     const workout = this.day()?.workouts.find((item) => item.sessionId === sessionId);
-    this.workoutUnit.set(
-      workout?.exercises.flatMap((exercise) => exercise.sets).find((set) => set.prescribedLoadUnit)
-        ?.prescribedLoadUnit ?? null,
-    );
+    this.workoutUnit.set(workout ? startingWorkoutUnit(workout, this.setDrafts()) : null);
     this.unitSessionId = sessionId;
+  }
+
+  private workoutHint(workout: ClientWorkoutView, startedFor: string | undefined): string {
+    if (startedFor) {
+      return $localize`Started for ${formatDate(startedFor, 'EEE d MMM', this.locale)}`;
+    }
+    if (workout.status === 'Completed') return $localize`Today · done`;
+    return workout.status === 'InProgress'
+      ? $localize`Today · in progress`
+      : $localize`Today · not started`;
+  }
+
+  /** The exercise the coach prescribed, then the alternatives they approved at assignment. */
+  protected swapChoices(exercise: ClientExerciseView): UiMenuItem[] {
+    return [
+      {
+        label: exercise.prescribedExerciseName,
+        hint: $localize`The one your coach prescribed`,
+        action: exercise.prescribedExerciseId,
+      },
+      ...exercise.alternatives.map((alternative) => ({
+        label: alternative.name,
+        action: alternative.exerciseId,
+      })),
+    ];
+  }
+
+  /** Last time's numbers on this set, by position, as the drafts read them (TRN-029). */
+  protected previousSet(exercise: ClientExerciseView, set: ClientSetView) {
+    return previousSetFor(exercise, set);
   }
 
   private readonly onVisibilityChange = (): void => {
@@ -561,18 +612,20 @@ export class TodayTraining {
   protected async substitute(
     workout: ClientWorkoutView,
     exercise: ClientExerciseView,
-    event: Event,
+    exerciseId: string,
   ): Promise<void> {
     return this.scope.run('substitute', async (owner) => {
-      const exerciseId = (event.target as HTMLSelectElement).value;
       if (
         !exerciseId ||
+        exerciseId === exercise.actualExerciseId ||
         !workout.workoutExecutionId ||
         !exercise.performanceId ||
         workout.executionVersion === null
       ) {
         return;
       }
+      const name =
+        this.swapChoices(exercise).find((choice) => choice.action === exerciseId)?.label ?? '';
       const generation = this.contextGeneration;
       const workoutId = workout.workoutExecutionId;
       await owner.wait(this.workoutSaveQueues.get(workoutId));
@@ -603,7 +656,7 @@ export class TodayTraining {
           }
           await owner.wait(this.load(false));
           if (this.ownsContext(writeGeneration)) {
-            this.notice.set($localize`Approved substitution recorded.`);
+            this.notice.set($localize`Swapped to ${name}.`);
           }
         }),
       );
@@ -675,7 +728,7 @@ export class TodayTraining {
           this.finishConfirmation.set(null);
           this.finishedWorkoutName.set(workout.name);
           this.finishSummary.set(response.finishSummary ?? null);
-          this.skipRest();
+          this.restTimer()?.stop();
           void this.wakeLock?.release();
           this.wakeLock = null;
           if (response.finishSummary?.personalRecords.length && 'vibrate' in navigator) {
@@ -821,11 +874,7 @@ export class TodayTraining {
           combined.workouts.find((item) => item.sessionId === this.selectedSession()) ??
           combined.workouts[0];
         if (active && this.unitSessionId !== active.sessionId) {
-          this.workoutUnit.set(
-            active.exercises
-              .flatMap((exercise) => exercise.sets)
-              .find((set) => set.prescribedLoadUnit)?.prescribedLoadUnit ?? null,
-          );
+          this.workoutUnit.set(startingWorkoutUnit(active, this.setDrafts()));
           this.unitSessionId = active.sessionId;
         }
       } catch (error) {
@@ -887,7 +936,7 @@ export class TodayTraining {
     this.workoutUnit.set(null);
     this.unitSessionId = null;
     this.prSetIds.set(new Set());
-    this.skipRest();
+    this.restTimer()?.stop();
     void this.wakeLock?.release();
     this.wakeLock = null;
     this.activeMedia.set(null);
@@ -1007,7 +1056,7 @@ export class TodayTraining {
     this.workoutUnit.set(null);
     this.unitSessionId = null;
     this.prSetIds.set(new Set());
-    this.skipRest();
+    this.restTimer()?.stop();
     void this.wakeLock?.release();
     this.wakeLock = null;
     this.selectedSession.set(null);

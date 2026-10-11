@@ -39,3 +39,17 @@ export function wantsHouseBrand(root: ActivatedRouteSnapshot): boolean {
   }
   return false;
 }
+
+/**
+ * Route data for a client screen that fills the whole screen, as the workout player does (M2, as in
+ * the prototype): no tab bar over its foot and no page margin around it. Its own × leads back.
+ */
+export const FULL_SCREEN: Data = { fullScreen: true };
+
+/** Whether the active route, or a route above it, fills the whole screen. */
+export function wantsFullScreen(root: ActivatedRouteSnapshot): boolean {
+  for (let route: ActivatedRouteSnapshot | null = root; route; route = route.firstChild) {
+    if (route.data['fullScreen'] === true) return true;
+  }
+  return false;
+}
