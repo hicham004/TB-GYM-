@@ -284,6 +284,7 @@ function maxesView(overrides: Record<string, unknown> = {}) {
     mesocycleId: BLOCK,
     version: 4,
     loadUnit: 'Kilogram',
+    loadIncrement: 2.5,
     isClosed: false,
     maxes: [
       {
@@ -1169,9 +1170,12 @@ test('a lift’s logged sets suggest a max, and Review opens its new weights alr
 
   const panel = page.locator('app-program-maxes');
   const suggestion = panel.locator('.lift').first().locator('.suggestion');
+  // Said in the program's 2.5 kg steps (R5.4c); the exact 77.065 kg is the sheet's and How it is worked out's.
   await expect(suggestion.locator('.suggestion-head')).toHaveText(
-    'Logged sets suggest 77.07 kg, up from 70 kg.',
+    'Logged sets suggest about 77.5 kg, up from 70 kg.',
   );
+  await suggestion.getByText('How it is worked out').click();
+  await expect(suggestion.locator('.how-text')).toContainText('= 77.065 kg');
   await expect(suggestion.locator('.detail')).toHaveText(
     'From 62.5 kg for 5 reps at RPE 8 on Wed 23 Sep, week 2.',
   );
@@ -1281,7 +1285,7 @@ test('keeping a max quiets its suggestion and says so, at phone width and in dar
   // The suggestion is gone; the line that replaced it says what was kept, and has the focus.
   const line = panel.locator('#kept-ex-squat');
   await expect(line).toHaveText(
-    'You kept 70 kg on Thu 1 Oct, over the 77.07 kg logged sets suggested.',
+    'You kept 70 kg on Thu 1 Oct, when logged sets suggested about 77.5 kg.',
   );
   await expect(line).toBeFocused();
   await expect(panel.locator('.suggestion')).toHaveCount(0);

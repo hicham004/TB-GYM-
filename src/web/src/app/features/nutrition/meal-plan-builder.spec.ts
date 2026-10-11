@@ -19,7 +19,7 @@ import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { UiToast } from '../../ui/toast';
-import { fill, settle } from '../../../testing/dom';
+import { field, fill, settle } from '../../../testing/dom';
 import {
   CHICKEN,
   draftContent,
@@ -215,6 +215,13 @@ describe('the meal-plan builder', () => {
       }),
     );
     expect(request.content.targetCalories).toBe(2200);
+    // A round figure is a valid one to the browser too (R5.4c): "min 1, step 10" made 2200 a step mismatch.
+    const calories = field<HTMLInputElement>(host, 'Calories (kcal)');
+    expect(calories.validity.stepMismatch).toBe(false);
+    for (const typed of ['2000', '2137', '1']) {
+      calories.value = typed;
+      expect(calories.validity.valid).toBe(true);
+    }
     expect(request.content.days).toHaveLength(2);
     expect(status(host)).toMatch(/^Saved (at|on) .+, not published yet$/);
     expect(textOf(days(host)[0].querySelector('.day-against'))).toBe('1,200 kcal under');

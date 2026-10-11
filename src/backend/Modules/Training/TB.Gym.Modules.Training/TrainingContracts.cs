@@ -587,11 +587,16 @@ public sealed class TrainingMaxSuggestionChangedException(string message) : Inva
     public const string Code = "training_max_suggestion_changed";
 }
 
+/// <param name="LoadIncrement">
+/// The program's rounding step (STR-008), so a screen can say a suggested max in the steps the program loads
+/// in; the suggestion itself stays exact.
+/// </param>
 /// <param name="IsClosed">True once the program is finished or cancelled; its maxes are then history.</param>
 public sealed record TrainingMaxesView(
     Guid MesocycleId,
     uint Version,
     TrainingLoadUnit LoadUnit,
+    decimal LoadIncrement,
     bool IsClosed,
     IReadOnlyList<TrainingMaxView> Maxes);
 

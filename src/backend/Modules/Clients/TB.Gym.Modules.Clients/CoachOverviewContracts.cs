@@ -118,13 +118,16 @@ public sealed record CoachAttentionItemView(
 /// <summary>
 /// A lift whose max the client's logged sets suggest changing (STR-012), named with both numbers so the coach
 /// knows what happened before opening anything. Values are in the program's unit and never converted.
+/// <c>LoadIncrement</c> is the program's rounding step (STR-008), so a screen can say the suggestion in the
+/// steps the program loads in, as the program's Training maxes panel does; the values here stay exact.
 /// </summary>
 public sealed record CoachMaxSuggestionView(
     Guid ExerciseId,
     string ExerciseName,
     decimal Current,
     decimal Suggested,
-    CoachActivityLoadUnit Unit);
+    CoachActivityLoadUnit Unit,
+    decimal LoadIncrement);
 
 /// <summary>Sessions programmed and completed on one workspace day.</summary>
 public sealed record SessionDayCountView(DateOnly Date, int Scheduled, int Completed);

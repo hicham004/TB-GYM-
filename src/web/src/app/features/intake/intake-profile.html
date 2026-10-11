@@ -60,7 +60,7 @@
     [today]="today()"
     [firstDay]="firstDay()"
     [weightUnit]="weightUnit()"
-    (dirtyChange)="setDirty($event)"
+    (dirtyChange)="dirty = $event"
     (closed)="closeSheet($event, sheet)"
   />
 </ng-template>

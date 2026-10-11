@@ -541,8 +541,28 @@ export function reviewWeight(
             : $localize`↑ ${amount(change)}:amount: ${unit}:unit: on the week before`,
     lastWeighed: lastDate ? $localize`Last weighed ${dayLabel(lastDate, context)}:date:` : null,
     values: summary.points.map((point) => point.value),
-    summary: $localize`Weekly average weight in the ${REVIEW_WINDOW_WEEKS}:weeks: weeks to this check-in, from ${formatNumber(summary.points[0].value, context.locale, '1.1-1')}:first: to ${formatNumber(summary.latest.value, context.locale, '1.1-1')}:last: ${unit}:unit:`,
+    summary: weightTrendWords(
+      summary.points.map((point) => point.value),
+      unit,
+      context.locale,
+    ),
   };
+}
+
+/**
+ * The spoken summary of the weight sparkline: where the weekly averages start and end in the window. A
+ * range that reads the same at one decimal is not said as one ("from 64.0 to 64.0"), since it sits beside
+ * the change on the week before, which may still move.
+ */
+function weightTrendWords(values: readonly number[], unit: string, locale: string): string {
+  const first = formatNumber(values[0], locale, '1.1-1');
+  const last = formatNumber(values[values.length - 1], locale, '1.1-1');
+  if (values.length === 1) {
+    return $localize`Weekly average weight in the ${REVIEW_WINDOW_WEEKS}:weeks: weeks to this check-in: ${last}:last: ${unit}:unit:, from one week of weigh-ins`;
+  }
+  return first === last
+    ? $localize`Weekly average weight in the ${REVIEW_WINDOW_WEEKS}:weeks: weeks to this check-in, ${last}:last: ${unit}:unit: at the start and at the end`
+    : $localize`Weekly average weight in the ${REVIEW_WINDOW_WEEKS}:weeks: weeks to this check-in, from ${first}:first: to ${last}:last: ${unit}:unit:`;
 }
 
 // ------------------------------------------------------------------------------------------------

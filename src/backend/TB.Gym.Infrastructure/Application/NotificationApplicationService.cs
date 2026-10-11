@@ -237,51 +237,90 @@ internal sealed class NotificationApplicationService(
             .Where(outbox => sources.Contains(outbox.Id))
             .Select(outbox => new { outbox.Id, outbox.Kind, outbox.AggregateId, outbox.PayloadJson })
             .ToListAsync(cancellationToken);
-        var links = new Dictionary<Guid, NotificationLink>();
-        foreach (var row in rows)
+        var delivered = notifications.ToDictionary(item => item.SourceOutboxItemId, item => item.TargetWeeks);
+        var training = rows
+            .Where(row => row.Kind != CommercialNotificationKind.RenewalRequested)
+            .Select(row => (row.Id, row.Kind, Payload: ReadTrainingPayload(row.PayloadJson)))
+            .Where(row => row.Payload is not null)
+            .Select(row => (row.Id, row.Kind, Payload: row.Payload!))
+            .ToArray();
+        var weekTargets = await ReadWeekTargetsAsync(
+            training
+                .Where(row => (row.Kind is CommercialNotificationKind.WeeksShared or CommercialNotificationKind.WeeksChanged) &&
+                    delivered[row.Id] is { Length: > 0 })
+                .Select(row => new WeekNotice(row.Id, row.Payload.MesocycleId, row.Payload.ClientProfileId, delivered[row.Id]!))
+                .ToArray(),
+            cancellationToken);
+
+        var links = rows
+            .Where(row => row.Kind == CommercialNotificationKind.RenewalRequested)
+            .ToDictionary(row => row.Id, row => new NotificationLink(row.AggregateId, null, null, null));
+        foreach (var (id, kind, payload) in training)
         {
-            if (row.Kind == CommercialNotificationKind.RenewalRequested)
-            {
-                links[row.Id] = new NotificationLink(row.AggregateId, null, null, null);
-                continue;
-            }
-
-            if (ReadTrainingPayload(row.PayloadJson) is not { } payload)
-            {
-                continue;
-            }
-
             // A client's note links the coach to that client; every other training notice is the reader's own.
-            int? targetWeek = null;
-            var delivered = notifications.Single(item => item.SourceOutboxItemId == row.Id).TargetWeeks;
-            if ((row.Kind is CommercialNotificationKind.WeeksShared or CommercialNotificationKind.WeeksChanged) &&
-                delivered is { Length: > 0 })
-            {
-                // The delivered snapshot limits candidates. Current visibility can only narrow them.
-                var block = await dbContext.TrainingMesocycles.AsNoTracking()
-                    .Where(item => item.Id == payload.MesocycleId && item.ClientProfileId == payload.ClientProfileId &&
-                        item.Status != TB.Gym.Modules.Training.MesocycleStatus.Cancelled)
-                    .Select(item => new { item.StartDate, item.TimeZoneId, item.RevealAllWeeks })
-                    .SingleOrDefaultAsync(cancellationToken);
-                if (block is not null)
-                {
-                    var weeks = await dbContext.MesocycleWeeks.AsNoTracking()
-                        .Where(item => item.MesocycleId == payload.MesocycleId && delivered.Contains(item.WeekNumber))
-                        .Select(item => new { item.WeekNumber, item.IsPublished }).ToListAsync(cancellationToken);
-                    targetWeek = weeks.Where(item => TB.Gym.Modules.Training.TrainingCalendarPolicy.GetWeekAvailability(
-                            block.StartDate, item.WeekNumber, block.TimeZoneId, clock.UtcNow, block.RevealAllWeeks, item.IsPublished).IsVisible)
-                        .Select(item => (int?)item.WeekNumber).Min();
-                }
-            }
-            links[row.Id] = new NotificationLink(
-                row.Kind == CommercialNotificationKind.ClientWorkoutNote ? payload.ClientProfileId : null,
+            links[id] = new NotificationLink(
+                kind == CommercialNotificationKind.ClientWorkoutNote ? payload.ClientProfileId : null,
                 payload.SessionId,
                 payload.WorkoutExecutionId,
-                targetWeek,
+                weekTargets.GetValueOrDefault(id),
                 payload.MesocycleId);
         }
 
         return links;
+    }
+
+    /// <summary>
+    /// The week each week notice opens: the first of the weeks it was delivered with that the client can still
+    /// open, or none. The delivered snapshot limits the candidates and current visibility can only narrow them.
+    /// The page's programs and weeks are read once each, however many week notices it holds.
+    /// </summary>
+    private async Task<Dictionary<Guid, int?>> ReadWeekTargetsAsync(
+        IReadOnlyCollection<WeekNotice> notices,
+        CancellationToken cancellationToken)
+    {
+        if (notices.Count == 0)
+        {
+            return [];
+        }
+
+        var mesocycleIds = notices.Select(notice => notice.MesocycleId).Distinct().ToArray();
+        var blocks = await dbContext.TrainingMesocycles.AsNoTracking()
+            .Where(item => mesocycleIds.Contains(item.Id) &&
+                item.Status != TB.Gym.Modules.Training.MesocycleStatus.Cancelled)
+            .Select(item => new { item.Id, item.ClientProfileId, item.StartDate, item.TimeZoneId, item.RevealAllWeeks })
+            .ToDictionaryAsync(item => item.Id, cancellationToken);
+        if (blocks.Count == 0)
+        {
+            return [];
+        }
+
+        var openIds = blocks.Keys.ToArray();
+        var weekNumbers = notices.SelectMany(notice => notice.Delivered).Distinct().ToArray();
+        var weeks = (await dbContext.MesocycleWeeks.AsNoTracking()
+                .Where(item => openIds.Contains(item.MesocycleId) && weekNumbers.Contains(item.WeekNumber))
+                .Select(item => new { item.MesocycleId, item.WeekNumber, item.IsPublished })
+                .ToListAsync(cancellationToken))
+            .ToLookup(item => item.MesocycleId);
+
+        var now = clock.UtcNow;
+        var targets = new Dictionary<Guid, int?>();
+        foreach (var notice in notices)
+        {
+            // A notice names its client's own program; a cancelled one, or another client's, opens no week.
+            if (!blocks.TryGetValue(notice.MesocycleId, out var block) || block.ClientProfileId != notice.ClientProfileId)
+            {
+                continue;
+            }
+
+            targets[notice.OutboxItemId] = weeks[notice.MesocycleId]
+                .Where(item => notice.Delivered.Contains(item.WeekNumber) &&
+                    TB.Gym.Modules.Training.TrainingCalendarPolicy.GetWeekAvailability(
+                        block.StartDate, item.WeekNumber, block.TimeZoneId, now, block.RevealAllWeeks, item.IsPublished).IsVisible)
+                .Select(item => (int?)item.WeekNumber)
+                .Min();
+        }
+
+        return targets;
     }
 
     private static TrainingNotificationPayload? ReadTrainingPayload(string payloadJson)
@@ -312,4 +351,7 @@ internal sealed class NotificationApplicationService(
         link?.MesocycleId);
 
     private sealed record NotificationLink(Guid? ClientProfileId, Guid? SessionId, Guid? WorkoutExecutionId, int? WeekNumber, Guid? MesocycleId = null);
+
+    /// <summary>A week notice on the page: its intent, the program it names, and the weeks it was delivered with.</summary>
+    private sealed record WeekNotice(Guid OutboxItemId, Guid MesocycleId, Guid ClientProfileId, int[] Delivered);
 }

@@ -154,7 +154,19 @@ export function liftSummary(lift: Lift, today: string, locale: string): string {
   if (same.length < 2) return $localize`${lift.name}:lift: ${kind}:kind: is ${last}:last:.`;
   const from = valueWords(first.value, first.unit, locale);
   const day = dayWords(first.date, today, locale);
+  // Said as the visible line says it: a number that has not moved is "unchanged", never "moved from 25 to 25".
+  if (same.every((item) => sameValue(item.value, lift.latest.value))) {
+    return $localize`${lift.name}:lift: ${kind}:kind: is ${last}:last:, unchanged since ${day}:day:.`;
+  }
+  if (sameValue(first.value, lift.latest.value)) {
+    return $localize`${lift.name}:lift: ${kind}:kind: is back to ${last}:last:, where it was on ${day}:day:.`;
+  }
   return $localize`${lift.name}:lift: ${kind}:kind: has moved from ${from}:first: on ${day}:day: to ${last}:last:.`;
+}
+
+/** Two maxes are the same at the three decimals the server keeps, as `changeWords` compares them. */
+function sameValue(a: number, b: number): boolean {
+  return Math.round((a - b) * 1000) === 0;
 }
 
 // ------------------------------------------------------------------------------------------------

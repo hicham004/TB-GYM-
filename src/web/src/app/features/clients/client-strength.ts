@@ -4,6 +4,7 @@ import {
   computed,
   effect,
   inject,
+  input,
   LOCALE_ID,
   signal,
   TemplateRef,
@@ -64,6 +65,12 @@ export class ClientStrength extends GuardedSheets {
   protected readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
 
+  /**
+   * How many changes the program page above has made (applied maxes, an assignment, a rename). Each new
+   * one may have added or renamed a program's training max (STR-015), so the list reads again, quietly.
+   */
+  readonly changes = input(0);
+
   private readonly recordSheet = viewChild.required<TemplateRef<unknown>>('recordSheet');
   private readonly historySheet = viewChild.required<TemplateRef<unknown>>('historySheet');
   private readonly confirmTemplate = viewChild.required<TemplateRef<unknown>>('confirmTemplate');
@@ -111,6 +118,8 @@ export class ClientStrength extends GuardedSheets {
 
   /** The workspace and client the list on screen was read for. */
   private loadedKey: string | null = null;
+  /** The program page's count of changes the list on screen has caught up with. */
+  private readAfter = 0;
 
   constructor() {
     super();
@@ -124,10 +133,16 @@ export class ClientStrength extends GuardedSheets {
       this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       const clientId = this.context.clientId();
+      const changes = this.changes();
       const key = tenantId && clientId ? `${tenantId}:${clientId}` : null;
       if (key && key !== this.loadedKey) {
         this.loadedKey = key;
+        this.readAfter = changes;
         untracked(() => void this.load());
+      } else if (key && changes !== this.readAfter) {
+        // A newer read replaces one still on its way (one lane), so the list ends on what the change wrote.
+        this.readAfter = changes;
+        untracked(() => void this.load(true));
       }
     });
   }

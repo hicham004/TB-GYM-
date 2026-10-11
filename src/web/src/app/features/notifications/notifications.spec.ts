@@ -252,6 +252,22 @@ describe('Notifications', () => {
     expect(host.querySelector('app-empty-state')?.textContent).toContain('a client leaves a note');
   });
 
+  it('tells a coach that check-ins and messages waiting for them are on Today (R5.4c)', async () => {
+    // "You're all caught up" here never means Today has nothing: check-ins and messages are not notices.
+    const coach = await render(undefined, { ...ALPHA, role: 'Coach' });
+    const pointer = query(coach.host, '.top .pointer');
+    expect(pointer.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'Check-ins and messages that need you are on Today.',
+    );
+    expect(query<HTMLAnchorElement>(pointer, 'a').getAttribute('href')).toBe('/');
+    expect(coach.host.querySelector('.lede')?.textContent).toContain("You're all caught up.");
+    TestBed.resetTestingModule();
+
+    // A client's Today is their own day, not a queue: nothing is said there.
+    const client = await render();
+    expect(client.host.querySelector('.pointer')).toBeNull();
+  });
+
   it('lists newest first under Today and says how many are unread', async () => {
     const { host } = await render(({ list, unreadCount }) => {
       unreadCount.mockReturnValue(of(2));

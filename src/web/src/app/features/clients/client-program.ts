@@ -121,6 +121,11 @@ export class ClientProgram {
   protected readonly maxesSuggested = signal<string | null>(null);
   /** Arrived from "Review maxes" (Coach Today, the client's overview): the maxes panel comes into view. */
   protected readonly revealMaxes = signal(false);
+  /**
+   * How many changes this page has made. Each may add or rename a program's training max, which the
+   * strength history below lists (STR-015), so the card reads its list again after each one.
+   */
+  protected readonly changes = signal(0);
 
   protected readonly assignSheet = viewChild.required<TemplateRef<unknown>>('assignSheet');
   protected readonly nextSheet = viewChild.required<TemplateRef<unknown>>('nextSheet');
@@ -453,10 +458,11 @@ export class ClientProgram {
     });
   }
 
-  /** A change was made: say so, and read the program again. */
+  /** A change was made: say so, and read the program and the strength history again. */
   private done(notice: string): void {
     this.context.error.set(null);
     this.context.notice.set(notice);
+    this.changes.update((count) => count + 1);
     void this.load();
   }
 

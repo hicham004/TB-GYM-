@@ -1,9 +1,6 @@
-import { protectSheetEdits } from '../../core/forms/sheet-exit-protection';
-import type { DialogRef } from '@angular/cdk/dialog';
 import { NgTemplateOutlet } from '@angular/common';
 import {
   Component,
-  DestroyRef,
   computed,
   effect,
   ElementRef,
@@ -19,19 +16,16 @@ import type {
   ProductCatalog,
   ProductOfferView,
 } from '../../core/api/generated';
+import { GuardedSheets, type Closable, type LeaveQuestion } from '../../core/forms/guarded-sheets';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { UiConfirm } from '../../ui/confirm';
-import { UiDialog } from '../../ui/dialog';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { UiMenu } from '../../ui/menu';
-import type { ModalSurface } from '../../ui/modal-surface';
-import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
-import { UiToast } from '../../ui/toast';
 import { ProductSheet, type ProductSheetMode } from './product-sheets';
 import { ProductsApi } from './products-api';
 import {
@@ -55,58 +49,39 @@ import {
   templateUrl: './products.html',
   styleUrl: './products.scss',
 })
-export class Products {
+export class Products extends GuardedSheets {
   private readonly api = inject(ProductsApi);
   private readonly csrf = inject(CsrfService);
-  private readonly sheets = inject(UiSheet);
-  private readonly dialogs = inject(UiDialog);
-  private leaveDecision: Promise<boolean> | null = null;
-  private activeConfirm: { close(): void } | null = null;
-  private readonly toast = inject(UiToast);
   private readonly tenants = inject(TenantStore);
   private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly sheetTemplate = viewChild.required<TemplateRef<unknown>>('productSheet');
-  private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
+  private readonly confirmTemplate = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private loadedTenantId: string | null = null;
-  private openSheet: DialogRef<unknown, ModalSurface> | null = null;
 
-  protected readonly closeLabel = $localize`Close`;
+  protected override readonly leaveQuestion: LeaveQuestion = {
+    title: $localize`Close without saving?`,
+    message: $localize`What you typed isn’t saved. If you close it now, it is lost.`,
+    confirm: $localize`Close without saving`,
+    cancel: $localize`Keep editing`,
+  };
   protected readonly loadingLabel = $localize`Loading your plans…`;
   protected readonly catalog = signal<ProductCatalog | null>(null);
   protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   /** The plan or option a write is changing, so its menu waits. */
   protected readonly working = signal<string | null>(null);
   protected readonly sheetMode = signal<ProductSheetMode | null>(null);
-  private readonly sheetDirty = signal(false);
-  protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
-    null,
-  );
 
   protected readonly cards = computed(() => planCards(this.catalog(), this.locale));
   protected readonly summary = computed(() => catalogSummary(this.catalog()));
   protected readonly currency = computed(() => this.catalog()?.workspaceCurrencyCode ?? 'USD');
 
-  async canLeave(): Promise<boolean> {
-    const allowed = await this.mayDiscard();
-    if (allowed) this.sheetDirty.set(false);
-    return allowed;
-  }
-
   constructor() {
-    protectSheetEdits(
-      this,
-      () => this.sheetDirty(),
-      () => {
-        this.openSheet?.close();
-        this.activeConfirm?.close();
-      },
-    );
-    inject(DestroyRef).onDestroy(() => this.openSheet?.close());
+    super();
     this.scope.onReset(() => {
       this.loadedTenantId = null;
-      this.openSheet?.close();
+      this.closeSheets();
       this.catalog.set(null);
       this.state.set('loading');
       this.working.set(null);
@@ -176,65 +151,27 @@ export class Products {
     }
   }
 
-  private open(mode: ProductSheetMode, title: string): void {
-    this.openSheet?.close();
-    this.sheetMode.set(mode);
-    this.sheetDirty.set(false);
-    const sheet = this.sheets.open(this.sheetTemplate(), {
-      title,
-      closeLabel: this.closeLabel,
-      closeOnNavigation: false,
-      canClose: () => this.mayDiscard(),
-    });
-    this.openSheet = sheet;
-    sheet.closed.subscribe(() => {
-      if (this.openSheet === sheet) this.openSheet = null;
-      this.sheetMode.set(null);
-      this.sheetDirty.set(false);
-    });
+  protected confirmDialog(): TemplateRef<unknown> {
+    return this.confirmTemplate();
   }
 
-  protected sheetChanged(dirty: boolean): void {
-    this.sheetDirty.set(dirty);
+  private open(mode: ProductSheetMode, title: string): void {
+    // The sheet before this one, if any, closes inside `show` and clears its mode first.
+    const sheet = this.show(this.sheetTemplate(), title);
+    this.sheetMode.set(mode);
+    sheet.closed.subscribe(() => this.sheetMode.set(null));
   }
 
   /** The sheet saved (a plan) or the coach chose Not now (null). */
-  protected async sheetClosed(saved: CoachingProductView | null): Promise<void> {
+  protected async sheetClosed(saved: CoachingProductView | null, sheet: Closable): Promise<void> {
+    if (!saved) return this.closeAsking(sheet);
+    const mode = this.sheetMode();
     return this.scope.run('sheet-result', async (owner) => {
-      const mode = this.sheetMode();
-      const sheet = this.openSheet;
-      if (!saved) {
-        if (await owner.wait(this.mayDiscard())) sheet?.close();
-        return;
-      }
-      this.sheetDirty.set(false);
-      sheet?.close();
+      this.dirty = false;
+      sheet.close(true);
       await owner.wait(this.load());
       if (mode) this.toast.show(savedMessage(mode, saved), { tone: 'success' });
     });
-  }
-
-  /** True when nothing typed would be lost, or the coach chose to lose it. */
-  private async mayDiscard(): Promise<boolean> {
-    if (!this.sheetDirty()) return true;
-    if (this.leaveDecision) return this.leaveDecision;
-    this.asking.set({
-      message: $localize`What you typed isn’t saved. If you close it now, it is lost.`,
-      confirm: $localize`Close without saving`,
-      cancel: $localize`Keep editing`,
-    });
-    const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
-      closeOnNavigation: false,
-      title: $localize`Close without saving?`,
-      closeLabel: this.closeLabel,
-    });
-    this.activeConfirm = dialog;
-    this.leaveDecision = firstValueFrom(dialog.closed).then((answer) => answer === true);
-    const answer = await this.leaveDecision;
-    this.leaveDecision = null;
-    this.activeConfirm = null;
-    this.asking.set(null);
-    return answer === true;
   }
 
   // ---------- selling and stopping, with Undo ----------

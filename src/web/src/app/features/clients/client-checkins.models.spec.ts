@@ -284,6 +284,38 @@ describe('weight and photos up to the day it was sent', () => {
     expect(reviewWeight(mapProgressDashboard(reviewDashboard({ weighIns: false })), CONTEXT)).toBe(
       null,
     );
+    expect(weight?.summary).toBe(
+      'Weekly average weight in the 12 weeks to this check-in, from 72.6 to 71.4 kg',
+    );
+  });
+
+  it('says the weight range only while its two ends differ at one decimal (R5.4c)', () => {
+    const base = reviewDashboard();
+    const withMeans = (means: number[]) =>
+      reviewWeight(
+        mapProgressDashboard({
+          ...base,
+          bodyweight: {
+            ...base.bodyweight,
+            weeks: means.map((mean, index) => ({
+              ...base.bodyweight.weeks[index],
+              meanKilograms: mean,
+              displayMean: mean,
+            })),
+          },
+        }),
+        CONTEXT,
+      );
+
+    // 64.03 and 64.04 both read 64.0, while the last week rose 0.2: never "from 64.0 to 64.0 kg".
+    const level = withMeans([64.03, 63.8, 63.85, 64.04]);
+    expect(level?.context).toBe('↑ 0.2 kg on the week before');
+    expect(level?.summary).toBe(
+      'Weekly average weight in the 12 weeks to this check-in, 64.0 kg at the start and at the end',
+    );
+    expect(withMeans([64])?.summary).toBe(
+      'Weekly average weight in the 12 weeks to this check-in: 64.0 kg, from one week of weigh-ins',
+    );
   });
 
   it('pairs each pose’s newest photo with the newest one up to the earlier check-in', () => {

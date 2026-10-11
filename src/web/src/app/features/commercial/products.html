@@ -194,13 +194,13 @@
   }
 </ng-template>
 
-<ng-template #productSheet>
+<ng-template #productSheet let-sheet>
   @if (sheetMode(); as mode) {
     <app-product-sheet
       [mode]="mode"
       [currency]="currency()"
-      (closed)="sheetClosed($event)"
-      (dirtyChange)="sheetChanged($event)"
+      (closed)="sheetClosed($event, sheet)"
+      (dirtyChange)="dirty = $event"
     />
   }
 </ng-template>

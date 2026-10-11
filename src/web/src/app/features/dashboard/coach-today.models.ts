@@ -8,6 +8,7 @@ import type {
   CoachMaxSuggestionView,
   CoachTodayView,
 } from '../../core/api/generated';
+import { nearestLoadStep } from '../../core/units/load-steps';
 import { initialsOf } from '../../shell/initials';
 
 /**
@@ -283,42 +284,60 @@ export function attentionRow(
 
 /**
  * What the logged sets of a client's last program suggest for the next one (STR-014): "Last program's
- * sets suggest Deadlift 80.75 kg, up from 77.5 kg".
+ * sets suggest Deadlift about 80 kg, up from 77.5 kg".
  */
 export function carriedMaxDetail(lifts: readonly CoachMaxSuggestionView[], locale: string): string {
-  const numbers =
-    lifts.length === 1
-      ? `${lifts[0].exerciseName} ${suggestedMaxDetail(lifts, locale)}`
-      : suggestedMaxDetail(lifts, locale);
-  return $localize`Last program’s sets suggest ${numbers}:maxes:`;
+  if (lifts.length === 1) {
+    const [lift] = lifts;
+    const { suggested, current } = maxWeights(lift, locale);
+    return Number(lift.suggested) > Number(lift.current)
+      ? $localize`Last program’s sets suggest ${lift.exerciseName}:lift: about ${suggested}:suggested:, up from ${current}:current:`
+      : $localize`Last program’s sets suggest ${lift.exerciseName}:lift: about ${suggested}:suggested:, down from ${current}:current:`;
+  }
+  return $localize`Last program’s sets suggest ${suggestedMaxDetail(lifts, locale)}:maxes:`;
 }
 
 /**
- * What a client's logged sets suggest (STR-012), in numbers: "80.75 kg, up from 77.5 kg" for one lift,
- * "Back Squat 176.5 kg, Deadlift 207.5 kg" for several. Units are the program's, never converted.
+ * What a client's logged sets suggest (STR-012), in numbers: "About 80 kg, up from 77.5 kg" for one lift,
+ * "Back Squat about 177.5 kg, Deadlift about 207.5 kg" for several. A suggestion is said in its program's
+ * steps (R5.4c), as the program's own page says it, where the exact estimate is kept. Units are the
+ * program's, never converted.
  */
 export function suggestedMaxDetail(
   lifts: readonly CoachMaxSuggestionView[],
   locale: string,
 ): string {
-  // A no-break space keeps "67.82 kg" on one line in a narrow Today row.
-  const weight = (value: number | string, unit: CoachMaxSuggestionView['unit']) => {
-    const amount = formatNumber(Number(value), locale, '1.0-2');
-    return unit === 'Pound'
+  if (lifts.length === 1) {
+    const [lift] = lifts;
+    const { suggested, current } = maxWeights(lift, locale);
+    return Number(lift.suggested) > Number(lift.current)
+      ? $localize`About ${suggested}:suggested:, up from ${current}:current:`
+      : $localize`About ${suggested}:suggested:, down from ${current}:current:`;
+  }
+  return lifts
+    .map(
+      (lift) =>
+        $localize`${lift.exerciseName}:lift: about ${maxWeights(lift, locale).suggested}:suggested:`,
+    )
+    .join(', ');
+}
+
+/** The suggestion in its program's steps and the max in use as it is, each kept on one line. */
+function maxWeights(
+  lift: CoachMaxSuggestionView,
+  locale: string,
+): { suggested: string; current: string } {
+  // A no-break space keeps "67.5 kg" on one line in a narrow Today row.
+  const weight = (value: number) => {
+    const amount = formatNumber(value, locale, '1.0-2');
+    return lift.unit === 'Pound'
       ? $localize`${amount}:weight:\u00a0lb`
       : $localize`${amount}:weight:\u00a0kg`;
   };
-  if (lifts.length === 1) {
-    const [lift] = lifts;
-    const suggested = weight(lift.suggested, lift.unit);
-    const current = weight(lift.current, lift.unit);
-    return Number(lift.suggested) > Number(lift.current)
-      ? $localize`${suggested}:suggested:, up from ${current}:current:`
-      : $localize`${suggested}:suggested:, down from ${current}:current:`;
-  }
-  return lifts
-    .map((lift) => `${lift.exerciseName} ${weight(lift.suggested, lift.unit)}`)
-    .join(', ');
+  return {
+    suggested: weight(nearestLoadStep(Number(lift.suggested), lift.unit, lift.loadIncrement)),
+    current: weight(Number(lift.current)),
+  };
 }
 
 export function activityRow(item: CoachActivityItemView, context: CoachTodayContext): ActivityRow {

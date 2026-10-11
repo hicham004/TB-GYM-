@@ -102,7 +102,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.3g | **Verify and commit R5.3f and the review repairs** (`docs/UI-REVIEW-2026-10-11.md`, "Step 0"): run the Vitest, Playwright and backend regressions written for them, then commit them as two commits on the owner's go | Every regression named in Step 0 has run green and the two rows above carry their hashes | Done · 2026-10-11 · 3290bc5 |
 | R5.4a | **The player logs what the coach prescribed** (review doc, "Slice 1"): a set's draft starts from the prescription and last time's numbers are the reference, a "Rest is over" cue, the kit's controls instead of the player's three browser selects, and nothing under the client tab bar in the player | §2, plus Vitest for the draft precedence, the rest end and the controls, the player's Playwright spec, and one TRN line in `DOMAIN-RULES.md` | Done · 2026-10-11 · e03aeb6 |
 | R5.4b | **One client, one mode, and honest failures** (review doc, "Slice 2"): client Today, Training and Check-ins marked `REDESIGNED` after a dark pass, a "This client isn't here" state for a 404, and a toast with Retry when a page fails to load | §2, plus the theme e2e for the three client routes and Vitest for the 404 state and the toast | Done · 2026-10-11 · b538386 |
-| R5.4c | **Sheet hosts on one base, and the small fixes** (review doc, "Slice 3"): Products, Service & access, Intake and Your entries on `GuardedSheets`; week-notice links read in two queries; the Strength history card reloads after Update maxes; suggested maxes in plate steps; the calories step, two wording fixes and the inbox line | §2, plus the folded hosts' specs green unchanged, one backend command-count test, and Vitest for the rounding and the wording | Open |
+| R5.4c | **Sheet hosts on one base, and the small fixes** (review doc, "Slice 3"): Products, Service & access, Intake and Your entries on `GuardedSheets`; week-notice links read in two queries; the Strength history card reloads after Update maxes; suggested maxes in plate steps; the calories step, two wording fixes and the inbox line | §2, plus the folded hosts' specs green unchanged, one backend command-count test, and Vitest for the rounding and the wording | Done · 2026-10-11 |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
 | R6.2 | **Homepage** pre-render, GSAP scroll story, Jitter hero video (the owner makes the assets) | §2 | Optional |
 
@@ -893,6 +893,32 @@ of the implemented R1.3 screens before production rollout.
   ring would read at a glance; (3) the toast's dismiss button keeps the kit's English default name for
   every toast until the translation work; (4) a page that fails still logs its error to the browser
   console, as the router always did.
+- **Sheet hosts on one base, and the small fixes, R5.4c (built 2026-10-11; screenshots
+  `docs/design/r54c-*.png`).** Plans you sell, Service & access, the intake cards (coach and client) and
+  the entry sheets (Your entries, a client's Progress, the dashboard's Log weight) open their sheets
+  through `GuardedSheets`, as the strength and nutrition sheets already did, so one place keeps typed work
+  through the close button, Escape, the backdrop, Not now, Browser Back, a workspace switch, sign-out and
+  a reload. Each kept its own words, so its tests did not change: Plans you sell and Service & access ask
+  "Close without saving?", the others "Discard what you typed?". An inbox page works out where its week
+  notices lead from one read of their programs and one of their weeks, however many it holds (it was two
+  reads per notice). The Strength history card reads its list again after every change the program page
+  makes, so Update maxes, an assignment or a rename show at once. A max the logged sets suggest is said in
+  the program's own steps: "Logged sets suggest about 80 kg, up from 77.5 kg." on the panel and "About 80
+  kg, up from 77.5 kg" on Coach Today and a client's overview, with the exact estimate under a new "How it
+  is worked out" and in the update sheet that applies it; nothing stored changes (STR-012). For that the
+  server adds the program's rounding step (`loadIncrement`) to Coach Today's suggestions and to the
+  program's Training maxes read. Also fixed: the meal-plan builder's calories field takes any whole number
+  (a round figure was invalid to the browser); a check-in's weight chart no longer says "from 64.0 to
+  64.0 kg"; a strength chart says "unchanged since" (or "back to … where it was on …") instead of
+  "moved from 25 kg to 25 kg"; a coach's Notifications says "Check-ins and messages that need you are on
+  Today", with the link. Decided by Claude while building: "about" before a rounded suggestion; the
+  nearest step, halves up; the exact number wherever the coach applies it (Assign program's suggestion
+  included); the inbox line for staff whenever the inbox shows, never for a client. Not built: (1) the
+  base question's confirm button is named Close, like the dialog's close cross; rename it "Close without
+  saving", as Plans you sell and Service & access say, in a slice that updates those hosts' tests, and
+  make the three wordings of the question one in a words pass; (2) the Renew plan and Start a plan sheets
+  still use the browser's date input (§2 rule 8); (3) a sign-out with a sheet open cannot be reached
+  from the screen (the sheet covers the account menu), so only the unit tests exercise it.
 ---
 
 ## 1. Verdict: why the product feels "meh"

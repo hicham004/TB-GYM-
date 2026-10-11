@@ -580,7 +580,10 @@ through the STR-011 preview by naming the set; the server works the max out agai
 set the rule picks now. The new max keeps the set (`SourceSetPerformanceId`) and its numbers. Nothing
 changes a max on its own. A set the coach looked at that the rule no longer picks (a newer best set, or
 a keep since) is refused with its own code, `training_max_suggestion_changed`, so the screen can say a
-newer set was logged.
+newer set was logged. A screen names a suggestion in the program's own steps, the nearest multiple of its
+rounding step with halves up ("about 80 kg", R5.4c), and shows the exact estimate where the coach applies
+it and under "How it is worked out"; Coach Today's suggestions and the program's Training maxes read carry
+the program's `LoadIncrement` for this.
 
 **STR-013** Keeping a max (P4c, built 2026-10-08, ADR 0036): instead of applying a suggestion the coach
 can keep the max in use. The server accepts only the set the rule picks now, changes nothing in the

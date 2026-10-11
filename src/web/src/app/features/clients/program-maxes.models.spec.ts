@@ -38,6 +38,7 @@ function view(lifts: object[] = [], fields: Record<string, unknown> = {}): Train
     mesocycleId: 'block-1',
     version: 4,
     loadUnit: 'Kilogram',
+    loadIncrement: 2.5,
     isClosed: false,
     maxes: lifts,
     ...fields,
@@ -108,8 +109,9 @@ describe('the panel’s lifts', () => {
       setId: 'set-9',
       value: 110.974,
       valueText: '110.97 kg',
-      headline: 'Logged sets suggest 110.97 kg, up from 100 kg.',
+      headline: 'Logged sets suggest about 110 kg, up from 100 kg.',
       from: 'From 90 kg for 5 reps at RPE 8 on Tue 13 Oct, week 2.',
+      explanation: 'Best logged set v1: …',
       keepLabel: 'Keep 100 kg',
     });
     expect(up.kept).toBeNull();
@@ -119,14 +121,41 @@ describe('the panel’s lifts', () => {
       'Maya',
       'en-US',
     );
-    expect(down.suggestion?.headline).toBe('Logged sets suggest 92.5 kg, down from 100 kg.');
+    expect(down.suggestion?.headline).toBe('Logged sets suggest about 92.5 kg, down from 100 kg.');
+  });
+
+  it('says a suggestion in the program’s own steps, and keeps the exact estimate for the sheet', () => {
+    // R5.4c (U1): an estimate is said in the steps the program loads in; the sheet applies the exact one.
+    const [fine] = maxCards(
+      view([squat({ suggestion: suggested() })], { loadIncrement: '1.25' }),
+      'Maya',
+      'en-US',
+    );
+    expect(fine.suggestion?.headline).toBe('Logged sets suggest about 111.25 kg, up from 100 kg.');
+    expect(fine.suggestion?.valueText).toBe('110.97 kg');
+    const [pounds] = maxCards(
+      view(
+        [
+          squat({
+            current: entry({ value: 225, unit: 'Pound' }),
+            suggestion: suggested({ value: 241.3, unit: 'Pound' }),
+          }),
+        ],
+        { loadUnit: 'Pound', loadIncrement: 5 },
+      ),
+      'Maya',
+      'en-US',
+    );
+    expect(pounds.suggestion?.headline).toBe('Logged sets suggest about 240 lb, up from 225 lb.');
+    const [row] = editRows(view([squat({ suggestion: suggested() })]), 'en-US');
+    expect(row.logged?.valueText).toBe('110.97 kg');
   });
 
   it('says when the coach kept the max over a suggestion, until something newer is suggested', () => {
     const kept = { suggestedValue: 110.974, unit: 'Kilogram', keptOn: '2026-10-14' };
     const [quiet] = maxCards(view([squat({ kept })]), 'Maya', 'en-US');
     expect(quiet.kept).toBe(
-      'You kept 100 kg on Wed 14 Oct, over the 110.97 kg logged sets suggested.',
+      'You kept 100 kg on Wed 14 Oct, when logged sets suggested about 110 kg.',
     );
     expect(quiet.suggestion).toBeNull();
 

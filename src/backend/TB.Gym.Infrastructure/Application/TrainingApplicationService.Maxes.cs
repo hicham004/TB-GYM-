@@ -113,6 +113,7 @@ internal sealed partial class TrainingApplicationService
             mesocycleId,
             header.Version,
             header.LoadUnit,
+            header.LoadIncrement,
             isClosed,
             maxes);
     }

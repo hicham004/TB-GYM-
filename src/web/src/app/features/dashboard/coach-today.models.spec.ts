@@ -193,12 +193,19 @@ describe('Coach Today view model', () => {
   });
 
   it('names the lifts whose logged sets suggest a new max, with both numbers', () => {
-    const lift = (exerciseName: string, current: number, suggested: number, unit = 'Kilogram') => ({
+    const lift = (
+      exerciseName: string,
+      current: number,
+      suggested: number,
+      unit = 'Kilogram',
+      loadIncrement = unit === 'Pound' ? 5 : 2.5,
+    ) => ({
       exerciseId: exerciseName.toLowerCase(),
       exerciseName,
       current,
       suggested,
       unit: unit as 'Kilogram' | 'Pound',
+      loadIncrement,
     });
     const one = attentionRow(
       attentionItem('MaxesToReview', SARA, {
@@ -211,7 +218,8 @@ describe('Coach Today view model', () => {
     );
     expect(one).toMatchObject({
       heading: "Sara Mansour's logged sets suggest a new Deadlift max",
-      detail: '80.75\u00a0kg, up from 77.5\u00a0kg',
+      // Said in the program's 2.5 kg steps; the exact 80.749 kg stays on the client's Training (R5.4c).
+      detail: 'About 80\u00a0kg, up from 77.5\u00a0kg',
       tag: 'Maxes',
       tone: 'share',
       action: {
@@ -230,14 +238,23 @@ describe('Coach Today view model', () => {
       context,
     );
     expect(several.heading).toBe("Sara Mansour's logged sets suggest new maxes for 2 lifts");
-    // Pounds stay pounds; a lower suggestion is shown as it is.
-    expect(several.detail).toBe('Back squat 400\u00a0lb, Bench press 96.2\u00a0kg');
+    // Pounds stay pounds, each lift in its own program's steps; a lower suggestion is shown as it is.
+    expect(several.detail).toBe('Back squat about 400\u00a0lb, Bench press about 95\u00a0kg');
     const lower = attentionRow(
       attentionItem('MaxesToReview', SARA, { count: 1, maxes: [lift('Bench press', 100, 96.2)] }),
       COACH_TODAY,
       context,
     );
-    expect(lower.detail).toBe('96.2\u00a0kg, down from 100\u00a0kg');
+    expect(lower.detail).toBe('About 95\u00a0kg, down from 100\u00a0kg');
+    const finer = attentionRow(
+      attentionItem('MaxesToReview', SARA, {
+        count: 1,
+        maxes: [lift('Deadlift', 77.5, 80.749, 'Kilogram', 0.5)],
+      }),
+      COACH_TODAY,
+      context,
+    );
+    expect(finer.detail).toBe('About 80.5\u00a0kg, up from 77.5\u00a0kg');
   });
 
   it('says a client between programs has none running, with what the last one suggests', () => {
@@ -247,6 +264,7 @@ describe('Coach Today view model', () => {
       current: 77.5,
       suggested: 80.749,
       unit: 'Kilogram' as const,
+      loadIncrement: 2.5,
     };
     const between = attentionRow(
       attentionItem('NoProgram', SARA, {
@@ -259,7 +277,7 @@ describe('Coach Today view model', () => {
     );
     expect(between).toMatchObject({
       heading: 'Sara Mansour has no program running',
-      detail: 'Last program’s sets suggest Deadlift 80.75\u00a0kg, up from 77.5\u00a0kg',
+      detail: 'Last program’s sets suggest Deadlift about 80\u00a0kg, up from 77.5\u00a0kg',
       action: {
         label: 'Assign program',
         link: `/clients/${SARA.clientProfileId}/training`,

@@ -103,6 +103,7 @@ test('lifts whose logged sets suggest a new max are named, last, with a way to r
         current: 77.5,
         suggested: 80.749,
         unit: 'Kilogram',
+        loadIncrement: 2.5,
       },
     ],
   });
@@ -111,7 +112,8 @@ test('lifts whose logged sets suggest a new max are named, last, with a way to r
 
   const row = page.locator('li.need').last();
   await expect(row).toContainText("Maya Fakhoury's logged sets suggest a new Deadlift max");
-  await expect(row).toContainText('80.75 kg, up from 77.5 kg');
+  // In the program's 2.5 kg steps (R5.4c); the exact estimate stays on the client's Training.
+  await expect(row).toContainText('About 80 kg, up from 77.5 kg');
   await expect(row.getByRole('link', { name: 'Review maxes for Maya Fakhoury' })).toHaveAttribute(
     'href',
     '/clients/c-maya/training?action=maxes',

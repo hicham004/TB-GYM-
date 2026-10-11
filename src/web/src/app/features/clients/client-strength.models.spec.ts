@@ -136,6 +136,28 @@ describe('the maxes on record', () => {
     expect(liftSummary(deadlift, TODAY, LOCALE)).toBe('Deadlift Training max is 77.5 kg.');
   });
 
+  it('says a max that has not moved is unchanged, as the line beside the chart does (R5.4c)', () => {
+    const same = groupLifts([
+      mapMax(maxView({ id: 'a', value: 25, effectiveDate: '2026-08-08' })),
+      mapMax(maxView({ id: 'b', value: 25, effectiveDate: '2026-10-01' })),
+    ])[0];
+    expect(changeWords(same, TODAY, LOCALE)).toBe('Unchanged since Sat 8 Aug');
+    expect(liftSummary(same, TODAY, LOCALE)).toBe(
+      'Back Squat Training max is 25 kg, unchanged since Sat 8 Aug.',
+    );
+
+    // Up and back again: the ends match, but the number did move.
+    const back = groupLifts([
+      mapMax(maxView({ id: 'a', value: 25, effectiveDate: '2026-08-08' })),
+      mapMax(maxView({ id: 'b', value: 30, effectiveDate: '2026-09-01' })),
+      mapMax(maxView({ id: 'c', value: 25, effectiveDate: '2026-10-01' })),
+    ])[0];
+    expect(changeWords(back, TODAY, LOCALE)).toBe('−5 kg since Tue 1 Sep');
+    expect(liftSummary(back, TODAY, LOCALE)).toBe(
+      'Back Squat Training max is back to 25 kg, where it was on Sat 8 Aug.',
+    );
+  });
+
   it('writes a load with its unit and no more decimals than two', () => {
     expect(valueWords(62.5, 'Kilogram')).toBe('62.5 kg');
     expect(valueWords(135, 'Pound')).toBe('135 lb');

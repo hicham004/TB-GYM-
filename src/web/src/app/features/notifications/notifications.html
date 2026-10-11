@@ -4,6 +4,12 @@
       <h1 id="inbox-heading" #heading tabindex="-1" i18n>Notifications</h1>
       @if (!loading() && error() === null) {
         <p class="lede">{{ summary() }}</p>
+        @if (!isClient()) {
+          <!-- Check-ins to review and unread messages are not notices: Today lists them (R5.4c). -->
+          <p class="pointer" i18n>
+            Check-ins and messages that need you are on <a routerLink="/">Today</a>.
+          </p>
+        }
       }
     </div>
     <a class="settings" routerLink="/notifications/settings">

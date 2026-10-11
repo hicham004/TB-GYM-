@@ -1130,6 +1130,7 @@ export type CoachMaxSuggestionView = {
   current: number | string;
   suggested: number | string;
   unit: CoachActivityLoadUnit;
+  loadIncrement: number | string;
 };
 
 export type CoachProgramBlockView = {
@@ -3421,6 +3422,7 @@ export type TrainingMaxesView = {
   mesocycleId: string;
   version: number | string;
   loadUnit: TrainingLoadUnit;
+  loadIncrement: number | string;
   isClosed: boolean;
   maxes: Array<TrainingMaxView>;
 };

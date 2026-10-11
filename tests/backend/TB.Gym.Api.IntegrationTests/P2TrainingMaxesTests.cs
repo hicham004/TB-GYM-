@@ -232,9 +232,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         var scenario = await P2StartAsync(coach, client, "p2-read", 3);
         var maxes = await ReadSliceAsync<TrainingMaxesView>(coach, P2MaxesUrl(scenario.Block.Id));
 
+        // The program's own rounding step travels with its unit, so a suggestion can be said in it (R5.4c).
         Assert.AreEqual(
-            (scenario.Block.Id, scenario.Block.Version, false, TrainingLoadUnit.Kilogram),
-            (maxes.MesocycleId, maxes.Version, maxes.IsClosed, maxes.LoadUnit));
+            (scenario.Block.Id, scenario.Block.Version, false, TrainingLoadUnit.Kilogram, 2.5m),
+            (maxes.MesocycleId, maxes.Version, maxes.IsClosed, maxes.LoadUnit, maxes.LoadIncrement));
         var lift = maxes.Maxes.Single();
         Assert.AreEqual(scenario.Resources.Exercise.Id, lift.ExerciseId);
         Assert.AreEqual(

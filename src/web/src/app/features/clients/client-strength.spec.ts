@@ -203,6 +203,40 @@ describe('A client’s strength history', () => {
     expect(textOf(host.querySelector('[data-lift] .now'))).toBe('100 kg Training max');
   });
 
+  it('reads the list again, quietly, each time the program page changes something (R5.4c)', async () => {
+    // Update maxes above gave the squat a new training max: the card must not keep the old one.
+    const listStrengthMaxes = vi
+      .fn()
+      .mockReturnValueOnce(of(maxPage(mayaMaxes())))
+      .mockReturnValue(
+        of(
+          maxPage([
+            maxView({
+              id: 'applied',
+              value: 65,
+              effectiveDate: TODAY,
+              createdAtUtc: '2026-10-10T09:00:00Z',
+            }),
+            ...mayaMaxes(),
+          ]),
+        ),
+      );
+    const { fixture, host } = await render({ listStrengthMaxes });
+    expect(textOf(host.querySelector('[data-lift] .now'))).toBe('62.5 kg Training max');
+
+    fixture.componentRef.setInput('changes', 1);
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(listStrengthMaxes).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-skeleton], app-skeleton')).toBeNull();
+    expect(textOf(host.querySelector('[data-lift] .now'))).toBe('65 kg Training max');
+    // The same count again is no change.
+    fixture.componentRef.setInput('changes', 1);
+    await settle(fixture);
+    expect(listStrengthMaxes).toHaveBeenCalledTimes(2);
+  });
+
   it('records a max for any lift from the top, offering the lifts with maxes first', async () => {
     const { fixture, host } = await render();
 

@@ -1,9 +1,7 @@
-import { protectSheetEdits } from '../../core/forms/sheet-exit-protection';
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
   inject,
   input,
   LOCALE_ID,
@@ -11,14 +9,11 @@ import {
   TemplateRef,
   viewChild,
 } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
 import type { BodyweightUnit, ClientIntakeProfile } from '../../core/api/api.models';
+import { GuardedSheets, type Closable } from '../../core/forms/guarded-sheets';
 import { Button } from '../../ui/button';
 import type { IsoDate } from '../../ui/calendar';
 import { UiConfirm } from '../../ui/confirm';
-import { UiDialog } from '../../ui/dialog';
-import { UiSheet } from '../../ui/sheet';
-import { UiToast } from '../../ui/toast';
 import { IntakeEdit } from './intake-edit';
 import {
   answerRows,
@@ -47,17 +42,10 @@ import {
   templateUrl: './intake-profile.html',
   styleUrl: './intake-profile.scss',
 })
-export class IntakeProfile {
+export class IntakeProfile extends GuardedSheets {
   private readonly locale = inject(LOCALE_ID);
-  private readonly sheets = inject(UiSheet);
-  private readonly dialogs = inject(UiDialog);
-  private leaveDecision: Promise<boolean> | null = null;
-  private activeConfirm: { close(): void } | null = null;
-  private readonly toast = inject(UiToast);
   private readonly editSheet = viewChild.required<TemplateRef<unknown>>('editSheet');
-  private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
-  private openSheet: { close: () => void } | null = null;
-  private sheetDirty = false;
+  private readonly confirmTemplate = viewChild.required<TemplateRef<unknown>>('confirmDialog');
 
   readonly profile = input.required<ClientIntakeProfile>();
   readonly saver = input.required<IntakeSaver>();
@@ -70,12 +58,8 @@ export class IntakeProfile {
   readonly editable = input(true);
 
   protected readonly groups = INTAKE_GROUPS;
-  protected readonly closeLabel = $localize`Close`;
   protected readonly notAdded = $localize`Not added`;
   protected readonly editing = signal<IntakeStepId>('about');
-  protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
-    null,
-  );
 
   protected readonly rows = computed<Record<IntakeGroup, AnswerRow[]>>(() => {
     const profile = this.profile();
@@ -104,22 +88,8 @@ export class IntakeProfile {
     };
   });
 
-  async canLeave(): Promise<boolean> {
-    const allowed = await this.canCloseSheet();
-    if (allowed) this.sheetDirty = false;
-    return allowed;
-  }
-
-  constructor() {
-    protectSheetEdits(
-      this,
-      () => this.sheetDirty,
-      () => {
-        this.openSheet?.close();
-        this.activeConfirm?.close();
-      },
-    );
-    inject(DestroyRef).onDestroy(() => this.openSheet?.close());
+  protected confirmDialog(): TemplateRef<unknown> {
+    return this.confirmTemplate();
   }
 
   protected titleOf(step: IntakeStepId): string {
@@ -128,47 +98,13 @@ export class IntakeProfile {
 
   protected edit(step: IntakeStepId): void {
     this.editing.set(step);
-    this.sheetDirty = false;
-    this.openSheet?.close();
-    const sheet = this.sheets.open<boolean>(this.editSheet(), {
-      title: this.titleOf(step),
-      closeLabel: this.closeLabel,
-      closeOnNavigation: false,
-      canClose: () => this.canCloseSheet(),
-    });
-    this.openSheet = sheet;
-    sheet.closed.subscribe((saved) => {
-      if (this.openSheet === sheet) {
-        this.openSheet = null;
-        this.sheetDirty = false;
-      }
-      if (saved) this.toast.show(this.savedText(step), { tone: 'success' });
-    });
-  }
-
-  protected setDirty(dirty: boolean): void {
-    this.sheetDirty = dirty;
-  }
-
-  /** The close button, Escape, the backdrop and Not now all ask the same question. */
-  private canCloseSheet(): boolean | Promise<boolean> {
-    return (
-      !this.sheetDirty ||
-      this.ask(
-        $localize`Close without saving? What you typed will be lost.`,
-        $localize`Close`,
-        $localize`Keep editing`,
-        $localize`Discard what you typed?`,
-      )
-    );
+    this.show(this.editSheet(), this.titleOf(step));
   }
 
   /** The sheet's own buttons: Save changes closes it for good, Not now asks first when needed. */
-  protected async closeSheet(
-    saved: boolean,
-    sheet: { close(result: boolean): void },
-  ): Promise<void> {
-    if (saved || (await this.canCloseSheet())) sheet.close(saved);
+  protected closeSheet(saved: boolean, sheet: Closable): void {
+    if (saved) this.done(sheet, this.savedText(this.editing()));
+    else void this.closeAsking(sheet);
   }
 
   private savedText(step: IntakeStepId): string {
@@ -178,27 +114,5 @@ export class IntakeProfile {
     return step === 'start'
       ? $localize`${name}:name: has finished setting up.`
       : $localize`${name}:name:’s details were saved.`;
-  }
-
-  private async ask(
-    message: string,
-    confirm: string,
-    cancel: string,
-    title: string,
-  ): Promise<boolean> {
-    if (this.leaveDecision) return this.leaveDecision;
-    this.asking.set({ message, confirm, cancel });
-    const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
-      closeOnNavigation: false,
-      title,
-      closeLabel: this.closeLabel,
-    });
-    this.activeConfirm = dialog;
-    this.leaveDecision = firstValueFrom(dialog.closed).then((answer) => answer === true);
-    const answer = await this.leaveDecision;
-    this.leaveDecision = null;
-    this.activeConfirm = null;
-    this.asking.set(null);
-    return answer === true;
   }
 }

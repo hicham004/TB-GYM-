@@ -46,6 +46,21 @@ h1 {
   font-variant-numeric: tabular-nums;
   margin-block-start: var(--space-4);
 }
+.pointer {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin-block-start: var(--space-4);
+}
+.pointer a {
+  color: var(--tb-accent-ink);
+  font-weight: 600;
+  text-underline-offset: 0.2em;
+}
+.pointer a:focus-visible {
+  border-radius: 2px;
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
 .settings {
   align-items: center;
   border-radius: 999px;

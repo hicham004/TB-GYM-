@@ -217,7 +217,7 @@
     [catalog]="catalog()"
     [plans]="plans()"
     [renewFrom]="renewSource()"
-    (dirtyChange)="sheetDirty = $event"
+    (dirtyChange)="dirty = $event"
     (closed)="closePlanSheet($event, sheet)"
   />
 </ng-template>
@@ -228,7 +228,7 @@
       [plan]="plan"
       [firstName]="firstName()"
       [today]="today()"
-      (dirtyChange)="sheetDirty = $event"
+      (dirtyChange)="dirty = $event"
       (closed)="closePlanSheet($event, sheet)"
     />
   }
@@ -252,13 +252,12 @@
 </ng-template>
 
 <ng-template #leaveDialog let-dialog>
-  <app-confirm
-    message="What you typed is not saved. Closing loses it."
-    i18n-message
-    confirmLabel="Close without saving"
-    i18n-confirmLabel
-    cancelLabel="Keep editing"
-    i18n-cancelLabel
-    (answer)="dialog.close($event)"
-  />
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
 </ng-template>

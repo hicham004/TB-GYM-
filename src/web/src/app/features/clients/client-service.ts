@@ -1,8 +1,6 @@
-import { protectSheetEdits } from '../../core/forms/sheet-exit-protection';
 import { UiConfirm } from '../../ui/confirm';
 import {
   Component,
-  DestroyRef,
   computed,
   effect,
   inject,
@@ -21,6 +19,7 @@ import type {
   ProductCatalog,
 } from '../../core/api/api.models';
 import type { ClientProfileOverviewView } from '../../core/api/generated';
+import { GuardedSheets, type Closable, type LeaveQuestion } from '../../core/forms/guarded-sheets';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -28,8 +27,6 @@ import { Button } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
-import { UiDialog } from '../../ui/dialog';
-import { UiSheet } from '../../ui/sheet';
 import { ClientActions } from './client-actions';
 import { ClientCoach } from './client-coach';
 import { ClientRelease } from './client-release';
@@ -78,49 +75,33 @@ import { PlanPayment, PlanStart } from './plan-sheets';
   templateUrl: './client-service.html',
   styleUrl: './client-service.scss',
 })
-export class ClientService {
+export class ClientService extends GuardedSheets {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly sheets = inject(UiSheet);
-  private readonly dialogs = inject(UiDialog);
-  private leaveDecision: Promise<boolean> | null = null;
-  private activeConfirm: { close(): void } | null = null;
   private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
-  protected sheetDirty = false;
-  protected readonly asking = signal(false);
-  private activeSheet: { close(): void } | null = null;
-  private readonly leaveDialog = viewChild.required<TemplateRef<unknown>>('leaveDialog');
+  private readonly confirmTemplate = viewChild.required<TemplateRef<unknown>>('leaveDialog');
 
-  async canLeave(): Promise<boolean> {
-    if (!this.sheetDirty) return true;
-    if (this.leaveDecision) return this.leaveDecision;
-    this.asking.set(true);
-    const ref = this.dialogs.open<boolean>(this.leaveDialog(), {
-      title: $localize`Close without saving?`,
-      closeOnNavigation: false,
-    });
-    this.activeConfirm = ref;
-    this.leaveDecision = firstValueFrom(ref.closed).then((answer) => answer === true);
-    const allowed = await this.leaveDecision;
-    this.leaveDecision = null;
-    this.activeConfirm = null;
-    this.asking.set(false);
-    if (allowed) this.sheetDirty = false;
-    return allowed;
+  protected override readonly leaveQuestion: LeaveQuestion = {
+    title: $localize`Close without saving?`,
+    message: $localize`What you typed is not saved. Closing loses it.`,
+    confirm: $localize`Close without saving`,
+    cancel: $localize`Keep editing`,
+  };
+
+  protected confirmDialog(): TemplateRef<unknown> {
+    return this.confirmTemplate();
   }
 
-  protected async closePlanSheet(
-    result: unknown,
-    sheet: { close(result: unknown): void },
-  ): Promise<void> {
+  /** A plan sheet's result: saved closes it at once, Not now asks first when something is typed. */
+  protected closePlanSheet(result: unknown, sheet: Closable): void {
     if (result) {
-      this.sheetDirty = false;
+      this.dirty = false;
       sheet.close(result);
-    } else if (await this.canLeave()) sheet.close(result);
+    } else void this.closeAsking(sheet);
   }
 
   private loadedKey: string | null = null;
@@ -222,15 +203,7 @@ export class ClientService {
   });
 
   constructor() {
-    protectSheetEdits(
-      this,
-      () => this.sheetDirty,
-      () => {
-        this.activeSheet?.close();
-        this.activeConfirm?.close();
-      },
-    );
-    inject(DestroyRef).onDestroy(() => this.activeSheet?.close());
+    super();
     this.scope.onReset(() => this.reset());
     effect(() => {
       this.scope.epoch();
@@ -354,7 +327,7 @@ export class ClientService {
     });
     ref.closed.subscribe((changed) => {
       if (!changed) return;
-      this.done(
+      this.afterChange(
         mode === 'pause'
           ? $localize`${card.name}:plan: is paused.`
           : $localize`${card.name}:plan: is cancelled.`,
@@ -372,7 +345,7 @@ export class ClientService {
     ref.closed.subscribe((updated) => {
       if (!updated) return;
       this.context.setProfile(updated);
-      this.done(
+      this.afterChange(
         updated.isCoachBlocked
           ? $localize`${updated.firstName}:name: is blocked in your coaching space only.`
           : $localize`${updated.firstName}:name: is unblocked.`,
@@ -388,7 +361,7 @@ export class ClientService {
     try {
       await this.csrf.refresh();
       await firstValueFrom(this.api.resumeEnrollment(card.id, card.version));
-      this.done($localize`${card.name}:plan: is running again.`);
+      this.afterChange($localize`${card.name}:plan: is running again.`);
     } catch (error) {
       this.context.error.set(
         serviceWriteError(
@@ -417,26 +390,13 @@ export class ClientService {
     title: string,
     notice: (result: T) => string,
   ): void {
-    this.activeSheet?.close();
-    this.sheetDirty = false;
-    const ref = this.sheets.open<T | null | false>(template, {
-      closeOnNavigation: false,
-      canClose: () => this.canLeave(),
-      title,
-      closeLabel: this.closeLabel,
-    });
-    this.activeSheet = ref;
-    ref.closed.subscribe((result) => {
-      if (this.activeSheet === ref) {
-        this.activeSheet = null;
-        this.sheetDirty = false;
-      }
-      if (result) this.done(notice(result as T));
+    this.show<T | null | false>(template, title).closed.subscribe((result) => {
+      if (result) this.afterChange(notice(result as T));
     });
   }
 
   /** A change was made: say so, and read the plans again so the header and this page agree. */
-  private done(notice: string): void {
+  private afterChange(notice: string): void {
     this.context.error.set(null);
     this.context.notice.set(notice);
     void this.reread();
@@ -466,7 +426,7 @@ export class ClientService {
   }
 
   private reset(): void {
-    this.activeSheet?.close();
+    this.closeSheets();
     this.loadedKey = null;
     this.state.set('loading');
     this.catalog.set(null);

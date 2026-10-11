@@ -10,6 +10,7 @@ import type {
   TrainingMaxesView,
   TrainingMaxView,
 } from '../../core/api/generated';
+import { nearestLoadStep } from '../../core/units/load-steps';
 import { unitLabel } from '../training/training-program.models';
 import type { FieldMessages } from './client-program-forms.models';
 
@@ -58,23 +59,27 @@ export interface MaxCard {
   readonly earlier: readonly MaxHistoryRow[];
   /** The max the client's logged sets suggest (P4b); null when they suggest nothing. */
   readonly suggestion: MaxSuggestion | null;
-  /** "You kept 100 kg on Thu 8 Oct, over the 110.97 kg logged sets suggested." Only while nothing newer is suggested. */
+  /** "You kept 100 kg on Thu 8 Oct, when logged sets suggested about 110 kg." Only while nothing newer is suggested. */
   readonly kept: string | null;
 }
 
 /**
  * The max a lift's logged sets suggest (STR-007). The server picks the set and works the number out; the
- * coach applies it through the usual preview, sending back only the set.
+ * coach applies it through the usual preview, sending back only the set. A sentence says it in the
+ * program's steps (R5.4c); the exact estimate is what the sheet applies and what "How it is worked out"
+ * shows.
  */
 export interface MaxSuggestion {
   readonly setId: string;
   readonly value: number;
-  /** "110.97 kg". */
+  /** The exact estimate: "110.97 kg". */
   readonly valueText: string;
-  /** "Logged sets suggest 110.97 kg, up from 100 kg." */
+  /** In the program's steps: "Logged sets suggest about 110 kg, up from 100 kg." */
   readonly headline: string;
   /** "From 90 kg for 5 reps at RPE 8 on Thu 8 Oct, week 1." */
   readonly from: string;
+  /** The server's own working, to the exact estimate. */
+  readonly explanation: string;
   /** "Keep 100 kg": the max in use, kept over the suggestion (STR-013). */
   readonly keepLabel: string;
 }
@@ -150,39 +155,59 @@ function basisWords(entry: TrainingMaxEntryView, locale: string): string | null 
       : $localize`${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe: in week 1`;
 }
 
-function suggestionOf(lift: TrainingMaxView, locale: string): MaxSuggestion | null {
+/** A suggested max in the program's steps: an estimate is not a plate load, so it is said as one (U1). */
+function stepWeight(
+  value: number | string,
+  unit: TrainingLoadUnit,
+  step: number | string,
+  locale: string,
+): string {
+  return weight(nearestLoadStep(num(value), unit, step), unit, locale);
+}
+
+function suggestionOf(
+  lift: TrainingMaxView,
+  step: number | string,
+  locale: string,
+): MaxSuggestion | null {
   const suggestion = lift.suggestion;
   const logged = suggestion?.basis.loggedSet;
   if (!suggestion || !logged) return null;
   const value = num(suggestion.value);
   const current = num(lift.current.value);
-  const valueText = weight(value, suggestion.unit, locale);
+  const about = stepWeight(value, suggestion.unit, step, locale);
   const now = weight(current, lift.current.unit, locale);
   const { load, reps, rpe } = setParts(suggestion.basis, suggestion.unit, locale);
   return {
     setId: logged.setPerformanceId,
     value,
-    valueText,
+    valueText: weight(value, suggestion.unit, locale),
     headline:
       value > current
-        ? $localize`Logged sets suggest ${valueText}:value:, up from ${now}:current:.`
-        : $localize`Logged sets suggest ${valueText}:value:, down from ${now}:current:.`,
+        ? $localize`Logged sets suggest about ${about}:value:, up from ${now}:current:.`
+        : $localize`Logged sets suggest about ${about}:value:, down from ${now}:current:.`,
     from: $localize`From ${load}:weight: for ${reps}:reps: reps at RPE ${rpe}:rpe: on ${day(logged.performedOn, locale)}:date:, week ${num(logged.weekNumber)}:week:.`,
+    explanation: suggestion.explanation,
     keepLabel: $localize`Keep ${now}:current:`,
   };
 }
 
-function keptWords(lift: TrainingMaxView, locale: string): string | null {
+function keptWords(lift: TrainingMaxView, step: number | string, locale: string): string | null {
   const kept = lift.kept;
   if (!kept || lift.suggestion) return null;
-  return $localize`You kept ${weight(lift.current.value, lift.current.unit, locale)}:current: on ${day(kept.keptOn, locale)}:date:, over the ${weight(kept.suggestedValue, kept.unit, locale)}:suggested: logged sets suggested.`;
+  return $localize`You kept ${weight(lift.current.value, lift.current.unit, locale)}:current: on ${day(kept.keptOn, locale)}:date:, when logged sets suggested about ${stepWeight(kept.suggestedValue, kept.unit, step, locale)}:suggested:.`;
 }
 
 function entryWords(entry: TrainingMaxEntryView, firstName: string, locale: string): string {
   return `${sourceWords(entry, firstName)} · ${day(entry.setOn, locale)}`;
 }
 
-function cardOf(lift: TrainingMaxView, firstName: string, locale: string): MaxCard {
+function cardOf(
+  lift: TrainingMaxView,
+  step: number | string,
+  firstName: string,
+  locale: string,
+): MaxCard {
   const current = lift.current;
   const previous = lift.earlier[0] ?? null;
   const difference = previous ? num(current.value) - num(previous.value) : 0;
@@ -214,13 +239,13 @@ function cardOf(lift: TrainingMaxView, firstName: string, locale: string): MaxCa
           ? $localize`When the program was assigned`
           : entry.reason,
     })),
-    suggestion: suggestionOf(lift, locale),
-    kept: keptWords(lift, locale),
+    suggestion: suggestionOf(lift, step, locale),
+    kept: keptWords(lift, step, locale),
   };
 }
 
 export function maxCards(view: TrainingMaxesView, firstName: string, locale: string): MaxCard[] {
-  return view.maxes.map((lift) => cardOf(lift, firstName, locale));
+  return view.maxes.map((lift) => cardOf(lift, view.loadIncrement, firstName, locale));
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -269,7 +294,7 @@ export function editRows(view: TrainingMaxesView, locale: string): MaxEditRow[] 
       : null,
     value: null,
     weekOneWeight: null,
-    logged: suggestionOf(lift, locale),
+    logged: suggestionOf(lift, view.loadIncrement, locale),
     useLogged: false,
   }));
 }

@@ -158,7 +158,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             .Single(entry => entry.Kind == CoachAttentionKind.MaxesToReview);
         Assert.AreEqual((clientId, 1, block.Id), (item.Client.ClientProfileId, item.Count, item.SubjectId));
         Assert.AreEqual(
-            new CoachMaxSuggestionView(exercise.Id, "Competition squat", 100m, 110.974m, CoachActivityLoadUnit.Kilogram),
+            new CoachMaxSuggestionView(exercise.Id, "Competition squat", 100m, 110.974m, CoachActivityLoadUnit.Kilogram, 2.5m),
             item.Maxes?.Single());
         Assert.IsFalse((await ReadSliceAsync<CoachTodayView>(otherCoach, CoachTodayUrl)).Attention
             .Any(entry => entry.Kind == CoachAttentionKind.MaxesToReview));

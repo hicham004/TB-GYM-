@@ -713,7 +713,7 @@ describe('a client’s Training', () => {
     });
 
     it('opens the update sheet from the panel, and reads the program again once the maxes are updated', async () => {
-      const { harness, host, getProgram, programApi, context } = await render({
+      const { harness, host, getProgram, programApi, context, api } = await render({
         maxes,
         programApi: { previewTrainingMaxes: vi.fn(() => of(emptyPreview)) },
       });
@@ -726,7 +726,9 @@ describe('a client’s Training', () => {
       await settle(harness.fixture);
       press(sheet, 'Show the new weights');
       await settle(harness.fixture);
+      const historyReads = api.listStrengthMaxes.mock.calls.length;
       press(sheet, 'Update maxes');
+      await settle(harness.fixture);
       await settle(harness.fixture);
 
       expect(programApi.applyTrainingMaxes).toHaveBeenCalledWith(
@@ -736,6 +738,8 @@ describe('a client’s Training', () => {
       expect(dialog()).toBeNull();
       expect(getProgram).toHaveBeenCalledTimes(2);
       expect(context.notice()).toBe('Training maxes updated. The weeks still to come follow them.');
+      // The strength history below lists the program's maxes too, so it reads them again (R5.4c, D6).
+      expect(api.listStrengthMaxes.mock.calls.length).toBe(historyReads + 1);
     });
 
     it('offers no way to change the maxes of a program that is over', async () => {

@@ -246,7 +246,7 @@
         }
 
         @if (program.isAllowed) {
-          <app-client-strength />
+          <app-client-strength [changes]="changes()" />
         }
       }
     }

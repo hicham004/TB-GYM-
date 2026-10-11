@@ -31,6 +31,7 @@ function maxes(lifts: object[]) {
     mesocycleId: 'block-lean',
     version: 4,
     loadUnit: 'Kilogram',
+    loadIncrement: 2.5,
     isClosed: false,
     maxes: lifts,
   };
@@ -167,12 +168,17 @@ describe('the training maxes panel', () => {
 
     const lifts = Array.from(host.querySelectorAll('.lift'));
     const suggestion = lifts[0].querySelector('.suggestion');
+    // In the program's 2.5 kg steps; the exact 150.637 kg is in How it is worked out (R5.4c).
     expect(textOf(suggestion?.querySelector('.suggestion-head'))).toBe(
-      'Logged sets suggest 150.64 kg, up from 120 kg.',
+      'Logged sets suggest about 150 kg, up from 120 kg.',
     );
     expect(textOf(suggestion?.querySelector('.detail'))).toBe(
       'From 130 kg for 3 reps at RPE 8 on Wed 30 Sep, week 2.',
     );
+    const how = suggestion?.querySelector('details.how');
+    expect(textOf(how?.querySelector('summary'))).toBe('How it is worked out');
+    expect(how?.hasAttribute('open')).toBe(false);
+    expect(textOf(how?.querySelector('p'))).toBe('Best logged set v1: …');
     expect(lifts[1].querySelector('.suggestion')).toBeNull();
     // Nothing changed on its own: the max in use is still the one shown.
     expect(textOf(lifts[0].querySelector('.value'))).toBe('120 kg');
@@ -208,7 +214,7 @@ describe('the training maxes panel', () => {
     expect(host.querySelector('.suggestion')).toBeNull();
     const kept = query(host, '#kept-squat');
     expect(textOf(kept)).toBe(
-      'You kept 120 kg on Thu 1 Oct, over the 150.64 kg logged sets suggested.',
+      'You kept 120 kg on Thu 1 Oct, when logged sets suggested about 150 kg.',
     );
     // The buttons the coach pressed are gone; the line that replaced them has the focus.
     expect(document.activeElement).toBe(kept);

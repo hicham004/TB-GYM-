@@ -365,7 +365,8 @@ internal sealed class CoachOverviewReader(
             item.ExerciseName,
             item.Current,
             item.Suggested,
-            Unit(item.Unit)))];
+            Unit(item.Unit),
+            item.LoadIncrement))];
 
     private static SessionDayCountView[] Days(IEnumerable<SessionRow> sessions, DateOnly from, int dayCount)
     {
@@ -636,6 +637,7 @@ internal sealed class CoachOverviewReader(
                         max.Value,
                         suggestion.Estimate.Value,
                         item.LoadUnit,
+                        item.LoadIncrement,
                         suggestion.Set.LoggedAtUtc);
                 }
 
@@ -1024,6 +1026,7 @@ internal sealed class CoachOverviewReader(
         decimal Current,
         decimal Suggested,
         TrainingLoadUnit Unit,
+        decimal LoadIncrement,
         DateTimeOffset LoggedAtUtc);
 
     private sealed record FinishedWorkout(

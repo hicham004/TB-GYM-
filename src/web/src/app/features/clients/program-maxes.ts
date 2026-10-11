@@ -99,6 +99,10 @@ import { maxCards, type MaxCard } from './program-maxes.models';
                           {{ suggestion.headline }}
                         </p>
                         <p class="detail" dir="auto">{{ suggestion.from }}</p>
+                        <details class="how">
+                          <summary i18n>How it is worked out</summary>
+                          <p class="how-text" dir="auto">{{ suggestion.explanation }}</p>
+                        </details>
                         <div class="suggestion-actions">
                           <button
                             appButton
@@ -255,7 +259,8 @@ import { maxCards, type MaxCard } from './program-maxes.models';
     }
 
     .source,
-    .detail {
+    .detail,
+    .how-text {
       color: var(--tb-muted);
       font-size: 0.8125rem;
     }
@@ -274,6 +279,22 @@ import { maxCards, type MaxCard } from './program-maxes.models';
 
     .suggestion-head {
       font-weight: 600;
+    }
+
+    // The exact estimate behind the rounded sentence (R5.4c), closed until the coach asks.
+    .how summary {
+      align-items: center;
+      color: var(--tb-accent-ink);
+      cursor: pointer;
+      display: inline-flex;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      min-block-size: 2rem;
+    }
+
+    .how summary:focus-visible {
+      outline: 3px solid var(--tb-focus);
+      outline-offset: 2px;
     }
 
     .suggestion-actions {

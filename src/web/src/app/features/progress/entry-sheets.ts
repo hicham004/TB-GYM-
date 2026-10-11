@@ -1,23 +1,17 @@
-import { protectSheetEdits } from '../../core/forms/sheet-exit-protection';
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
-  inject,
   input,
   output,
   signal,
   TemplateRef,
   viewChild,
 } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { GuardedSheets, type Closable } from '../../core/forms/guarded-sheets';
 import type { GirthUnit, MassUnit } from '../../core/units/body-units';
 import type { IsoDate } from '../../ui/calendar';
 import { UiConfirm } from '../../ui/confirm';
-import { UiDialog } from '../../ui/dialog';
-import { UiSheet } from '../../ui/sheet';
-import { UiToast } from '../../ui/toast';
 import { CorrectMeasurement, LogMeasurements, MeasurementChanges } from './measurement-sheets';
 import { AddPhotos, PhotoView } from './photo-sheets';
 import {
@@ -199,13 +193,7 @@ export type EntryKind = 'weight' | 'measurements' | 'photos';
     </ng-template>
   `,
 })
-export class EntrySheets {
-  private readonly sheets = inject(UiSheet);
-  private readonly dialogs = inject(UiDialog);
-  private leaveDecision: Promise<boolean> | null = null;
-  private activeConfirm: { close(): void } | null = null;
-  private readonly toast = inject(UiToast);
-
+export class EntrySheets extends GuardedSheets {
   /** The client a coach is entering for; null on the client's own pages. */
   readonly clientId = input<string | null>(null);
   readonly audience = input.required<Audience>();
@@ -234,17 +222,11 @@ export class EntrySheets {
     viewChild.required<TemplateRef<unknown>>('measurementChangesSheet');
   private readonly addPhotosSheet = viewChild.required<TemplateRef<unknown>>('addPhotosSheet');
   private readonly photoSheet = viewChild.required<TemplateRef<unknown>>('photoSheet');
-  private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
+  private readonly confirmTemplate = viewChild.required<TemplateRef<unknown>>('confirmDialog');
 
   protected readonly weighIn = signal<WeighInRow | null>(null);
   protected readonly measurement = signal<MeasurementRow | null>(null);
   protected readonly photo = signal<PhotoTile | null>(null);
-  protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
-    null,
-  );
-  /** Whether the open sheet holds something typed that closing would lose. */
-  protected dirty = false;
-  private open: { close: () => void } | null = null;
 
   protected readonly existingWeights = computed<ReadonlyMap<string, BodyweightObservation>>(
     () => new Map(this.weights().map((row) => [row.date, row.observation])),
@@ -253,22 +235,8 @@ export class EntrySheets {
     () => new Set(this.weights().map((row) => row.date)),
   );
 
-  async canLeave(): Promise<boolean> {
-    const allowed = await this.canClose();
-    if (allowed) this.dirty = false;
-    return allowed;
-  }
-
-  constructor() {
-    protectSheetEdits(
-      this,
-      () => this.dirty,
-      () => {
-        this.open?.close();
-        this.activeConfirm?.close();
-      },
-    );
-    inject(DestroyRef).onDestroy(() => this.open?.close());
+  protected confirmDialog(): TemplateRef<unknown> {
+    return this.confirmTemplate();
   }
 
   // ---- opening ----
@@ -341,7 +309,7 @@ export class EntrySheets {
       saved.measurementDate === this.today()
         ? $localize`today`
         : dayWords(saved.measurementDate, this.today(), this.audience().locale);
-    this.done(sheet, $localize`Weight logged for ${day}:day:.`, 'weight');
+    this.saved(sheet, $localize`Weight logged for ${day}:day:.`, 'weight');
   }
 
   /** The chosen day already has a weight: close this sheet and open that one's correction. */
@@ -355,7 +323,7 @@ export class EntrySheets {
 
   protected weightCorrected(history: BodyweightHistory | null, sheet: Closable): void {
     if (history === null) return void this.closeAsking(sheet);
-    this.done(
+    this.saved(
       sheet,
       $localize`Weight corrected. The earlier number stays in its history.`,
       'weight',
@@ -365,7 +333,7 @@ export class EntrySheets {
   protected weightMoved(moved: BodyweightDateCorrection | null, sheet: Closable): void {
     if (moved === null) return void this.closeAsking(sheet);
     const day = dayWords(moved.replacement.measurementDate, this.today(), this.audience().locale);
-    this.done(
+    this.saved(
       sheet,
       $localize`Moved to ${day}:day:. The old entry is kept, marked as replaced.`,
       'weight',
@@ -374,7 +342,7 @@ export class EntrySheets {
 
   protected measurementsLogged(count: number, sheet: Closable): void {
     if (count === 0) return void this.closeAsking(sheet);
-    this.done(
+    this.saved(
       sheet,
       count === 1 ? $localize`Measurement saved.` : $localize`${count}:count: measurements saved.`,
       'measurements',
@@ -383,7 +351,7 @@ export class EntrySheets {
 
   protected measurementCorrected(history: BodyMeasurementHistory | null, sheet: Closable): void {
     if (history === null) return void this.closeAsking(sheet);
-    this.done(
+    this.saved(
       sheet,
       $localize`Measurement corrected. The earlier number stays in its history.`,
       'measurements',
@@ -392,7 +360,7 @@ export class EntrySheets {
 
   protected photosAdded(count: number, sheet: Closable): void {
     if (count === 0) return void this.closeAsking(sheet);
-    this.done(
+    this.saved(
       sheet,
       count === 1 ? $localize`Photo saved.` : $localize`${count}:count: photos saved.`,
       'photos',
@@ -401,7 +369,7 @@ export class EntrySheets {
 
   protected photoClosed(removed: ProgressPhoto | null, sheet: Closable): void {
     if (removed === null) return void this.closeAsking(sheet);
-    this.done(
+    this.saved(
       sheet,
       this.audience().coach
         ? $localize`Photo removed. The client keeps it in their own history.`
@@ -412,70 +380,9 @@ export class EntrySheets {
 
   // ---- the sheet itself ----
 
-  private show(content: TemplateRef<unknown>, title: string): void {
-    this.open?.close();
-    this.dirty = false;
-    const sheet = this.sheets.open<unknown>(content, {
-      title,
-      closeLabel: $localize`Close`,
-      closeOnNavigation: false,
-      canClose: () => this.canClose(),
-    });
-    this.open = sheet;
-    sheet.closed.subscribe(() => {
-      if (this.open === sheet) this.open = null;
-      this.dirty = false;
-    });
-  }
-
-  /** The close button, Escape, the backdrop and Not now all ask the same question. */
-  private canClose(): boolean | Promise<boolean> {
-    return (
-      !this.dirty ||
-      this.ask(
-        $localize`Close without saving? What you typed will be lost.`,
-        $localize`Close`,
-        $localize`Keep editing`,
-        $localize`Discard what you typed?`,
-      )
-    );
-  }
-
-  private async closeAsking(sheet: Closable): Promise<void> {
-    if (await this.canClose()) sheet.close(null);
-  }
-
-  private done(sheet: Closable, message: string, kind: EntryKind): void {
-    this.dirty = false;
-    sheet.close(true);
-    this.toast.show(message, { tone: 'success' });
+  /** A sheet saved: it closes, a toast says so, and the page reads that list again. */
+  private saved(sheet: Closable, message: string, kind: EntryKind): void {
+    this.done(sheet, message);
     this.changed.emit(kind);
   }
-
-  private async ask(
-    message: string,
-    confirm: string,
-    cancel: string,
-    title: string,
-  ): Promise<boolean> {
-    if (this.leaveDecision) return this.leaveDecision;
-    this.asking.set({ message, confirm, cancel });
-    const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
-      closeOnNavigation: false,
-      title,
-      closeLabel: $localize`Close`,
-    });
-    this.activeConfirm = dialog;
-    this.leaveDecision = firstValueFrom(dialog.closed).then((answer) => answer === true);
-    const answer = await this.leaveDecision;
-    this.leaveDecision = null;
-    this.activeConfirm = null;
-    this.asking.set(null);
-    return answer === true;
-  }
-}
-
-/** The sheet a template is given as `let-sheet`. */
-interface Closable {
-  close(result?: unknown): void;
 }
