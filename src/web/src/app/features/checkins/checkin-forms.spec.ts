@@ -22,6 +22,8 @@ import {
   settle as settleDom,
 } from '../../../testing/dom';
 import { CheckInForms } from './checkin-forms';
+import { UiDialog } from '../../ui/dialog';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 
 const QUESTION_KEY = 'a'.repeat(32);
 
@@ -109,6 +111,7 @@ async function settle(fixture: { detectChanges(): void; whenStable(): Promise<un
 }
 
 interface Harness {
+  canLeave(): Promise<boolean>;
   openForm(formId: string): Promise<void>;
   editVersion(versionId: string): Promise<void>;
   startNewForm(): void;
@@ -117,6 +120,8 @@ interface Harness {
   setTitle(title: string): void;
   validation(): { isValid: boolean };
   startRename(): void;
+  deriveDraft(sourceVersionId: string): Promise<void>;
+  publish(versionId: string, version: number): Promise<void>;
 }
 
 async function render(api: Partial<ApiClient> = {}) {
@@ -159,12 +164,97 @@ describe('CheckInForms', () => {
     TestBed.resetTestingModule();
   });
 
+  it('leaves an untouched form freely, but protects typed work on navigation and refresh', async () => {
+    const { fixture, host, component } = await render();
+    const open = vi
+      .spyOn(TestBed.inject(UiDialog), 'open')
+      .mockReturnValue({ closed: of(false) } as never);
+    component.startNewForm();
+    await settle(fixture);
+    expect(await component.canLeave()).toBe(true);
+    fill(host, 'Title', 'Weekly recovery');
+    await settle(fixture);
+    expect(await TestBed.inject(UnsavedWork).confirmLeave()).toBe(false);
+    expect(open).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ closeOnNavigation: false }),
+    );
+    expect(host.querySelector<HTMLInputElement>('#builder-title')?.value).toBe('Weekly recovery');
+    const refresh = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(refresh);
+    expect(refresh.defaultPrevented).toBe(true);
+    open.mockReturnValue({ closed: of(true) } as never);
+    expect(await component.canLeave()).toBe(true);
+  });
+
+  it('keeps a changed draft when another form is opened and the coach chooses Stay', async () => {
+    const getCheckInForm = vi.fn(() => of(details(version('v1', 1, 'Draft'))));
+    const { fixture, host, component } = await render({ getCheckInForm });
+    vi.spyOn(TestBed.inject(UiDialog), 'open').mockReturnValue({ closed: of(false) } as never);
+    component.startNewForm();
+    await settle(fixture);
+    fill(host, 'Title', 'Weekly recovery');
+    await settle(fixture);
+    await component.openForm('form-1');
+    expect(getCheckInForm).not.toHaveBeenCalled();
+    expect(host.querySelector<HTMLInputElement>('#builder-title')?.value).toBe('Weekly recovery');
+  });
+
+  it('treats an unchanged saved draft as clean and a changed question as unsaved work', async () => {
+    const draft = version('v1', 1, 'Draft');
+    const { component } = await render({
+      getCheckInForm: vi.fn(() => of(details(draft))),
+      getCheckInFormVersion: vi.fn(() => of(draft)),
+    });
+    vi.spyOn(TestBed.inject(UiDialog), 'open').mockReturnValue({ closed: of(false) } as never);
+    await component.openForm('form-1');
+    await component.editVersion('v1');
+    expect(await component.canLeave()).toBe(true);
+    component.setPrompt(0, 'How did you sleep?');
+    expect(await component.canLeave()).toBe(false);
+    component.setPrompt(0, 'How is your body feeling?');
+    expect(await component.canLeave()).toBe(true);
+  });
+
   it('lists the library and asks for a selection first', async () => {
     const { host } = await render();
 
     expect(host.textContent).toContain('Weekly check-in');
     expect(host.textContent).toContain('Select a form to see its versions');
   });
+
+  for (const action of ['derive', 'publish'] as const) {
+    it(`asks once before ${action} discards an unsaved form title`, async () => {
+      const published = version('v1', 1, 'Published');
+      const draft = version('v2', 2, 'Draft');
+      const deriveCheckInDraft = vi.fn(() => of(draft));
+      const publishCheckInVersion = vi.fn(() => of(published));
+      const { fixture, host, component } = await render({
+        getCheckInForm: vi.fn(() =>
+          of(details(published, ...(action === 'publish' ? [draft] : []))),
+        ),
+        deriveCheckInDraft: deriveCheckInDraft as never,
+        publishCheckInVersion: publishCheckInVersion as never,
+      });
+      await component.openForm('form-1');
+      component.startRename();
+      await settle(fixture);
+      fill(host, 'Title', 'Unsaved title');
+      await settle(fixture);
+      const open = vi
+        .spyOn(TestBed.inject(UiDialog), 'open')
+        .mockReturnValue({ closed: of(true) } as never);
+      if (action === 'derive') await component.deriveDraft('v1');
+      else await component.publish('v2', 3);
+      await settle(fixture);
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(
+        action === 'derive' ? deriveCheckInDraft : publishCheckInVersion,
+      ).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('#rename-title')).toBeNull();
+      expect(await component.canLeave()).toBe(true);
+    });
+  }
 
   it('offers publish on a draft and a new draft only from the latest published version', async () => {
     const draft = version('v2', 2, 'Draft');

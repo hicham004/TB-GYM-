@@ -20,6 +20,7 @@ import {
 } from '../../../testing/exercise-fixtures';
 import { ExerciseLibrary } from './exercise-library';
 import { ExerciseLibraryApi } from './exercise-library-api';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 
 type Api = { [K in keyof ExerciseLibraryApi]: ReturnType<typeof vi.fn> };
 
@@ -117,6 +118,27 @@ describe('the exercise library', () => {
   afterEach(() => {
     document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
+  });
+
+  it('protects a typed exercise across a session change and refresh, and unregisters on destroy', async () => {
+    const { harness, host } = await render();
+    const work = TestBed.inject(UnsavedWork);
+    press(host, 'New exercise');
+    await settle(harness.fixture);
+    fill(dialog()!, 'Exercise name', 'Hip Thrust');
+    await settle(harness.fixture);
+    const refresh = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(refresh);
+    expect(refresh.defaultPrevented).toBe(true);
+    const leaving = work.confirmLeave();
+    await settle(harness.fixture);
+    press(dialog()!, 'Keep editing');
+    await expect(leaving).resolves.toBe(false);
+    expect(dialog()?.querySelector<HTMLInputElement>('input[name="exercise-name"]')?.value).toBe(
+      'Hip Thrust',
+    );
+    harness.fixture.destroy();
+    await expect(work.confirmLeave()).resolves.toBe(true);
   });
 
   it('shows each exercise as a card with what it trains, its type and its first picture or video', async () => {

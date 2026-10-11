@@ -129,9 +129,9 @@
       id="phone"
       [hidden]="view() !== 'client'"
       [attr.data-mode]="mode()"
-      [style.--brand]="brand().brand"
-      [style.--accent]="brand().accent"
-      [style.--on-accent]="brand().onAccent"
+      [style.--hero-brand]="brand().brand"
+      [style.--hero-accent]="brand().accent"
+      [style.--hero-on-accent]="brand().onAccent"
     >
       <div class="screen" id="screen">
         <div class="statusbar" id="statusbar" [class.on-dark]="scene() !== 'today'">
@@ -197,7 +197,7 @@
                   cy="17"
                   r="14"
                   fill="none"
-                  stroke="var(--line)"
+                  stroke="var(--hero-line)"
                   stroke-width="2.5"
                 />
                 <circle
@@ -206,13 +206,13 @@
                   cy="17"
                   r="7"
                   fill="none"
-                  stroke="var(--accent)"
+                  stroke="var(--hero-accent)"
                   stroke-width="14"
                   transform="rotate(-90 17 17)"
                 />
                 <path
                   d="m11.5 17 3.8 3.8 7.2-7.3"
-                  stroke="var(--on-accent)"
+                  stroke="var(--hero-on-accent)"
                   stroke-width="2.4"
                   fill="none"
                   stroke-linecap="round"
@@ -227,7 +227,7 @@
                   cy="17"
                   r="14"
                   fill="none"
-                  stroke="var(--line)"
+                  stroke="var(--hero-line)"
                   stroke-width="2"
                   stroke-dasharray="3 4"
                 />
@@ -240,7 +240,7 @@
                   cy="17"
                   r="14"
                   fill="none"
-                  stroke="var(--line)"
+                  stroke="var(--hero-line)"
                   stroke-width="2.5"
                 />
                 <circle
@@ -249,13 +249,13 @@
                   cy="17"
                   r="7"
                   fill="none"
-                  stroke="var(--accent)"
+                  stroke="var(--hero-accent)"
                   stroke-width="14"
                   transform="rotate(-90 17 17)"
                 />
                 <path
                   d="m11.5 17 3.8 3.8 7.2-7.3"
-                  stroke="var(--on-accent)"
+                  stroke="var(--hero-on-accent)"
                   stroke-width="2.4"
                   fill="none"
                   stroke-linecap="round"
@@ -269,8 +269,8 @@
                   cx="17"
                   cy="17"
                   r="14"
-                  fill="var(--surface)"
-                  stroke="var(--accent-ink)"
+                  fill="var(--hero-surface)"
+                  stroke="var(--hero-accent-ink)"
                   stroke-width="2.6"
                 />
                 <circle
@@ -279,16 +279,16 @@
                   cy="17"
                   r="7"
                   fill="none"
-                  stroke="var(--accent)"
+                  stroke="var(--hero-accent)"
                   stroke-width="14"
                   transform="rotate(-90 17 17)"
                   style="stroke-dasharray: 43.98; stroke-dashoffset: 43.98"
                 />
-                <circle id="today-dot" cx="17" cy="17" r="4" fill="var(--accent-ink)" />
+                <circle id="today-dot" cx="17" cy="17" r="4" fill="var(--hero-accent-ink)" />
                 <path
                   id="today-check"
                   d="m11.5 17 3.8 3.8 7.2-7.3"
-                  stroke="var(--on-accent)"
+                  stroke="var(--hero-on-accent)"
                   stroke-width="2.4"
                   fill="none"
                   stroke-linecap="round"
@@ -304,7 +304,7 @@
                   cy="17"
                   r="14"
                   fill="none"
-                  stroke="var(--line)"
+                  stroke="var(--hero-line)"
                   stroke-width="2.5"
                 />
               </svg>
@@ -316,7 +316,7 @@
                   cy="17"
                   r="14"
                   fill="none"
-                  stroke="var(--line)"
+                  stroke="var(--hero-line)"
                   stroke-width="2"
                   stroke-dasharray="3 4"
                 />
@@ -329,7 +329,7 @@
                   cy="17"
                   r="14"
                   fill="none"
-                  stroke="var(--line)"
+                  stroke="var(--hero-line)"
                   stroke-width="2.5"
                 />
               </svg>
@@ -397,7 +397,7 @@
                   cy="27"
                   r="22"
                   fill="none"
-                  stroke="var(--surface-2)"
+                  stroke="var(--hero-surface-2)"
                   stroke-width="6.5"
                 />
                 <circle
@@ -406,7 +406,7 @@
                   cy="27"
                   r="22"
                   fill="none"
-                  stroke="var(--accent-ink)"
+                  stroke="var(--hero-accent-ink)"
                   stroke-width="6.5"
                   stroke-linecap="round"
                   transform="rotate(-90 27 27)"
@@ -419,7 +419,7 @@
                   ><span class="num" id="kcal" style="font-size: 19px">{{
                     kcal().toLocaleString()
                   }}</span>
-                  <span style="color: var(--muted); font-weight: 400; font-size: 13.5px"
+                  <span style="color: var(--hero-muted); font-weight: 400; font-size: 13.5px"
                     >/ 1,950 kcal</span
                   ></b
                 >
@@ -429,13 +429,13 @@
                     ><b
                       id="m-p"
                       [style.width]="meals() === 2 ? '62%' : '88%'"
-                      style="background: var(--accent-ink)"
+                      style="background: var(--hero-accent-ink)"
                     ></b></i
                   ><i
                     ><b
                       id="m-c"
                       [style.width]="meals() === 2 ? '58%' : '90%'"
-                      style="background: color-mix(in srgb, var(--accent) 85%, #000 15%)"
+                      style="background: color-mix(in srgb, var(--hero-accent) 85%, #000 15%)"
                     ></b></i
                   ><i
                     ><b
@@ -497,7 +497,7 @@
                 <div class="eyebrow">Weight trend</div>
                 <div class="big num">
                   <span id="weight">71.2</span>
-                  <span style="font-size: 18px; color: var(--muted)">kg</span>
+                  <span style="font-size: 18px; color: var(--hero-muted)">kg</span>
                 </div>
                 <span class="delta">↓ 0.7 kg in 4 weeks</span>
               </div>
@@ -509,19 +509,19 @@
               >
                 <path
                   d="M4 14 L30 20 L56 18 L82 30 L108 36 L128 44 L128 64 L4 64 Z"
-                  fill="var(--accent-soft)"
+                  fill="var(--hero-accent-soft)"
                   stroke="none"
                 />
                 <path
                   id="spark"
                   d="M4 14 L30 20 L56 18 L82 30 L108 36 L128 44"
                   fill="none"
-                  stroke="var(--accent-ink)"
+                  stroke="var(--hero-accent-ink)"
                   stroke-width="2.6"
                   stroke-linecap="round"
                   stroke-linejoin="round"
                 />
-                <circle cx="128" cy="44" r="4.5" fill="var(--accent-ink)" />
+                <circle cx="128" cy="44" r="4.5" fill="var(--hero-accent-ink)" />
               </svg>
             </div>
           </div>
@@ -531,7 +531,7 @@
               <span class="av a1">HH</span>
               <div>
                 <b>Coach Hicham</b>
-                <span style="color: var(--muted); font-size: 12px">· 11:20</span>
+                <span style="color: var(--hero-muted); font-size: 12px">· 11:20</span>
                 <p>
                   Great week, Maya. Your squat looked strong. Let's push the bench top set to 62.5
                   kg today.
@@ -938,7 +938,7 @@
                 cy="30"
                 r="25"
                 fill="none"
-                stroke="var(--accent)"
+                stroke="var(--hero-accent)"
                 stroke-width="6"
                 stroke-linecap="round"
                 transform="rotate(-90 30 30)"
@@ -1053,9 +1053,9 @@
       id="desk"
       [hidden]="view() !== 'coach'"
       [attr.data-mode]="mode()"
-      [style.--brand]="brand().brand"
-      [style.--accent]="brand().accent"
-      [style.--on-accent]="brand().onAccent"
+      [style.--hero-brand]="brand().brand"
+      [style.--hero-accent]="brand().accent"
+      [style.--hero-on-accent]="brand().onAccent"
     >
       <div class="bar" aria-hidden="true">
         <i></i><i></i><i></i><span class="url">app.tbgym.com/today</span>
@@ -1265,18 +1265,18 @@
                 <svg width="120" height="48" viewBox="0 0 120 48" aria-hidden="true">
                   <path
                     d="M2 38 L20 33 L38 35 L56 24 L74 26 L92 15 L116 9 L116 48 L2 48Z"
-                    fill="var(--accent-soft)"
+                    fill="var(--hero-accent-soft)"
                   />
                   <path
                     id="cspark"
                     d="M2 38 L20 33 L38 35 L56 24 L74 26 L92 15 L116 9"
                     fill="none"
-                    stroke="var(--accent-ink)"
+                    stroke="var(--hero-accent-ink)"
                     stroke-width="2.4"
                     stroke-linecap="round"
                     stroke-linejoin="round"
                   />
-                  <circle cx="116" cy="9" r="4" fill="var(--accent-ink)" />
+                  <circle cx="116" cy="9" r="4" fill="var(--hero-accent-ink)" />
                 </svg>
               </div>
               <div class="card stat">
@@ -1319,10 +1319,10 @@
                 </div>
                 <div class="allgood" id="allgood" [hidden]="needs().length > 0">
                   <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true">
-                    <circle cx="23" cy="23" r="21" fill="var(--accent)" />
+                    <circle cx="23" cy="23" r="21" fill="var(--hero-accent)" />
                     <path
                       d="m14 23.5 6 6 12-12.5"
-                      stroke="var(--on-accent)"
+                      stroke="var(--hero-on-accent)"
                       stroke-width="3.2"
                       fill="none"
                       stroke-linecap="round"
@@ -1381,7 +1381,7 @@
               <div>
                 <div class="eyebrow">This week</div>
                 <span class="v num"><span data-count="26">26</span> of 49</span
-                ><span class="d" style="color: var(--muted); font-size: 13px"
+                ><span class="d" style="color: var(--hero-muted); font-size: 13px"
                   >sessions done so far</span
                 >
               </div>

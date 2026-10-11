@@ -24,6 +24,7 @@ export const trainingRoutes: Routes = [
   {
     path: 'exercises',
     canActivate: [coachGuard],
+    canDeactivate: [confirmBeforeLeaving],
     title: $localize`Exercises | TB Gym`,
     // The library follows the coach's mode (C10, R5.1b).
     data: REDESIGNED,

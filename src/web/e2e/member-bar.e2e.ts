@@ -53,3 +53,28 @@ test('on a phone the menu opens to Sign out and stays within the screen', async 
   await expectNoViolations(page);
   await page.screenshot({ path: 'test-results/r53e-member-bar-390.png' });
 });
+
+for (const width of [390, 1440]) {
+  test(`the dashboard without a coaching space uses the kit and reflows at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockSession(page, {
+      memberships: [],
+      user: { ...SIGNED_IN_USER, roles: ['PlatformAdmin'] },
+    });
+    await page.goto('/');
+    await expect(page.locator('app-empty-state')).toContainText(
+      'ask your coach to send you a new invitation',
+    );
+    await expect(
+      page.getByRole('link', { name: 'Open platform billing', exact: true }),
+    ).toHaveClass(/tb-button/);
+    await waitForFonts(page);
+    await expectNoViolations(page);
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: `test-results/r53f-no-space-${width}.png`, fullPage: true });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    await expectNoHorizontalOverflow(page);
+  });
+}

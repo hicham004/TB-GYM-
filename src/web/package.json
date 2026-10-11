@@ -12,7 +12,8 @@
     "i18n:extract": "ng extract-i18n --output-path src/locale",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "ng lint"
+    "lint": "ng lint && npm run lint:styles",
+    "lint:styles": "node --test scripts/check-legacy-styles.test.mjs && node scripts/check-legacy-styles.mjs"
   },
   "private": true,
   "packageManager": "npm@11.17.0",

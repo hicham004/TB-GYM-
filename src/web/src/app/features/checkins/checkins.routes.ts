@@ -1,5 +1,7 @@
 import { CanDeactivateFn, Routes } from '@angular/router';
 import { clientGuard, coachGuard } from '../../core/auth/auth.guards';
+import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
+import { REDESIGNED } from '../../core/theme/redesigned-route';
 
 /**
  * Leaving mid-check-in saves the last answer first, so nothing typed is lost to a tab tap. Typed
@@ -12,12 +14,15 @@ export const saveBeforeLeaving: CanDeactivateFn<{
 export const checkInRoutes: Routes = [
   {
     path: 'forms',
+    data: REDESIGNED,
     canActivate: [coachGuard],
+    canDeactivate: [confirmBeforeLeaving],
     title: $localize`Check-in forms | TB Gym`,
     loadComponent: () => import('./checkin-forms').then((module) => module.CheckInForms),
   },
   {
     path: 'clients',
+    data: REDESIGNED,
     canActivate: [coachGuard],
     title: $localize`Client check-ins | TB Gym`,
     loadComponent: () => import('./checkin-clients').then((module) => module.CheckInClients),

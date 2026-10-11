@@ -18,7 +18,11 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
         </svg>
       </ng-content>
     </div>
-    <h2>{{ heading() }}</h2>
+    @if (headingLevel() === 1) {
+      <h1>{{ heading() }}</h1>
+    } @else {
+      <h2>{{ heading() }}</h2>
+    }
     <p>{{ description() }}</p>
     <div class="action"><ng-content select="[empty-state-action]" /></div>
   `,
@@ -44,6 +48,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       inline-size: 100%;
     }
 
+    h1,
     h2 {
       font-family: var(--tb-font-serif);
       font-size: clamp(1.5rem, 3vw, 2rem);
@@ -72,6 +77,8 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EmptyState {
+  /** A standalone empty page supplies its main heading; empty sections default to level two. */
+  readonly headingLevel = input<1 | 2>(2);
   readonly heading = input.required<string>();
   readonly description = input.required<string>();
 }

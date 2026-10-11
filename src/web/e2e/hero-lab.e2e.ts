@@ -87,7 +87,7 @@ test('brand, dark mode and enlarged text keep the phone preview within the viewp
   expect(
     await page
       .locator('#phone')
-      .evaluate((phone) => getComputedStyle(phone).getPropertyValue('--brand').trim()),
+      .evaluate((phone) => getComputedStyle(phone).getPropertyValue('--hero-brand').trim()),
   ).toBe('#15233f');
   await page.evaluate(() => {
     document.documentElement.style.fontSize = '32px';

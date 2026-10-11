@@ -209,8 +209,11 @@ test('sign-in is keyboard operable with the design-system focus ring', async ({ 
     page.getByRole('button', { name: 'Sign in' }),
     page.getByRole('link', { name: 'Create your coaching space' }),
   ];
-  for (const target of order) {
-    await page.keyboard.press('Tab');
+  await expect(page.locator('main h1')).toBeFocused();
+  // Arrival starts at the page heading; the preceding brand is still reachable by Shift+Tab.
+  await page.keyboard.press('Shift+Tab');
+  for (const [index, target] of order.entries()) {
+    if (index > 0) await page.keyboard.press('Tab');
     await expect(target).toBeFocused();
     const ring = await target.evaluate((element) => {
       const style = getComputedStyle(element);

@@ -7,8 +7,9 @@
 // 2. Mode. Light or dark surfaces, text and status colours. Light is the default. Any element with
 //    `data-mode` starts its own scope, which is how a screen not yet rebuilt stays light inside a
 //    dark shell (App puts `data-mode="light"` on <main> for those).
-// 3. Aliases. The v1 `--color-*` names and the pre-foundation names (--accent, --surface, ...)
-//    that unmigrated screens still use, pointing at the tokens above until R5.3 deletes them.
+// 3. Aliases. The v1 `--color-*` names the kit's primitives read, pointing at the tokens above. The
+//    pre-foundation names (--accent, --surface, ...) were deleted in R5.3f; `npm run lint:styles`
+//    fails if one comes back.
 //
 // A custom property that refers to another resolves where it is declared, and descendants inherit
 // the result. So every token that refers to another (mode tokens that use the brand, and all the
@@ -134,23 +135,6 @@ $light-line: #d9dfd1;
   --color-information-subtle: var(--tb-info-soft);
   --color-text-on-inverse-muted: var(--tb-on-brand-muted);
   --elevation-overlay: var(--tb-shadow-overlay);
-
-  --accent: var(--tb-accent-ink);
-  --accent-strong: var(--tb-accent-ink-strong);
-  --background: var(--tb-bg);
-  --border: var(--tb-line);
-  --border-strong: var(--tb-line-strong);
-  --danger: var(--tb-danger);
-  --danger-soft: var(--tb-danger-soft);
-  --muted-text: var(--tb-muted);
-  --success: var(--tb-success);
-  --success-border: color-mix(in srgb, var(--tb-success) 35%, var(--tb-surface));
-  --success-soft: var(--tb-success-soft);
-  --surface: var(--tb-surface);
-  --surface-subtle: var(--tb-surface-2);
-  --text: var(--tb-ink);
-  --warning: var(--tb-warning);
-  --warning-soft: var(--tb-warning-soft);
 }
 
 :root {

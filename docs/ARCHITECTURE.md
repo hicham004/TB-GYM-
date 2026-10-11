@@ -660,6 +660,13 @@ R1.2 puts the reusable display, chart and selection components in `src/app/ui`; 
 owns tab interaction, and `@angular/cdk` owns dialog, sheet and toast overlays. The UI lab exercises
 the kit in light, dark and RTL before any redesigned screen adopts it.
 
+R5.3f removes the pre-foundation global classes and colour aliases. `npm run lint:styles` reads
+Angular's actual template and style metadata (including shared style constants) and rejects old
+colour names, unsupported former global classes and browser-default buttons; its fixtures test refusals.
+Check-in drafts and exercise sheets join `UnsavedWork`; a sheet can keep itself open on Browser Back
+until its leave guard answers. `RouteHeadingFocus` supplies a heading focus fallback after navigation
+or a delayed read, preserves deliberate field/dialog focus, and leaves filters, anchors and router scroll alone.
+
 Design-system slice 2 (2026-09-22) adds the coach shell (`src/app/shell/`) and migrates the exercise
 library's default list state. **Which shell renders is presentation, and only that**: `App` picks the
 coach shell when the selected membership is Owner or Coach, keeps the pre-existing top bar for a

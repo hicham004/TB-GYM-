@@ -3,7 +3,7 @@
   <app-section-nav class="section-links" label="Check-in sections" i18n-label [links]="sections" />
 
   <header class="page-head">
-    <h2 i18n>Check-in forms</h2>
+    <h1 #heading tabindex="-1" i18n>Check-in forms</h1>
     <button appButton type="button" (click)="startNewForm()" i18n>New form</button>
   </header>
 
@@ -16,7 +16,7 @@
 
   <div class="split">
     <article class="panel library">
-      <h3 i18n>Library</h3>
+      <h2 i18n>Library</h2>
       @if (loading() && forms().length === 0) {
         <p class="empty" i18n>Loading check-in forms…</p>
       } @else if (forms().length === 0) {
@@ -44,12 +44,12 @@
 
     <article class="panel builder">
       @if (selected(); as details) {
-        <h3>
+        <h2>
           {{ details.form.title }}
           @if (isArchived()) {
             <app-status-label label="Archived" i18n-label />
           }
-        </h3>
+        </h2>
         @if (details.form.description) {
           <p class="detail">{{ details.form.description }}</p>
         }
@@ -207,7 +207,7 @@
         @let readOnly = version !== null && (version.status !== 'Draft' || isArchived());
 
         <form class="builder-form" (ngSubmit)="save()">
-          <h4>
+          <h3>
             @if (creating()) {
               <ng-container i18n>New check-in form</ng-container>
             } @else if (readOnly) {
@@ -215,7 +215,7 @@
             } @else {
               <ng-container i18n>Editing draft version {{ version!.versionNumber }}</ng-container>
             }
-          </h4>
+          </h3>
 
           @if (creating()) {
             @let titleReasons = formFieldErrors('title');
@@ -489,3 +489,12 @@
     </article>
   </div>
 </section>
+
+<ng-template #leaveDialog let-dialog>
+  <app-confirm
+    [message]="leaveMessage"
+    [confirmLabel]="leaveLabel"
+    [cancelLabel]="stayLabel"
+    (answer)="dialog.close($event)"
+  />
+</ng-template>

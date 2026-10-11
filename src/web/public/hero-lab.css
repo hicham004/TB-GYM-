@@ -11,38 +11,38 @@
   font-display: swap;
 }
 app-hero-lab .page {
-  --page-bg: #ebeae2;
-  --page-text: #1b2521;
-  --page-muted: #56615b;
-  --page-line: #d3d3c8;
-  --page-panel: #f7f6f0;
-  --page-on: #1b2521;
-  --page-on-text: #f4f6f0;
-  --sans: 'Hero Plex', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --cond: 'IBM Plex Sans Condensed', 'Hero Plex', 'Arial Narrow', system-ui, sans-serif;
-  --serif: 'TB Home Serif', Georgia, 'Times New Roman', serif;
+  --hero-page-bg: #ebeae2;
+  --hero-page-text: #1b2521;
+  --hero-page-muted: #56615b;
+  --hero-page-line: #d3d3c8;
+  --hero-page-panel: #f7f6f0;
+  --hero-page-on: #1b2521;
+  --hero-page-on-text: #f4f6f0;
+  --hero-sans: 'Hero Plex', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --hero-cond: 'IBM Plex Sans Condensed', 'Hero Plex', 'Arial Narrow', system-ui, sans-serif;
+  --hero-serif: 'TB Home Serif', Georgia, 'Times New Roman', serif;
 }
 @media (prefers-color-scheme: dark) {
   app-hero-lab .page:not([data-theme='light']) {
     color-scheme: dark;
-    --page-bg: #0d1110;
-    --page-text: #e4eae6;
-    --page-muted: #95a19b;
-    --page-line: #26302c;
-    --page-panel: #151b19;
-    --page-on: #e4eae6;
-    --page-on-text: #0d1110;
+    --hero-page-bg: #0d1110;
+    --hero-page-text: #e4eae6;
+    --hero-page-muted: #95a19b;
+    --hero-page-line: #26302c;
+    --hero-page-panel: #151b19;
+    --hero-page-on: #e4eae6;
+    --hero-page-on-text: #0d1110;
   }
 }
 app-hero-lab .page[data-theme='dark'] {
   color-scheme: dark;
-  --page-bg: #0d1110;
-  --page-text: #e4eae6;
-  --page-muted: #95a19b;
-  --page-line: #26302c;
-  --page-panel: #151b19;
-  --page-on: #e4eae6;
-  --page-on-text: #0d1110;
+  --hero-page-bg: #0d1110;
+  --hero-page-text: #e4eae6;
+  --hero-page-muted: #95a19b;
+  --hero-page-line: #26302c;
+  --hero-page-panel: #151b19;
+  --hero-page-on: #e4eae6;
+  --hero-page-on-text: #0d1110;
 }
 app-hero-lab * {
   box-sizing: border-box;
@@ -53,9 +53,9 @@ app-hero-lab [hidden] {
 app-hero-lab.tb-theme {
   display: block;
   margin: 8px;
-  background: var(--page-bg);
-  color: var(--page-text);
-  font-family: var(--sans);
+  background: var(--hero-page-bg);
+  color: var(--hero-page-text);
+  font-family: var(--hero-sans);
   font-size: 0.9375rem;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
@@ -74,16 +74,16 @@ app-hero-lab .page {
   gap: 16px;
 }
 app-hero-lab .page {
-  font-family: var(--sans);
+  font-family: var(--hero-sans);
 }
 app-hero-lab .page .eyebrow {
-  color: var(--muted) !important;
+  color: var(--hero-muted) !important;
   margin-block-end: 0 !important;
   font-size: 0.6875rem;
   font-weight: 600;
 }
 app-hero-lab .page .hero .eyebrow {
-  color: var(--accent) !important;
+  color: var(--hero-accent) !important;
 }
 app-hero-lab .page .player .eyebrow,
 app-hero-lab .page .summary .eyebrow {
@@ -106,14 +106,14 @@ app-hero-lab .chrome h1 {
   text-wrap: balance;
 }
 app-hero-lab .chrome h1 em {
-  font-family: var(--serif);
+  font-family: var(--hero-serif);
   font-style: italic;
   font-weight: 400;
   font-size: 1.15em;
 }
 app-hero-lab .chrome p {
   margin: 4px 0 0;
-  color: var(--page-muted);
+  color: var(--hero-page-muted);
   max-width: 62ch;
 }
 app-hero-lab .steps {
@@ -124,20 +124,20 @@ app-hero-lab .steps {
   padding: 0;
   list-style: none;
   font-size: 0.8125rem;
-  color: var(--page-muted);
+  color: var(--hero-page-muted);
 }
 app-hero-lab .steps li {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 5px 10px;
-  border: 1px solid var(--page-line);
+  border: 1px solid var(--hero-page-line);
   border-radius: 999px;
-  background: var(--page-panel);
+  background: var(--hero-page-panel);
 }
 app-hero-lab .steps b {
-  font-family: var(--cond);
-  color: var(--page-text);
+  font-family: var(--hero-cond);
+  color: var(--hero-page-text);
 }
 app-hero-lab .controls {
   display: flex;
@@ -145,9 +145,9 @@ app-hero-lab .controls {
   align-items: center;
   gap: 12px 22px;
   padding: 10px 12px;
-  border: 1px solid var(--page-line);
+  border: 1px solid var(--hero-page-line);
   border-radius: 16px;
-  background: var(--page-panel);
+  background: var(--hero-page-panel);
 }
 app-hero-lab .group {
   display: flex;
@@ -159,7 +159,7 @@ app-hero-lab .label {
   font-size: 0.71875rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--page-muted);
+  color: var(--hero-page-muted);
   font-weight: 600;
 }
 app-hero-lab .seg {
@@ -167,7 +167,7 @@ app-hero-lab .seg {
   gap: 2px;
   padding: 3px;
   border-radius: 11px;
-  background: var(--page-bg);
+  background: var(--hero-page-bg);
 }
 app-hero-lab .seg button {
   border: 0;
@@ -179,8 +179,8 @@ app-hero-lab .seg button {
   cursor: pointer;
 }
 app-hero-lab .seg button[aria-pressed='true'] {
-  background: var(--page-on);
-  color: var(--page-on-text);
+  background: var(--hero-page-on);
+  color: var(--hero-page-on-text);
 }
 app-hero-lab .swatch {
   width: 32px;
@@ -190,14 +190,14 @@ app-hero-lab .swatch {
   padding: 0;
   cursor: pointer;
   background: linear-gradient(135deg, var(--b) 0 50%, var(--a) 50% 100%);
-  box-shadow: 0 0 0 1px var(--page-line);
+  box-shadow: 0 0 0 1px var(--hero-page-line);
   position: relative;
 }
 app-hero-lab .swatch[aria-pressed='true'],
 app-hero-lab .swatch[data-on='true'] {
   box-shadow:
-    0 0 0 2px var(--page-panel),
-    0 0 0 4px var(--page-text);
+    0 0 0 2px var(--hero-page-panel),
+    0 0 0 4px var(--hero-page-text);
 }
 app-hero-lab .swatch.custom {
   background: conic-gradient(#ff8a4c, #f3d34a, #9be15d, #3ec5c9, #6f7cf6, #d46be3, #ff8a4c);
@@ -220,7 +220,7 @@ app-hero-lab .brandname {
 }
 app-hero-lab .page button:focus-visible,
 app-hero-lab .page input:focus-visible {
-  outline: 2px solid var(--page-text);
+  outline: 2px solid var(--hero-page-text);
   outline-offset: 2px;
 }
 app-hero-lab .stage {
@@ -228,7 +228,7 @@ app-hero-lab .stage {
   justify-content: center;
 }
 app-hero-lab .foot {
-  color: var(--page-muted);
+  color: var(--hero-page-muted);
   font-size: 0.8125rem;
   text-align: center;
   margin: 0;
@@ -236,29 +236,29 @@ app-hero-lab .foot {
 
 /* ---------- Shared device tokens ---------- */
 app-hero-lab .device {
-  --brand: #153d33;
-  --accent: #d9ed94;
-  --on-accent: #11201b;
-  --bg: #fbfaf5;
-  --surface: #ffffff;
-  --surface-2: #f3f1e7;
-  --text: #182d27;
-  --muted: #5a6a61;
-  --line: #e3e5da;
-  --accent-ink: var(--brand);
-  --night: color-mix(in srgb, var(--brand) 42%, #050807);
-  --accent-soft: color-mix(in srgb, var(--accent) 30%, transparent);
-  color: var(--text);
+  --hero-brand: #153d33;
+  --hero-accent: #d9ed94;
+  --hero-on-accent: #11201b;
+  --hero-bg: #fbfaf5;
+  --hero-surface: #ffffff;
+  --hero-surface-2: #f3f1e7;
+  --hero-text: #182d27;
+  --hero-muted: #5a6a61;
+  --hero-line: #e3e5da;
+  --hero-accent-ink: var(--hero-brand);
+  --hero-night: color-mix(in srgb, var(--hero-brand) 42%, #050807);
+  --hero-accent-soft: color-mix(in srgb, var(--hero-accent) 30%, transparent);
+  color: var(--hero-text);
   font-variant-numeric: tabular-nums;
 }
 app-hero-lab .device[data-mode='dark'] {
-  --bg: #0f1513;
-  --surface: #161e1b;
-  --surface-2: #1d2724;
-  --text: #e8eee9;
-  --muted: #9aa8a1;
-  --line: #28322e;
-  --accent-ink: var(--accent);
+  --hero-bg: #0f1513;
+  --hero-surface: #161e1b;
+  --hero-surface-2: #1d2724;
+  --hero-text: #e8eee9;
+  --hero-muted: #9aa8a1;
+  --hero-line: #28322e;
+  --hero-accent-ink: var(--hero-accent);
 }
 app-hero-lab .device,
 app-hero-lab .device * {
@@ -273,16 +273,16 @@ app-hero-lab .device button {
   cursor: pointer;
 }
 app-hero-lab .device button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--hero-accent);
   outline-offset: 2px;
 }
 app-hero-lab .serif {
-  font-family: var(--serif);
+  font-family: var(--hero-serif);
   font-style: italic;
   font-weight: 400;
 }
 app-hero-lab .num {
-  font-family: var(--cond);
+  font-family: var(--hero-cond);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -291,7 +291,7 @@ app-hero-lab .eyebrow {
   letter-spacing: 0.13em;
   text-transform: uppercase;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--hero-muted);
 }
 app-hero-lab .av {
   width: 36px;
@@ -329,9 +329,9 @@ app-hero-lab .a6 {
 }
 app-hero-lab .pr {
   display: inline-block;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-family: var(--cond);
+  background: var(--hero-accent);
+  color: var(--hero-on-accent);
+  font-family: var(--hero-cond);
   font-weight: 700;
   font-size: 0.65625rem;
   letter-spacing: 0.05em;
@@ -376,7 +376,7 @@ app-hero-lab .screen {
   height: 100%;
   border-radius: 40px;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--hero-bg);
   isolation: isolate;
 }
 app-hero-lab .statusbar {
@@ -392,7 +392,7 @@ app-hero-lab .statusbar {
   padding: 4px 28px 0;
   font-weight: 600;
   font-size: 0.90625rem;
-  color: var(--text);
+  color: var(--hero-text);
   pointer-events: none;
 }
 app-hero-lab .statusbar.on-dark {
@@ -441,8 +441,8 @@ app-hero-lab .coachchip {
   gap: 8px;
   padding: 4px 10px 4px 4px;
   border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--hero-surface);
+  border: 1px solid var(--hero-line);
   font-size: 0.75rem;
   font-weight: 600;
   max-width: 150px;
@@ -459,9 +459,9 @@ app-hero-lab .logo {
   display: grid;
   place-items: center;
   flex: none;
-  background: var(--brand);
-  color: var(--accent);
-  font-family: var(--cond);
+  background: var(--hero-brand);
+  color: var(--hero-accent);
+  font-family: var(--hero-cond);
   font-weight: 700;
   font-size: 0.71875rem;
   letter-spacing: 0.02em;
@@ -471,7 +471,7 @@ app-hero-lab .week {
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
   font-size: 0.6875rem;
-  color: var(--muted);
+  color: var(--hero-muted);
 }
 app-hero-lab .week div {
   display: flex;
@@ -480,7 +480,7 @@ app-hero-lab .week div {
   gap: 6px;
 }
 app-hero-lab .week .on {
-  color: var(--text);
+  color: var(--hero-text);
   font-weight: 600;
 }
 app-hero-lab .week svg circle {
@@ -494,9 +494,9 @@ app-hero-lab .hero {
   color: #fff;
   background: linear-gradient(
     165deg,
-    color-mix(in srgb, var(--brand) 86%, #ffffff 14%),
-    var(--brand) 55%,
-    color-mix(in srgb, var(--brand) 80%, #000 20%)
+    color-mix(in srgb, var(--hero-brand) 86%, #ffffff 14%),
+    var(--hero-brand) 55%,
+    color-mix(in srgb, var(--hero-brand) 80%, #000 20%)
   );
   isolation: isolate;
 }
@@ -509,7 +509,7 @@ app-hero-lab .hero .glow {
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    color-mix(in srgb, var(--accent) 60%, transparent),
+    color-mix(in srgb, var(--hero-accent) 60%, transparent),
     transparent 66%
   );
   opacity: 0.55;
@@ -521,7 +521,7 @@ app-hero-lab .hero .dots {
   inset: 0;
   z-index: -1;
   background-image: radial-gradient(
-    color-mix(in srgb, var(--accent) 30%, transparent) 1px,
+    color-mix(in srgb, var(--hero-accent) 30%, transparent) 1px,
     transparent 1.4px
   );
   background-size: 14px 14px;
@@ -530,7 +530,7 @@ app-hero-lab .hero .dots {
   pointer-events: none;
 }
 app-hero-lab .hero .eyebrow {
-  color: var(--accent);
+  color: var(--hero-accent);
 }
 app-hero-lab .hero h3 {
   margin: 8px 0 8px;
@@ -574,8 +574,8 @@ app-hero-lab .cta {
   padding: 15px;
   font-weight: 600;
   font-size: 1rem;
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--hero-accent);
+  color: var(--hero-on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -605,11 +605,11 @@ app-hero-lab .h-sec h4 {
 }
 app-hero-lab .h-sec span {
   font-size: 0.78125rem;
-  color: var(--muted);
+  color: var(--hero-muted);
 }
 app-hero-lab .tile {
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--hero-surface);
+  border: 1px solid var(--hero-line);
   border-radius: 22px;
   padding: 14px 16px;
 }
@@ -624,7 +624,7 @@ app-hero-lab .tile b {
 app-hero-lab .tile .sub {
   display: block;
   font-size: 0.78125rem;
-  color: var(--muted);
+  color: var(--hero-muted);
   margin-top: 2px;
 }
 app-hero-lab .trend {
@@ -645,8 +645,8 @@ app-hero-lab .delta {
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--text);
+  background: var(--hero-accent-soft);
+  color: var(--hero-text);
 }
 app-hero-lab .macros {
   display: flex;
@@ -658,7 +658,7 @@ app-hero-lab .macros i {
   flex: 1;
   height: 5px;
   border-radius: 3px;
-  background: var(--surface-2);
+  background: var(--hero-surface-2);
   overflow: hidden;
 }
 app-hero-lab .macros i b {
@@ -668,13 +668,13 @@ app-hero-lab .macros i b {
 }
 app-hero-lab .mini {
   margin-top: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
+  border: 1px solid var(--hero-line);
+  background: var(--hero-surface-2);
   border-radius: 12px;
   padding: 7px 12px;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--text);
+  color: var(--hero-text);
   transition:
     transform 0.15s,
     background-color 0.45s,
@@ -692,8 +692,8 @@ app-hero-lab .pill {
   font-weight: 600;
   padding: 6px 12px;
   border-radius: 999px;
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--hero-accent);
+  color: var(--hero-on-accent);
   border: 0;
 }
 app-hero-lab .msg p {
@@ -711,10 +711,10 @@ app-hero-lab .tabbar {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   padding: 9px 6px 0;
-  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  background: color-mix(in srgb, var(--hero-bg) 86%, transparent);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hero-line);
 }
 app-hero-lab .tab {
   min-width: 0;
@@ -725,7 +725,7 @@ app-hero-lab .tab {
   align-items: center;
   gap: 4px;
   font-size: 0.6875rem;
-  color: var(--muted);
+  color: var(--hero-muted);
   overflow-wrap: anywhere;
   text-align: center;
 }
@@ -742,12 +742,12 @@ app-hero-lab .tab .ico {
   place-items: center;
 }
 app-hero-lab .tab.on {
-  color: var(--text);
+  color: var(--hero-text);
   font-weight: 600;
 }
 app-hero-lab .tab.on .ico {
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--hero-accent);
+  color: var(--hero-on-accent);
 }
 
 @container (max-width: 15rem) {
@@ -773,7 +773,7 @@ app-hero-lab .summary {
   position: absolute;
   inset: 0;
   z-index: 20;
-  background: var(--night);
+  background: var(--hero-night);
   color: #e9efea;
 }
 app-hero-lab .player {
@@ -807,7 +807,7 @@ app-hero-lab .p-title {
 }
 app-hero-lab .clock {
   font-size: 1.0625rem;
-  color: var(--accent);
+  color: var(--hero-accent);
 }
 app-hero-lab .segs {
   display: grid;
@@ -826,7 +826,7 @@ app-hero-lab .segs i b {
   position: absolute;
   inset: 0 auto 0 0;
   width: 0;
-  background: var(--accent);
+  background: var(--hero-accent);
   border-radius: 2px;
 }
 app-hero-lab .p-:host {
@@ -855,11 +855,11 @@ app-hero-lab .thumb {
   place-items: center;
   background: linear-gradient(
     145deg,
-    color-mix(in srgb, var(--brand) 72%, #ffffff 10%),
-    var(--brand)
+    color-mix(in srgb, var(--hero-brand) 72%, #ffffff 10%),
+    var(--hero-brand)
   );
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-  color: var(--accent);
+  color: var(--hero-accent);
 }
 app-hero-lab .ex h3 {
   margin: 3px 0 0;
@@ -909,18 +909,18 @@ app-hero-lab .set {
   padding: 10px 12px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.055);
-  font-family: var(--cond);
+  font-family: var(--hero-cond);
   font-weight: 700;
   font-size: 1.125rem;
 }
 app-hero-lab .set .n {
-  font-family: var(--sans);
+  font-family: var(--hero-sans);
   font-size: 0.875rem;
   color: #9fb3a8;
   font-weight: 600;
 }
 app-hero-lab .set .prev {
-  font-family: var(--sans);
+  font-family: var(--hero-sans);
   font-weight: 400;
   font-size: 0.84375rem;
   color: #7e978a;
@@ -940,11 +940,11 @@ app-hero-lab .set .ok {
   color: inherit;
 }
 app-hero-lab .set.done {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--hero-accent) 14%, transparent);
 }
 app-hero-lab .set.done .ok {
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--hero-accent);
+  color: var(--hero-on-accent);
 }
 app-hero-lab .set.active {
   grid-template-columns: 30px 1fr 1fr 50px;
@@ -953,7 +953,7 @@ app-hero-lab .set.active {
   color: #13201b;
   padding: 12px 10px;
   box-shadow:
-    0 0 0 2px var(--accent),
+    0 0 0 2px var(--hero-accent),
     0 16px 30px -18px rgba(0, 0, 0, 0.7);
 }
 app-hero-lab .set.active .n {
@@ -987,7 +987,7 @@ app-hero-lab .step button {
   color: #153d33;
   font-size: 1.125rem;
   line-height: 1;
-  font-family: var(--sans);
+  font-family: var(--hero-sans);
   font-weight: 600;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
 }
@@ -997,7 +997,7 @@ app-hero-lab .step span {
 }
 app-hero-lab .step small {
   display: block;
-  font-family: var(--sans);
+  font-family: var(--hero-sans);
   font-size: 0.59375rem;
   letter-spacing: 0.1em;
   font-weight: 600;
@@ -1008,7 +1008,7 @@ app-hero-lab .set.active .ok {
   width: 46px;
   height: 46px;
   border-radius: 15px;
-  background: var(--brand);
+  background: var(--hero-brand);
   color: #fff;
 }
 app-hero-lab .tools {
@@ -1051,8 +1051,8 @@ app-hero-lab .rest {
   gap: 14px;
   padding: 14px 16px;
   border-radius: 24px;
-  background: color-mix(in srgb, var(--brand) 72%, #0b120f);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--hero-brand) 72%, #0b120f);
+  border: 1px solid color-mix(in srgb, var(--hero-accent) 30%, transparent);
   box-shadow: 0 -10px 40px -10px rgba(0, 0, 0, 0.5);
 }
 app-hero-lab .rest .t {
@@ -1084,7 +1084,7 @@ app-hero-lab .burst {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--hero-accent);
   pointer-events: none;
   z-index: 70;
 }
@@ -1107,7 +1107,7 @@ app-hero-lab .summary h3 {
 }
 app-hero-lab .summary h3 .serif {
   font-size: 1.15em;
-  color: var(--accent);
+  color: var(--hero-accent);
 }
 app-hero-lab .summary .meta {
   color: #a6b8ae;
@@ -1148,15 +1148,15 @@ app-hero-lab .prlist div {
   gap: 10px;
   padding: 11px 14px;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--hero-accent) 14%, transparent);
   font-size: 0.875rem;
 }
 app-hero-lab .share {
   margin-top: 18px;
   padding: 18px;
   border-radius: 26px;
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--hero-accent);
+  color: var(--hero-on-accent);
   transform: rotate(-2deg);
   box-shadow: 0 30px 40px -24px rgba(0, 0, 0, 0.7);
 }
@@ -1166,12 +1166,12 @@ app-hero-lab .share .top {
   align-items: center;
 }
 app-hero-lab .share .logo {
-  background: var(--brand);
-  color: var(--accent);
+  background: var(--hero-brand);
+  color: var(--hero-accent);
 }
 app-hero-lab .share .big {
   margin: 14px 0 2px;
-  font-family: var(--serif);
+  font-family: var(--hero-serif);
   font-style: italic;
   font-size: 2.75rem;
   line-height: 1;
@@ -1202,8 +1202,8 @@ app-hero-lab .desk {
   width: min(1200px, 100%);
   border-radius: 18px;
   overflow: hidden;
-  border: 1px solid var(--page-line);
-  background: var(--bg);
+  border: 1px solid var(--hero-page-line);
+  background: var(--hero-bg);
   box-shadow: 0 40px 90px -50px rgba(8, 20, 14, 0.6);
 }
 app-hero-lab .bar {
@@ -1212,22 +1212,22 @@ app-hero-lab .bar {
   gap: 8px;
   height: 40px;
   padding: 0 14px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--line);
+  background: var(--hero-surface-2);
+  border-bottom: 1px solid var(--hero-line);
 }
 app-hero-lab .bar i {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: var(--line);
+  background: var(--hero-line);
 }
 app-hero-lab .bar .url {
   margin-inline: auto;
   padding: 4px 14px;
   border-radius: 8px;
-  background: var(--surface);
+  background: var(--hero-surface);
   font-size: 0.78125rem;
-  color: var(--muted);
+  color: var(--hero-muted);
 }
 app-hero-lab .coach {
   display: grid;
@@ -1235,8 +1235,8 @@ app-hero-lab .coach {
   min-height: 760px;
 }
 app-hero-lab .cside {
-  background: var(--brand);
-  color: color-mix(in srgb, #ffffff 82%, var(--brand));
+  background: var(--hero-brand);
+  color: color-mix(in srgb, #ffffff 82%, var(--hero-brand));
   padding: 20px 14px;
   display: flex;
   flex-direction: column;
@@ -1252,8 +1252,8 @@ app-hero-lab .cbrand .logo {
   width: 34px;
   height: 34px;
   font-size: 0.8125rem;
-  background: var(--accent);
-  color: var(--brand);
+  background: var(--hero-accent);
+  color: var(--hero-brand);
 }
 app-hero-lab .cbrand b {
   color: #fff;
@@ -1281,17 +1281,17 @@ app-hero-lab .cnav a {
   text-decoration: none;
 }
 app-hero-lab .cnav a.on {
-  background: color-mix(in srgb, var(--accent) 17%, transparent);
+  background: color-mix(in srgb, var(--hero-accent) 17%, transparent);
   color: #fff;
   font-weight: 600;
 }
 app-hero-lab .cnav a.on svg {
-  color: var(--accent);
+  color: var(--hero-accent);
 }
 app-hero-lab .cnav .count {
   margin-inline-start: auto;
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--hero-accent);
+  color: var(--hero-on-accent);
   font-size: 0.6875rem;
   font-weight: 700;
   border-radius: 999px;
@@ -1346,10 +1346,10 @@ app-hero-lab .ctop h2 .serif {
 }
 app-hero-lab .ctop p {
   margin: 8px 0 0;
-  color: var(--muted);
+  color: var(--hero-muted);
 }
 app-hero-lab .ctop p b {
-  color: var(--text);
+  color: var(--hero-text);
 }
 app-hero-lab .cbtn {
   border: 0;
@@ -1357,13 +1357,13 @@ app-hero-lab .cbtn {
   padding: 10px 15px;
   font-weight: 600;
   font-size: 0.875rem;
-  background: var(--brand);
+  background: var(--hero-brand);
   color: #fff;
 }
 app-hero-lab .cbtn.line {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--line);
+  background: var(--hero-surface);
+  color: var(--hero-text);
+  border: 1px solid var(--hero-line);
 }
 app-hero-lab .search {
   display: flex;
@@ -1372,9 +1372,9 @@ app-hero-lab .search {
   min-width: 220px;
   padding: 9px 12px;
   border-radius: 11px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--muted);
+  border: 1px solid var(--hero-line);
+  background: var(--hero-surface);
+  color: var(--hero-muted);
   font-size: 0.875rem;
 }
 app-hero-lab .stats3 {
@@ -1383,8 +1383,8 @@ app-hero-lab .stats3 {
   gap: 16px;
 }
 app-hero-lab .card {
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--hero-surface);
+  border: 1px solid var(--hero-line);
   border-radius: 18px;
 }
 app-hero-lab .stat {
@@ -1404,7 +1404,7 @@ app-hero-lab .stat .d {
   display: block;
   margin-top: 8px;
   font-size: 0.8125rem;
-  color: var(--muted);
+  color: var(--hero-muted);
 }
 app-hero-lab .up {
   color: #2f7f4f;
@@ -1421,7 +1421,7 @@ app-hero-lab .stack .av {
   height: 30px;
   font-size: 0.65625rem;
   margin-inline-start: -8px;
-  box-shadow: 0 0 0 2px var(--surface);
+  box-shadow: 0 0 0 2px var(--hero-surface);
 }
 app-hero-lab .atstake {
   font-size: 0.75rem;
@@ -1455,17 +1455,17 @@ app-hero-lab .card header h3 {
 app-hero-lab .card header a {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--accent-ink);
+  color: var(--hero-accent-ink);
   text-decoration: none;
 }
 app-hero-lab .badge {
-  font-family: var(--cond);
+  font-family: var(--hero-cond);
   font-size: 0.75rem;
   font-weight: 700;
   padding: 2px 9px;
   border-radius: 999px;
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--hero-accent);
+  color: var(--hero-on-accent);
 }
 app-hero-lab .q {
   display: grid;
@@ -1473,7 +1473,7 @@ app-hero-lab .q {
   align-items: center;
   gap: 14px;
   padding: 12px 20px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hero-line);
   overflow: hidden;
 }
 app-hero-lab .q b {
@@ -1483,7 +1483,7 @@ app-hero-lab .q b {
 app-hero-lab .q .sub {
   display: block;
   font-size: 0.8125rem;
-  color: var(--muted);
+  color: var(--hero-muted);
   margin-top: 2px;
 }
 app-hero-lab .tag {
@@ -1498,8 +1498,8 @@ app-hero-lab .t-review {
   color: #7e5300;
 }
 app-hero-lab .t-renew {
-  background: var(--accent-soft);
-  color: var(--text);
+  background: var(--hero-accent-soft);
+  color: var(--hero-text);
 }
 app-hero-lab .t-share {
   background: #e2eeea;
@@ -1519,7 +1519,7 @@ app-hero-lab .q .cbtn {
 }
 app-hero-lab .allgood {
   padding: 28px 20px 30px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hero-line);
   text-align: center;
 }
 app-hero-lab .allgood p {
@@ -1528,7 +1528,7 @@ app-hero-lab .allgood p {
   font-weight: 600;
 }
 app-hero-lab .allgood span {
-  color: var(--muted);
+  color: var(--hero-muted);
   font-size: 0.84375rem;
 }
 app-hero-lab .feed {
@@ -1539,7 +1539,7 @@ app-hero-lab .f {
   display: flex;
   gap: 12px;
   padding: 12px 20px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--hero-line);
   font-size: 0.875rem;
   line-height: 1.45;
 }
@@ -1547,10 +1547,10 @@ app-hero-lab .f em {
   display: block;
   font-style: normal;
   font-size: 0.78125rem;
-  color: var(--muted);
+  color: var(--hero-muted);
 }
 app-hero-lab .f.fresh {
-  background: var(--accent-soft);
+  background: var(--hero-accent-soft);
 }
 app-hero-lab .live {
   display: inline-flex;
@@ -1558,7 +1558,7 @@ app-hero-lab .live {
   gap: 6px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--hero-muted);
 }
 app-hero-lab .live i {
   width: 8px;
@@ -1601,26 +1601,30 @@ app-hero-lab .bars div {
   align-items: center;
   gap: 6px;
   font-size: 0.71875rem;
-  color: var(--muted);
+  color: var(--hero-muted);
   height: 100%;
   justify-content: flex-end;
 }
 app-hero-lab .bars i {
   width: 100%;
   border-radius: 7px 7px 3px 3px;
-  background: var(--brand);
+  background: var(--hero-brand);
   transform-origin: bottom;
 }
 app-hero-lab .device[data-mode='dark'] .bars i {
-  background: color-mix(in srgb, var(--accent) 70%, var(--brand));
+  background: color-mix(in srgb, var(--hero-accent) 70%, var(--hero-brand));
 }
 app-hero-lab .bars i.plan {
-  background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--line) 6px 12px);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--hero-surface-2) 0 6px,
+    var(--hero-line) 6px 12px
+  );
 }
 app-hero-lab .bars .today i {
   box-shadow:
-    0 0 0 2px var(--surface),
-    0 0 0 4px var(--accent);
+    0 0 0 2px var(--hero-surface),
+    0 0 0 4px var(--hero-accent);
 }
 app-hero-lab .desk .toast {
   position: absolute;

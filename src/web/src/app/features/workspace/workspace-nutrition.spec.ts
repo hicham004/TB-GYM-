@@ -100,7 +100,7 @@ describe('Settings › Nutrition', () => {
       nutritionSettings({ aiMaximumMonthlyRequests: 0, aiMaximumMonthlyCost: 0 }),
     );
     expect(textOf(host.querySelector('#ai-heading')?.parentElement)).toContain(
-      'TB Gym hasn’t turned on AI suggestions for workspaces yet.',
+      'TB Gym hasn’t turned on AI suggestions for coaching spaces yet.',
     );
     expect(host.querySelector('input[name="requests"]')).toBeNull();
   });

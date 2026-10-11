@@ -22,6 +22,7 @@ import { BillingBanner } from './features/billing/billing-banner';
 import { ClientTabs } from './shell/client-tabs';
 import { CoachShell } from './shell/coach-shell';
 import { Button } from './ui/button';
+import { RouteHeadingFocus } from './core/forms/route-heading-focus';
 
 /**
  * Which chrome surrounds the routed page. Presentation only: every route keeps its own guards and
@@ -116,6 +117,7 @@ export class App implements OnInit {
   });
 
   constructor() {
+    inject(RouteHeadingFocus);
     effect(() => {
       if (this.shell() !== 'pending') this.launched.set(true);
     });

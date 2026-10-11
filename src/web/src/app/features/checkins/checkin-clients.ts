@@ -1,6 +1,16 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
-import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
+import {
+  afterNextRender,
+  Component,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  Injector,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -51,6 +61,8 @@ export class CheckInClients {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly injector = inject(Injector);
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly route = inject(ActivatedRoute);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedTenantId: string | null = null;
@@ -136,6 +148,7 @@ export class CheckInClients {
   }
 
   constructor() {
+    afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
     this.scope.onReset(() => this.resetTenantState());
     effect(() => {
       this.scope.epoch();
@@ -219,7 +232,7 @@ export class CheckInClients {
     return this.scope.run('assign', async (owner) => {
       this.attempt.attempt();
       if (this.assignmentErrors().length > 0) {
-        this.summary()?.nativeElement.focus();
+        afterNextRender(() => this.summary()?.nativeElement.focus(), { injector: this.injector });
         return;
       }
 

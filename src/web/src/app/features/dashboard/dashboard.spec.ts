@@ -10,7 +10,11 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { settle, text } from '../../../testing/dom';
 import { Dashboard } from './dashboard';
 
-async function render(memberships: TenantMembership[], selectedTenantId: string | null) {
+async function render(
+  memberships: TenantMembership[],
+  selectedTenantId: string | null,
+  roles: string[] = [],
+) {
   const selected = signal(selectedTenantId);
   const all = signal(memberships);
   const selectedMembership = computed(() =>
@@ -24,7 +28,7 @@ async function render(memberships: TenantMembership[], selectedTenantId: string 
         provide: ApiClient,
         useValue: { getClients: vi.fn(() => of([])), getInvitations: vi.fn(() => of([])) },
       },
-      { provide: AuthStore, useValue: { user: signal({ displayName: 'Dana' }) } },
+      { provide: AuthStore, useValue: { user: signal({ displayName: 'Dana', roles }) } },
       {
         provide: TenantStore,
         useValue: {
@@ -68,5 +72,21 @@ describe('Dashboard', () => {
 
     expect(host.querySelector('[data-no-workspace]')).toBeNull();
     expect(text(fixture)).toContain('Choose another coaching space to continue.');
+  });
+
+  it('offers a platform admin without a space the way to platform billing, as a kit button', async () => {
+    const { host } = await render([], null, ['PlatformAdmin']);
+
+    const link = host.querySelector<HTMLAnchorElement>('app-empty-state a.tb-button');
+    expect(host.querySelector('app-empty-state h1')).not.toBeNull();
+    expect(link?.textContent?.trim()).toBe('Open platform billing');
+    expect(link?.getAttribute('href')).toBe('/admin/billing');
+    expect(host.querySelector('.empty-state')).toBeNull();
+  });
+
+  it('offers no billing link to anyone else', async () => {
+    const { host } = await render([], null);
+
+    expect(host.querySelector('app-empty-state a')).toBeNull();
   });
 });

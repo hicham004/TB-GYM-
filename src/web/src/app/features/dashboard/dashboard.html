@@ -4,20 +4,26 @@
   <app-client-today />
 } @else if (tenants.memberships().length === 0) {
   <!-- An account that left, was released, or resigned from its last workspace still signs in. -->
-  <section class="empty-state" data-no-workspace>
-    <h2 i18n>You are not part of a coaching space right now</h2>
-    <p i18n>
-      Your TB Gym account still works, but it is not linked to any coaching space. This happens
-      after you leave, or when your coaching ends.
-    </p>
-    <p i18n>To join one again, ask your coach to send you a new invitation.</p>
+  <app-empty-state
+    data-no-workspace
+    [headingLevel]="1"
+    heading="You are not part of a coaching space right now"
+    i18n-heading
+    description="Your TB Gym account still works, but it is not linked to any coaching space. This happens after you leave, or when your coaching ends. To join one again, ask your coach to send you a new invitation."
+    i18n-description
+  >
     @if (auth.user()?.roles?.includes('PlatformAdmin')) {
-      <p><a routerLink="/admin/billing" i18n>Open platform billing</a></p>
+      <a appButton variant="outlined" routerLink="/admin/billing" empty-state-action i18n
+        >Open platform billing</a
+      >
     }
-  </section>
+  </app-empty-state>
 } @else {
-  <section class="empty-state">
-    <h2 i18n>No role here yet</h2>
-    <p i18n>Choose another coaching space to continue.</p>
-  </section>
+  <app-empty-state
+    [headingLevel]="1"
+    heading="No role here yet"
+    i18n-heading
+    description="Choose another coaching space to continue."
+    i18n-description
+  />
 }

@@ -49,7 +49,7 @@ export class UiSheet {
       width: '100vw',
       maxWidth: '40rem',
       maxHeight: '90dvh',
-      closeOnNavigation: true,
+      closeOnNavigation: options.closeOnNavigation ?? true,
       ...guardedConfig(options),
     });
     guardClose(ref, data, options.canClose);

@@ -1,9 +1,11 @@
 import type { DialogRef } from '@angular/cdk/dialog';
 import {
+  afterNextRender,
   Component,
   computed,
   effect,
   ElementRef,
+  DestroyRef,
   inject,
   LOCALE_ID,
   linkedSignal,
@@ -17,6 +19,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom, map } from 'rxjs';
 import type { ExerciseView, MediaAssetView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
+import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
@@ -78,8 +82,9 @@ const GRANT_BATCH = 32;
   ],
   templateUrl: './exercise-library.html',
   styleUrl: './exercise-library.scss',
+  host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
 })
-export class ExerciseLibrary {
+export class ExerciseLibrary implements HoldsUnsavedWork {
   private readonly api = inject(ExerciseLibraryApi);
   private readonly csrf = inject(CsrfService);
   private readonly sheets = inject(UiSheet);
@@ -146,6 +151,8 @@ export class ExerciseLibrary {
   });
 
   constructor() {
+    inject(DestroyRef).onDestroy(inject(UnsavedWork).register(this));
+    afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
     this.scope.onReset(() => {
       this.openSheet?.close();
       this.exercises.set([]);
@@ -335,6 +342,7 @@ export class ExerciseLibrary {
     const sheet = this.sheets.open(this.sheetTemplate(), {
       title,
       closeLabel: this.closeLabel,
+      closeOnNavigation: false,
       canClose: () => this.mayDiscard(),
     });
     this.openSheet = sheet;
@@ -378,8 +386,22 @@ export class ExerciseLibrary {
     const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
       title: $localize`Close without saving?`,
       closeLabel: this.closeLabel,
+      closeOnNavigation: false,
     });
     return (await firstValueFrom(dialog.closed)) === true;
+  }
+
+  async canLeave(): Promise<boolean> {
+    if (!(await this.mayDiscard())) return false;
+    this.openSheet?.close();
+    return true;
+  }
+
+  protected onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.sheetDirty()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
   }
 
   // ---------- archiving, with Undo ----------

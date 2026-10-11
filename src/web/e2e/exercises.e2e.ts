@@ -126,6 +126,40 @@ async function axe(page: Page) {
   ).toEqual([]);
 }
 
+test('an exercise sheet protects edits on browser navigation and refresh', async ({ page }) => {
+  await openLibrary(page, 390);
+  await page.route('**/api/training/templates?*', (route) =>
+    json(route, 200, { total: 0, items: [] }),
+  );
+  await page.route('**/api/training/program-drafts', (route) => json(route, 200, []));
+  await page.getByRole('link', { name: 'Programs', exact: true }).click();
+  await page.getByRole('link', { name: 'Exercises', exact: true }).click();
+  await page.getByRole('button', { name: 'New exercise', exact: true }).click();
+  await page.getByLabel('Exercise name').fill('Hip Thrust');
+  // A refresh is a real browser action: refusing the native warning keeps both the page and entry.
+  let refreshWarned = false;
+  page.once('dialog', async (dialog) => {
+    refreshWarned = dialog.type() === 'beforeunload';
+    await dialog.dismiss();
+  });
+  await page.reload({ timeout: 5000 }).catch(() => undefined);
+  expect(refreshWarned).toBe(true);
+  await expect(page.getByLabel('Exercise name')).toHaveValue('Hip Thrust');
+  await page.goBack();
+  const warning = page.getByRole('dialog', { name: 'Close without saving?' });
+  await warning.getByRole('button', { name: 'Keep editing' }).click();
+  await expect(page).toHaveURL('/training/exercises');
+  await expect(page.getByLabel('Exercise name')).toHaveValue('Hip Thrust');
+  await expectNoHorizontalOverflow(page);
+  await page
+    .getByRole('dialog', { name: 'New exercise', exact: true })
+    .getByRole('button', { name: 'Not now', exact: true })
+    .click();
+  await warning.getByRole('button', { name: 'Close without saving' }).click();
+  await page.getByRole('link', { name: 'Programs', exact: true }).click();
+  await expect(page).toHaveURL('/training/programs');
+});
+
 for (const width of [390, 1440]) {
   test(`the library shows cards and a list at ${width}px and passes axe`, async ({ page }) => {
     await openLibrary(page, width);

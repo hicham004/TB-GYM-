@@ -1104,6 +1104,9 @@ Work follows this order; anything outside it needs the user's approval first.
   [UI-REDESIGN-PLAN.md](UI-REDESIGN-PLAN.md) (demo workspace, brand v2 and component kit, the approved
   hero screens, the client app, the coach core). Founding coaches see the product after R3; R4-R6
   follow during the founding period. The Step 4 infrastructure stays ready and unchanged.
+  R5 is built through R5.3f (2026-10-10, committed 2026-10-11): legacy styling is removed and the
+  remaining editor, focus and reflow fixes are verified. Next is the owner's product review and
+  founding-coach demo; optional R6 is not started.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
 

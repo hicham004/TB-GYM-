@@ -97,7 +97,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.3d1 | **The coach's client Nutrition tab** (C3): the latest targets with the numbers they came from, Work out targets in a sheet that starts from what the record knows (weight, height, age, steps, each with where it came from), the meal plans (current, coming, earlier) with their calories and macros, Assign a meal plan in a sheet that says in words what overlaps or is not covered before sending, and the client's allergens in a sheet; two new coach reads (the declared allergens, the last work-outs with their inputs and warnings) and the plan list now names each plan | §2, plus Vitest (the rules, every sheet, the page) and API tests (the two reads, plan names and macros, tenant, coach and released scoping) | Done · 2026-10-10 · 31ffbde |
 | R5.3d2 | **The coach's Strength history** (C7), replacing "More training tools" at the foot of Training: every max on record by lift (a program's training maxes beside the recorded ones, STR-015) with how it moved, a Record a max sheet (a training max or a tested one; a manual estimate is refused by the server, so it is not offered), and How they have done on a lift (their sets newest first, the best estimated max, a chart) | §2, plus Vitest (the rules, the picker, both sheets, the card, the date defaults moved to it) | Done · 2026-10-10 · 4d5b514 |
 | R5.3e | **The leftovers** (C5, C3, M2, M8): the coach's two check-in pages (the form library and builder; assigning a check-in, reading and comparing) on the kit's buttons, fields, calendar and status labels, with coach words for each kind of question and each status; the coach's workout page (Target and Actual per set, units in one helper, a loading and a Retry state, each note by its author, and the closed-plan sentences said to the coach rather than as "Your plan"); the client's Training player's empty, completed and error states (always on the dark tokens, so the kit's pieces fit it); the plain top bar of an account with no coaching space (the kit's buttons and the brand tokens); and the former-client note on Training and Nutrition | §2, plus Vitest (the new wording, units, a failed read, the validation reasons through the kit's field ids) and Playwright (the plain top bar at 1440 and 390 px) | Done · 2026-10-10 · c2cfb1c |
-| R5.3f | **Delete the legacy CSS** (the global rules and variables in `styles.scss`), add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | To do |
+| R5.3f | **Delete the legacy CSS** (the global rules and variables in `styles.scss`), add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | Done · 2026-10-11 |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
 | R6.2 | **Homepage** pre-render, GSAP scroll story, Jitter hero video (the owner makes the assets) | §2 | Optional |
 
@@ -149,9 +149,6 @@ of the implemented R1.3 screens before production rollout.
   what was said is deferred by the roadmap (Phase 6B) and would need its own index and access rules.
 - **The client beside the chat is read when a thread opens (from R3.5b).** A workout the client
   finishes while the coach has the thread open shows the next time it is opened, like the plan.
-- **Nutrition day refusals (from R0.2).** A day with no meal plan and a refused day share one
-  message ("There is no meal plan for this day…"). Map each access reason, as check-ins do, when
-  M4 is rebuilt (R2.4).
 - **Translations.** `src/web/src/locale/messages.xlf` has not been regenerated since Phase 5, and
   R0.2 changed about 250 source strings. Run `npm run i18n:extract` before any translation work.
 - **Check-in photos (from R2.4c).** The check-in's photo step saves ordinary progress photos dated
@@ -271,6 +268,8 @@ of the implemented R1.3 screens before production rollout.
   Strength history card load with their routes. R5.3e measures 546.95 kB (+2.04 kB): the kit's button in the app shell's plain top bar; the check-in pages, the
   coach's workout page and the Training states are lazy chunks, and `today-training.scss` is 8.00 kB against the 8 kB
   error line (it shrank when the older global classes it borrowed were removed).
+  R5.3f measures 541.89 kB (−5.06 kB): the older globals are gone; the heading-focus fallback and the
+  standalone empty heading are the only new start-up behavior. The 520 kB target remains a follow-up.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -323,11 +322,6 @@ of the implemented R1.3 screens before production rollout.
   and an overpayment is refused.
 - **Older dialogs inside Service & access (from R3.4b).** Reassign coach and End coaching keep their
   native `<dialog>` forms, now inside the new page's rows; move them to the kit Dialog with the rest.
-- **The legacy `label > span` rule (seen in R3.4b).** `styles.scss` still gives any span straight
-  inside a label a fixed colour (`#344149`), size, weight and margin, which is wrong on dark and on the
-  new sheets; R3.4b's price cards restate each property. R4.3 found it in the kit's `PhotoCompare`
-  too: its two date labels failed contrast on dark until the kit restated them. Remove the rule once
-  the last legacy form is gone.
 - **The brand outside the app (from R3.5a).** Sign-in, accepting an invitation, emails and notifications
   are still TB Gym's: a person signs in before any workspace is known. Branding the invitation page and
   emails would need the workspace on those requests; not planned.
@@ -827,6 +821,17 @@ of the implemented R1.3 screens before production rollout.
   changing. Not done: assigning from a sheet on the client's own Check-ins (R4.3's follow-up stands), a
   schedule that repeats, comparing more than two check-ins, and the forms' layout on a phone beyond what
   the kit gives (a long builder is a long page). R5.3f deletes the global rules these pages no longer use.
+- **Legacy CSS, R5.3f (2026-10-10; screenshots `docs/design/r53f-live-*.png`).** The older layout and
+  form classes and pre-brand palette are gone; the kit keeps its own primitive aliases. The lint check
+  reads actual Angular templates and styles, including shared constants, and has six refusal tests.
+  Check-in drafts and exercise sheets ask before losing work on navigation, workspace change, sign-out
+  or refresh; Browser Back keeps the exercise sheet open until the coach answers. Refused check-in
+  submits focus the summary after it becomes visible, both coach pages follow dark mode, the builder
+  reflows with enlarged text, and standalone empty pages have a main heading. Route arrival has a
+  shared heading-focus fallback that
+  preserves fields, dialogs, filters, anchors and scroll. The prototype's own colours stay under
+  `--hero-*`; the reviewed kit snapshots now show its own captions and brand focus colour. No backend
+  rule, API or database change; optional R6 remains outside this slice.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1737,20 +1742,12 @@ Maya Fakhoury is the client with a workout waiting today.
 
 ## 9. Open problems carried over from the retired audit documents
 
-These must be fixed while the screen is rebuilt, and verified in the browser:
-
-- **Unsaved work is discarded silently** on navigation and refresh in the editors. Add a guard to
-  every editor (C4, C7, the exercise editor, the intake form: done in R5.3b). The exercise editor must never drop
-  muscles, alternatives or linked media on save.
-- **Invalid form submits can fail silently.** Every form shows field errors and focuses the first
-  one.
-- **Expected authorization states render as generic failures.** Map them to friendly states (§6).
-- **Headings, focus and scroll on route change.** Each route sets its title, focuses the heading
-  and restores scroll.
-- **Coach topbar overflow below about 1426 px, and the mobile menu staying open after
-  navigation.** Verify both are gone in the rebuilt shell.
-- **Client nutrition reachability.** Verify the client can always reach their meal plan from Today
-  and the tab bar.
+No open items. Closed in R5.3f (2026-10-10), verified in the browser: editors protect unsaved work;
+refused submits show reasons and focus the relevant field or summary; expected access refusals have
+friendly states; route titles, heading focus and scroll work together; the rebuilt shell fits narrow
+screens and closes its menu on navigation; clients reach Nutrition from Today and the tab bar.
+Exercise saves retain muscles, alternatives and linked media. The existing regression tests and the
+R5.3f navigation, refresh, dark-mode and reflow checks pin these behaviors.
 
 ---
 
