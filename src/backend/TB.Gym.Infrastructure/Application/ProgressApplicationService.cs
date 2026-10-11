@@ -824,7 +824,10 @@ internal sealed partial class ProgressApplicationService(
             displayUnit,
             from,
             toExclusive,
-            days);
+            days,
+            await dbContext.BodyMeasurements.AsNoTracking()
+                .Where(item => item.ClientProfileId == clientProfileId && item.MeasurementDate < from)
+                .MaxAsync(item => (DateOnly?)item.MeasurementDate, cancellationToken));
     }
 
     private async Task<BodyMeasurementHistoryView?> GetMeasurementHistoryAsync(
@@ -1164,7 +1167,11 @@ internal sealed partial class ProgressApplicationService(
             clientProfileId,
             from,
             toExclusive,
-            photos.Select(ToPhotoView).ToArray());
+            photos.Select(ToPhotoView).ToArray(),
+            await dbContext.ProgressPhotos.AsNoTracking()
+                .Where(item => item.ClientProfileId == clientProfileId && item.PhotoDate < from &&
+                    (includeRemoved || item.Status == ProgressPhotoStatus.Active))
+                .MaxAsync(item => (DateOnly?)item.PhotoDate, cancellationToken));
     }
 
     private async Task TombstoneOrphanedAssetAsync(Guid mediaAssetId, CancellationToken cancellationToken)

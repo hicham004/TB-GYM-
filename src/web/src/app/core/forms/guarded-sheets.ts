@@ -1,3 +1,4 @@
+import { protectSheetEdits } from './sheet-exit-protection';
 import { DestroyRef, Directive, inject, signal, type TemplateRef } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { UiDialog } from '../../ui/dialog';
@@ -19,6 +20,8 @@ export interface Closable {
 export abstract class GuardedSheets {
   private readonly sheets = inject(UiSheet);
   private readonly dialogs = inject(UiDialog);
+  private leaveDecision: Promise<boolean> | null = null;
+  private activeConfirm: { close(): void } | null = null;
   protected readonly toast = inject(UiToast);
 
   /** The question the confirmation dialog is asking now; its template shows it. */
@@ -32,7 +35,21 @@ export abstract class GuardedSheets {
   /** The host's `<ng-template>` that holds `<app-confirm>` for `asking()`. */
   protected abstract confirmDialog(): TemplateRef<unknown>;
 
+  async canLeave(): Promise<boolean> {
+    const allowed = await this.canClose();
+    if (allowed) this.dirty = false;
+    return allowed;
+  }
+
   constructor() {
+    protectSheetEdits(
+      this,
+      () => this.dirty,
+      () => {
+        this.open?.close();
+        this.activeConfirm?.close();
+      },
+    );
     inject(DestroyRef).onDestroy(() => this.open?.close());
   }
 
@@ -42,6 +59,7 @@ export abstract class GuardedSheets {
     const sheet = this.sheets.open<unknown>(content, {
       title,
       closeLabel: $localize`Close`,
+      closeOnNavigation: false,
       canClose: () => this.canClose(),
     });
     this.open = sheet;
@@ -82,12 +100,18 @@ export abstract class GuardedSheets {
     cancel: string,
     title: string,
   ): Promise<boolean> {
+    if (this.leaveDecision) return this.leaveDecision;
     this.asking.set({ message, confirm, cancel });
     const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
+      closeOnNavigation: false,
       title,
       closeLabel: $localize`Close`,
     });
-    const answer = await firstValueFrom(dialog.closed);
+    this.activeConfirm = dialog;
+    this.leaveDecision = firstValueFrom(dialog.closed).then((answer) => answer === true);
+    const answer = await this.leaveDecision;
+    this.leaveDecision = null;
+    this.activeConfirm = null;
     this.asking.set(null);
     return answer === true;
   }

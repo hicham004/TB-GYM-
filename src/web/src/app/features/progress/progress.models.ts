@@ -35,6 +35,7 @@ export interface BodyMeasurement {
 }
 
 export interface BodyMeasurements {
+  earlierDate?: string | null;
   clientProfileId: string;
   timeZoneId: string;
   displayUnit: MeasurementUnit;
@@ -252,6 +253,7 @@ export interface ProgressPhoto {
 }
 
 export interface ProgressPhotos {
+  earlierDate?: string | null;
   clientProfileId: string;
   from: string;
   toExclusive: string;
@@ -276,6 +278,7 @@ export function mapProgressPhotos(value: ContractProgressPhotos): ProgressPhotos
     from: value.from,
     toExclusive: value.toExclusive,
     photos: value.photos.map(mapProgressPhoto),
+    earlierDate: value.earlierDate ?? null,
   };
 }
 

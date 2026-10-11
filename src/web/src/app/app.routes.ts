@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { confirmBeforeLeaving } from './core/forms/leave-guard';
+import { confirmBeforeLeaving, confirmSheetLeave } from './core/forms/leave-guard';
 import {
   authGuard,
   clientGuard,
@@ -58,6 +58,7 @@ export const routes: Routes = [
   },
   {
     path: 'products',
+    canDeactivate: [confirmSheetLeave],
     canActivate: [authGuard, coachGuard],
     title: $localize`Plans you sell | TB Gym`,
     // Plans you sell follows the coach's mode (C8, R5.1a).
@@ -126,6 +127,7 @@ export const routes: Routes = [
   {
     // Progress follows the client's mode (R5.3c): its Log weight sheet opens over the page.
     path: 'progress/dashboard',
+    canDeactivate: [confirmSheetLeave],
     canActivate: [authGuard, clientGuard],
     data: REDESIGNED,
     title: $localize`My progress dashboard | TB Gym`,
@@ -137,6 +139,7 @@ export const routes: Routes = [
   {
     // Weight, measurements and photos (R5.3c); `?tab=` names the one that opens.
     path: 'progress',
+    canDeactivate: [confirmSheetLeave],
     canActivate: [authGuard, clientGuard],
     data: REDESIGNED,
     title: $localize`Your entries | TB Gym`,

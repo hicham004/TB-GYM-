@@ -77,11 +77,14 @@ export class Notifications {
 
   /** Bumped whenever the recipient or the workspace changes; every reply is checked against it. */
   private contextGeneration = 0;
+  private cursor: string | undefined;
+  private readonly readIds = new Set<string>();
+  private readRevision = 0;
   private listGeneration = 0;
   private context: string | null = null;
 
   protected readonly items = signal<readonly NotificationItem[]>([]);
-  /** Server offset positions consumed, which can exceed rendered rows when pages overlap. */
+  /** Rows received on this visit, used only to decide when a quiet first-page refresh is safe. */
   protected readonly consumedOffset = signal(0);
   protected readonly total = signal(0);
   private readonly serverExhausted = signal(false);
@@ -102,9 +105,7 @@ export class Notifications {
   protected readonly filterLabel = $localize`Show`;
   protected readonly loadingLabel = $localize`Loading your notifications…`;
   protected readonly loadedCount = computed(() => this.items().length);
-  protected readonly hasMore = computed(
-    () => !this.serverExhausted() && this.consumedOffset() < this.total(),
-  );
+  protected readonly hasMore = computed(() => !this.serverExhausted());
   protected readonly isEmpty = computed(
     () => !this.loading() && this.error() === null && this.loadedCount() === 0,
   );
@@ -199,33 +200,44 @@ export class Notifications {
   }
 
   protected async loadMore(): Promise<void> {
+    if (!this.hasMore() || this.loadingMore() || this.loading() || this.markingAll()) return;
     return this.scope.run('notifications', async (owner) => {
       const generation = this.contextGeneration;
-      if (!this.hasMore() || this.loadingMore() || this.loading()) {
-        return;
-      }
 
       const request = ++this.listGeneration;
-      const skip = this.consumedOffset();
+      const readRevision = this.readRevision;
       this.loadingMore.set(true);
       this.error.set(null);
       try {
         const page = await owner.wait(
-          firstValueFrom(this.api.listNotifications(skip, pageSize, this.filter() === 'unread')),
+          firstValueFrom(
+            this.api.listNotifications(0, pageSize, this.filter() === 'unread', this.cursor),
+          ),
         );
         if (!this.owns(generation, request)) {
           return;
         }
 
-        // Appended by identifier rather than by position: something delivered between the two requests
-        // shifts the page boundary, and a duplicated row would be a rendering error.
-        this.items.update((loaded) => appendPage(loaded, page.items));
-        // Offset progress belongs to rows the server returned, not unique rows that survived DOM
-        // deduplication. An overlapping page still consumed every one of its server positions.
+        // The cursor keeps reads/insertions ahead of the boundary from shifting later pages.
+        // Deduplication also protects against a stale reply overlapping already-rendered rows.
+        this.items.update((loaded) =>
+          appendPage(
+            loaded,
+            this.filter() === 'unread'
+              ? page.items.filter((item) => !this.readIds.has(item.id))
+              : page.items,
+          ),
+        );
+        const nextCursor = page.items.at(-1)?.id;
+        const advanced = nextCursor !== undefined && nextCursor !== this.cursor;
+        this.cursor = nextCursor ?? this.cursor;
         this.consumedOffset.update((consumed) => consumed + page.items.length);
         this.total.set(page.total);
-        this.serverExhausted.set(page.items.length === 0);
-        this.notifications.set(page.unreadTotal);
+        this.serverExhausted.set(
+          !(page.hasMore ?? page.items.length === pageSize) || page.items.length === 0 || !advanced,
+        );
+        if (readRevision === this.readRevision) this.notifications.set(page.unreadTotal);
+        else void this.notifications.refresh();
       } catch (error) {
         if (!owner.current) return;
         if (this.owns(generation, request)) {
@@ -244,11 +256,9 @@ export class Notifications {
   }
 
   protected async markRead(notification: NotificationItem): Promise<void> {
+    if (notification.isRead || this.busyId() !== null) return;
     return this.scope.run('markRead', async (owner) => {
       const generation = this.contextGeneration;
-      if (notification.isRead || this.busyId() !== null) {
-        return;
-      }
 
       this.busyId.set(notification.id);
       this.error.set(null);
@@ -265,8 +275,12 @@ export class Notifications {
           return;
         }
 
+        ++this.readRevision;
+        this.readIds.add(updated.id);
         this.items.update((loaded) =>
-          loaded.map((item) => (item.id === updated.id ? updated : item)),
+          this.filter() === 'unread'
+            ? loaded.filter((item) => item.id !== updated.id)
+            : loaded.map((item) => (item.id === updated.id ? updated : item)),
         );
         this.notifications.decrement();
       } catch (error) {
@@ -289,11 +303,9 @@ export class Notifications {
   }
 
   protected async markAllRead(): Promise<void> {
+    if (this.markingAll() || this.unread() === 0) return;
     return this.scope.run('markAllRead', async (owner) => {
       const generation = this.contextGeneration;
-      if (this.markingAll() || this.unread() === 0) {
-        return;
-      }
 
       this.markingAll.set(true);
       this.error.set(null);
@@ -308,6 +320,9 @@ export class Notifications {
           return;
         }
 
+        ++this.listGeneration;
+        ++this.readRevision;
+        this.loadingMore.set(false);
         this.notifications.set(left);
         const now = new Date().toISOString();
         if (this.filter() === 'unread') {
@@ -345,6 +360,8 @@ export class Notifications {
   private async load(generation: number, quiet = false): Promise<void> {
     return this.scope.run('notifications', async (owner) => {
       const request = ++this.listGeneration;
+      const readRevision = this.readRevision;
+      this.loadingMore.set(false);
       if (!quiet) {
         this.loading.set(true);
       }
@@ -359,11 +376,19 @@ export class Notifications {
         }
 
         this.readAt.set(new Date());
-        this.items.set(page.items);
+        this.items.set(
+          this.filter() === 'unread'
+            ? page.items.filter((item) => !this.readIds.has(item.id))
+            : page.items,
+        );
+        this.cursor = page.items.at(-1)?.id;
         this.consumedOffset.set(page.items.length);
         this.total.set(page.total);
-        this.serverExhausted.set(page.items.length === 0);
-        this.notifications.set(page.unreadTotal);
+        this.serverExhausted.set(
+          !(page.hasMore ?? page.items.length === pageSize) || page.items.length === 0,
+        );
+        if (readRevision === this.readRevision) this.notifications.set(page.unreadTotal);
+        else void this.notifications.refresh();
       } catch (error) {
         if (!owner.current) return;
         if (this.owns(generation, request) && !quiet) {
@@ -390,6 +415,8 @@ export class Notifications {
 
   private reset(): void {
     ++this.listGeneration;
+    this.cursor = undefined;
+    this.readIds.clear();
     this.items.set([]);
     this.consumedOffset.set(0);
     this.total.set(0);

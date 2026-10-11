@@ -1816,3 +1816,12 @@ pressing it is entitled to know about in advance. Failed password reset and acco
 invitation submissions clear password controls while preserving safe fields such as display name.
 
 See `docs/adr/0021-tokenless-action-email-materialization.md`.
+
+Phase 5 review (2026-10-11): sheet hosts register with `UnsavedWork` and routed parents ask before
+teardown; guarded sheets survive popstate until that decision. Every plan/exercise/media continuation
+uses `TenantOperation`. Inbox pagination can use a recipient-scoped keyset cursor with `hasMore`;
+read-state changes do not shift its boundary. Delivered week numbers are stored in the immutable
+notification snapshot, never rewritten into the outbox, and links narrow them by current visibility.
+Measurement/photo windows retain the 366-day cap and expose only the nearest earlier date under the
+same tenant/client/audience predicates. API types were regenerated. R5.3g ran the new regressions and
+fixed the two bugs they found (the swap search box, Show earlier after an empty year).

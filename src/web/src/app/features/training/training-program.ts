@@ -73,6 +73,7 @@ export class TrainingProgram {
    * A notice's link (R5.1c): `?week=3` opens that week, `?workout=<id>` shows that finished workout.
    * Each is followed once, the first time its part of the page has loaded.
    */
+  private readonly linkedProgram = this.route?.snapshot.queryParamMap.get('program');
   private linkedWeek = Number(this.route?.snapshot.queryParamMap.get('week') ?? NaN);
   protected readonly linkedWorkout = signal(
     this.route?.snapshot.queryParamMap.get('workout') ?? null,
@@ -240,7 +241,8 @@ export class TrainingProgram {
     const number = this.linkedWeek;
     this.linkedWeek = NaN;
     const week = this.program()?.weeks.find((item) => item.number === number);
-    if (!week) return;
+    if (!week || !week.visible || (this.linkedProgram && this.program()?.id !== this.linkedProgram))
+      return;
     const inFocus = week === this.focus();
     if (!inFocus && week.visible && week.sessions.length > 0 && !this.isOpen(week)) {
       this.toggleWeek(week);

@@ -50,6 +50,10 @@ export class ExerciseLibraryApi {
     return this.http.get<ExerciseSearchResult>('/api/exercises', { params });
   }
 
+  get(exerciseId: string): Observable<ExerciseView> {
+    return this.http.get<ExerciseView>(`/api/exercises/${exerciseId}`);
+  }
+
   create(request: CreateExerciseRequest): Observable<ExerciseView> {
     return this.http.post<ExerciseView>('/api/exercises', request);
   }

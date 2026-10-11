@@ -1,3 +1,5 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { TenantStore } from '../../core/tenancy/tenant.store';
 import { formatDate } from '@angular/common';
 import {
   afterNextRender,
@@ -264,7 +266,7 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
                 name="offer"
                 [value]="choice.offerId"
                 [checked]="choice.offerId === offerId()"
-                (change)="offerId.set(choice.offerId)"
+                (change)="offerId.set(choice.offerId); dirtyChange.emit(true)"
               />
               <span class="choice-text">
                 <span class="choice-label" dir="auto">{{ choice.label }}</span>
@@ -285,7 +287,7 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
             appControl
             type="date"
             [value]="startDate()"
-            (input)="startDate.set($any($event.target).value)"
+            (input)="startDate.set($any($event.target).value); dirtyChange.emit(true)"
             (blur)="attempt.touch('startDate')"
           />
         </app-field>
@@ -329,6 +331,8 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
 export class PlanStart {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
+  private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly locale = inject(LOCALE_ID);
   private readonly intent = new IntentIdempotencyKey();
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -343,6 +347,7 @@ export class PlanStart {
   readonly renewFrom = input<ClientEnrollment | null>(null);
   /** The plan started, or null when the coach closed the sheet without one. */
   readonly closed = output<ClientEnrollment | null>();
+  readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
   protected readonly startLabel = $localize`First day`;
@@ -412,41 +417,48 @@ export class PlanStart {
 
   protected async submit(): Promise<void> {
     if (this.busy()) return;
-    if (this.problemCount() > 0) {
-      this.attempt.attempt();
-      focusFirstProblem(this.host, this.injector);
-      return;
-    }
-    const payload = { offerId: this.offerId(), startDate: this.startDate() };
-    const from = this.renewFrom();
-    const request = {
-      ...payload,
-      idempotencyKey: this.intent.forPayload({ ...payload, from: from?.id }),
-    };
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      await this.csrf.refresh();
-      const plan = await firstValueFrom(
-        from
-          ? this.api.renewEnrollment(from.id, request)
-          : this.api.assignProduct(this.clientId(), request),
-      );
-      this.intent.complete();
-      this.closed.emit(plan);
-    } catch (error) {
-      this.error.set(
-        serviceWriteError(
-          error,
-          from
-            ? $localize`The plan could not be renewed. Try again.`
-            : $localize`The plan could not be started. Try again.`,
-          this.firstName(),
-        ),
-      );
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('submit', async (owner) => {
+      if (this.problemCount() > 0) {
+        this.attempt.attempt();
+        focusFirstProblem(this.host, this.injector);
+        return;
+      }
+      const payload = { offerId: this.offerId(), startDate: this.startDate() };
+      const from = this.renewFrom();
+      const request = {
+        ...payload,
+        idempotencyKey: this.intent.forPayload({ ...payload, from: from?.id }),
+      };
+      this.busy.set(true);
+      this.error.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        const plan = await owner.wait(
+          firstValueFrom(
+            from
+              ? this.api.renewEnrollment(from.id, request)
+              : this.api.assignProduct(this.clientId(), request),
+          ),
+        );
+        this.intent.complete();
+        this.closed.emit(plan);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(
+          serviceWriteError(
+            error,
+            from
+              ? $localize`The plan could not be renewed. Try again.`
+              : $localize`The plan could not be started. Try again.`,
+            this.firstName(),
+          ),
+        );
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 }
 
@@ -486,7 +498,7 @@ const METHODS: readonly ManualPaymentMethod[] = [
             min="0.01"
             step="0.01"
             [value]="amount() ?? ''"
-            (input)="setAmount($any($event.target).valueAsNumber)"
+            (input)="setAmount($any($event.target).valueAsNumber); dirtyChange.emit(true)"
             (blur)="attempt.touch('amount')"
           />
           <span class="unit">{{ plan().currency }}</span>
@@ -506,13 +518,17 @@ const METHODS: readonly ManualPaymentMethod[] = [
           type="date"
           [max]="today()"
           [value]="receivedOn()"
-          (input)="receivedOn.set($any($event.target).value)"
+          (input)="receivedOn.set($any($event.target).value); dirtyChange.emit(true)"
           (blur)="attempt.touch('receivedOn')"
         />
       </app-field>
 
       <app-field [label]="methodLabel">
-        <select appControl name="method" (change)="method.set($any($event.target).value)">
+        <select
+          appControl
+          name="method"
+          (change)="method.set($any($event.target).value); dirtyChange.emit(true)"
+        >
           @for (option of methods; track option) {
             <option [value]="option" [selected]="option === method()">
               {{ methodName(option) }}
@@ -530,7 +546,7 @@ const METHODS: readonly ManualPaymentMethod[] = [
           maxlength="200"
           dir="auto"
           [value]="reference()"
-          (input)="reference.set($any($event.target).value)"
+          (input)="reference.set($any($event.target).value); dirtyChange.emit(true)"
         />
       </app-field>
 
@@ -543,7 +559,7 @@ const METHODS: readonly ManualPaymentMethod[] = [
           maxlength="2000"
           dir="auto"
           [value]="note()"
-          (input)="note.set($any($event.target).value)"
+          (input)="note.set($any($event.target).value); dirtyChange.emit(true)"
         ></textarea>
       </app-field>
 
@@ -572,6 +588,8 @@ const METHODS: readonly ManualPaymentMethod[] = [
 export class PlanPayment {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
+  private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly locale = inject(LOCALE_ID);
   private readonly intent = new IntentIdempotencyKey();
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -583,6 +601,7 @@ export class PlanPayment {
   readonly today = input.required<string>();
   /** True when a payment was recorded. */
   readonly closed = output<boolean>();
+  readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
   protected readonly methods = METHODS;
@@ -635,59 +654,66 @@ export class PlanPayment {
 
   protected async submit(): Promise<void> {
     if (this.busy()) return;
-    if (this.problemCount() > 0) {
-      this.attempt.attempt();
-      focusFirstProblem(this.host, this.injector);
-      return;
-    }
-    const plan = this.plan();
-    const entered = {
-      plan: plan.id,
-      amount: this.amount()!,
-      receivedOn: this.receivedOn(),
-      method: this.method(),
-      reference: this.reference().trim() || null,
-      note: this.note().trim() || null,
-    };
-    // The server binds the key to the whole payment, instant included, so a retry of the same entry
-    // sends the same instant and is answered with the payment already recorded (SUB-011).
-    const fingerprint = JSON.stringify(entered);
-    if (this.pending?.fingerprint !== fingerprint) {
-      this.pending = {
-        fingerprint,
-        at: receivedAtUtc(entered.receivedOn, this.today(), new Date()),
+    return this.scope.run('submit', async (owner) => {
+      if (this.problemCount() > 0) {
+        this.attempt.attempt();
+        focusFirstProblem(this.host, this.injector);
+        return;
+      }
+      const plan = this.plan();
+      const entered = {
+        plan: plan.id,
+        amount: this.amount()!,
+        receivedOn: this.receivedOn(),
+        method: this.method(),
+        reference: this.reference().trim() || null,
+        note: this.note().trim() || null,
       };
-    }
-    const at = this.pending.at;
-    const key = this.intent.forPayload(entered);
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      await this.csrf.refresh();
-      await firstValueFrom(
-        this.api.recordManualPayment(plan.id, {
-          amount: entered.amount,
-          currencyCode: plan.currency,
-          receivedAtUtc: at,
-          method: entered.method,
-          reference: entered.reference,
-          note: entered.note,
-          idempotencyKey: key,
-        }),
-      );
-      this.intent.complete();
-      this.pending = null;
-      this.closed.emit(true);
-    } catch (error) {
-      this.error.set(
-        serviceWriteError(
-          error,
-          $localize`The payment could not be recorded. Try again.`,
-          this.firstName(),
-        ),
-      );
-    } finally {
-      this.busy.set(false);
-    }
+      // The server binds the key to the whole payment, instant included, so a retry of the same entry
+      // sends the same instant and is answered with the payment already recorded (SUB-011).
+      const fingerprint = JSON.stringify(entered);
+      if (this.pending?.fingerprint !== fingerprint) {
+        this.pending = {
+          fingerprint,
+          at: receivedAtUtc(entered.receivedOn, this.today(), new Date()),
+        };
+      }
+      const at = this.pending.at;
+      const key = this.intent.forPayload(entered);
+      this.busy.set(true);
+      this.error.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        await owner.wait(
+          firstValueFrom(
+            this.api.recordManualPayment(plan.id, {
+              amount: entered.amount,
+              currencyCode: plan.currency,
+              receivedAtUtc: at,
+              method: entered.method,
+              reference: entered.reference,
+              note: entered.note,
+              idempotencyKey: key,
+            }),
+          ),
+        );
+        this.intent.complete();
+        this.pending = null;
+        this.closed.emit(true);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(
+          serviceWriteError(
+            error,
+            $localize`The payment could not be recorded. Try again.`,
+            this.firstName(),
+          ),
+        );
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 }

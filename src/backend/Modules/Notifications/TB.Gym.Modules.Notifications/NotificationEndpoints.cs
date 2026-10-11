@@ -81,13 +81,15 @@ public static class NotificationEndpoints
             int? skip,
             int? take,
             bool? unread,
+            Guid? beforeId,
             INotificationApplicationService service,
             CancellationToken token) =>
             Results.Ok(await service.ListOwnAsync(
                 NotificationPaging.NormalizeSkip(skip),
                 NotificationPaging.NormalizeTake(take),
                 unread == true,
-                token)))
+                token,
+                beforeId)))
         .WithName("ListOwnNotifications")
         .Produces<NotificationPage>();
 

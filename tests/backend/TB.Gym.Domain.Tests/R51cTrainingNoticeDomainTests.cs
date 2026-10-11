@@ -19,6 +19,18 @@ public sealed class R51cTrainingNoticeDomainTests
     ];
 
     [TestMethod]
+    public void DeliveredWeekTargetsUseTheSameWeeksAsTheTitleAndAreCopied()
+    {
+        Assert.IsTrue(NotificationTemplateCatalog.TryResolve(CommercialNotificationKind.WeeksShared, "en", out var template));
+        var named = NotificationTemplateCatalog.NameWeeks(template, [3, 3]);
+        var notice = Notification.Materialize(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), CommercialNotificationKind.WeeksShared, named);
+        Assert.AreEqual("Your coach shared week 3", notice.Title);
+        CollectionAssert.AreEqual(named.TargetWeeks, notice.TargetWeeks);
+        named.TargetWeeks![0] = 2;
+        Assert.AreEqual(3, notice.TargetWeeks!.Single(), "The stored snapshot owns its copy.");
+    }
+
+    [TestMethod]
     [DataRow(new[] { 3 }, "week 3")]
     [DataRow(new[] { 3, 5 }, "weeks 3 and 5")]
     [DataRow(new[] { 3, 4 }, "weeks 3 and 4")]

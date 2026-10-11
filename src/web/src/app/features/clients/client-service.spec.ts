@@ -1,3 +1,4 @@
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
@@ -20,7 +21,7 @@ import {
   SERVICE_TODAY,
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
-import { press, settle } from '../../../testing/dom';
+import { fill, press, settle } from '../../../testing/dom';
 import { TeamApi } from '../team/team-api';
 import { ClientService } from './client-service';
 import { ClientWorkspaceContext } from './client-workspace.context';
@@ -132,6 +133,28 @@ describe('a client’s Service & access', () => {
   afterEach(() => {
     document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
+  });
+
+  it('protects a payment sheet for session exits, close actions and refresh', async () => {
+    const { harness, host } = await render({ plans: plansOverview([unpaidRenewal()]) });
+    press(host, 'Record payment');
+    await settle(harness.fixture);
+    const sheet = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    fill(sheet, 'Reference (optional)', 'Receipt draft');
+    await settle(harness.fixture);
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    const leave = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(harness.fixture);
+    const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+    press(dialogs[dialogs.length - 1], 'Keep editing');
+    expect(await leave).toBe(false);
+    expect(sheet.querySelector<HTMLInputElement>('input[name="reference"]')!.value).toBe(
+      'Receipt draft',
+    );
+    harness.fixture.destroy();
+    expect(await TestBed.inject(UnsavedWork).confirmLeave()).toBe(true);
   });
 
   it('puts the plan running today in front, with the one thing that needs the coach', async () => {

@@ -16,6 +16,41 @@ namespace TB.Gym.Api.IntegrationTests;
 public sealed partial class Phase3TrainingWorkflowTests
 {
     [TestMethod]
+    public async Task ReviewWeekLinkUsesDeliveredWeeksAndNarrowsWhenVisibilityChanges()
+    {
+        using var coach = CreateClient();
+        using var client = CreateClient();
+        var scenario = await P2StartAsync(coach, client, "review-week-target", 3);
+        SetTenant(client, scenario.WorkspaceId);
+        await RefreshCsrfAsync(coach);
+        var response = await coach.PutAsJsonAsync($"/api/training/mesocycles/{scenario.Block.Id}/visibility",
+            new { revealAllWeeks = true, version = scenario.Block.Version });
+        await AssertStatusAsync(response, HttpStatusCode.OK);
+        var version = (await ReadSlicePayloadAsync<TrainingMesocycleView>(response)).Version;
+        var payloadBefore = await R51cPayloadsAsync(scenario.Block.Id, nameof(CommercialNotificationKind.WeeksShared));
+        version = await R51cPublishAsync(coach, scenario.Block.Id, scenario.Block.Weeks[1].Id, false, version);
+        await R51cSweepAsync();
+        var notice = (await R51cInboxAsync(client)).Items.Single(item => item.Kind == nameof(CommercialNotificationKind.WeeksShared));
+        Assert.AreEqual("Your coach shared week 3", notice.Title);
+        Assert.AreEqual(3, notice.WeekNumber);
+        CollectionAssert.AreEqual(payloadBefore, await R51cPayloadsAsync(scenario.Block.Id, nameof(CommercialNotificationKind.WeeksShared)));
+
+        // Re-publishing the omitted week must never widen this notice's delivered target.
+        version = await R51cPublishAsync(coach, scenario.Block.Id, scenario.Block.Weeks[1].Id, true, version);
+        Assert.AreEqual(3, (await R51cInboxAsync(client)).Items.Single(item => item.Id == notice.Id).WeekNumber);
+        await R51cPublishAsync(coach, scenario.Block.Id, scenario.Block.Weeks[2].Id, false, version);
+        var hidden = (await R51cInboxAsync(client)).Items.Single(item => item.Id == notice.Id);
+        Assert.IsNull(hidden.WeekNumber);
+        Assert.AreEqual(notice.Title, hidden.Title, "Delivered wording remains history.");
+        await using var connection = new Npgsql.NpgsqlConnection(RequiredDatabaseConnection);
+        await connection.OpenAsync();
+        await using var command = new Npgsql.NpgsqlCommand("""UPDATE notifications."Notifications" SET "TargetWeeks" = ARRAY[2] WHERE "Id" = @id""", connection);
+        command.Parameters.AddWithValue("id", notice.Id);
+        var conflict = await Assert.ThrowsExactlyAsync<Npgsql.PostgresException>(() => command.ExecuteNonQueryAsync());
+        Assert.AreEqual("23514", conflict.SqlState);
+    }
+
+    [TestMethod]
     public async Task R51cANewProgramAndItsWeeksTellTheClientOnlyWhatTheyCanOpenNow()
     {
         using var coach = CreateClient();

@@ -1250,6 +1250,7 @@ public sealed partial class GymDbContext(
         {
             if (entry.Property(item => item.Title).IsModified ||
                 entry.Property(item => item.Body).IsModified ||
+                entry.Property(item => item.TargetWeeks).IsModified ||
                 entry.Property(item => item.TemplateKey).IsModified ||
                 entry.Property(item => item.TemplateVersion).IsModified ||
                 entry.Property(item => item.Culture).IsModified ||

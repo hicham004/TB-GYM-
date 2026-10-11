@@ -1,3 +1,4 @@
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
@@ -8,7 +9,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { press, settle } from '../../../testing/dom';
+import { fill, press, settle } from '../../../testing/dom';
 import { workspace } from '../../../testing/intake-fixtures';
 import {
   mayaMeasurements,
@@ -105,6 +106,23 @@ describe('Your entries', () => {
       .querySelectorAll('.cdk-overlay-container')
       .forEach((node) => node.replaceChildren());
     TestBed.resetTestingModule();
+  });
+
+  it('protects an entry sheet during session exits and unregisters it when its page goes', async () => {
+    const { fixture, host } = await render();
+    press(host, 'Log weight');
+    await settle(fixture);
+    fill(dialog()!, 'Weight', '81');
+    await settle(fixture);
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    const leave = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(fixture);
+    press(dialog()!, 'Keep editing');
+    expect(await leave).toBe(false);
+    fixture.destroy();
+    expect(await TestBed.inject(UnsavedWork).confirmLeave()).toBe(true);
   });
 
   describe('the weight tab', () => {
@@ -368,22 +386,38 @@ describe('Your entries', () => {
       );
     });
 
-    it('says what nothing earlier means, and offers the year before while there may be more', async () => {
-      const measurements = vi.fn((_c: string | null, _u: string, from: string) =>
-        of(from === '2024-10-09' ? measurementsView([]) : measurementsView(mayaMeasurements())),
-      );
+    it('reaches old measurements across empty years and stops only at the server boundary', async () => {
+      const measurements = vi
+        .fn()
+        .mockReturnValueOnce(of({ ...measurementsView([]), earlierDate: '2022-06-15' }))
+        .mockReturnValue(of({ ...measurementsView(mayaMeasurements()), earlierDate: null }));
       const { fixture, host } = await render({
         url: '/progress?tab=measurements',
         api: { measurements },
       });
-
+      // An empty year is not "no measurements yet": the older ones are one press away.
+      expect(host.textContent).toContain('No measurements in the last year.');
+      expect(host.textContent).not.toContain('No measurements yet');
       expect(host.querySelector('[data-earlier-measurements]')).not.toBeNull();
       press(host, 'Show earlier measurements');
       await settle(fixture);
+      expect(measurements).toHaveBeenLastCalledWith(null, 'Centimetre', '2021-06-15', '2022-06-16');
       expect(host.querySelector('[data-earlier-measurements]')).toBeNull();
-      expect(textOf(host.querySelector('[data-pane="measurements"] p.quiet'))).toBe(
-        'Nothing earlier was recorded in the year before these.',
-      );
+      expect(host.textContent).toContain('There are no earlier measurements.');
+    });
+
+    it('reaches old photos from an empty initial year with bounded windows', async () => {
+      const photos = vi
+        .fn()
+        .mockReturnValueOnce(of({ ...photosView([]), earlierDate: '2020-02-15' }))
+        .mockReturnValue(of({ ...photosView(mayaPhotos()), earlierDate: null }));
+      const { fixture, host } = await render({ url: '/progress?tab=photos', api: { photos } });
+      expect(host.textContent).toContain('No photos in the last year.');
+      expect(host.textContent).not.toContain('No photos yet');
+      press(host, 'Show earlier photos');
+      await settle(fixture);
+      expect(photos).toHaveBeenLastCalledWith(null, '2019-02-15', '2020-02-16');
+      expect(host.querySelector('[data-earlier-photos]')).toBeNull();
     });
 
     it('shows photos by day with their thumbnails granted in one batch, and what was removed apart', async () => {

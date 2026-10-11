@@ -1,3 +1,4 @@
+import { protectSheetEdits } from '../../core/forms/sheet-exit-protection';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -201,6 +202,8 @@ export type EntryKind = 'weight' | 'measurements' | 'photos';
 export class EntrySheets {
   private readonly sheets = inject(UiSheet);
   private readonly dialogs = inject(UiDialog);
+  private leaveDecision: Promise<boolean> | null = null;
+  private activeConfirm: { close(): void } | null = null;
   private readonly toast = inject(UiToast);
 
   /** The client a coach is entering for; null on the client's own pages. */
@@ -250,7 +253,21 @@ export class EntrySheets {
     () => new Set(this.weights().map((row) => row.date)),
   );
 
+  async canLeave(): Promise<boolean> {
+    const allowed = await this.canClose();
+    if (allowed) this.dirty = false;
+    return allowed;
+  }
+
   constructor() {
+    protectSheetEdits(
+      this,
+      () => this.dirty,
+      () => {
+        this.open?.close();
+        this.activeConfirm?.close();
+      },
+    );
     inject(DestroyRef).onDestroy(() => this.open?.close());
   }
 
@@ -401,6 +418,7 @@ export class EntrySheets {
     const sheet = this.sheets.open<unknown>(content, {
       title,
       closeLabel: $localize`Close`,
+      closeOnNavigation: false,
       canClose: () => this.canClose(),
     });
     this.open = sheet;
@@ -440,12 +458,18 @@ export class EntrySheets {
     cancel: string,
     title: string,
   ): Promise<boolean> {
+    if (this.leaveDecision) return this.leaveDecision;
     this.asking.set({ message, confirm, cancel });
     const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
+      closeOnNavigation: false,
       title,
       closeLabel: $localize`Close`,
     });
-    const answer = await firstValueFrom(dialog.closed);
+    this.activeConfirm = dialog;
+    this.leaveDecision = firstValueFrom(dialog.closed).then((answer) => answer === true);
+    const answer = await this.leaveDecision;
+    this.leaveDecision = null;
+    this.activeConfirm = null;
     this.asking.set(null);
     return answer === true;
   }

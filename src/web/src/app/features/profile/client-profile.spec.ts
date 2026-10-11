@@ -269,6 +269,24 @@ describe('ClientProfilePage', () => {
     );
   });
 
+  it('protects completed-intake sheet edits during sign-out or switching and refresh', async () => {
+    const { fixture, host } = await render(finishedProfile());
+    (host.querySelector('[data-edit="about"]') as HTMLButtonElement).click();
+    await settle(fixture);
+    // A new number: the saved profile already holds +96170123456, and retyping it changes nothing.
+    fill(dialog()!, 'Phone number (optional)', '+96171999888');
+    await settle(fixture);
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    const leave = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(fixture);
+    press(dialog()!, 'Keep editing');
+    expect(await leave).toBe(false);
+    fixture.destroy();
+    expect(await TestBed.inject(UnsavedWork).confirmLeave()).toBe(true);
+  });
+
   it('shows a finished profile as cards, and saves a group from its sheet', async () => {
     const { fixture, host, api } = await render(finishedProfile());
 

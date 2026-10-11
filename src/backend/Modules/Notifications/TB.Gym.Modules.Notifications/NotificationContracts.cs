@@ -83,13 +83,14 @@ public sealed record NotificationView(
     Guid? ClientProfileId = null,
     Guid? SessionId = null,
     Guid? WorkoutExecutionId = null,
-    int? WeekNumber = null);
+    int? WeekNumber = null,
+    Guid? MesocycleId = null);
 
 /// <summary>What "Mark all as read" did: how many it marked, and the unread count left (0 unless one arrived meanwhile).</summary>
 public sealed record NotificationReadAllResult(int Marked, long Unread);
 
 /// <summary>One newest-first page of the caller's own inbox.</summary>
-public sealed record NotificationPage(long Total, long UnreadTotal, IReadOnlyList<NotificationView> Items);
+public sealed record NotificationPage(long Total, long UnreadTotal, IReadOnlyList<NotificationView> Items, bool HasMore = false);
 
 public sealed record NotificationUnreadCount(long Unread);
 
@@ -149,7 +150,7 @@ public sealed record NotificationCommandResult(
 public interface INotificationApplicationService
 {
     /// <summary>A newest-first page of the caller's own inbox; <paramref name="unreadOnly"/> leaves out what was read.</summary>
-    Task<NotificationPage> ListOwnAsync(int skip, int take, bool unreadOnly, CancellationToken cancellationToken);
+    Task<NotificationPage> ListOwnAsync(int skip, int take, bool unreadOnly, CancellationToken cancellationToken, Guid? beforeId = null);
 
     Task<NotificationUnreadCount> CountOwnUnreadAsync(CancellationToken cancellationToken);
 

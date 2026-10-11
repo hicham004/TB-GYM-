@@ -70,7 +70,7 @@ function item(
 }
 
 function page(total: number, unreadTotal: number, ...items: NotificationItem[]): NotificationPage {
-  return { total, unreadTotal, items };
+  return { total, unreadTotal, items, hasMore: total > items.length };
 }
 
 interface Harness {
@@ -171,6 +171,67 @@ describe('Notifications', () => {
   afterEach(() => {
     TestBed.resetTestingModule();
     vi.restoreAllMocks();
+  });
+
+  it('pages unread notices after a read without skipping the old boundary', async () => {
+    const first = Array.from({ length: 25 }, (_, i) => item(`n${i + 1}`, moments(i)));
+    const rest = Array.from({ length: 25 }, (_, i) => item(`n${i + 26}`, moments(i + 25)));
+    const { fixture, host, list, markRead } = await render((api) => {
+      api.list.mockReturnValue(of({ total: 50, unreadTotal: 50, items: first, hasMore: true }));
+      api.markRead.mockReturnValue(of({ ...first[0], isRead: true }));
+    });
+    const component = fixture.componentInstance as unknown as {
+      setFilter(v: string): void;
+      markRead(n: NotificationItem): Promise<void>;
+      loadMore(): Promise<void>;
+      items(): NotificationItem[];
+      hasMore(): boolean;
+    };
+    component.setFilter('unread');
+    await settle(fixture);
+    await component.markRead(first[0]);
+    list.mockReturnValue(of({ total: 49, unreadTotal: 49, items: rest, hasMore: false }));
+    await component.loadMore();
+    await settle(fixture);
+    expect(markRead).toHaveBeenCalled();
+    expect(list).toHaveBeenLastCalledWith(0, 25, true, 'n25');
+    expect(component.items().map((n) => n.id)).toEqual(
+      [...first.slice(1), ...rest].map((n) => n.id),
+    );
+    expect(component.hasMore()).toBe(false);
+    expect(host.textContent).toContain('Notification n26');
+  });
+
+  it('does not resurrect a read row from a pagination reply already in flight', async () => {
+    const first = Array.from({ length: 25 }, (_, i) => item(`n${i + 1}`, moments(i)));
+    const pending = new Subject<NotificationPage>();
+    const { fixture, list } = await render((api) => {
+      api.list.mockReturnValue(of({ total: 50, unreadTotal: 50, items: first, hasMore: true }));
+      api.markRead.mockReturnValue(of({ ...first[0], isRead: true }));
+    });
+    const component = fixture.componentInstance as unknown as {
+      setFilter(v: string): void;
+      markRead(n: NotificationItem): Promise<void>;
+      loadMore(): Promise<void>;
+      items(): NotificationItem[];
+      hasMore(): boolean;
+    };
+    component.setFilter('unread');
+    await settle(fixture);
+    list.mockReturnValue(pending);
+    const loading = component.loadMore();
+    await component.markRead(first[0]);
+    pending.next({
+      total: 49,
+      unreadTotal: 49,
+      items: [first[0], item('n26', moments(26))],
+      hasMore: false,
+    });
+    pending.complete();
+    await loading;
+    expect(component.items().filter((n) => n.id === 'n1')).toHaveLength(0);
+    expect(new Set(component.items().map((n) => n.id)).size).toBe(component.items().length);
+    expect(component.hasMore()).toBe(false);
   });
 
   it('invites with an empty state that says what will arrive', async () => {
@@ -406,7 +467,10 @@ describe('Notifications', () => {
   it('loads earlier notices without repeating an identifier already on screen', async () => {
     const first = page(3, 3, item('n3', moments(0.1)), item('n2', moments(0.2)));
     // The second page overlaps, as it would if something were delivered between the two requests.
-    const second = page(3, 3, item('n2', moments(0.2)), item('n1', moments(0.3)));
+    const second = {
+      ...page(3, 3, item('n2', moments(0.2)), item('n1', moments(0.3))),
+      hasMore: false,
+    };
     const harness = await render(({ list }) => {
       list.mockReturnValueOnce(of(first)).mockReturnValueOnce(of(second));
     });
@@ -419,19 +483,19 @@ describe('Notifications', () => {
       'Notification n2',
       'Notification n1',
     ]);
-    expect(harness.list).toHaveBeenLastCalledWith(2, 25, false);
+    expect(harness.list).toHaveBeenLastCalledWith(0, 25, false, 'n2');
     // Everything is loaded, so the control is gone rather than left offering nothing.
     expect(harness.host.textContent).not.toContain('Show earlier notifications');
   });
 
-  it('advances by consumed server positions when an insertion makes pages overlap', async () => {
+  it('advances the cursor despite an overlapping reply and stops on the server boundary', async () => {
     const harness = await render(({ list }) => {
       list
         .mockReturnValueOnce(of(page(4, 4, item('n3', moments(0.1)), item('n2', moments(0.2)))))
         // A new n4 was inserted ahead of the first page. Offset 2 now overlaps on n2, but both
         // returned rows still consume server positions 2 and 3.
         .mockReturnValueOnce(of(page(5, 5, item('n2', moments(0.2)), item('n1', moments(0.3)))))
-        .mockReturnValueOnce(of(page(5, 5, item('n0', moments(0.4)))));
+        .mockReturnValueOnce(of({ ...page(5, 5, item('n0', moments(0.4))), hasMore: false }));
     });
 
     button(harness.host, 'Show earlier notifications').click();
@@ -441,8 +505,8 @@ describe('Notifications', () => {
 
     expect(harness.list.mock.calls).toEqual([
       [0, 25, false],
-      [2, 25, false],
-      [4, 25, false],
+      [0, 25, false, 'n2'],
+      [0, 25, false, 'n1'],
     ]);
     const titles = rowTitles(harness.host);
     expect(titles).toEqual([

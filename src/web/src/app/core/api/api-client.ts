@@ -1240,10 +1240,16 @@ export class ApiClient {
   }
 
   /** A page of the reader's own inbox, newest first; `unreadOnly` leaves out what was read. */
-  listNotifications(skip = 0, take = 25, unreadOnly = false): Observable<NotificationPage> {
-    const params: Record<string, number | boolean> = unreadOnly
+  listNotifications(
+    skip = 0,
+    take = 25,
+    unreadOnly = false,
+    beforeId?: string,
+  ): Observable<NotificationPage> {
+    const params: Record<string, string | number | boolean> = unreadOnly
       ? { skip, take, unread: true }
       : { skip, take };
+    if (beforeId) params['beforeId'] = beforeId;
     return this.http
       .get<Phase3Contracts.NotificationPage>('/api/notifications', { params })
       .pipe(map(mapNotificationPage));

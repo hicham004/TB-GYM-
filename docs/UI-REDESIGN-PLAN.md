@@ -97,7 +97,12 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.3d1 | **The coach's client Nutrition tab** (C3): the latest targets with the numbers they came from, Work out targets in a sheet that starts from what the record knows (weight, height, age, steps, each with where it came from), the meal plans (current, coming, earlier) with their calories and macros, Assign a meal plan in a sheet that says in words what overlaps or is not covered before sending, and the client's allergens in a sheet; two new coach reads (the declared allergens, the last work-outs with their inputs and warnings) and the plan list now names each plan | §2, plus Vitest (the rules, every sheet, the page) and API tests (the two reads, plan names and macros, tenant, coach and released scoping) | Done · 2026-10-10 · 31ffbde |
 | R5.3d2 | **The coach's Strength history** (C7), replacing "More training tools" at the foot of Training: every max on record by lift (a program's training maxes beside the recorded ones, STR-015) with how it moved, a Record a max sheet (a training max or a tested one; a manual estimate is refused by the server, so it is not offered), and How they have done on a lift (their sets newest first, the best estimated max, a chart) | §2, plus Vitest (the rules, the picker, both sheets, the card, the date defaults moved to it) | Done · 2026-10-10 · 4d5b514 |
 | R5.3e | **The leftovers** (C5, C3, M2, M8): the coach's two check-in pages (the form library and builder; assigning a check-in, reading and comparing) on the kit's buttons, fields, calendar and status labels, with coach words for each kind of question and each status; the coach's workout page (Target and Actual per set, units in one helper, a loading and a Retry state, each note by its author, and the closed-plan sentences said to the coach rather than as "Your plan"); the client's Training player's empty, completed and error states (always on the dark tokens, so the kit's pieces fit it); the plain top bar of an account with no coaching space (the kit's buttons and the brand tokens); and the former-client note on Training and Nutrition | §2, plus Vitest (the new wording, units, a failed read, the validation reasons through the kit's field ids) and Playwright (the plain top bar at 1440 and 390 px) | Done · 2026-10-10 · c2cfb1c |
-| R5.3f | **Delete the legacy CSS** (the global rules and variables in `styles.scss`), add the lint check, final words pass, close every §9 item | No legacy variables, no default buttons, §9 empty | Done · 2026-10-11 |
+| R5.3f | **Delete the legacy CSS** (the global rules and variables in `styles.scss`), add the lint check and final words pass; later review limits §9 closure | No legacy variables, no default buttons; review findings repaired and verified in R5.3g | Done · 2026-10-11 |
+| R5 review | **Six repairs**: tenant-owned plan/exercise/media operations; sheet edits across route/session/browser exits; unread cursor pagination; delivered and visible week shortcuts; server-paged swaps retaining selections; measurement/photo history across empty years | Repairs and focused regressions built; five repairs checked live in the review of 2026-10-11 (`docs/UI-REVIEW-2026-10-11.md`, "Step 0") and every regression run green in R5.3g | Done · 2026-10-11 |
+| R5.3g | **Verify and commit R5.3f and the review repairs** (`docs/UI-REVIEW-2026-10-11.md`, "Step 0"): run the Vitest, Playwright and backend regressions written for them, then commit them as two commits on the owner's go | Every regression named in Step 0 has run green and the two rows above carry their hashes | Done · 2026-10-11 |
+| R5.4a | **The player logs what the coach prescribed** (review doc, "Slice 1"): a set's draft starts from the prescription and last time's numbers are the reference, a "Rest is over" cue, the kit's controls instead of the player's three browser selects, and nothing under the client tab bar in the player | §2, plus Vitest for the draft precedence, the rest end and the controls, the player's Playwright spec, and one TRN line in `DOMAIN-RULES.md` | Open |
+| R5.4b | **One client, one mode, and honest failures** (review doc, "Slice 2"): client Today, Training and Check-ins marked `REDESIGNED` after a dark pass, a "This client isn't here" state for a 404, and a toast with Retry when a page fails to load | §2, plus the theme e2e for the three client routes and Vitest for the 404 state and the toast | Open |
+| R5.4c | **Sheet hosts on one base, and the small fixes** (review doc, "Slice 3"): Products, Service & access, Intake and Your entries on `GuardedSheets`; week-notice links read in two queries; the Strength history card reloads after Update maxes; suggested maxes in plate steps; the calories step, two wording fixes and the inbox line | §2, plus the folded hosts' specs green unchanged, one backend command-count test, and Vitest for the rounding and the wording | Open |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
 | R6.2 | **Homepage** pre-render, GSAP scroll story, Jitter hero video (the owner makes the assets) | §2 | Optional |
 
@@ -755,12 +760,11 @@ of the implemented R1.3 screens before production rollout.
   owner; Claude recommends it, with the same one-tap reasons; (b) more measurement types (neck, calf,
   shoulders: the type is a server list); (c) photo tags, reordering and the before/after slider on the entries
   page (the dashboard compares two photos of one pose); (d) a reminder to log a weight or to take photos
-  (no notice kind exists); (e) **reaching a measurement or a photo from before a year with none**: Show
-  earlier for weights knows where the first weigh-in is (a read of the first day), but the measurement
-  and photo reads have no such day, so their Show earlier stops at the first empty year ("Nothing earlier
-  was recorded in the year before these"). A client back after more than a year away would not reach
-  the older ones from this page; a first-date field on those two reads, like the weight one, is the
-  fix.
+  (no notice kind exists). Review repair (2026-10-11): measurement and photo reads now carry the nearest
+  earlier date under the same client/audience scope. Show earlier jumps across empty years in bounded
+  windows and stops only at that boundary; a client still sees their removed photos, a coach does not.
+  Its regressions ran in R5.3g, which also gave the Measurements tab its Show earlier after an empty
+  year (see R5.3g below).
 
 - **The coach's client Nutrition tab and Strength history, R5.3d (built 2026-10-10; screenshots
   `docs/design/r53d-*.png` and `r53d2-*.png`). Decided by Claude for the owner on 2026-10-10**, after
@@ -832,6 +836,17 @@ of the implemented R1.3 screens before production rollout.
   preserves fields, dialogs, filters, anchors and scroll. The prototype's own colours stay under
   `--hero-*`; the reviewed kit snapshots now show its own captions and brand focus colour. No backend
   rule, API or database change; optional R6 remains outside this slice.
+- **Verify and commit, R5.3g (2026-10-11).** Every regression in the review's Step 0 ran: the full
+  Vitest suite, the touched Playwright specs and the full backend suite. Five of them failed on
+  their first run. Two were real bugs in the repairs, fixed here: the exercise sheet's swap search
+  box disappeared as soon as the coach typed (it showed only while more than eight rows were on
+  screen, and a search empties them first; it now follows the size of the whole library), and Your
+  entries offered no Show earlier measurements when the last year had none (photos did). Both tabs
+  now say "No measurements (photos) in the last year" above Show earlier instead of "none yet" when
+  older ones exist. Three were faults in the tests: the Browser Back test never started the router's
+  listener and waited on a navigation its own question held (it now also checks that the address
+  comes back), the intake test retyped the phone number already saved, and the history test read
+  units without the suite's string-enum options. R5.3f and the repairs were then committed apart.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1742,12 +1757,17 @@ Maya Fakhoury is the client with a workout waiting today.
 
 ## 9. Open problems carried over from the retired audit documents
 
-No open items. Closed in R5.3f (2026-10-10), verified in the browser: editors protect unsaved work;
-refused submits show reasons and focus the relevant field or summary; expected access refusals have
-friendly states; route titles, heading focus and scroll work together; the rebuilt shell fits narrow
-screens and closes its menu on navigation; clients reach Nutrition from Today and the tab bar.
-Exercise saves retain muscles, alternatives and linked media. The existing regression tests and the
-R5.3f navigation, refresh, dark-mode and reflow checks pin these behaviors.
+The R5.3f blanket closure claim was too broad. The six findings reconfirmed in the Phase 5 review
+are repaired in code (2026-10-11): pending plan/exercise saves and media use tenant-operation ownership;
+nutrition, progress, completed-intake and plan sheets register for route, workspace, sign-out and unload
+exits and survive Browser Back until the decision; unread pages use a stable recipient-scoped cursor;
+week shortcuts use delivered structured targets narrowed by current visibility; swaps use server search
+and pagination while retaining selected rows; history reads carry an earlier date across empty years.
+Historical week notices without structured targets open Training without guessing a week or rewriting
+history. The review of 2026-10-11 checked five of them live in a browser; Browser Back on a sheet is
+proved in Vitest. R5.3g ran every regression written for them, fixed the two bugs they found (the swap
+search box and Show earlier after an empty year) and committed R5.3f and the repairs. These close the
+six named findings, not every editor or access state for good. R6 has not started.
 
 ---
 

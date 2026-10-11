@@ -48,6 +48,7 @@ public sealed class Notification : TenantEntity
         Culture = template.Culture;
         Title = template.Title;
         Body = template.Body;
+        TargetWeeks = template.TargetWeeks?.ToArray();
     }
 
     public Guid RecipientUserId { get; private set; }
@@ -70,6 +71,9 @@ public sealed class Notification : TenantEntity
     public string Title { get; private set; } = string.Empty;
 
     public string Body { get; private set; } = string.Empty;
+
+    /// <summary>Weeks actually named at delivery; null for historical rows with no structured target.</summary>
+    public int[]? TargetWeeks { get; private set; }
 
     public DateTimeOffset? ReadAtUtc { get; private set; }
 

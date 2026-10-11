@@ -30,11 +30,13 @@ export interface NotificationItem {
   readonly workoutExecutionId: string | null;
   /** The first week a week notice names, so Training can open at it. */
   readonly weekNumber: number | null;
+  readonly mesocycleId?: string | null;
 }
 
 export interface NotificationPage {
   readonly total: number;
   readonly unreadTotal: number;
+  readonly hasMore?: boolean;
   readonly items: readonly NotificationItem[];
 }
 
@@ -50,6 +52,7 @@ export function mapNotification(value: ContractNotificationView): NotificationIt
     clientProfileId: value.clientProfileId ?? null,
     sessionId: value.sessionId ?? null,
     workoutExecutionId: value.workoutExecutionId ?? null,
+    mesocycleId: value.mesocycleId ?? null,
     weekNumber:
       value.weekNumber === null || value.weekNumber === undefined
         ? null
@@ -61,6 +64,7 @@ export function mapNotificationPage(value: ContractNotificationPage): Notificati
   return {
     total: toCount(value.total),
     unreadTotal: toCount(value.unreadTotal),
+    hasMore: value.hasMore,
     items: value.items.map(mapNotification),
   };
 }

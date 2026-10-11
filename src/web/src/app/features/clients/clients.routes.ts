@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
+import { confirmBeforeLeaving, confirmSheetLeave } from '../../core/forms/leave-guard';
 import { REDESIGNED } from '../../core/theme/redesigned-route';
 
 const sections = () => import('./client-workspace-sections');
@@ -25,6 +25,7 @@ export const clientRoutes: Routes = [
     // One client's record (C3): a header and one route per section, so each section can be linked
     // to, bookmarked and reloaded. The API authorizes every read and change.
     path: ':clientId',
+    canDeactivate: [confirmSheetLeave],
     loadComponent: () => import('./client-workspace').then((module) => module.ClientWorkspace),
     children: [
       {
@@ -36,6 +37,7 @@ export const clientRoutes: Routes = [
       },
       {
         path: 'training',
+        canDeactivate: [confirmSheetLeave],
         title: $localize`Client training | TB Gym`,
         data: REDESIGNED,
         loadComponent: () => sections().then((module) => module.ClientTrainingSection),
@@ -51,6 +53,7 @@ export const clientRoutes: Routes = [
       },
       {
         path: 'nutrition',
+        canDeactivate: [confirmSheetLeave],
         title: $localize`Client nutrition | TB Gym`,
         data: REDESIGNED,
         loadComponent: () => sections().then((module) => module.ClientNutritionSection),
@@ -73,18 +76,21 @@ export const clientRoutes: Routes = [
       },
       {
         path: 'progress',
+        canDeactivate: [confirmSheetLeave],
         title: $localize`Client progress | TB Gym`,
         data: REDESIGNED,
         loadComponent: () => sections().then((module) => module.ClientProgressSection),
       },
       {
         path: 'service',
+        canDeactivate: [confirmSheetLeave],
         title: $localize`Client service & access | TB Gym`,
         data: REDESIGNED,
         loadComponent: () => sections().then((module) => module.ClientServiceSection),
       },
       {
         path: 'intake',
+        canDeactivate: [confirmSheetLeave],
         title: $localize`Client intake | TB Gym`,
         data: REDESIGNED,
         loadComponent: () => import('./client-intake').then((module) => module.ClientIntake),

@@ -1411,6 +1411,10 @@ change; a note's notice is keyed by the note. The payload holds identifiers and 
 never a note's text, a weight or a date. Before delivery the dispatcher checks again: the client still
 this workspace's, linked to the recipient and not blocked, the program still theirs and not cancelled,
 and for a week notice at least one of its weeks still open to the client; only those weeks are named.
+Phase 5 review: delivered week identifiers are an immutable part of the notification snapshot;
+shortcuts may narrow them to currently visible weeks, never widen them to omitted weeks. Old rows
+without structured targets use the program page, with no wording parsing or historical backfill.
+Unread paging uses an optional own-recipient cursor so read-state changes cannot move its boundary.
 
 **MED-001** Object bytes live in object storage; the database owns metadata, tenant, purpose,
 content type, size, checksum, status, and retention. Upload authorization validates type and
@@ -1642,6 +1646,9 @@ removed and taken again the same day, by the client or by their coach, as PRG-01
 weigh-in's date. The removed row, its media association and its removal record are kept; the client still
 sees it in their own history and a coach never does. Two active photos for one date and pose still
 conflict, whether they arrive one after the other or together.
+Measurement/photo history reads also expose the nearest earlier date under the same client and photo
+visibility predicates; empty windows never prove that older history is absent. Entry windows remain
+bounded and half-open.
 
 **MED-009** A storage allowance counts the original and every derivative, counts tombstoned bytes
 that are not yet purged because they are still physically stored, and excludes purged bytes. Uploads

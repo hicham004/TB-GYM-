@@ -20,7 +20,7 @@ import { ApiClient } from '../../core/api/api-client';
 import type { WorkspaceDetails } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
-import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import type { GirthUnit, MassUnit } from '../../core/units/body-units';
 import { Button } from '../../ui/button';
@@ -181,6 +181,8 @@ export class ProgressEntries {
   protected readonly weightState = signal<FeedState>('idle');
   private readonly weightWindows = signal<readonly ProgressViewModel[]>([]);
   private weightRanges: Range[] = [];
+  private earlierMeasurementDate: string | null = null;
+  private earlierPhotoDate: string | null = null;
   private firstWeighIn: string | null = null;
   protected readonly weightMore = signal(false);
   protected readonly weightEarlierBusy = signal(false);
@@ -309,6 +311,13 @@ export class ProgressEntries {
 
   // ---- reading ----
 
+  private historyRange(ranges: readonly Range[], earlierDate: string | null): Range {
+    const previous = this.earlierRange(ranges);
+    if (!earlierDate || earlierDate >= previous.from) return previous;
+    const to = addDays(earlierDate, 1);
+    return { from: addDays(to, -WINDOW_DAYS), to };
+  }
+
   private firstRange(): Range {
     const to = addDays(this.today(), 1);
     return { from: addDays(to, -WINDOW_DAYS), to };
@@ -411,7 +420,8 @@ export class ProgressEntries {
         );
         this.measurementRanges = [range];
         this.measurementWindows.set([window]);
-        this.measurementMore.set(measurementDays(window, this.audience()).length > 0);
+        this.earlierMeasurementDate = window.earlierDate ?? null;
+        this.measurementMore.set(this.earlierMeasurementDate !== null);
         this.measurementState.set('ready');
       } catch {
         if (!owner.current) return;
@@ -424,7 +434,7 @@ export class ProgressEntries {
     return this.scope.run('measurements-earlier', async (owner) => {
       this.measurementEarlierBusy.set(true);
       try {
-        const range = this.earlierRange(this.measurementRanges);
+        const range = this.historyRange(this.measurementRanges, this.earlierMeasurementDate);
         const window = await owner.wait(
           firstValueFrom(
             this.entries.measurements(this.clientId(), this.girth(), range.from, range.to),
@@ -432,8 +442,9 @@ export class ProgressEntries {
         );
         this.measurementRanges = [...this.measurementRanges, range];
         this.measurementWindows.update((windows) => [...windows, window]);
-        // A year with nothing in it is the end of what is known: older years are not guessed at.
-        this.measurementMore.set(measurementDays(window, this.audience()).length > 0);
+        // The server boundary crosses empty years without guessing from this window.
+        this.earlierMeasurementDate = window.earlierDate ?? null;
+        this.measurementMore.set(this.earlierMeasurementDate !== null);
       } catch {
         if (!owner.current) return;
       } finally {
@@ -456,6 +467,8 @@ export class ProgressEntries {
           ),
         );
         this.measurementWindows.set(windows);
+        this.earlierMeasurementDate = windows.at(-1)?.earlierDate ?? null;
+        this.measurementMore.set(this.earlierMeasurementDate !== null);
       } catch {
         if (!owner.current) return;
         this.measurementState.set('error');
@@ -478,9 +491,10 @@ export class ProgressEntries {
         );
         this.photoRanges = [range];
         this.photoWindows.set([window.photos]);
-        this.photoMore.set(window.photos.length > 0);
+        this.earlierPhotoDate = window.earlierDate ?? null;
+        this.photoMore.set(this.earlierPhotoDate !== null);
         this.photoState.set('ready');
-        await owner.wait(this.grantThumbnails(window.photos));
+        await owner.wait(this.grantThumbnails(window.photos, owner));
       } catch {
         if (!owner.current) return;
         if (this.photoState() !== 'ready') this.photoState.set('error');
@@ -492,14 +506,15 @@ export class ProgressEntries {
     return this.scope.run('photos-earlier', async (owner) => {
       this.photoEarlierBusy.set(true);
       try {
-        const range = this.earlierRange(this.photoRanges);
+        const range = this.historyRange(this.photoRanges, this.earlierPhotoDate);
         const window = await owner.wait(
           firstValueFrom(this.entries.photos(this.clientId(), range.from, range.to)),
         );
         this.photoRanges = [...this.photoRanges, range];
         this.photoWindows.update((windows) => [...windows, window.photos]);
-        this.photoMore.set(window.photos.length > 0);
-        await owner.wait(this.grantThumbnails(window.photos));
+        this.earlierPhotoDate = window.earlierDate ?? null;
+        this.photoMore.set(this.earlierPhotoDate !== null);
+        await owner.wait(this.grantThumbnails(window.photos, owner));
       } catch {
         if (!owner.current) return;
       } finally {
@@ -520,7 +535,14 @@ export class ProgressEntries {
           ),
         );
         this.photoWindows.set(windows.map((window) => window.photos));
-        await owner.wait(this.grantThumbnails(windows.flatMap((window) => window.photos)));
+        this.earlierPhotoDate = windows.at(-1)?.earlierDate ?? null;
+        this.photoMore.set(this.earlierPhotoDate !== null);
+        await owner.wait(
+          this.grantThumbnails(
+            windows.flatMap((window) => window.photos),
+            owner,
+          ),
+        );
       } catch {
         if (!owner.current) return;
         this.photoState.set('error');
@@ -532,15 +554,18 @@ export class ProgressEntries {
    * A thumbnail path is not a public address: it needs a short-lived grant. One grant covers a screenful
    * of tiles, and a failure leaves the tiles saying so rather than failing the page.
    */
-  private async grantThumbnails(photos: readonly ProgressPhoto[]): Promise<void> {
+  private async grantThumbnails(
+    photos: readonly ProgressPhoto[],
+    owner: TenantOperation,
+  ): Promise<void> {
     const wanted = photos
       .filter((photo) => photo.status === 'Active' && !this.thumbnails().has(photo.mediaAssetId))
       .map((photo) => photo.mediaAssetId);
     for (let start = 0; start < wanted.length; start += GRANT_CHUNK) {
       try {
-        await this.csrf.refresh();
-        const granted = await firstValueFrom(
-          this.entries.thumbnails(wanted.slice(start, start + GRANT_CHUNK)),
+        await owner.wait(this.csrf.refresh());
+        const granted = await owner.wait(
+          firstValueFrom(this.entries.thumbnails(wanted.slice(start, start + GRANT_CHUNK))),
         );
         this.thumbnails.update((known) => new Map([...known, ...granted]));
       } catch {

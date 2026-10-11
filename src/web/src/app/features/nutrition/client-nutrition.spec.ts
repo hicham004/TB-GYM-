@@ -1,3 +1,4 @@
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -108,6 +109,23 @@ describe('A client’s Nutrition tab', () => {
       .querySelectorAll('.cdk-overlay-container')
       .forEach((node) => node.replaceChildren());
     TestBed.resetTestingModule();
+  });
+
+  it('registers dirty nutrition sheets for session exits and beforeunload and cleans up', async () => {
+    const { fixture, host } = await render();
+    press(card(host, 'allergens'), 'Edit allergens');
+    await settle(fixture);
+    tick(dialog()!, 'Sesame');
+    await settle(fixture);
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    const leave = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(fixture);
+    press(dialog()!, 'Keep editing');
+    expect(await leave).toBe(false);
+    fixture.destroy();
+    expect(await TestBed.inject(UnsavedWork).confirmLeave()).toBe(true);
   });
 
   describe('what it shows', () => {

@@ -4009,6 +4009,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("SourceOutboxItemId")
                         .HasColumnType("uuid");
 
+                    b.PrimitiveCollection<int[]>("TargetWeeks")
+                        .HasColumnType("integer[]");
+
                     b.Property<string>("TemplateKey")
                         .IsRequired()
                         .HasMaxLength(100)

@@ -142,7 +142,8 @@
             </div>
           }
           @case ('ready') {
-            @if (measurementList().length === 0) {
+            <!-- An empty year never hides older entries: the server says when there are some. -->
+            @if (measurementList().length === 0 && !measurementMore()) {
               <app-empty-state
                 class="panel"
                 [heading]="coachMode() ? noMeasurementsCoach() : noMeasurementsClient"
@@ -158,53 +159,54 @@
                   Log measurements
                 </button>
               </app-empty-state>
-            } @else {
-              @for (group of measurementList(); track group.date) {
-                <section class="panel day" [attr.data-day]="group.date">
-                  <h2>
-                    <time [attr.datetime]="group.date">{{ dayLong(group.date) }}</time>
-                  </h2>
-                  <ul class="rows" role="list">
-                    @for (row of group.rows; track row.id) {
-                      <li class="row" [attr.data-measurement]="row.id">
-                        <div class="what">
-                          <span class="when">{{ row.name }}</span
-                          >&ngsp;
-                          <span class="meta">
-                            {{ row.addedBy }}
-                            @if (row.entered) {
-                              <ng-container>&ngsp;·&ngsp;{{ row.entered }}</ng-container>
-                            }
-                          </span>
-                        </div>
-                        <strong class="value">{{ row.value }}</strong>
-                        <app-menu
-                          [label]="moreForMeasurement(row)"
-                          icon="more"
-                          [items]="measurementMenu"
-                          (chosen)="measurementAction($event, row, sheets)"
-                        />
-                      </li>
-                    }
-                  </ul>
-                </section>
-              }
-              @if (measurementMore()) {
-                <button
-                  appButton
-                  type="button"
-                  variant="outlined"
-                  class="earlier"
-                  [loading]="measurementEarlierBusy()"
-                  (click)="showEarlierMeasurements()"
-                  data-earlier-measurements
-                  i18n
-                >
-                  Show earlier measurements
-                </button>
-              } @else {
-                <p class="quiet" i18n>Nothing earlier was recorded in the year before these.</p>
-              }
+            } @else if (measurementList().length === 0) {
+              <p class="quiet" i18n>No measurements in the last year.</p>
+            }
+            @for (group of measurementList(); track group.date) {
+              <section class="panel day" [attr.data-day]="group.date">
+                <h2>
+                  <time [attr.datetime]="group.date">{{ dayLong(group.date) }}</time>
+                </h2>
+                <ul class="rows" role="list">
+                  @for (row of group.rows; track row.id) {
+                    <li class="row" [attr.data-measurement]="row.id">
+                      <div class="what">
+                        <span class="when">{{ row.name }}</span
+                        >&ngsp;
+                        <span class="meta">
+                          {{ row.addedBy }}
+                          @if (row.entered) {
+                            <ng-container>&ngsp;·&ngsp;{{ row.entered }}</ng-container>
+                          }
+                        </span>
+                      </div>
+                      <strong class="value">{{ row.value }}</strong>
+                      <app-menu
+                        [label]="moreForMeasurement(row)"
+                        icon="more"
+                        [items]="measurementMenu"
+                        (chosen)="measurementAction($event, row, sheets)"
+                      />
+                    </li>
+                  }
+                </ul>
+              </section>
+            }
+            @if (measurementMore()) {
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                class="earlier"
+                [loading]="measurementEarlierBusy()"
+                (click)="showEarlierMeasurements()"
+                data-earlier-measurements
+                i18n
+              >
+                Show earlier measurements
+              </button>
+            } @else if (measurementList().length > 0) {
+              <p class="quiet" i18n>There are no earlier measurements.</p>
             }
           }
           @default {
@@ -234,7 +236,9 @@
             </div>
           }
           @case ('ready') {
-            @if (photoLists().days.length === 0 && photoLists().removed.length === 0) {
+            @if (
+              photoLists().days.length === 0 && photoLists().removed.length === 0 && !photoMore()
+            ) {
               <app-empty-state
                 class="panel"
                 [heading]="coachMode() ? noPhotosCoach() : noPhotosClient"
@@ -250,6 +254,8 @@
                   Add photos
                 </button>
               </app-empty-state>
+            } @else if (photoLists().days.length === 0 && photoMore()) {
+              <p class="quiet" i18n>No photos in the last year.</p>
             }
             @for (group of photoLists().days; track group.date) {
               <section class="panel day" [attr.data-day]="group.date">
@@ -325,7 +331,7 @@
                 Show earlier photos
               </button>
             } @else if (photoLists().days.length > 0) {
-              <p class="quiet" i18n>Nothing earlier was saved in the year before these.</p>
+              <p class="quiet" i18n>There are no earlier photos.</p>
             }
           }
           @default {

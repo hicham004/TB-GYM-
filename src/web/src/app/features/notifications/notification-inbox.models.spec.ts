@@ -79,6 +79,21 @@ describe('noticeTarget', () => {
     ).toEqual({ commands: ['/training/program'], queryParams: { workout: 'w-1' } });
   });
 
+  it('pins a week shortcut to its delivered program and falls back when no visible target remains', () => {
+    expect(
+      noticeTarget(
+        notice('s', at, { kind: 'WeeksShared', weekNumber: 3, mesocycleId: 'program-a' }),
+        false,
+      ),
+    ).toEqual({ commands: ['/training/program'], queryParams: { week: 3, program: 'program-a' } });
+    expect(
+      noticeTarget(
+        notice('s', at, { kind: 'WeeksShared', weekNumber: null, mesocycleId: 'program-a' }),
+        false,
+      ),
+    ).toEqual({ commands: ['/training/program'] });
+  });
+
   it('opens a client’s note on that client’s Training, at the session', () => {
     expect(
       noticeTarget(

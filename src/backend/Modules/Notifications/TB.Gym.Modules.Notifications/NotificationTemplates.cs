@@ -4,7 +4,10 @@ namespace TB.Gym.Modules.Notifications;
 /// One rendered template: what a notification of a given kind says, in a given culture, at a given
 /// template version.
 /// </summary>
-public sealed record NotificationTemplate(string Key, int Version, string Culture, string Title, string Body);
+public sealed record NotificationTemplate(string Key, int Version, string Culture, string Title, string Body)
+{
+    public int[]? TargetWeeks { get; init; }
+}
 
 /// <summary>
 /// The complete, code-owned set of notification wordings.
@@ -174,7 +177,11 @@ public static class NotificationTemplateCatalog
     /// read, so nothing a person typed can reach the wording.
     /// </summary>
     public static NotificationTemplate NameWeeks(NotificationTemplate template, IEnumerable<int> weeks) =>
-        template with { Title = template.Title.Replace(WeeksToken, DescribeWeeks(weeks), StringComparison.Ordinal) };
+        template with
+        {
+            Title = template.Title.Replace(WeeksToken, DescribeWeeks(weeks), StringComparison.Ordinal),
+            TargetWeeks = weeks.Where(week => week > 0).Distinct().Order().ToArray(),
+        };
 
     public static string DescribeWeeks(IEnumerable<int> weeks)
     {

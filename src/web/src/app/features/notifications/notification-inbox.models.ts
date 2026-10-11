@@ -38,7 +38,14 @@ export function noticeTarget(item: NotificationItem, isOwner: boolean): NoticeTa
     case 'WeeksChanged':
       return {
         commands: ['/training/program'],
-        ...(item.weekNumber !== null ? { queryParams: { week: item.weekNumber } } : {}),
+        ...(item.weekNumber !== null
+          ? {
+              queryParams: {
+                week: item.weekNumber,
+                ...(item.mesocycleId ? { program: item.mesocycleId } : {}),
+              },
+            }
+          : {}),
       };
     case 'CoachWorkoutNote':
       return {

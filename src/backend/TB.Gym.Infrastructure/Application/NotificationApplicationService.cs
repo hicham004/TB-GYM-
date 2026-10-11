@@ -33,7 +33,8 @@ internal sealed class NotificationApplicationService(
         int skip,
         int take,
         bool unreadOnly,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? beforeId = null)
     {
         if (!TryResolveRecipient(out var recipientUserId))
         {
@@ -47,6 +48,16 @@ internal sealed class NotificationApplicationService(
         var listed = unreadOnly ? own.Where(item => item.ReadAtUtc == null) : own;
         var total = unreadOnly ? unread : await own.LongCountAsync(cancellationToken);
 
+        if (beforeId is { } cursor)
+        {
+            var anchor = await own.Where(item => item.Id == cursor)
+                .Select(item => new { item.Id, item.CreatedAtUtc }).SingleOrDefaultAsync(cancellationToken);
+            if (anchor is null) return new NotificationPage(total, unread, []);
+            listed = listed.Where(item => item.CreatedAtUtc < anchor.CreatedAtUtc ||
+                (item.CreatedAtUtc == anchor.CreatedAtUtc && item.Id.CompareTo(anchor.Id) < 0));
+            skip = 0;
+        }
+
         // Newest first, with the identifier as the tiebreaker. UUIDv7 identifiers are time-ordered,
         // so two notifications written in the same instant still page deterministically instead of
         // swapping places between requests and duplicating or skipping a row.
@@ -54,14 +65,16 @@ internal sealed class NotificationApplicationService(
             .OrderByDescending(item => item.CreatedAtUtc)
             .ThenByDescending(item => item.Id)
             .Skip(skip)
-            .Take(take)
+            .Take(take + 1)
             .ToListAsync(cancellationToken);
+        var hasMore = items.Count > take;
+        if (hasMore) items.RemoveAt(items.Count - 1);
         var links = await ReadLinksAsync(items, cancellationToken);
 
         return new NotificationPage(
             total,
             unread,
-            items.Select(item => ToView(item, links.GetValueOrDefault(item.SourceOutboxItemId))).ToList());
+            items.Select(item => ToView(item, links.GetValueOrDefault(item.SourceOutboxItemId))).ToList(), hasMore);
     }
 
     public async Task<NotificationReadAllResult> MarkAllOwnReadAsync(CancellationToken cancellationToken)
@@ -239,12 +252,33 @@ internal sealed class NotificationApplicationService(
             }
 
             // A client's note links the coach to that client; every other training notice is the reader's own.
-            var weeks = payload.Weeks?.Where(week => week > 0).ToArray() ?? [];
+            int? targetWeek = null;
+            var delivered = notifications.Single(item => item.SourceOutboxItemId == row.Id).TargetWeeks;
+            if ((row.Kind is CommercialNotificationKind.WeeksShared or CommercialNotificationKind.WeeksChanged) &&
+                delivered is { Length: > 0 })
+            {
+                // The delivered snapshot limits candidates. Current visibility can only narrow them.
+                var block = await dbContext.TrainingMesocycles.AsNoTracking()
+                    .Where(item => item.Id == payload.MesocycleId && item.ClientProfileId == payload.ClientProfileId &&
+                        item.Status != TB.Gym.Modules.Training.MesocycleStatus.Cancelled)
+                    .Select(item => new { item.StartDate, item.TimeZoneId, item.RevealAllWeeks })
+                    .SingleOrDefaultAsync(cancellationToken);
+                if (block is not null)
+                {
+                    var weeks = await dbContext.MesocycleWeeks.AsNoTracking()
+                        .Where(item => item.MesocycleId == payload.MesocycleId && delivered.Contains(item.WeekNumber))
+                        .Select(item => new { item.WeekNumber, item.IsPublished }).ToListAsync(cancellationToken);
+                    targetWeek = weeks.Where(item => TB.Gym.Modules.Training.TrainingCalendarPolicy.GetWeekAvailability(
+                            block.StartDate, item.WeekNumber, block.TimeZoneId, clock.UtcNow, block.RevealAllWeeks, item.IsPublished).IsVisible)
+                        .Select(item => (int?)item.WeekNumber).Min();
+                }
+            }
             links[row.Id] = new NotificationLink(
                 row.Kind == CommercialNotificationKind.ClientWorkoutNote ? payload.ClientProfileId : null,
                 payload.SessionId,
                 payload.WorkoutExecutionId,
-                weeks.Length > 0 ? weeks.Min() : null);
+                targetWeek,
+                payload.MesocycleId);
         }
 
         return links;
@@ -274,7 +308,8 @@ internal sealed class NotificationApplicationService(
         link?.ClientProfileId,
         link?.SessionId,
         link?.WorkoutExecutionId,
-        link?.WeekNumber);
+        link?.WeekNumber,
+        link?.MesocycleId);
 
-    private sealed record NotificationLink(Guid? ClientProfileId, Guid? SessionId, Guid? WorkoutExecutionId, int? WeekNumber);
+    private sealed record NotificationLink(Guid? ClientProfileId, Guid? SessionId, Guid? WorkoutExecutionId, int? WeekNumber, Guid? MesocycleId = null);
 }

@@ -1,4 +1,6 @@
+import { inject } from '@angular/core';
 import type { CanDeactivateFn } from '@angular/router';
+import { UnsavedWork } from './unsaved-work';
 
 /** A page that may hold work the server does not have yet. */
 export interface HoldsUnsavedWork {
@@ -10,4 +12,10 @@ export interface HoldsUnsavedWork {
  * Asks an editor before the router takes the person away from it, so unsaved work is never dropped
  * silently (plan §9). Typed structurally, so a routes file does not pull a lazy editor in.
  */
-export const confirmBeforeLeaving: CanDeactivateFn<HoldsUnsavedWork> = (page) => page.canLeave();
+export const confirmSheetLeave: CanDeactivateFn<unknown> = () =>
+  inject(UnsavedWork).confirmSheets();
+
+export const confirmBeforeLeaving: CanDeactivateFn<HoldsUnsavedWork> = async (page) => {
+  const work = inject(UnsavedWork);
+  return (await work.confirmSheets()) && (await page.canLeave());
+};

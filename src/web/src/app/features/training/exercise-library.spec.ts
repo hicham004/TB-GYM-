@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExerciseSearchResult } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, fill, press, settle, tick } from '../../../testing/dom';
+import { button, field, fill, press, settle, tick } from '../../../testing/dom';
 import {
   access,
   asset,
@@ -32,6 +32,7 @@ async function render(
 ) {
   const api: Api = {
     search: vi.fn(search),
+    get: vi.fn((id: string) => of(exercise('Selected swap', { id }))),
     create: vi.fn((request: { name: string }) => of(exercise(request.name))),
     update: vi.fn((id: string, request: { name: string }) =>
       of(exercise(request.name, { id, version: 4 })),
@@ -139,6 +140,62 @@ describe('the exercise library', () => {
     );
     harness.fixture.destroy();
     await expect(work.confirmLeave()).resolves.toBe(true);
+  });
+
+  it('drops a save closed during CSRF refresh before a workspace switch', async () => {
+    const { harness, host, api } = await render();
+    let resolve!: () => void;
+    const pending = new Promise<void>((done) => {
+      resolve = done;
+    });
+    vi.mocked(TestBed.inject(CsrfService).refresh).mockReturnValue(pending);
+    press(host, 'New exercise');
+    await settle(harness.fixture);
+    fill(dialog()!, 'Exercise name', 'Hip Thrust');
+    await settle(harness.fixture);
+    press(dialog()!, 'Add exercise');
+    await settle(harness.fixture);
+    harness.fixture.destroy();
+    (TestBed.inject(TenantStore).selectedTenantId as ReturnType<typeof signal<string>>).set(
+      'tenant-2',
+    );
+    resolve();
+    await pending;
+    await Promise.resolve();
+    expect(api.create).not.toHaveBeenCalled();
+    expect(api.registerVideoLink).not.toHaveBeenCalled();
+  });
+
+  it('searches swaps on the server and retains an off-page selection across another search', async () => {
+    const saved = exercise('Squat', {
+      alternatives: [{ exerciseId: 'far-away', exerciseName: 'Selected swap', note: null }],
+    });
+    // A library of 40, so the swaps get a search box; the selected swap is on none of these pages.
+    const firstPage = [
+      saved,
+      ...Array.from({ length: 12 }, (_, index) => exercise(`Lift ${index}`)),
+    ];
+    const { harness, host, api } = await render(undefined, (query) =>
+      of(query['query'] === 'press' ? results([exercise('Bench press')]) : results(firstPage, 40)),
+    );
+    await choose(harness, host, 'More for Squat', 'Edit');
+    const sheet = dialog()!;
+    expect(sheet.textContent).toContain('Selected swap');
+    fill(sheet, 'Find an exercise', 'press');
+    await settle(harness.fixture);
+    expect(api.search).toHaveBeenLastCalledWith({ query: 'press', skip: 0, take: 25 });
+    // The box stays while a search empties the rows under it, with what was typed.
+    expect(field(sheet, 'Find an exercise').value).toBe('press');
+    expect(sheet.textContent).toContain('Bench press');
+    expect(sheet.textContent).toContain('Selected swap');
+    press(sheet, 'Save exercise');
+    await settle(harness.fixture);
+    expect(api.update).toHaveBeenCalledWith(
+      saved.id,
+      expect.objectContaining({
+        alternatives: [expect.objectContaining({ exerciseId: 'far-away' })],
+      }),
+    );
   });
 
   it('shows each exercise as a card with what it trains, its type and its first picture or video', async () => {

@@ -1,3 +1,5 @@
+import { signal } from '@angular/core';
+import { TenantStore } from '../../core/tenancy/tenant.store';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -38,6 +40,7 @@ async function renderStart(
     providers: [
       provideRouter([]),
       { provide: ApiClient, useValue: calls },
+      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
     ],
   });
@@ -185,6 +188,7 @@ async function renderPayment(api: Record<string, unknown> = {}) {
     imports: [PlanPayment],
     providers: [
       { provide: ApiClient, useValue: calls },
+      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
     ],
   });
@@ -205,6 +209,24 @@ async function renderPayment(api: Record<string, unknown> = {}) {
 
 describe('Record payment', () => {
   afterEach(() => TestBed.resetTestingModule());
+
+  it('does not record a payment after destruction during CSRF refresh', async () => {
+    const { fixture, host, api, closed } = await renderPayment();
+    let resolve!: () => void;
+    vi.mocked(TestBed.inject(CsrfService).refresh).mockReturnValue(
+      new Promise<void>((done) => {
+        resolve = done;
+      }),
+    );
+    press(host, 'Record payment');
+    await settle(fixture);
+    fixture.destroy();
+    resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(api.recordManualPayment).not.toHaveBeenCalled();
+    expect(closed).not.toHaveBeenCalled();
+  });
 
   it('starts at what is left and records it in the plan’s currency', async () => {
     const { fixture, host, api, closed } = await renderPayment();

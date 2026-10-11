@@ -1,3 +1,4 @@
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -78,6 +79,51 @@ describe('Plans you sell', () => {
   afterEach(() => {
     document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
+  });
+
+  it('drops a pending create when its sheet is destroyed during CSRF refresh', async () => {
+    const { fixture, host, api } = await render();
+    let resolve!: () => void;
+    const pending = new Promise<void>((done) => {
+      resolve = done;
+    });
+    vi.mocked(TestBed.inject(CsrfService).refresh).mockReturnValue(pending);
+    press(host, 'New plan');
+    await settle(fixture);
+    fill(dialog()!, 'Plan name', 'Hybrid');
+    fill(dialog()!, 'Length in weeks', '4');
+    fill(dialog()!, 'Price', '100');
+    await settle(fixture);
+    press(dialog()!, 'Create plan');
+    await settle(fixture);
+    fixture.destroy();
+    (TestBed.inject(TenantStore).selectedTenantId as ReturnType<typeof signal<string>>).set(
+      'tenant-2',
+    );
+    resolve();
+    await pending;
+    await Promise.resolve();
+    expect(api.createProduct).not.toHaveBeenCalled();
+  });
+
+  it('protects plan typing for session exits and beforeunload and cleans up on destroy', async () => {
+    const { fixture, host } = await render();
+    press(host, 'New plan');
+    await settle(fixture);
+    fill(dialog()!, 'Plan name', 'Hybrid');
+    await settle(fixture);
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    const leave = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(fixture);
+    press(dialog()!, 'Keep editing');
+    expect(await leave).toBe(false);
+    fixture.destroy();
+    expect(await TestBed.inject(UnsavedWork).confirmLeave()).toBe(true);
+    const after = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
   });
 
   it('shows each plan with its clients, price options shortest first and what each includes', async () => {

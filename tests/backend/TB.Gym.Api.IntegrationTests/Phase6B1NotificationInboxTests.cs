@@ -14,6 +14,44 @@ public sealed partial class Phase6B1NotificationDispatchTests
     /// see it or mark it read, and the refusal discloses nothing about whether it exists.
     /// </summary>
     [TestMethod]
+    public async Task UnreadCursorSurvivesReadsOfLoadedRowsAndEqualTimestampTies()
+    {
+        var workspace = await CreateWorkspaceAsync("review-cursor");
+        foreach (var feature in new[] { "Training", "Nutrition", "CheckIns", "Messaging", "ResourceLibrary" })
+        {
+            await AssignPaidLaterAsync(workspace, 100m, feature);
+            await SweepAsync(); // Same clock instant: the UUID tiebreaker must page too.
+        }
+        var first = await RequiredJsonAsync<UnreadPage>(await workspace.Client.GetAsync("/api/notifications?unread=true&take=2"));
+        Assert.IsTrue(first.HasMore);
+        await AssertStatusAsync(await MarkReadAsync(workspace.Client, first.Items[0].Id), HttpStatusCode.OK);
+        await AssertStatusAsync(await MarkReadAsync(workspace.Client, first.Items[1].Id), HttpStatusCode.OK);
+        var second = await RequiredJsonAsync<UnreadPage>(await workspace.Client.GetAsync($"/api/notifications?unread=true&take=2&beforeId={first.Items[^1].Id}"));
+        Assert.HasCount(2, second.Items);
+        Assert.IsTrue(second.HasMore);
+        Assert.IsFalse(second.Items.Any(item => first.Items.Any(earlier => earlier.Id == item.Id)));
+        var last = await RequiredJsonAsync<UnreadPage>(await workspace.Client.GetAsync($"/api/notifications?unread=true&take=2&beforeId={second.Items[^1].Id}"));
+        Assert.HasCount(1, last.Items);
+        Assert.IsFalse(last.HasMore);
+        var all = await InboxAsync(workspace.Client, take: 100);
+        CollectionAssert.AreEqual(all.Items.Skip(2).Select(item => item.Id).ToArray(), second.Items.Concat(last.Items).Select(item => item.Id).ToArray());
+        var other = await CreateWorkspaceAsync("review-cursor-other");
+        var foreign = await RequiredJsonAsync<UnreadPage>(await other.Client.GetAsync($"/api/notifications?beforeId={first.Items[^1].Id}"));
+        Assert.IsEmpty(foreign.Items, "A cursor from another recipient/workspace discloses nothing.");
+        using var anonymous = CreateClient();
+        SetTenant(anonymous, workspace.TenantId);
+        await AssertStatusAsync(await anonymous.GetAsync($"/api/notifications?beforeId={first.Items[^1].Id}"), HttpStatusCode.Unauthorized);
+    }
+
+    /// <summary>
+    /// An inbox page as the cursor test reads it: the ids in order and whether more follow. The kind
+    /// travels as a word, which the module's own view cannot read without the API's enum options.
+    /// </summary>
+    private sealed record UnreadPage(UnreadItem[] Items, bool HasMore);
+
+    private sealed record UnreadItem(Guid Id);
+
+    [TestMethod]
     public async Task AnotherWorkspaceCanNeitherReadNorMarkThisWorkspaceNotification()
     {
         var alpha = await CreateWorkspaceAsync("iso-alpha");

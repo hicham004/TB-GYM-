@@ -1,5 +1,8 @@
+import { protectSheetEdits } from '../../core/forms/sheet-exit-protection';
+import { UiConfirm } from '../../ui/confirm';
 import {
   Component,
+  DestroyRef,
   computed,
   effect,
   inject,
@@ -60,6 +63,7 @@ import { PlanPayment, PlanStart } from './plan-sheets';
   selector: 'app-client-service',
   imports: [
     AccessChange,
+    UiConfirm,
     Button,
     ClientActions,
     ClientCoach,
@@ -82,8 +86,43 @@ export class ClientService {
   private readonly router = inject(Router);
   private readonly sheets = inject(UiSheet);
   private readonly dialogs = inject(UiDialog);
+  private leaveDecision: Promise<boolean> | null = null;
+  private activeConfirm: { close(): void } | null = null;
   private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
+  protected sheetDirty = false;
+  protected readonly asking = signal(false);
+  private activeSheet: { close(): void } | null = null;
+  private readonly leaveDialog = viewChild.required<TemplateRef<unknown>>('leaveDialog');
+
+  async canLeave(): Promise<boolean> {
+    if (!this.sheetDirty) return true;
+    if (this.leaveDecision) return this.leaveDecision;
+    this.asking.set(true);
+    const ref = this.dialogs.open<boolean>(this.leaveDialog(), {
+      title: $localize`Close without saving?`,
+      closeOnNavigation: false,
+    });
+    this.activeConfirm = ref;
+    this.leaveDecision = firstValueFrom(ref.closed).then((answer) => answer === true);
+    const allowed = await this.leaveDecision;
+    this.leaveDecision = null;
+    this.activeConfirm = null;
+    this.asking.set(false);
+    if (allowed) this.sheetDirty = false;
+    return allowed;
+  }
+
+  protected async closePlanSheet(
+    result: unknown,
+    sheet: { close(result: unknown): void },
+  ): Promise<void> {
+    if (result) {
+      this.sheetDirty = false;
+      sheet.close(result);
+    } else if (await this.canLeave()) sheet.close(result);
+  }
+
   private loadedKey: string | null = null;
 
   protected readonly context = inject(ClientWorkspaceContext);
@@ -183,6 +222,15 @@ export class ClientService {
   });
 
   constructor() {
+    protectSheetEdits(
+      this,
+      () => this.sheetDirty,
+      () => {
+        this.activeSheet?.close();
+        this.activeConfirm?.close();
+      },
+    );
+    inject(DestroyRef).onDestroy(() => this.activeSheet?.close());
     this.scope.onReset(() => this.reset());
     effect(() => {
       this.scope.epoch();
@@ -369,11 +417,20 @@ export class ClientService {
     title: string,
     notice: (result: T) => string,
   ): void {
+    this.activeSheet?.close();
+    this.sheetDirty = false;
     const ref = this.sheets.open<T | null | false>(template, {
+      closeOnNavigation: false,
+      canClose: () => this.canLeave(),
       title,
       closeLabel: this.closeLabel,
     });
+    this.activeSheet = ref;
     ref.closed.subscribe((result) => {
+      if (this.activeSheet === ref) {
+        this.activeSheet = null;
+        this.sheetDirty = false;
+      }
       if (result) this.done(notice(result as T));
     });
   }
@@ -409,6 +466,7 @@ export class ClientService {
   }
 
   private reset(): void {
+    this.activeSheet?.close();
     this.loadedKey = null;
     this.state.set('loading');
     this.catalog.set(null);

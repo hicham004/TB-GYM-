@@ -61,7 +61,7 @@ public sealed record ProgressPhotosView(
     Guid ClientProfileId,
     DateOnly From,
     DateOnly ToExclusive,
-    IReadOnlyList<ProgressPhotoView> Photos);
+    IReadOnlyList<ProgressPhotoView> Photos, DateOnly? EarlierDate = null);
 
 public sealed record ProgressPhotoCommandResult(
     ProgressPhotoCommandStatus Status,
@@ -239,7 +239,7 @@ public sealed record BodyMeasurementsView(
     MeasurementUnit DisplayUnit,
     DateOnly From,
     DateOnly ToExclusive,
-    IReadOnlyList<BodyMeasurementDayView> Days);
+    IReadOnlyList<BodyMeasurementDayView> Days, DateOnly? EarlierDate = null);
 
 public sealed record BodyMeasurementHistoryItemView(
     Guid Id,

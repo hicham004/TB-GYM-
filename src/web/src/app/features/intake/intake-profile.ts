@@ -1,3 +1,4 @@
+import { protectSheetEdits } from '../../core/forms/sheet-exit-protection';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -50,6 +51,8 @@ export class IntakeProfile {
   private readonly locale = inject(LOCALE_ID);
   private readonly sheets = inject(UiSheet);
   private readonly dialogs = inject(UiDialog);
+  private leaveDecision: Promise<boolean> | null = null;
+  private activeConfirm: { close(): void } | null = null;
   private readonly toast = inject(UiToast);
   private readonly editSheet = viewChild.required<TemplateRef<unknown>>('editSheet');
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
@@ -101,7 +104,21 @@ export class IntakeProfile {
     };
   });
 
+  async canLeave(): Promise<boolean> {
+    const allowed = await this.canCloseSheet();
+    if (allowed) this.sheetDirty = false;
+    return allowed;
+  }
+
   constructor() {
+    protectSheetEdits(
+      this,
+      () => this.sheetDirty,
+      () => {
+        this.openSheet?.close();
+        this.activeConfirm?.close();
+      },
+    );
     inject(DestroyRef).onDestroy(() => this.openSheet?.close());
   }
 
@@ -116,11 +133,15 @@ export class IntakeProfile {
     const sheet = this.sheets.open<boolean>(this.editSheet(), {
       title: this.titleOf(step),
       closeLabel: this.closeLabel,
+      closeOnNavigation: false,
       canClose: () => this.canCloseSheet(),
     });
     this.openSheet = sheet;
     sheet.closed.subscribe((saved) => {
-      if (this.openSheet === sheet) this.openSheet = null;
+      if (this.openSheet === sheet) {
+        this.openSheet = null;
+        this.sheetDirty = false;
+      }
       if (saved) this.toast.show(this.savedText(step), { tone: 'success' });
     });
   }
@@ -165,12 +186,18 @@ export class IntakeProfile {
     cancel: string,
     title: string,
   ): Promise<boolean> {
+    if (this.leaveDecision) return this.leaveDecision;
     this.asking.set({ message, confirm, cancel });
     const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
+      closeOnNavigation: false,
       title,
       closeLabel: this.closeLabel,
     });
-    const answer = await firstValueFrom(dialog.closed);
+    this.activeConfirm = dialog;
+    this.leaveDecision = firstValueFrom(dialog.closed).then((answer) => answer === true);
+    const answer = await this.leaveDecision;
+    this.leaveDecision = null;
+    this.activeConfirm = null;
     this.asking.set(null);
     return answer === true;
   }

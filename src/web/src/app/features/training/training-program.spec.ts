@@ -65,6 +65,20 @@ describe('TrainingProgram', () => {
     Element.prototype.scrollIntoView = originalScrollIntoView;
   });
 
+  it('does not focus a week number reused by a different program', async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    await render({}, fakeClientAccess(), '/?week=2&program=another-program');
+    expect(scrolled).not.toHaveBeenCalled();
+  });
+
+  it('does not focus an unshared week after a notification was delivered', async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    await render({}, fakeClientAccess(), '/?week=4');
+    expect(scrolled).not.toHaveBeenCalled();
+  });
+
   it('leads with the program, its week, what is done and missed, and today’s workout', async () => {
     const { host, read, textOf } = await render();
 

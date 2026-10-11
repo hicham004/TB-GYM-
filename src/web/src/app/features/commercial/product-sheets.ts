@@ -1,3 +1,5 @@
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -373,6 +375,8 @@ export type ProductSheetMode =
 export class ProductSheet {
   private readonly api = inject(ProductsApi);
   private readonly csrf = inject(CsrfService);
+  private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly locale = inject(LOCALE_ID);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
@@ -481,29 +485,34 @@ export class ProductSheet {
 
   protected async submit(): Promise<void> {
     if (this.busy()) return;
-    if (this.problemCount() > 0) {
-      this.attempt.attempt();
-      afterNextRender(
-        () =>
-          this.host.nativeElement
-            .querySelector<HTMLElement>('[aria-invalid="true"], fieldset[aria-describedby] input')
-            ?.focus(),
-        { injector: this.injector },
-      );
-      return;
-    }
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      await this.csrf.refresh();
-      const saved = await firstValueFrom(this.request());
-      this.priceIntent.complete();
-      this.closed.emit(saved);
-    } catch (error) {
-      this.error.set(productWriteError(error));
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('submit', async (owner) => {
+      if (this.problemCount() > 0) {
+        this.attempt.attempt();
+        afterNextRender(
+          () =>
+            this.host.nativeElement
+              .querySelector<HTMLElement>('[aria-invalid="true"], fieldset[aria-describedby] input')
+              ?.focus(),
+          { injector: this.injector },
+        );
+        return;
+      }
+      this.busy.set(true);
+      this.error.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        const saved = await owner.wait(firstValueFrom(this.request()));
+        this.priceIntent.complete();
+        this.closed.emit(saved);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(productWriteError(error));
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
   private request() {

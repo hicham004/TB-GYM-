@@ -1,3 +1,5 @@
+import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
+import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -201,7 +203,7 @@ import {
         <fieldset class="group">
           <legend i18n>Swaps a client may make</legend>
           <p class="muted" i18n>When a program allows a swap, the client chooses from these.</p>
-          @if (others().length > 8) {
+          @if (searchable() || find()) {
             <app-field [label]="findLabel" hideLabel>
               <input
                 appControl
@@ -210,9 +212,37 @@ import {
                 autocomplete="off"
                 [placeholder]="findPlaceholder"
                 [value]="find()"
-                (input)="find.set($any($event.target).value)"
+                (input)="searchAlternatives($any($event.target).value)"
               />
             </app-field>
+          }
+          @for (id of unresolvedAlternatives(); track id) {
+            <app-checkbox label="Previously selected exercise (unavailable)" i18n-label>
+              <input
+                appControl
+                type="checkbox"
+                [checked]="true"
+                (change)="toggleAlternative(id, false)"
+              />
+            </app-checkbox>
+          }
+          @if (alternativesError(); as message) {
+            <p role="alert">{{ message }}</p>
+            <button appButton type="button" variant="text" (click)="loadAlternatives()" i18n>
+              Try again
+            </button>
+          }
+          @if (alternativesMore()) {
+            <button
+              appButton
+              type="button"
+              variant="text"
+              [loading]="alternativesBusy()"
+              (click)="loadAlternatives(true)"
+              i18n
+            >
+              Show more exercises
+            </button>
           }
           <div class="scroll" tabindex="0" [attr.aria-label]="alternativesLabel">
             @for (other of shownOthers(); track other.id) {
@@ -510,6 +540,8 @@ import {
 export class ExerciseSheet implements OnInit {
   private readonly api = inject(ExerciseLibraryApi);
   private readonly csrf = inject(CsrfService);
+  private readonly tenants = inject(TenantStore);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
 
@@ -556,6 +588,16 @@ export class ExerciseSheet implements OnInit {
   /** Editing shows every field; a new exercise starts with the few most coaches fill in. */
   protected readonly detailsOpen = linkedSignal(() => this.exercise() !== null);
   protected readonly others = signal<ExerciseView[]>([]);
+  /**
+   * A library of more than eight exercises gets a search box. Decided from the whole library, not
+   * the rows on screen: a search empties those rows while it runs, and the box must not go with them.
+   */
+  protected readonly searchable = signal(false);
+  private readonly knownAlternatives = signal<ReadonlyMap<string, ExerciseView>>(new Map());
+  protected readonly alternativesBusy = signal(false);
+  protected readonly alternativesMore = signal(false);
+  protected readonly alternativesError = signal<string | null>(null);
+  private alternativesOffset = 0;
   protected readonly find = signal('');
   protected readonly library = signal<MediaAssetView[]>([]);
   protected readonly mediaError = signal<string | null>(null);
@@ -575,12 +617,58 @@ export class ExerciseSheet implements OnInit {
       : $localize`Paste a YouTube or Vimeo link. Clients see it in their workout.`;
   });
   protected readonly shownOthers = computed(() => {
-    const words = this.find().trim().toLocaleLowerCase();
-    const chosen = this.values().alternativeIds;
-    return this.others()
-      .filter((other) => !words || other.name.toLocaleLowerCase().includes(words))
-      .sort((a, b) => Number(chosen.includes(b.id)) - Number(chosen.includes(a.id)));
+    const selected = this.values().alternativeIds;
+    const known = this.knownAlternatives();
+    const rows = new Map(this.others().map((item) => [item.id, item]));
+    for (const id of selected) {
+      if (known.has(id)) rows.set(id, known.get(id)!);
+    }
+    return [...rows.values()].sort(
+      (a, b) => Number(selected.includes(b.id)) - Number(selected.includes(a.id)),
+    );
   });
+
+  protected readonly unresolvedAlternatives = computed(() =>
+    this.values().alternativeIds.filter((id) => !this.knownAlternatives().has(id)),
+  );
+
+  protected searchAlternatives(query: string): void {
+    this.find.set(query);
+    this.others.set([]);
+    this.alternativesOffset = 0;
+    void this.loadAlternatives();
+  }
+
+  protected loadAlternatives(more = false): Promise<void> {
+    return this.scope.run('alternatives', async (owner) => {
+      const query = this.find();
+      const skip = more ? this.alternativesOffset : 0;
+      this.alternativesBusy.set(true);
+      this.alternativesError.set(null);
+      try {
+        const page = await owner.wait(firstValueFrom(this.api.search({ query, skip, take: 25 })));
+        if (!query) this.searchable.set(Number(page.total) > 8);
+        const eligible = page.items.filter(
+          (item) => item.id !== this.exercise()?.id && !item.isArchived,
+        );
+        this.knownAlternatives.update(
+          (known) => new Map([...known, ...eligible.map((item) => [item.id, item] as const)]),
+        );
+        this.others.update((rows) => [
+          ...new Map([...(more ? rows : []), ...eligible].map((item) => [item.id, item])).values(),
+        ]);
+        this.alternativesOffset = skip + page.items.length;
+        this.alternativesMore.set(
+          page.items.length > 0 && this.alternativesOffset < Number(page.total),
+        );
+      } catch {
+        if (!owner.current) return;
+        this.alternativesError.set($localize`Exercises could not be loaded. Try again.`);
+      } finally {
+        if (owner.current) this.alternativesBusy.set(false);
+      }
+    });
+  }
 
   ngOnInit(): void {
     if (this.detailsOpen()) void this.loadDetails();
@@ -635,21 +723,35 @@ export class ExerciseSheet implements OnInit {
 
   /** The other exercises (for swaps) and the coach's ready media, read once when details open. */
   private async loadDetails(): Promise<void> {
-    if (this.loaded) return;
-    this.loaded = true;
-    const id = this.exercise()?.id;
-    try {
-      const [others, media] = await Promise.all([
-        firstValueFrom(this.api.search({ take: 100 })),
-        firstValueFrom(this.api.listMedia()),
-      ]);
-      this.others.set(others.items.filter((item) => item.id !== id && !item.isArchived));
-      this.library.set(media.items.filter((item) => item.status === 'Ready'));
-    } catch {
-      this.mediaError.set(
-        $localize`Your media and other exercises could not be loaded. Close and open the sheet again.`,
-      );
-    }
+    return this.scope.run('loadDetails', async (owner) => {
+      if (this.loaded) return;
+      this.loaded = true;
+      try {
+        const ids = this.values().alternativeIds;
+        const [media, selected] = await owner.wait(
+          Promise.all([
+            firstValueFrom(this.api.listMedia()),
+            Promise.all(ids.map((id) => firstValueFrom(this.api.get(id)).catch(() => null))),
+            this.loadAlternatives(),
+          ]),
+        );
+        this.knownAlternatives.update(
+          (known) =>
+            new Map([
+              ...known,
+              ...selected
+                .filter((item): item is ExerciseView => item !== null)
+                .map((item) => [item.id, item] as const),
+            ]),
+        );
+        this.library.set(media.items.filter((item) => item.status === 'Ready'));
+      } catch {
+        if (!owner.current) return;
+        this.mediaError.set(
+          $localize`Your media and other exercises could not be loaded. Close and open the sheet again.`,
+        );
+      }
+    });
   }
 
   protected async upload(event: Event): Promise<void> {
@@ -657,93 +759,116 @@ export class ExerciseSheet implements OnInit {
     const file = input.files?.item(0);
     input.value = '';
     if (!file || this.uploading()) return;
-    this.uploading.set(true);
-    this.mediaError.set(null);
-    try {
-      await this.csrf.refresh();
-      const title = this.values().name.trim() || file.name;
-      const asset = await firstValueFrom(this.api.uploadMedia(title, file));
-      this.library.update((items) => [asset, ...items]);
-      if (asset.status === 'Ready') this.toggleMedia(asset.id, true);
-    } catch (error) {
-      this.mediaError.set(
-        exerciseWriteError(
-          error,
-          $localize`The file could not be uploaded. Try a JPEG, PNG, WebP, MP4 or WebM file.`,
-        ),
-      );
-    } finally {
-      this.uploading.set(false);
-    }
+    return this.scope.run('upload', async (owner) => {
+      this.uploading.set(true);
+      this.mediaError.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        const title = this.values().name.trim() || file.name;
+        const asset = await owner.wait(firstValueFrom(this.api.uploadMedia(title, file)));
+        this.library.update((items) => [asset, ...items]);
+        if (asset.status === 'Ready') this.toggleMedia(asset.id, true);
+      } catch (error) {
+        if (!owner.current) return;
+        this.mediaError.set(
+          exerciseWriteError(
+            error,
+            $localize`The file could not be uploaded. Try a JPEG, PNG, WebP, MP4 or WebM file.`,
+          ),
+        );
+      } finally {
+        if (owner.current) {
+          this.uploading.set(false);
+        }
+      }
+    });
   }
 
   protected async deleteMedia(asset: MediaAssetView): Promise<void> {
     if (this.mediaBusy()) return;
-    this.mediaBusy.set(true);
-    this.mediaError.set(null);
-    try {
-      await this.csrf.refresh();
-      await firstValueFrom(this.api.deleteMedia(asset.id, Number(asset.version)));
-      this.library.update((items) => items.filter((item) => item.id !== asset.id));
-      this.deleting.set(null);
-    } catch (error) {
-      this.mediaError.set(
-        exerciseWriteError(error, $localize`It could not be deleted. Try again.`),
-      );
-    } finally {
-      this.mediaBusy.set(false);
-    }
+    return this.scope.run('deleteMedia', async (owner) => {
+      this.mediaBusy.set(true);
+      this.mediaError.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        await owner.wait(firstValueFrom(this.api.deleteMedia(asset.id, Number(asset.version))));
+        this.library.update((items) => items.filter((item) => item.id !== asset.id));
+        this.deleting.set(null);
+      } catch (error) {
+        if (!owner.current) return;
+        this.mediaError.set(
+          exerciseWriteError(error, $localize`It could not be deleted. Try again.`),
+        );
+      } finally {
+        if (owner.current) {
+          this.mediaBusy.set(false);
+        }
+      }
+    });
   }
 
   protected async submit(): Promise<void> {
     if (this.busy() || this.uploading()) return;
-    if (this.problemCount() > 0) {
-      this.attempt.attempt();
-      afterNextRender(
-        () => this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-        { injector: this.injector },
-      );
-      return;
-    }
-    this.busy.set(true);
-    this.error.set(null);
-    const values = this.values();
-    try {
-      await this.csrf.refresh();
-      // A pasted link becomes the exercise's first video, so its card and the client's workout show it.
-      const linkId = await this.registerLink(values);
-      const media = linkId
-        ? [linkId, ...values.mediaAssetIds.filter((id) => id !== linkId)]
-        : [...values.mediaAssetIds];
-      const request = exerciseRequest(values, media);
-      const current = this.exercise();
-      const saved = await firstValueFrom(
-        current
-          ? this.api.update(current.id, { ...request, version: Number(current.version) })
-          : this.api.create(request),
-      );
-      this.registered = null;
-      this.closed.emit(saved);
-    } catch (error) {
-      this.error.set(
-        exerciseWriteError(error, $localize`The exercise could not be saved. Try again.`),
-      );
-    } finally {
-      this.busy.set(false);
-    }
+    return this.scope.run('submit', async (owner) => {
+      if (this.problemCount() > 0) {
+        this.attempt.attempt();
+        afterNextRender(
+          () =>
+            this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
+          { injector: this.injector },
+        );
+        return;
+      }
+      this.busy.set(true);
+      this.error.set(null);
+      const values = this.values();
+      try {
+        await owner.wait(this.csrf.refresh());
+        // A pasted link becomes the exercise's first video, so its card and the client's workout show it.
+        const linkId = await owner.wait(this.registerLink(values, owner));
+        const media = linkId
+          ? [linkId, ...values.mediaAssetIds.filter((id) => id !== linkId)]
+          : [...values.mediaAssetIds];
+        const request = exerciseRequest(values, media);
+        const current = this.exercise();
+        const saved = await owner.wait(
+          firstValueFrom(
+            current
+              ? this.api.update(current.id, { ...request, version: Number(current.version) })
+              : this.api.create(request),
+          ),
+        );
+        this.registered = null;
+        this.closed.emit(saved);
+      } catch (error) {
+        if (!owner.current) return;
+        this.error.set(
+          exerciseWriteError(error, $localize`The exercise could not be saved. Try again.`),
+        );
+      } finally {
+        if (owner.current) {
+          this.busy.set(false);
+        }
+      }
+    });
   }
 
-  private async registerLink(values: ExerciseValues): Promise<string | null> {
+  private async registerLink(
+    values: ExerciseValues,
+    owner: TenantOperation,
+  ): Promise<string | null> {
     const link = parseVideoLink(values.videoLink);
     if (!link) return null;
     const key = `${link.provider}:${link.id}`;
     if (this.registered?.link === key) return this.registered.id;
-    const asset = await firstValueFrom(
-      this.api.registerVideoLink({
-        title: values.name.trim(),
-        provider: link.provider,
-        externalMediaId: link.id,
-      }),
+    const asset = await owner.wait(
+      firstValueFrom(
+        this.api.registerVideoLink({
+          title: values.name.trim(),
+          provider: link.provider,
+          externalMediaId: link.id,
+        }),
+      ),
     );
     this.registered = { link: key, id: asset.id };
     return asset.id;
