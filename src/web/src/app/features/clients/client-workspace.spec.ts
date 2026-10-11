@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
@@ -350,4 +351,53 @@ describe('ClientWorkspace', () => {
     expect(host.querySelector('app-status-pill')).toBeNull();
     expect(host.querySelector('.plan-line')).toBeNull();
   });
+
+  it('says a client the server does not find is not here, with the way to Clients and no Retry', async () => {
+    // What a coach gets for another coach's client (ADR 0026) or an old link.
+    const getClient = vi.fn(() =>
+      throwError(() => new HttpErrorResponse({ status: 404, url: '/api/clients/client-1' })),
+    );
+    const { host } = await render({ api: { getClient } });
+
+    expect(host.querySelector('h1')?.textContent?.trim()).toBe('This client isn’t here');
+    expect(host.querySelector('app-empty-state p')?.textContent?.trim()).toBe(
+      'The link may be old, or this client isn’t in your client list.',
+    );
+    const link = host.querySelector<HTMLAnchorElement>('app-empty-state a');
+    expect(link?.textContent?.trim()).toBe('See your clients');
+    expect(link?.getAttribute('href')).toBe('/clients');
+    // Asking again can never help, so nothing offers it or reads as a failure.
+    expect(buttonNames(host)).not.toContain('Retry');
+    expect(alerts(host)).toEqual([]);
+    expect(host.querySelector('app-section-nav')).toBeNull();
+    expect(host.querySelector('app-section-stub')).toBeNull();
+    expect(getClient).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Retry for a failure that may pass, such as a server error', async () => {
+    const getClient = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 500 })))
+      .mockReturnValueOnce(of(PROFILE));
+    const { harness, host } = await render({ api: { getClient } });
+
+    expect(alerts(host)).toEqual(['The client profile could not be loaded.']);
+    expect(host.querySelector('app-empty-state')).toBeNull();
+    press(host, 'Retry');
+    await settle(harness.fixture);
+    expect(host.querySelector('h1')?.textContent?.trim()).toBe('Maya Rahman');
+  });
 });
+
+function buttonNames(host: HTMLElement): string[] {
+  return Array.from(host.querySelectorAll('button')).map(
+    (button) => button.textContent?.trim() ?? '',
+  );
+}
+
+/** The alerts that say something; the page keeps an empty one ready for a failed change. */
+function alerts(host: HTMLElement): string[] {
+  return Array.from(host.querySelectorAll('[role="alert"]'))
+    .map((alert) => alert.textContent?.trim() ?? '')
+    .filter((text) => text !== '');
+}

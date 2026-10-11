@@ -8,7 +8,7 @@ import {
   publicHomeGuard,
   signedOutGuard,
 } from './core/auth/auth.guards';
-import { HOUSE_BRAND, REDESIGNED, REDESIGNED_FOR_STAFF } from './core/theme/redesigned-route';
+import { HOUSE_BRAND, REDESIGNED } from './core/theme/redesigned-route';
 import { devRoutes } from './dev/dev-routes';
 import { platformAdminGuard } from './features/platform-admin/platform-admin.guard';
 
@@ -35,9 +35,9 @@ export const routes: Routes = [
     path: '',
     pathMatch: 'full',
     canActivate: [authGuard],
-    // A client's Today and a coach's Today (R3.2); only the coach's is rebuilt for dark mode yet.
+    // A coach's Today (R3.2) and a client's Today, both in the person's mode (the client's since R5.4b).
     title: $localize`Today | TB Gym`,
-    data: REDESIGNED_FOR_STAFF,
+    data: REDESIGNED,
     loadComponent: () =>
       import('./features/dashboard/dashboard').then((module) => module.Dashboard),
   },

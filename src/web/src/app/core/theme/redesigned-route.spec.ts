@@ -3,9 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   FULL_SCREEN,
   HOUSE_BRAND,
+  isRedesigned,
   REDESIGNED,
-  REDESIGNED_FOR_STAFF,
-  redesignedFor,
   wantsFullScreen,
   wantsHouseBrand,
 } from './redesigned-route';
@@ -18,12 +17,13 @@ function chain(...data: Data[]): ActivatedRouteSnapshot {
   return child!;
 }
 
-describe('redesignedFor', () => {
+describe('isRedesigned', () => {
   it('finds the marker on the active route or any route above it', () => {
-    expect(redesignedFor(chain({}, REDESIGNED))).toBe('everyone');
-    expect(redesignedFor(chain(REDESIGNED, {}))).toBe('everyone');
-    expect(redesignedFor(chain({}, REDESIGNED_FOR_STAFF))).toBe('staff');
-    expect(redesignedFor(chain({}, {}))).toBeNull();
+    expect(isRedesigned(chain({}, REDESIGNED))).toBe(true);
+    expect(isRedesigned(chain(REDESIGNED, {}))).toBe(true);
+    expect(isRedesigned(chain({}, {}))).toBe(false);
+    // The full-screen player carries both marks (R5.4b).
+    expect(isRedesigned(chain({}, { ...FULL_SCREEN, ...REDESIGNED }))).toBe(true);
   });
 });
 

@@ -28,13 +28,16 @@ export const checkInRoutes: Routes = [
     loadComponent: () => import('./checkin-clients').then((module) => module.CheckInClients),
   },
   {
+    // The client's check-ins and each check-in follow their mode (M6, checked in dark in R5.4b).
     path: 'me',
+    data: REDESIGNED,
     canActivate: [clientGuard],
     title: $localize`Check-ins | TB Gym`,
     loadComponent: () => import('./my-checkins').then((module) => module.MyCheckIns),
   },
   {
     path: 'me/:assignmentId',
+    data: REDESIGNED,
     canActivate: [clientGuard],
     canDeactivate: [saveBeforeLeaving],
     title: $localize`Check-in | TB Gym`,

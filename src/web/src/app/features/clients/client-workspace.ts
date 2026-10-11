@@ -21,7 +21,8 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Avatar } from '../../ui/avatar';
-import { Button } from '../../ui/button';
+import { Button, ButtonLink } from '../../ui/button';
+import { EmptyState } from '../../ui/empty-state';
 import { SectionNav, type SectionLink } from '../../ui/section-nav';
 import { StatusPill, type StatusPillTone } from '../../ui/status-pill';
 import { ConversationLaunch } from '../messaging/conversation-launch';
@@ -42,7 +43,17 @@ import { ClientWorkspaceContext } from './client-workspace.context';
  */
 @Component({
   selector: 'app-client-workspace',
-  imports: [Avatar, Button, ClientActions, RouterLink, RouterOutlet, SectionNav, StatusPill],
+  imports: [
+    Avatar,
+    Button,
+    ButtonLink,
+    ClientActions,
+    EmptyState,
+    RouterLink,
+    RouterOutlet,
+    SectionNav,
+    StatusPill,
+  ],
   providers: [ClientWorkspaceContext],
   templateUrl: './client-workspace.html',
   styleUrl: './client-workspace.scss',

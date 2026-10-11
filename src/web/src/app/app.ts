@@ -16,7 +16,7 @@ import { filter, map } from 'rxjs';
 import { AuthStore } from './core/auth/auth.store';
 import { SessionActions } from './core/auth/session-actions';
 import { TenantStore } from './core/tenancy/tenant.store';
-import { redesignedFor, wantsFullScreen, wantsHouseBrand } from './core/theme/redesigned-route';
+import { isRedesigned, wantsFullScreen, wantsHouseBrand } from './core/theme/redesigned-route';
 import { WorkspaceBrandStore } from './core/theme/workspace-brand.store';
 import { BillingBanner } from './features/billing/billing-banner';
 import { ClientTabs } from './shell/client-tabs';
@@ -90,9 +90,9 @@ export class App implements OnInit {
   private readonly redesigned = toSignal(
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
-      map(() => redesignedFor(this.router.routerState.snapshot.root)),
+      map(() => isRedesigned(this.router.routerState.snapshot.root)),
     ),
-    { initialValue: null },
+    { initialValue: false },
   );
 
   /** Billing and the platform admin are TB Gym's own screens, in TB Gym's colours (plan §3.1). */
@@ -115,15 +115,9 @@ export class App implements OnInit {
 
   /**
    * The page keeps the light tokens whatever the person's mode until its screen is rebuilt on
-   * brand v2 (REDESIGNED); the shells around it follow the mode. A route rebuilt for staff only
-   * follows the mode in the coach shell.
+   * brand v2 (REDESIGNED); the shells around it follow the mode.
    */
-  protected readonly contentMode = computed(() => {
-    const rebuilt = this.redesigned();
-    return rebuilt === 'everyone' || (rebuilt === 'staff' && !this.tenants.isClient())
-      ? null
-      : 'light';
-  });
+  protected readonly contentMode = computed(() => (this.redesigned() ? null : 'light'));
 
   constructor() {
     inject(RouteHeadingFocus);

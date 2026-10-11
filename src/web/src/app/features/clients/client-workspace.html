@@ -64,6 +64,20 @@
 
   @if (context.loading() && !profile()) {
     <p class="loading-row" role="status" i18n>Loading client…</p>
+  } @else if (context.missing()) {
+    <!-- A 404: an old link, or a client this coach does not coach (ADR 0026). Retry can never help. -->
+    <app-empty-state
+      class="missing"
+      [headingLevel]="1"
+      heading="This client isn’t here"
+      i18n-heading
+      description="The link may be old, or this client isn’t in your client list."
+      i18n-description
+    >
+      <a appButton variant="outlined" routerLink="/clients" empty-state-action i18n
+        >See your clients</a
+      >
+    </app-empty-state>
   } @else if (context.loadError(); as message) {
     <div class="load-error">
       <p role="alert">{{ message }}</p>

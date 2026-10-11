@@ -101,7 +101,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5 review | **Six repairs**: tenant-owned plan/exercise/media operations; sheet edits across route/session/browser exits; unread cursor pagination; delivered and visible week shortcuts; server-paged swaps retaining selections; measurement/photo history across empty years | Repairs and focused regressions built; five repairs checked live in the review of 2026-10-11 (`docs/UI-REVIEW-2026-10-11.md`, "Step 0") and every regression run green in R5.3g | Done · 2026-10-11 · 3290bc5 |
 | R5.3g | **Verify and commit R5.3f and the review repairs** (`docs/UI-REVIEW-2026-10-11.md`, "Step 0"): run the Vitest, Playwright and backend regressions written for them, then commit them as two commits on the owner's go | Every regression named in Step 0 has run green and the two rows above carry their hashes | Done · 2026-10-11 · 3290bc5 |
 | R5.4a | **The player logs what the coach prescribed** (review doc, "Slice 1"): a set's draft starts from the prescription and last time's numbers are the reference, a "Rest is over" cue, the kit's controls instead of the player's three browser selects, and nothing under the client tab bar in the player | §2, plus Vitest for the draft precedence, the rest end and the controls, the player's Playwright spec, and one TRN line in `DOMAIN-RULES.md` | Done · 2026-10-11 · e03aeb6 |
-| R5.4b | **One client, one mode, and honest failures** (review doc, "Slice 2"): client Today, Training and Check-ins marked `REDESIGNED` after a dark pass, a "This client isn't here" state for a 404, and a toast with Retry when a page fails to load | §2, plus the theme e2e for the three client routes and Vitest for the 404 state and the toast | Open |
+| R5.4b | **One client, one mode, and honest failures** (review doc, "Slice 2"): client Today, Training and Check-ins marked `REDESIGNED` after a dark pass, a "This client isn't here" state for a 404, and a toast with Retry when a page fails to load | §2, plus the theme e2e for the three client routes and Vitest for the 404 state and the toast | Done · 2026-10-11 |
 | R5.4c | **Sheet hosts on one base, and the small fixes** (review doc, "Slice 3"): Products, Service & access, Intake and Your entries on `GuardedSheets`; week-notice links read in two queries; the Strength history card reloads after Update maxes; suggested maxes in plate steps; the calories step, two wording fixes and the inbox line | §2, plus the folded hosts' specs green unchanged, one backend command-count test, and Vitest for the rounding and the wording | Open |
 | R6.1 | **Share cards** (M9), created only by the client, with consent each time | §2 | Optional |
 | R6.2 | **Homepage** pre-render, GSAP scroll story, Jitter hero video (the owner makes the assets) | §2 | Optional |
@@ -164,9 +164,12 @@ of the implemented R1.3 screens before production rollout.
 - **Client "today" (from R2.4c).** The check-ins page shows plain due dates ("Due Sun 4 Oct"), not
   "Due today" or "Overdue", because only the training API returns the workspace's date to a client.
   A small own-workspace date read would allow relative wording without trusting the phone's clock.
-- **Client dark mode (seen in R2.4c).** Today, Nutrition, Progress and Check-in use brand tokens but
-  none is marked `REDESIGNED`, so all stay light in dark mode. Mark them together after one dark
-  screenshot pass. (R2.5c marked Me, since dark mode is chosen there.)
+- **Client dark mode (seen in R2.4c), closed in R5.4b.** Today, Nutrition, Progress and Check-in use
+  brand tokens but none was marked `REDESIGNED`, so all stayed light in dark mode. R2.5c marked Me,
+  R4.4d Nutrition and R5.3c Progress, and R5.4b marked Today, Training, Check-ins and the player after
+  one dark pass on the Atlas demo. The pass found one defect: a chosen check-in answer
+  (a number, an option, a hovered photo tile) was drawn in the brand colour, which all but vanishes on
+  a dark card; it now uses the accent ink. Screenshots: `docs/design/r54b-*.png`.
 - **Scale answers in other languages (from R2.4c).** "8 out of 10" formats the number with plain
   digits, as the coach's comparison view already did. Use locale number formatting with the
   translation work.
@@ -870,6 +873,26 @@ of the implemented R1.3 screens before production rollout.
   §4 rules out for now; (3) no setting to turn the beeps off; (4) `RestTimer` stays a player part, not
   yet in `ui/` and the lab (§4 lists it in the kit), so the lab's baselines are not rewritten; (5) the
   prototype's set table and pill tools (review: not in this slice).
+- **One client, one mode, and honest failures, R5.4b (built 2026-10-11; screenshots
+  `docs/design/r54b-*.png`).** The client's Today, Training, Check-ins (the list and each check-in) and
+  the player follow the person's mode. The dark pass on the Atlas demo found one defect: a chosen
+  check-in answer was drawn in the brand colour, 1.4:1 on a dark card, and now uses the accent ink (the
+  theme e2e asks 3:1). A coach who opens another coach's client, or an old link, sees "This client isn't
+  here" with See your clients, not a failure with Retry. A page that cannot be opened says so in the kit
+  toast, "That page couldn't be opened. Check your connection and try again.", with Reload when the
+  page's file could not be fetched (offline, or after a release renamed it) and Try again otherwise;
+  offline, Reload says it again rather than open the browser's offline page, and the toast goes when a
+  page opens. The toast's code stays out of the first download (the initial bundle grew 1.6 kB) and is
+  fetched at idle once someone is signed in. Wording decided by Claude while building: "That page
+  couldn't be opened. Try again." for a failure that is not the connection, and "The link may be old, or
+  this client isn't in your client list." Found and fixed on the way: the kit toast squeezed its message
+  to a few letters a line at 200% text; its actions now wrap under the message. Not built: (1) client
+  Today's header (coach, bell, Me) scrolls sideways by 37 px at 320 px with 200% text, in both modes and
+  before this step; (2) the planned-day rings in Today's week and the upcoming-session marks on Training
+  are drawn in the faint line colour (about 1.3:1 in both modes): the words carry the state, but a 3:1
+  ring would read at a glance; (3) the toast's dismiss button keeps the kit's English default name for
+  every toast until the translation work; (4) a page that fails still logs its error to the browser
+  console, as the router always did.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1133,8 +1156,8 @@ limited to the coach's assigned clients.
   - The feed shows the newest six with "Show all".
   - The week is drawn as bars, with a hidden table for screen readers.
   - An empty workspace gets one "Invite your first client" card instead of zeros.
-  - Coach Today follows dark mode (`REDESIGNED_FOR_STAFF`); the client's Today at the same route
-    stays light until its own dark pass.
+  - Coach Today follows dark mode; the client's Today at the same route does too since its dark
+    pass in R5.4b.
   - Screenshots on the Atlas demo: `docs/design/r32-coach-today-*.png`.
 
 **C2. Clients**

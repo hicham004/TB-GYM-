@@ -113,6 +113,8 @@ interface ToastTimer {
       border-radius: var(--tb-radius-control);
       box-shadow: var(--tb-shadow-overlay);
       display: flex;
+      // With large text the actions move under the message rather than squeeze it to a few letters.
+      flex-wrap: wrap;
       gap: 0.5rem;
       min-block-size: 3rem;
       padding: 0.5rem;
@@ -128,7 +130,7 @@ interface ToastTimer {
 
     .tb-toast__message {
       align-self: center;
-      flex: 1;
+      flex: 1 1 8rem;
       margin: 0;
       min-inline-size: 0;
       overflow-wrap: anywhere;
@@ -144,6 +146,8 @@ interface ToastTimer {
 
     .tb-toast .tb-icon-button {
       align-self: start;
+      // Dismiss stays at the end of its line when the actions wrap under the message.
+      margin-inline-start: auto;
     }
 
     .tb-toast :is(button, a):focus-visible {

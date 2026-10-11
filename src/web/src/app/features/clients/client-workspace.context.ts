@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom, type Observable } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -32,6 +33,11 @@ export class ClientWorkspaceContext {
   readonly workspace = signal<WorkspaceDetails | null>(null);
   readonly loading = signal(false);
   readonly loadError = signal<string | null>(null);
+  /**
+   * The server answered that this client is not here (404): an old link, another workspace, or,
+   * for a coach, another coach's client (ADR 0026). Retrying can never help, so it is not an error.
+   */
+  readonly missing = signal(false);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly notice = signal<string | null>(null);
@@ -51,6 +57,7 @@ export class ClientWorkspaceContext {
       this.clientId.set(clientId);
       this.loading.set(true);
       this.loadError.set(null);
+      this.missing.set(false);
       try {
         const [profile, plans, workspace] = await owner.wait(
           Promise.all([
@@ -64,6 +71,10 @@ export class ClientWorkspaceContext {
         this.workspace.set(workspace);
       } catch (error) {
         if (!owner.current) return;
+        if (error instanceof HttpErrorResponse && error.status === 404) {
+          this.missing.set(true);
+          return;
+        }
         this.loadError.set(
           apiErrorMessage(error, $localize`The client profile could not be loaded.`),
         );
@@ -135,6 +146,7 @@ export class ClientWorkspaceContext {
     this.workspace.set(null);
     this.loading.set(false);
     this.loadError.set(null);
+    this.missing.set(false);
     this.busy.set(false);
     this.clearMessages();
   }

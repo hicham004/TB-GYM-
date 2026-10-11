@@ -3,6 +3,9 @@
 // moves to the label around them. The legacy global `input` and `label > span` rules are restated
 // here so they never leak in.
 
+// A chosen answer is drawn in the accent ink, the brand on light and the bright accent on dark: the
+// brand itself is a dark surface colour and all but vanishes on a dark card (R5.4b).
+
 // The real control, kept focusable and announced, drawn by its label instead.
 .choice-input,
 .pose-input {
@@ -53,8 +56,8 @@
   border-color: var(--tb-line-strong);
 }
 .scale-chip:has(:checked) > span {
-  background: var(--tb-brand);
-  color: var(--tb-on-brand);
+  background: var(--tb-accent-ink);
+  color: var(--tb-on-accent-ink);
 }
 .scale-chip:has(:focus-visible) > span,
 .option:has(:focus-visible),
@@ -83,7 +86,7 @@
 }
 .option:has(:checked) {
   background: var(--tb-accent-soft);
-  border-color: var(--tb-brand);
+  border-color: var(--tb-accent-ink);
 }
 .option > span {
   color: var(--tb-ink);
@@ -103,8 +106,8 @@
   border-radius: 6px;
 }
 .option:has(:checked) > .option-mark {
-  background: var(--tb-brand);
-  border-color: var(--tb-brand);
+  background: var(--tb-accent-ink);
+  border-color: var(--tb-accent-ink);
   box-shadow: inset 0 0 0 3px var(--tb-accent-soft);
 }
 .option > .option-label {
@@ -161,7 +164,7 @@
   text-align: center;
 }
 .pose:hover {
-  border-color: var(--tb-brand);
+  border-color: var(--tb-accent-ink);
 }
 .pose.is-added {
   background: var(--tb-success-soft);

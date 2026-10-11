@@ -556,8 +556,8 @@ To decide every client's access at once, `ICoachingFeatureAccessService` gained 
 R3.2 draws Coach Today from that read with no other call. `ApiClient.getCoachToday` returns the
 generated contract, and `coach-today.models.ts` turns it into sentences and links inside the lazy
 dashboard chunk, so none of it reaches the initial bundle. `/` serves both Todays, so the route
-carries `REDESIGNED_FOR_STAFF`: App lets the content follow dark mode only when the member is not a
-client. Messages opens `?conversation=<id>` once, when that thread is in the first page of the inbox.
+carried `REDESIGNED_FOR_STAFF` (dark mode for staff only) until R5.4b checked the client's Today in
+dark. Messages opens `?conversation=<id>` once, when that thread is in the first page of the inbox.
 
 R3.3a draws Clients from `GET /api/clients/overview` with no other call, through a feature-local
 `ClientListApi` (like `FormerClientsApi`, so it stays out of the initial bundle). The read returns
@@ -666,6 +666,15 @@ colour names, unsupported former global classes and browser-default buttons; its
 Check-in drafts and exercise sheets join `UnsavedWork`; a sheet can keep itself open on Browser Back
 until its leave guard answers. `RouteHeadingFocus` supplies a heading focus fallback after navigation
 or a delayed read, preserves deliberate field/dialog focus, and leaves filters, anchors and router scroll alone.
+
+R5.4b marks the client's Today, Training and Check-ins `REDESIGNED` after a dark pass, so no route is
+rebuilt for staff only and `REDESIGNED_FOR_STAFF` is gone. A failed navigation reaches
+`NavigationFailure` through `withNavigationErrorHandler` and shows the kit toast: Reload (a full load
+of the address) when the page's code file could not be fetched, offline or after a release renamed its
+files, otherwise Try again. A leave guard's refusal cancels its navigation and never reaches it. The
+toast and its CDK overlay (about 90 kB) stay out of the initial bundle; the service fetches them at idle
+once someone is signed in, so they still open with no connection. A client record whose read answers
+404 (another coach's client, ADR 0026) says "This client isn't here" instead of offering Retry.
 
 Design-system slice 2 (2026-09-22) adds the coach shell (`src/app/shell/`) and migrates the exercise
 library's default list state. **Which shell renders is presentation, and only that**: `App` picks the
