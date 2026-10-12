@@ -25,7 +25,7 @@ internal sealed partial class DemoWorkspaceGenerator
                     food.Name, FoodProvenance.CoachAuthored, null, null, null,
                     new AddFoodVersionRequest(100m, FoodQuantityUnit.Gram, food.Basis,
                         food.Protein, food.Carbs, food.Fat, 0m, 0m, 0m, null,
-                        "Atlas Performance fictional demo values", "demo-v1", food.Allergens)), token));
+                        $"{people.WorkspaceName} fictional demo values", "demo-v1", food.Allergens)), token));
             var created = Require(result.Food, result.Status == NutritionCommandStatus.Success, $"demo food {food.Name}", result);
             versions[food.Key] = (created.CurrentVersion.Id, food.Basis);
         }
@@ -88,7 +88,7 @@ internal sealed partial class DemoWorkspaceGenerator
         }).ToArray();
         var plan = await As<INutritionApplicationService, NutritionCommandResult>(OwnerActor,
             (service, token) => service.CreateMealPlanAsync(new CreateMealPlanRequest(
-                "Atlas everyday meals", dayCount, 2000m, 120m, 220m, 65m, slots), token));
+                $"{people.ShortName} everyday meals", dayCount, 2000m, 120m, 220m, 65m, slots), token));
         var draftPlan = Require(plan.MealPlan, plan.Status == NutritionCommandStatus.Success, "create demo meal plan", plan);
         var publication = await As<INutritionApplicationService, NutritionCommandResult>(OwnerActor,
             (service, token) => service.PublishMealPlanVersionAsync(draftPlan.VersionId, token));

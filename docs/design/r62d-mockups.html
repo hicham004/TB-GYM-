@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R6.2d mockups: the premium homepage</title>
+<!--
+  Static mockups for UI plan R6.2d (2026-10-12): the hero with two headlines, one week stage, one
+  feature row and the audience split, in the final look the research chose. The pictures are real
+  screens of the sample demo ("Oakline Strength", first names only) made by
+  src/web/scripts/home-pictures.mjs: the phone under Apple's iPhone 17 bezel, the coach's screens as
+  1:1 crops. Fonts come from Google Fonts here only; the live page self-hosts its subsets.
+  Screenshots: docs/design/r62d-*.png (1440 and 390 px).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap">
+<style>
+  :root {
+    --night: #0a0f0d; --page: #0f1513; --surface: #161e1b; --raised: #1d2724;
+    --cream: #fbfaf5; --soft: #f5f3ea; --ink: #182d27; --forest: #153d33; --muted: #4f6057; --line: #d9dfd1;
+    --lime: #d9ed94; --dim: #a5b2ab; --hair: rgba(255, 255, 255, 0.11);
+    --sans: 'IBM Plex Sans', system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+    --serif: 'Instrument Serif', Georgia, serif;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { background: var(--night); }
+  body { font-family: var(--sans); color: var(--ink); background: var(--cream); -webkit-font-smoothing: antialiased; font-size: 17px; line-height: 1.5; font-feature-settings: 'tnum' 1; }
+  img { display: block; max-width: 100%; height: auto; }
+  a { color: inherit; }
+
+  /* ---- the document around the mockups ------------------------------------------------- */
+  .doc { background: #e9e7de; color: var(--ink); padding: 32px clamp(20px, 5vw, 80px) 28px; border-bottom: 1px solid #d3d1c6; }
+  .doc h1 { font-size: 28px; font-weight: 500; letter-spacing: -0.02em; margin: 6px 0 10px; }
+  .doc p { max-width: 70ch; margin: 0 0 8px; font-size: 15px; }
+  .doc .rec { background: var(--cream); border: 1px solid #d3d1c6; border-radius: 14px; padding: 18px 22px; margin-top: 16px; max-width: 980px; }
+  .doc .rec h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .doc ol { margin: 6px 0 0 20px; font-size: 15px; } .doc li { margin-bottom: 4px; }
+  .label { font: 500 12px/1.4 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .slug { background: #e9e7de; padding: 14px clamp(20px, 5vw, 80px); border-top: 1px solid #d3d1c6; border-bottom: 1px solid #d3d1c6; display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+  .slug b { font-weight: 600; font-size: 14px; }
+  .slug span { font-size: 14px; color: var(--muted); }
+
+  /* ---- shared language ------------------------------------------------------------------ */
+  .eyebrow { font: 500 12.5px/1.4 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
+  .display { font-weight: 500; letter-spacing: -0.03em; line-height: 1.02; text-wrap: balance; font-size: clamp(46px, 5.85vw, 84px); }
+  .display--section { font-size: clamp(34px, 3.3vw, 48px); letter-spacing: -0.025em; line-height: 1.06; }
+  .lead { font-size: clamp(17px, 1.25vw, 18px); line-height: 1.5; }
+  .pill { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 48px; padding: 0 22px; border-radius: 999px; font-weight: 600; font-size: 15.5px; text-decoration: none; border: 1px solid transparent; white-space: nowrap; }
+  .pill--lime { background: var(--lime); color: var(--ink); }
+  .pill--forest { background: var(--forest); color: var(--cream); }
+  .pill--hair { border-color: var(--line); color: var(--ink); background: transparent; }
+  .quiet { display: inline-flex; align-items: center; gap: 10px; font-weight: 500; font-size: 15.5px; text-decoration: none; min-height: 48px; }
+  .quiet .mark { color: var(--lime); }
+  .caption { font: 400 12.5px/1.4 var(--mono); letter-spacing: 0.04em; color: var(--dim); }
+  .on-cream .caption { color: var(--muted); }
+  .wrap { max-width: 1440px; margin: 0 auto; padding-inline: clamp(20px, 5vw, 80px); }
+
+  /* ---- nav ------------------------------------------------------------------------------- */
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 22px clamp(20px, 5vw, 80px); color: var(--cream); max-width: 1440px; width: 100%; margin: 0 auto; }
+  .brand { display: inline-flex; align-items: center; gap: 11px; font-weight: 600; letter-spacing: -0.04em; font-size: 17px; text-decoration: none; }
+  .brand .disc { width: 36px; height: 36px; border-radius: 50%; background: var(--forest); display: inline-grid; place-items: center; font-size: 14px; letter-spacing: -0.08em; color: #fff; border: 1px solid var(--hair); }
+  .brand .disc i { font-style: normal; color: var(--lime); }
+  .links { display: flex; gap: 28px; font-size: 14.5px; font-weight: 500; align-items: center; }
+  .links a { text-decoration: none; color: var(--dim); }
+  .links a.now { color: var(--cream); }
+  .links .sign { color: var(--cream); border: 1px solid var(--hair); border-radius: 999px; padding: 8px 16px; }
+  .menu { display: none; }
+
+  /* ---- hero ------------------------------------------------------------------------------ */
+  .hero { background: radial-gradient(1200px 700px at 78% 30%, #16221d 0%, var(--page) 55%, var(--night) 100%); color: var(--cream); min-height: 900px; display: flex; flex-direction: column; overflow: hidden; }
+  .hero__grid { max-width: 1440px; margin: 0 auto; width: 100%; padding: 56px clamp(20px, 5vw, 80px) 0; display: grid; grid-template-columns: minmax(480px, 600px) 1fr; gap: 32px; align-items: center; flex: 1; }
+  .hero .eyebrow { color: var(--lime); display: flex; gap: 12px; align-items: center; margin-bottom: 26px; }
+  .hero .eyebrow::before { content: ''; width: 28px; height: 1px; background: var(--lime); }
+  .hero .display { margin-bottom: 24px; }
+  .hero .lead { color: var(--dim); max-width: 44ch; margin-bottom: 34px; }
+  .hero .actions { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+  .hero .quiet { color: var(--cream); }
+  .hero__media { position: relative; height: 760px; }
+  .hero__window { position: absolute; left: 0; top: 36px; width: 660px; }
+  .hero__phone { position: absolute; right: 0; top: 0; width: 350px; }
+  .hero__caption { position: absolute; left: 0; bottom: 0; }
+  .hero__phone-only { display: none; }
+
+  /* ---- week stage --------------------------------------------------------------------------- */
+  .stage { background: var(--cream); color: var(--ink); padding: clamp(80px, 9vw, 136px) 0; }
+  .stage__grid { display: grid; grid-template-columns: minmax(360px, 460px) 1fr; gap: 64px; align-items: center; }
+  .days { display: flex; gap: 18px; font: 500 12.5px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 36px; }
+  .days b { color: var(--forest); font-weight: 500; position: relative; }
+  .days b::after { content: ''; position: absolute; left: 0; right: 0; bottom: -8px; height: 2px; background: var(--forest); }
+  .stage .eyebrow { color: var(--muted); margin-bottom: 18px; }
+  .stage .display--section { margin-bottom: 18px; }
+  .stage .lead { color: var(--muted); max-width: 42ch; }
+  .numeral { margin-top: 36px; display: flex; align-items: baseline; gap: 14px; }
+  .numeral b { font: 400 128px/0.9 var(--serif); letter-spacing: -0.03em; color: var(--ink); font-feature-settings: 'tnum' 1; }
+  .numeral span { font: 500 13px/1.4 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .panel { background: linear-gradient(160deg, var(--surface), var(--night)); border-radius: 28px; padding: 40px 48px 0; position: relative; min-height: 820px; overflow: hidden; border: 1px solid rgba(0, 0, 0, 0.06); }
+  .panel__feed { position: absolute; left: 48px; top: 40px; width: 480px; }
+  .panel__phone { position: absolute; right: 48px; top: 40px; width: 350px; }
+  .panel .caption { position: absolute; left: 48px; bottom: 24px; }
+
+  /* ---- feature row -------------------------------------------------------------------------- */
+  .feature { background: var(--soft); color: var(--ink); padding: clamp(80px, 9vw, 136px) 0; }
+  .feature__grid { display: grid; grid-template-columns: minmax(340px, 420px) 1fr; gap: 64px; align-items: center; }
+  .feature .eyebrow { color: var(--muted); margin-bottom: 18px; }
+  .feature .display--section { margin-bottom: 18px; }
+  .feature .lead { color: var(--muted); max-width: 40ch; margin-bottom: 24px; }
+  .feature .quiet { color: var(--forest); }
+  .feature .quiet .mark { color: var(--forest); }
+  .pair { position: relative; height: 640px; }
+  .pair__window { position: absolute; left: 0; top: 60px; width: 700px; }
+  .pair__phone { position: absolute; right: 0; top: 0; width: 330px; }
+  .pair .caption { position: absolute; left: 0; bottom: 0; }
+
+  /* ---- audiences ------------------------------------------------------------------------------ */
+  .who { background: var(--cream); color: var(--ink); padding: clamp(80px, 9vw, 136px) 0; }
+  .who .eyebrow { color: var(--muted); margin-bottom: 18px; }
+  .who > .wrap > .display--section { margin-bottom: 56px; max-width: 18ch; }
+  .who__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  .story { background: var(--soft); border-radius: 28px; padding: 40px 40px 0; overflow: hidden; display: flex; flex-direction: column; min-height: 760px; }
+  .story h3 { font-size: 30px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 14px; }
+  .story p { color: var(--muted); max-width: 40ch; margin-bottom: 22px; }
+  .story .actions { display: flex; gap: 14px; margin-bottom: 36px; flex-wrap: wrap; }
+  /* The windows stay 1:1 and run off the card's right edge, as a bare window does on Linear or Mercury. */
+  .story__shot { margin-top: auto; align-self: stretch; overflow: hidden; }
+  .story__shot img { max-width: none; height: auto; }
+  .story__shot--builder img { width: 520px; }
+  .story__shot--team img { width: 640px; }
+  .standin { background: repeating-linear-gradient(135deg, #cfd3ca 0 14px, #c5c9c0 14px 28px); border-radius: 16px; aspect-ratio: 4 / 3; display: grid; place-items: center; text-align: center; padding: 20px; margin-bottom: 26px; }
+  .standin span { font: 500 12px/1.5 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); max-width: 26ch; }
+
+  /* ---- finale --------------------------------------------------------------------------------- */
+  .finale { background: linear-gradient(180deg, var(--page), var(--night)); color: var(--cream); padding: clamp(80px, 9vw, 136px) 0 56px; }
+  .finale .eyebrow { color: var(--lime); margin-bottom: 18px; }
+  .finale .display--section { margin-bottom: 28px; max-width: 16ch; }
+  .finale .actions { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; margin-bottom: 72px; }
+  .finale .quiet { color: var(--cream); }
+  .foot { display: flex; justify-content: space-between; gap: 20px; border-top: 1px solid var(--hair); padding-top: 24px; font-size: 13.5px; color: var(--dim); flex-wrap: wrap; }
+
+  /* ---- 390 px -------------------------------------------------------------------------------------- */
+  @media (max-width: 1099px) {
+    .hero { min-height: 0; }
+    .hero__grid { grid-template-columns: 1fr; padding-top: 24px; gap: 40px; }
+    .hero__media { height: auto; }
+    .hero__window, .hero__phone { display: none; }
+    .hero__phone-only { display: block; width: min(300px, 80%); margin: 0 auto; }
+    .hero__caption { position: static; text-align: center; margin-top: 18px; }
+    .hero .actions { flex-direction: column; align-items: stretch; }
+    .hero .pill { width: 100%; }
+    .hero .eyebrow { font-size: 11.5px; letter-spacing: 0.1em; }
+    .links { display: none; }
+    .menu { display: inline-flex; color: var(--cream); font: 500 12.5px var(--mono); letter-spacing: 0.1em; border: 1px solid var(--hair); border-radius: 999px; padding: 8px 14px; }
+    .stage__grid, .feature__grid, .who__grid { grid-template-columns: 1fr; gap: 36px; }
+    .numeral b { font-size: 96px; }
+    .panel { padding: 24px 24px 0; min-height: 0; border-radius: 22px; }
+    .panel__feed { display: none; }
+    .panel__phone { position: static; width: min(300px, 86%); margin: 0 auto; }
+    .panel .caption { position: static; margin: 18px 0 20px; }
+    .pair { height: auto; display: flex; flex-direction: column; }
+    .pair__phone { position: static; width: min(300px, 86%); margin: 0 auto 24px; order: 1; }
+    .pair__window { position: static; width: 100%; order: 2; }
+    .pair .caption { position: static; margin-top: 14px; order: 3; }
+    .story { min-height: 0; padding: 28px 24px 0; border-radius: 22px; }
+    .story h3 { font-size: 26px; }
+    .story__shot--builder img, .story__shot--team img { width: 100%; }
+    .finale .actions { flex-direction: column; align-items: stretch; }
+    .finale .pill { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header class="doc">
+  <p class="label">UI plan R6.2d · 2026-10-12 · mockups for the premium homepage</p>
+  <h1>Five mockups in the final look, on real screens of the sample demo</h1>
+  <p>Two heroes that differ only in their headline, one week stage, one feature row that pairs the coach's screen with the client's phone, and the audience split. Every picture is the app on "Oakline Strength", the first-name sample cast, photographed by the device pipeline: the client under Apple's iPhone 17 bezel with a drawn 9:41 status bar, the coach's screen as a 1:1 crop in a bare window. The grey block marks where the shoot's photograph goes.</p>
+  <div class="rec">
+    <h2>Recommendation for R6.2f</h2>
+    <p><b>Build hero B, the one promise line: "Coach both sides of the week."</b> Six words, one idea, at 84 px in three short lines beside the two devices that prove it, with the devices keeping half the first screen, the ratio every admired hero measures at. The three beats (hero A) are a list of three ideas in the place where the premium pages put one; they are the week's story, so they live on as the chapter titles (Plan it. Lift it. See it.). A seven-word line ("Coach the whole week, from both sides.") needed four lines in this column and crowded the devices; six words is the limit at this size.</p>
+    <p>Changes to the row, seen while making these:</p>
+    <ol>
+      <li>The hero's coach window is the <b>dark-mode</b> Today at 1:1, so the lit phone is the one subject; the cream window beside the phone reads as two subjects fighting.</li>
+      <li>A phone must be at least 330 CSS px wide to stay legible, so each feature row's coach crop is a <b>560 px region</b> of the screen, not the whole window; the rows alternate which side the phone sits on.</li>
+      <li>The week stage's chapter label is the <b>Mon–Sun strip</b> above the title, and the travelling number is an upright serif numeral in the copy column, never a lime chip.</li>
+      <li>"Shown with sample data" is one mono caption per picture group; no person on a picture gets a quote, rating or outcome.</li>
+      <li>The finale repeats the one lime pill; every other button on the page is forest or a hairline, so lime stays a signal.</li>
+    </ol>
+  </div>
+</header>
+
+<main>
+<!-- ============================================================ Mockup 1: hero A -->
+<div class="slug"><b>Mockup 1 · Hero A</b><span>the current three beats, weight 500 at 84 / 46 px</span></div>
+<section class="hero">
+  <nav class="nav" aria-label="Homepage, hero A">
+    <a class="brand" href="#"><span class="disc">TB<i>.</i></span>TB Gym</a>
+    <div class="links">
+      <a class="now" href="#">The week</a><a href="#">What's inside</a><a href="#">For gyms</a><a class="sign" href="#">Sign in</a>
+    </div>
+    <span class="menu">MENU</span>
+  </nav>
+  <div class="hero__grid">
+    <div>
+      <p class="eyebrow">For personal trainers, coaches and gyms</p>
+      <h2 class="display">You plan it.<br>They lift it.<br>You both see it.</h2>
+      <p class="lead">Programs, meal plans, check-ins and messages in one coaching space. Your client's phone and your screen tell the same week.</p>
+      <div class="actions">
+        <a class="pill pill--lime" href="#">Start your coaching space</a>
+        <a class="quiet" href="#">Talk to us about your gym <span class="mark">→</span></a>
+      </div>
+    </div>
+    <div class="hero__media">
+      <img class="hero__window" src="r62d/today-needs-you-dark.avif" width="1320" height="1336" alt="The coach's Today in TB Gym: the greeting, who needs her, the week so far">
+      <img class="hero__phone" src="r62d/client-today-1140.avif" width="1350" height="2760" alt="A client's Today on an iPhone: Lower A waiting, a note from her coach">
+      <img class="hero__phone-only" src="r62d/client-today-760.avif" width="1350" height="2760" alt="">
+      <p class="caption hero__caption">Shown with sample data</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ Mockup 2: hero B -->
+<div class="slug"><b>Mockup 2 · Hero B</b><span>one promise line in two lines; everything else the same</span></div>
+<section class="hero">
+  <nav class="nav" aria-label="Homepage, hero B">
+    <a class="brand" href="#"><span class="disc">TB<i>.</i></span>TB Gym</a>
+    <div class="links">
+      <a class="now" href="#">The week</a><a href="#">What's inside</a><a href="#">For gyms</a><a class="sign" href="#">Sign in</a>
+    </div>
+    <span class="menu">MENU</span>
+  </nav>
+  <div class="hero__grid">
+    <div>
+      <p class="eyebrow">For personal trainers, coaches and gyms</p>
+      <h2 class="display">Coach both sides of the week.</h2>
+      <p class="lead">Programs, meal plans, check-ins and messages in one coaching space. Your client's phone and your screen tell the same week.</p>
+      <div class="actions">
+        <a class="pill pill--lime" href="#">Start your coaching space</a>
+        <a class="quiet" href="#">Talk to us about your gym <span class="mark">→</span></a>
+      </div>
+    </div>
+    <div class="hero__media">
+      <img class="hero__window" src="r62d/today-needs-you-dark.avif" width="1320" height="1336" alt="">
+      <img class="hero__phone" src="r62d/client-today-1140.avif" width="1350" height="2760" alt="">
+      <img class="hero__phone-only" src="r62d/client-today-760.avif" width="1350" height="2760" alt="">
+      <p class="caption hero__caption">Shown with sample data</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ Mockup 3: a week stage -->
+<div class="slug"><b>Mockup 3 · One week stage</b><span>Monday evening · Train: the chapter label is the day strip, the number is a serif numeral</span></div>
+<section class="stage on-cream">
+  <div class="wrap stage__grid">
+    <div>
+      <p class="days"><b>Mon</b><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></p>
+      <p class="eyebrow">Monday evening · Train</p>
+      <h2 class="display--section display">She lifts it.</h2>
+      <p class="lead">Maya logs set by set against the plan, last time beside her, the rest timer running. The third set goes up 2.5 kg, as her coach asked. Her record lands on the coach's Today the moment the workout ends.</p>
+      <p class="numeral"><b>52.5</b><span>kg × 5 · a new record</span></p>
+    </div>
+    <div class="panel">
+      <img class="panel__feed" src="r62d/feed-after-dark.avif" width="960" height="1040" alt="The coach's Today after the workout: Maya finished Lower A in 41 minutes with a back squat record">
+      <img class="panel__phone" src="r62d/client-player-1140.avif" width="1350" height="2760" alt="The workout on the phone: two squat sets logged, the third at 55 kg, the rest timer running">
+      <p class="caption">Shown with sample data</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ Mockup 4: a feature row -->
+<div class="slug"><b>Mockup 4 · One feature row</b><span>the coach's screen and the client's phone for the same moment, in the premium grammar</span></div>
+<section class="feature on-cream">
+  <div class="wrap feature__grid">
+    <div>
+      <p class="eyebrow">Check-ins</p>
+      <h2 class="display--section display">Her week, in her words.</h2>
+      <p class="lead">Your questions, one at a time on her phone. Her answers beside last week's on your screen, every change marked.</p>
+      <a class="quiet" href="#">How check-ins work <span class="mark">→</span></a>
+    </div>
+    <div class="pair">
+      <img class="pair__window" src="r62d/checkin-review.avif" width="1400" height="920" alt="The coach's check-in review: this week's answers beside last week's">
+      <img class="pair__phone" src="r62d/client-checkin-760.avif" width="1350" height="2760" alt="The client's check-in answers on her phone">
+      <p class="caption">Shown with sample data</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ Mockup 5: the audience split -->
+<div class="slug"><b>Mockup 5 · The audience split</b><span>story-led, late on the page, a real screen and its own button each; the grey block is the shoot's photograph</span></div>
+<section class="who on-cream">
+  <div class="wrap">
+    <p class="eyebrow">Who it's for</p>
+    <h2 class="display--section display">Built for one coach. Ready for a whole floor.</h2>
+    <div class="who__grid">
+      <article class="story">
+        <h3>For independent coaches</h3>
+        <p>Your programs and meal plans, your brand on their phone, every client's week in one place. Start alone; add a second coach when you need one.</p>
+        <div class="actions"><a class="pill pill--forest" href="#">Start your coaching space</a></div>
+        <div class="story__shot story__shot--builder"><img src="r62d/builder-week.avif" width="1040" height="1120" alt="The program builder: the first week of Lean &amp; Strong, two sessions and a rest day"></div>
+      </article>
+      <article class="story">
+        <h3>For gyms and coaching teams</h3>
+        <p>Every coach on your floor with their own clients, one owner's view of the whole space, one bill. We set it up with you.</p>
+        <div class="actions"><a class="pill pill--hair" href="#">Talk to us about your gym</a></div>
+        <div class="standin"><span>Photograph from the shoot (team.jpg) · grey stand-in until it arrives</span></div>
+        <div class="story__shot story__shot--team"><img src="r62d/team-window.avif" width="1280" height="840" alt="The Team page: the owner and two coaches, each with their own clients"></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ the finale, for the bookend -->
+<div class="slug"><b>Finale</b><span>the dark bookend that closes the cream body; the one lime pill again</span></div>
+<section class="finale">
+  <div class="wrap">
+    <p class="eyebrow">Start</p>
+    <h2 class="display--section display">Your next client's week starts here.</h2>
+    <div class="actions">
+      <a class="pill pill--lime" href="#">Start your coaching space</a>
+      <a class="quiet" href="#">Talk to us about your gym <span class="mark">→</span></a>
+    </div>
+    <div class="foot"><span>TB Gym · Beirut</span><span>Changelog · last change 12 Oct 2026</span><span>Sign in · Privacy</span></div>
+  </div>
+</section>
+</main>
+
+</body>
+</html>

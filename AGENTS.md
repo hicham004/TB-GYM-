@@ -160,6 +160,10 @@
 
 # Fill the dev database with the Atlas Performance demo (UI-REDESIGN-PLAN.md R0.1); stop the API first
 .\scripts\demo-workspace.ps1
+# The same demo as the first-name cast "Oakline Strength", for the homepage's pictures (R6.2d)
+.\scripts\demo-workspace.ps1 --cast sample
+# Photograph that demo for the homepage: phones under Apple's bezel, coach screens as 1:1 crops
+.\scripts\home-pictures.ps1 -Bezel <Apple's iPhone 17 portrait bezel PNG>
 
 # Complete Docker development stack
 docker compose up --build

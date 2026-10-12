@@ -35,7 +35,7 @@ internal sealed partial class DemoWorkspaceGenerator
     private readonly DemoRequests requests;
     private readonly DemoTimeline timeline;
     private readonly string password;
-    private readonly IReadOnlyList<DemoClient> clients;
+    private readonly DemoPeople people;
     private readonly CancellationToken cancellationToken;
 
     private readonly Dictionary<string, Guid> staffUserIds = [];
@@ -53,13 +53,13 @@ internal sealed partial class DemoWorkspaceGenerator
         IServiceProvider services,
         DemoClock clock,
         string password,
-        IReadOnlyList<DemoClient> clients,
+        DemoPeople people,
         CancellationToken cancellationToken)
     {
         this.services = services;
         this.clock = clock;
         this.password = password;
-        this.clients = clients;
+        this.people = people;
         this.cancellationToken = cancellationToken;
         calendar = new DemoCalendar(DateTimeOffset.UtcNow, TimeZoneId);
         clock.Rewind(calendar.At(WorkspaceCreatedDay, 9, 0));
@@ -70,12 +70,12 @@ internal sealed partial class DemoWorkspaceGenerator
     public async Task<DemoWorkspaceTally> GenerateAsync(TextWriter output)
     {
         PlanWorkspace();
-        foreach (var client in clients)
+        foreach (var client in people.Clients)
         {
             // Each client keeps their place in the cast, so their story is the same in any subset.
             var state = new DemoClientState(client);
             states.Add(state);
-            PlanClient(state, IndexOf(client));
+            PlanClient(state, people.IndexOf(client));
         }
 
         PlanPendingInvitations();
@@ -130,9 +130,9 @@ internal sealed partial class DemoWorkspaceGenerator
         timeline.At(calendar.At(day, 12, 0), "build the meal plan", BuildMealPlanAsync);
 
         var acceptances = new[] { calendar.At(day + 1, 18, 10), calendar.At(day + 2, 9, 30) };
-        for (var index = 0; index < Coaches.Count; index++)
+        for (var index = 0; index < people.Coaches.Count; index++)
         {
-            var coach = Coaches[index];
+            var coach = people.Coaches[index];
             var acceptAt = acceptances[index];
             timeline.At(calendar.At(day + 1, 11, index * 5), $"invite coach {coach.FirstName}",
                 () => InviteCoachAsync(coach, acceptAt));
@@ -145,10 +145,10 @@ internal sealed partial class DemoWorkspaceGenerator
             DemoActor.Anonymous,
             (service, token) => service.RegisterCoachAsync(
                 new RegisterCoachRequest(
-                    Owner.DisplayName,
-                    Owner.Email,
+                    people.Owner.DisplayName,
+                    people.Owner.Email,
                     password,
-                    WorkspaceName,
+                    people.WorkspaceName,
                     TimeZoneId,
                     "en-LB",
                     Currency,
@@ -156,8 +156,8 @@ internal sealed partial class DemoWorkspaceGenerator
                 token));
         Require(result.Status == WorkspaceRegistrationStatus.Created, "open the workspace", result);
 
-        var ownerId = await ConfirmEmailAsync(Owner.Email);
-        staffUserIds[Owner.Key] = ownerId;
+        var ownerId = await ConfirmEmailAsync(people.Owner.Email);
+        staffUserIds[people.Owner.Key] = ownerId;
         await using var scope = services.CreateAsyncScope();
         var memberships = await scope.ServiceProvider.GetRequiredService<ITenantMembershipStore>()
             .ListForUserAsync(ownerId, cancellationToken);
@@ -354,7 +354,7 @@ internal sealed partial class DemoWorkspaceGenerator
 
     private void PlanPendingInvitations()
     {
-        foreach (var invite in PendingInvites)
+        foreach (var invite in people.PendingInvites)
         {
             timeline.At(calendar.Ago(invite.Ago), $"invite {invite.FirstName}", async () =>
             {
@@ -369,7 +369,7 @@ internal sealed partial class DemoWorkspaceGenerator
         }
     }
 
-    private DemoActor OwnerActor => StaffActor(Owner.Key);
+    private DemoActor OwnerActor => StaffActor(people.Owner.Key);
 
     private DemoActor StaffActor(string key) => new(staffUserIds[key], tenantId);
 

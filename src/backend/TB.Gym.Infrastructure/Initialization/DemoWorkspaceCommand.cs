@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,9 +19,12 @@ namespace TB.Gym.Infrastructure.Initialization;
 /// <code>
 /// dotnet run --project src/backend/TB.Gym.Api -- demo-workspace
 /// dotnet run --project src/backend/TB.Gym.Api -- demo-workspace --password "Another-Pass-1"
+/// dotnet run --project src/backend/TB.Gym.Api -- demo-workspace --cast sample
 /// </code>
 /// It applies pending migrations, then refuses if the workspace already exists. Dates are relative to
 /// the day it runs, so rebuild it (drop the development database and run it again) before a demo.
+/// <c>--cast sample</c> builds the same people as a first-name cast in "Oakline Strength", for the
+/// pictures on the public homepage (UI plan R6.2d); the owner's own demo keeps its names.
 /// </remarks>
 public static class DemoWorkspaceCommand
 {
@@ -44,19 +48,28 @@ public static class DemoWorkspaceCommand
     }
 
     /// <returns>0 when the demo was built, 1 when a step failed, 2 for a usage or setup problem.</returns>
-    public static Task<int> RunAsync(
+    public static async Task<int> RunAsync(
         IServiceProvider services,
         IReadOnlyList<string> args,
         TextWriter output,
-        CancellationToken cancellationToken = default) =>
-        RunAsync(services, args, output, DemoWorkspaceCast.Clients, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        if (!DemoWorkspaceOptions.TryParse(args, out var options))
+        {
+            await output.WriteLineAsync($"Usage: {Name} [--password <password>] [--cast atlas|sample]");
+            return 2;
+        }
 
-    /// <summary>Builds the demo with only some of its clients, which keeps the integration test quick.</summary>
+        return await RunAsync(services, options.Password, output, options.People, cancellationToken);
+    }
+
+    /// <summary>Builds the demo for the given people, which lets the integration test run with a few of its clients.</summary>
     internal static async Task<int> RunAsync(
         IServiceProvider services,
-        IReadOnlyList<string> args,
+        string password,
         TextWriter output,
-        IReadOnlyList<DemoClient> clients,
+        DemoPeople people,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -64,12 +77,6 @@ public static class DemoWorkspaceCommand
         if (!services.GetRequiredService<IHostEnvironment>().IsDevelopment())
         {
             await output.WriteLineAsync($"{Name} only runs in Development. It never touches a real workspace.");
-            return 2;
-        }
-
-        if (!TryReadPassword(args, out var password))
-        {
-            await output.WriteLineAsync($"Usage: {Name} [--password <password>]");
             return 2;
         }
 
@@ -83,20 +90,20 @@ public static class DemoWorkspaceCommand
         {
             await scope.ServiceProvider.GetRequiredService<GymDbContext>().Database.MigrateAsync(cancellationToken);
             var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-            if (await users.FindByEmailAsync(DemoWorkspaceCast.Owner.Email) is not null)
+            if (await users.FindByEmailAsync(people.Owner.Email) is not null)
             {
                 await output.WriteLineAsync(
-                    $"{DemoWorkspaceCast.WorkspaceName} is already in this database. " +
+                    $"{people.WorkspaceName} is already in this database. " +
                     "To rebuild it with today's dates, drop the development database and run this again.");
                 return 2;
             }
         }
 
-        await output.WriteLineAsync($"Building {DemoWorkspaceCast.WorkspaceName}. This takes a minute or two.");
+        await output.WriteLineAsync($"Building {people.WorkspaceName}. This takes a minute or two.");
         DemoWorkspaceTally tally;
         try
         {
-            tally = await new DemoWorkspaceGenerator(services, clock, password, clients, cancellationToken).GenerateAsync(output);
+            tally = await new DemoWorkspaceGenerator(services, clock, password, people, cancellationToken).GenerateAsync(output);
         }
         catch (DemoStepFailedException exception)
         {
@@ -105,34 +112,19 @@ public static class DemoWorkspaceCommand
             return 1;
         }
 
-        await WriteSummaryAsync(output, tally, password, clients);
+        await WriteSummaryAsync(output, tally, password, people);
         return 0;
-    }
-
-    private static bool TryReadPassword(IReadOnlyList<string> args, out string password)
-    {
-        password = DefaultPassword;
-        switch (args.Count)
-        {
-            case 1:
-                return true;
-            case 3 when args[1] == "--password" && !string.IsNullOrWhiteSpace(args[2]):
-                password = args[2];
-                return true;
-            default:
-                return false;
-        }
     }
 
     private static async Task WriteSummaryAsync(
         TextWriter output,
         DemoWorkspaceTally tally,
         string password,
-        IReadOnlyList<DemoClient> clients)
+        DemoPeople people)
     {
         var waiting = tally.CheckInsSubmitted - tally.CheckInsReviewed;
         await output.WriteLineAsync();
-        await output.WriteLineAsync($"{DemoWorkspaceCast.WorkspaceName} is ready.");
+        await output.WriteLineAsync($"{people.WorkspaceName} is ready.");
         await output.WriteLineAsync(
             $"  {tally.Clients} clients and {tally.PendingInvitations} pending invitations, {tally.Workouts} workouts " +
             $"({tally.Sets} sets, {tally.PersonalBests} personal bests), {tally.WeighIns} weigh-ins, " +
@@ -140,15 +132,60 @@ public static class DemoWorkspaceCommand
             $"{tally.Messages} messages, {tally.Notifications} notifications delivered.");
         await output.WriteLineAsync();
         await output.WriteLineAsync($"Sign in with any of these, password {password}:");
-        await output.WriteLineAsync($"  Owner   {DemoWorkspaceCast.Owner.Email}");
-        foreach (var coach in DemoWorkspaceCast.Coaches)
+        await output.WriteLineAsync($"  Owner   {people.Owner.Email}");
+        foreach (var coach in people.Coaches)
         {
             await output.WriteLineAsync($"  Coach   {coach.Email}");
         }
 
-        if (clients.SingleOrDefault(client => client.IsHero) is { } hero)
+        if (people.Clients.SingleOrDefault(client => client.IsHero) is { } hero)
         {
-            await output.WriteLineAsync($"  Client  {hero.Email} (has a workout today), or any client as first.last@mail.example");
+            await output.WriteLineAsync($"  Client  {hero.Email} (has a workout today); every client's address is made the same way");
         }
+    }
+}
+
+/// <summary>What the command was asked for: the shared password and which people to build.</summary>
+internal sealed record DemoWorkspaceOptions(string Password, DemoPeople People)
+{
+    /// <summary>
+    /// <c>demo-workspace [--password &lt;password&gt;] [--cast atlas|sample]</c>, in any order. Anything else
+    /// is a usage error, so a mistyped option never quietly builds the wrong demo.
+    /// </summary>
+    public static bool TryParse(IReadOnlyList<string> args, [NotNullWhen(true)] out DemoWorkspaceOptions? options)
+    {
+        options = null;
+        if (!DemoWorkspaceCommand.IsInvocation(args))
+        {
+            return false;
+        }
+
+        var password = DemoWorkspaceCommand.DefaultPassword;
+        var people = DemoWorkspaceCast.Atlas;
+        for (var index = 1; index < args.Count; index += 2)
+        {
+            if (index + 1 >= args.Count || string.IsNullOrWhiteSpace(args[index + 1]))
+            {
+                return false;
+            }
+
+            switch (args[index], args[index + 1])
+            {
+                case ("--password", var value):
+                    password = value;
+                    break;
+                case ("--cast", "atlas"):
+                    people = DemoWorkspaceCast.Atlas;
+                    break;
+                case ("--cast", "sample"):
+                    people = DemoWorkspaceCast.Sample;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        options = new DemoWorkspaceOptions(password, people);
+        return true;
     }
 }

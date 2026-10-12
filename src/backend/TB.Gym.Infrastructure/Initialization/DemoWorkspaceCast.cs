@@ -18,14 +18,6 @@ internal static class DemoWorkspaceCast
     /// <summary>The day the owner opens the workspace, before anyone else arrives.</summary>
     public const int WorkspaceCreatedDay = -77;
 
-    public static readonly DemoStaff Owner = new("karim", "Karim", "Haddad", "karim@atlas.example");
-
-    public static readonly IReadOnlyList<DemoStaff> Coaches =
-    [
-        new("lea", "Lea", "Khoury", "lea@atlas.example"),
-        new("omar", "Omar", "Nassar", "omar@atlas.example"),
-    ];
-
     public static readonly IReadOnlyList<DemoProduct> Products =
     [
         new(
@@ -314,7 +306,7 @@ internal static class DemoWorkspaceCast
         "That's the consistency we want.",
     ];
 
-    public static readonly IReadOnlyList<DemoClient> Clients =
+    private static readonly IReadOnlyList<DemoClient> AtlasClients =
     [
         new("maya", "Maya", "Fakhoury", "lea", 29, 166m, IsHero: true,
             Goals: "Lose 6 kg and feel strong for my wedding in December.",
@@ -609,13 +601,34 @@ internal static class DemoWorkspaceCast
     ];
 
     /// <summary>People invited in the last two days who have not accepted yet.</summary>
-    public static readonly IReadOnlyList<DemoPendingInvite> PendingInvites =
+    private static readonly IReadOnlyList<DemoPendingInvite> AtlasPendingInvites =
     [
         new("karim", "Ziad", "Khalil", "ziad.khalil@mail.example", TimeSpan.FromHours(26)),
         new("lea", "Christelle", "Moukarzel", "christelle.moukarzel@mail.example", TimeSpan.FromHours(5)),
     ];
 
-    public static int IndexOf(DemoClient client) => Clients.ToList().IndexOf(client);
+    // The two casts come after the lists they are made of: static fields initialise in file order.
+
+    /// <summary>The owner's own demo: Atlas Performance and its people, with their full names.</summary>
+    public static DemoPeople Atlas { get; } = new(
+        WorkspaceName,
+        "Atlas",
+        new DemoStaff("karim", "Karim", "Haddad", "karim@atlas.example"),
+        [
+            new DemoStaff("lea", "Lea", "Khoury", "lea@atlas.example"),
+            new DemoStaff("omar", "Omar", "Nassar", "omar@atlas.example"),
+        ],
+        AtlasClients,
+        AtlasPendingInvites);
+
+    /// <summary>
+    /// The same people for the pictures on the public homepage (UI plan R6.2d, <c>--cast sample</c>):
+    /// first names with a last initial, because the product asks every client for a last name, in a
+    /// business whose name was checked against real ones on 2026-10-12. "Atlas Performance" is a
+    /// training centre in Florida and a US trademark for personal training; "Oakline Strength" matched
+    /// no business. Chosen by Claude for the owner on 2026-10-12; the owner's own demo keeps Atlas.
+    /// </summary>
+    public static DemoPeople Sample { get; } = Atlas.AsFirstNameCast("Oakline Strength", "Oakline", "oakline.example");
 
     public static DemoProgram Program(string key) => Programs.Single(program => program.Key == key);
 
@@ -627,9 +640,6 @@ internal static class DemoWorkspaceCast
         return (product, product.Offers.Single(item => item.Offer == offer));
     }
 
-    public static DemoStaff Staff(string key) =>
-        key == Owner.Key ? Owner : Coaches.Single(coach => coach.Key == key);
-
     private static DemoExercisePlan Main(string exerciseKey) => new(exerciseKey, 0, 0, 0, IsMainLift: true);
 
     private static DemoExercisePlan Acc(string exerciseKey, int sets, int repsMinimum, int repsMaximum) =>
@@ -639,6 +649,57 @@ internal static class DemoWorkspaceCast
 internal sealed record DemoStaff(string Key, string FirstName, string LastName, string Email)
 {
     public string DisplayName => $"{FirstName} {LastName}";
+}
+
+/// <summary>
+/// The people of one demo and the business they belong to. The content (exercises, programs, products,
+/// the check-in form, the meal plan) is the same whichever cast is built; only who is there changes.
+/// </summary>
+internal sealed record DemoPeople(
+    string WorkspaceName,
+    string ShortName,
+    DemoStaff Owner,
+    IReadOnlyList<DemoStaff> Coaches,
+    IReadOnlyList<DemoClient> Clients,
+    IReadOnlyList<DemoPendingInvite> PendingInvites)
+{
+    /// <summary>A client's place in the cast, which keeps their story the same in any subset.</summary>
+    public int IndexOf(DemoClient client) => Clients.ToList().IndexOf(client);
+
+    /// <summary>The same business with only some of its clients, which keeps the integration test quick.</summary>
+    public DemoPeople WithClients(IReadOnlyList<DemoClient> clients) => this with { Clients = clients };
+
+    /// <summary>
+    /// The same people with every last name cut to its initial, mail at another address, and the business
+    /// renamed wherever a message says its short name ("Welcome to Atlas, Maya!").
+    /// </summary>
+    public DemoPeople AsFirstNameCast(string workspaceName, string shortName, string staffMailDomain)
+    {
+        string Rename(string text) => text.Replace(ShortName, shortName, StringComparison.Ordinal);
+        DemoStaff Staff(DemoStaff staff) => staff with
+        {
+            LastName = Initial(staff.LastName),
+            Email = $"{staff.FirstName}@{staffMailDomain}".ToLowerInvariant(),
+        };
+        return new DemoPeople(
+            workspaceName,
+            shortName,
+            Staff(Owner),
+            [.. Coaches.Select(Staff)],
+            [.. Clients.Select(client => client with
+            {
+                LastName = Initial(client.LastName),
+                Welcome = Rename(client.Welcome),
+                Messages = [.. client.Messages.Select(message => message with { Text = Rename(message.Text) })],
+            })],
+            [.. PendingInvites.Select(invite => invite with
+            {
+                LastName = Initial(invite.LastName),
+                Email = $"{invite.FirstName}.{invite.LastName[0]}@mail.example".ToLowerInvariant(),
+            })]);
+    }
+
+    private static string Initial(string lastName) => $"{char.ToUpperInvariant(lastName[0])}.";
 }
 
 internal enum DemoOffer
@@ -783,8 +844,8 @@ internal sealed record DemoClient(
     string? PauseReason = null,
     int? AsksToRenewDay = null)
 {
-    public string Email => $"{FirstName}.{LastName.Replace(" ", string.Empty, StringComparison.Ordinal)}@mail.example"
-        .ToLowerInvariant();
+    /// <summary>Letters only, so "Bou Khalil" and the sample cast's "K." both make a valid address.</summary>
+    public string Email => $"{FirstName}.{new string([.. LastName.Where(char.IsLetter)])}@mail.example".ToLowerInvariant();
 
     public string DisplayName => $"{FirstName} {LastName}";
 

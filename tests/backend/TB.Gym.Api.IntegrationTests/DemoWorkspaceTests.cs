@@ -104,10 +104,11 @@ public sealed class DemoWorkspaceTests
             });
         });
         using var output = new StringWriter();
-        var cast = DemoWorkspaceCast.Clients.Where(client => CastForTheTest.Contains(client.Key)).ToList();
+        var cast = DemoWorkspaceCast.Atlas.Clients.Where(client => CastForTheTest.Contains(client.Key)).ToList();
+        var demo = DemoWorkspaceCast.Atlas.WithClients(cast);
 
         var exitCode = await DemoWorkspaceCommand.RunAsync(
-            factory.Services, [DemoWorkspaceCommand.Name], output, cast, CancellationToken.None);
+            factory.Services, DemoWorkspaceCommand.DefaultPassword, output, demo, CancellationToken.None);
 
         Assert.AreEqual(0, exitCode, output.ToString());
         Assert.Contains("Atlas Performance is ready.", output.ToString());
@@ -210,7 +211,7 @@ public sealed class DemoWorkspaceTests
 
         using var again = new StringWriter();
         Assert.AreEqual(2, await DemoWorkspaceCommand.RunAsync(
-            factory.Services, [DemoWorkspaceCommand.Name], again, cast, CancellationToken.None));
+            factory.Services, DemoWorkspaceCommand.DefaultPassword, again, demo, CancellationToken.None));
         Assert.Contains("already in this database", again.ToString());
     }
 
@@ -219,9 +220,9 @@ public sealed class DemoWorkspaceTests
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GymDbContext>();
         var tenantId = await db.Tenants.Where(item => item.Name == DemoWorkspaceCast.WorkspaceName).Select(item => item.Id).SingleAsync();
-        var owner = await db.Users.SingleAsync(user => user.Email == DemoWorkspaceCast.Owner.Email);
+        var owner = await db.Users.SingleAsync(user => user.Email == DemoWorkspaceCast.Atlas.Owner.Email);
         var omar = await db.Users.SingleAsync(user => user.Email == "omar@atlas.example");
-        var heroEmail = DemoWorkspaceCast.Clients.Single(client => client.IsHero).Email;
+        var heroEmail = DemoWorkspaceCast.Atlas.Clients.Single(client => client.IsHero).Email;
         var maya = await db.Users.SingleAsync(user => user.Email == heroEmail);
         return (tenantId, owner.Id, omar.Id, maya.Id);
     }
