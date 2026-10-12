@@ -1,221 +1,240 @@
 @use 'home-shared' as *;
 
-// The week: the hero's copy and the chapters in one column, the stage of two screens in the other.
-// Below $wide (the same 1100px HomeWeekMotion asks the browser about) there is one column and no
-// stage: the hero and every chapter carry their own two pictures.
+// The week: the stages' copy in one column, the panel of two screens in the other (home-week-panel.scss).
+// Below $wide, or for a reader who asked for less motion, there is no live panel: each stage carries
+// its own pictures.
 
 :host {
   display: block;
 }
 
 .week {
-  display: grid;
-  gap: clamp(28px, 4vw, 64px);
-  margin-inline: auto;
-  max-inline-size: 1440px;
-  padding: clamp(24px, 4vw, 48px) clamp(20px, 5vw, 80px) clamp(56px, 6vw, 96px);
+  @include wrap;
+  padding-block: clamp(72px, 9vw, 128px) clamp(24px, 4vw, 56px);
+  scroll-margin-block-start: 72px;
 }
 
-.week__copy {
-  min-inline-size: 0;
-}
-
-.hero {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.hero__eyebrow {
-  @include eyebrow;
-}
-
-.hero__rule {
-  background: var(--home-forest);
-  block-size: 1px;
-  flex: none;
-  inline-size: 28px;
-}
-
-// Three beats, one line each; the lines are the rhythm, so they are not left to the width.
-.hero__title {
-  @include display(clamp(2.7rem, 4.6vw, 4.9rem));
-  margin-block-end: 24px;
-  text-wrap: initial;
-}
-
-// A lime marker sweeps under the promise once the page settles.
-.hero__title em {
-  @include accent;
-  -webkit-box-decoration-break: clone;
-  background: linear-gradient(var(--home-lime), var(--home-lime)) no-repeat 0 90% / 100% 32%;
-  box-decoration-break: clone;
-  color: var(--home-forest);
-  padding-inline: 0.05em;
-}
-
-.hero__title em:dir(rtl) {
-  background-position: 100% 90%;
-}
-
-.hero__lead {
+// The Mon–Sun strip: the chapter label. A stage's own copy carries one; on a wide screen the
+// column's single strip stays at the top while the stages scroll under it.
+.days {
+  @include mono;
   color: var(--home-muted);
-  font-size: clamp(1.06rem, 1.4vw, 1.25rem);
-  line-height: 1.55;
-  margin-block: 0 28px;
-  max-inline-size: 32rem;
+  display: flex;
+  font-size: 0.78rem;
+  gap: 18px;
+  line-height: 1;
+  margin: 0 0 32px;
+  position: relative;
 }
 
-.hero__actions {
+.days__day {
+  padding-block-end: 10px;
+  position: relative;
+  transition: color 300ms ease;
+}
+
+.days__day.is-on {
+  color: var(--home-forest);
+}
+
+.days__day.is-on::after {
+  background: var(--home-forest);
+  block-size: 2px;
+  content: '';
+  inset-block-end: 0;
+  inset-inline: 0;
+  position: absolute;
+}
+
+.days__marker,
+.days--strip {
+  display: none;
+}
+
+.stage {
+  padding-block: 8px 56px;
+}
+
+.stage__when {
+  @include eyebrow;
+  color: var(--home-muted);
+}
+
+.stage__title {
+  @include section-display;
+  margin-block-end: 18px;
+}
+
+.stage__body {
+  @include lead;
+  color: var(--home-muted);
+  max-inline-size: 42ch;
+}
+
+// The travelling number: an upright serif numeral in the copy column, never a chip.
+.stage__numeral {
+  align-items: baseline;
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-block-end: 20px;
+  gap: 14px;
+  margin: 36px 0 0;
 }
 
-.hero__primary {
-  @include button;
-  background: var(--home-forest);
-  color: white;
+// The serif face arrives once the page is live (home.ts): the numerals are below the first screen,
+// so its bytes never compete with the headline's; until then a system serif stands in.
+.stage__numeral b {
+  @include numeral;
+  color: var(--home-ink);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(5rem, 9vw, 8rem);
 }
 
-.hero__primary:hover {
-  background: #275b49;
+:host-context(.home--live) .stage__numeral b {
+  font-family: var(--home-serif);
 }
 
-.hero__secondary {
-  @include button;
-  border-color: var(--home-forest);
-  color: var(--home-forest);
-}
-
-.hero__secondary:hover {
-  background: #e7ecdf;
-}
-
-.hero__note {
+.stage__numeral span {
+  @include mono;
   color: var(--home-muted);
-  font-size: 0.86rem;
-  line-height: 1.5;
-  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
-.hero__note a {
-  color: inherit;
-  font-weight: 600;
-  text-underline-offset: 3px;
+.stage__own {
+  margin: 32px 0 0;
 }
 
-// Entrance: the copy rises in sequence. The headline only moves, never fades, because it is the
-// page's largest first paint.
-@media (prefers-reduced-motion: no-preference) {
-  .hero__eyebrow,
-  .hero__lead,
-  .hero__actions,
-  .hero__note {
-    animation: hero-rise 800ms var(--home-ease) both;
-  }
+.stage__own-phone {
+  inline-size: min(300px, 86%);
+  margin-inline: auto;
+}
 
-  .hero__title {
-    animation: hero-lift 900ms var(--home-ease) both;
-  }
+.stage__own-window {
+  display: none;
+}
 
-  .hero__title em {
-    animation: hero-mark 1000ms var(--home-ease) 700ms both;
-  }
+.stage__caption {
+  @include caption;
+  color: var(--home-muted);
+  margin-block-start: 16px;
+  text-align: center;
+}
 
-  .hero__lead {
-    animation-delay: 160ms;
+@media (prefers-reduced-motion: reduce) {
+  .days__day {
+    transition: none;
   }
+}
 
-  .hero__actions {
-    animation-delay: 240ms;
-  }
-
-  .hero__note {
-    animation-delay: 320ms;
+// On a phone each stage is a screen or two of its own; the browser lays it out, and fetches its
+// picture, only as it comes near, so the first paint is not waiting on the whole week.
+@media (max-width: 1099px) {
+  .stage {
+    contain-intrinsic-size: auto 1100px;
+    content-visibility: auto;
   }
 }
 
 @media #{$wide-story} {
   .week {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
-  }
-
-  .hero {
-    // The copy sits level with the stage on arrival; the chapters follow below.
-    min-block-size: min(calc(100vh - 148px), 760px);
-  }
-}
-
-// Wide, but the reader asked for less motion: no stage, the hero's own pictures beside its copy.
-@media #{$wide-still} {
-  .hero {
-    align-items: center;
-    column-gap: clamp(32px, 5vw, 80px);
+    align-items: start;
+    column-gap: 64px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(360px, 460px) minmax(0, 1fr);
   }
 
-  .hero > * {
-    grid-column: 1;
-  }
-
-  .hero .screens--hero {
-    grid-column: 2;
-    grid-row: 1 / 3;
+  .days--strip {
+    background: var(--home-cream);
+    display: flex;
+    inset-block-start: 72px;
     margin: 0;
-    max-inline-size: 560px;
+    padding-block: 24px 0;
+    position: sticky;
+    z-index: 2;
   }
-}
 
-@media (max-width: $mobile) {
-  // The copy owns the first screen, with "See a week of coaching" as the way down; the pictures
-  // start below it, so the first paint is the headline and never waits for a picture.
-  .hero__copy {
+  .days--own {
+    display: none;
+  }
+
+  // Moved by GSAP to the stage's day; until it runs, the stylesheet marks Monday itself.
+  .days__marker {
+    background: var(--home-forest);
+    block-size: 2px;
+    display: block;
+    inline-size: 2.6rem;
+    inset-block-end: 0;
+    inset-inline-start: 0;
+    position: absolute;
+  }
+
+  .week[data-motion='running'] .days--strip .days__day.is-on::after {
+    display: none;
+  }
+
+  .stage {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    min-block-size: calc(100svh - 64px);
+    min-block-size: 100vh;
+    padding-block: 48px;
   }
 
-  .hero__title {
-    font-size: clamp(2.45rem, 10.4vw, 3.6rem);
+  // The last stage ends with the panel, not a screen of nothing after its words.
+  .stage:last-child {
+    min-block-size: 72vh;
+    padding-block-end: 0;
   }
 
-  .hero__lead {
-    margin-block-end: 24px;
-  }
-
-  .hero__primary {
-    flex: 1 1 100%;
-  }
-
-  .hero__secondary {
-    border-color: transparent;
-    min-block-size: 44px;
-    padding-inline: 4px;
+  .stage__own {
+    display: none;
   }
 }
 
-// Nested in an at-rule on purpose: see _home-shared.scss.
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes hero-rise {
-    from {
-      opacity: 0;
-      transform: translateY(18px);
-    }
+// Wide, but the reader asked for less motion: each stage's two screens beside its words, still.
+@media #{$wide-still} {
+  .stage {
+    align-items: center;
+    column-gap: 48px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    padding-block: 56px;
   }
 
-  @keyframes hero-lift {
-    from {
-      transform: translateY(24px);
-    }
+  .stage > * {
+    grid-column: 1;
   }
 
-  @keyframes hero-mark {
-    from {
-      background-size: 0% 32%;
-    }
+  // Written as a child selector on purpose: Angular's emulated encapsulation makes `.stage > *`
+  // more specific than a lone class, so a bare `.stage__own` would lose and sit in the first column.
+  .stage > .stage__own {
+    grid-column: 2;
+    grid-row: 1 / 7;
+    margin: 0;
+    min-block-size: 720px;
+    position: relative;
+  }
+
+  .stage__own-window {
+    display: block;
+    inline-size: min(100%, 520px);
+    inset-block-start: 40px;
+    position: absolute;
+  }
+
+  .stage__own-phone {
+    inline-size: 300px;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    margin: 0;
+    position: absolute;
+    z-index: 1;
+  }
+
+  .stage__caption {
+    inset-block-end: 0;
+    inset-inline-start: 0;
+    position: absolute;
+    text-align: start;
   }
 }

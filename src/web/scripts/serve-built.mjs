@@ -60,12 +60,15 @@ const TYPES = {
 };
 
 /**
- * Which file answers a request: nginx.conf's two rules. `exists` says whether a relative path is a
- * file in the build output.
+ * Which file answers a request: nginx.conf's three rules. `exists` says whether a relative path is
+ * a file in the build output.
  */
 export function documentFor(pathname, cookie, exists) {
   if (pathname === '/') {
     return SIGNED_IN_COOKIE.test(cookie ?? '') ? 'index.csr.html' : 'index.html';
+  }
+  if (pathname === '/changelog') {
+    return 'changelog/index.html';
   }
   const relative = normalize(decodeURIComponent(pathname)).replace(/^[\\/]+/, '');
   if (relative === '' || relative.split(/[\\/]/).includes('..')) return 'index.csr.html';
@@ -122,12 +125,15 @@ function buildIfStale() {
     console.error('ng build failed.');
     process.exit(result.status ?? 1);
   }
-  // As `npm run build` does: the homepage's first paint needs the HTML alone.
-  const home = join(browser, 'index.html');
-  const inlined = inlineHomeStyles(readFileSync(home, 'utf8'), (name) =>
-    readFileSync(join(browser, name), 'utf8'),
-  );
-  if (inlined !== null) writeFileSync(home, inlined);
+  // As `npm run build` does: the pre-rendered pages' first paint needs the HTML alone.
+  for (const document of ['index.html', 'changelog/index.html']) {
+    const path = join(browser, document);
+    if (!existsSync(path)) continue;
+    const inlined = inlineHomeStyles(readFileSync(path, 'utf8'), (name) =>
+      readFileSync(join(browser, name), 'utf8'),
+    );
+    if (inlined !== null) writeFileSync(path, inlined);
+  }
   const findings = checkPrerender(browser);
   if (findings.length > 0) {
     console.error(findings.join('\n'));

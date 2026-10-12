@@ -216,6 +216,7 @@ interface EditFailure {
   styleUrls: [
     '../training/program-builder.scss',
     '../training/program-week.scss',
+    '../training/program-week-session.scss',
     './program-edit.scss',
   ],
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },

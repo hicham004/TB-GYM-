@@ -1,0 +1,56 @@
+<section class="facts" aria-label="About TB Gym" i18n-aria-label>
+  <ul class="facts__list">
+    @for (fact of facts; track fact) {
+      <li>{{ fact }}</li>
+    }
+    @if (lastChange) {
+      <li>
+        <a routerLink="/changelog"
+          ><ng-container i18n>Last change {{ lastChange }}: see what changed</ng-container></a
+        >
+      </li>
+    }
+  </ul>
+</section>
+
+<section class="who" id="for-gyms" aria-labelledby="who-title">
+  <p class="who__eyebrow" i18n>Who it's for</p>
+  <h2 id="who-title" class="who__title" i18n>Built for one coach. Ready for a whole floor.</h2>
+  <div class="who__grid">
+    <article class="story" aria-labelledby="who-coaches">
+      <h3 id="who-coaches" i18n>For independent coaches</h3>
+      <p i18n>
+        Your programs and meal plans, your brand on their phone, every client's week in one place.
+        Start alone; add a second coach when you need one.
+      </p>
+      <a class="story__button story__button--forest" routerLink="/auth/register" i18n
+        >Start your coaching space</a
+      >
+      <div class="story__shot" [style.--window-width.px]="builder.width">
+        <app-home-window
+          [window]="builder"
+          alt="The program builder: the first week of Lean & Strong, two sessions and a rest day"
+          i18n-alt
+        />
+      </div>
+    </article>
+    <article class="story" aria-labelledby="who-gyms">
+      <h3 id="who-gyms" i18n>For gyms and coaching teams</h3>
+      <p i18n>
+        Every coach on your floor with their own clients, one owner's view of the whole space, one
+        bill. We set it up with you.
+      </p>
+      <a class="story__button story__button--hair" routerLink="/auth/register" i18n
+        >Start your gym's coaching space</a
+      >
+      <div class="story__shot" [style.--window-width.px]="team.width">
+        <app-home-window
+          [window]="team"
+          alt="The Team page: the owner and two coaches, each with their own clients"
+          i18n-alt
+        />
+      </div>
+    </article>
+  </div>
+  <p class="who__caption" i18n>Shown with sample data</p>
+</section>

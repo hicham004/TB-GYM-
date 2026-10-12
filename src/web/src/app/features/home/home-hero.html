@@ -1,0 +1,43 @@
+<section class="hero" aria-labelledby="home-title">
+  <div class="hero__inner">
+    <div class="hero__copy">
+      <p class="hero__eyebrow">
+        <span class="hero__rule" aria-hidden="true"></span
+        ><span i18n>For personal trainers, coaches and gyms</span>
+      </p>
+      <h1 id="home-title" class="hero__title" i18n>
+        Coach both <br class="hero__break" />sides of <br class="hero__break" />the week.
+      </h1>
+      <p class="hero__lead" i18n>
+        Programs, meal plans, check-ins and messages in one coaching space. Your client's phone and
+        your screen tell the same week.
+      </p>
+      <div class="hero__actions">
+        <a class="hero__start" routerLink="/auth/register" i18n>Start your coaching space</a>
+        <a class="hero__talk" routerLink="/" fragment="for-gyms">
+          <span i18n>Talk to us about your gym</span
+          ><span class="quiet__mark" aria-hidden="true">→</span>
+        </a>
+      </div>
+    </div>
+
+    <!--
+      The two screens. A phone shows the phone alone, below the copy; a wide screen shows both. The
+      pictures are lazy and the wide first pair is preloaded from index.html, so a phone never fetches
+      the coach's window and a wide screen asks for both with the document.
+    -->
+    <figure class="hero__media">
+      <app-home-window class="hero__window" [window]="window" />
+      <app-home-phone
+        class="hero__phone"
+        screen="client-today"
+        sizes="(min-width: 1100px) 350px, 300px"
+      />
+      <figcaption class="hero__caption" i18n>Shown with sample data</figcaption>
+    </figure>
+    <p class="tb-visually-hidden" i18n>
+      On the coach's screen: her Today, with four clients who need her and three check-ins to
+      review. On the client's phone: her Today, with Lower A scheduled and a note from her coach.
+    </p>
+  </div>
+</section>

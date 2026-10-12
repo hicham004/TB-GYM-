@@ -2,7 +2,8 @@
 // invitation page) share these, so arriving at sign-in from the homepage looks like one product.
 // Signed-in screens use the design-system tokens in _tokens.scss instead.
 
-// Loaded only by the stylesheets that include it; index.html preloads the file for the homepage.
+// Loaded only by the stylesheets that include it: the italic accent of the signed-out screens and
+// the app's moments.
 @mixin serif-face {
   @font-face {
     font-display: swap;
@@ -10,6 +11,35 @@
     font-style: italic;
     font-weight: 400;
     src: url('/fonts/instrument-serif/InstrumentSerif-Italic-latin.woff2') format('woff2');
+  }
+}
+
+// The homepage's own faces (UI plan R6.2f), included by home.scss alone so no other page fetches
+// them: Plex Medium for its headlines, Plex Mono Medium for its eyebrows, captions and day strip,
+// and the upright serif for its numerals. index.html preloads the first two for the first paint.
+@mixin home-faces {
+  @font-face {
+    font-display: swap;
+    font-family: 'Notebook Plex';
+    font-style: normal;
+    font-weight: 500;
+    src: url('/fonts/ibm-plex/IBMPlexSans-Medium.woff2') format('woff2');
+  }
+
+  @font-face {
+    font-display: swap;
+    font-family: 'Notebook Plex Mono';
+    font-style: normal;
+    font-weight: 500;
+    src: url('/fonts/ibm-plex/IBMPlexMono-Medium.woff2') format('woff2');
+  }
+
+  @font-face {
+    font-display: swap;
+    font-family: 'TB Home Serif';
+    font-style: normal;
+    font-weight: 400;
+    src: url('/fonts/instrument-serif/InstrumentSerif-Regular-latin.woff2') format('woff2');
   }
 }
 

@@ -1,0 +1,182 @@
+@use 'home-shared' as *;
+
+:host {
+  display: block;
+}
+
+// The dark stage: it starts under the sticky header, which is clear over it.
+.hero {
+  background: radial-gradient(
+    1200px 700px at 78% 30%,
+    #16221d 0%,
+    var(--home-page) 55%,
+    var(--home-night) 100%
+  );
+  color: var(--home-cream);
+  margin-block-start: -72px;
+  overflow: hidden;
+  padding-block-start: 72px;
+  @include dark-focus;
+}
+
+.hero__inner {
+  @include wrap;
+  align-items: center;
+  display: grid;
+  gap: 32px;
+  grid-template-columns: minmax(440px, 600px) minmax(0, 1fr);
+  min-block-size: max(640px, calc(100vh - 72px));
+  padding-block: 40px 56px;
+}
+
+.hero__eyebrow {
+  @include eyebrow;
+  color: var(--home-lime);
+  margin-block-end: 26px;
+}
+
+.hero__rule {
+  background: var(--home-lime);
+  block-size: 1px;
+  flex: none;
+  inline-size: 28px;
+}
+
+// Six words in three short lines: the lines are the rhythm, so they are not left to the width.
+.hero__title {
+  @include display;
+  margin-block-end: 24px;
+  text-wrap: initial;
+}
+
+.hero__lead {
+  @include lead;
+  color: var(--home-dim);
+  margin-block-end: 34px;
+  max-inline-size: 44ch;
+}
+
+.hero__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+}
+
+.hero__start {
+  @include pill;
+  @include pill-lime;
+}
+
+.hero__talk {
+  @include quiet;
+  color: var(--home-cream);
+
+  .quiet__mark {
+    color: var(--home-lime);
+  }
+}
+
+.hero__media {
+  block-size: 760px;
+  margin: 0;
+  position: relative;
+}
+
+// The coach's window at 1:1 runs behind the phone; the lit phone is the one subject.
+.hero__window {
+  inline-size: 660px;
+  inset-block-start: 36px;
+  inset-inline-start: 0;
+  position: absolute;
+}
+
+.hero__phone {
+  inline-size: 350px;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  position: absolute;
+  z-index: 1;
+}
+
+.hero__caption {
+  @include caption;
+  inset-block-end: 0;
+  inset-inline-start: 0;
+  position: absolute;
+}
+
+@media (max-width: #{$wide - 1px}) {
+  .hero {
+    margin-block-start: -64px;
+    padding-block-start: 64px;
+  }
+
+  .hero__inner {
+    gap: 40px;
+    grid-template-columns: 1fr;
+    min-block-size: 0;
+    padding-block: 24px 48px;
+  }
+
+  .hero__break {
+    display: none;
+  }
+
+  .hero__title {
+    text-wrap: balance;
+  }
+
+  .hero__media {
+    block-size: auto;
+  }
+
+  .hero__window {
+    display: none;
+  }
+
+  .hero__phone {
+    inline-size: min(300px, 80%);
+    margin-inline: auto;
+    position: static;
+  }
+
+  .hero__caption {
+    margin-block-start: 18px;
+    position: static;
+    text-align: center;
+  }
+}
+
+@media (max-width: $mobile) {
+  // The copy owns the first screen: the first paint is the headline and never waits for a picture.
+  .hero__copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-block-size: calc(100svh - 64px);
+  }
+
+  .hero__title {
+    font-size: clamp(2.5rem, 10.4vw, 3.4rem);
+  }
+
+  .hero__eyebrow {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+  }
+
+  .hero__actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .hero__start {
+    inline-size: 100%;
+  }
+
+  .hero__talk {
+    justify-content: center;
+  }
+}

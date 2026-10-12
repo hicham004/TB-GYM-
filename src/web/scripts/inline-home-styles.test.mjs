@@ -4,8 +4,11 @@ import { inlineHomeStyles } from './inline-home-styles.mjs';
 
 const HOME =
   '<!doctype html><html><head><title>TB Gym</title>' +
-  '<link rel="stylesheet" href="styles-ABC12345.css"></head>' +
-  '<body><app-root ngh="0"><h1>You plan it.</h1></app-root></body></html>';
+  '<link rel="stylesheet" href="styles-ABC12345.css">' +
+  '<link rel="modulepreload" href="chunk-GHI.js"></head>' +
+  '<body><app-root ngh="0"><h1>You plan it.</h1></app-root>' +
+  '<script src="polyfills-ABC.js" type="module"></script>' +
+  '<script src="main-DEF.js" type="module"></script></body></html>';
 
 test('replaces the stylesheet link with the sheet itself', () => {
   const read = (name) => {
@@ -17,11 +20,29 @@ test('replaces the stylesheet link with the sheet itself', () => {
 
   assert.ok(inlined);
   assert.doesNotMatch(inlined, /<link\s+rel="stylesheet"/);
-  assert.match(
-    inlined,
-    /<head><title>TB Gym<\/title><style>:root\{--tb-bg:#fbfaf5\}<\/style><\/head>/,
-  );
+  assert.match(inlined, /<head><title>TB Gym<\/title><style>:root\{--tb-bg:#fbfaf5\}<\/style>/);
   assert.match(inlined, /<h1>You plan it\.<\/h1>/);
+});
+
+test('asks for the page’s scripts at low priority, every module script and nothing else', () => {
+  const inlined = inlineHomeStyles(HOME, () => 'body{margin:0}');
+
+  assert.match(inlined, /<script src="polyfills-ABC\.js" type="module" fetchpriority="low">/);
+  assert.match(inlined, /<script src="main-DEF\.js" type="module" fetchpriority="low">/);
+  assert.match(inlined, /<link rel="modulepreload" href="chunk-GHI\.js" fetchpriority="low">/);
+  assert.doesNotMatch(inlined, /<script src="[^"]+" type="module">/);
+  assert.doesNotMatch(inlined, /<style>[^<]*fetchpriority/);
+});
+
+test('inlines the unhashed sheet of a development build too', () => {
+  const page = HOME.replace('styles-ABC12345.css', 'styles.css');
+
+  const inlined = inlineHomeStyles(page, (name) => {
+    assert.equal(name, 'styles.css');
+    return 'body{margin:0}';
+  });
+
+  assert.match(inlined, /<style>body\{margin:0\}<\/style>/);
 });
 
 test('leaves a page without a stylesheet link alone', () => {

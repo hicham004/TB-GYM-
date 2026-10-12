@@ -1,17 +1,21 @@
-// Fails when the production build no longer carries the homepage as finished HTML (UI plan R6.2a).
+// Fails when the production build no longer carries the homepage, or what changed, as finished
+// HTML (UI plan R6.2a, R6.2f).
 //
-// `ng build` renders `/` ahead of time into index.html and keeps the plain application shell as
-// index.csr.html; nginx.conf serves the first for "/" and the second for every other address. This
-// reads both from the build output and checks what each must and must not hold, so a build that
-// quietly stopped pre-rendering (a service touching the browser at start-up, a route change) fails
-// here rather than on Google. `npm run build` runs it; `node scripts/check-prerender.mjs <dir>` reads
-// another output folder.
+// `ng build` renders `/` ahead of time into index.html and `/changelog` into changelog/index.html,
+// and keeps the plain application shell as index.csr.html; nginx.conf serves the first two for
+// their own addresses and the shell for every other. This reads all three from the build output
+// and checks what each must and must not hold, so a build that quietly stopped pre-rendering (a
+// service touching the browser at start-up, a route change) fails here rather than on Google.
+// `npm run build` runs it; `node scripts/check-prerender.mjs <dir>` reads another output folder.
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** The homepage headline, as the <h1> in features/home/home-week.html reads. */
-export const HEADLINE = ['You plan it.', 'They lift it.', 'You both see it.'];
+/** The homepage headline, as the <h1> in features/home/home-hero.html reads. */
+export const HEADLINE = ['Coach both', 'sides of', 'the week.'];
+
+/** The changelog's title, as the <h1> in features/changelog/changelog.html reads. */
+export const CHANGELOG_TITLE = 'What changed';
 
 /** The description and link-preview tags index.html declares; each must survive the render. */
 export const PREVIEW_TAGS = [
@@ -43,6 +47,7 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT) {
     return readFileSync(path, 'utf8');
   };
   const home = read('index.html');
+  const changelog = read(join('changelog', 'index.html'));
   const shell = read('index.csr.html');
 
   if (home !== null) {
@@ -54,28 +59,20 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT) {
     for (const tag of PREVIEW_TAGS) {
       if (!metaContent(home, tag)) findings.push(`index.html lacks the ${tag} tag or its content.`);
     }
-    if (!/<app-root[^>]*\sngh="/.test(home)) {
+    findings.push(...renderedPageProblems(home, 'index.html'));
+  }
+
+  if (changelog !== null) {
+    const text = visibleText(changelog);
+    if (!text.includes(CHANGELOG_TITLE) || !/<h1[\s>]/.test(changelog)) {
       findings.push(
-        'index.html was not rendered by Angular: <app-root> carries no hydration mark.',
+        `changelog/index.html does not hold the title "${CHANGELOG_TITLE}" as its <h1>.`,
       );
     }
-    if (
-      !/<script id="ng-state" type="application\/json">[^<]*"tb-gym\.rendered-signed-out":true/.test(
-        home,
-      )
-    ) {
-      findings.push('index.html has no "rendered signed out" mark for the session store.');
+    if (!/<time\s[^>]*datetime="\d{4}-\d{2}-\d{2}"/.test(changelog)) {
+      findings.push('changelog/index.html holds no dated release.');
     }
-    if (/<script(?![^>]*type="application\/json")[^>]*>[^<]/.test(home)) {
-      findings.push(
-        "index.html holds an inline script, which the CSP (script-src 'self') would refuse.",
-      );
-    }
-    if (/<link\s+rel="stylesheet"/.test(home)) {
-      findings.push(
-        'index.html still links the global stylesheet: scripts/inline-home-styles.mjs did not run.',
-      );
-    }
+    findings.push(...renderedPageProblems(changelog, 'changelog/index.html'));
   }
 
   if (shell !== null) {
@@ -83,15 +80,41 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT) {
       findings.push('index.csr.html is not the plain shell: <app-root> is not empty.');
     }
     const text = visibleText(shell);
-    for (const part of HEADLINE) {
+    for (const part of [...HEADLINE, CHANGELOG_TITLE]) {
       if (text.includes(part)) {
         findings.push(
-          `index.csr.html holds homepage text ("${part}"): a deep link would show the homepage first.`,
+          `index.csr.html holds page text ("${part}"): a deep link would show that page first.`,
         );
       }
     }
   }
 
+  return findings;
+}
+
+/** What every pre-rendered page must and must not carry, whatever its words. */
+function renderedPageProblems(html, name) {
+  const findings = [];
+  if (!/<app-root[^>]*\sngh="/.test(html)) {
+    findings.push(`${name} was not rendered by Angular: <app-root> carries no hydration mark.`);
+  }
+  if (
+    !/<script id="ng-state" type="application\/json">[^<]*"tb-gym\.rendered-signed-out":true/.test(
+      html,
+    )
+  ) {
+    findings.push(`${name} has no "rendered signed out" mark for the session store.`);
+  }
+  if (/<script(?![^>]*type="application\/json")[^>]*>[^<]/.test(html)) {
+    findings.push(
+      `${name} holds an inline script, which the CSP (script-src 'self') would refuse.`,
+    );
+  }
+  if (/<link\s+rel="stylesheet"/.test(html)) {
+    findings.push(
+      `${name} still links the global stylesheet: scripts/inline-home-styles.mjs did not run.`,
+    );
+  }
   return findings;
 }
 
@@ -119,7 +142,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exitCode = 1;
   } else {
     console.log(
-      `The built homepage holds its headline and preview tags, and the shell holds neither (${directory}).`,
+      `The built homepage holds its headline and preview tags, the changelog its releases, and the shell holds neither (${directory}).`,
     );
   }
 }

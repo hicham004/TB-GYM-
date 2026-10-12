@@ -1,0 +1,26 @@
+<section class="finale" aria-labelledby="finale-title">
+  <div class="finale__inner">
+    <p class="finale__eyebrow" i18n>Start</p>
+    <h2 id="finale-title" class="finale__title" i18n>Your next client's week starts here.</h2>
+    <div class="finale__actions">
+      <a class="finale__start" routerLink="/auth/register" i18n>Start your coaching space</a>
+      <a class="finale__talk" routerLink="/" fragment="for-gyms">
+        <span i18n>Talk to us about your gym</span
+        ><span class="quiet__mark" aria-hidden="true">→</span>
+      </a>
+    </div>
+    <footer class="foot">
+      <span i18n><span translate="no">TB Gym</span> · Beirut</span>
+      <nav class="foot__links" aria-label="Footer" i18n-aria-label>
+        @if (lastChange) {
+          <a routerLink="/changelog"
+            ><ng-container i18n>What changed</ng-container> · {{ lastChange }}</a
+          >
+        } @else {
+          <a routerLink="/changelog" i18n>What changed</a>
+        }
+        <a routerLink="/auth/sign-in" i18n>Sign in</a>
+      </nav>
+    </footer>
+  </div>
+</section>

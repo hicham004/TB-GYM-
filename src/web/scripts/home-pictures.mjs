@@ -21,7 +21,8 @@
 //                             "Product bezels"; the files stay out of the repository).
 //   <shot>-<width>.avif/webp  the same phone at the widths the page draws (3x and 2x of its slot).
 //   <picture>.png/avif/webp   a coach screen: a 1:1 crop of one region of the 2x capture in a bare
-//                             window with rounded corners and a hairline edge, nothing else.
+//                             window with rounded corners and a hairline edge, nothing else; and
+//   <picture>-1x.avif/webp    the same at 1x, for screens that draw one device pixel per CSS pixel.
 //
 // `sharp` is deliberately not a dependency of the app (a native image library for a once-a-release
 // task): install it outside the repository and point TB_HOME_TOOLS at that folder, e.g.
@@ -242,9 +243,44 @@ const WINDOWS = [
     width: 360,
     height: 580,
   },
+  // The feature rows (UI plan R6.2f): a 560-750 px region of the coach's screen beside the phone,
+  // and a narrower region of the same screen for phones, where the window is drawn about 350 px
+  // wide and a wide crop would shrink its text.
+  { name: 'programs', shot: 'coach-builder', left: 262, top: 130, width: 745, height: 680 },
+  { name: 'programs-narrow', shot: 'coach-builder', left: 262, top: 130, width: 380, height: 680 },
+  { name: 'week-done', shot: 'coach-client-after', left: 265, top: 505, width: 707, height: 310 },
+  {
+    name: 'week-done-narrow',
+    shot: 'coach-client-after',
+    left: 265,
+    top: 505,
+    width: 380,
+    height: 310,
+  },
+  { name: 'targets', shot: 'coach-client-nutrition', left: 265, top: 310, width: 675, height: 520 },
+  {
+    name: 'targets-narrow',
+    shot: 'coach-client-nutrition',
+    left: 265,
+    top: 310,
+    width: 380,
+    height: 520,
+  },
+  { name: 'review', shot: 'coach-client-checkin', left: 258, top: 355, width: 700, height: 520 },
+  {
+    name: 'review-narrow',
+    shot: 'coach-client-checkin',
+    left: 258,
+    top: 355,
+    width: 380,
+    height: 520,
+  },
+  { name: 'thread-narrow', shot: 'coach-messages', left: 611, top: 148, width: 460, height: 612 },
+  { name: 'clients', shot: 'coach-clients', left: 258, top: 170, width: 760, height: 520 },
+  { name: 'clients-narrow', shot: 'coach-clients', left: 258, top: 230, width: 420, height: 460 },
 ];
 
-const PHONE_WIDTHS = [1140, 760, 460];
+const PHONE_WIDTHS = [1140, 760, 600, 460];
 
 function parseArgs(args) {
   const options = {};
@@ -687,10 +723,11 @@ async function phonePicture(sharp, source, name, bezel, bars, out) {
     .toFile(join(out, `${name}.png`));
   for (const target of PHONE_WIDTHS) {
     const resized = sharp(master).resize({ width: target });
+    // The two small sizes are a phone's own: a touch more compression keeps its first screens light.
     const [avif, webp] = await Promise.all([
       resized
         .clone()
-        .avif({ quality: 60 })
+        .avif({ quality: target <= 600 ? 54 : 60 })
         .toFile(join(out, `${name}-${target}.avif`)),
       resized
         .clone()
@@ -735,6 +772,14 @@ async function windowPicture(sharp, source, window, out) {
     sharp(picture)
       .webp({ quality: 84 })
       .toFile(join(out, `${window.name}.webp`)),
+    sharp(picture)
+      .resize({ width: window.width })
+      .avif({ quality: 62 })
+      .toFile(join(out, `${window.name}-1x.avif`)),
+    sharp(picture)
+      .resize({ width: window.width })
+      .webp({ quality: 84 })
+      .toFile(join(out, `${window.name}-1x.webp`)),
   ]);
   console.log(
     `${window.name}: ${window.width} x ${window.height} css px, png ${png.size} B, avif ${avif.size} B, webp ${webp.size} B`,

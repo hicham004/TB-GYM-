@@ -2,11 +2,12 @@ import { expect, mockSignedOut, test, waitForFonts } from '../support';
 
 /**
  * The built app, served as `nginx.conf` serves it (`scripts/serve-built.mjs`, the `built` project):
- * the homepage pre-rendered at build time (UI plan R6.2a) and the plain shell for every other
- * address. The dev server renders `/` on request too, but only a build writes the two documents and
- * only nginx picks one by address and cookie, so this project is where those rules are checked.
+ * the homepage and what changed pre-rendered at build time (UI plan R6.2a, R6.2f) and the plain
+ * shell for every other address. The dev server renders both on request too, but only a build
+ * writes the documents and only nginx picks one by address and cookie, so this project is where
+ * those rules are checked.
  */
-const HEADLINE = /You plan it\./;
+const HEADLINE = /Coach both/;
 
 /** The document's text without its tags: the shell's og:image:alt names the headline, its page does not. */
 function pageText(html: string): string {
@@ -22,16 +23,30 @@ test('the homepage is served as finished HTML, with its headline, its week and l
   expect(response.headers()['content-type']).toContain('text/html');
   expect(response.headers()['cache-control']).toBe('no-cache');
   const html = await response.text();
-  expect(html).toMatch(/<h1[^>]*>\s*You plan it\.[\s\S]*They lift it\.[\s\S]*You both see it\./);
-  // The whole week is in the HTML (R6.2b): nothing below the fold waits for the browser.
-  expect(pageText(html)).toMatch(/A record worth sharing\./);
-  expect(html.match(/data-chapter="/g)).toHaveLength(7);
+  expect(html).toMatch(/<h1[^>]*>\s*Coach both[\s\S]*sides of[\s\S]*the week\./);
+  // The whole page is in the HTML: nothing below the fold waits for the browser.
+  expect(pageText(html)).toMatch(/You both see it\./);
+  expect(pageText(html)).toMatch(/Built for one coach\. Ready for a whole floor\./);
+  expect(html.match(/<article[^>]*data-stage-id="/g)).toHaveLength(4);
+  expect(html.match(/<article[^>]*data-row="/g)).toHaveLength(6);
   expect(html).toMatch(
-    /<meta[^>]*property="og:title"[^>]*content="TB Gym: you plan it, they lift it, you both see it"/,
+    /<meta[^>]*property="og:title"[^>]*content="TB Gym: coach both sides of the week"/,
   );
   expect(html).toMatch(/<meta[^>]*name="description"[^>]*content="[^"]+"/);
   // The CSP allows no inline script, so the page must not come with one.
   expect(html).not.toMatch(/<script(?![^>]*type="application\/json")[^>]*>[^<]/);
+});
+
+test('what changed is served as finished HTML with its dated releases', async ({ request }) => {
+  const response = await request.get('/changelog');
+
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toContain('text/html');
+  const html = await response.text();
+  expect(html).toMatch(/<h1[^>]*>\s*What changed/);
+  expect(html).toMatch(/<time[^>]*datetime="\d{4}-\d{2}-\d{2}"/);
+  expect(html).not.toMatch(/<script(?![^>]*type="application\/json")[^>]*>[^<]/);
+  expect(html).not.toMatch(/<link\s+rel="stylesheet"/);
 });
 
 test('a deep link loads the plain shell, so it never shows the homepage first', async ({
@@ -42,6 +57,7 @@ test('a deep link loads the plain shell, so it never shows the homepage first', 
     '/clients',
     '/clients/00000000-0000-4000-8000-000000000001/training',
     '/invite?token=abc',
+    '/changelog/2026',
     '/index.csr.html',
   ]) {
     const response = await request.get(path);
@@ -74,14 +90,19 @@ test('a visitor who is signed in gets the shell at /, whichever way the cookie i
   expect(pageText(visitor)).toMatch(HEADLINE);
 });
 
-test('robots.txt and the week’s pictures are served as files, not as the shell', async ({
+test('robots.txt and the page’s pictures are served as files, not as the shell', async ({
   request,
 }) => {
   const robots = await request.get('/robots.txt');
   expect(robots.status()).toBe(200);
   expect(robots.headers()['content-type']).toContain('text/plain');
   expect(await robots.text()).toMatch(/^User-agent: \*/);
-  for (const picture of ['hero-phone.avif', 'hero-coach.webp', 'share-coach-small.avif']) {
+  for (const picture of [
+    'client-today-760.avif',
+    'today-needs-you-dark.webp',
+    'programs-1x.avif',
+    'review-narrow.webp',
+  ]) {
     const response = await request.get(`/images/home/${picture}`);
     expect(response.status(), picture).toBe(200);
     expect(response.headers()['content-type'], picture).toMatch(/^image\//);
@@ -106,7 +127,7 @@ test('the app takes the pre-rendered page over in place: same headline, no launc
   await page.goto('/');
   await waitForFonts(page);
 
-  // The story decides how it is told once the app is live: the page is hydrated.
+  // The page decides how its story is told once the app is live: the page is hydrated.
   await expect(page.locator('#week')).toHaveAttribute('data-motion', /running|off/);
   await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.locator('h1[data-arrived-with-the-page]')).toHaveText(HEADLINE);
@@ -119,13 +140,13 @@ test('the app takes the pre-rendered page over in place: same headline, no launc
   // And it is interactive: on this wide screen the story runs, from its own lazily loaded chunk.
   await expect(page.locator('#week')).toHaveAttribute('data-motion', 'running');
   await page.evaluate(() =>
-    document.querySelector('[data-chapter="eat"]')?.scrollIntoView({ block: 'center' }),
+    document.querySelector('[data-stage-id="checkin"]')?.scrollIntoView({ block: 'center' }),
   );
-  await expect(page.locator('#week')).toHaveAttribute('data-moment', 'eat');
+  await expect(page.locator('#week')).toHaveAttribute('data-stage', 'checkin');
 });
 
-// The build cannot know a visitor's motion setting, so the page arrives with the stage; a visitor
-// who asked for less motion gets the still story from the same HTML, with nothing else disturbed.
+// The build cannot know a visitor's motion setting, so the page arrives with the panel; a visitor
+// who asked for less motion gets the still page from the same HTML, with nothing else disturbed.
 test('a visitor who prefers reduced motion gets the still page from the same HTML, without errors', async ({
   page,
 }) => {
@@ -136,7 +157,22 @@ test('a visitor who prefers reduced motion gets the still page from the same HTM
 
   await expect(page.locator('#week')).toHaveAttribute('data-motion', 'off');
   await expect(page.getByRole('heading', { level: 1, name: HEADLINE })).toBeVisible();
-  await expect(page.locator('.week__stage')).toBeHidden();
-  await expect(page.locator('[data-chapter="plan"] .screens')).toBeVisible();
+  await expect(page.locator('.week__panel')).toBeHidden();
+  await expect(page.locator('[data-stage-id="plan"] .stage__own')).toBeVisible();
   await expect(page.locator('.launch')).toHaveCount(0);
+});
+
+test('what changed hydrates in place and keeps the website around it for a visitor', async ({
+  page,
+}) => {
+  await mockSignedOut(page);
+  await page.goto('/changelog');
+  await waitForFonts(page);
+
+  await expect(page.getByRole('heading', { level: 1, name: 'What changed' })).toBeVisible();
+  await expect(page.locator('app-home-header')).toBeVisible();
+  await expect(page.locator('.launch')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Home' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { level: 1, name: HEADLINE })).toBeVisible();
 });

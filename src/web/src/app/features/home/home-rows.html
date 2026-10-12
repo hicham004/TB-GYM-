@@ -1,0 +1,50 @@
+<section class="rows" id="inside" aria-labelledby="inside-title">
+  <div class="rows__intro">
+    <p class="rows__eyebrow" i18n>What's inside</p>
+    <h2 id="inside-title" class="rows__title" #introTitle i18n>
+      Everything the coaching needs, in one place.
+    </h2>
+  </div>
+  @for (row of rows; track row.id) {
+    <article
+      class="row"
+      [class.row--phone-first]="row.phoneFirst"
+      [attr.data-row]="row.id"
+      [attr.aria-labelledby]="'row-' + row.id"
+    >
+      <div class="row__copy">
+        <p class="row__eyebrow">{{ row.eyebrow }}</p>
+        <h3 class="row__title" [id]="'row-' + row.id" #rowTitle>{{ row.title }}</h3>
+        <p class="row__body">{{ row.body }}</p>
+        <a class="row__link" routerLink="/auth/register">
+          <span>{{ row.link }}</span
+          ><span class="quiet__mark" aria-hidden="true">→</span>
+        </a>
+      </div>
+      <figure class="pair" [style.--window-width.px]="row.window.width">
+        <app-home-window
+          class="pair__window"
+          [window]="row.window"
+          [narrow]="row.narrow"
+          [alt]="row.windowAlt"
+        />
+        <app-home-phone
+          class="pair__phone"
+          [screen]="row.phone"
+          sizes="(min-width: 1100px) 330px, 300px"
+          [alt]="row.phoneAlt"
+        />
+        <figcaption class="pair__caption" i18n>Shown with sample data</figcaption>
+      </figure>
+    </article>
+  }
+</section>
+
+<aside class="clients" aria-label="For clients" i18n-aria-label>
+  <div class="clients__inner">
+    <p i18n>
+      Here as a client? Your coach sends the invitation. Already joined?
+      <a routerLink="/auth/sign-in">Sign in</a>.
+    </p>
+  </div>
+</aside>

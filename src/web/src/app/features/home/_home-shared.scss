@@ -1,104 +1,190 @@
-// Shared homepage patterns. Every section stylesheet `@use`s this partial; the colours, fonts and
-// easing it refers to are custom properties set once on `.home` (home.scss) and inherited. The
-// palette, heading mixins and wordmark are forwarded from styles/_brand.scss, which the signed-out
-// screens share.
+// Shared homepage patterns (UI plan R6.2f). Every section stylesheet `@use`s this partial; the
+// colours, fonts and easing it refers to are custom properties set once on `.home` (home.scss) and
+// inherited. The light palette, the wordmark and the faces are forwarded from styles/_brand.scss,
+// which the signed-out screens share.
 //
-// Motion rule for the whole page: the base styles are the finished state. Movement is added only
-// under `prefers-reduced-motion: no-preference`, and scroll-linked movement only where the
-// browser supports scroll timelines, so a visitor without either sees a complete, still page.
+// Motion rule for the whole page: the base styles are the finished state, painted in full by the
+// build-time render. GSAP adds movement only on a wide screen for a reader who has not asked for
+// less motion (`$wide-story`, the same question HomeMotion asks the browser); nothing here starts
+// hidden, and a visitor without the script sees the complete, still page.
 
 @forward '../../../styles/brand';
 
-$tablet: 1100px;
+$wide: 1100px;
 $mobile: 760px;
 $small: 520px;
 
-// The week's scroll story (home-week*.scss): the stage stays beside the chapters only on a wide
-// screen for a reader who has not asked for less motion. HomeWeekMotion asks the browser the same
-// question (WIDE_STORY) before loading GSAP, so the stylesheet and the script agree.
-$wide: 1100px;
 $wide-story: '(min-width: #{$wide}) and (prefers-reduced-motion: no-preference)';
 $wide-still: '(min-width: #{$wide}) and (prefers-reduced-motion: reduce)';
 
-@mixin button {
+// The page's own faces: Plex Medium for the headlines, Plex Mono Medium for the small caps, the
+// upright serif for numerals (home.scss declares them).
+@mixin mono {
+  font-family: 'Notebook Plex Mono', ui-monospace, 'Cascadia Mono', Menlo, monospace;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@mixin eyebrow {
+  @include mono;
+  align-items: center;
+  display: flex;
+  font-size: 0.78rem;
+  gap: 12px;
+  line-height: 1.4;
+  margin: 0 0 18px;
+}
+
+// A headline: weight 500, tight, balanced. The hero's is 84 px at 1440; a section's about 48.
+@mixin display($size: clamp(2.875rem, 5.85vw, 5.25rem)) {
+  font-size: $size;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+  margin: 0;
+  text-wrap: balance;
+}
+
+@mixin section-display {
+  @include display(clamp(2.125rem, 3.3vw, 3rem));
+  letter-spacing: -0.025em;
+  line-height: 1.06;
+}
+
+@mixin lead {
+  font-size: clamp(1.0625rem, 1.25vw, 1.125rem);
+  line-height: 1.5;
+  margin: 0;
+}
+
+@mixin numeral {
+  font-family: var(--home-serif);
+  font-feature-settings: 'tnum' 1;
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+}
+
+@mixin pill {
   align-items: center;
   border: 1px solid transparent;
   border-radius: 999px;
   display: inline-flex;
-  font-size: 0.95rem;
-  font-weight: 600;
-  gap: 18px;
-  justify-content: space-between;
-  min-block-size: 54px;
-  padding: 12px 22px;
+  font-size: 0.97rem;
+  font-weight: 500;
+  gap: 12px;
+  justify-content: center;
+  min-block-size: 48px;
+  padding: 0 22px;
   text-decoration: none;
   transition:
     background-color 200ms ease,
+    border-color 200ms ease,
     color 200ms ease,
     transform 250ms var(--home-ease);
 
-  > [aria-hidden] {
-    display: inline-block;
-    transition: transform 250ms var(--home-ease);
-  }
-
   &:hover {
     transform: translateY(-2px);
-
-    > [aria-hidden] {
-      transform: translate(3px, -3px);
-    }
   }
 
   @media (prefers-reduced-motion: reduce) {
     transition: none;
 
-    &:hover,
-    &:hover > [aria-hidden] {
+    &:hover {
       transform: none;
     }
   }
 }
 
-// The global focus outline is near-black; on the forest-green sections it would vanish.
+// Lime is a signal: one lime pill per view, every other button forest or a hairline.
+@mixin pill-lime {
+  background: var(--home-lime);
+  color: var(--home-ink);
+
+  &:hover {
+    background: #e5f3ad;
+  }
+}
+
+@mixin pill-forest {
+  background: var(--home-forest);
+  color: var(--home-cream);
+
+  &:hover {
+    background: #1c4f42;
+  }
+}
+
+@mixin pill-hair {
+  background: transparent;
+  border-color: var(--home-line);
+  color: var(--home-ink);
+
+  &:hover {
+    border-color: var(--home-ink);
+  }
+}
+
+// The quiet link: words and a mark, no box.
+@mixin quiet {
+  align-items: center;
+  display: inline-flex;
+  font-size: 0.97rem;
+  font-weight: 500;
+  gap: 10px;
+  min-block-size: 48px;
+  text-decoration: none;
+
+  .quiet__mark {
+    display: inline-block;
+    transition: transform 250ms var(--home-ease);
+  }
+
+  &:hover {
+    text-decoration: underline;
+    text-underline-offset: 5px;
+  }
+
+  &:hover .quiet__mark {
+    transform: translateX(4px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .quiet__mark,
+    &:hover .quiet__mark {
+      transform: none;
+      transition: none;
+    }
+  }
+}
+
+// "Shown with sample data": one mono caption per picture group.
+@mixin caption {
+  @include mono;
+  color: var(--home-dim);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  margin: 0;
+  text-transform: none;
+}
+
+@mixin wrap {
+  margin-inline: auto;
+  max-inline-size: 1440px;
+  padding-inline: clamp(20px, 5vw, 80px);
+}
+
+@mixin section-padding {
+  padding-block: clamp(80px, 9vw, 136px);
+}
+
+// The global focus outline is near-black; on the dark sections it would vanish.
 @mixin dark-focus {
   a:focus-visible,
   button:focus-visible {
     outline-color: var(--home-lime);
   }
-}
-
-// Keyframes live inside an at-rule on purpose. Angular renames top-level `@keyframes` per component
-// but rewrites `animation` references only in top-level rules, and every animation on this page is
-// declared inside a reduced-motion or scroll-support query - so a top-level keyframe name would
-// never match its reference and nothing would move. Keyframes nested in `@media`/`@supports` keep
-// their written names, and those names are prefixed by section to stay unique.
-//
-// Content rises into place as it scrolls into view. A stylesheet that uses `reveal` includes
-// `reveal-keyframes` once at its root.
-@mixin reveal($range: entry 0% cover 28%) {
-  @media (prefers-reduced-motion: no-preference) {
-    @supports (animation-timeline: view()) {
-      animation: home-reveal linear both;
-      animation-range: $range;
-      animation-timeline: view();
-    }
-  }
-}
-
-@mixin reveal-keyframes {
-  @media (prefers-reduced-motion: no-preference) {
-    @keyframes home-reveal {
-      from {
-        opacity: 0;
-        transform: translateY(36px);
-      }
-    }
-  }
-}
-
-@mixin section-padding {
-  margin-inline: auto;
-  max-inline-size: 1440px;
-  padding: clamp(80px, 9vw, 136px) clamp(20px, 5vw, 80px);
 }

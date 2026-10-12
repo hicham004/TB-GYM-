@@ -1,0 +1,103 @@
+@use 'home-shared' as *;
+
+// The panel: a deep surface holding the coach's screen and the client's phone, pinned beside the
+// stages on a wide screen. Each stage is a composition of the two slots, keyed on the panel's
+// data-stage; Flip carries the slots from one to the next, and the pictures inside crossfade.
+
+.week__panel {
+  display: none;
+}
+
+@media #{$wide-story} {
+  .week__panel {
+    align-self: start;
+    background: linear-gradient(160deg, var(--home-surface), var(--home-night));
+    block-size: min(calc(100vh - 140px), 820px);
+    border: 1px solid rgb(0 0 0 / 6%);
+    border-radius: 28px;
+    display: block;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .panel__slot {
+    overflow: hidden;
+    position: absolute;
+  }
+
+  .panel__slot--window {
+    inline-size: 520px;
+    inset-block-start: 40px;
+    inset-inline-start: 40px;
+  }
+
+  .panel__slot--phone {
+    inline-size: 330px;
+    inset-block-start: 60px;
+    inset-inline-end: 40px;
+    z-index: 1;
+  }
+
+  // Every stage's pictures are in the slots; the stage's own pair is shown, the others wait.
+  .panel__picture {
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    opacity: 0;
+    position: absolute;
+    transition: opacity 600ms var(--home-ease);
+  }
+
+  .panel__slot--phone .panel__picture {
+    inline-size: 100%;
+  }
+
+  @each $stage in plan, train, checkin, see {
+    .week__panel[data-stage='#{$stage}'] .panel__picture[data-stage-id='#{$stage}'] {
+      opacity: 1;
+      position: relative;
+    }
+  }
+
+  // Monday evening: the phone leads at the left, the feed answers beside it and runs off the edge.
+  .week__panel[data-stage='train'] .panel__slot--window {
+    inline-size: 480px;
+    inset-block-start: 100px;
+    inset-inline-start: 390px;
+  }
+
+  .week__panel[data-stage='train'] .panel__slot--phone {
+    inline-size: 320px;
+    inset-block-start: 40px;
+    inset-inline-end: auto;
+    inset-inline-start: 40px;
+  }
+
+  // Thursday: the review, wide, with the phone lower at the right.
+  .week__panel[data-stage='checkin'] .panel__slot--window {
+    inline-size: 620px;
+    inset-inline-start: 24px;
+  }
+
+  .week__panel[data-stage='checkin'] .panel__slot--phone {
+    inline-size: 300px;
+    inset-block-start: 120px;
+    inset-inline-end: 24px;
+  }
+
+  // Sunday: the maxes column and the trend, side by side.
+  .week__panel[data-stage='see'] .panel__slot--window {
+    inline-size: 360px;
+    inset-block-start: 60px;
+  }
+
+  .week__panel[data-stage='see'] .panel__slot--phone {
+    inset-block-start: 40px;
+  }
+
+  .panel__caption {
+    @include caption;
+    inset-block-end: 24px;
+    inset-inline-start: 40px;
+    position: absolute;
+  }
+}

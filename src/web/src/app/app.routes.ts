@@ -28,8 +28,16 @@ export const routes: Routes = [
     path: '',
     pathMatch: 'full',
     canMatch: [publicHomeGuard],
-    title: $localize`TB Gym: you plan it, they lift it, you both see it`,
+    title: $localize`TB Gym: coach both sides of the week`,
     loadComponent: () => import('./features/home/home').then((module) => module.Home),
+  },
+  {
+    // What changed, from src/content/changelog.md at build time (UI plan R6.2f); rendered ahead of
+    // time like the homepage, and open to anyone, signed in or not.
+    path: 'changelog',
+    title: $localize`What changed | TB Gym`,
+    loadComponent: () =>
+      import('./features/changelog/changelog').then((module) => module.Changelog),
   },
   {
     path: '',

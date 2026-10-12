@@ -724,26 +724,49 @@ sees the homepage for the moment the session check takes, then their Today); eve
 is the plain shell there too, so the rest of the browser checks are unchanged.
 
 R6.2b rebuilt that homepage as one week of coaching told from both sides with the real app on the
-Atlas demo (UI plan R6.2b; the research and the decision are in `docs/design/homepage-research.md`).
-The page is three components under `features/home/`: `home-week` (the hero, seven chapters and a
-stage holding the coach's screen and the client's phone for each moment), `home-inside` and
-`home-closing`. The whole page is rendered at build time; nothing waits for the browser except the
-story's motion. `HomeWeekMotion` asks the browser one question, `WIDE_STORY` (a wide screen and no
-request for reduced motion, the same query the stylesheet keeps the stage beside the chapters under),
-and only when it matches does it load GSAP and ScrollTrigger as their own chunk; ScrollTrigger then
-says which chapter has reached the line and the component's state and CSS transitions change the
-stage. A phone, a reader who asked for less motion and the build-time render never load GSAP: the
-chapters stack, each with its own two pictures, revealed by the stylesheet's scroll timelines. The
-stage is `aria-hidden`, because every chapter says in words what its two screens show. The pictures
-are AVIF with a WebP fallback in `public/images/home/`, made by `scripts/home-screens.mjs` from
-screenshots of the demo (the script names the screen each moment uses); the stage's pictures are
-lazy so a layout that does not draw the stage never fetches them. `public/robots.txt` answers crawlers
-as a file, so nginx's fallback no longer hands them the shell for it. Two more build-time steps serve
-the homepage's first paint: `scripts/inline-home-styles.mjs` (run by `npm run build` and by the `built`
-Playwright project's build) puts the global stylesheet inside `index.html`, so the first paint needs the
-HTML alone (the CSP allows inline styles; the shell keeps its link), and the two Latin IBM Plex files are
-subsets (`public/fonts/ibm-plex/README.md`). `check-prerender.mjs` fails a build whose homepage still
-links the stylesheet.
+demo (UI plan R6.2b; the research and the decision are in `docs/design/homepage-research.md`), and
+R6.2f rebuilt it again as the premium page the R6.2d mockups recommended
+(`docs/design/r62d-mockups.html`, after `docs/design/homepage-visual-research.md`). The page is
+`features/home/`: `home` (the root, which starts the motion and reads the header's tone on scroll),
+`home-header` (sticky, cream over the dark hero and finale, ink over the cream body, a disclosure
+menu on phones; `/changelog` uses it too), `home-hero` (one promise line, the coach's dark Today at
+1:1 beside the client's phone), `home-week` (four stages with the Mon–Sun strip as the chapter label
+and an upright serif numeral, and a panel of two slots whose composition is the panel's `data-stage`),
+`home-rows` (six feature rows pairing the coach's screen and the client's phone, and the strip for
+clients), `home-who` (the product-fact strip with the changelog's newest date, and the audience split)
+and `home-finale`; `home-content.ts` holds the words and `home-pictures.ts` the picture names and
+sizes. The whole page is rendered at build time, painted in full; nothing waits for the browser except
+the motion. `HomeMotion` asks the browser one question, `WIDE_STORY` (a wide screen and no request
+for reduced motion, the same query the stylesheet draws the panel under), and only when it matches
+does it load GSAP, ScrollTrigger, Flip and SplitText as one chunk: ScrollTrigger pins the panel while
+the week scrolls and says which stage has reached the line, Flip carries the two slots from one
+composition to the next (the component writes the panel's `data-stage` synchronously so Flip can
+measure the new layout), and SplitText reveals each headline line by line after `document.fonts.ready`
+(`autoSplit`, masked lines, `aria: auto`). A phone, a reader who asked for less motion and the
+build-time render never load GSAP: a phone stacks the stages with one asset each and a narrower crop
+in every feature row; a wide screen with reduced motion shows each stage with both of its screens,
+still. The panel is `aria-hidden`, because every stage says in words what its two screens show.
+`/changelog` is the second pre-rendered route (`app.routes.server.ts`, `nginx.conf`'s
+`location = /changelog`, `serve-built.mjs`): `src/content/changelog.md` is imported as text
+(`angular.json` `loader`: `.md` as `text`), `changelog-parser.ts` reads its `## YYYY-MM-DD`
+releases, the page lists them and the homepage prints the newest date; a signed-in person who
+opens it gets the app's own shell around it and no website header. The pictures are AVIF with a WebP
+fallback in `public/images/home/`, made by `scripts/home-pictures.mjs` from captures of the sample
+demo (phones under Apple's bezel at three widths, coach windows at 2x and 1x; the masters stay in
+`artifacts/`); the panel's pictures are lazy so a layout that does not draw it never fetches them,
+and the hero's two are preloaded from `index.html` on wide screens only. `public/robots.txt` answers
+crawlers as a file, so nginx's fallback no longer hands them the shell for it. Two more build-time
+steps serve the first paint: `scripts/inline-home-styles.mjs` (run by `npm run build` and by the
+`built` Playwright project's build) puts the global stylesheet inside both pre-rendered documents,
+so the first paint needs the HTML alone (the CSP allows inline styles; the shell keeps its link), and
+marks their module scripts and module preloads `fetchpriority="low"`, because a pre-rendered page is
+complete before the app runs and its words should not wait behind the bundle that only makes it
+interactive (the shell keeps full priority: it has nothing to show without the app); the Latin IBM
+Plex files are subsets (`public/fonts/ibm-plex/README.md`; the homepage's own faces, Plex Medium,
+Plex Mono Medium and the upright Instrument Serif, are declared by `home.scss` alone, and the serif
+is asked for only once the page is live, since the numerals sit below the first screen).
+`check-prerender.mjs` fails a build whose homepage lost its headline, whose changelog lost its
+releases, or whose pages still link the stylesheet.
 
 The migrated exercise library keeps every request it made before and adds no new one. Its filters
 stay server-side and are applied on Apply or Enter only; the list asks for the 100 rows the server is

@@ -1,0 +1,42 @@
+<header class="header" [attr.data-tone]="tone()" [class.header--open]="menuOpen()">
+  <div class="header__inner">
+    <a class="brand" routerLink="/" (click)="close()">
+      <span class="brand__disc" aria-hidden="true" dir="ltr">TB<i>.</i></span>
+      <span i18n translate="no">TB Gym</span>
+    </a>
+    <nav class="links" aria-label="Homepage" i18n-aria-label>
+      <a routerLink="/" fragment="week" i18n>The week</a>
+      <a routerLink="/" fragment="inside" i18n>What's inside</a>
+      <a routerLink="/" fragment="for-gyms" i18n>For gyms</a>
+      <a class="links__sign" routerLink="/auth/sign-in" i18n>Sign in</a>
+    </nav>
+    <button
+      class="menu-button"
+      type="button"
+      aria-controls="home-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggle()"
+    >
+      @if (menuOpen()) {
+        <ng-container i18n>Close</ng-container>
+      } @else {
+        <ng-container i18n>Menu</ng-container>
+      }
+    </button>
+  </div>
+  <nav
+    id="home-menu"
+    class="menu"
+    aria-label="Homepage menu"
+    i18n-aria-label
+    [hidden]="!menuOpen()"
+  >
+    <a routerLink="/" fragment="week" (click)="close()" i18n>The week</a>
+    <a routerLink="/" fragment="inside" (click)="close()" i18n>What's inside</a>
+    <a routerLink="/" fragment="for-gyms" (click)="close()" i18n>For gyms</a>
+    <a routerLink="/auth/sign-in" (click)="close()" i18n>Sign in</a>
+    <a class="menu__start" routerLink="/auth/register" (click)="close()" i18n
+      >Start your coaching space</a
+    >
+  </nav>
+</header>

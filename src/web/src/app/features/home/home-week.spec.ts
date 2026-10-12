@@ -1,34 +1,23 @@
-import { provideRouter } from '@angular/router';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { query, settle } from '../../../testing/dom';
-import { HomeWeek, WEEK_MOMENTS } from './home-week';
-import { GSAP_LOADER, WIDE_STORY } from './home-week-motion';
-
-interface FakeTrigger {
-  readonly config: { trigger: Element; onToggle(self: { isActive: boolean }): void };
-  readonly kill: ReturnType<typeof vi.fn>;
-}
+import { WEEK_STAGES } from './home-content';
+import { GSAP_LOADER, HomeMotion, WIDE_STORY } from './home-motion';
+import { HomeWeek } from './home-week';
 
 function fakeGsap() {
-  const triggers: FakeTrigger[] = [];
   const media = {
     add: vi.fn((_query: string, setUp: () => (() => void) | void) => setUp()),
     revert: vi.fn(),
   };
   return {
-    triggers,
     media,
     modules: {
-      gsap: { registerPlugin: vi.fn(), matchMedia: () => media, to: vi.fn() },
-      ScrollTrigger: {
-        create: vi.fn((config: FakeTrigger['config']) => {
-          const trigger = { config, kill: vi.fn() };
-          triggers.push(trigger);
-          return trigger;
-        }),
-        refresh: vi.fn(),
-      },
+      gsap: { registerPlugin: vi.fn(), matchMedia: () => media, to: vi.fn(), from: vi.fn() },
+      ScrollTrigger: { create: vi.fn(() => ({ kill: vi.fn() })), refresh: vi.fn() },
+      Flip: { getState: vi.fn(() => ({})), from: vi.fn() },
+      SplitText: { create: vi.fn(() => ({ revert: vi.fn() })) },
     },
   };
 }
@@ -40,97 +29,100 @@ async function render(wide: boolean) {
   );
   const fake = fakeGsap();
   TestBed.configureTestingModule({
-    providers: [provideRouter([]), { provide: GSAP_LOADER, useValue: async () => fake.modules }],
+    providers: [
+      provideRouter([]),
+      HomeMotion,
+      { provide: GSAP_LOADER, useValue: async () => fake.modules },
+    ],
   });
   const fixture = TestBed.createComponent(HomeWeek);
   await settle(fixture);
+  // The page starts the motion with this section's targets once everything is rendered.
+  const motion = TestBed.inject(HomeMotion);
+  await motion.start({
+    ...fixture.componentInstance.motionTargets(),
+    titles: fixture.componentInstance.titles(),
+  });
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, fake };
+  const host = fixture.nativeElement as HTMLElement;
+  return { fixture, host, fake, motion };
 }
-
-const activeCoach = (host: HTMLElement) =>
-  query<HTMLImageElement>(host, '.stage__coach picture.is-active img').getAttribute('src');
 
 describe('HomeWeek', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('tells the week in words a screen reader hears, with the real screens beside them', async () => {
+  it('tells the four stages in words a screen reader hears, each with its own pictures and numeral', async () => {
     const { host } = await render(false);
 
-    expect(query(host, 'h1').textContent).toContain('You plan it. They lift it.');
-    const chapters = host.querySelectorAll('.chapter');
-    expect(chapters).toHaveLength(WEEK_MOMENTS.length - 1);
-    expect(chapters[1].textContent).toContain('She lifts it.');
-    expect(chapters[1].textContent).toContain('finished Lower A in 41 minutes');
-    // Each moment's two pictures, as AVIF with a WebP fallback, in the chapter and on the stage.
-    expect(chapters[1].querySelector('source')?.getAttribute('srcset')).toBe(
-      '/images/home/train-phone-480.avif 480w, /images/home/train-phone.avif 720w',
+    const stages = host.querySelectorAll('.stage');
+    expect(stages).toHaveLength(WEEK_STAGES.length);
+    expect(stages[1].querySelector('h2')?.textContent).toBe('They lift it.');
+    expect(stages[1].textContent).toContain('finished Lower A in 41 minutes');
+    expect(stages[1].querySelector('.stage__numeral b')?.textContent).toBe('52.5');
+    // Each stage's own phone, as AVIF with a WebP fallback at three widths, lazy.
+    const phone = stages[1].querySelector<HTMLImageElement>('.stage__own-phone img');
+    expect(phone?.getAttribute('srcset')).toBe(
+      '/images/home/client-player-460.webp 460w, /images/home/client-player-600.webp 600w, /images/home/client-player-760.webp 760w, /images/home/client-player-1140.webp 1140w',
     );
-    expect(chapters[1].querySelector('img')?.getAttribute('src')).toBe(
-      '/images/home/train-phone.webp',
+    expect(phone?.getAttribute('loading')).toBe('lazy');
+    expect(stages[1].querySelector('.stage__own-phone source')?.getAttribute('type')).toBe(
+      'image/avif',
     );
-    expect(host.querySelectorAll('.stage__coach picture')).toHaveLength(WEEK_MOMENTS.length);
-    expect(host.querySelectorAll('.stage__phone picture')).toHaveLength(WEEK_MOMENTS.length);
-    // The stage is decorative: the words carry the story, so it must hold nothing to focus.
-    expect(query(host, '.week__stage').getAttribute('aria-hidden')).toBe('true');
-    expect(host.querySelectorAll('.week__stage a, .week__stage button')).toHaveLength(0);
+    // The panel is decorative: the words carry the story, so it must hold nothing to focus.
+    const panel = query(host, '.week__panel');
+    expect(panel.getAttribute('aria-hidden')).toBe('true');
+    expect(panel.querySelectorAll('a, button')).toHaveLength(0);
+    expect(panel.querySelectorAll('.panel__slot--window .panel__picture')).toHaveLength(4);
+    expect(panel.querySelectorAll('.panel__slot--phone .panel__picture')).toHaveLength(4);
   });
 
-  it('starts on Monday morning with the hero pictures, each phone in two sizes, nothing fetched ahead of the words', async () => {
+  it('starts on Monday with the first composition, and nothing fetched ahead of the words', async () => {
     const { host } = await render(false);
 
-    expect(query(host, '#week').getAttribute('data-moment')).toBe('hero');
-    expect(activeCoach(host)).toBe('/images/home/hero-coach.webp');
-    expect(query(host, '.stage__number').textContent).toContain('Lower A');
-    // On a phone the copy owns the first screen, so every picture waits for the reader (lazy);
-    // the stage's first pair is in view on a wide screen and comes from index.html's preload.
+    expect(query(host, '#week').getAttribute('data-stage')).toBe('plan');
+    expect(query(host, '.week__panel').getAttribute('data-stage')).toBe('plan');
+    expect(query(host, '.days--strip .days__day.is-on').textContent).toBe('Mon');
     for (const img of Array.from(host.querySelectorAll<HTMLImageElement>('img'))) {
       expect(img.getAttribute('loading'), img.getAttribute('src') ?? '').toBe('lazy');
     }
-    const heroPhone = query<HTMLImageElement>(host, '.screens--hero .screens__phone img');
-    expect(heroPhone.getAttribute('srcset')).toBe(
-      '/images/home/hero-phone-480.webp 480w, /images/home/hero-phone.webp 720w',
+    // The coach's window keeps its own width inside the panel, so its text keeps its size.
+    const window = query<HTMLElement>(host, '.panel__slot--window .panel__picture');
+    expect(window.style.inlineSize).toBe('520px');
+    expect(window.querySelector('img')?.getAttribute('srcset')).toBe(
+      '/images/home/builder-week-dark-1x.webp 1x, /images/home/builder-week-dark.webp 2x',
     );
-    expect(heroPhone.getAttribute('sizes')).toBe('250px');
-    expect(
-      query<HTMLImageElement>(host, '.stage__coach picture.is-active img').getAttribute(
-        'fetchpriority',
-      ),
-    ).toBe('high');
   });
 
-  it('without the scroll story the page still says so, and loads no motion library', async () => {
+  it('without the motion the section says so, and loads no motion library', async () => {
     const { host, fake } = await render(false);
 
     expect(query(host, '#week').getAttribute('data-motion')).toBe('off');
-    expect(fake.triggers).toHaveLength(0);
+    expect(fake.modules.ScrollTrigger.create).not.toHaveBeenCalled();
   });
 
-  it('on a wide screen the stage follows the chapter at the line', async () => {
-    const { fixture, host, fake } = await render(true);
-    expect(query(host, '#week').getAttribute('data-motion')).toBe('running');
-    // The hero's copy first, then one trigger per chapter, in the page's order.
-    expect(fake.triggers).toHaveLength(WEEK_MOMENTS.length);
-    expect(fake.triggers[0].config.trigger).toBe(query(host, '.hero'));
-    expect(fake.triggers[3].config.trigger).toBe(query(host, '[data-chapter="eat"]'));
+  it('shows a stage when the motion asks: the panel at once, the copy column through the signal', async () => {
+    const { fixture, host } = await render(true);
+    const targets = fixture.componentInstance.motionTargets();
+    expect(targets.stages).toHaveLength(4);
+    expect(targets.slots).toHaveLength(2);
+    expect(targets.dayOf(2)?.textContent).toBe('Thu');
 
-    fake.triggers[3].config.onToggle({ isActive: true });
+    targets.onStage(2);
+    // The panel's composition changed before onStage returned, for Flip to measure.
+    expect(query(host, '.week__panel').getAttribute('data-stage')).toBe('checkin');
     await settle(fixture);
 
-    expect(query(host, '#week').getAttribute('data-moment')).toBe('eat');
-    expect(activeCoach(host)).toBe('/images/home/eat-coach.webp');
-    expect(query(host, '.stage__number').textContent).toContain('2,156 kcal');
-    expect(query(host, '.stage__when').textContent).toContain('Tuesday');
-    expect(query(host, '[data-chapter="eat"]').classList).toContain('is-current');
-    expect(query(host, '[data-chapter="train"]').classList).not.toContain('is-current');
-    expect(query(host, '.stage__days li.is-on').textContent).toBe('Tue');
+    expect(query(host, '#week').getAttribute('data-stage')).toBe('checkin');
+    expect(query(host, '.days--strip .days__day.is-on').textContent).toBe('Thu');
+    expect(query(host, '[data-stage-id="checkin"]').classList).toContain('is-current');
+    expect(query(host, '[data-stage-id="plan"]').classList).not.toContain('is-current');
   });
 
-  it('leaving the page reverts everything the story set up', async () => {
-    const { fixture, fake } = await render(true);
+  it('names the headlines the page reveals', async () => {
+    const { fixture } = await render(false);
 
-    fixture.destroy();
-
-    expect(fake.media.revert).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.titles().map((title) => title.textContent)).toEqual(
+      WEEK_STAGES.map((stage) => stage.title),
+    );
   });
 });

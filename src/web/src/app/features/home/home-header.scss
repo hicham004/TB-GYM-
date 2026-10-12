@@ -1,178 +1,204 @@
 @use 'home-shared' as *;
 
-// The header sticks to the top. Where scroll timelines exist it starts clear and firms up over the
-// first 140px of scroll, and a thin bar tracks reading progress; elsewhere it is simply solid.
-.home-header {
-  background: rgb(245 243 234 / 94%);
-  border-block-end: 1px solid var(--home-line);
+// The header sticks to the top and takes the tone of what is under it. Over the dark hero it is
+// clear with cream text; over the cream body it firms up with a blurred cream fill and ink text.
+// The host is the sticky box (a sticky child would be held inside its parent's height), and a
+// block, so the page can measure where its bottom edge is.
+:host {
+  display: block;
   inset-block-start: 0;
   position: sticky;
   z-index: 40;
 }
 
-.home-header__inner {
+.header {
+  transition:
+    background-color 300ms ease,
+    color 300ms ease;
+}
+
+// The open menu draws an opaque panel: a blur over the dark hero would show through it.
+.header--open {
+  backdrop-filter: none;
+  background: var(--home-cream);
+}
+
+// A faint dusk at the top keeps the cream words readable when a lit phone scrolls under them.
+.header[data-tone='dark'] {
+  background: linear-gradient(rgb(10 15 13 / 72%), rgb(10 15 13 / 0%));
+  color: var(--home-cream);
+  @include dark-focus;
+}
+
+.header[data-tone='light'] {
+  backdrop-filter: blur(14px);
+  background: rgb(251 250 245 / 86%);
+  border-block-end: 1px solid var(--home-line);
+  color: var(--home-ink);
+}
+
+.header--open[data-tone='light'] {
+  backdrop-filter: none;
+  background: var(--home-cream);
+}
+
+.header__inner {
+  @include wrap;
   align-items: center;
   display: flex;
   gap: 24px;
   justify-content: space-between;
-  margin-inline: auto;
-  max-inline-size: 1440px;
   min-block-size: 72px;
-  padding-inline: clamp(20px, 5vw, 80px);
 }
 
-.home-header__progress {
-  background: var(--home-forest);
-  block-size: 3px;
-  display: none;
-  inset-block-end: -1px;
-  inset-inline: 0;
-  position: absolute;
-  transform: scaleX(0);
-  transform-origin: left;
-}
-
-.home-header__progress:dir(rtl) {
-  transform-origin: right;
-}
-
-@supports (animation-timeline: scroll()) {
-  .home-header {
-    animation: header-firm linear both;
-    animation-range: 0 140px;
-    animation-timeline: scroll(root);
-    background: rgb(245 243 234 / 0%);
-    border-block-end-color: transparent;
-  }
-
-  .home-header__progress {
-    animation: header-progress linear both;
-    animation-timeline: scroll(root);
-    display: block;
-  }
-}
-
-.home-brand {
-  @include brand-link;
-}
-
-.home-brand__mark {
-  @include brand-mark;
-  transition: transform 400ms var(--home-ease);
-}
-
-.home-brand:hover .home-brand__mark {
-  transform: rotate(-12deg) scale(1.06);
-}
-
-.home-brand__dot {
-  color: var(--home-lime);
-}
-
-.home-nav {
+.brand {
   align-items: center;
-  display: flex;
-  gap: clamp(10px, 2.2vw, 34px);
-}
-
-.home-nav a {
-  align-items: center;
+  color: inherit;
   display: inline-flex;
-  font-size: 0.9rem;
-  font-weight: 600;
-  gap: 12px;
-  min-block-size: 44px;
+  flex: none;
+  font-size: 1.06rem;
+  font-weight: 500;
+  gap: 11px;
+  letter-spacing: -0.04em;
   text-decoration: none;
 }
 
-.home-nav__section,
-.home-nav__sign-in {
-  background: linear-gradient(currentColor, currentColor) no-repeat left bottom 10px / 0% 1.5px;
-  transition: background-size 300ms var(--home-ease);
-}
-
-.home-nav__section:dir(rtl),
-.home-nav__sign-in:dir(rtl) {
-  background-position: right bottom 10px;
-}
-
-.home-nav__section:hover,
-.home-nav__sign-in:hover {
-  background-size: 100% 1.5px;
-}
-
-.home-nav .home-nav__sign-in {
-  margin-inline-start: clamp(4px, 1.8vw, 28px);
-}
-
-.home-nav .home-nav__start {
-  @include button;
+.brand__disc {
+  align-items: center;
   background: var(--home-forest);
+  block-size: 2.25rem;
+  border: 1px solid var(--home-hair);
+  border-radius: 50%;
   color: white;
-  min-block-size: 46px;
-  padding: 10px 20px;
+  display: inline-flex;
+  flex: none;
+  font-size: 0.88rem;
+  inline-size: 2.25rem;
+  justify-content: center;
+  letter-spacing: -0.08em;
+  transition: transform 400ms var(--home-ease);
+
+  i {
+    color: var(--home-lime);
+    font-style: normal;
+  }
 }
 
-.home-nav .home-nav__start:hover {
-  background: #275b49;
+.brand:hover .brand__disc {
+  transform: rotate(-12deg) scale(1.06);
+}
+
+.links {
+  align-items: center;
+  display: flex;
+  gap: clamp(14px, 2.2vw, 30px);
+}
+
+.links a {
+  align-items: center;
+  color: inherit;
+  display: inline-flex;
+  font-size: 0.92rem;
+  font-weight: 500;
+  min-block-size: 44px;
+  opacity: 0.82;
+  text-decoration: none;
+  transition: opacity 200ms ease;
+}
+
+.links a:hover {
+  opacity: 1;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+
+.links .links__sign {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  margin-inline-start: clamp(4px, 1vw, 12px);
+  min-block-size: 40px;
+  opacity: 1;
+  padding-inline: 16px;
+}
+
+.links .links__sign:hover {
+  text-decoration: none;
+}
+
+.header[data-tone='dark'] .links .links__sign {
+  border-color: var(--home-hair);
+}
+
+.menu-button {
+  @include mono;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+  display: none;
+  font-size: 0.78rem;
+  min-block-size: 40px;
+  padding: 0 14px;
+}
+
+.menu-button:hover {
+  background: rgb(127 127 127 / 12%);
+}
+
+.header[data-tone='dark'] .menu-button {
+  border-color: var(--home-hair);
+}
+
+.menu {
+  @include wrap;
+  border-block-start: 1px solid var(--home-line);
+  display: flex;
+  flex-direction: column;
+  padding-block: 8px 20px;
+}
+
+.menu[hidden] {
+  display: none;
+}
+
+.menu a {
+  color: inherit;
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 500;
+  padding-block: 12px;
+  text-decoration: none;
+}
+
+.menu .menu__start {
+  @include pill;
+  @include pill-forest;
+  margin-block-start: 12px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-brand__mark,
-  .home-nav__section,
-  .home-nav__sign-in {
+  .header,
+  .brand__disc,
+  .links a {
     transition: none;
   }
+
+  .brand:hover .brand__disc {
+    transform: none;
+  }
 }
 
-@media (max-width: $tablet) {
-  .home-nav .home-nav__section {
+@media (max-width: #{$wide - 1px}) {
+  .links {
     display: none;
   }
-}
 
-@media (max-width: $mobile) {
-  .home-header__inner {
+  .menu-button {
+    display: inline-flex;
+  }
+
+  .header__inner {
     min-block-size: 64px;
-  }
-
-  .home-nav .home-nav__sign-in {
-    margin-inline-start: 0;
-  }
-}
-
-@media (max-width: $small) {
-  .home-brand {
-    font-size: 1rem;
-  }
-
-  .home-nav {
-    gap: 12px;
-  }
-
-  .home-nav a {
-    font-size: 0.85rem;
-  }
-
-  .home-nav .home-nav__start {
-    gap: 6px;
-    padding-inline: 14px;
-  }
-}
-
-// Nested in an at-rule on purpose: see _home-shared.scss.
-@supports (animation-timeline: scroll()) {
-  @keyframes header-firm {
-    to {
-      backdrop-filter: blur(14px);
-      background: rgb(245 243 234 / 86%);
-      border-block-end-color: var(--home-line);
-    }
-  }
-
-  @keyframes header-progress {
-    to {
-      transform: scaleX(1);
-    }
   }
 }

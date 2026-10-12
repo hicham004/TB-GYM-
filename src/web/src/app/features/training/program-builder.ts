@@ -235,7 +235,7 @@ const LEAVE_WAIT_MS = 8000;
     UiMenu,
   ],
   templateUrl: './program-builder.html',
-  styleUrls: ['./program-builder.scss', './program-week.scss'],
+  styleUrls: ['./program-builder.scss', './program-week.scss', './program-week-session.scss'],
   host: {
     '(window:beforeunload)': 'onBeforeUnload($event)',
     '(document:visibilitychange)': 'onVisibilityChange()',

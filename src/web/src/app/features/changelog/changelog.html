@@ -1,0 +1,41 @@
+<div class="changelog tb-theme" [class.changelog--embedded]="signedIn()">
+  @if (!signedIn()) {
+    <a class="skip-link" href="#changelog-content" i18n>Skip to content</a>
+    <app-home-header />
+  }
+  <div id="changelog-content" class="changelog__inner" tabindex="-1">
+    <header class="changelog__head">
+      <p class="changelog__eyebrow" i18n>Changelog</p>
+      <h1 class="changelog__title" i18n>What changed</h1>
+      <p class="changelog__lead">
+        <ng-container i18n>Every change coaches and clients can see, newest first.</ng-container>
+        @if (newest) {
+          <ng-container i18n> Last change {{ newest }}.</ng-container>
+        }
+      </p>
+    </header>
+    @for (release of releases; track release.date) {
+      <section class="release" [attr.aria-labelledby]="'release-' + release.date">
+        <h2 class="release__date" [id]="'release-' + release.date">
+          <time [attr.datetime]="release.date">{{ date(release.date) }}</time>
+        </h2>
+        <ul class="release__items">
+          @for (item of release.items; track $index) {
+            <li>{{ item }}</li>
+          }
+        </ul>
+      </section>
+    } @empty {
+      <p class="changelog__empty" i18n>Nothing to tell yet.</p>
+    }
+  </div>
+  @if (!signedIn()) {
+    <footer class="changelog__foot">
+      <span i18n><span translate="no">TB Gym</span> · Beirut</span>
+      <nav aria-label="Footer" i18n-aria-label>
+        <a routerLink="/" i18n>Home</a>
+        <a routerLink="/auth/sign-in" i18n>Sign in</a>
+      </nav>
+    </footer>
+  }
+</div>

@@ -1,0 +1,166 @@
+@use 'home-shared' as *;
+
+:host {
+  display: block;
+}
+
+.rows {
+  @include wrap;
+  @include section-padding;
+  scroll-margin-block-start: 72px;
+}
+
+.rows__intro {
+  margin-block-end: clamp(40px, 5vw, 72px);
+}
+
+.rows__eyebrow,
+.row__eyebrow {
+  @include eyebrow;
+  color: var(--home-muted);
+}
+
+.rows__title {
+  @include section-display;
+  max-inline-size: 22ch;
+}
+
+// A row: the words in one column, the two screens in the other, a hairline between rows.
+.row {
+  border-block-start: 1px solid var(--home-line);
+  display: grid;
+  gap: 36px;
+  padding-block: clamp(40px, 5vw, 72px);
+}
+
+.row__title {
+  @include display(clamp(1.75rem, 2.6vw, 2.5rem));
+  margin-block-end: 16px;
+}
+
+.row__body {
+  @include lead;
+  color: var(--home-muted);
+  margin-block-end: 20px;
+  max-inline-size: 40ch;
+}
+
+.row__link {
+  @include quiet;
+  color: var(--home-forest);
+}
+
+.pair {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.pair__phone {
+  inline-size: min(300px, 86%);
+  margin: 0 auto 24px;
+  order: 1;
+}
+
+.pair__window {
+  order: 2;
+}
+
+.pair__caption {
+  @include caption;
+  color: var(--home-muted);
+  margin-block-start: 14px;
+  order: 3;
+}
+
+@media (min-width: $wide) {
+  .row {
+    align-items: center;
+    column-gap: 64px;
+    grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  }
+
+  // The window at 1:1, the phone over its edge; the rows alternate the phone's side.
+  .pair {
+    align-items: center;
+    display: grid;
+    min-block-size: 720px;
+    position: relative;
+  }
+
+  .pair__window {
+    inline-size: var(--window-width);
+    justify-self: start;
+    max-inline-size: 100%;
+    order: 0;
+  }
+
+  .pair__phone {
+    inline-size: 330px;
+    inset-block-start: 20px;
+    inset-inline-end: 0;
+    margin: 0;
+    order: 0;
+    position: absolute;
+    z-index: 1;
+  }
+
+  // With the phone at the left, the window starts past it and runs off the page's edge instead.
+  .row--phone-first .pair__window {
+    margin-inline-start: 350px;
+    max-inline-size: none;
+  }
+
+  .row--phone-first .pair__phone {
+    inset-inline-end: auto;
+    inset-inline-start: 0;
+  }
+
+  .pair__caption {
+    inset-block-end: 0;
+    inset-inline-start: 0;
+    margin: 0;
+    position: absolute;
+  }
+
+  .row--phone-first .pair__caption {
+    inset-inline-end: 0;
+    inset-inline-start: auto;
+  }
+}
+
+// On a phone each row is a screen or two of its own; the browser lays it out, and fetches its
+// pictures, only as it comes near.
+@media (max-width: 1099px) {
+  .row {
+    contain-intrinsic-size: auto 1400px;
+    content-visibility: auto;
+  }
+}
+
+// The strip for clients.
+.clients {
+  @include wrap;
+}
+
+.clients__inner {
+  border-block: 1px solid var(--home-line);
+  color: var(--home-muted);
+  font-size: 0.97rem;
+  line-height: 1.5;
+  padding-block: 22px;
+}
+
+.clients p {
+  margin: 0;
+}
+
+.clients a {
+  color: var(--home-forest);
+  font-weight: 500;
+  text-underline-offset: 4px;
+}
+
+.clients a:hover {
+  color: var(--home-ink);
+}
