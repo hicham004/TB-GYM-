@@ -152,6 +152,15 @@
             <div class="library-head">
               <h2 id="library-title" class="panel-title" i18n>Exercises</h2>
               <a class="manage" routerLink="/training/exercises" i18n>Manage</a>
+              <button
+                class="library-close"
+                type="button"
+                aria-expanded="true"
+                [attr.aria-label]="hideLibraryLabel"
+                (click)="toggleLibrary()"
+              >
+                <app-icon name="close" />
+              </button>
             </div>
             <app-program-library
               mode="drag"
@@ -163,6 +172,17 @@
               (retry)="loadLibrary()"
             />
           </aside>
+        } @else {
+          <!-- Closed, the library is a rail at the edge of the grid; one click opens it. -->
+          <button
+            class="library-rail"
+            type="button"
+            aria-expanded="false"
+            (click)="toggleLibrary()"
+          >
+            <app-icon name="plus" />
+            <span class="rail-word" i18n>Exercises</span>
+          </button>
         }
 
         <section class="plan" aria-labelledby="weeks-title">
@@ -177,20 +197,6 @@
                   (chosen)="chooseFormula($event)"
                 />
               }
-              <button
-                appButton
-                class="library-toggle"
-                type="button"
-                variant="text"
-                [attr.aria-expanded]="libraryOpen()"
-                (click)="libraryOpen.set(!libraryOpen())"
-              >
-                @if (libraryOpen()) {
-                  <span i18n>Hide exercises</span>
-                } @else {
-                  <span i18n>Show exercises</span>
-                }
-              </button>
               <button
                 appButton
                 type="button"
@@ -259,9 +265,41 @@
                     [items]="row.menu"
                     (chosen)="onWeekAction(row.key, $event)"
                   />
+                  <!-- Only a wide page folds: a phone shows one week at a time already. -->
+                  <button
+                    class="fold"
+                    type="button"
+                    [class.is-folded]="row.folded"
+                    [attr.aria-expanded]="!row.folded"
+                    [attr.aria-label]="row.foldLabel"
+                    (click)="toggleFold(row.key)"
+                  >
+                    <app-icon name="chevron-down" />
+                  </button>
                 </header>
 
-                <div class="days">
+                @if (row.folded) {
+                  <!-- Folded: one line in place of the days, which still takes a drop (its first free day). -->
+                  @if (row.fold; as fold) {
+                    <div
+                      class="week-fold"
+                      cdkDropList
+                      [id]="fold.listId"
+                      [cdkDropListConnectedTo]="dropIds()"
+                      [cdkDropListData]="fold.target"
+                      [cdkDropListEnterPredicate]="canEnter"
+                      (cdkDropListDropped)="dropped($event)"
+                    >
+                      <span class="week-summary">{{ row.summary }}</span>
+                    </div>
+                  } @else {
+                    <div class="week-fold">
+                      <span class="week-summary">{{ row.summary }}</span>
+                    </div>
+                  }
+                }
+
+                <div class="days" [class.folded]="row.folded">
                   @for (cell of row.days; track cell.day) {
                     <div
                       class="day"
@@ -328,7 +366,7 @@
                                   <span class="exercise-grip" cdkDragHandle aria-hidden="true"
                                     ><app-icon name="grip"
                                   /></span>
-                                  <span class="exercise-name" dir="auto">
+                                  <span class="exercise-name" dir="auto" [title]="exercise.name">
                                     {{ exercise.name }}
                                     @if (exercise.isMainLift) {
                                       <span class="main-lift" i18n>Main</span>

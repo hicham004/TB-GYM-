@@ -74,16 +74,17 @@ export function trainingDays(draft: ProgramDraft): ReadonlySet<number> {
 
 /**
  * The grid's columns, the same for every week so the days line up down the page. A day that holds
- * a session somewhere is wide enough for exercise names; a rest day everywhere is a narrow column.
+ * a session somewhere is wide enough for exercise names; a rest day everywhere is a thin strip
+ * (its label written downward, with the add button) so the width goes to the training days.
  */
 export function gridColumns(draft: ProgramDraft, editingDay: number | null = null): string {
-  const used = trainingDays(draft);
+  return columnsFor(trainingDays(draft), editingDay);
+}
+
+/** The columns for the days in `used`; the Edit weeks page counts a client's locked sessions too. */
+export function columnsFor(used: ReadonlySet<number>, editingDay: number | null): string {
   return DAYS.map((day) =>
-    day === editingDay
-      ? 'minmax(20rem, 1.8fr)'
-      : used.has(day)
-        ? 'minmax(9rem, 1fr)'
-        : 'minmax(4.25rem, 0.4fr)',
+    day === editingDay ? 'minmax(20rem, 1.8fr)' : used.has(day) ? 'minmax(9rem, 1fr)' : '2.5rem',
   ).join(' ');
 }
 

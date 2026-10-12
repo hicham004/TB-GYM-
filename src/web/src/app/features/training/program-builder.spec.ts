@@ -220,6 +220,7 @@ describe('the program builder', () => {
     document.body
       .querySelectorAll('.cdk-overlay-container')
       .forEach((node) => node.replaceChildren());
+    localStorage.clear();
     TestBed.resetTestingModule();
   });
 
@@ -257,9 +258,41 @@ describe('the program builder', () => {
     expect((all(host, '.save-buttons button')[1] as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('starts with the library closed as a rail, opens it on a click and remembers the choice', async () => {
+    const { host, harness } = await render();
+
+    expect(host.querySelector('app-program-library')).toBeNull();
+    expect(host.querySelector('.workspace')?.classList.contains('with-library')).toBe(false);
+    const rail = named(host, 'Exercises');
+    expect(rail.classList.contains('library-rail')).toBe(true);
+    expect(rail.getAttribute('aria-expanded')).toBe('false');
+
+    rail.click();
+    await settle(harness.fixture);
+    expect(host.querySelector('app-program-library')).not.toBeNull();
+    expect(host.querySelector('.workspace')?.classList.contains('with-library')).toBe(true);
+    expect(host.querySelector('.library-rail')).toBeNull();
+    expect(localStorage.getItem('tb.program-library')).toBe('open');
+
+    named(host, 'Hide exercises').click();
+    await settle(harness.fixture);
+    expect(host.querySelector('app-program-library')).toBeNull();
+    expect(localStorage.getItem('tb.program-library')).toBe('closed');
+  });
+
+  it('opens with the library beside the grid when the coach left it open last time', async () => {
+    localStorage.setItem('tb.program-library', 'open');
+    const { host } = await render();
+
+    expect(host.querySelector('app-program-library')).not.toBeNull();
+    expect(host.querySelector('.library-rail')).toBeNull();
+  });
+
   it('lists the library with pictures where granted, searches it and groups it by movement', async () => {
     const { host, harness, csrf, api } = await render();
 
+    named(host, 'Exercises').click();
+    await settle(harness.fixture);
     const library = host.querySelector<HTMLElement>('app-program-library')!;
     expect(csrf.refresh).toHaveBeenCalled();
     expect(api.createMediaAccessBatch).toHaveBeenCalledWith(['media-row']);
@@ -751,6 +784,47 @@ describe('the program builder', () => {
       'Your coaching space is read-only until its TB Gym bill is paid. You can still view everything.',
     ]);
     expect(status(host)).toBe('Not saved');
+  });
+
+  it('folds a week to one line with its summary, folds the others from the menu, and keeps the folds per program', async () => {
+    const { host, harness } = await render();
+
+    const weeks = all(host, 'section.week');
+    expect(all(host, '.week-fold')).toHaveLength(0);
+    named(host, 'Fold week 2').click();
+    await settle(harness.fixture);
+    expect(weeks[1].querySelector('.days')?.classList.contains('folded')).toBe(true);
+    expect(weeks[0].querySelector('.days')?.classList.contains('folded')).toBe(false);
+    expect(textOf(weeks[1].querySelector('.week-summary'))).toBe('2 sessions · 3 exercises');
+    expect(named(host, 'Unfold week 2').getAttribute('aria-expanded')).toBe('false');
+    // A drop on the folded week lands on its first free day (day 2).
+    expect(weeks[1].querySelector('.week-fold')?.id).toBe(`fold-${weeks[1].dataset['week']}`);
+    expect(localStorage.getItem('tb.program-folds:template-1')).toBe('[1]');
+
+    named(host, 'More for week 1').click();
+    await settle(harness.fixture);
+    named(host, 'Unfold every week').click();
+    await settle(harness.fixture);
+    expect(all(host, '.week-fold')).toHaveLength(0);
+    expect(localStorage.getItem('tb.program-folds:template-1')).toBeNull();
+
+    named(host, 'More for week 2').click();
+    await settle(harness.fixture);
+    named(host, 'Fold the other weeks').click();
+    await settle(harness.fixture);
+    expect(
+      all(host, 'section.week').map((week) => week.querySelector('.week-fold') !== null),
+    ).toEqual([true, false]);
+    expect(localStorage.getItem('tb.program-folds:template-1')).toBe('[0]');
+  });
+
+  it('reopens a program with the weeks it had folded', async () => {
+    localStorage.setItem('tb.program-folds:template-1', '[0]');
+    const { host } = await render();
+
+    expect(
+      all(host, 'section.week').map((week) => week.querySelector('.week-fold') !== null),
+    ).toEqual([true, false]);
   });
 
   it('duplicates a week from its menu and deletes one with an undo', async () => {

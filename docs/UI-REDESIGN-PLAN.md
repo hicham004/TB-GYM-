@@ -112,6 +112,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R6.1b | **Share cards, before and after** (M9, CLI-008): a client picks two of their own progress photos of one pose and makes a before-and-after image in the coach's brand. Each time, a confirmation names the photos and their dates before anything is made, and nothing is remembered. The server records every photo export (who, when, which photos; never the image), because photo exports are auditable (CLI-008); a removed photo cannot be used | §2, plus API tests (own photos only, another client, another tenant, a removed photo, a released client, the record append-only) and Vitest (the picker, the confirmation, the card) | Done · 2026-10-12 · 1837417 |
 | R6.2a | **Homepage pre-render** (website): the homepage is built as finished HTML at build time, so Google and link previews read it. Every other route keeps the app shell, so a deep link never shows the homepage first (nginx falls back to the client-only page). Browser-only code waits for the browser, and the homepage's words, offers and prices stay as they are. A new package is explained and documented as `AGENTS.md` asks | §2, plus a check that the built homepage holds its headline and meta tags, Playwright for a deep link and the homepage, and the nginx architecture test kept green | Done · 2026-10-12 · 07fd867 |
 | R6.2b | **The homepage, one of one** (website; the owner, 2026-10-11: "something extraordinary, something I have never seen"): research first, then rebuild. Study at least 15 of the best homepages in and beyond fitness (award winners, the best product sites, coaching and training apps, the competitors) and write one page, `docs/design/homepage-research.md`, with links: what each does best, what TB Gym can own that none of them has, three concepts and the one chosen. Then build it as the real homepage with a GSAP scroll story at its heart, from the app's real screens on the Atlas demo (no AI-made people; only licensed images and fonts), and polish at least twice by setting its screenshots beside the references. Everything may change except money terms (prices, offers, the trial) and legal statements, which stay as they are. The hero works without the video R6.2c adds later. Install the tools you need: packages (each explained and documented as `AGENTS.md` asks), browsers and connectors (at user scope, not in the repo; a connector that needs a sign-in, such as Figma, cannot be used unattended) | §2, plus the research page, Lighthouse on a phone (performance 90 or more, accessibility 100, best practices and SEO 95 or more), reduced motion and keyboard paths, the pre-render kept, Vitest for the motion set-up and clean-up, and Playwright at 390 and 1440 px | Done · 2026-10-12 · a488ea9 |
+| R6.3 | **Builder density** (the owner, 2026-10-12, from a numbered mockup page): the exercise library starts closed as a rail at the edge of the grid and opens beside it on a click, the choice kept in the browser; a session is a flat list with one line per exercise (name, then its sets at the end, which wrap under a long name); a rest day is a thin strip with its label written downward; a week folds to its head line with a summary (chevron in the head; "Fold the other weeks" and "Unfold every week" in its menu), a drop on a folded week lands on its first free day, and the folds are kept per program. The rail, rows and strips serve Edit weeks too; folding is the builder's only | §2, plus Vitest (the rail, the kept choice, the columns, the folds) and Playwright (the drags through the rail, the phone without one) | Done · 2026-10-12 |
 | R6.2c | **Homepage hero video**: the owner makes the loop in Jitter (MP4 and WebM, with a poster frame); then a chat puts it in the hero, loaded late, with the poster for reduced motion | §2 | Optional · for later (owner, 2026-10-11): waits for the owner's video |
 
 **Design approval:** the owner approved the prototype direction on 2026-09-28. The partner saw
@@ -361,8 +362,9 @@ of the implemented R1.3 screens before production rollout.
     that back.
   - "Add to saved sessions" copies the session from a saved version, so since R4.2a it waits for
     Publish ("Publish the program first").
-  - With five or more training days beside the library, a week scrolls sideways; "Hide exercises"
-    gives the grid the page.
+  - With five or more training days beside the library, a week scrolls sideways; closing the
+    library to its rail (R6.3) gives the grid the page, and the weeks not being worked on fold.
+  - Edit weeks has the rail, the one-line rows and the rest strips (R6.3) but not the folding weeks.
   - On a phone, a session moves to another week only through a wide screen (there is no "Move to
     week" in its menu).
   - The Atlas demo has no exercise pictures, so its library shows initials (see "Demo data gaps").
@@ -1465,9 +1467,15 @@ limited to the coach's assigned clients.
     read, `GET /api/training/templates/{templateId}`, reopens a program with its versions and the
     token its next save carries.
   - Beside the grid sits the exercise library: search, movement chips, the first picture of each
-    exercise (initials otherwise) and the coach's saved sessions.
+    exercise (initials otherwise) and the coach's saved sessions. Since R6.3 it starts closed as a
+    rail (the word "Exercises" written downward) and opens beside the grid on a click; the choice
+    is kept in the browser (`tb.program-library`).
   - Each week is a row of seven days with a name, "Shared with client" and a menu (duplicate, move,
-    delete with Undo). A rest day is a narrow dashed column.
+    delete with Undo). A rest day is a thin dashed strip (R6.3) with its label written downward and
+    the add button; a session is a head over a flat list, one line per exercise. A chevron in the
+    head folds a week to one line ("2 sessions · 3 exercises"); folded, it still takes a dropped
+    session, on its first free day. Folds are kept per program in the browser
+    (`tb.program-folds:<templateId>`, by position, since week keys are new on every load).
   - Drags (CDK, lists connected by id): exercises from the library or another session into a
     session; a session to another day or week; a saved session onto a day; an exercise onto a rest
     day starts a session there.

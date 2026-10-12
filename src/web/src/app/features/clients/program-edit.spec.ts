@@ -160,6 +160,17 @@ describe('editing a client’s weeks', () => {
     document.body
       .querySelectorAll('.cdk-overlay-container')
       .forEach((node) => node.replaceChildren());
+    localStorage.clear();
+  });
+
+  it('keeps the library as a rail until the coach opens it, as in the builder', async () => {
+    const { host, harness } = await render();
+
+    expect(host.querySelector('app-program-library')).toBeNull();
+    named(host, 'Exercises').click();
+    await settle(harness.fixture);
+    expect(host.querySelector('app-program-library')).not.toBeNull();
+    expect(localStorage.getItem('tb.program-library')).toBe('open');
   });
 
   it('shows the sessions still to come beside the locked ones, with nothing to review yet', async () => {

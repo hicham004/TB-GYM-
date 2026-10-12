@@ -91,6 +91,15 @@
           <aside class="library panel" aria-labelledby="library-title">
             <div class="library-head">
               <h3 id="library-title" class="panel-title" i18n>Exercises</h3>
+              <button
+                class="library-close"
+                type="button"
+                aria-expanded="true"
+                [attr.aria-label]="hideLibraryLabel"
+                (click)="toggleLibrary()"
+              >
+                <app-icon name="close" />
+              </button>
             </div>
             <app-program-library
               mode="drag"
@@ -102,26 +111,23 @@
               (retry)="loadLibrary()"
             />
           </aside>
+        } @else {
+          <!-- Closed, the library is a rail at the edge of the grid; one click opens it. -->
+          <button
+            class="library-rail"
+            type="button"
+            aria-expanded="false"
+            (click)="toggleLibrary()"
+          >
+            <app-icon name="plus" />
+            <span class="rail-word" i18n>Exercises</span>
+          </button>
         }
 
         <section class="plan" aria-labelledby="weeks-title">
           <div class="plan-tools">
             <h3 id="weeks-title" class="panel-title" i18n>Weeks</h3>
             <div class="plan-buttons">
-              <button
-                appButton
-                class="library-toggle"
-                type="button"
-                variant="text"
-                [attr.aria-expanded]="libraryOpen()"
-                (click)="libraryOpen.set(!libraryOpen())"
-              >
-                @if (libraryOpen()) {
-                  <span i18n>Hide exercises</span>
-                } @else {
-                  <span i18n>Show exercises</span>
-                }
-              </button>
               <button
                 appButton
                 type="button"
@@ -270,7 +276,7 @@
                                   <span class="exercise-grip" cdkDragHandle aria-hidden="true"
                                     ><app-icon name="grip"
                                   /></span>
-                                  <span class="exercise-name" dir="auto">
+                                  <span class="exercise-name" dir="auto" [title]="exercise.name">
                                     {{ exercise.name }}
                                     @if (exercise.isMainLift) {
                                       <span class="main-lift" i18n>Main</span>

@@ -1,7 +1,8 @@
 // The program builder (C4): the exercise library beside a week × day grid. Brand v2 tokens only, so
 // it follows the coach's brand and the person's mode. The layout answers to the width of the page
-// beside the sidebar: from 64rem the library sits beside the grid; narrower, the library opens in a
-// sheet and each week lists its days one under another. Things that can be dragged are styled with
+// beside the sidebar: from 64rem the library is a rail at the edge of the grid that opens into a
+// panel beside it; narrower, the library opens in a sheet and each week lists its days one under
+// another. Things that can be dragged are styled with
 // one class each, because the drag preview is a copy placed outside this component.
 :host {
   container: builder / inline-size;
@@ -230,15 +231,16 @@ h1 {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.library {
-  display: none;
-}
-
-.library-toggle {
+.library,
+.library-rail {
   display: none;
 }
 
 @container builder (min-width: 64rem) {
+  .workspace {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
   .workspace.with-library {
     grid-template-columns: 16.5rem minmax(0, 1fr);
   }
@@ -255,15 +257,74 @@ h1 {
     position: sticky;
   }
 
-  .library-toggle {
-    display: inline-flex;
+  // Closed, the library is this rail: a tall button with the word written downward.
+  .library-rail {
+    align-items: center;
+    background: var(--tb-surface);
+    border: 1px solid var(--tb-line);
+    border-radius: var(--tb-radius-card);
+    box-shadow: var(--tb-shadow-card);
+    color: var(--tb-accent-ink);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    gap: 0.5rem;
+    inline-size: 2.75rem;
+    inset-block-start: 1rem;
+    padding: 0.75rem 0;
+    position: sticky;
+  }
+
+  .library-rail:hover {
+    border-color: var(--tb-line-strong);
+  }
+
+  .library-rail:focus-visible {
+    outline: 2px solid var(--tb-focus);
+    outline-offset: 2px;
   }
 }
 
+.rail-word {
+  writing-mode: vertical-rl;
+}
+
 .library-head {
-  align-items: baseline;
+  align-items: center;
   display: flex;
-  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.library-head .panel-title {
+  flex: 1;
+}
+
+.library-close {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  block-size: 2rem;
+  color: var(--tb-muted);
+  cursor: pointer;
+  display: inline-flex;
+  inline-size: 2rem;
+  justify-content: center;
+  margin-inline-end: -0.375rem;
+  padding: 0;
+}
+
+.library-close:hover {
+  background: var(--tb-surface-2);
+  color: var(--tb-ink);
+}
+
+.library-close:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 1px;
 }
 
 .manage {

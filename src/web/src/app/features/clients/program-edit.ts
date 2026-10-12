@@ -57,6 +57,7 @@ import {
   addExercise,
   addWeek,
   applyDrop,
+  columnsFor,
   copySession,
   DAYS,
   type DayRef,
@@ -78,6 +79,7 @@ import {
   startSessionWith,
 } from '../training/program-builder.models';
 import { ExerciseDemo } from '../training/exercise-demo';
+import { readLibraryOpen, writeLibraryOpen } from '../training/builder-preferences';
 import { type LibraryThumbs, ProgramLibrary } from '../training/program-library';
 import { ProgramSessionEditor } from '../training/program-session-editor';
 import { ProgramSetsEditor } from '../training/program-sets-editor';
@@ -272,7 +274,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
   protected readonly libraryState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly saved = signal<SavedSessionView[]>([]);
   protected readonly thumbs = signal<LibraryThumbs>(new Map());
-  protected readonly libraryOpen = signal(true);
+  protected readonly libraryOpen = signal(readLibraryOpen());
   /** Each library exercise's demos, so a grid row can offer Watch demo (P4). */
   private readonly libraryMedia = computed(
     () => new Map(this.exercises().map((item) => [item.id, item.mediaIds] as const)),
@@ -297,6 +299,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
 
   protected readonly firstName = computed(() => this.context.profile()?.firstName ?? '');
   protected readonly sharedLabel = computed(() => $localize`Shared with ${this.firstName()}:name:`);
+  protected readonly hideLibraryLabel = $localize`Hide exercises`;
   protected readonly trainingLink = computed(() => [
     '/clients',
     this.context.clientId(),
@@ -346,13 +349,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
         .flatMap((week) => week.sessions)
         .find((session) => session.exercises.some((exercise) => exercise.key === key))?.dayOffset ??
       null;
-    return DAYS.map((day) =>
-      day === editingDay
-        ? 'minmax(20rem, 1.8fr)'
-        : used.has(day)
-          ? 'minmax(9rem, 1fr)'
-          : 'minmax(4.25rem, 0.4fr)',
-    ).join(' ');
+    return columnsFor(used, editingDay);
   });
 
   /** Every list a drag can land in; the days already gone are left out. */
@@ -568,6 +565,13 @@ export class ProgramEditPage implements HoldsUnsavedWork {
         this.newSessionName,
       ),
     );
+  }
+
+  /** Opens or closes the library beside the grid, and keeps the choice for next time. */
+  protected toggleLibrary(): void {
+    const open = !this.libraryOpen();
+    this.libraryOpen.set(open);
+    writeLibraryOpen(open);
   }
 
   protected addWeek(): void {

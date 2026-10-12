@@ -147,10 +147,22 @@ async function openBuilder(
   return sent;
 }
 
-async function axe(page: Page) {
-  const result = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
-    .analyze();
+/**
+ * With a menu open, the part of the grid under it is not a target: the overlay's backdrop takes
+ * the click. Axe would still measure a half-covered button there, so that rule is left out then.
+ */
+async function axe(page: Page, options: { menuOpen?: boolean } = {}) {
+  const builder = new AxeBuilder({ page }).withTags([
+    'wcag2a',
+    'wcag2aa',
+    'wcag21a',
+    'wcag21aa',
+    'wcag22aa',
+    'best-practice',
+  ]);
+  const result = await (
+    options.menuOpen ? builder.disableRules(['target-size']) : builder
+  ).analyze();
   expect(
     result.violations.map(
       (violation) =>
@@ -220,7 +232,12 @@ test('the builder takes drags, keeps them as the coach’s draft, and publishes 
   const first = week(page, 0);
   const lower = first.locator('.session-card', { hasText: 'Lower A' });
 
-  // An exercise from the library into Lower A, then reorder it by its grip.
+  // The library starts as a rail; opening it gives the grid the drags below.
+  await expect(page.locator('app-program-library')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Exercises' }).click();
+  await expect(page.locator('app-program-library')).toBeVisible();
+
+  // An exercise from the library onto the second row of Lower A, then reorder it by its grip.
   await drag(
     page,
     page.locator('app-program-library .lib-item', { hasText: 'Goblet squat' }),
@@ -228,8 +245,8 @@ test('the builder takes drags, keeps them as the coach’s draft, and publishes 
   );
   await expect(lower.locator('.exercise-name')).toHaveText([
     /Back squat/,
-    'Romanian deadlift',
     'Goblet squat',
+    'Romanian deadlift',
   ]);
   // A moment after the drop the change is the coach's own draft on the server.
   await expect(page.locator('.status')).toHaveText(/^Saved at \d\d:\d\d, not published yet$/);
@@ -241,13 +258,13 @@ test('the builder takes drags, keeps them as the coach’s draft, and publishes 
   });
   await drag(
     page,
-    lower.locator('.exercise-row').nth(2).locator('.exercise-grip'),
-    lower.locator('.exercise-row').nth(1).locator('.exercise-heading'),
+    lower.locator('.exercise-row').nth(1).locator('.exercise-grip'),
+    lower.locator('.exercise-row').nth(2).locator('.exercise-heading'),
   );
   await expect(lower.locator('.exercise-name')).toHaveText([
     /Back squat/,
-    'Goblet squat',
     'Romanian deadlift',
+    'Goblet squat',
   ]);
 
   // Upper A from day 3 onto day 5, a rest day.
@@ -280,7 +297,7 @@ test('the builder takes drags, keeps them as the coach’s draft, and publishes 
       session.exercises.map((exercise) => exercise.exerciseId),
     ]),
   ).toEqual([
-    ['Lower A', 0, ['squat', 'goblet', 'rdl']],
+    ['Lower A', 0, ['squat', 'rdl', 'goblet']],
     ['Training day', 1, ['row']],
     ['Upper A', 4, ['bench']],
   ]);
@@ -333,8 +350,9 @@ test.describe('with no connection', () => {
 test('a phone shows one week at a time and adds through the sheet', async ({ page }) => {
   await openBuilder(page, 390, 844);
 
-  await expect(page.locator('app-program-library')).toHaveCount(1);
-  await expect(page.locator('aside.library')).toBeHidden();
+  // A phone has no library beside the grid and no rail: it adds through the sheet.
+  await expect(page.locator('app-program-library')).toHaveCount(0);
+  await expect(page.locator('.library-rail')).toBeHidden();
   await expect(week(page, 0)).toBeVisible();
   await expect(week(page, 1)).toBeHidden();
   // The chip a thumb presses; the radio inside it is what a screen reader reads.
@@ -625,7 +643,7 @@ test('the program picks one formula for loads from RPE, and every set follows it
   const menu = page.getByRole('button', { name: 'Weights from RPE: RTS chart' });
   await menu.click();
   await expect(page.getByRole('button', { name: /^RTS chart \(recommended\)/ })).toBeVisible();
-  await axe(page);
+  await axe(page, { menuOpen: true });
   await page.getByRole('button', { name: /^Epley curve/ }).click();
 
   await expect(page.getByRole('button', { name: 'Weights from RPE: Epley curve' })).toBeVisible();

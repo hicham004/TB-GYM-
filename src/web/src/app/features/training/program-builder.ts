@@ -95,6 +95,7 @@ import {
   versionToOpen,
   withProgramFormula,
 } from './program-builder.models';
+import { readFolds, readLibraryOpen, writeFolds, writeLibraryOpen } from './builder-preferences';
 import { type LibraryThumbs, ProgramLibrary } from './program-library';
 import { ProgramSessionEditor } from './program-session-editor';
 import { ProgramSetsEditor } from './program-sets-editor';
@@ -182,6 +183,13 @@ interface WeekRow {
   menu: UiMenuItem[];
   menuLabel: string;
   labelName: string;
+  /** Folded to its head line, with a summary in place of its days (R6.3). */
+  folded: boolean;
+  foldLabel: string;
+  /** "4 sessions · 20 exercises". */
+  summary: string;
+  /** Where a drop on the folded week lands: its first free day; null when every day is taken. */
+  fold: { listId: string; target: DropTarget } | null;
 }
 
 /** How long leaving waits for the last changes to reach the server before it asks instead. */
@@ -308,7 +316,9 @@ export class ProgramBuilder implements HoldsUnsavedWork {
   protected readonly libraryState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly saved = signal<SavedSessionView[]>([]);
   protected readonly thumbs = signal<LibraryThumbs>(new Map());
-  protected readonly libraryOpen = signal(true);
+  protected readonly libraryOpen = signal(readLibraryOpen());
+  /** The weeks folded to their head line, by key; kept per program by position (R6.3). */
+  protected readonly folded = signal<ReadonlySet<string>>(new Set());
   /** Each library exercise's demos, so a grid row can offer Watch demo (P4). */
   private readonly libraryMedia = computed(
     () => new Map(this.exercises().map((item) => [item.id, item.mediaIds] as const)),
@@ -332,6 +342,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
   protected readonly loadingLabel = $localize`Loading the program…`;
   protected readonly closeLabel = $localize`Close`;
   protected readonly sharedLabel = $localize`Shared with client`;
+  protected readonly hideLibraryLabel = $localize`Hide exercises`;
   protected readonly dragDelay = { touch: 250, mouse: 0 };
   /** A program holds up to 52 weeks, as the server allows (TRN-005). */
   protected readonly maxWeeks = 52;
@@ -362,7 +373,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     return gridColumns(draft, session?.dayOffset ?? null);
   });
   protected readonly grid = computed(() =>
-    this.rows(this.draft(), this.hasDraft() || this.unsaved()),
+    this.rows(this.draft(), this.hasDraft() || this.unsaved(), this.folded()),
   );
   /**
    * Every list on the grid, by id. The lists are connected by name rather than by a
@@ -370,9 +381,10 @@ export class ProgramBuilder implements HoldsUnsavedWork {
    * inside its day) out of the outer list's group.
    */
   protected readonly dropIds = computed(() =>
-    this.grid().flatMap((row) =>
-      row.days.flatMap((cell) => [cell.listId, ...cell.sessions.map((item) => item.listId)]),
-    ),
+    this.grid().flatMap((row) => [
+      ...(row.fold ? [row.fold.listId] : []),
+      ...row.days.flatMap((cell) => [cell.listId, ...cell.sessions.map((item) => item.listId)]),
+    ]),
   );
   protected readonly pageTitle = computed(
     () => this.draft().name.trim() || (this.isNew() ? $localize`New program` : $localize`Program`),
@@ -742,6 +754,13 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     );
   }
 
+  /** Opens or closes the library beside the grid, and keeps the choice for next time. */
+  protected toggleLibrary(): void {
+    const open = !this.libraryOpen();
+    this.libraryOpen.set(open);
+    writeLibraryOpen(open);
+  }
+
   protected addWeek(): void {
     this.commit(addWeek(this.draft()));
     const week = this.draft().weeks.at(-1);
@@ -772,7 +791,33 @@ export class ProgramBuilder implements HoldsUnsavedWork {
         this.focusWeek(this.draft().weeks[Math.max(0, index - 1)]?.key);
         this.offerUndo($localize`Week ${index + 1}:number: deleted.`, before);
         return;
+      case 'fold-others':
+        this.setFolds(
+          new Set(before.weeks.filter((week) => week.key !== weekKey).map((w) => w.key)),
+        );
+        this.focusWeek(weekKey);
+        return;
+      case 'unfold-all':
+        this.setFolds(new Set());
+        this.focusWeek(weekKey);
+        return;
     }
+  }
+
+  /** Folds a week to its head line, or opens it again. */
+  protected toggleFold(weekKey: string): void {
+    const next = new Set(this.folded());
+    if (!next.delete(weekKey)) next.add(weekKey);
+    this.setFolds(next);
+  }
+
+  private setFolds(keys: ReadonlySet<string>): void {
+    this.folded.set(keys);
+    const weeks = this.draft().weeks;
+    writeFolds(
+      this.templateId(),
+      weeks.flatMap((week, index) => (keys.has(week.key) ? [index] : [])),
+    );
   }
 
   protected onSessionAction(ref: SessionRef, action: string): void {
@@ -1308,11 +1353,15 @@ export class ProgramBuilder implements HoldsUnsavedWork {
 
   // ---------- drawing the grid ----------
 
-  private rows(draft: ProgramDraft, changed: boolean): WeekRow[] {
+  private rows(draft: ProgramDraft, changed: boolean, folded: ReadonlySet<string>): WeekRow[] {
     const last = draft.weeks.length - 1;
     return draft.weeks.map((week, index) => {
       const number = index + 1;
       const title = $localize`Week ${number}:number:`;
+      const isFolded = folded.has(week.key);
+      const taken = new Set(week.sessions.map((session) => session.dayOffset));
+      const freeDay = DAYS.find((day) => !taken.has(day));
+      const exercises = week.sessions.reduce((sum, session) => sum + session.exercises.length, 0);
       return {
         key: week.key,
         number,
@@ -1320,6 +1369,22 @@ export class ProgramBuilder implements HoldsUnsavedWork {
         week,
         labelName: $localize`Name of week ${number}:number:`,
         menuLabel: $localize`More for week ${number}:number:`,
+        folded: isFolded,
+        foldLabel: isFolded
+          ? $localize`Unfold week ${number}:number:`
+          : $localize`Fold week ${number}:number:`,
+        summary: `${
+          week.sessions.length === 1
+            ? $localize`1 session`
+            : $localize`${week.sessions.length}:count: sessions`
+        } · ${exercises === 1 ? $localize`1 exercise` : $localize`${exercises}:count: exercises`}`,
+        fold:
+          isFolded && freeDay !== undefined
+            ? {
+                listId: `fold-${week.key}`,
+                target: { kind: 'day', at: { weekKey: week.key, day: freeDay }, empty: true },
+              }
+            : null,
         menu: [
           {
             label: $localize`Duplicate week`,
@@ -1341,6 +1406,12 @@ export class ProgramBuilder implements HoldsUnsavedWork {
           },
           { label: $localize`Move up`, action: 'up', disabled: index === 0 },
           { label: $localize`Move down`, action: 'down', disabled: index === last },
+          { label: $localize`Fold the other weeks`, action: 'fold-others', disabled: last === 0 },
+          {
+            label: $localize`Unfold every week`,
+            action: 'unfold-all',
+            disabled: folded.size === 0,
+          },
           {
             label: $localize`Delete week`,
             action: 'delete',
@@ -1500,6 +1571,10 @@ export class ProgramBuilder implements HoldsUnsavedWork {
 
   private adopt(draft: ProgramDraft): void {
     this.draft.set(draft);
+    const positions = readFolds(this.templateId());
+    this.folded.set(
+      new Set(draft.weeks.filter((_, index) => positions.has(index)).map((w) => w.key)),
+    );
     this.problem.set(null);
     this.saveError.set(null);
     this.newerVersion.set(null);

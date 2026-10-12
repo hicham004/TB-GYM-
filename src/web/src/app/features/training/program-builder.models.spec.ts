@@ -128,12 +128,10 @@ describe('program builder grid', () => {
     expect(setIssue({ ...set, manualLoadOverride: 0 })?.field).toBe('manualLoadOverride');
     expect(setIssue({ ...set, exertionTarget: 11 })?.field).toBe('exertionTarget');
   });
-  it('gives room to days that hold a session in any week and keeps rest days narrow', () => {
-    const columns = gridColumns(program()).split(' minmax');
-    expect(columns).toHaveLength(7);
+  it('gives room to days that hold a session in any week and keeps rest days a thin strip', () => {
     expect(gridColumns(program())).toBe(
       [0, 1, 2, 3, 4, 5, 6]
-        .map((day) => (day === 0 || day === 2 ? 'minmax(9rem, 1fr)' : 'minmax(4.25rem, 0.4fr)'))
+        .map((day) => (day === 0 || day === 2 ? 'minmax(9rem, 1fr)' : '2.5rem'))
         .join(' '),
     );
   });
