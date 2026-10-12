@@ -1,4 +1,13 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { isPlatformServer } from '@angular/common';
+import {
+  computed,
+  inject,
+  Injectable,
+  makeStateKey,
+  PLATFORM_ID,
+  signal,
+  TransferState,
+} from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
 import { ApiClient } from '../api/api-client';
 import { BodyweightUnit, CurrentUser } from '../api/api.models';
@@ -6,14 +15,33 @@ import { CsrfService } from '../security/csrf.service';
 import { TenantStore } from '../tenancy/tenant.store';
 import { isThemeMode, PersonalModeStore, type ThemeMode } from '../theme/personal-mode.store';
 
+/**
+ * The mark the build leaves in the pre-rendered homepage (R6.2a). That document was rendered for
+ * nobody, and nginx serves it only to a visitor without the sign-in cookie. A browser that starts
+ * from it knows there was no session when the page was asked for, so it keeps the page on screen and
+ * asks the API quietly, instead of covering the page with the launch screen while it asks.
+ */
+export const RENDERED_SIGNED_OUT = makeStateKey<boolean>('tb-gym.rendered-signed-out');
+
+/** The build-time render leaves the mark; a browser reads it. Nothing else ever sets it. */
+function startedSignedOut(server: boolean, transferState: TransferState): boolean {
+  if (server) transferState.set(RENDERED_SIGNED_OUT, true);
+  return server || transferState.get(RENDERED_SIGNED_OUT, false);
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthStore {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly theme = inject(PersonalModeStore);
+  /** The build-time render of the homepage: no browser, no cookie, nothing to ask the API. */
+  private readonly server = isPlatformServer(inject(PLATFORM_ID));
+  private readonly startedSignedOut = startedSignedOut(this.server, inject(TransferState));
   private readonly userState = signal<CurrentUser | null>(null);
-  private readonly loadingState = signal(true);
+  private readonly loadingState = signal(!this.startedSignedOut);
+  /** The first session check of a page that began as the pre-rendered homepage shows no launch screen. */
+  private quietFirstLoad = this.startedSignedOut && !this.server;
   private initialization: Promise<void> | null = null;
   private sessionRequest = 0;
   /** Personal settings save one at a time: the account's concurrency stamp rejects two at once. */
@@ -31,7 +59,7 @@ export class AuthStore {
       return this.initialization;
     }
 
-    this.initialization = this.loadSession();
+    this.initialization = this.server ? Promise.resolve() : this.loadSession();
     return this.initialization;
   }
 
@@ -99,7 +127,9 @@ export class AuthStore {
 
   private async loadSession(): Promise<void> {
     const request = ++this.sessionRequest;
-    this.loadingState.set(true);
+    const quiet = this.quietFirstLoad;
+    this.quietFirstLoad = false;
+    if (!quiet) this.loadingState.set(true);
     try {
       await this.csrf.refresh();
       if (request !== this.sessionRequest) return;

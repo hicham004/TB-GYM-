@@ -1,5 +1,5 @@
-import { DOCUMENT } from '@angular/common';
-import { computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
+import { DOCUMENT, isPlatformBrowser } from '@angular/common';
+import { computed, DestroyRef, inject, Injectable, PLATFORM_ID, signal } from '@angular/core';
 
 /** Chrome's install event, which TypeScript's DOM types do not describe. */
 interface BeforeInstallPromptEvent extends Event {
@@ -31,7 +31,10 @@ const DAY_MS = 86_400_000;
  */
 @Injectable({ providedIn: 'root' })
 export class InstallPrompt {
-  private readonly window = inject(DOCUMENT).defaultView;
+  /** Null during the build-time render of the homepage (R6.2a): there is no browser to install from. */
+  private readonly window = isPlatformBrowser(inject(PLATFORM_ID))
+    ? inject(DOCUMENT).defaultView
+    : null;
   private readonly deferred = signal<BeforeInstallPromptEvent | null>(null);
   private readonly installed = signal(this.window !== null && isInstalledApp(this.window));
   private readonly dismissedAt = signal<number | null>(readDismissedAt(this.window));

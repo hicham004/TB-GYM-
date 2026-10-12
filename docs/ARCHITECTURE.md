@@ -700,6 +700,29 @@ homepage for visitors and the existing guarded dashboard for members; protected 
 the invitation-only client onboarding flow are unchanged. The homepage has its own navigation, so
 the sign-in and registration screens retain their existing public top bar.
 
+R6.2a renders that homepage at build time (UI plan R6.2a), so Google and link previews read finished
+HTML. Two packages carry it, both pinned to the installed Angular version: `@angular/platform-server`
+(the DOM-less render) and `@angular/ssr` (the per-route render modes). There is no Node server:
+`angular.json` sets `outputMode: "static"`, `app.routes.server.ts` marks `/` for pre-rendering and
+everything else client-only, and the build writes the homepage as `index.html` and the plain shell as
+`index.csr.html`. `nginx.conf` answers `/` with the homepage, or with the shell when the request
+carries the sign-in cookie (either environment's spelling, matched on the whole Cookie header, with
+`Cache-Control: no-cache` so the choice is made afresh); every other address gets the shell, so a deep
+link never shows the homepage first. The browser hydrates the pre-rendered page in place
+(`provideClientHydration`, incremental hydration and event replay off because their inline scripts
+would break the CSP, HTTP transfer cache off because the render calls no API). `AuthStore` records a
+"rendered signed out" mark in the transfer state during the build; a browser that finds it draws the
+page at once and checks the session without the launch screen, while the route guards still decide
+what to show. Browser-only work waits for the browser: the session request, tenant storage and the
+install prompt do nothing on the server, and `<html data-mode>` is written with `setAttribute`
+because the build-time DOM has no `dataset`. `npm run build` ends with `scripts/check-prerender.mjs`
+(headline, description and preview tags in `index.html`; an empty `<app-root>` and no homepage text in
+`index.csr.html`; no inline script), and the `built` Playwright project runs `e2e/built/` against a
+real build served by `scripts/serve-built.mjs` with nginx's rules and headers. `ng serve` renders `/`
+on request the same way (with the mark, and without nginx's cookie rule, so a signed-in developer
+sees the homepage for the moment the session check takes, then their Today); every other address
+is the plain shell there too, so the rest of the browser checks are unchanged.
+
 The migrated exercise library keeps every request it made before and adds no new one. Its filters
 stay server-side and are applied on Apply or Enter only; the list asks for the 100 rows the server is
 willing to return (it clamps `take` to 1-100) and says either "N exercises · sorted by name" or

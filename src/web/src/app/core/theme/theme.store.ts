@@ -48,5 +48,5 @@ export class ThemeStore {
 /** Draws `element` and everything inside it in one brand and mode. */
 export function applyTheme(element: HTMLElement, tokens: BrandTokens, mode: ThemeMode): void {
   writeBrandTokens(element, tokens);
-  element.dataset['mode'] = mode;
+  element.setAttribute('data-mode', mode);
 }

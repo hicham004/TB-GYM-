@@ -1,4 +1,5 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { computed, inject, Injectable, PLATFORM_ID, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../api/api-client';
 import { TenantMembership } from '../api/api.models';
@@ -10,10 +11,12 @@ const tenantStorageKey = 'tb-gym.active-tenant';
 export class TenantStore {
   private readonly api = inject(ApiClient);
   private readonly context = inject(TenantContext);
+  /** Only a browser remembers the workspace; the build-time render of the homepage (R6.2a) has no storage. */
+  private readonly storage = isPlatformBrowser(inject(PLATFORM_ID)) ? localStorage : null;
   private loadRequest = 0;
   private readonly membershipsState = signal<TenantMembership[]>([]);
   private readonly selectedTenantIdState = signal<string | null>(
-    localStorage.getItem(tenantStorageKey),
+    this.storage?.getItem(tenantStorageKey) ?? null,
   );
 
   readonly memberships = this.membershipsState.asReadonly();
@@ -62,9 +65,9 @@ export class TenantStore {
     this.selectedTenantIdState.set(tenantId);
     if (changed) this.context.invalidate();
     if (tenantId) {
-      localStorage.setItem(tenantStorageKey, tenantId);
+      this.storage?.setItem(tenantStorageKey, tenantId);
     } else {
-      localStorage.removeItem(tenantStorageKey);
+      this.storage?.removeItem(tenantStorageKey);
     }
   }
 
@@ -72,7 +75,7 @@ export class TenantStore {
     ++this.loadRequest;
     this.membershipsState.set([]);
     this.selectedTenantIdState.set(null);
-    localStorage.removeItem(tenantStorageKey);
+    this.storage?.removeItem(tenantStorageKey);
     this.context.invalidate();
   }
 }

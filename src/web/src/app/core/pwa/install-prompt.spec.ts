@@ -1,3 +1,4 @@
+import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InstallPrompt, isInstalledApp, isIosBrowser } from './install-prompt';
@@ -232,5 +233,15 @@ describe('where the app is running', () => {
     expect(isIosBrowser(window)).toBe(false);
     userAgent(IPHONE);
     expect(isIosBrowser(window)).toBe(true);
+  });
+
+  // The homepage is rendered at build time (R6.2a), where there is no browser to install from.
+  it('offers nothing during the build-time render, even where a phone would see the Share steps', () => {
+    userAgent(IPHONE);
+    TestBed.configureTestingModule({ providers: [{ provide: PLATFORM_ID, useValue: 'server' }] });
+    const install = service();
+
+    expect(install.offer()).toBeNull();
+    expect(install.bannerOffer()).toBeNull();
   });
 });

@@ -1111,8 +1111,10 @@ Work follows this order; anything outside it needs the user's approval first.
   the same day: share cards (R6.1a, R6.1b), the homepage's pre-render (R6.2a) and a homepage rebuilt
   after research (R6.2b); the hero video (R6.2c) waits for the owner's Jitter assets. R6.1a, a client's
   share cards of records and finished programs, and R6.1b, a client's before-and-after of two progress
-  photos with the server's record of every photo export (PRG-013), were built on 2026-10-12. The owner's
-  product review and the founding-coach demo follow.
+  photos with the server's record of every photo export (PRG-013), were built on 2026-10-12, and so was
+  R6.2a: the homepage is rendered at build time for Google and link previews, served by nginx only for `/`
+  and only to visitors without the sign-in cookie. The owner's product review and the founding-coach demo
+  follow.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
 

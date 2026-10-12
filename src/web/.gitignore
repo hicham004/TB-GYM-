@@ -42,6 +42,8 @@ __screenshots__/
 /test-results
 /playwright-report
 /blob-report
+# The production build the `built` Playwright project serves (scripts/serve-built.mjs)
+/.e2e-dist
 
 # System files
 .DS_Store

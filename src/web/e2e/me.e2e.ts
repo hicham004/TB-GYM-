@@ -494,16 +494,17 @@ test.describe('the launch screen', () => {
     await mockSignedOut(page);
     // The media condition cannot be emulated, so the page is served with it removed: this proves the
     // rule, the picture and the colours. That the screen is shown only when installed is the
-    // browser's own `display-mode`.
+    // browser's own `display-mode`. The installed app starts at the sign-in page, which loads the
+    // plain shell; `/` is the homepage rendered at build time (R6.2a), whose <app-root> is never empty.
     await page.route('**/main.js', () => new Promise<void>(() => undefined));
-    await page.route('**/', async (route) => {
+    await page.route('**/auth/sign-in', async (route) => {
       if (route.request().resourceType() !== 'document') return route.fallback();
       const response = await route.fetch();
       const html = (await response.text()).replaceAll('(display-mode: standalone)', 'all');
       await route.fulfill({ response, body: html });
     });
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/', { waitUntil: 'commit' });
+    await page.goto('/auth/sign-in', { waitUntil: 'commit' });
     await page.waitForSelector('app-root', { state: 'attached' });
 
     await expect

@@ -1,10 +1,11 @@
+import { PLATFORM_ID, TransferState } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../api/api-client';
 import type { CurrentUser } from '../api/api.models';
 import { PersonalModeStore } from '../theme/personal-mode.store';
-import { AuthStore } from './auth.store';
+import { AuthStore, RENDERED_SIGNED_OUT } from './auth.store';
 
 const maya: CurrentUser = {
   id: 'user-maya',
@@ -226,5 +227,71 @@ describe('AuthStore personal settings', () => {
 
     expect(auth.user()?.id).toBe('user-maya');
     expect(auth.weightUnit()).toBe('Kilogram');
+  });
+});
+
+/**
+ * The homepage is built as finished HTML (R6.2a). The build-time render has no session and no API;
+ * a browser that starts from that page keeps it on screen while it asks about the session.
+ */
+describe('AuthStore and the pre-rendered homepage', () => {
+  afterEach(() => {
+    localStorage.clear();
+    TestBed.resetTestingModule();
+  });
+
+  it('renders at build time as signed out, asks the API nothing, and marks the page', async () => {
+    const { api } = configure();
+    TestBed.configureTestingModule({ providers: [{ provide: PLATFORM_ID, useValue: 'server' }] });
+    const transferState = TestBed.inject(TransferState);
+
+    const auth = TestBed.inject(AuthStore);
+    expect(auth.loading()).toBe(false);
+    await auth.initialize();
+
+    expect(api.getCsrfToken).not.toHaveBeenCalled();
+    expect(api.getCurrentUser).not.toHaveBeenCalled();
+    expect(auth.user()).toBeNull();
+    expect(transferState.get(RENDERED_SIGNED_OUT, false)).toBe(true);
+  });
+
+  it('a browser starting from the marked page shows no launch screen while it asks, and stays signed out on a 401', async () => {
+    const { api } = configure();
+    api.getCurrentUser.mockImplementation(() => throwError(() => new Error('401')));
+    TestBed.inject(TransferState).set(RENDERED_SIGNED_OUT, true);
+
+    const auth = TestBed.inject(AuthStore);
+    expect(auth.loading()).toBe(false);
+    const pending = auth.initialize();
+    expect(auth.loading()).toBe(false);
+    await pending;
+
+    expect(api.getCurrentUser).toHaveBeenCalledTimes(1);
+    expect(auth.user()).toBeNull();
+    expect(auth.loading()).toBe(false);
+  });
+
+  it('still finds a session behind the marked page, and a later check shows the launch screen as before', async () => {
+    configure();
+    TestBed.inject(TransferState).set(RENDERED_SIGNED_OUT, true);
+
+    const auth = TestBed.inject(AuthStore);
+    const pending = auth.initialize();
+    expect(auth.loading()).toBe(false);
+    await pending;
+    expect(auth.user()?.id).toBe('user-maya');
+
+    const again = auth.initialize(true);
+    expect(auth.loading()).toBe(true);
+    await again;
+    expect(auth.loading()).toBe(false);
+  });
+
+  it('a page without the mark starts with the launch screen, as before', () => {
+    configure();
+
+    const auth = TestBed.inject(AuthStore);
+
+    expect(auth.loading()).toBe(true);
   });
 });

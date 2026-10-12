@@ -6,6 +6,11 @@ import { defineConfig, devices } from '@playwright/test';
  * because the lab route only exists there. Every API call is answered by a per-test `page.route`
  * mock, so no backend is needed and no runtime guard is bypassed: the guards run and read the mocks.
  *
+ * The `built` project is the exception (UI plan R6.2a): `e2e/built/` runs against a real build of
+ * the app, served by `scripts/serve-built.mjs` the way `nginx.conf` serves it. The dev server renders
+ * `/` on request too, but only a build writes the two documents (`index.html`, `index.csr.html`) and
+ * only nginx chooses between them by address and cookie, which is what that project checks.
+ *
  * Files are named `*.e2e.ts`, not `*.spec.ts`, because the Angular unit-test builder collects every
  * `**\/*.spec.ts` under this project and would try to run them in Vitest.
  *
@@ -13,6 +18,8 @@ import { defineConfig, devices } from '@playwright/test';
  * (`-chromium-win32.png`). Never accept a new or changed baseline without looking at it.
  */
 const port = 4300;
+const builtPort = 4301;
+const builtFiles = /[\\/]built[\\/].*\.e2e\.ts$/;
 
 export default defineConfig({
   testDir: './e2e',
@@ -34,11 +41,35 @@ export default defineConfig({
     deviceScaleFactor: 1,
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], deviceScaleFactor: 1 } }],
-  webServer: {
-    command: `npx ng serve --configuration development --host 127.0.0.1 --port ${port}`,
-    url: `http://127.0.0.1:${port}`,
-    reuseExistingServer: !process.env['CI'],
-    timeout: 240_000,
-  },
+  projects: [
+    {
+      name: 'chromium',
+      testIgnore: builtFiles,
+      use: { ...devices['Desktop Chrome'], deviceScaleFactor: 1 },
+    },
+    {
+      name: 'built',
+      testMatch: builtFiles,
+      use: {
+        ...devices['Desktop Chrome'],
+        deviceScaleFactor: 1,
+        baseURL: `http://127.0.0.1:${builtPort}`,
+      },
+    },
+  ],
+  webServer: [
+    {
+      command: `npx ng serve --configuration development --host 127.0.0.1 --port ${port}`,
+      url: `http://127.0.0.1:${port}`,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 240_000,
+    },
+    {
+      // Builds into .e2e-dist when the sources are newer than the last build, then serves it.
+      command: `node scripts/serve-built.mjs --build --port ${builtPort}`,
+      url: `http://127.0.0.1:${builtPort}/index.csr.html`,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 300_000,
+    },
+  ],
 });

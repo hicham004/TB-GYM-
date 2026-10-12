@@ -14,8 +14,10 @@ export class PersonalModeStore {
   readonly mode = this.state.asReadonly();
 
   constructor() {
+    // setAttribute rather than dataset: the build-time render of the homepage (R6.2a) runs on a DOM
+    // without dataset, and this effect is the first thing to touch <html>.
     effect(() => {
-      this.root.dataset['mode'] = this.state();
+      this.root.setAttribute('data-mode', this.state());
     });
   }
 

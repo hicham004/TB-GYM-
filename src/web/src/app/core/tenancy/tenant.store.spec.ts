@@ -1,3 +1,4 @@
+import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,5 +59,19 @@ describe('TenantStore', () => {
     store.select('workspace-outside-account');
 
     expect(store.selectedTenantId()).toBe('workspace-a');
+  });
+
+  // The homepage is rendered at build time (R6.2a), where there is no browser and no storage.
+  it('remembers no workspace during the build-time render and touches no storage', async () => {
+    localStorage.setItem('tb-gym.active-tenant', 'workspace-b');
+    TestBed.configureTestingModule({ providers: [{ provide: PLATFORM_ID, useValue: 'server' }] });
+    const store = TestBed.inject(TenantStore);
+
+    expect(store.selectedTenantId()).toBeNull();
+    await store.load();
+    store.select('workspace-a');
+    store.clear();
+
+    expect(localStorage.getItem('tb-gym.active-tenant')).toBe('workspace-b');
   });
 });

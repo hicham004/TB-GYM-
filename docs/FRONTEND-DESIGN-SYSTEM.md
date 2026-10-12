@@ -18,7 +18,9 @@ of truth (plan §8); its token names remain as aliases until R5.3.
 | `src/web/src/app/shell/` | The coach shell and the client tab bar |
 | `src/web/src/app/dev/` | Development-only routes: component kit (`/dev/ui-lab`) and the three prototype hero screens (`/dev/ui-lab/hero`) |
 | `src/web/public/hero-lab.css` | Prototype-scoped hero preview styles; loaded only by the development hero route |
-| `src/web/e2e/` | Playwright + axe browser checks and their screenshot baselines |
+| `src/web/e2e/` | Playwright + axe browser checks and their screenshot baselines; `e2e/built/` runs against a real build (the pre-rendered homepage, R6.2a) |
+| `src/web/scripts/` | Build-time checks: the style lint (`check-legacy-styles.mjs`), the pre-render check `npm run build` ends with (`check-prerender.mjs`), and `serve-built.mjs`, which serves a build the way `nginx.conf` does for the `built` Playwright project |
+| `src/web/src/main.server.ts`, `src/app/app.config.server.ts`, `src/app/app.routes.server.ts` | The build-time render of the homepage: its entry, its providers and the one route it renders |
 
 ## Lab and tests
 
@@ -28,7 +30,8 @@ of truth (plan §8); its token names remain as aliases until R5.3.
 
 # From src/web, after dot-sourcing scripts/Toolchain.ps1 and Initialize-TbGymToolchains:
 npm test                                 # Vitest
-npm run e2e                              # Playwright + axe; starts ng serve on 127.0.0.1:4300
+npm run e2e                              # Playwright + axe; starts ng serve on 127.0.0.1:4300 and, for e2e/built/, a build in .e2e-dist on 4301
+npm run build                            # production build; ends with the pre-render check (scripts/check-prerender.mjs)
 npx playwright install chromium          # once per machine
 ```
 
