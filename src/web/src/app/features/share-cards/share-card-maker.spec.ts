@@ -8,9 +8,26 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { AA_TEXT } from '../../core/theme/brand-theme';
 import { contrast } from '../../core/theme/color';
 import { WorkspaceBrandStore } from '../../core/theme/workspace-brand.store';
-import { personalRecord } from '../../../testing/share-card-fixtures';
+import { personalRecord, progressPhotos } from '../../../testing/share-card-fixtures';
 import { ShareCardMaker, shareLook } from './share-card-maker';
-import { recordCard } from './share-card.models';
+import { photosCard, recordCard } from './share-card.models';
+
+/** Pictures that decode, at 600 × 800, except those whose address names a broken one. */
+function decodablePictures(broken: string | null = null) {
+  const decoded: string[] = [];
+  Object.defineProperty(HTMLImageElement.prototype, 'decode', {
+    configurable: true,
+    value(this: HTMLImageElement) {
+      decoded.push(this.getAttribute('src') ?? '');
+      return broken && this.src.includes(broken)
+        ? Promise.reject(new Error('Not an image.'))
+        : Promise.resolve();
+    },
+  });
+  vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(600);
+  vi.spyOn(HTMLImageElement.prototype, 'naturalHeight', 'get').mockReturnValue(800);
+  return decoded;
+}
 
 function setUp(brand: { logoAssetId?: string | null; logoUrl?: string | null } = {}) {
   const api = { createMediaAccess: vi.fn(() => of({ url: '/api/media/logo-2/content' })) };
@@ -58,6 +75,7 @@ function stubCanvas() {
 describe('ShareCardMaker', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    delete (HTMLImageElement.prototype as Partial<HTMLImageElement>).decode;
     TestBed.resetTestingModule();
   });
 
@@ -99,6 +117,29 @@ describe('ShareCardMaker', () => {
     // jsdom loads no image, so both tries fail and the card still comes out.
     expect(api.createMediaAccess).toHaveBeenCalledTimes(1);
     expect(api.createMediaAccess).toHaveBeenCalledWith('logo-2');
+  });
+
+  it('draws a before and after from both photos, read from TB Gym’s own addresses', async () => {
+    stubCanvas();
+    const decoded = decodablePictures();
+    const { maker } = setUp();
+    const image = await maker.make(photosCard(progressPhotos(), maker.identity(), 'en-LB'));
+
+    expect(decoded).toEqual([
+      '/api/media/asset-Front-2026-09-05/content',
+      '/api/media/asset-Front-2026-10-03/content',
+    ]);
+    expect(image.file.name).toBe('front-before-and-after.png');
+    expect(image.dataUrl).toMatch(/^data:image\/png;base64,/);
+  });
+
+  it('never makes a before and after with a photo missing', async () => {
+    stubCanvas();
+    decodablePictures('asset-Front-2026-10-03');
+    const { maker } = setUp();
+    await expect(
+      maker.make(photosCard(progressPhotos(), maker.identity(), 'en-LB')),
+    ).rejects.toThrow('Not an image.');
   });
 
   it('refuses plainly where the browser cannot draw', async () => {

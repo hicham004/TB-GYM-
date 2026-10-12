@@ -225,6 +225,9 @@
           <button appButton type="button" (click)="sheets.addPhotos()" data-add-photos i18n>
             Add photos
           </button>
+          @if (canMakeBeforeAfter()) {
+            <app-before-after-button />
+          }
         </div>
         @switch (photoState()) {
           @case ('error') {

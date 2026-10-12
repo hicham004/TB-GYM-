@@ -8,6 +8,7 @@ import { AA_TEXT, brandTokens, safeBrand, type BrandColors } from '../../core/th
 import { contrast, mix } from '../../core/theme/color';
 import { WorkspaceBrandStore } from '../../core/theme/workspace-brand.store';
 import { initialsOf } from '../../shell/initials';
+import { paintBeforeAfterCard, type SharePicture } from './before-after-paint';
 import {
   paintShareCard,
   SHARE_IMAGE_HEIGHT,
@@ -28,10 +29,12 @@ export interface ShareImage {
 
 /** How long the faces and the logo may take before a card is drawn without them. */
 const WAIT_MS = 4000;
+/** A before-and-after cannot be drawn without its photos, which are full size, so they get longer. */
+const PHOTO_WAIT_MS = 30_000;
 
 /**
- * Makes share cards (M9, R6.1a) in the coach's brand, on the client's own phone: the coaching space's
- * colours, its logo or initials, and the client's first name. Nothing is uploaded or kept; the
+ * Makes share cards (M9, R6.1a and R6.1b) in the coach's brand, on the client's own phone: the coaching
+ * space's colours, its logo or initials, and the client's first name. Nothing is uploaded or kept; the
  * picture lives in the page until the client shares it, saves it, or closes the sheet.
  */
 @Injectable({ providedIn: 'root' })
@@ -63,8 +66,14 @@ export class ShareCardMaker {
     const context = canvas.getContext('2d');
     if (!context) throw new Error('This browser cannot draw the picture.');
 
-    const [mark] = await Promise.all([this.mark(), this.loadFaces(card)]);
-    paintShareCard(context, card, this.look(), mark, this.document.documentElement.dir === 'rtl');
+    const [mark, pictures] = await Promise.all([
+      this.mark(),
+      this.pictures(card),
+      this.loadFaces(card),
+    ]);
+    const rtl = this.document.documentElement.dir === 'rtl';
+    if (pictures) paintBeforeAfterCard(context, card, this.look(), mark, pictures, rtl);
+    else paintShareCard(context, card, this.look(), mark, rtl);
     const blob = await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob(
         (made) => (made ? resolve(made) : reject(new Error('The picture could not be made.'))),
@@ -77,11 +86,27 @@ export class ShareCardMaker {
     };
   }
 
+  /**
+   * A before-and-after's two photos, decoded from their granted addresses on TB Gym's own origin. Either
+   * one failing fails the card: it is never drawn with a photo missing.
+   */
+  private async pictures(
+    card: ShareCard,
+  ): Promise<{ before: SharePicture; after: SharePicture } | null> {
+    if (!card.photos) return null;
+    const [before, after] = await Promise.all([
+      loadPicture(this.document, card.photos.before.imageUrl, PHOTO_WAIT_MS),
+      loadPicture(this.document, card.photos.after.imageUrl, PHOTO_WAIT_MS),
+    ]);
+    return { before, after };
+  }
+
   /** The faces the card's words need, so the picture never falls back to another font by accident. */
   private async loadFaces(card: ShareCard): Promise<void> {
     const faces = this.document.fonts;
     if (!faces?.load) return;
-    const words = [card.kicker, card.title, ...card.facts, card.byline].join(' ');
+    const labels = card.photos ? [card.photos.before.label, card.photos.after.label] : [];
+    const words = [card.kicker, card.title, ...card.facts, card.byline, ...labels].join(' ');
     await within(
       Promise.all([
         faces.load(`italic 400 200px ${SHARE_SERIF}`, card.headline),
@@ -137,18 +162,22 @@ function softInk(ink: string, ground: string): string {
 }
 
 async function loadImage(document: Document, url: string): Promise<ShareMark> {
+  return { kind: 'logo', ...(await loadPicture(document, url, WAIT_MS)) };
+}
+
+async function loadPicture(document: Document, url: string, wait: number): Promise<SharePicture> {
   const image = document.createElement('img');
   image.decoding = 'async';
   image.src = url;
-  await within(image.decode());
-  if (!image.naturalWidth || !image.naturalHeight) throw new Error('The logo has no size.');
-  return { kind: 'logo', image, width: image.naturalWidth, height: image.naturalHeight };
+  await within(image.decode(), wait);
+  if (!image.naturalWidth || !image.naturalHeight) throw new Error('The picture has no size.');
+  return { image, width: image.naturalWidth, height: image.naturalHeight };
 }
 
-function within<T>(work: Promise<T>): Promise<T> {
+function within<T>(work: Promise<T>, wait = WAIT_MS): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('Timed out.')), WAIT_MS);
+    timer = setTimeout(() => reject(new Error('Timed out.')), wait);
   });
   return Promise.race([work, late]).finally(() => clearTimeout(timer));
 }

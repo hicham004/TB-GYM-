@@ -18,6 +18,7 @@ import {
   measurementsView,
   NOW,
   observation,
+  photo,
   photosView,
   progressView,
   weightHistory,
@@ -474,6 +475,32 @@ describe('Your entries', () => {
         'No photos yet',
       );
     });
+
+    it('offers a before and after beside Add photos once a pose has photos on two days', async () => {
+      const { host } = await render({ url: '/progress?tab=photos' });
+      expect(textOf(host.querySelector('[data-pane="photos"] .toolbar [data-before-after]'))).toBe(
+        'Share a before and after',
+      );
+    });
+
+    it('offers no before and after while each pose has one active photo', async () => {
+      const { host } = await render({
+        url: '/progress?tab=photos',
+        api: {
+          photos: vi.fn(() =>
+            of(
+              photosView([
+                photo({ pose: 'Front', photoDate: '2026-10-03' }),
+                photo({ pose: 'Front', photoDate: '2026-09-05', status: 'Removed' }),
+                photo({ pose: 'Side', photoDate: '2026-09-05' }),
+              ]),
+            ),
+          ),
+        },
+      });
+      expect(all(host, 'button.tile')).toHaveLength(2);
+      expect(host.querySelector('[data-before-after]')).toBeNull();
+    });
   });
 
   describe('a coach reading a client’s entries', () => {
@@ -531,6 +558,20 @@ describe('Your entries', () => {
         'client-9',
         expect.objectContaining({ value: 81, unit: 'Kilogram' }),
       );
+    });
+
+    it('offers a coach no before and after: only the client makes one (M9)', async () => {
+      const { fixture, host, entries } = await render({ clientId: 'client-9' });
+      tab(host, 'Photos').click();
+      await settle(fixture);
+
+      expect(entries['photos']).toHaveBeenCalledWith(
+        'client-9',
+        expect.any(String),
+        expect.any(String),
+      );
+      expect(all(host, 'button.tile').length).toBeGreaterThan(0);
+      expect(host.querySelector('[data-before-after]')).toBeNull();
     });
   });
 

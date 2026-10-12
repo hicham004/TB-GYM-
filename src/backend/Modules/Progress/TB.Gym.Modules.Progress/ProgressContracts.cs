@@ -28,6 +28,7 @@ public interface IProgressApplicationService
     Task<ProgressPhotosView?> GetClientPhotosAsync(Guid clientProfileId, DateOnly? from, DateOnly? endExclusive, CancellationToken cancellationToken);
     Task<ProgressPhotoCommandResult> RemoveOwnPhotoAsync(Guid photoId, RemoveProgressPhotoRequest request, CancellationToken cancellationToken);
     Task<ProgressPhotoCommandResult> RemovePhotoForClientAsync(Guid clientProfileId, Guid photoId, RemoveProgressPhotoRequest request, CancellationToken cancellationToken);
+    Task<ProgressPhotoExportCommandResult> ExportOwnPhotosAsync(ExportProgressPhotosRequest request, CancellationToken cancellationToken);
     Task<ProgressDashboardView?> GetOwnDashboardAsync(DateOnly? from, DateOnly? endExclusive, RecordedMassUnit displayUnit, MeasurementUnit measurementDisplayUnit, CancellationToken cancellationToken);
     Task<ProgressDashboardView?> GetClientDashboardAsync(Guid clientProfileId, DateOnly? from, DateOnly? endExclusive, RecordedMassUnit displayUnit, MeasurementUnit measurementDisplayUnit, CancellationToken cancellationToken);
 }
@@ -87,6 +88,31 @@ public enum ProgressPhotoCommandStatus
     /// </summary>
     Unavailable = 7,
 }
+
+/// <summary>
+/// The two photos a client confirmed for a before-and-after (R6.1b, PRG-013): the earlier one first.
+/// </summary>
+public sealed record ExportProgressPhotosRequest(Guid BeforePhotoId, Guid AfterPhotoId);
+
+public sealed record ProgressPhotoExportPhotoView(Guid Id, DateOnly PhotoDate, Guid MediaAssetId);
+
+/// <summary>
+/// What the server recorded of a photo export: who made it is the signed-in client, and this says when
+/// and from which photos. The picture itself is made on the client's device and never reaches the server.
+/// </summary>
+public sealed record ProgressPhotoExportView(
+    Guid Id,
+    ProgressPhotoPose Pose,
+    ProgressPhotoExportPhotoView Before,
+    ProgressPhotoExportPhotoView After,
+    DateTimeOffset ExportedAtUtc);
+
+public sealed record ProgressPhotoExportCommandResult(
+    ProgressCommandStatus Status,
+    ProgressPhotoExportView? Export = null,
+    IReadOnlyDictionary<string, string[]>? Errors = null,
+    string? Code = null,
+    string? Message = null);
 
 public sealed record RecordBodyweightRequest(
     decimal Value,

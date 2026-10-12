@@ -52,7 +52,8 @@ const BYLINE: TextStyle = { size: 36, weight: 600, line: 48, lines: 2 };
 const HEADLINE_LARGEST = 230;
 const HEADLINE_SMALLEST = 96;
 
-interface Layout {
+/** How a card's words fall on the accent card, and how tall that makes it. */
+export interface CardLayout {
   readonly headlineSize: number;
   readonly title: readonly string[];
   readonly facts: readonly string[];
@@ -73,10 +74,22 @@ export function paintShareCard(
   rtl = false,
 ): void {
   paintBackground(context, look);
-  const layout = layOut(context, card);
+  const layout = layOutCard(context, card);
+  paintTiltedCard(context, card, layout, look, mark, rtl, SHARE_IMAGE_HEIGHT / 2 - 40);
+}
 
+/** The accent card with its words, tilted like the prototype's, its middle at `centreY`. */
+export function paintTiltedCard(
+  context: CanvasRenderingContext2D,
+  card: ShareCard,
+  layout: CardLayout,
+  look: ShareLook,
+  mark: ShareMark,
+  rtl: boolean,
+  centreY: number,
+): void {
   context.save();
-  context.translate(SHARE_IMAGE_WIDTH / 2, SHARE_IMAGE_HEIGHT / 2 - 40);
+  context.translate(SHARE_IMAGE_WIDTH / 2, centreY);
   context.rotate(TILT);
   context.translate(-CARD_WIDTH / 2, -layout.height / 2);
 
@@ -127,7 +140,15 @@ export function wrapLines(
   return kept;
 }
 
-function layOut(context: CanvasRenderingContext2D, card: ShareCard): Layout {
+/**
+ * Sets the card's words: the title and byline wrapped, the headline as large as fits, at most
+ * `headlineLargest` pixels.
+ */
+export function layOutCard(
+  context: CanvasRenderingContext2D,
+  card: ShareCard,
+  headlineLargest = HEADLINE_LARGEST,
+): CardLayout {
   context.font = sans(TITLE);
   const title = wrapLines(context, card.title, INNER, TITLE.lines);
   context.font = sans(FACT);
@@ -135,7 +156,7 @@ function layOut(context: CanvasRenderingContext2D, card: ShareCard): Layout {
   context.font = sans(BYLINE);
   const byline = wrapLines(context, card.byline, INNER, BYLINE.lines);
 
-  let headlineSize = HEADLINE_LARGEST;
+  let headlineSize = headlineLargest;
   context.font = serif(headlineSize);
   while (
     headlineSize - 4 >= HEADLINE_SMALLEST &&
@@ -161,7 +182,8 @@ function layOut(context: CanvasRenderingContext2D, card: ShareCard): Layout {
   return { headlineSize, title, facts, byline, height };
 }
 
-function paintBackground(context: CanvasRenderingContext2D, look: ShareLook): void {
+/** The story's ground: the brand, darkening to the night tone at the foot, with two soft glows. */
+export function paintBackground(context: CanvasRenderingContext2D, look: ShareLook): void {
   const fill = context.createLinearGradient(0, 0, 0, SHARE_IMAGE_HEIGHT);
   fill.addColorStop(0, look.brand);
   fill.addColorStop(1, look.night);
@@ -189,7 +211,7 @@ function glow(
 function paintCard(
   context: CanvasRenderingContext2D,
   card: ShareCard,
-  layout: Layout,
+  layout: CardLayout,
   look: ShareLook,
   mark: ShareMark,
   rtl: boolean,
@@ -276,7 +298,7 @@ function paintMark(
   context.restore();
 }
 
-function roundedRect(
+export function roundedRect(
   context: CanvasRenderingContext2D,
   x: number,
   y: number,
@@ -311,7 +333,7 @@ export function directionOf(text: string, rtl: boolean): CanvasDirection {
 }
 
 /** Letter spacing where the browser draws it (Chrome 99, Safari 18); plain text elsewhere. */
-function letterSpacing(context: CanvasRenderingContext2D, value: string): void {
+export function letterSpacing(context: CanvasRenderingContext2D, value: string): void {
   if ('letterSpacing' in context)
     context.letterSpacing = value as CanvasRenderingContext2D['letterSpacing'];
 }

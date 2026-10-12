@@ -1149,6 +1149,19 @@ export class ApiClient {
       .pipe(map(mapProgressPhoto));
   }
 
+  /**
+   * Records a before-and-after the client confirmed (R6.1b, PRG-013), before its picture is made on the
+   * device: who, when and which two photos. 404 for a photo that is not theirs, 409 for a removed one.
+   */
+  exportMyProgressPhotos(
+    request: Phase3Contracts.ExportProgressPhotosRequest,
+  ): Observable<Phase3Contracts.ProgressPhotoExportView> {
+    return this.http.post<Phase3Contracts.ProgressPhotoExportView>(
+      '/api/progress/me/photo-exports',
+      request,
+    );
+  }
+
   removeClientProgressPhoto(
     clientId: string,
     photoId: string,

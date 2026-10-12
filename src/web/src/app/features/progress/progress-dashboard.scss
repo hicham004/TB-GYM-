@@ -224,6 +224,10 @@ app-trend-chart {
   color: var(--tb-muted, #4f6057);
   font-weight: 400;
 }
+.before-after {
+  display: flex;
+  margin-block-start: 1rem;
+}
 .photo-timeline {
   display: flex;
   overflow-x: auto;

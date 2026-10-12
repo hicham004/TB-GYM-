@@ -217,6 +217,26 @@ public static class ProgressEndpoints
             return ToPhotoResult(await service.RemoveOwnPhotoAsync(photoId, request, token));
         }).WithName("RemoveOwnProgressPhoto").Produces<ProgressPhotoView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
 
+        // A before-and-after the client confirmed (R6.1b, PRG-013): recorded before the picture is made on
+        // their device. Only the client makes one, so there is no coach route.
+        client.MapPost("/photo-exports", async (
+            ExportProgressPhotosRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IProgressApplicationService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToExportResult(await service.ExportOwnPhotosAsync(request, token));
+        })
+        .WithName("ExportOwnProgressPhotos")
+        .Produces<ProgressPhotoExportView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status429TooManyRequests)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
+
         client.MapGet("/dashboard", async (
             DateOnly? from,
             DateOnly? to,
@@ -523,6 +543,16 @@ public static class ProgressEndpoints
         ProgressCommandStatus.NotFound => Results.NotFound(),
         ProgressCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),
         ProgressCommandStatus.Conflict => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: result.Message ?? "The body measurement conflicts with current state.", extensions: result.Code is null ? null : new Dictionary<string, object?> { ["code"] = result.Code }),
+        ProgressCommandStatus.Forbidden => Results.Forbid(),
+        _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+    };
+
+    private static IResult ToExportResult(ProgressPhotoExportCommandResult result) => result.Status switch
+    {
+        ProgressCommandStatus.Success => Results.Ok(result.Export),
+        ProgressCommandStatus.NotFound => Results.NotFound(),
+        ProgressCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),
+        ProgressCommandStatus.Conflict => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: result.Message ?? "The photo export conflicts with current state.", extensions: result.Code is null ? null : new Dictionary<string, object?> { ["code"] = result.Code }),
         ProgressCommandStatus.Forbidden => Results.Forbid(),
         _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
     };

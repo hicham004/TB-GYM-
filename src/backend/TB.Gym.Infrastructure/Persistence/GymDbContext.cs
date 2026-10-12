@@ -87,6 +87,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<ProgressPhotoRemoval> ProgressPhotoRemovals => Set<ProgressPhotoRemoval>();
 
+    public DbSet<ProgressPhotoExport> ProgressPhotoExports => Set<ProgressPhotoExport>();
+
     public DbSet<CoachingProduct> CoachingProducts => Set<CoachingProduct>();
 
     public DbSet<ProductOffer> ProductOffers => Set<ProductOffer>();
@@ -860,6 +862,9 @@ public sealed partial class GymDbContext(
             entity.ToTable("ProgressPhotos", "progress");
             entity.HasKey(item => item.Id);
             entity.HasAlternateKey(item => new { item.TenantId, item.Id });
+            // What a photo export points at (PRG-013): the photo with its client and pose, so the database
+            // itself refuses an export of another client's photo or of two poses.
+            entity.HasAlternateKey(item => new { item.TenantId, item.ClientProfileId, item.Pose, item.Id });
             entity.Property(item => item.PhotoDate).HasColumnType("date");
             entity.Property(item => item.Pose).HasConversion<string>().HasMaxLength(16);
             entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(16);
@@ -904,6 +909,38 @@ public sealed partial class GymDbContext(
                 .WithMany()
                 .HasForeignKey(item => new { item.TenantId, item.ProgressPhotoId })
                 .HasPrincipalKey(photo => new { photo.TenantId, photo.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(client => new { client.TenantId, client.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            ConfigureAuditable(entity);
+        });
+
+        // A before-and-after a client made (R6.1b, PRG-013): who, when and which two photos, never the
+        // picture. Both photos are the record's own client's, in its pose (the composite keys); the insert
+        // trigger checks they are active and in order, and the rows are append-only.
+        builder.Entity<ProgressPhotoExport>(entity =>
+        {
+            entity.ToTable("ProgressPhotoExports", "progress", table =>
+                table.HasCheckConstraint(
+                    "CK_ProgressPhotoExports_TwoPhotos",
+                    "\"BeforePhotoId\" <> \"AfterPhotoId\""));
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Pose).HasConversion<string>().HasMaxLength(16);
+            entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.ExportedAtUtc });
+            entity.HasOne<ProgressPhoto>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId, item.Pose, item.BeforePhotoId })
+                .HasPrincipalKey(photo => new { photo.TenantId, photo.ClientProfileId, photo.Pose, photo.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProgressPhoto>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId, item.Pose, item.AfterPhotoId })
+                .HasPrincipalKey(photo => new { photo.TenantId, photo.ClientProfileId, photo.Pose, photo.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ClientProfile>()
                 .WithMany()
@@ -1000,6 +1037,7 @@ public sealed partial class GymDbContext(
         }
 
         RejectAppendOnlyMutations<ProgressPhotoRemoval>("Progress photo removal history is append-only.");
+        RejectAppendOnlyMutations<ProgressPhotoExport>("Progress photo exports are append-only.");
 
         if (ChangeTracker.Entries<ProgressPhoto>().Any(item => item.State == EntityState.Deleted))
         {

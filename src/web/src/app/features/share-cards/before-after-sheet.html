@@ -1,0 +1,199 @@
+<div class="before-after">
+  @switch (step()) {
+    @case ('loading') {
+      <div aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="state" role="alert">
+        <p i18n>Your photos couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @case ('empty') {
+      <div class="state">
+        <h3 class="step-title" tabindex="-1" data-step-heading i18n>
+          Two photos of one pose are needed
+        </h3>
+        <p i18n>
+          A before and after shows the same pose on two days. Add a front, side or back photo on
+          another day, then come back.
+        </p>
+      </div>
+    }
+    @case ('pick') {
+      @if (pair(); as chosen) {
+        <h3 class="step-title" tabindex="-1" data-step-heading i18n>Choose your photos</h3>
+        @if (problem(); as message) {
+          <p class="problem" role="alert">{{ message }}</p>
+        }
+        @if (poseOptions().length > 1) {
+          <app-segmented-control
+            [label]="poseLabel"
+            [options]="poseOptions()"
+            [selected]="current()?.pose ?? ''"
+            (selectedChange)="choosePose($event)"
+          />
+        }
+        <div class="pair">
+          <ng-container
+            [ngTemplateOutlet]="slot"
+            [ngTemplateOutletContext]="{ side: 'before', photo: chosen.before }"
+          />
+          <ng-container
+            [ngTemplateOutlet]="slot"
+            [ngTemplateOutletContext]="{ side: 'after', photo: chosen.after }"
+          />
+        </div>
+        <p class="apart" i18n>{{ apart() }} between them</p>
+        <div class="actions">
+          <button appButton type="button" size="touch" (click)="review()" i18n>
+            Use these photos
+          </button>
+        </div>
+      }
+    }
+    @case ('choose') {
+      @if (pair(); as chosen) {
+        <h3 class="step-title" tabindex="-1" data-step-heading>
+          @if (side() === 'before') {
+            <ng-container i18n>Choose your before photo</ng-container>
+          } @else {
+            <ng-container i18n>Choose your after photo</ng-container>
+          }
+        </h3>
+        <p class="hint">
+          @if (side() === 'before') {
+            <ng-container i18n
+              >It must be earlier than your after photo, {{ day(chosen.after) }}.</ng-container
+            >
+          } @else {
+            <ng-container i18n
+              >It must be later than your before photo, {{ day(chosen.before) }}.</ng-container
+            >
+          }
+        </p>
+        <ul class="grid" role="list">
+          @for (item of grid(); track item.photo.id) {
+            <li>
+              <button
+                class="tile"
+                type="button"
+                [class.chosen]="item.chosen"
+                [attr.aria-pressed]="item.chosen"
+                [disabled]="!item.fits"
+                [attr.data-photo]="item.photo.id"
+                (click)="pick(item.photo)"
+              >
+                <span class="frame">
+                  @if (thumbnail(item.photo); as source) {
+                    <img [src]="source" alt="" width="240" height="320" loading="lazy" />
+                  } @else {
+                    <span class="no-preview" aria-hidden="true" i18n>No preview</span>
+                  }
+                </span>
+                <span class="tile-date">{{ day(item.photo) }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+        <div class="actions">
+          <button
+            appButton
+            type="button"
+            variant="outlined"
+            size="touch"
+            (click)="backToPick()"
+            i18n
+          >
+            Back
+          </button>
+        </div>
+      }
+    }
+    @case ('confirm') {
+      @if (pair(); as chosen) {
+        <h3 class="step-title" tabindex="-1" data-step-heading i18n>Make this before and after?</h3>
+        <ul class="named" role="list">
+          <li>
+            <span class="thumb">
+              @if (thumbnail(chosen.before); as source) {
+                <img [src]="source" alt="" width="240" height="320" />
+              }
+            </span>
+            <span class="named-text"
+              ><strong i18n>Before</strong>&ngsp;<span>{{ named(chosen.before) }}</span></span
+            >
+          </li>
+          <li>
+            <span class="thumb">
+              @if (thumbnail(chosen.after); as source) {
+                <img [src]="source" alt="" width="240" height="320" />
+              }
+            </span>
+            <span class="named-text"
+              ><strong i18n>After</strong>&ngsp;<span>{{ named(chosen.after) }}</span></span
+            >
+          </li>
+        </ul>
+        <p class="apart" i18n>{{ apart() }} between them</p>
+        <p class="note" i18n>
+          The picture is made on this device. <span translate="no">TB Gym</span> keeps a note that
+          you made it, with these two photos and the time, but never the picture. Nothing is posted
+          for you.
+        </p>
+        @if (problem(); as message) {
+          <p class="problem" role="alert">{{ message }}</p>
+        }
+        <div class="actions">
+          <button appButton type="button" size="touch" [loading]="busy()" (click)="make()" i18n>
+            Make the picture
+          </button>
+          <button
+            appButton
+            type="button"
+            variant="outlined"
+            size="touch"
+            [disabled]="busy()"
+            (click)="changePhotos()"
+            i18n
+          >
+            Change photos
+          </button>
+        </div>
+      }
+    }
+    @case ('share') {
+      <h3 class="step-title" tabindex="-1" data-step-heading i18n>Your before and after</h3>
+      <app-share-sheet [facts]="facts()" />
+      <button appButton type="button" variant="text" class="other" (click)="changePhotos()" i18n>
+        Use other photos
+      </button>
+    }
+  }
+</div>
+
+<ng-template #slot let-which="side" let-photo="photo">
+  <button type="button" class="slot" [attr.data-slot]="which" (click)="change(which)">
+    <span class="frame">
+      @if (thumbnail(photo); as source) {
+        <img [src]="source" alt="" width="240" height="320" />
+      } @else {
+        <span class="no-preview" aria-hidden="true" i18n>No preview</span>
+      }
+    </span>
+    <span class="slot-text"
+      ><strong class="slot-label">
+        @if (which === 'before') {
+          <ng-container i18n>Before</ng-container>
+        } @else {
+          <ng-container i18n>After</ng-container>
+        }</strong
+      >&ngsp;<span class="slot-date">{{ day(photo) }}</span></span
+    >
+    <span class="change"
+      ><span class="tb-visually-hidden">, </span><ng-container i18n>Change</ng-container></span
+    >
+  </button>
+</ng-template>

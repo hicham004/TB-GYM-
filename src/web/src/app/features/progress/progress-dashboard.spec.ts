@@ -498,6 +498,52 @@ describe('ProgressDashboardView media grants', () => {
     );
   });
 
+  it('puts the older photo on the before side of the slider and the newer on the after', async () => {
+    // The server sends a pose's previews oldest first (21 then 22 August).
+    const dashboard = mapProgressDashboard(
+      contract({
+        photos: {
+          poses: [
+            {
+              pose: 'Front',
+              photos: [
+                {
+                  id: 'photo-2',
+                  photoDate: '2026-08-21',
+                  pose: 'Front',
+                  mediaAssetId: 'asset-2',
+                  thumbnailUrl: '/api/media/asset-2/content/thumbnail',
+                },
+                {
+                  id: 'photo-1',
+                  photoDate: '2026-08-22',
+                  pose: 'Front',
+                  mediaAssetId: 'asset-1',
+                  thumbnailUrl: '/api/media/asset-1/content/thumbnail',
+                },
+              ],
+            },
+          ],
+          photoCount: '2',
+          missingThumbnailCount: '0',
+          previewPhotoCount: '2',
+        },
+      }),
+    );
+    const { host } = await renderWith(of(dashboard));
+
+    const images = Array.from(host.querySelectorAll<HTMLImageElement>('app-photo-compare img'));
+    expect(images.map((image) => image.getAttribute('src'))).toEqual([
+      '/api/media/asset-2/content/thumbnail',
+      '/api/media/asset-1/content/thumbnail',
+    ]);
+    const dates = host.querySelectorAll('app-photo-compare .control span');
+    expect(Array.from(dates).map((date) => date.textContent)).toEqual([
+      '21 Aug 2026',
+      '22 Aug 2026',
+    ]);
+  });
+
   it('binds only the asset ids present in a partial batch response', async () => {
     const dashboard = twoPreviewDashboard();
     const host = await render(of(dashboard), {
@@ -675,5 +721,71 @@ describe('ProgressDashboardView logging', () => {
     const { host } = await renderWith(answerRead(), {}, { clientId: 'client-9' });
 
     expect(host.querySelector('.log-button')).toBeNull();
+  });
+
+  it('offers the client a before and after once a pose has photos on two days (R6.1b)', async () => {
+    const open = vi.fn(() => ({ close: vi.fn(), closed: new Subject<unknown>() }));
+    const { fixture, host } = await renderWith(
+      of(mapProgressDashboard(contract())),
+      {},
+      { providers: [{ provide: UiSheet, useValue: { open } }] },
+    );
+
+    const share = host.querySelector<HTMLButtonElement>('[data-before-after]');
+    expect(share?.textContent?.trim()).toBe('Share a before and after');
+    share!.click();
+    await settle(fixture);
+    expect((open.mock.calls[0] as unknown as [unknown, { title: string }])[1].title).toBe(
+      'Before and after',
+    );
+  });
+
+  it('offers no before and after with one photo of a pose, nor to a coach', async () => {
+    const single = await render(
+      of(
+        mapProgressDashboard(
+          contract({
+            photos: {
+              poses: [
+                {
+                  pose: 'Front',
+                  photos: [
+                    {
+                      id: 'photo-1',
+                      photoDate: '2026-08-22',
+                      pose: 'Front',
+                      mediaAssetId: 'asset-1',
+                      thumbnailUrl: null,
+                    },
+                  ],
+                },
+              ],
+              photoCount: '1',
+              missingThumbnailCount: '1',
+              previewPhotoCount: '1',
+            },
+          }),
+        ),
+      ),
+    );
+    expect(single.querySelector('[data-before-after]')).toBeNull();
+    TestBed.resetTestingModule();
+
+    // Only the client makes one (M9); a coach reading the same photos is offered nothing.
+    const { host } = await renderWith(
+      of(mapProgressDashboard(contract())),
+      {
+        getClientProgressDashboard: vi.fn(() => of(mapProgressDashboard(contract()))) as never,
+        getClientProgress: vi.fn(() =>
+          of({ days: [], weeks: [], displayUnit: 'Kilogram' } as never),
+        ) as never,
+        getClientTrainingPersonalRecords: vi.fn(() =>
+          of({ isAllowed: false, accessReason: 'Expired', items: [] } as never),
+        ) as never,
+      },
+      { clientId: 'client-9' },
+    );
+    expect(host.querySelectorAll('.photo-tile')).toHaveLength(2);
+    expect(host.querySelector('[data-before-after]')).toBeNull();
   });
 });

@@ -31,6 +31,8 @@ import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import { UiTabPane, UiTabs } from '../../ui/tabs';
+import { BeforeAfterButton } from '../share-cards/before-after-button';
+import { posesToCompare } from '../share-cards/before-after.models';
 import { EntrySheets, type EntryKind } from './entry-sheets';
 import { ProgressEntriesApi } from './progress-entries-api';
 import {
@@ -80,6 +82,7 @@ const GIRTH_UNITS: readonly SegmentOption[] = [
 @Component({
   selector: 'app-progress-entries',
   imports: [
+    BeforeAfterButton,
     Button,
     EmptyState,
     EntrySheets,
@@ -214,6 +217,10 @@ export class ProgressEntries {
   private readonly thumbnails = signal<ReadonlyMap<string, string>>(new Map());
   protected readonly photoLists = computed(() =>
     photoLists(this.photoWindows().flat(), this.audience()),
+  );
+  /** The client's own photos of one pose on two days can make a before-and-after (R6.1b). */
+  protected readonly canMakeBeforeAfter = computed(
+    () => !this.coachMode() && posesToCompare(this.photoWindows().flat()).length > 0,
   );
 
   constructor() {

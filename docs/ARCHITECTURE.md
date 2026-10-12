@@ -171,6 +171,12 @@ Progress photos (5B-2) and their thumbnails (5B-3) reuse the Media pipeline with
 assembly referencing Media; the combined dashboard (5B-4) is a read-side projection in
 Infrastructure that owns no tables. See ADRs 0011-0013.
 
+A client's before-and-after (R6.1b) is recorded in the Progress module's append-only
+`ProgressPhotoExports` before its picture is drawn on the device: who, when and which two photos,
+never the picture. Composite foreign keys to `(TenantId, ClientProfileId, Pose, Id)` keep both photos
+the record's own client's and pose, and an insert trigger locks both and refuses a removed one or the
+wrong order. See PRG-013.
+
 An uploaded image is bounded by its decoded dimensions, not by its compressed size: a few kilobytes
 of PNG or JPEG can describe a bitmap of gigabytes, so the codec header is checked against
 `MediaUploadPolicy.TryValidateDecodedImage` — 8 000 px per edge, 30 megapixels, approximately 120 MB

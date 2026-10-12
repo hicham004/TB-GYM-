@@ -8100,6 +8100,71 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("ProgressPhotos", "progress");
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Progress.ProgressPhotoExport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AfterPhotoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BeforePhotoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ExportedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ExportedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Pose")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ClientProfileId", "ExportedAtUtc");
+
+                    b.HasIndex("TenantId", "ClientProfileId", "Pose", "AfterPhotoId");
+
+                    b.HasIndex("TenantId", "ClientProfileId", "Pose", "BeforePhotoId");
+
+                    b.ToTable("ProgressPhotoExports", "progress", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProgressPhotoExports_TwoPhotos", "\"BeforePhotoId\" <> \"AfterPhotoId\"");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Progress.ProgressPhotoRemoval", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12778,6 +12843,31 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Progress.ProgressPhotoExport", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Progress.ProgressPhoto", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId", "Pose", "AfterPhotoId")
+                        .HasPrincipalKey("TenantId", "ClientProfileId", "Pose", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Progress.ProgressPhoto", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId", "Pose", "BeforePhotoId")
+                        .HasPrincipalKey("TenantId", "ClientProfileId", "Pose", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProgressPhotoExports_ProgressPhotos_TenantId_ClientProfile~1");
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Progress.ProgressPhotoRemoval", b =>

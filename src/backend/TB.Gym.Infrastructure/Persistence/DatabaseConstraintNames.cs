@@ -75,6 +75,13 @@ internal static class DatabaseConstraintNames
         "IX_ProgressPhotos_TenantId_ClientProfileId_PhotoDate_Pose";
 
     /// <summary>
+    /// A photo export names two active photos, the earlier one first (PRG-013). Raised by the insert
+    /// trigger, which locks both photos, so an export that loses a race with a removal is told so.
+    /// </summary>
+    public const string ProgressPhotoExportNamesActivePhotos =
+        "CK_ProgressPhotoExports_ActivePhotos";
+
+    /// <summary>
     /// One in-app notification per outbox intent. The dispatcher reads this name to recognise a
     /// replay it lost the race for, rather than parsing a PostgreSQL message.
     /// </summary>

@@ -1788,6 +1788,11 @@ export type ExerciseView = {
 
 export type ExertionDisplayPreference = 'Rpe' | 'Rir';
 
+export type ExportProgressPhotosRequest = {
+  beforePhotoId: string;
+  afterPhotoId: string;
+};
+
 export type ExternalMediaProvider = 'YouTube' | 'Vimeo';
 
 export type FeatureAccessDecision = {
@@ -2801,6 +2806,20 @@ export type ProgressionPreviewView = {
   isInsideTrainingCoverage: boolean;
   coverageMessage: null | string;
   generatedWeeks: Array<TrainingWeekView>;
+};
+
+export type ProgressPhotoExportPhotoView = {
+  id: string;
+  photoDate: string;
+  mediaAssetId: string;
+};
+
+export type ProgressPhotoExportView = {
+  id: string;
+  pose: ProgressPhotoPose;
+  before: ProgressPhotoExportPhotoView;
+  after: ProgressPhotoExportPhotoView;
+  exportedAtUtc: string;
 };
 
 export type ProgressPhotoPose = 'Front' | 'Side' | 'Back';
@@ -9146,6 +9165,45 @@ export type RemoveOwnProgressPhotoResponses = {
 
 export type RemoveOwnProgressPhotoResponse =
   RemoveOwnProgressPhotoResponses[keyof RemoveOwnProgressPhotoResponses];
+
+export type ExportOwnProgressPhotosData = {
+  body: ExportProgressPhotosRequest;
+  path?: never;
+  query?: never;
+  url: '/api/progress/me/photo-exports';
+};
+
+export type ExportOwnProgressPhotosErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+  /**
+   * Too Many Requests
+   */
+  429: unknown;
+};
+
+export type ExportOwnProgressPhotosError =
+  ExportOwnProgressPhotosErrors[keyof ExportOwnProgressPhotosErrors];
+
+export type ExportOwnProgressPhotosResponses = {
+  /**
+   * OK
+   */
+  200: ProgressPhotoExportView;
+};
+
+export type ExportOwnProgressPhotosResponse =
+  ExportOwnProgressPhotosResponses[keyof ExportOwnProgressPhotosResponses];
 
 export type GetOwnProgressDashboardData = {
   body?: never;

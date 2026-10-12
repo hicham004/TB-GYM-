@@ -72,7 +72,8 @@ profile.
 
 **CLI-008** Allergies, medications, injury history, photos, and body measurements are
 sensitive personal or health-adjacent data. Access is least privilege, exports and deletion
-are auditable, retention is defined, and logs/analytics must not contain raw values.
+are auditable, retention is defined, and logs/analytics must not contain raw values. A client's
+before-and-after picture is such an export, recorded without the picture (PRG-013).
 
 **CLI-009** Coach block and platform block are separate facts with actor, reason, effective
 time, and optional reversal. The client cannot change either fact.
@@ -1677,6 +1678,23 @@ conflict, whether they arrive one after the other or together.
 Measurement/photo history reads also expose the nearest earlier date under the same client and photo
 visibility predicates; empty windows never prove that older history is absent. Entry windows remain
 bounded and half-open.
+
+**PRG-013** A client's before-and-after is a recorded photo export (R6.1b, M9; exports are auditable,
+CLI-008). Only the client makes one, from two of their own active progress photos of one pose, the
+earlier first: chosen afresh each time (the pose's first and latest to begin with) and named with their
+dates in a confirmation before anything is made. Confirming records the export before the picture is
+made on the client's device, in the append-only `ProgressPhotoExports`: who (the signed-in user), when
+(the server's clock), the pose and the two photos, and never the picture, which TB Gym neither uploads
+nor keeps. Every picture made is its own record; a retry of one that failed on the device is not. The
+database keeps both photos the record's own client's and pose (composite foreign keys), and at insert
+locks both and refuses one that is not active or out of order, so an export that races a removal is
+refused. A removed photo, which its owner still sees, answers 409 `ProgressPhotoRemoved`; another
+client's or workspace's photo answers 404 and nothing is recorded; a former client is refused at the
+workspace (ADR 0027), and a returning one reaches only the new profile's photos (`CurrentFor`). Like the
+photos, an export does not depend on the plan, and a coach's block does not take it away (PRG-008).
+The picture shows each photo whole (never cropped, covered or retouched), labelled Before and After,
+the time between them in whole units never rounded up, and the day each was taken (decided 2026-10-12;
+the evidence is in the UI plan's follow-ups).
 
 **MED-009** A storage allowance counts the original and every derivative, counts tombstoned bytes
 that are not yet purged because they are still physically stored, and excludes purged bytes. Uploads

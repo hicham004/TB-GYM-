@@ -1,0 +1,235 @@
+:host {
+  display: block;
+}
+
+.before-after {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.step-title {
+  font-size: var(--text-section-title-size);
+  line-height: var(--text-section-title-line-height);
+  margin: 0;
+  text-wrap: balance;
+}
+
+.step-title:focus {
+  outline: none;
+}
+
+.step-title:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.state {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+
+  p {
+    color: var(--tb-muted);
+    margin: 0;
+  }
+}
+
+// The two photos side by side, each a big target that says which side it is and when it was taken.
+// On a wide screen they stop growing, so Use these photos stays in view under them.
+.pair {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 16rem));
+  justify-content: center;
+}
+
+.slot,
+.tile {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  color: var(--tb-ink);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 0.5rem;
+  inline-size: 100%;
+  padding: 0.5rem;
+  text-align: start;
+}
+
+.slot:hover,
+.tile:hover:not(:disabled) {
+  border-color: var(--tb-ink);
+}
+
+.slot:focus-visible,
+.tile:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.frame {
+  aspect-ratio: 3 / 4;
+  background: var(--tb-surface-2);
+  border-radius: var(--tb-radius-control);
+  display: block;
+  overflow: hidden;
+  position: relative;
+
+  img {
+    block-size: 100%;
+    display: block;
+    inline-size: 100%;
+    object-fit: cover;
+  }
+}
+
+.no-preview {
+  align-items: center;
+  color: var(--tb-muted);
+  display: flex;
+  font-size: 0.8125rem;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+
+.slot-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding-inline: 0.25rem;
+}
+
+.slot-label {
+  font-weight: 700;
+}
+
+.slot-date,
+.tile-date {
+  color: var(--tb-muted);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+}
+
+.change {
+  color: var(--tb-accent-ink);
+  font-weight: 600;
+  padding-inline: 0.25rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.apart {
+  font-family: var(--tb-font-serif);
+  font-size: 1.5rem;
+  font-style: italic;
+  line-height: 1.2;
+  margin: 0;
+  text-align: center;
+}
+
+.hint {
+  color: var(--tb-muted);
+  margin: 0;
+}
+
+// A year of weekly photos is fifty tiles or more: those out of view are laid out when reached.
+.grid li {
+  contain-intrinsic-size: auto 11rem;
+  content-visibility: auto;
+}
+
+.grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tile {
+  gap: 0.375rem;
+  padding: 0.375rem;
+}
+
+.tile.chosen {
+  border-color: var(--tb-accent-ink);
+  box-shadow: 0 0 0 2px var(--tb-accent-ink);
+}
+
+.tile:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.named {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  li {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+  }
+}
+
+.thumb {
+  aspect-ratio: 3 / 4;
+  background: var(--tb-surface-2);
+  border-radius: var(--tb-radius-control);
+  flex: none;
+  inline-size: 3.5rem;
+  overflow: hidden;
+
+  img {
+    block-size: 100%;
+    display: block;
+    inline-size: 100%;
+    object-fit: cover;
+  }
+}
+
+.named-text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--tb-muted);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  margin: 0;
+}
+
+.problem {
+  background: var(--tb-danger-soft);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-danger);
+  font-weight: 600;
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+
+  button {
+    flex: 1 1 10rem;
+  }
+}
+
+.other {
+  align-self: center;
+}

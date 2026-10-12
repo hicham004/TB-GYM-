@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { personalRecord, programSummary } from '../../../testing/share-card-fixtures';
+import {
+  personalRecord,
+  programSummary,
+  progressPhotos,
+} from '../../../testing/share-card-fixtures';
 import {
   bylineOf,
+  dateRange,
   firstNameOf,
+  photosCard,
   programCard,
   recordCard,
   shareCards,
+  timeBetween,
   type ShareIdentity,
 } from './share-card.models';
 
@@ -108,6 +115,60 @@ describe('share card words', () => {
     ).toBe('developpe-couche-personal-record.png');
     expect(recordCard(personalRecord({ exerciseName: 'سكوات' }), maya, 'en-LB').fileName).toBe(
       'record-personal-record.png',
+    );
+  });
+});
+
+describe('before-and-after words (R6.1b)', () => {
+  it('tells two photos by the time between them and their dates, and names the picture after the pose', () => {
+    const card = photosCard(progressPhotos(), maya, 'en-LB');
+    expect(card).toMatchObject({
+      id: 'photos-export-1',
+      kind: 'photos',
+      choice: 'Before and after',
+      kicker: 'Before and after',
+      headline: '4 weeks',
+      title: '',
+      facts: ['Before: 5 September 2026', 'After: 3 October 2026'],
+      byline: 'Maya · coached by Atlas Performance',
+      fileName: 'front-before-and-after.png',
+      photos: {
+        before: { label: 'Before', imageUrl: '/api/media/asset-Front-2026-09-05/content' },
+        after: { label: 'After', imageUrl: '/api/media/asset-Front-2026-10-03/content' },
+      },
+    });
+    expect(card.description).toBe(
+      'Before and after. Front photos from 5 September to 3 October 2026, 4 weeks apart. ' +
+        'Maya · coached by Atlas Performance',
+    );
+    expect(shareCards([{ kind: 'photos', photos: progressPhotos() }], maya, 'en-LB')).toEqual([
+      card,
+    ]);
+  });
+
+  it('counts whole days, weeks, months and years and never rounds up', () => {
+    expect(timeBetween('2026-10-02', '2026-10-03')).toBe('1 day');
+    expect(timeBetween('2026-09-20', '2026-10-03')).toBe('13 days');
+    expect(timeBetween('2026-09-19', '2026-10-03')).toBe('2 weeks');
+    expect(timeBetween('2026-08-08', '2026-10-03')).toBe('8 weeks');
+    // Just short of four months is still weeks; four whole months is months.
+    expect(timeBetween('2026-06-04', '2026-10-03')).toBe('17 weeks');
+    expect(timeBetween('2026-06-03', '2026-10-03')).toBe('4 months');
+    expect(timeBetween('2025-10-04', '2026-10-03')).toBe('11 months');
+    expect(timeBetween('2024-10-04', '2026-10-03')).toBe('23 months');
+    expect(timeBetween('2024-10-03', '2026-10-03')).toBe('2 years');
+    // A clock change between the dates moves nothing: dates are days, not instants.
+    expect(timeBetween('2026-10-20', '2026-11-03')).toBe('2 weeks');
+  });
+
+  it('says the year once when both photos share it', () => {
+    expect(dateRange('2026-09-05', '2026-10-03', 'en-LB')).toBe('5 September to 3 October 2026');
+    expect(dateRange('2025-12-28', '2026-03-01', 'en-LB')).toBe('28 December 2025 to 1 March 2026');
+  });
+
+  it('names the picture after a side or back pose too', () => {
+    expect(photosCard(progressPhotos({ pose: 'Back' }), maya, 'en-LB').fileName).toBe(
+      'back-before-and-after.png',
     );
   });
 });

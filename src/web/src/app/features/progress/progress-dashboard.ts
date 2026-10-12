@@ -20,12 +20,14 @@ import { addDays, deviceToday } from '../../ui/calendar';
 import { TrendChart } from '../../ui/trend-chart';
 import { BarChart } from '../../ui/bar-chart';
 import { PhotoCompare } from '../../ui/photo-compare';
+import { BeforeAfterButton } from '../share-cards/before-after-button';
 import { EntrySheets } from './entry-sheets';
 import { weighInRows, type Audience } from './progress-entries.models';
 
 @Component({
   selector: 'app-progress-dashboard',
   imports: [
+    BeforeAfterButton,
     Button,
     DatePipe,
     DecimalPipe,
@@ -98,10 +100,17 @@ export class ProgressDashboardView {
       const photos = pose.photos.filter(
         (photo) => photo.thumbnailUrl && granted.has(photo.mediaAssetId),
       );
-      if (photos.length >= 2) return { before: photos.at(-1)!, after: photos[0] };
+      // The server sends a pose's previews oldest first: the first is the before.
+      if (photos.length >= 2) return { before: photos[0], after: photos.at(-1)! };
     }
     return null;
   });
+  /** A client with photos of one pose on two days can share a before-and-after of them (R6.1b). */
+  protected readonly canMakeBeforeAfter = computed(
+    () =>
+      !this.coachMode() &&
+      (this.dashboard()?.photos.poses ?? []).some((pose) => pose.photos.length >= 2),
+  );
   protected readonly trainingBars = computed(() => {
     const training = this.dashboard()?.training.context;
     return training

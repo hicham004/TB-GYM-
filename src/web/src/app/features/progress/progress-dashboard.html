@@ -189,6 +189,11 @@
         } @else {
           <p class="empty" i18n>Log photos over time to compare them here.</p>
         }
+        @if (canMakeBeforeAfter()) {
+          <div class="before-after">
+            <app-before-after-button />
+          </div>
+        }
         @if (view.photos.photoCount > 0) {
           <div class="photo-timeline">
             @for (pose of view.photos.poses; track pose.pose) {

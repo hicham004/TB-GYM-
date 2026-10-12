@@ -109,7 +109,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R5.4b | **One client, one mode, and honest failures** (review doc, "Slice 2"): client Today, Training and Check-ins marked `REDESIGNED` after a dark pass, a "This client isn't here" state for a 404, and a toast with Retry when a page fails to load | §2, plus the theme e2e for the three client routes and Vitest for the 404 state and the toast | Done · 2026-10-11 · b538386 |
 | R5.4c | **Sheet hosts on one base, and the small fixes** (review doc, "Slice 3"): Products, Service & access, Intake and Your entries on `GuardedSheets`; week-notice links read in two queries; the Strength history card reloads after Update maxes; suggested maxes in plate steps; the calories step, two wording fixes and the inbox line | §2, plus the folded hosts' specs green unchanged, one backend command-count test, and Vitest for the rounding and the wording | Done · 2026-10-11 · 6dc3088 |
 | R6.1a | **Share cards, records and programs** (M9; the owner opened R6 on 2026-10-11): a client turns a new personal record (from the workout's finish summary, by the server's record rule) or a finished program into an image in the coach's brand, sees it first, then shares it through the phone's share sheet or saves it. The client taps every time; the image is made on the phone, and TB Gym uploads, stores and posts nothing | §2, plus Vitest (the card from the record and program facts, the preview, share and save) and API tests for any new read (other tenant, other client, released client) | Done · 2026-10-12 · 0b25dbb |
-| R6.1b | **Share cards, before and after** (M9, CLI-008): a client picks two of their own progress photos of one pose and makes a before-and-after image in the coach's brand. Each time, a confirmation names the photos and their dates before anything is made, and nothing is remembered. The server records every photo export (who, when, which photos; never the image), because photo exports are auditable (CLI-008); a removed photo cannot be used | §2, plus API tests (own photos only, another client, another tenant, a removed photo, a released client, the record append-only) and Vitest (the picker, the confirmation, the card) | Open |
+| R6.1b | **Share cards, before and after** (M9, CLI-008): a client picks two of their own progress photos of one pose and makes a before-and-after image in the coach's brand. Each time, a confirmation names the photos and their dates before anything is made, and nothing is remembered. The server records every photo export (who, when, which photos; never the image), because photo exports are auditable (CLI-008); a removed photo cannot be used | §2, plus API tests (own photos only, another client, another tenant, a removed photo, a released client, the record append-only) and Vitest (the picker, the confirmation, the card) | Done · 2026-10-12 |
 | R6.2a | **Homepage pre-render** (website): the homepage is built as finished HTML at build time, so Google and link previews read it. Every other route keeps the app shell, so a deep link never shows the homepage first (nginx falls back to the client-only page). Browser-only code waits for the browser, and the homepage's words, offers and prices stay as they are. A new package is explained and documented as `AGENTS.md` asks | §2, plus a check that the built homepage holds its headline and meta tags, Playwright for a deep link and the homepage, and the nginx architecture test kept green | Open |
 | R6.2b | **The homepage, one of one** (website; the owner, 2026-10-11: "something extraordinary, something I have never seen"): research first, then rebuild. Study at least 15 of the best homepages in and beyond fitness (award winners, the best product sites, coaching and training apps, the competitors) and write one page, `docs/design/homepage-research.md`, with links: what each does best, what TB Gym can own that none of them has, three concepts and the one chosen. Then build it as the real homepage with a GSAP scroll story at its heart, from the app's real screens on the Atlas demo (no AI-made people; only licensed images and fonts), and polish at least twice by setting its screenshots beside the references. Everything may change except money terms (prices, offers, the trial) and legal statements, which stay as they are. The hero works without the video R6.2c adds later. Install the tools you need: packages (each explained and documented as `AGENTS.md` asks), browsers and connectors (at user scope, not in the repo; a connector that needs a sign-in, such as Figma, cannot be used unattended) | §2, plus the research page, Lighthouse on a phone (performance 90 or more, accessibility 100, best practices and SEO 95 or more), reduced motion and keyboard paths, the pre-render kept, Vitest for the motion set-up and clean-up, and Playwright at 390 and 1440 px | Open |
 | R6.2c | **Homepage hero video**: the owner makes the loop in Jitter (MP4 and WebM, with a poster frame); then a chat puts it in the hero, loaded late, with the poster for reduced motion | §2 | Optional · for later (owner, 2026-10-11): waits for the owner's video |
@@ -289,6 +289,8 @@ of the implemented R1.3 screens before production rollout.
   standalone empty heading are the only new start-up behavior. The 520 kB target remains a follow-up.
   R6.1a measures 544.39 kB, +0.06 kB on 0580f99's 544.33 kB. The share cards load with Training and the
   player; only the API client's new read and the kit's `mode` option are in the start-up files.
+  R6.1b measures 544.48 kB (+0.09 kB): the API client's one new write; the before-and-after sheet and its
+  painter load with the Progress pages. `progress-dashboard.scss` is 5.36 kB against its 5 kB warning.
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -386,10 +388,10 @@ of the implemented R1.3 screens before production rollout.
     a conversation belongs to one coach and one client.
   - Comparing more than two check-ins, or one question over time, stays deferred (roadmap 6A), and
     would need a decision about what a series of answers may imply (CHK-012).
-- **Progress photo compare order (seen in R4.3).** On Progress the slider's "before" side shows the
-  newest photo and "after" the oldest: the dashboard sends its previews oldest first and
-  `progress-dashboard.ts` takes them the other way round. The labels carry the right dates, so nothing
-  is misreported, but the sides are swapped. A one-line fix in that file.
+- **Progress photo compare order (seen in R4.3; fixed in R6.1b, 2026-10-12).** On Progress the slider's
+  "before" side showed the newest photo and "after" the oldest: the dashboard sends its previews oldest
+  first and `progress-dashboard.ts` took them the other way round. Fixed in R6.1b, whose Share a before and
+  after sits under that slider: the older photo is now the before, as the new sheet has it.
 - **Progression when duplicating a week (decided 2026-10-05).** The owner approved it: steps P1 to P4
   above and ADR 0036. The first built is the builder's "Duplicate with progression" (P1). Left for
   later from P1: the weeks a coach adds are plain numbers, so weights from a max are worked out when
@@ -958,6 +960,36 @@ of the implemented R1.3 screens before production rollout.
   - (g) `R25bHistoryListsFinishedWorkoutsNewestFirstWithTheRecordsEachSet` fails like R34a's when a run
     starts in the hour after midnight in Beirut before 25 Oct: whole-day steps across the clock change
     land a day short. R6.1a's tests start their clock at midday instead.
+- **Share cards, before and after, R6.1b (built 2026-10-12; screenshots `docs/design/r61b-*.png`).
+  Decided by Claude for the owner on 2026-10-12**, after looking at four things. FitSW, the one coaching
+  tool found that makes a before-and-after image, puts the two photos side by side in one picture with each
+  one's date, and asks the trainer to check the client is happy before posting. Trainerize compares paired
+  photos side by side and once offered posting a pair to Facebook; Everfit compares two photos side by side
+  but shares none. The UK advertising rules' advice on before-and-after pictures (CAP, June 2025) asks that
+  they be genuine, unaltered and backed by dated proof, and the ASA's body-wrap ruling turned on photos that
+  could not prove the eight weeks claimed between them; a client's card markets their coach, so it should
+  pass that test. The decisions: (1) **side by side, the earlier first** (on the right of a right-to-left
+  page), in frames of one size; (2) **each photo whole and as taken**: never cropped, covered by the card or
+  retouched, so a photo of another shape keeps its shape inside the frame; (3) **the dates of both photos and
+  the time between them, in whole units never rounded up** (days under two weeks, weeks under four months,
+  months under two years, then years), and nothing else about the body: no weight or measurements, which the
+  confirmation does not name; (4) **the export is recorded when the client confirms, before the picture is
+  made**, and no picture is made if it is not: the preview can be saved from the page, so making the picture
+  is the export (CLI-008); (5) **the pose's first photo and its latest to begin with**, chosen afresh each
+  time and never remembered; (6) **a coach's block does not stop it** (the client's progress stays theirs,
+  PRG-008), while a former client cannot (ADR 0027). Also fixed on the same panel: the Progress slider showed
+  the newest photo as its before (the R4.3 follow-up above). Checked live on a fresh Atlas demo with drawn
+  stand-in photos uploaded as Maya through the API: the whole flow at 390 px light and 1440 px dark, the
+  export recorded before the full pictures were asked for, a photo removed from another tab while the
+  confirmation showed it (refused, photos read again), 200% text, axe clean on every step, and a coach
+  offered nothing. Not built:
+  - (a) a read of past exports, for the client or as an audit page for the owner or the platform admin; the
+    records are in the database only;
+  - (b) a before-and-after made by the coach, or sent to the coach (M9: only the client makes one);
+  - (c) square and feed sizes, and more than two photos (front, side and back in one picture);
+  - (d) the demo still has no progress photos (R0.1's follow-up stands); a live pass uploads drawn stand-ins;
+  - (e) Your entries offers the button when the year it has read holds a pose on two days; the sheet itself
+    reads every year, so an older pair alone shows the button only after Show earlier photos.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1763,6 +1795,18 @@ limited to the coach's assigned clients.
   it." Over the player the sheet is dark; on Training it follows the person's mode. A record's card says
   the load in the unit lifted, never converted. A program's card gives its weeks, the workouts finished in
   it and the records they set, read from the server (TRN-030).
+- Built in R6.1b (before and after): Share a before and after sits under Progress's photos and beside Add
+  photos on Your entries, for the client only, once a pose has photos on two days. Its sheet reads every
+  year of the client's photos and starts at the pose's first photo and its latest (a choice of pose when
+  several qualify); each side is changed from the pose's photos, the before always earlier than the
+  after. Use these photos shows the confirmation: both photos named with their dates, the time between
+  them, and "The picture is made on this device. TB Gym keeps a note that you made it, with these two
+  photos and the time, but never the picture. Nothing is posted for you." Make the picture records the
+  export on the server first (PRG-013), then the two photos are read at full size and the picture is made:
+  the two photos whole side by side, labelled Before and After, over the tilted accent card with the time
+  between them, each photo's date and "coached by" the space, in the R6.1a share sheet (Share, Save image).
+  A photo removed meanwhile is refused and the photos are read again to choose from; nothing is remembered,
+  and every picture made is its own record.
 
 ### Signed-out and website
 - These are already the strongest part.
