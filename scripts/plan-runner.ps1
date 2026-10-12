@@ -9,6 +9,12 @@ model for its row (the owner put R6.2 on Fable on 2026-10-11). It gets the owner
 $stepPrompt below. The owner decided on 2026-10-11 that such a chat commits its own step
 once every check AGENTS.md asks for is green. It never pushes: a deny rule blocks git push.
 
+A chat that hits a usage limit is resumed where it stopped. A five-hour limit is waited out
+on the same model. A weekly limit (one resetting more than 12 hours away, the account's or one
+model's) moves the chat to -FallbackModel at once, and later rows stay on it until that limit
+resets (the owner, 2026-10-12: Fable first, then Opus 5.5). Claude Code's --fallback-model does
+the same for a model that is overloaded or unavailable.
+
 A step starts only when no tracked file is changed, no chat in this folder has written
 for -IdleMinutes, and the next row is Open (not a gate, Optional, Built or Blocked).
 The runner stops after -MaxSteps, at the first step that does not end clean with its
@@ -28,6 +34,9 @@ param(
     [int]$MaxLimitWaits = 12,
     # Row id pattern (-like) to model; a row matching none runs on $model below.
     [hashtable]$RowModels = @{ 'R6.2*' = 'claude-fable-5-1' },
+    # After a weekly limit the chat carries on with this model, and so do later rows until that
+    # limit resets (the owner, 2026-10-12). An empty string stops the runner instead.
+    [string]$FallbackModel = 'claude-opus-5-5',
     [switch]$WaitForIdle,
     [switch]$DryRun,
     [switch]$SelfTest,
@@ -45,6 +54,8 @@ $lockFile = Join-Path $logDir 'runner.lock'
 $summaryPath = Join-Path $logDir 'summary.md'
 $model = 'claude-opus-5-5'
 $effort = 'max'
+# Models whose weekly limit is used up, with when to try them again; their rows run on $FallbackModel.
+$script:exhaustedUntil = @{}
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $gateSign = [char]::ConvertFromUtf32(0x1F6A6)
 [IO.Directory]::CreateDirectory($logDir) | Out-Null
@@ -99,16 +110,22 @@ function Write-Note([string]$Message) {
 }
 
 function Get-RowModel([string]$RowId) {
+    $chosen = $model
     foreach ($pattern in @($RowModels.Keys | Sort-Object)) {
-        if ($RowId -like $pattern) { return [string]$RowModels[$pattern] }
+        if ($RowId -like $pattern) { $chosen = [string]$RowModels[$pattern]; break }
     }
-    return $model
+    if ($FallbackModel -and $script:exhaustedUntil.ContainsKey($chosen) -and (Get-Date) -lt $script:exhaustedUntil[$chosen]) {
+        return $FallbackModel
+    }
+    return $chosen
 }
 
 function Get-RowModelText {
     $pairs = @($RowModels.Keys | Sort-Object | ForEach-Object { '{0} on {1}' -f $_, $RowModels[$_] })
-    if ($pairs.Count -eq 0) { return ('every row on {0}' -f $model) }
-    return ('{0}; every other row on {1}' -f ($pairs -join ', '), $model)
+    $text = 'every row on {0}' -f $model
+    if ($pairs.Count -gt 0) { $text = '{0}; every other row on {1}' -f ($pairs -join ', '), $model }
+    if ($FallbackModel) { $text += '; after a weekly limit, {0}' -f $FallbackModel }
+    return $text
 }
 
 function Get-ShortText([string]$Text, [int]$Length) {
@@ -286,7 +303,8 @@ function Read-ChatEvent([string]$Line, $Run) {
         $Run.SessionId = Get-Field $chatEvent 'session_id'
         $Run.Model = Get-Field $chatEvent 'model'
         Write-Note ('Chat {0} started on {1}.' -f $Run.SessionId, $Run.Model)
-        if ("$($Run.Model)" -notlike "$($Run.Expected)*") { $Run.Stopped = ('it started on {0}, not {1}' -f $Run.Model, $Run.Expected) }
+        $onFallback = $Run.Fallback -and "$($Run.Model)" -like "$($Run.Fallback)*"
+        if ("$($Run.Model)" -notlike "$($Run.Expected)*" -and -not $onFallback) { $Run.Stopped = ('it started on {0}, not {1}' -f $Run.Model, $Run.Expected) }
     }
     elseif ($type -eq 'result') {
         $Run.Result = $chatEvent
@@ -316,6 +334,11 @@ function Invoke-Chat {
         '--permission-mode', 'bypassPermissions', '--permission-prompts', 'none',
         '--output-format', 'stream-json', '--verbose', '--name', ('"{0}"' -f $Name))
     if ($ResumeId) { $argList += @('--resume', $ResumeId) }
+    $fallback = ''
+    if ($FallbackModel -and $FallbackModel -ne $ChatModel) {
+        $fallback = $FallbackModel
+        $argList += @('--fallback-model', $FallbackModel)
+    }
     $argList += $ExtraArgs
     # Deny rules hold even in bypassPermissions. The list takes every value up to the end.
     $argList += '--disallowedTools'
@@ -335,7 +358,7 @@ function Invoke-Chat {
     $startInfo.EnvironmentVariables['CLAUDE_CODE_EFFORT_LEVEL'] = $effort
     $startInfo.EnvironmentVariables['CLAUDE_CODE_SUBAGENT_MODEL'] = $ChatModel
 
-    $run = [pscustomobject]@{ SessionId = $ResumeId; Expected = $ChatModel; Model = $null; Init = $null; Result = $null; RateLimit = $null; ExitCode = $null; Stopped = $null }
+    $run = [pscustomobject]@{ SessionId = $ResumeId; Expected = $ChatModel; Fallback = $fallback; Model = $null; Init = $null; Result = $null; RateLimit = $null; ExitCode = $null; Stopped = $null }
     $log = New-Object IO.StreamWriter($LogPath, $true, $utf8)
     $log.AutoFlush = $true
     $process = [Diagnostics.Process]::Start($startInfo)
@@ -400,12 +423,24 @@ function Test-Retryable($Run) {
 # Seconds until the usage window named in the chat's last rate-limit event resets, or 30
 # minutes when it named none.
 function Get-ResumeDelay($Run) {
-    $resetsAt = Get-Field $Run.RateLimit 'resetsAt'
-    if ((Get-Field $Run.RateLimit 'status') -eq 'rejected' -and $resetsAt) {
+    $resetsAt = $null
+    if ((Get-Field $Run.RateLimit 'status') -eq 'rejected') { $resetsAt = Get-Field $Run.RateLimit 'resetsAt' }
+    # Some limit messages carry the reset time themselves, as "...limit reached|<epoch seconds>".
+    if (-not $resetsAt -and (Get-ResultText $Run) -match '\|(\d{10})\b') { $resetsAt = $Matches[1] }
+    if ($resetsAt) {
         $seconds = ([DateTimeOffset]::FromUnixTimeSeconds([long]$resetsAt) - [DateTimeOffset]::UtcNow).TotalSeconds + 120
         if ($seconds -gt 60) { return [int]$seconds }
     }
     return 1800
+}
+
+# A weekly limit, the account's or one model's: it resets more than 12 hours away, or says so.
+function Test-LongLimit($Run, [int]$Delay) {
+    if ($Delay -gt 12 * 3600) { return $true }
+    $type = [string](Get-Field $Run.RateLimit 'rateLimitType')
+    if ((Get-Field $Run.RateLimit 'status') -eq 'rejected' -and $type -match '(?i)seven|week') { return $true }
+    $text = Get-ResultText $Run
+    return ($text -match '(?i)limit') -and ($text -match '(?i)week|seven.?day|7.?day')
 }
 
 function Get-UsageText($Run) {
@@ -429,19 +464,34 @@ function Invoke-Step($Row) {
     Write-Note ('Starting {0} in a new chat ({1}, effort {2}). Log: {3}' -f $Row.Id, $stepModel, $effort, $log)
 
     $run = Invoke-Chat -Prompt $stepPrompt.Replace('<<ROW>>', $Row.Id) -Name $name -WorkDir $repositoryRoot -LogPath $log -ChatModel $stepModel
+    $fallbackNotes = New-Object System.Collections.Generic.List[string]
     $waits = 0
     while ((Test-Retryable $run) -and $waits -lt $MaxLimitWaits -and -not (Test-Path $stopFile)) {
         $waits++
         $reason = Get-ShortText (Get-ResultText $run) 200
         $delay = Get-ResumeDelay $run
-        # A used-up weekly window resets days later: stop rather than sleep through it.
-        if ($delay -gt 12 * 3600) {
-            $run.Stopped = 'the usage limit resets {0:ddd HH:mm}, more than 12 hours away' -f (Get-Date).AddSeconds($delay)
+        # A chat that never got a session id starts again with the whole step prompt.
+        $prompt = $stepPrompt.Replace('<<ROW>>', $Row.Id)
+        if ($run.SessionId) { $prompt = $resumePrompt -f $reason, $Row.Id }
+        if (Test-LongLimit $run $delay) {
+            $resetText = 'later this week'
+            if ($delay -gt 12 * 3600) { $resetText = '{0:ddd HH:mm}' -f (Get-Date).AddSeconds($delay) }
+            # A used-up weekly window resets days later: carry on with the fallback model, or stop.
+            if ($FallbackModel -and $stepModel -ne $FallbackModel) {
+                $script:exhaustedUntil[$stepModel] = (Get-Date).AddSeconds([Math]::Max($delay, 24 * 3600))
+                $note = '{0} hit a limit that resets {1} ("{2}"); the chat carries on with {3}, and so do later rows until then' -f $stepModel, $resetText, $reason, $FallbackModel
+                Write-Note $note
+                $fallbackNotes.Add($note)
+                $stepModel = $FallbackModel
+                $run = Invoke-Chat -Prompt $prompt -Name $name -WorkDir $repositoryRoot -LogPath $log -ResumeId $run.SessionId -ChatModel $stepModel
+                continue
+            }
+            $run.Stopped = 'the usage limit of {0} resets {1}, more than 12 hours away' -f $stepModel, $resetText
             break
         }
         Write-Note ('The chat stopped on "{0}". Resuming it at {1:HH:mm} ({2} of {3}).' -f $reason, (Get-Date).AddSeconds($delay), $waits, $MaxLimitWaits)
         Start-Sleep -Seconds $delay
-        $run = Invoke-Chat -Prompt ($resumePrompt -f $reason, $Row.Id) -Name $name -WorkDir $repositoryRoot -LogPath $log -ResumeId $run.SessionId -ChatModel $stepModel
+        $run = Invoke-Chat -Prompt $prompt -Name $name -WorkDir $repositoryRoot -LogPath $log -ResumeId $run.SessionId -ChatModel $stepModel
     }
 
     $problems = New-Object System.Collections.Generic.List[string]
@@ -480,6 +530,9 @@ function Invoke-Step($Row) {
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add(('## {0}: {1}' -f $Row.Id, $outcome))
     $lines.Add(('- {0:yyyy-MM-dd HH:mm} to {1:HH:mm}, chat "{2}", session {3}, model {4}' -f $started, (Get-Date), $name, $run.SessionId, $run.Model))
+    $billed = Get-Field $run.Result 'modelUsage'
+    if ($billed) { $lines.Add('- Models used: ' + (($billed.PSObject.Properties | ForEach-Object { $_.Name }) -join ', ')) }
+    foreach ($note in $fallbackNotes) { $lines.Add('- Fallback: ' + $note) }
     foreach ($commit in $commits) { $lines.Add('- Commit: ' + $commit) }
     foreach ($problem in $problems) { $lines.Add('- Problem: ' + $problem) }
     if ($newUntracked.Count -gt 0) { $lines.Add('- New untracked files: ' + ($newUntracked -join ', ')) }
@@ -539,7 +592,7 @@ function Show-DryRun {
 
 if ($SelfTest) {
     $allPassed = $true
-    foreach ($testModel in @(@($model) + @($RowModels.Values) | Select-Object -Unique)) {
+    foreach ($testModel in @(@($model) + @($RowModels.Values) + @(@($FallbackModel) | Where-Object { $_ }) | Select-Object -Unique)) {
         if (-not (Invoke-SelfTest $testModel)) { $allPassed = $false }
     }
     if ($allPassed) { exit 0 }

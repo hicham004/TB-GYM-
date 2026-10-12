@@ -44,6 +44,9 @@ __screenshots__/
 /blob-report
 # The production build the `built` Playwright project serves (scripts/serve-built.mjs)
 /.e2e-dist
+# Stand-in photographs for the private pre-launch build only (UI plan R6.2h); never committed
+/placeholders/*
+!/placeholders/README.md
 
 # System files
 .DS_Store
