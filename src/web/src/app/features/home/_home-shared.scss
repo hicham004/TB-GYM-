@@ -13,6 +13,13 @@ $tablet: 1100px;
 $mobile: 760px;
 $small: 520px;
 
+// The week's scroll story (home-week*.scss): the stage stays beside the chapters only on a wide
+// screen for a reader who has not asked for less motion. HomeWeekMotion asks the browser the same
+// question (WIDE_STORY) before loading GSAP, so the stylesheet and the script agree.
+$wide: 1100px;
+$wide-story: '(min-width: #{$wide}) and (prefers-reduced-motion: no-preference)';
+$wide-still: '(min-width: #{$wide}) and (prefers-reduced-motion: reduce)';
+
 @mixin button {
   align-items: center;
   border: 1px solid transparent;

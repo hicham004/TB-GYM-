@@ -19,7 +19,9 @@ of truth (plan §8); its token names remain as aliases until R5.3.
 | `src/web/src/app/dev/` | Development-only routes: component kit (`/dev/ui-lab`) and the three prototype hero screens (`/dev/ui-lab/hero`) |
 | `src/web/public/hero-lab.css` | Prototype-scoped hero preview styles; loaded only by the development hero route |
 | `src/web/e2e/` | Playwright + axe browser checks and their screenshot baselines; `e2e/built/` runs against a real build (the pre-rendered homepage, R6.2a) |
-| `src/web/scripts/` | Build-time checks: the style lint (`check-legacy-styles.mjs`), the pre-render check `npm run build` ends with (`check-prerender.mjs`), and `serve-built.mjs`, which serves a build the way `nginx.conf` does for the `built` Playwright project |
+| `src/web/scripts/` | Build-time checks: the style lint (`check-legacy-styles.mjs`), the pre-render check `npm run build` ends with (`check-prerender.mjs`), `serve-built.mjs`, which serves a build the way `nginx.conf` does for the `built` Playwright project, `home-screens.mjs`, which makes the homepage's pictures of the app from demo screenshots (R6.2b; needs `sharp` outside the repository), and `inline-home-styles.mjs`, which `npm run build` runs to put the global stylesheet inside the built homepage |
+| `src/web/public/fonts/` | The self-hosted faces: IBM Plex Sans (Latin subsets since R6.2b, see its README), IBM Plex Sans Arabic and Instrument Serif |
+| `src/web/public/images/home/` | The homepage's pictures of the app on the Atlas demo, AVIF and WebP, one coach window and one phone per moment of the week (R6.2b) |
 | `src/web/src/main.server.ts`, `src/app/app.config.server.ts`, `src/app/app.routes.server.ts` | The build-time render of the homepage: its entry, its providers and the one route it renders |
 
 ## Lab and tests

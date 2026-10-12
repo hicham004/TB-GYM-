@@ -1,0 +1,199 @@
+@use 'home-shared' as *;
+
+// The stage: a deep panel holding the coach's screen and the client's phone, kept beside the
+// chapters on a wide screen. Each moment's pictures are all in it; the active pair is shown and
+// the others wait, so a change is a crossfade the stylesheet owns and GSAP only times.
+
+.week__stage {
+  display: none;
+}
+
+.stage {
+  background:
+    radial-gradient(circle at 12% 96%, rgb(242 185 148 / 22%), transparent 36%),
+    radial-gradient(circle at 84% 8%, rgb(217 237 148 / 26%), transparent 40%), var(--home-deep);
+  block-size: 100%;
+  border-radius: 22px;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 20px 22px;
+  position: relative;
+}
+
+// A faint dot grid, as the workout player's dark surface has.
+.stage::before {
+  background-image: radial-gradient(rgb(255 255 255 / 9%) 1px, transparent 1.5px);
+  background-size: 22px 22px;
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.stage__bar {
+  align-items: center;
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+  position: relative;
+}
+
+.stage__days {
+  background: rgb(255 255 255 / 8%);
+  border-radius: 999px;
+  padding: 4px;
+  position: relative;
+}
+
+.stage__days ol {
+  display: flex;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.stage__days li {
+  color: rgb(255 255 255 / 62%);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 6px 10px;
+  text-transform: uppercase;
+  transition: color 300ms ease;
+}
+
+.stage__days li.is-on {
+  color: var(--home-ink);
+}
+
+// Moved by GSAP to the active day; before it runs, Monday is marked by the stylesheet alone.
+.stage__marker {
+  background: var(--home-lime);
+  border-radius: 999px;
+  inline-size: 3.1rem;
+  inset-block: 4px;
+  inset-inline-start: 4px;
+  position: absolute;
+}
+
+.stage__when {
+  color: rgb(255 255 255 / 76%);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.stage__scene {
+  flex: 1;
+  margin-block-start: 18px;
+  position: relative;
+}
+
+.stage__coach {
+  aspect-ratio: 4 / 3;
+  background: var(--home-cream);
+  border-radius: 12px;
+  box-shadow: 0 30px 60px -30px rgb(0 0 0 / 70%);
+  inline-size: 86%;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  overflow: hidden;
+  position: absolute;
+}
+
+.stage__phone {
+  aspect-ratio: 390 / 844;
+  background: #0d1f1a;
+  border-radius: 10% / 4.6%;
+  box-shadow:
+    0 34px 70px -28px rgb(0 0 0 / 80%),
+    inset 0 0 0 1.5px rgb(255 255 255 / 16%);
+  inline-size: 34%;
+  inset-block-end: 5%;
+  inset-inline-end: 0;
+  overflow: hidden;
+  padding: 2.6%;
+  position: absolute;
+}
+
+.stage__coach picture,
+.stage__phone picture {
+  display: block;
+  inset: 0;
+  opacity: 0;
+  position: absolute;
+  transform: translateY(14px) scale(0.985);
+  transition:
+    opacity 600ms var(--home-ease),
+    transform 700ms var(--home-ease);
+}
+
+.stage__phone picture {
+  border-radius: 8% / 3.7%;
+  inset: 2.6%;
+  overflow: hidden;
+}
+
+.stage__coach picture.is-active,
+.stage__phone picture.is-active {
+  opacity: 1;
+  transform: none;
+}
+
+.stage__coach img,
+.stage__phone img {
+  block-size: 100%;
+  display: block;
+  inline-size: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.stage__number {
+  background: var(--home-lime);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px -20px rgb(0 0 0 / 60%);
+  color: var(--home-ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+  inset-block-end: 0;
+  inset-inline-start: 0;
+  line-height: 1.3;
+  margin: 0;
+  max-inline-size: 56%;
+  padding: 10px 14px;
+  position: absolute;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stage__number {
+    animation: stage-pop 520ms var(--home-ease) both;
+  }
+}
+
+@media #{$wide-story} {
+  .week__stage {
+    align-self: start;
+    block-size: min(calc(100vh - 118px), 800px);
+    display: block;
+    inset-block-start: 92px;
+    position: sticky;
+  }
+}
+
+// Nested in an at-rule on purpose: see _home-shared.scss.
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes stage-pop {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.96);
+    }
+  }
+}

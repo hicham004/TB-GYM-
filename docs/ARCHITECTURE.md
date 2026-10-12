@@ -723,6 +723,28 @@ on request the same way (with the mark, and without nginx's cookie rule, so a si
 sees the homepage for the moment the session check takes, then their Today); every other address
 is the plain shell there too, so the rest of the browser checks are unchanged.
 
+R6.2b rebuilt that homepage as one week of coaching told from both sides with the real app on the
+Atlas demo (UI plan R6.2b; the research and the decision are in `docs/design/homepage-research.md`).
+The page is three components under `features/home/`: `home-week` (the hero, seven chapters and a
+stage holding the coach's screen and the client's phone for each moment), `home-inside` and
+`home-closing`. The whole page is rendered at build time; nothing waits for the browser except the
+story's motion. `HomeWeekMotion` asks the browser one question, `WIDE_STORY` (a wide screen and no
+request for reduced motion, the same query the stylesheet keeps the stage beside the chapters under),
+and only when it matches does it load GSAP and ScrollTrigger as their own chunk; ScrollTrigger then
+says which chapter has reached the line and the component's state and CSS transitions change the
+stage. A phone, a reader who asked for less motion and the build-time render never load GSAP: the
+chapters stack, each with its own two pictures, revealed by the stylesheet's scroll timelines. The
+stage is `aria-hidden`, because every chapter says in words what its two screens show. The pictures
+are AVIF with a WebP fallback in `public/images/home/`, made by `scripts/home-screens.mjs` from
+screenshots of the demo (the script names the screen each moment uses); the stage's pictures are
+lazy so a layout that does not draw the stage never fetches them. `public/robots.txt` answers crawlers
+as a file, so nginx's fallback no longer hands them the shell for it. Two more build-time steps serve
+the homepage's first paint: `scripts/inline-home-styles.mjs` (run by `npm run build` and by the `built`
+Playwright project's build) puts the global stylesheet inside `index.html`, so the first paint needs the
+HTML alone (the CSP allows inline styles; the shell keeps its link), and the two Latin IBM Plex files are
+subsets (`public/fonts/ibm-plex/README.md`). `check-prerender.mjs` fails a build whose homepage still
+links the stylesheet.
+
 The migrated exercise library keeps every request it made before and adds no new one. Its filters
 stay server-side and are applied on Apply or Enter only; the list asks for the 100 rows the server is
 willing to return (it clamps `take` to 1-100) and says either "N exercises · sorted by name" or

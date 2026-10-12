@@ -1,0 +1,23 @@
+<section class="inside" id="inside" aria-labelledby="inside-title">
+  <div class="inside__intro">
+    <p class="inside__eyebrow" i18n>What's inside</p>
+    <h2 id="inside-title" i18n>Everything the coaching needs, <em>in one place.</em></h2>
+    <p class="inside__lead" i18n>
+      Not a chat thread. Not a spreadsheet. Not a PDF. What follows is the shipped product, in its
+      own words.
+    </p>
+    <a class="inside__action" routerLink="/auth/register">
+      <span i18n>Start your coaching space</span><span aria-hidden="true">↗</span>
+    </a>
+  </div>
+
+  <ol class="inside__grid">
+    @for (item of items; track item.title; let index = $index) {
+      <li class="inside__item">
+        <span class="inside__number" aria-hidden="true">0{{ index + 1 }}</span>
+        <h3>{{ item.title }}</h3>
+        <p>{{ item.body }}</p>
+      </li>
+    }
+  </ol>
+</section>

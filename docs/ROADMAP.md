@@ -1113,8 +1113,10 @@ Work follows this order; anything outside it needs the user's approval first.
   share cards of records and finished programs, and R6.1b, a client's before-and-after of two progress
   photos with the server's record of every photo export (PRG-013), were built on 2026-10-12, and so was
   R6.2a: the homepage is rendered at build time for Google and link previews, served by nginx only for `/`
-  and only to visitors without the sign-in cookie. The owner's product review and the founding-coach demo
-  follow.
+  and only to visitors without the sign-in cookie. R6.2b, the homepage rebuilt as one of one after
+  research (`docs/design/homepage-research.md`), was built the same day: one week of coaching told from
+  both sides with the real app on the Atlas demo, a GSAP scroll story on wide screens only. The owner's
+  product review and the founding-coach demo follow.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
 

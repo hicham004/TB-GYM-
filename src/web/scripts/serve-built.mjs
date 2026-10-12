@@ -10,11 +10,19 @@
 // configuration is chosen on purpose: Angular compares the rendered page with what it would draw only
 // in development mode, so a hydration mismatch fails the tests instead of passing unseen.
 import { spawnSync } from 'node:child_process';
-import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs';
+import {
+  createReadStream,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkPrerender } from './check-prerender.mjs';
+import { inlineHomeStyles } from './inline-home-styles.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, '.e2e-dist');
@@ -44,6 +52,7 @@ const TYPES = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.webp': 'image/webp',
+  '.avif': 'image/avif',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
   '.woff': 'font/woff',
@@ -113,6 +122,12 @@ function buildIfStale() {
     console.error('ng build failed.');
     process.exit(result.status ?? 1);
   }
+  // As `npm run build` does: the homepage's first paint needs the HTML alone.
+  const home = join(browser, 'index.html');
+  const inlined = inlineHomeStyles(readFileSync(home, 'utf8'), (name) =>
+    readFileSync(join(browser, name), 'utf8'),
+  );
+  if (inlined !== null) writeFileSync(home, inlined);
   const findings = checkPrerender(browser);
   if (findings.length > 0) {
     console.error(findings.join('\n'));

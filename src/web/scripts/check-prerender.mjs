@@ -10,8 +10,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** The homepage headline, as the <h1> in features/home/home-hero.html reads. */
-export const HEADLINE = ['Stop coaching from', 'chats and spreadsheets.'];
+/** The homepage headline, as the <h1> in features/home/home-week.html reads. */
+export const HEADLINE = ['You plan it.', 'They lift it.', 'You both see it.'];
 
 /** The description and link-preview tags index.html declares; each must survive the render. */
 export const PREVIEW_TAGS = [
@@ -69,6 +69,11 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT) {
     if (/<script(?![^>]*type="application\/json")[^>]*>[^<]/.test(home)) {
       findings.push(
         "index.html holds an inline script, which the CSP (script-src 'self') would refuse.",
+      );
+    }
+    if (/<link\s+rel="stylesheet"/.test(home)) {
+      findings.push(
+        'index.html still links the global stylesheet: scripts/inline-home-styles.mjs did not run.',
       );
     }
   }

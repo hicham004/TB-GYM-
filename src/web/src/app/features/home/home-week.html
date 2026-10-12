@@ -1,0 +1,182 @@
+<section
+  class="week"
+  id="week"
+  aria-labelledby="home-title"
+  [attr.data-moment]="moment().id"
+  [attr.data-motion]="motionState()"
+>
+  <div class="week__copy">
+    <div class="hero" #heroCopy>
+      <div class="hero__copy">
+        <p class="hero__eyebrow">
+          <span class="hero__rule" aria-hidden="true"></span
+          ><span i18n>For personal trainers, coaches and gyms</span>
+        </p>
+        <h1 id="home-title" class="hero__title" i18n>
+          You plan it. <br class="hero__break" />They lift it. <br class="hero__break" /><em
+            >You both see it.</em
+          >
+        </h1>
+        <p class="hero__lead" i18n>
+          TB Gym is one coaching space for your programs, meal plans, check-ins and messages. Your
+          client's phone and your screen tell the same week, so you coach instead of chase.
+        </p>
+        <div class="hero__actions">
+          <a class="hero__primary" routerLink="/auth/register">
+            <span i18n>Start your coaching space</span><span aria-hidden="true">↗</span>
+          </a>
+          <a class="hero__secondary" href="#chapters">
+            <span i18n>See a week of coaching</span><span aria-hidden="true">↓</span>
+          </a>
+        </div>
+        <p class="hero__note" i18n>
+          Already coaching with us? <a routerLink="/auth/sign-in">Sign in</a>. Clients join by
+          invitation from their coach.
+        </p>
+      </div>
+
+      <!-- On a phone the hero shows Monday morning itself, below the first screen; on a wide screen the stage beside it does. -->
+      <figure class="screens screens--hero" aria-hidden="true">
+        <picture class="screens__phone">
+          <source type="image/avif" [srcset]="phoneSet(moments[0], 'avif')" sizes="250px" />
+          <img
+            [src]="picture(moments[0], 'phone') + '.webp'"
+            [srcset]="phoneSet(moments[0], 'webp')"
+            sizes="250px"
+            width="720"
+            height="1558"
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        </picture>
+        <picture class="screens__coach">
+          <source type="image/avif" [srcset]="picture(moments[0], 'coach-small') + '.avif'" />
+          <img
+            [src]="picture(moments[0], 'coach-small') + '.webp'"
+            width="800"
+            height="600"
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        </picture>
+        <figcaption class="screens__number">{{ moments[0].number }}</figcaption>
+      </figure>
+      <p class="tb-visually-hidden">{{ moments[0].screens }}</p>
+    </div>
+
+    <div class="chapters" id="chapters">
+      <header class="chapters__intro">
+        <p class="chapters__eyebrow" i18n>One week, two screens</p>
+        <h2 i18n>A week with Maya, <em>from both sides.</em></h2>
+        <p i18n>
+          Lea coaches Maya at Atlas Performance, a demo coaching space on TB Gym. Every picture
+          below is the real app with that week in it; nothing is a drawing.
+        </p>
+      </header>
+      <ol class="chapters__list">
+        @for (chapter of chapters; track chapter.id; let index = $index) {
+          <li
+            class="chapter"
+            #chapter
+            [attr.data-chapter]="chapter.id"
+            [class.is-current]="active() === index + 1"
+          >
+            <p class="chapter__when">{{ chapter.when }}</p>
+            <h3 class="chapter__title">{{ chapter.title }}</h3>
+            <p class="chapter__body">{{ chapter.body }}</p>
+            <p class="tb-visually-hidden">{{ chapter.screens }}</p>
+            <figure class="screens" aria-hidden="true">
+              <picture class="screens__phone">
+                <source type="image/avif" [srcset]="phoneSet(chapter, 'avif')" sizes="250px" />
+                <img
+                  [src]="picture(chapter, 'phone') + '.webp'"
+                  [srcset]="phoneSet(chapter, 'webp')"
+                  sizes="250px"
+                  width="720"
+                  height="1558"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                />
+              </picture>
+              <picture class="screens__coach">
+                <source type="image/avif" [srcset]="picture(chapter, 'coach-small') + '.avif'" />
+                <img
+                  [src]="picture(chapter, 'coach-small') + '.webp'"
+                  width="800"
+                  height="600"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                />
+              </picture>
+              <figcaption class="screens__number">{{ chapter.number }}</figcaption>
+            </figure>
+          </li>
+        }
+      </ol>
+    </div>
+  </div>
+
+  <!--
+    The stage: decorative here, because every chapter says in words what its two screens show. Its
+    pictures are lazy on purpose: where the stage is not drawn (a phone, reduced motion) none of them
+    is fetched, and where it is they are in view and load at once, the first pair from its preload.
+  -->
+  <div class="week__stage" aria-hidden="true">
+    <div class="stage">
+      <div class="stage__bar">
+        <div class="stage__days">
+          <span class="stage__marker" #marker></span>
+          <ol>
+            @for (day of days; track $index; let d = $index) {
+              <li #day [class.is-on]="moment().day === d">{{ day }}</li>
+            }
+          </ol>
+        </div>
+        @for (current of [moment()]; track current.id) {
+          <p class="stage__when">{{ current.when }}</p>
+        }
+      </div>
+      <div class="stage__scene">
+        <div class="stage__coach">
+          @for (item of moments; track item.id; let index = $index) {
+            <picture [class.is-active]="active() === index">
+              <source type="image/avif" [srcset]="picture(item, 'coach') + '.avif'" />
+              <img
+                [src]="picture(item, 'coach') + '.webp'"
+                width="1200"
+                height="900"
+                alt=""
+                loading="lazy"
+                [attr.fetchpriority]="index === 0 ? 'high' : null"
+                decoding="async"
+              />
+            </picture>
+          }
+        </div>
+        <div class="stage__phone">
+          @for (item of moments; track item.id; let index = $index) {
+            <picture [class.is-active]="active() === index">
+              <source type="image/avif" [srcset]="picture(item, 'phone') + '.avif'" />
+              <img
+                [src]="picture(item, 'phone') + '.webp'"
+                width="720"
+                height="1558"
+                alt=""
+                loading="lazy"
+                decoding="async"
+              />
+            </picture>
+          }
+        </div>
+        <!-- Keyed on the moment so the chip is re-created, and its pop replays, on every change. -->
+        @for (current of [moment()]; track current.id) {
+          <p class="stage__number">{{ current.number }}</p>
+        }
+      </div>
+    </div>
+  </div>
+</section>

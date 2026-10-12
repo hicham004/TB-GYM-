@@ -111,7 +111,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R6.1a | **Share cards, records and programs** (M9; the owner opened R6 on 2026-10-11): a client turns a new personal record (from the workout's finish summary, by the server's record rule) or a finished program into an image in the coach's brand, sees it first, then shares it through the phone's share sheet or saves it. The client taps every time; the image is made on the phone, and TB Gym uploads, stores and posts nothing | §2, plus Vitest (the card from the record and program facts, the preview, share and save) and API tests for any new read (other tenant, other client, released client) | Done · 2026-10-12 · 0b25dbb |
 | R6.1b | **Share cards, before and after** (M9, CLI-008): a client picks two of their own progress photos of one pose and makes a before-and-after image in the coach's brand. Each time, a confirmation names the photos and their dates before anything is made, and nothing is remembered. The server records every photo export (who, when, which photos; never the image), because photo exports are auditable (CLI-008); a removed photo cannot be used | §2, plus API tests (own photos only, another client, another tenant, a removed photo, a released client, the record append-only) and Vitest (the picker, the confirmation, the card) | Done · 2026-10-12 · 1837417 |
 | R6.2a | **Homepage pre-render** (website): the homepage is built as finished HTML at build time, so Google and link previews read it. Every other route keeps the app shell, so a deep link never shows the homepage first (nginx falls back to the client-only page). Browser-only code waits for the browser, and the homepage's words, offers and prices stay as they are. A new package is explained and documented as `AGENTS.md` asks | §2, plus a check that the built homepage holds its headline and meta tags, Playwright for a deep link and the homepage, and the nginx architecture test kept green | Done · 2026-10-12 · 07fd867 |
-| R6.2b | **The homepage, one of one** (website; the owner, 2026-10-11: "something extraordinary, something I have never seen"): research first, then rebuild. Study at least 15 of the best homepages in and beyond fitness (award winners, the best product sites, coaching and training apps, the competitors) and write one page, `docs/design/homepage-research.md`, with links: what each does best, what TB Gym can own that none of them has, three concepts and the one chosen. Then build it as the real homepage with a GSAP scroll story at its heart, from the app's real screens on the Atlas demo (no AI-made people; only licensed images and fonts), and polish at least twice by setting its screenshots beside the references. Everything may change except money terms (prices, offers, the trial) and legal statements, which stay as they are. The hero works without the video R6.2c adds later. Install the tools you need: packages (each explained and documented as `AGENTS.md` asks), browsers and connectors (at user scope, not in the repo; a connector that needs a sign-in, such as Figma, cannot be used unattended) | §2, plus the research page, Lighthouse on a phone (performance 90 or more, accessibility 100, best practices and SEO 95 or more), reduced motion and keyboard paths, the pre-render kept, Vitest for the motion set-up and clean-up, and Playwright at 390 and 1440 px | Open |
+| R6.2b | **The homepage, one of one** (website; the owner, 2026-10-11: "something extraordinary, something I have never seen"): research first, then rebuild. Study at least 15 of the best homepages in and beyond fitness (award winners, the best product sites, coaching and training apps, the competitors) and write one page, `docs/design/homepage-research.md`, with links: what each does best, what TB Gym can own that none of them has, three concepts and the one chosen. Then build it as the real homepage with a GSAP scroll story at its heart, from the app's real screens on the Atlas demo (no AI-made people; only licensed images and fonts), and polish at least twice by setting its screenshots beside the references. Everything may change except money terms (prices, offers, the trial) and legal statements, which stay as they are. The hero works without the video R6.2c adds later. Install the tools you need: packages (each explained and documented as `AGENTS.md` asks), browsers and connectors (at user scope, not in the repo; a connector that needs a sign-in, such as Figma, cannot be used unattended) | §2, plus the research page, Lighthouse on a phone (performance 90 or more, accessibility 100, best practices and SEO 95 or more), reduced motion and keyboard paths, the pre-render kept, Vitest for the motion set-up and clean-up, and Playwright at 390 and 1440 px | Built, not committed |
 | R6.2c | **Homepage hero video**: the owner makes the loop in Jitter (MP4 and WebM, with a poster frame); then a chat puts it in the hero, loaded late, with the poster for reduced motion | §2 | Optional · for later (owner, 2026-10-11): waits for the owner's video |
 
 **Design approval:** the owner approved the prototype direction on 2026-09-28. The partner saw
@@ -997,11 +997,21 @@ of the implemented R1.3 screens before production rollout.
   the built HTML: the sections below the fold stay `@defer (on idle)` and render in the browser, because
   putting them in the HTML needs incremental hydration, whose inline scripts the CSP refuses without a
   per-request nonce (nginx `sub_filter` on `$request_id`). Google renders the script, so it reads them;
-  link previews need only the tags. R6.2b decides whether the rebuilt page keeps `@defer` at all.
+  link previews need only the tags. R6.2b dropped `@defer`: the whole page is in the HTML.
   (3) Event replay is off for the same reason: a tap in the moment before the app is live is lost.
   (4) `og:image` stays relative until go-live (LAUNCH-CHECKLIST). (5) A signed-in person who opens `/index.html`
   by name, or whose browser kept the homepage from before signing in, sees the homepage for the time the
   session check takes, then their Today; nginx's `no-cache` on `/` keeps the ordinary path clear of it.
+- **Homepage, left for later (from R6.2b, 2026-10-12).** (1) The sign-in frame still uses the photo
+  `public/images/coaching-hero.jpg` from the first homepage (2026-09-24), whose licence is not recorded
+  anywhere; the rebuilt homepage no longer uses it. Record its source or replace it. (2) The Latin IBM
+  Plex files are subsets without Greek and Cyrillic; a client's name in those scripts falls back to the
+  system font. (3) The homepage's pictures are a build of the demo on 2026-10-12 (Maya's week, Lea's
+  Today); when a screen they show changes, repeat the pass `scripts/home-screens.mjs` describes.
+  (4) The hero's picture frame is where R6.2c's video goes, poster first. (5) The phone pictures are
+  one size (720 px); a 480 px variant for phones would save about 20 kB on the first paint there.
+  (6) A signed-out visitor's session check still logs a 401 in the console (Lighthouse best practices
+  96, not 100); answering it quietly needs the API to say "nobody" with a 2xx, a backend change.
 ---
 
 ## 1. Verdict: why the product feels "meh"
@@ -1215,6 +1225,19 @@ Tokens are theme-ready from R1, so this costs little later.
   replay off: their inline scripts would break the CSP). `ng serve` renders `/` on request the same
   way, without nginx's cookie rule; the `built` Playwright project checks a real build and those rules.
   Details in `ARCHITECTURE.md` §8.
+- Built in R6.2b: the homepage is one week of coaching told from both sides with the real app on the
+  Atlas demo (`docs/design/homepage-research.md` holds the research and the decision). `features/home/`
+  is the page: `home-week` (the hero, the seven chapters and the stage of two screens), `home-inside`
+  and `home-closing`. The stage stays beside the chapters only on a wide screen for a reader who has
+  not asked for less motion (`$wide-story` in `_home-shared.scss`, the same query `HomeWeekMotion` asks
+  the browser), and only then is GSAP loaded, as its own chunk, for ScrollTrigger to time the chapters;
+  everywhere else the chapters stack with their own pictures and the stylesheet's scroll timelines
+  reveal them. The whole page is in the built HTML (no `@defer` left). The pictures are AVIF with a
+  WebP fallback, made by `scripts/home-screens.mjs` from demo screenshots (sharp, installed outside
+  the repository). For the first paint on a phone: the two Latin IBM Plex files are subsets
+  (`public/fonts/ibm-plex/README.md`), `scripts/inline-home-styles.mjs` puts the global stylesheet inside
+  the built homepage, on a phone the hero's copy owns the first screen and every picture waits for the
+  reader, and `public/robots.txt` answers crawlers instead of the shell.
 - **Retire:** the pre-foundation palette and globals in `styles.scss`, the `--accent/--surface`
   legacy variables, and every browser-default button. The migration is finished when a lint check
   finds no legacy variable and no unstyled `<button>`.

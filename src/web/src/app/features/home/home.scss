@@ -25,11 +25,6 @@
   font-family: var(--font-sans-arabic);
 }
 
-// Holds the space of the sections below the fold until they render.
-.home-later {
-  min-block-size: 100vh;
-}
-
 .home a {
   color: inherit;
 }
@@ -50,7 +45,9 @@
   transform: translateY(0);
 }
 
-#home-content > * {
+#home-content > *,
+#inside,
+#who-its-for {
   scroll-margin-block-start: 76px;
 }
 

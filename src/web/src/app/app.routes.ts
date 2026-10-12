@@ -28,7 +28,7 @@ export const routes: Routes = [
     path: '',
     pathMatch: 'full',
     canMatch: [publicHomeGuard],
-    title: $localize`Coaching, connected | TB Gym`,
+    title: $localize`TB Gym: you plan it, they lift it, you both see it`,
     loadComponent: () => import('./features/home/home').then((module) => module.Home),
   },
   {

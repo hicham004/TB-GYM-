@@ -6,14 +6,14 @@ import { expect, mockSignedOut, test, waitForFonts } from '../support';
  * address. The dev server renders `/` on request too, but only a build writes the two documents and
  * only nginx picks one by address and cookie, so this project is where those rules are checked.
  */
-const HEADLINE = /Stop coaching from/;
+const HEADLINE = /You plan it\./;
 
 /** The document's text without its tags: the shell's og:image:alt names the headline, its page does not. */
 function pageText(html: string): string {
   return html.replace(/<[^>]*>/g, ' ');
 }
 
-test('the homepage is served as finished HTML, with its headline and link-preview tags', async ({
+test('the homepage is served as finished HTML, with its headline, its week and link-preview tags', async ({
   request,
 }) => {
   const response = await request.get('/');
@@ -22,9 +22,12 @@ test('the homepage is served as finished HTML, with its headline and link-previe
   expect(response.headers()['content-type']).toContain('text/html');
   expect(response.headers()['cache-control']).toBe('no-cache');
   const html = await response.text();
-  expect(html).toMatch(/<h1[^>]*>\s*Stop coaching from[\s\S]*chats and spreadsheets\./);
+  expect(html).toMatch(/<h1[^>]*>\s*You plan it\.[\s\S]*They lift it\.[\s\S]*You both see it\./);
+  // The whole week is in the HTML (R6.2b): nothing below the fold waits for the browser.
+  expect(pageText(html)).toMatch(/A record worth sharing\./);
+  expect(html.match(/data-chapter="/g)).toHaveLength(7);
   expect(html).toMatch(
-    /<meta[^>]*property="og:title"[^>]*content="TB Gym: stop coaching from chats and spreadsheets"/,
+    /<meta[^>]*property="og:title"[^>]*content="TB Gym: you plan it, they lift it, you both see it"/,
   );
   expect(html).toMatch(/<meta[^>]*name="description"[^>]*content="[^"]+"/);
   // The CSP allows no inline script, so the page must not come with one.
@@ -71,6 +74,20 @@ test('a visitor who is signed in gets the shell at /, whichever way the cookie i
   expect(pageText(visitor)).toMatch(HEADLINE);
 });
 
+test('robots.txt and the week’s pictures are served as files, not as the shell', async ({
+  request,
+}) => {
+  const robots = await request.get('/robots.txt');
+  expect(robots.status()).toBe(200);
+  expect(robots.headers()['content-type']).toContain('text/plain');
+  expect(await robots.text()).toMatch(/^User-agent: \*/);
+  for (const picture of ['hero-phone.avif', 'hero-coach.webp', 'share-coach-small.avif']) {
+    const response = await request.get(`/images/home/${picture}`);
+    expect(response.status(), picture).toBe(200);
+    expect(response.headers()['content-type'], picture).toMatch(/^image\//);
+  }
+});
+
 test('the app takes the pre-rendered page over in place: same headline, no launch screen, no errors', async ({
   page,
 }) => {
@@ -89,8 +106,8 @@ test('the app takes the pre-rendered page over in place: same headline, no launc
   await page.goto('/');
   await waitForFonts(page);
 
-  // The sections below the fold render in the browser once it is idle: the app is live.
-  await expect(page.locator('#tour')).toBeAttached();
+  // The story decides how it is told once the app is live: the page is hydrated.
+  await expect(page.locator('#week')).toHaveAttribute('data-motion', /running|off/);
   await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.locator('h1[data-arrived-with-the-page]')).toHaveText(HEADLINE);
   expect(
@@ -99,14 +116,16 @@ test('the app takes the pre-rendered page over in place: same headline, no launc
     ),
   ).toEqual({ launchScreen: false });
   await expect(page.locator('.launch')).toHaveCount(0);
-  // And it is interactive: the hero example runs and can be paused.
-  const example = page.getByRole('group', { name: 'Example: a week of coaching in TB Gym' });
-  await example.getByRole('button', { name: 'Pause the example' }).click();
-  await expect(example.getByRole('button', { name: 'Play the example' })).toBeVisible();
+  // And it is interactive: on this wide screen the story runs, from its own lazily loaded chunk.
+  await expect(page.locator('#week')).toHaveAttribute('data-motion', 'running');
+  await page.evaluate(() =>
+    document.querySelector('[data-chapter="eat"]')?.scrollIntoView({ block: 'center' }),
+  );
+  await expect(page.locator('#week')).toHaveAttribute('data-moment', 'eat');
 });
 
-// The build cannot know a visitor's motion setting, so the page arrives with the pause controls; a
-// visitor who asked for less motion sees them go once the app is live, with nothing else disturbed.
+// The build cannot know a visitor's motion setting, so the page arrives with the stage; a visitor
+// who asked for less motion gets the still story from the same HTML, with nothing else disturbed.
 test('a visitor who prefers reduced motion gets the still page from the same HTML, without errors', async ({
   page,
 }) => {
@@ -115,8 +134,9 @@ test('a visitor who prefers reduced motion gets the still page from the same HTM
   await page.goto('/');
   await waitForFonts(page);
 
-  await expect(page.locator('#tour')).toBeAttached();
+  await expect(page.locator('#week')).toHaveAttribute('data-motion', 'off');
   await expect(page.getByRole('heading', { level: 1, name: HEADLINE })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Pause the/ })).toHaveCount(0);
+  await expect(page.locator('.week__stage')).toBeHidden();
+  await expect(page.locator('[data-chapter="plan"] .screens')).toBeVisible();
   await expect(page.locator('.launch')).toHaveCount(0);
 });

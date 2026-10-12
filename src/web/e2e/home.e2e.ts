@@ -1,12 +1,17 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, expectNoHorizontalOverflow, mockSignedOut, test, waitForFonts } from './support';
 
-// The sections below the hero render once the browser is idle (`@defer (on idle)`).
+const HEADLINE = /You plan it\./;
+
+/**
+ * The page is pre-rendered; `data-motion` leaves `idle` once the app is live and the story has
+ * decided whether it is scroll-driven here (`running`) or told by the stylesheet alone (`off`).
+ */
 async function openHome(page: import('@playwright/test').Page): Promise<void> {
   await mockSignedOut(page);
   await page.goto('/');
   await waitForFonts(page);
-  await expect(page.locator('#tour')).toBeAttached();
+  await expect(page.locator('#week')).toHaveAttribute('data-motion', /running|off/);
 }
 
 for (const width of [1440, 390]) {
@@ -15,7 +20,7 @@ for (const width of [1440, 390]) {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await openHome(page);
 
-    await expect(page.getByRole('heading', { level: 1, name: /Stop coaching from/ })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: HEADLINE })).toBeVisible();
     await expect(page.locator('.topbar')).toBeHidden();
     await expect(
       page.getByRole('link', { name: 'Start your coaching space' }).first(),
@@ -24,58 +29,74 @@ for (const width of [1440, 390]) {
       'href',
       '/auth/sign-in',
     );
-    for (const id of ['tour', 'how-it-works', 'who-its-for']) {
+    for (const id of ['chapters', 'inside', 'who-its-for']) {
       await expect(page.locator(`#${id}`)).toBeAttached();
     }
+    await expect(page.locator('.chapter')).toHaveCount(7);
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: testInfo.outputPath('home-full.png'), fullPage: true });
 
     // Reduced motion shows the finished page, so contrast is measured on final colours rather
-    // than on a section caught half-way through fading in.
+    // than on a section caught half-way through rising in.
     const accessibility = await new AxeBuilder({ page }).analyze();
     expect(accessibility.violations).toEqual([]);
   });
 }
 
-test('the hero example plays by itself and can be paused or stepped through', async ({ page }) => {
+test('on a wide screen the stage of two screens follows the chapters as they scroll past', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await openHome(page);
-  const example = page.getByRole('group', { name: 'Example: a week of coaching in TB Gym' });
+  const week = page.locator('#week');
 
-  await expect(example.getByRole('button', { name: 'Plan', exact: true })).toHaveAttribute(
-    'aria-current',
-    'step',
-  );
-  await example.getByRole('button', { name: 'Pause the example' }).click();
-  await expect(example.getByRole('button', { name: 'Play the example' })).toBeVisible();
+  await expect(week).toHaveAttribute('data-motion', 'running');
+  await expect(week).toHaveAttribute('data-moment', 'hero');
+  await expect(page.locator('.week__stage')).toBeVisible();
+  // Each chapter's own pictures stay out of the way while the stage tells the story.
+  await expect(page.locator('.chapter .screens').first()).toBeHidden();
 
-  await example.getByRole('button', { name: 'Reply', exact: true }).click();
-  await expect(example.getByRole('button', { name: 'Reply', exact: true })).toHaveAttribute(
-    'aria-current',
-    'step',
+  await page.evaluate(() =>
+    document.querySelector('[data-chapter="train"]')?.scrollIntoView({ block: 'center' }),
   );
-  await expect(example.getByText('You reply in the same place')).toBeVisible();
+  await expect(week).toHaveAttribute('data-moment', 'train');
+  await expect(page.locator('.stage__coach picture.is-active img')).toHaveAttribute(
+    'src',
+    '/images/home/train-coach.webp',
+  );
+  await expect(page.locator('.stage__number')).toHaveText(/55 kg × 5/);
+  await expect(page.locator('.stage__when')).toHaveText(/Monday evening/);
+
+  await page.evaluate(() =>
+    document.querySelector('[data-chapter="progress"]')?.scrollIntoView({ block: 'center' }),
+  );
+  await expect(week).toHaveAttribute('data-moment', 'progress');
+  await expect(page.locator('.stage__days li.is-on')).toHaveText('Sun');
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(week).toHaveAttribute('data-moment', 'hero');
 });
 
-test('the product tour is a keyboard-operable tab set', async ({ page }) => {
-  await openHome(page);
-  const training = page.getByRole('tab', { name: /Training/ });
-
-  await training.focus();
-  await page.keyboard.press('ArrowDown');
-
-  await expect(page.getByRole('tab', { name: /Nutrition/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await expect(page.getByRole('tab', { name: /Nutrition/ })).toBeFocused();
-  await expect(page.getByRole('tabpanel')).toContainText('Meal plans with real targets');
-});
-
-test('reduced motion shows a still, complete page with nothing to pause', async ({ page }) => {
+test('reduced motion shows a still, complete story: every chapter with its own two screens', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await openHome(page);
 
-  await expect(page.getByRole('button', { name: /Pause the/ })).toHaveCount(0);
+  await expect(page.locator('#week')).toHaveAttribute('data-motion', 'off');
+  await expect(page.locator('.week__stage')).toBeHidden();
+  await expect(page.locator('.chapter .screens')).toHaveCount(7);
+  for (const chapter of ['plan', 'share']) {
+    const figure = page.locator(`[data-chapter="${chapter}"] .screens`);
+    await figure.scrollIntoViewIfNeeded();
+    await expect(figure).toBeVisible();
+    await expect(figure.locator('.screens__phone img')).toHaveAttribute(
+      'src',
+      `/images/home/${chapter}-phone.webp`,
+    );
+  }
   const timed = await page.evaluate(
     () =>
       document.getAnimations().filter((animation) => animation.timeline instanceof DocumentTimeline)
@@ -84,13 +105,44 @@ test('reduced motion shows a still, complete page with nothing to pause', async 
   expect(timed).toBe(0);
 });
 
-test('homepage navigation reaches its sections and the existing sign-in screen', async ({
+test('a phone gets the stacked story: the hero copy owns the first screen, every chapter has its pictures', async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await openHome(page);
-  await page.getByRole('link', { name: 'Take the tour' }).click();
-  await expect(page.locator('#tour')).toBeInViewport();
-  await page.getByRole('link', { name: 'Sign in', exact: true }).first().click();
+
+  await expect(page.locator('#week')).toHaveAttribute('data-motion', 'off');
+  await expect(page.locator('.week__stage')).toBeHidden();
+  // The first screen is the headline and the way down; the pictures start below it.
+  const figureTop = await page
+    .locator('.screens--hero')
+    .evaluate((el) => el.getBoundingClientRect().top);
+  expect(figureTop).toBeGreaterThan(600);
+  await page.getByRole('link', { name: 'See a week of coaching' }).click();
+  await expect(page.locator('#chapters')).toBeInViewport();
+  await expect(page.locator('[data-chapter="train"] .screens__phone img')).toHaveAttribute(
+    'srcset',
+    /train-phone-480\.webp 480w/,
+  );
+});
+
+test('the keyboard reaches the week, the sections and the sign-in screen', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+
+  await page.getByRole('link', { name: 'See a week of coaching' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#chapters')).toBeInViewport();
+  // The stage is decorative and holds nothing to land on; Tab from the hero goes to the chapters' words.
+  await expect(page.locator('.week__stage a, .week__stage button')).toHaveCount(0);
+
+  await page.getByRole('link', { name: "What's inside" }).first().focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#inside')).toBeInViewport();
+
+  await page.getByRole('link', { name: 'Sign in', exact: true }).first().focus();
+  await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/auth\/sign-in$/);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 });
@@ -101,7 +153,7 @@ test('a shared link carries a preview image, title and description', async ({ pa
 
   const meta = (property: string) =>
     page.locator(`meta[property="${property}"]`).getAttribute('content');
-  expect(await meta('og:title')).toBe('TB Gym: stop coaching from chats and spreadsheets');
+  expect(await meta('og:title')).toBe('TB Gym: you plan it, they lift it, you both see it');
   expect(await meta('og:description')).toBeTruthy();
   const image = await request.get((await meta('og:image')) ?? '');
   expect(image.status()).toBe(200);
@@ -122,5 +174,5 @@ test('homepage mirrors cleanly in right-to-left layout', async ({ page }) => {
   await openHome(page);
   await page.evaluate(() => (document.documentElement.dir = 'rtl'));
   await expectNoHorizontalOverflow(page);
-  await expect(page.getByRole('heading', { level: 1, name: /Stop coaching from/ })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: HEADLINE })).toBeVisible();
 });

@@ -5,7 +5,7 @@
     <title>TB Gym</title>
     <meta
       name="description"
-      content="TB Gym brings training, nutrition, check-ins, progress, and client conversations together for coaches and teams."
+      content="One coaching space for programs, meal plans, check-ins and messages. Your client's phone and your screen tell the same week. For personal trainers, coaches and gyms."
     />
     <meta name="theme-color" content="#f5f3ea" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0f1513" media="(prefers-color-scheme: dark)" />
@@ -16,19 +16,40 @@
     -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="TB Gym" />
-    <meta property="og:title" content="TB Gym: stop coaching from chats and spreadsheets" />
+    <meta property="og:title" content="TB Gym: you plan it, they lift it, you both see it" />
     <meta
       property="og:description"
-      content="Training, meal plans, check-ins, progress and messages for every client, in one place. For personal trainers, coaches and gyms."
+      content="One coaching space for programs, meal plans, check-ins and messages. Your client's phone and your screen tell the same week. For personal trainers, coaches and gyms."
     />
     <meta property="og:image" content="/images/og-home.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="TB Gym: a coach guiding a client through a barbell lift, beside the headline Stop coaching from chats and spreadsheets."
+      content="TB Gym: a coach's Today screen and a client's phone from the Atlas Performance demo, beside the headline You plan it. They lift it. You both see it."
     />
     <meta name="twitter:card" content="summary_large_image" />
+    <!--
+      The homepage's first pictures (the week's Monday morning, R6.2b), asked for with the document
+      where they are on the first screen: beside the hero's copy on a wide screen. On a phone the copy
+      owns the first screen and the pictures follow, so nothing there is asked for ahead of the words.
+      A browser without AVIF skips these and takes the WebP from the page's <picture>.
+    -->
+    <link
+      rel="preload"
+      as="image"
+      type="image/avif"
+      imagesrcset="/images/home/hero-phone-480.avif 480w, /images/home/hero-phone.avif 720w"
+      imagesizes="250px"
+      media="(min-width: 1100px)"
+    />
+    <link
+      rel="preload"
+      href="/images/home/hero-coach.avif"
+      as="image"
+      type="image/avif"
+      media="(min-width: 1100px)"
+    />
     <!-- The homepage headline's faces, fetched with the document so the headline does not reflow. -->
     <link
       rel="preload"

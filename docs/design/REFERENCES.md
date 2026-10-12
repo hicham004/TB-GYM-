@@ -36,6 +36,12 @@ demo data.
 | Whoop | [App Store](https://apps.apple.com/us/app/whoop/id933944389) | One hero number plus one plain sentence explaining it |
 | MacroFactor | [App Store](https://apps.apple.com/us/app/macrofactor-macro-tracker/id1553503471) | Fast food logging and a clear daily macro view |
 
+## The homepage
+
+The homepage has its own board: [`homepage-research.md`](homepage-research.md) (R6.2b, 2026-10-12)
+reads twenty-nine homepages, the competitors, the consumer fitness products, the best product sites
+and the Awwwards Sites of the Year, and records the three concepts and the one chosen.
+
 ## What to avoid
 
 Scroll-hijacking, animation on every tap, stock photos of people inside the app, AI-generated

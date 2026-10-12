@@ -1,0 +1,210 @@
+@use 'home-shared' as *;
+
+// The chapters, and the two-screen figure each one (and the hero) carries where the stage is not
+// drawn: a phone with the coach's screen as a card over its lower half.
+
+@include reveal-keyframes;
+
+.chapters {
+  scroll-margin-block-start: 88px;
+}
+
+.chapters__intro {
+  margin-block: clamp(56px, 9vw, 128px) clamp(28px, 3vw, 44px);
+}
+
+.chapters__eyebrow {
+  @include eyebrow;
+}
+
+.chapters__intro h2 {
+  @include display(clamp(2.1rem, 3.4vw, 3.4rem));
+  margin-block-end: 18px;
+}
+
+.chapters__intro h2 em {
+  @include accent;
+  color: var(--home-forest);
+}
+
+.chapters__intro p:last-child {
+  color: var(--home-muted);
+  font-size: 1.02rem;
+  line-height: 1.55;
+  margin: 0;
+  max-inline-size: 30rem;
+}
+
+.chapters__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chapter {
+  border-block-start: 1px solid var(--home-line);
+  padding-block: 30px 36px;
+}
+
+.chapter__when {
+  @include eyebrow;
+  margin-block-end: 12px;
+}
+
+.chapter__title {
+  font-size: clamp(1.6rem, 2.5vw, 2.3rem);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  margin: 0 0 12px;
+  text-wrap: balance;
+}
+
+.chapter__body {
+  color: var(--home-muted);
+  font-size: clamp(1rem, 1.2vw, 1.12rem);
+  line-height: 1.55;
+  margin: 0;
+  max-inline-size: 31rem;
+}
+
+// The figure: the phone, then the coach's screen as a card below it, with the moment's number
+// between them; wide but still (reduced motion), the phone stands beside the card instead.
+.screens {
+  display: grid;
+  gap: 14px;
+  margin: 26px 0 0;
+  max-inline-size: 420px;
+  position: relative;
+  @include reveal(entry 0% cover 22%);
+}
+
+.screens--hero {
+  margin-block-start: 34px;
+}
+
+.screens__phone {
+  aspect-ratio: 390 / 844;
+  background: #0d1f1a;
+  border-radius: 10% / 4.6%;
+  box-shadow:
+    0 30px 60px -26px rgb(4 20 15 / 60%),
+    inset 0 0 0 1.5px rgb(255 255 255 / 14%);
+  display: block;
+  inline-size: min(62%, 250px);
+  margin-inline: auto;
+  overflow: hidden;
+  padding: 2.6%;
+}
+
+.screens__phone img {
+  block-size: auto;
+  border-radius: 8% / 3.7%;
+  display: block;
+  inline-size: 100%;
+}
+
+.screens__number {
+  background: var(--home-lime);
+  border-radius: 12px;
+  box-shadow: 0 14px 30px -16px rgb(4 20 15 / 45%);
+  font-size: 0.9rem;
+  font-weight: 600;
+  justify-self: center;
+  line-height: 1.3;
+  margin-block: -34px 0;
+  max-inline-size: 86%;
+  order: 1;
+  padding: 9px 13px;
+  position: relative;
+  text-align: center;
+}
+
+.screens__coach {
+  aspect-ratio: 4 / 3;
+  background: var(--home-cream);
+  border: 1px solid var(--home-line);
+  border-radius: 12px;
+  box-shadow: 0 26px 50px -24px rgb(4 20 15 / 45%);
+  display: block;
+  inline-size: 100%;
+  order: 2;
+  overflow: hidden;
+}
+
+.screens__coach img {
+  block-size: 100%;
+  display: block;
+  inline-size: 100%;
+  object-fit: cover;
+}
+
+@media #{$wide-story} {
+  .screens {
+    display: none;
+  }
+
+  .chapter {
+    border-block-start: 0;
+    border-inline-start: 3px solid transparent;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-block-size: 64vh;
+    padding-block: 24px;
+    padding-inline-start: 22px;
+    transition: border-color 450ms ease;
+  }
+
+  // While the stage is live, a lime rule marks the chapter whose moment is on it. The others keep
+  // their full colour: dimming them would put their words under the contrast line.
+  .week[data-motion='running'] .chapter.is-current {
+    border-inline-start-color: var(--home-lime);
+  }
+}
+
+// Wide, but the reader asked for less motion: each chapter's pictures beside its words.
+@media #{$wide-still} {
+  .chapter {
+    align-items: center;
+    column-gap: clamp(32px, 5vw, 80px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding-block: 48px;
+  }
+
+  .chapter > * {
+    grid-column: 1;
+  }
+
+  .chapter .screens {
+    grid-column: 2;
+    grid-row: 1 / 5;
+    margin: 0;
+    max-inline-size: 560px;
+  }
+
+  .screens {
+    align-items: end;
+    column-gap: 18px;
+    grid-template-columns: 42% minmax(0, 1fr);
+  }
+
+  .screens__phone {
+    grid-row: 1 / 3;
+    inline-size: 100%;
+    margin: 0;
+  }
+
+  .screens__number,
+  .screens__coach {
+    grid-column: 2;
+    order: 0;
+  }
+
+  .screens__number {
+    justify-self: start;
+    margin-block: 0;
+    text-align: start;
+  }
+}

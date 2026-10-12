@@ -9,13 +9,15 @@ import { RouterLink } from '@angular/router';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HomeClosing {
-  // The loop from the hero, repeated as the backdrop of the last call to action.
+  // The week's beats, repeated as the backdrop of the last call to action.
   private readonly loop = [
     $localize`Plan`,
     $localize`Train`,
+    $localize`Eat`,
     $localize`Check in`,
-    $localize`Reply`,
+    $localize`Talk`,
     $localize`Progress`,
+    $localize`Share`,
   ];
   protected readonly words = [...this.loop, ...this.loop, ...this.loop];
 }
