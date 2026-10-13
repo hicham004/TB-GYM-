@@ -6,8 +6,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { WebsiteSettingsStore } from '../../core/website/website-settings';
-import { announced, fill, press, query, settle } from '../../../testing/dom';
-import { HomeTalk, looksLikeContact } from './home-talk';
+import { announced, fill, leave, press, query, settle } from '../../../testing/dom';
+import { HomeTalk, looksLikeContact, SENT_HOLD_MS, sentHold } from './home-talk';
+
+/** A browser that answers the reduced-motion question; jsdom has no `matchMedia` of its own. */
+function stubMotion(reduce: boolean): void {
+  vi.stubGlobal('matchMedia', (media: string) => ({
+    matches: reduce && media.includes('reduce'),
+    media,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+}
 
 class IntersectionObserverStub {
   static instances: IntersectionObserverStub[] = [];
@@ -138,6 +148,69 @@ describe('HomeTalk', () => {
     expect(
       query<HTMLInputElement>(host, 'input[name="contact"]').getAttribute('aria-invalid'),
     ).toBe('true');
+  });
+
+  it('draws each field as a line whose label floats once it is in use, with the help in its note until the reasons are due', async () => {
+    const { fixture, host } = await render();
+    const nameField = query(host, '[for="talk-name"]').closest('.talk__field')!;
+    const contact = query<HTMLInputElement>(host, '#talk-contact');
+    const contactNote = query(host, '#talk-contact-note');
+
+    // At rest the label sits in its field; the note under the contact field is its help.
+    expect(nameField.classList).not.toContain('talk__field--filled');
+    expect(contact.getAttribute('aria-describedby')).toBe('talk-contact-note');
+    expect(contactNote.textContent?.trim()).toBe('Either works; we reply there.');
+    expect(contactNote.classList).not.toContain('talk__note--error');
+
+    fill(host, 'Your name', 'Rami Tabet');
+    await settle(fixture);
+    expect(nameField.classList).toContain('talk__field--filled');
+
+    // Left wrong, a field says why in its own note, which its control is described by.
+    fill(host, 'Email or WhatsApp number', 'rami');
+    leave(host, 'Email or WhatsApp number');
+    await settle(fixture);
+    expect(contact.getAttribute('aria-invalid')).toBe('true');
+    expect(contactNote.classList).toContain('talk__note--error');
+    expect(contactNote.textContent).toContain('Enter an email address or a WhatsApp number');
+
+    // A field with no help has no note until it has a reason to show.
+    const gym = query<HTMLInputElement>(host, '#talk-gym');
+    expect(host.querySelector('#talk-gym-note')).toBeNull();
+    expect(gym.hasAttribute('aria-describedby')).toBe(false);
+    leave(host, 'Your gym');
+    await settle(fixture);
+    expect(query(host, '#talk-gym-note').textContent).toContain('Enter the name of your gym.');
+    expect(gym.getAttribute('aria-describedby')).toBe('talk-gym-note');
+  });
+
+  it('holds a check on Send for a moment before the thanks takes the form’s place', async () => {
+    stubMotion(false);
+    const { fixture, host } = await render();
+    fillTheForm(host);
+    await settle(fixture);
+    press(host, 'Send');
+    await settle(fixture);
+
+    const send = query<HTMLButtonElement>(host, '.talk__send');
+    expect(send.classList).toContain('talk__send--sent');
+    expect(send.textContent?.trim()).toBe('Sent');
+    expect(send.disabled).toBe(true);
+    expect(host.textContent).not.toContain('Thanks,');
+
+    await new Promise((resolve) => setTimeout(resolve, SENT_HOLD_MS + 50));
+    await settle(fixture);
+    expect(host.querySelector('form')).toBeNull();
+    expect(host.textContent).toContain('Thanks, Rami Tabet.');
+    expect(document.activeElement).toBe(query(host, '[role="status"]'));
+  });
+
+  it('skips the check’s moment for a reader who asked for less motion, or where nothing can ask', () => {
+    expect(sentHold()).toBe(0);
+    stubMotion(true);
+    expect(sentHold()).toBe(0);
+    stubMotion(false);
+    expect(sentHold()).toBe(SENT_HOLD_MS);
   });
 
   it('keeps the hidden field out of reach and sends it empty', async () => {

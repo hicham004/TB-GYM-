@@ -4,15 +4,24 @@
   display: block;
 }
 
+// The last part of the dark ending, after Talk to us: the hero's green light again, the closing
+// line at the hero's size, the one lime pill, and the page's foot.
 .finale {
-  background: linear-gradient(180deg, var(--home-page), var(--home-night));
+  background:
+    radial-gradient(1100px 640px at 74% 34%, #16221d 0%, rgb(22 34 29 / 0%) 70%),
+    linear-gradient(180deg, var(--home-page), var(--home-night));
   color: var(--home-cream);
   @include dark-focus;
 }
 
 .finale__inner {
   @include wrap;
-  padding-block: clamp(80px, 9vw, 136px) 56px;
+  padding-block-end: 56px;
+}
+
+.finale__body {
+  border-block-start: 1px solid var(--home-hair);
+  padding-block-start: clamp(72px, 8vw, 120px);
 }
 
 .finale__eyebrow {
@@ -21,9 +30,9 @@
 }
 
 .finale__title {
-  @include section-display;
-  margin-block-end: 28px;
-  max-inline-size: 16ch;
+  @include display;
+  margin-block-end: 40px;
+  max-inline-size: 12ch;
 }
 
 .finale__actions {
@@ -31,7 +40,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 22px;
-  margin-block-end: 72px;
+  margin-block-end: clamp(64px, 7vw, 104px);
 }
 
 .finale__start {
@@ -76,6 +85,10 @@
 }
 
 @media (max-width: $mobile) {
+  .finale__title {
+    font-size: clamp(2.25rem, 9.4vw, 3.1rem);
+  }
+
   .finale__actions {
     align-items: stretch;
     flex-direction: column;

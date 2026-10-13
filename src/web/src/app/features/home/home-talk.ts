@@ -19,10 +19,18 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { WebsiteSettingsStore } from '../../core/website/website-settings';
-import { Control, Field } from '../../ui/field';
 
 /** The server's rule: the least a person takes between the form appearing and sending it. */
 export const MINIMUM_FORM_MS = 3000;
+
+/** How long Send holds its check before the thanks takes the form's place. */
+export const SENT_HOLD_MS = 900;
+
+/** The check's moment, or none for a reader who asked for less motion (and where nothing can ask). */
+export function sentHold(): number {
+  if (typeof matchMedia !== 'function') return 0;
+  return matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : SENT_HOLD_MS;
+}
 
 /** The server's answer when the form was sent sooner than that, or with a stamp it no longer takes. */
 const TOO_FAST = 'contact_form_too_fast';
@@ -53,10 +61,14 @@ export function looksLikeContact(value: string): boolean {
  * two refusals a person can meet by waiting or by fetching a new stamp, once. A script that fills
  * the hidden "Website" field is answered as if accepted and kept nowhere. Nothing here runs at
  * build time: the page arrives with the empty form, and the stamp is asked for in the browser.
+ *
+ * Since R6.2j the form opens the page's dark ending, and its fields are drawn as lines with their
+ * labels resting inside them, which the kit's field (a label above a boxed control) cannot draw;
+ * so each field wires its own label, note, `aria-invalid` and `aria-describedby` the way the kit's
+ * does. Once sent, Send holds a check for a moment, then the thanks takes the form's place.
  */
 @Component({
   selector: 'app-home-talk',
-  imports: [Field, Control],
   templateUrl: './home-talk.html',
   styleUrl: './home-talk.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -69,6 +81,7 @@ export class HomeTalk {
   private readonly injector = inject(Injector);
   private readonly browser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly section = viewChild.required<ElementRef<HTMLElement>>('section');
+  private readonly form = viewChild<ElementRef<HTMLFormElement>>('form');
   private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
   private readonly doneNote = viewChild<ElementRef<HTMLElement>>('doneNote');
 
@@ -78,7 +91,11 @@ export class HomeTalk {
   protected readonly attempt = new FormAttempt();
   protected readonly submitting = signal(false);
   protected readonly error = signal<string | null>(null);
+  /** The moment between the server's yes and the thanks: Send shows its check. */
+  protected readonly justSent = signal(false);
   protected readonly sent = signal<{ name: string; contact: string } | null>(null);
+  /** The form's height when the thanks replaced it, which the thanks keeps on a wide screen. */
+  protected readonly slotHeight = signal<number | null>(null);
   protected readonly whatsAppLink = this.settings.whatsAppLink;
 
   protected readonly name = signal('');
@@ -154,6 +171,12 @@ export class HomeTalk {
     };
     try {
       await this.post(value, true);
+      const hold = sentHold();
+      if (hold > 0) {
+        this.justSent.set(true);
+        await new Promise((resolve) => setTimeout(resolve, hold));
+      }
+      this.slotHeight.set(this.form()?.nativeElement.offsetHeight ?? null);
       this.sent.set({ name: value.name.trim(), contact: value.contact.trim() });
       // The note takes the form's place on the next render; focus lands on it then.
       afterNextRender(() => this.doneNote()?.nativeElement.focus(), { injector: this.injector });

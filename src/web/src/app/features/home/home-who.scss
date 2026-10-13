@@ -7,7 +7,7 @@
 // The facts: one hairline strip, a lime dot as each mark.
 .facts {
   @include wrap;
-  padding-block: clamp(32px, 4vw, 56px) 0;
+  padding-block: clamp(32px, 4vw, 56px) clamp(56px, 6vw, 88px);
 }
 
 .facts__list {
@@ -50,41 +50,58 @@
   color: var(--home-ink);
 }
 
+// The band: the dark ending starts here, under the same green light as the hero.
 .who {
+  background:
+    radial-gradient(1000px 560px at 76% 0%, #16221d 0%, rgb(22 34 29 / 0%) 72%), var(--home-page);
+  color: var(--home-cream);
+  scroll-margin-block-start: 72px;
+  @include dark-focus;
+}
+
+.who__inner {
   @include wrap;
   @include section-padding;
-  scroll-margin-block-start: 72px;
 }
 
 .who__eyebrow {
   @include eyebrow;
-  color: var(--home-muted);
+  color: var(--home-lime);
 }
 
 .who__title {
   @include section-display;
-  margin-block-end: 56px;
   max-inline-size: 18ch;
 }
 
-.who__grid {
+// Two halves split by a hairline, no card around either. The gym half is the wider one, so the
+// Team screen (640 px) fits at 1:1 from about 1440 px; below that both screens shrink to their half.
+.who__halves {
+  border-block-start: 1px solid var(--home-hair);
   display: grid;
-  gap: 40px;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+  margin-block-start: clamp(48px, 5vw, 72px);
 }
 
-// A story: the words, its own button, then its screen running off the card's edge at 1:1.
-.story {
-  background: var(--home-soft);
-  border-radius: 28px;
+.half {
+  align-items: flex-start;
   display: flex;
   flex-direction: column;
-  min-block-size: 700px;
-  overflow: hidden;
-  padding: 40px 40px 0;
+  min-inline-size: 0;
+  padding-block-start: 48px;
+  transition: opacity 450ms ease;
 }
 
-.story h3 {
+.half--coach {
+  padding-inline-end: clamp(28px, 3.4vw, 56px);
+}
+
+.half--gym {
+  border-inline-start: 1px solid var(--home-hair);
+  padding-inline-start: clamp(28px, 3.4vw, 56px);
+}
+
+.half h3 {
   font-size: clamp(1.5rem, 2vw, 1.875rem);
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -92,49 +109,85 @@
   margin: 0 0 14px;
 }
 
-.story p {
-  color: var(--home-muted);
+.half p {
+  color: var(--home-dim);
+  font-size: 1.0625rem;
   line-height: 1.55;
-  margin: 0 0 22px;
+  margin: 0 0 26px;
   max-inline-size: 40ch;
 }
 
-.story__button {
+.half__button {
   @include pill;
-  align-self: flex-start;
-  margin-block-end: 36px;
 }
 
-.story__button--forest {
-  @include pill-forest;
+.half__button--forest {
+  @include pill-forest-dark;
 }
 
-.story__button--hair {
-  @include pill-hair;
+.half__button--hair {
+  @include pill-hair-dark;
 }
 
-// The private pre-launch build (R6.2h): the gym floor's stand-in between the button and the screen.
-.story__photo {
-  aspect-ratio: 3 / 2;
-  border-radius: 16px;
-  flex: none;
-  margin-block-end: 28px;
+.half__shot {
+  inline-size: 100%;
+  margin-block-start: 52px;
+  transition: opacity 450ms ease;
 }
 
-.story__shot {
-  margin-block-start: auto;
-  overflow: hidden;
-}
-
-.story__shot app-home-window {
+// The screen whole, at its own size until the half is narrower, lifted off the night by a shadow
+// that follows its rounded corners.
+.half__window {
+  filter: drop-shadow(0 30px 50px rgb(0 0 0 / 50%));
   inline-size: var(--window-width);
-  max-inline-size: none;
+  max-inline-size: 100%;
+  transition: transform 700ms var(--home-ease);
+}
+
+// The private pre-launch build (R6.2h): the gym floor's stand-in, the Team screen lifted onto it.
+.half__photo {
+  aspect-ratio: 16 / 9;
+  border-radius: 18px;
+  inline-size: 100%;
+}
+
+.half__shot--photo .half__window {
+  margin-block-start: -118px;
+  position: relative;
 }
 
 .who__caption {
   @include caption;
-  color: var(--home-muted);
-  margin-block-start: 16px;
+  margin-block-start: 40px;
+}
+
+// The half under the pointer (or the keyboard) comes forward and the other steps back: its screen
+// fades, its words dim only as far as they stay readable.
+@media (hover: hover) and (min-width: $wide) {
+  .who__halves:has(.half:hover) .half:not(:hover),
+  .who__halves:has(.half:focus-within) .half:not(:focus-within) {
+    opacity: 0.75;
+  }
+
+  .who__halves:has(.half:hover) .half:not(:hover) .half__shot,
+  .who__halves:has(.half:focus-within) .half:not(:focus-within) .half__shot {
+    opacity: 0.55;
+  }
+}
+
+@media (hover: hover) and (min-width: $wide) and (prefers-reduced-motion: no-preference) {
+  .half:hover .half__window,
+  .half:focus-within .half__window {
+    transform: translateY(-12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .half,
+  .half__shot,
+  .half__window {
+    transition: none;
+  }
 }
 
 @media (max-width: #{$wide - 1px}) {
@@ -142,23 +195,36 @@
     grid-template-columns: 1fr;
   }
 
-  .who__grid {
-    grid-template-columns: 1fr;
+  .who__halves {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .story {
-    border-radius: 22px;
-    min-block-size: 0;
-    padding: 28px 24px 0;
+  .half--coach {
+    padding-block-end: 48px;
+    padding-inline-end: 0;
   }
 
-  .story__shot app-home-window {
+  .half--gym {
+    border-block-start: 1px solid var(--home-hair);
+    border-inline-start: 0;
+    padding-inline-start: 0;
+  }
+
+  .half__shot {
+    margin-block-start: 40px;
+  }
+
+  .half__window {
     inline-size: 100%;
+  }
+
+  .half__shot--photo .half__window {
+    margin-block-start: -56px;
   }
 }
 
 @media (max-width: $mobile) {
-  .story__button {
+  .half__button {
     align-self: stretch;
   }
 }

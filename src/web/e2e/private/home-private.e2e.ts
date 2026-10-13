@@ -91,7 +91,7 @@ for (const width of [1440, 390]) {
     for (const [name, file] of STAND_INS) {
       await expectStandIn(page.locator(`[data-placeholder="${name}"]:visible`).first(), file);
     }
-    await expect(page.locator('.story__photo')).toBeVisible();
+    await expect(page.locator('.half__photo')).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: testInfo.outputPath('private-home-full.png'), fullPage: true });
 

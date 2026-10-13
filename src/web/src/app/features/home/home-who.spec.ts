@@ -16,32 +16,43 @@ async function render(placeholders: PlaceholderSet | null) {
 }
 
 describe('HomeWho', () => {
-  it('gives each audience a real screen and its own button, with no stand-in on the public build', async () => {
-    const { host } = await render(null);
+  it('gives each audience a half of the band with a real screen and its own button, with no stand-in on the public build', async () => {
+    const { fixture, host } = await render(null);
 
-    const stories = host.querySelectorAll('.story');
-    expect(stories).toHaveLength(2);
-    expect(stories[0].querySelector('.story__button')?.getAttribute('href')).toBe('/auth/register');
-    expect(stories[1].querySelector('.story__button')?.getAttribute('href')).toBe('/#talk');
-    expect(stories[1].querySelector('.story__shot img')?.getAttribute('src')).toBe(
+    const halves = host.querySelectorAll('.half');
+    expect(halves).toHaveLength(2);
+    expect(halves[0].querySelector('h3')?.textContent).toContain('For independent coaches');
+    expect(halves[0].querySelector('.half__button')?.getAttribute('href')).toBe('/auth/register');
+    expect(halves[1].querySelector('h3')?.textContent).toContain('For gyms and coaching teams');
+    expect(halves[1].querySelector('.half__button')?.getAttribute('href')).toBe('/#talk');
+    expect(halves[0].querySelector('.half__shot img')?.getAttribute('src')).toBe(
+      '/images/home/builder-week-1x.webp',
+    );
+    expect(halves[1].querySelector('.half__shot img')?.getAttribute('src')).toBe(
       '/images/home/team-window-1x.webp',
     );
-    expect(host.querySelector('.story__photo')).toBeNull();
+    // Each screen is drawn at its own width until its half is narrower.
+    const windows = host.querySelectorAll<HTMLElement>('.half__window');
+    expect(windows[0].style.getPropertyValue('--window-width')).toBe('520px');
+    expect(windows[1].style.getPropertyValue('--window-width')).toBe('640px');
+    expect(host.querySelector('.half__photo')).toBeNull();
+    // The band is where the dark ending begins; the page reads its top for the header's tone.
+    expect(fixture.componentInstance.band()).toBe(query(host, '#for-gyms'));
   });
 
-  it('on the private build puts the gym floor’s stand-in above the Team screen, and only there', async () => {
+  it('on the private build lifts the Team screen onto the gym floor’s stand-in, and only there', async () => {
     const { host } = await render(TEST_PLACEHOLDERS);
 
-    const stories = host.querySelectorAll('.story');
-    expect(stories[0].querySelector('.story__photo')).toBeNull();
-    const photo = query(stories[1], '.story__photo');
+    const halves = host.querySelectorAll('.half');
+    expect(halves[0].querySelector('.half__photo')).toBeNull();
+    const shot = query(halves[1], '.half__shot');
+    expect(shot.classList).toContain('half__shot--photo');
+    const photo = query(shot, '.half__photo');
     expect(photo.getAttribute('data-placeholder')).toBe('team');
     expect(photo.querySelector('img')?.getAttribute('src')).toBe('/placeholders/team.jpg');
     expect(photo.querySelector('img')?.getAttribute('alt')).toContain('Two coaches on a gym floor');
-    // The photograph sits between the button and the screen.
-    const order = Array.from(stories[1].children).map((child) => child.className.split(' ')[0]);
-    expect(order.indexOf('story__button')).toBeLessThan(order.indexOf('story__photo'));
-    expect(order.indexOf('story__photo')).toBeLessThan(order.indexOf('story__shot'));
-    expect(stories[1].querySelector('.story__shot img')).not.toBeNull();
+    // The photograph comes first and the screen after it, lifted over its lower edge.
+    const order = Array.from(shot.children).map((child) => child.className.split(' ')[0]);
+    expect(order).toEqual(['half__photo', 'half__window']);
   });
 });

@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { HomeFinale } from './home-finale';
-import { HomeHeader } from './home-header';
+import { HomeHeader, type HeaderTone } from './home-header';
 import { HomeHero } from './home-hero';
 import { HomeMotion } from './home-motion';
 import { HomeRows } from './home-rows';
@@ -38,10 +38,10 @@ export class Home {
   private readonly hero = viewChild.required(HomeHero);
   private readonly week = viewChild.required(HomeWeek);
   private readonly rows = viewChild.required(HomeRows);
-  private readonly finale = viewChild.required(HomeFinale);
+  private readonly who = viewChild.required(HomeWho);
 
-  /** Whether a dark section (the hero, the finale) is under the sticky header right now. */
-  protected readonly overDark = signal(true);
+  /** What is under the sticky header right now: the hero, the cream body or the dark ending. */
+  protected readonly headerTone = signal<HeaderTone>('dark');
 
   /**
    * True once the app is live in the browser. The numerals' serif face waits for it: they sit
@@ -62,15 +62,16 @@ export class Home {
     });
   }
 
-  // The header takes the tone of the section under its bottom edge: dark while the hero still
-  // reaches below it, and again once the finale has risen up to it. Read on scroll, one frame at
-  // a time, from two rectangles; nothing else is laid out.
+  // The header takes the tone of the section under its bottom edge: clear while the hero still
+  // reaches below it, cream over the body, and night from the moment the dark ending (who it's
+  // for, Talk to us, the finale, down to the page's end) has risen up to it. Read on scroll, one
+  // frame at a time, from two rectangles; nothing else is laid out.
   private watchTone(): void {
     const update = () => {
       const edge = this.header().host.getBoundingClientRect().bottom;
       const hero = this.hero().host.getBoundingClientRect();
-      const finale = this.finale().host.getBoundingClientRect();
-      this.overDark.set(hero.bottom > edge || finale.top < edge);
+      const ending = this.who().band().getBoundingClientRect();
+      this.headerTone.set(hero.bottom > edge ? 'dark' : ending.top < edge ? 'night' : 'light');
     };
     let frame = 0;
     const onScroll = () => {

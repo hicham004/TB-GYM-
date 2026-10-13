@@ -13,10 +13,17 @@ import { RouterLink } from '@angular/router';
 import { HOME_PLACEHOLDERS } from './home-placeholder';
 
 /**
+ * What is under the header: the dark hero, where it is clear (`dark`); the cream body, where it
+ * takes a frosted cream fill (`light`); or the dark ending below the hero, where it takes a frosted
+ * dark fill (`night`), since there the page's words scroll right under it.
+ */
+export type HeaderTone = 'dark' | 'light' | 'night';
+
+/**
  * The website's header (the homepage and `/changelog`): the wordmark, three section links, Sign
  * in. It sticks to the top and takes the tone of the section under it: cream text over the dark
- * hero and finale, ink over the cream body. On a phone the section links sit behind a Menu button,
- * a disclosure the keyboard closes with Escape.
+ * hero and the dark ending, ink over the cream body. On a phone the section links sit behind a Menu
+ * button, a disclosure the keyboard closes with Escape.
  */
 @Component({
   selector: 'app-home-header',
@@ -28,8 +35,8 @@ import { HOME_PLACEHOLDERS } from './home-placeholder';
 export class HomeHeader {
   readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
-  /** Whether the section under the header is dark right now. */
-  readonly dark = input(false);
+  /** The section under the header right now; the changelog's cream page leaves it light. */
+  readonly under = input<HeaderTone>('light');
 
   protected readonly menuOpen = signal(false);
 
@@ -40,8 +47,8 @@ export class HomeHeader {
       inject(Meta).updateTag({ name: 'robots', content: 'noindex, nofollow' });
     }
   }
-  /** Over the dark hero the header is clear; the open menu draws its own panel either way. */
-  protected readonly tone = computed(() => (this.dark() && !this.menuOpen() ? 'dark' : 'light'));
+  /** The open menu draws its own cream panel, whatever is under it. */
+  protected readonly tone = computed<HeaderTone>(() => (this.menuOpen() ? 'light' : this.under()));
 
   protected toggle(): void {
     this.menuOpen.update((open) => !open);

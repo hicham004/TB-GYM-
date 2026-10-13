@@ -127,6 +127,28 @@ $wide-still: '(min-width: #{$wide}) and (prefers-reduced-motion: reduce)';
   }
 }
 
+// On the dark ending a forest pill needs a faint edge to stand off the night behind it.
+@mixin pill-forest-dark {
+  background: var(--home-forest);
+  border-color: rgb(255 255 255 / 16%);
+  color: var(--home-cream);
+
+  &:hover {
+    background: #1c4f42;
+    border-color: rgb(255 255 255 / 30%);
+  }
+}
+
+@mixin pill-hair-dark {
+  background: transparent;
+  border-color: rgb(255 255 255 / 32%);
+  color: var(--home-cream);
+
+  &:hover {
+    border-color: var(--home-cream);
+  }
+}
+
 // The quiet link: words and a mark, no box.
 @mixin quiet {
   align-items: center;

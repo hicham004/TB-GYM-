@@ -101,11 +101,17 @@ test('on a wide screen the panel follows the stages as they scroll past, and the
   await expect(week).toHaveAttribute('data-stage', 'see');
   await expect(page.locator('.days--strip .days__day.is-on')).toHaveText('Sun');
 
-  // The finale is shorter than the screen, so it never rises up to the header on this viewport;
-  // back at the top the hero is under the header again.
+  // Back at the top the hero is under the header again, and it is clear.
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect(week).toHaveAttribute('data-stage', 'plan');
   await expect(page.locator('.header')).toHaveAttribute('data-tone', 'dark');
+
+  // From who it's for to the page's end the page is dark, and the header firms up in the night's
+  // colour over it.
+  for (const id of ['for-gyms', 'talk']) {
+    await page.evaluate((section) => document.getElementById(section)?.scrollIntoView(), id);
+    await expect(page.locator('.header')).toHaveAttribute('data-tone', 'night');
+  }
 });
 
 test('reduced motion shows a still, complete week: every stage with its own two screens', async ({
@@ -224,6 +230,27 @@ for (const width of [1280, 1440]) {
     });
 
     expect(pictures.hero, 'the hero’s window shows beside the phone').toBe(false);
+
+    // Who it's for: each screen whole inside its half of the band, at its own size from 1440 px.
+    const halves = await page.evaluate(() =>
+      [...document.querySelectorAll('.half')].map((half) => {
+        const box = half.getBoundingClientRect();
+        const style = getComputedStyle(half);
+        const screen = half.querySelector('.half__window img')!.getBoundingClientRect();
+        return {
+          name: half.querySelector('h3')!.textContent!.trim(),
+          left: screen.left - (box.left + parseFloat(style.paddingLeft)),
+          right: box.right - parseFloat(style.paddingRight) - screen.right,
+          width: Math.round(screen.width),
+        };
+      }),
+    );
+    expect(halves).toHaveLength(2);
+    for (const { name, left, right } of halves) {
+      expect(left, `${name} starts outside its half`).toBeGreaterThanOrEqual(-1);
+      expect(right, `${name} runs past its half`).toBeGreaterThanOrEqual(-1);
+    }
+    if (width === 1440) expect(halves.map((half) => half.width)).toEqual([520, 640]);
     for (const { row, past, besidePhone } of pictures.rows) {
       expect(past, `${row} runs past the page`).toBeLessThanOrEqual(1);
       expect(besidePhone, `${row} shows beside the phone`).toBe(false);
@@ -404,6 +431,41 @@ for (const width of [1440, 390]) {
     await expectNoHorizontalOverflow(page);
   });
 }
+
+test('on a wide screen Send folds into a check, then the thanks takes the form’s place and the finale stays put', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await mockSignedOut(page, {
+    'GET /api/website/contact-form': (route) => json(route, 200, { stamp: 'stamp' }),
+    'POST /api/website/contact-requests': (route) => route.fulfill({ status: 202, body: '' }),
+  });
+  await page.goto('/');
+  await waitForFonts(page);
+  await expect(page.locator('#week')).toHaveAttribute('data-motion', 'running');
+
+  await page.locator('#talk').scrollIntoViewIfNeeded();
+  const name = page.getByLabel('Your name', { exact: true });
+  const label = page.locator('label[for="talk-name"]');
+  // A resting label sits inside its line; in use, it floats above it.
+  const resting = await label.boundingBox();
+  await name.fill('Rami Tabet');
+  await expect.poll(async () => (await label.boundingBox())!.y).toBeLessThan(resting!.y - 12);
+  await page.getByLabel('Your gym', { exact: true }).fill('Oakline Strength');
+  await page.getByLabel('Email or WhatsApp number', { exact: true }).fill('rami@example.com');
+  const finaleTop = () =>
+    page.evaluate(() => document.querySelector('.finale')!.getBoundingClientRect().top + scrollY);
+  const before = await finaleTop();
+
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.talk__send')).toHaveClass(/talk__send--sent/);
+  await expect(page.locator('.talk__send')).toHaveAccessibleName('Sent');
+  await page.screenshot({ path: testInfo.outputPath('home-talk-check.png') });
+  await expect(page.getByRole('status')).toContainText('Thanks, Rami Tabet.');
+  await expect(page.locator('#talk form')).toHaveCount(0);
+  expect(Math.abs((await finaleTop()) - before)).toBeLessThanOrEqual(1);
+});
 
 test('the form refuses an empty send with its reasons and keeps the keyboard inside it', async ({
   page,

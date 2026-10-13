@@ -37,6 +37,16 @@
   color: var(--home-ink);
 }
 
+// Over the dark ending the words scroll right under the header, so it firms up like the light
+// one does, in the night's colour.
+.header[data-tone='night'] {
+  backdrop-filter: blur(14px);
+  background: rgb(15 21 19 / 86%);
+  border-block-end: 1px solid var(--home-hair);
+  color: var(--home-cream);
+  @include dark-focus;
+}
+
 .header--open[data-tone='light'] {
   backdrop-filter: none;
   background: var(--home-cream);
@@ -125,7 +135,8 @@
   text-decoration: none;
 }
 
-.header[data-tone='dark'] .links .links__sign {
+.header[data-tone='dark'] .links .links__sign,
+.header[data-tone='night'] .links .links__sign {
   border-color: var(--home-hair);
 }
 
@@ -146,7 +157,8 @@
   background: rgb(127 127 127 / 12%);
 }
 
-.header[data-tone='dark'] .menu-button {
+.header[data-tone='dark'] .menu-button,
+.header[data-tone='night'] .menu-button {
   border-color: var(--home-hair);
 }
 

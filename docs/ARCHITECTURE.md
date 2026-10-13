@@ -729,12 +729,12 @@ demo (UI plan R6.2b; the research and the decision are in `docs/design/homepage-
 R6.2f rebuilt it again as the premium page the R6.2d mockups recommended
 (`docs/design/r62d-mockups.html`, after `docs/design/homepage-visual-research.md`). The page is
 `features/home/`: `home` (the root, which starts the motion and reads the header's tone on scroll),
-`home-header` (sticky, cream over the dark hero and finale, ink over the cream body, a disclosure
+`home-header` (sticky, clear over the dark hero, frosted cream over the body and frosted night over the dark ending (R6.2j), a disclosure
 menu on phones; `/changelog` uses it too), `home-hero` (one promise line, the coach's dark Today at
 1:1 beside the client's phone), `home-week` (four stages with the Mon–Sun strip as the chapter label
 and an upright serif numeral, and a panel of two slots whose composition is the panel's `data-stage`),
 `home-rows` (six feature rows pairing the coach's screen and the client's phone, and the strip for
-clients), `home-who` (the product-fact strip with the changelog's newest date, and the audience split)
+clients), `home-who` (the product-fact strip with the changelog's newest date, and the dark band where the two audiences split)
 and `home-finale`; `home-content.ts` holds the words and `home-pictures.ts` the picture names and
 sizes. The whole page is rendered at build time, painted in full; nothing waits for the browser except
 the motion. `HomeMotion` asks the browser one question, `WIDE_STORY` (a wide screen and no request
@@ -783,7 +783,10 @@ and add one `<script>` from `/stats/`, which nginx proxies to plausible.io toget
 endpoint, so the page connects to nothing but its own origin and sets no cookie. The build-time
 render asks for nothing, so the finished HTML holds the form and never the script
 (`check-prerender.mjs` checks both). `e2e/support.ts`'s `mockSignedOut` answers the settings
-with neither configured.
+with neither configured. Since R6.2j the band, the form and the finale are one dark ending, and the
+form draws its fields as lines with resting labels, wiring each `<label for>`, note, `aria-invalid`
+and `aria-describedby` itself the way the kit's field does (the kit's field is a label above a boxed
+control); the form's requests and guards are unchanged.
 
 R6.2h adds the private pre-launch build, for showing the homepage with stand-in photographs before
 the shoot and never to the public. The stand-ins live in `src/web/placeholders/` (git-ignored but
