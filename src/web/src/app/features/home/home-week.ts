@@ -8,9 +8,15 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
-import { WEEK_STAGES } from './home-content';
+import { type StageId, WEEK_STAGES } from './home-content';
 import { HomeMotion, type HomeMotionTargets } from './home-motion';
 import { HomePhone } from './home-phone';
+import {
+  HOME_PLACEHOLDERS,
+  HomePlaceholder,
+  type PlaceholderPicture,
+  stagePlaceholder,
+} from './home-placeholder';
 import { HomeWindow } from './home-window';
 
 /**
@@ -22,7 +28,7 @@ import { HomeWindow } from './home-window';
  */
 @Component({
   selector: 'app-home-week',
-  imports: [HomePhone, HomeWindow],
+  imports: [HomePhone, HomePlaceholder, HomeWindow],
   templateUrl: './home-week.html',
   styleUrls: ['./home-week.scss', './home-week-panel.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -41,6 +47,8 @@ export class HomeWeek {
   protected readonly active = signal(0);
   protected readonly stage = computed(() => this.stages[this.active()]);
   protected readonly motionState = inject(HomeMotion).state;
+  /** The private pre-launch build's stand-in photographs (R6.2h), or null on the public build. */
+  protected readonly placeholders = inject(HOME_PLACEHOLDERS);
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly panel = viewChild.required<ElementRef<HTMLElement>>('panel');
@@ -49,6 +57,11 @@ export class HomeWeek {
   private readonly stageTitles = viewChildren<ElementRef<HTMLElement>>('stageTitle');
   private readonly marker = viewChild<ElementRef<HTMLElement>>('marker');
   private readonly dayElements = viewChildren<ElementRef<HTMLElement>>('day');
+
+  /** The stage's stand-in photograph: on the private build, for the stages that have one. */
+  protected photoOf(stage: StageId): PlaceholderPicture | null {
+    return stagePlaceholder(stage, this.placeholders);
+  }
 
   /** The headlines the page reveals line by line. */
   titles(): HTMLElement[] {

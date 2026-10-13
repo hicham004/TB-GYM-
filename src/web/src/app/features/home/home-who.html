@@ -43,6 +43,15 @@
       <a class="story__button story__button--hair" routerLink="/" fragment="talk" i18n
         >Talk to us about your gym</a
       >
+      @if (placeholders; as set) {
+        <!-- The private pre-launch build only (R6.2h): the shoot's stand-in of a gym floor. -->
+        <app-home-placeholder
+          class="story__photo"
+          [picture]="set.team"
+          alt="Two coaches on a gym floor, each with a client: a stand-in for the shoot"
+          i18n-alt
+        />
+      }
       <div class="story__shot" [style.--window-width.px]="team.width">
         <app-home-window
           [window]="team"

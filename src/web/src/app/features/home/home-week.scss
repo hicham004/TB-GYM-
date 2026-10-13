@@ -104,6 +104,18 @@
   margin: 32px 0 0;
 }
 
+.stage__own-scene {
+  position: relative;
+}
+
+// The private pre-launch build (R6.2h): on a phone the stage's stand-in photograph is a band of
+// its own above the phone, whole, where there is no room for one beside the other.
+.stage__own-photo {
+  aspect-ratio: 3 / 2;
+  border-radius: 18px;
+  margin-block-end: 20px;
+}
+
 .stage__own-phone {
   inline-size: min(300px, 86%);
   margin-inline: auto;
@@ -211,8 +223,48 @@
     grid-column: 2;
     grid-row: 1 / 7;
     margin: 0;
-    min-block-size: 720px;
     position: relative;
+  }
+
+  .stage__own-scene {
+    min-block-size: 720px;
+  }
+
+  // With a stand-in photograph (R6.2h) the scene is the photograph, the phone lifted out of it at
+  // the right; the coach's window gives way, and the caption moves under the scene.
+  .stage__own--photo .stage__own-scene {
+    border-radius: 28px;
+    overflow: hidden;
+  }
+
+  .stage__own-photo {
+    aspect-ratio: auto;
+    border-radius: 0;
+    inset: 0;
+    margin: 0;
+    position: absolute;
+  }
+
+  .stage__own-photo[data-stage-id='train'] {
+    --placeholder-focus: 74% 50%;
+  }
+
+  .stage__own-photo[data-stage-id='see'] {
+    --placeholder-focus: 61% 50%;
+  }
+
+  .stage__own--photo .stage__own-window {
+    display: none;
+  }
+
+  .stage__own--photo .stage__own-phone {
+    inset-block-start: 40px;
+    inset-inline-end: 28px;
+  }
+
+  .stage__own--photo .stage__caption {
+    margin-block-start: 16px;
+    position: static;
   }
 
   .stage__own-window {

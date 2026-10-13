@@ -180,3 +180,60 @@
     justify-content: center;
   }
 }
+
+// The private pre-launch build (UI plan R6.2h): the shoot's stand-in behind the whole stage, under
+// a scrim that keeps the headline readable on the left and fades the picture into the page's dark
+// floor at the bottom. The coach's window is not drawn; the lit phone stays as the client's side.
+.hero--photo {
+  position: relative;
+}
+
+.hero__photo {
+  --placeholder-focus: 50% 50%;
+  --placeholder-mark-start: clamp(20px, 5vw, 80px);
+  --placeholder-mark-top: 92px;
+  inset: 0;
+  position: absolute;
+}
+
+.hero__scrim {
+  background:
+    linear-gradient(
+      90deg,
+      rgb(10 15 13 / 95%) 0%,
+      rgb(10 15 13 / 88%) 30%,
+      rgb(10 15 13 / 50%) 44%,
+      rgb(10 15 13 / 16%) 58%,
+      rgb(10 15 13 / 10%) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgb(10 15 13 / 30%) 0%,
+      rgb(10 15 13 / 0%) 30%,
+      rgb(15 21 19 / 94%) 100%
+    );
+  inset: 0;
+  position: absolute;
+}
+
+.hero--photo .hero__inner {
+  position: relative;
+}
+
+@media (max-width: #{$wide - 1px}) {
+  .hero__photo {
+    --placeholder-focus: 42% 0%;
+    --placeholder-mark-top: 80px;
+  }
+
+  // The copy owns the first screen: the photograph shows above it and darkens under it.
+  .hero__scrim {
+    background: linear-gradient(
+      180deg,
+      rgb(10 15 13 / 38%) 0%,
+      rgb(10 15 13 / 58%) 28%,
+      rgb(10 15 13 / 86%) 50%,
+      rgb(15 21 19 / 97%) 100%
+    );
+  }
+}

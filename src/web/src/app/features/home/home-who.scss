@@ -113,6 +113,14 @@
   @include pill-hair;
 }
 
+// The private pre-launch build (R6.2h): the gym floor's stand-in between the button and the screen.
+.story__photo {
+  aspect-ratio: 3 / 2;
+  border-radius: 16px;
+  flex: none;
+  margin-block-end: 28px;
+}
+
 .story__shot {
   margin-block-start: auto;
   overflow: hidden;

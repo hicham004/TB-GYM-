@@ -1,0 +1,52 @@
+@use 'home-shared' as *;
+
+// A stand-in photograph for the private pre-launch build (UI plan R6.2h). The picture fills its
+// host, which the section sizes: a backdrop under a scrim, or a box with a ratio. The mark names
+// the file so nobody mistakes the showing for the public page.
+
+:host {
+  background: var(--home-night);
+  display: block;
+  overflow: hidden;
+  position: relative;
+}
+
+img,
+.missing {
+  block-size: 100%;
+  display: block;
+  inline-size: 100%;
+  inset: 0;
+  position: absolute;
+}
+
+// Which part of the photograph stays in view when the box crops it; the section sets it.
+img {
+  object-fit: cover;
+  object-position: var(--placeholder-focus, 50% 50%);
+}
+
+// Grey, as the mockups drew the shoot's place before the photograph arrived.
+.missing {
+  background: repeating-linear-gradient(135deg, #cfd3ca 0 14px, #c5c9c0 14px 28px);
+}
+
+.mark {
+  @include mono;
+  background: rgb(10 15 13 / 74%);
+  border-radius: 999px;
+  color: #f5f3ea;
+  font-size: 0.68rem;
+  inset-block-start: var(--placeholder-mark-top, 12px);
+  inset-inline-start: var(--placeholder-mark-start, 12px);
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+  padding: 5px 11px;
+  position: absolute;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.mark--missing {
+  inset-block-start: calc(var(--placeholder-mark-top, 12px) + 34px);
+}

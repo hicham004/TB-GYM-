@@ -8,7 +8,9 @@ import {
   input,
   signal,
 } from '@angular/core';
+import { Meta } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
+import { HOME_PLACEHOLDERS } from './home-placeholder';
 
 /**
  * The website's header (the homepage and `/changelog`): the wordmark, three section links, Sign
@@ -30,6 +32,14 @@ export class HomeHeader {
   readonly dark = input(false);
 
   protected readonly menuOpen = signal(false);
+
+  constructor() {
+    // The private pre-launch build (UI plan R6.2h) is never for Google: every page this header is
+    // on says so in its document, besides the header the private server sends.
+    if (inject(HOME_PLACEHOLDERS)) {
+      inject(Meta).updateTag({ name: 'robots', content: 'noindex, nofollow' });
+    }
+  }
   /** Over the dark hero the header is clear; the open menu draws its own panel either way. */
   protected readonly tone = computed(() => (this.dark() && !this.menuOpen() ? 'dark' : 'light'));
 

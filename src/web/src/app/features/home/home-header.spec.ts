@@ -1,11 +1,15 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { query, settle } from '../../../testing/dom';
+import { TEST_PLACEHOLDERS } from '../../../testing/placeholder-fixtures';
 import { HomeHeader } from './home-header';
+import { HOME_PLACEHOLDERS, type PlaceholderSet } from './home-placeholder';
 
-async function render(dark = false) {
-  TestBed.configureTestingModule({ providers: [provideRouter([])] });
+async function render(dark = false, placeholders: PlaceholderSet | null = null) {
+  TestBed.configureTestingModule({
+    providers: [provideRouter([]), { provide: HOME_PLACEHOLDERS, useValue: placeholders }],
+  });
   const fixture = TestBed.createComponent(HomeHeader);
   fixture.componentRef.setInput('dark', dark);
   await settle(fixture);
@@ -13,6 +17,22 @@ async function render(dark = false) {
 }
 
 describe('HomeHeader', () => {
+  afterEach(() => document.querySelector('meta[name="robots"]')?.remove());
+
+  it('never asks not to be indexed on the public build', async () => {
+    await render(false);
+
+    expect(document.querySelector('meta[name="robots"]')).toBeNull();
+  });
+
+  it('asks not to be indexed on the private pre-launch build', async () => {
+    await render(false, TEST_PLACEHOLDERS);
+
+    expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
+      'noindex, nofollow',
+    );
+  });
+
   it('links the sections and sign-in, and takes the tone of the section under it', async () => {
     const { fixture, host } = await render(true);
 

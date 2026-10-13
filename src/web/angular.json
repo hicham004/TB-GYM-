@@ -66,6 +66,25 @@
               ],
               "outputHashing": "all"
             },
+            "placeholders": {
+              "assets": [
+                {
+                  "glob": "**/*",
+                  "input": "public"
+                },
+                {
+                  "glob": "*.jpg",
+                  "input": "placeholders",
+                  "output": "/placeholders"
+                }
+              ],
+              "fileReplacements": [
+                {
+                  "replace": "src/app/features/home/home-placeholders.ts",
+                  "with": "placeholders/home-placeholders.ts"
+                }
+              ]
+            },
             "development": {
               "optimization": false,
               "extractLicenses": false,

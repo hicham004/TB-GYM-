@@ -2,8 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { query, settle } from '../../../testing/dom';
+import { TEST_PLACEHOLDERS } from '../../../testing/placeholder-fixtures';
 import { WEEK_STAGES } from './home-content';
 import { GSAP_LOADER, HomeMotion, WIDE_STORY } from './home-motion';
+import { HOME_PLACEHOLDERS, type PlaceholderSet } from './home-placeholder';
 import { HomeWeek } from './home-week';
 
 function fakeGsap() {
@@ -22,7 +24,7 @@ function fakeGsap() {
   };
 }
 
-async function render(wide: boolean) {
+async function render(wide: boolean, placeholders: PlaceholderSet | null = null) {
   vi.stubGlobal(
     'matchMedia',
     vi.fn((media: string) => ({ matches: wide && media === WIDE_STORY, media })),
@@ -33,6 +35,7 @@ async function render(wide: boolean) {
       provideRouter([]),
       HomeMotion,
       { provide: GSAP_LOADER, useValue: async () => fake.modules },
+      { provide: HOME_PLACEHOLDERS, useValue: placeholders },
     ],
   });
   const fixture = TestBed.createComponent(HomeWeek);
@@ -74,6 +77,45 @@ describe('HomeWeek', () => {
     expect(panel.querySelectorAll('a, button')).toHaveLength(0);
     expect(panel.querySelectorAll('.panel__slot--window .panel__picture')).toHaveLength(4);
     expect(panel.querySelectorAll('.panel__slot--phone .panel__picture')).toHaveLength(4);
+    // The public build draws no stand-in anywhere in the week.
+    expect(host.querySelectorAll('[data-placeholder]')).toHaveLength(0);
+    expect(panel.classList).not.toContain('week__panel--photo');
+  });
+
+  it('on the private build gives Monday evening and Sunday their stand-ins, in the panel and in each stage’s own scene', async () => {
+    const { host } = await render(false, TEST_PLACEHOLDERS);
+
+    const panel = query(host, '.week__panel');
+    expect(panel.classList).toContain('week__panel--photo');
+    const panelPhotos = Array.from(panel.querySelectorAll('.panel__photo'));
+    expect(panelPhotos.map((photo) => photo.getAttribute('data-stage-id'))).toEqual([
+      'train',
+      'see',
+    ]);
+    expect(panelPhotos.map((photo) => photo.getAttribute('data-placeholder'))).toEqual([
+      'train',
+      'talk',
+    ]);
+    // The photographs sit under the slots, so the devices stay lifted out of them.
+    expect(panel.children[0]).toBe(panelPhotos[0]);
+    expect(panel.querySelector('.panel__scrim')).not.toBeNull();
+    expect(panel.querySelectorAll('a, button')).toHaveLength(0);
+
+    const own = (stage: string) => query(host, `[data-stage-id="${stage}"] .stage__own`);
+    expect(own('train').classList).toContain('stage__own--photo');
+    expect(own('train').querySelector('.stage__own-photo img')?.getAttribute('src')).toBe(
+      '/placeholders/train.jpg',
+    );
+    expect(own('see').querySelector('.stage__own-photo .missing')).not.toBeNull();
+    expect(own('plan').classList).not.toContain('stage__own--photo');
+    expect(own('plan').querySelector('.stage__own-photo')).toBeNull();
+    expect(own('checkin').querySelector('.stage__own-photo')).toBeNull();
+    // The scene holds the photograph and the devices; the caption stays under it.
+    const scene = query(own('train'), '.stage__own-scene');
+    expect(scene.querySelector('.stage__own-phone')).not.toBeNull();
+    expect(scene.querySelector('.stage__own-window')).not.toBeNull();
+    expect(scene.querySelector('figcaption')).toBeNull();
+    expect(own('train').querySelector('figcaption')?.textContent).toBe('Shown with sample data');
   });
 
   it('starts on Monday with the first composition, and nothing fetched ahead of the words', async () => {

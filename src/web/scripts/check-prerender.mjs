@@ -1,14 +1,17 @@
 // Fails when the production build no longer carries the homepage, or what changed, as finished
-// HTML (UI plan R6.2a, R6.2f).
+// HTML (UI plan R6.2a, R6.2f), or when it carries what only the private pre-launch build may
+// (R6.2h): a stand-in photograph, the placeholders folder, or a robots noindex tag.
 //
 // `ng build` renders `/` ahead of time into index.html and `/changelog` into changelog/index.html,
 // and keeps the plain application shell as index.csr.html; nginx.conf serves the first two for
 // their own addresses and the shell for every other. This reads all three from the build output
 // and checks what each must and must not hold, so a build that quietly stopped pre-rendering (a
 // service touching the browser at start-up, a route change) fails here rather than on Google.
-// `npm run build` runs it; `node scripts/check-prerender.mjs <dir>` reads another output folder.
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+// `npm run build` runs it; `node scripts/check-prerender.mjs <dir>` reads another output folder,
+// and `--private` checks a private pre-launch build the other way round (its stand-ins and its
+// noindex tag must be there).
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** The homepage headline, as the <h1> in features/home/home-hero.html reads. */
@@ -27,6 +30,26 @@ export const PREVIEW_TAGS = [
   'twitter:card',
 ];
 
+/**
+ * The folder the private pre-launch build serves its stand-in photographs from (UI plan R6.2h):
+ * `src/web/placeholders/`, copied to this name in the output by the `placeholders` configuration
+ * alone. A production output must neither hold it nor name it.
+ */
+export const PLACEHOLDERS_FOLDER = 'placeholders';
+
+/** How a stand-in names the folder in a page or a script: as a path. */
+const PLACEHOLDERS_PATH = /placeholders\//;
+
+/** A stand-in drawn by the page: features/home/home-placeholder.ts marks its host with this. */
+const STAND_IN = /\sdata-placeholder="/;
+
+/**
+ * The output files whose text can name the folder; pictures and fonts cannot. A source map (a
+ * development build's, for the `built` checks; production writes none) embeds every source
+ * comment and is read by no browser, so it is left out.
+ */
+const TEXT_FILES = /\.(?:html|m?js|css|json|txt|webmanifest|svg|xml)$/i;
+
 const DEFAULT_OUTPUT = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -35,8 +58,12 @@ const DEFAULT_OUTPUT = join(
   'browser',
 );
 
-/** The problems with a build output, or none. */
-export function checkPrerender(browserDirectory = DEFAULT_OUTPUT) {
+/**
+ * The problems with a build output, or none. `privatePreview` checks a private pre-launch build
+ * (R6.2h): the same rules, except that its pages must carry the stand-ins and the noindex tag
+ * that a production build must not.
+ */
+export function checkPrerender(browserDirectory = DEFAULT_OUTPUT, { privatePreview = false } = {}) {
   const findings = [];
   const read = (name) => {
     const path = join(browserDirectory, name);
@@ -66,7 +93,12 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT) {
     for (const tag of PREVIEW_TAGS) {
       if (!metaContent(home, tag)) findings.push(`index.html lacks the ${tag} tag or its content.`);
     }
-    findings.push(...renderedPageProblems(home, 'index.html'));
+    findings.push(...renderedPageProblems(home, 'index.html', privatePreview));
+    if (privatePreview && !STAND_IN.test(home)) {
+      findings.push(
+        'index.html draws no stand-in photograph: this is not the private pre-launch build.',
+      );
+    }
   }
 
   if (changelog !== null) {
@@ -79,7 +111,7 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT) {
     if (!/<time\s[^>]*datetime="\d{4}-\d{2}-\d{2}"/.test(changelog)) {
       findings.push('changelog/index.html holds no dated release.');
     }
-    findings.push(...renderedPageProblems(changelog, 'changelog/index.html'));
+    findings.push(...renderedPageProblems(changelog, 'changelog/index.html', privatePreview));
   }
 
   if (shell !== null) {
@@ -96,11 +128,40 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT) {
     }
   }
 
+  if (!privatePreview) findings.push(...placeholderLeaks(browserDirectory));
+
+  return findings;
+}
+
+/**
+ * What a production output must not carry from the private pre-launch build (R6.2h): the
+ * placeholders folder itself, a file that names it, or a page that draws a stand-in. Every text
+ * file of the output is read, because a stand-in's address could sit in a script as well as a page.
+ */
+export function placeholderLeaks(browserDirectory) {
+  const findings = [];
+  if (existsSync(join(browserDirectory, PLACEHOLDERS_FOLDER))) {
+    findings.push(
+      `the output holds a ${PLACEHOLDERS_FOLDER}/ folder: the stand-in photographs were copied into it.`,
+    );
+  }
+  for (const file of filesUnder(browserDirectory)) {
+    const name = relative(browserDirectory, file).split(sep).join('/');
+    if (name.startsWith(`${PLACEHOLDERS_FOLDER}/`) || !TEXT_FILES.test(name)) continue;
+    const content = readFileSync(file, 'utf8');
+    if (PLACEHOLDERS_PATH.test(content)) {
+      findings.push(
+        `${name} names the ${PLACEHOLDERS_FOLDER}/ folder: a stand-in photograph is referenced.`,
+      );
+    } else if (name.endsWith('.html') && STAND_IN.test(content)) {
+      findings.push(`${name} draws a stand-in photograph, which only the private build may.`);
+    }
+  }
   return findings;
 }
 
 /** What every pre-rendered page must and must not carry, whatever its words. */
-function renderedPageProblems(html, name) {
+function renderedPageProblems(html, name, privatePreview) {
   const findings = [];
   if (!/<app-root[^>]*\sngh="/.test(html)) {
     findings.push(`${name} was not rendered by Angular: <app-root> carries no hydration mark.`);
@@ -122,7 +183,33 @@ function renderedPageProblems(html, name) {
       `${name} still links the global stylesheet: scripts/inline-home-styles.mjs did not run.`,
     );
   }
+  // The private build asks not to be indexed in its own document (R6.2h); the public one never does.
+  const robots = metaContent(html, 'robots');
+  const noindex = robots !== null && /noindex/.test(robots);
+  if (privatePreview && !noindex) {
+    findings.push(
+      `${name} carries no robots noindex tag, which the private pre-launch build must.`,
+    );
+  } else if (!privatePreview && noindex) {
+    findings.push(`${name} carries a robots noindex tag, which only the private build may.`);
+  }
   return findings;
+}
+
+/** Every file under a folder, deepest last. */
+function filesUnder(directory) {
+  const files = [];
+  const visit = (path) => {
+    const stats = statSync(path, { throwIfNoEntry: false });
+    if (!stats) return;
+    if (stats.isDirectory()) {
+      for (const entry of readdirSync(path)) visit(join(path, entry));
+    } else {
+      files.push(path);
+    }
+  };
+  visit(directory);
+  return files;
 }
 
 /** The document's text without its tags, so an attribute value (og:title) does not count as page text. */
@@ -140,16 +227,23 @@ function metaContent(html, name) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const directory = process.argv[2] ? resolve(process.argv[2]) : DEFAULT_OUTPUT;
-  const findings = checkPrerender(directory);
+  const args = process.argv.slice(2);
+  const privatePreview = args.includes('--private');
+  const named = args.find((arg) => !arg.startsWith('--'));
+  const directory = named ? resolve(named) : DEFAULT_OUTPUT;
+  const findings = checkPrerender(directory, { privatePreview });
   if (findings.length > 0) {
     console.error(
       `${findings.length} pre-render problem(s) in ${directory}:\n${findings.map((line) => `  ${line}`).join('\n')}`,
     );
     process.exitCode = 1;
+  } else if (privatePreview) {
+    console.log(
+      `The private pre-launch build holds its stand-ins and its noindex tag, besides everything the public page holds (${directory}).`,
+    );
   } else {
     console.log(
-      `The built homepage holds its headline and preview tags, the changelog its releases, and the shell holds neither (${directory}).`,
+      `The built homepage holds its headline and preview tags, the changelog its releases, the shell holds neither, and nothing names the placeholders folder (${directory}).`,
     );
   }
 }

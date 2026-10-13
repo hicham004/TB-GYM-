@@ -2,6 +2,7 @@
 // project: "/" answers the pre-rendered homepage, or the plain shell when the request carries the
 // sign-in cookie; any other address answers its file, or else the plain shell. nginx's security
 // headers are sent too, so a page that would need an inline script fails here as in production.
+// private-preview.mjs serves the private pre-launch build (R6.2h) through the same server.
 //
 //   node scripts/serve-built.mjs [--port 4301] [--build]
 //
@@ -22,7 +23,7 @@ import { createServer } from 'node:http';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkPrerender } from './check-prerender.mjs';
-import { inlineHomeStyles } from './inline-home-styles.mjs';
+import { inlineHomeStyles, PRERENDERED_DOCUMENTS } from './inline-home-styles.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, '.e2e-dist');
@@ -42,7 +43,8 @@ export const SECURITY_HEADERS = {
     "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:",
 };
 
-const TYPES = {
+/** The content types a build output needs; nginx's own table has them all. */
+export const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -58,6 +60,9 @@ const TYPES = {
   '.woff': 'font/woff',
   '.txt': 'text/plain; charset=utf-8',
 };
+
+/** The paths nginx.conf proxies to the API; a static server has nothing behind them. */
+export const API_PATHS = /^\/(api|health|hubs|openapi)(\/|$)/;
 
 /**
  * Which file answers a request: nginx.conf's three rules. `exists` says whether a relative path is
@@ -76,7 +81,7 @@ export function documentFor(pathname, cookie, exists) {
 }
 
 /** The newest change under the given paths, as a timestamp. */
-function newestChange(paths) {
+export function newestChange(paths) {
   let newest = 0;
   const visit = (path) => {
     const stats = statSync(path, { throwIfNoEntry: false });
@@ -91,19 +96,56 @@ function newestChange(paths) {
   return newest;
 }
 
+/** The sources a build depends on, for telling a stale output from a current one. */
+export const BUILD_SOURCES = [
+  'src',
+  'public',
+  'angular.json',
+  'package-lock.json',
+  'tsconfig.json',
+  'tsconfig.app.json',
+].map((path) => join(root, path));
+
+/**
+ * A server for a build output (`browserDirectory`, the folder holding index.html), answering as
+ * nginx.conf would. `extraHeaders` go on every response; `intercept(request, response, url)` may
+ * answer a request itself first and return true, for a proxy or a stand-in API.
+ */
+export function createSiteServer(browserDirectory, { extraHeaders = {}, intercept } = {}) {
+  const headersFor = (file) => ({
+    'Content-Type': TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream',
+    ...SECURITY_HEADERS,
+    ...extraHeaders,
+  });
+  const isFile = (relative) => {
+    const file = join(browserDirectory, relative);
+    return file.startsWith(browserDirectory + sep) && existsSync(file) && statSync(file).isFile();
+  };
+  return createServer((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    if (intercept?.(request, response, url)) return;
+    // nginx proxies these to the API; here there is none, and the shell must not stand in for it.
+    if (API_PATHS.test(url.pathname)) {
+      response.writeHead(404, {
+        'Content-Type': 'application/json',
+        ...SECURITY_HEADERS,
+        ...extraHeaders,
+      });
+      response.end('{"title":"No API behind this server"}');
+      return;
+    }
+    const name = documentFor(url.pathname, request.headers.cookie, isFile);
+    const file = join(browserDirectory, name);
+    const headers = headersFor(file);
+    if (url.pathname === '/') headers['Cache-Control'] = 'no-cache';
+    response.writeHead(200, headers);
+    createReadStream(file).pipe(response);
+  });
+}
+
 function buildIfStale() {
   const built = statSync(join(browser, 'index.html'), { throwIfNoEntry: false });
-  const sources = newestChange(
-    [
-      'src',
-      'public',
-      'angular.json',
-      'package-lock.json',
-      'tsconfig.json',
-      'tsconfig.app.json',
-    ].map((path) => join(root, path)),
-  );
-  if (built && built.mtimeMs >= sources) {
+  if (built && built.mtimeMs >= newestChange(BUILD_SOURCES)) {
     console.log(`The build in ${output} is newer than the sources; serving it.`);
     return;
   }
@@ -126,7 +168,7 @@ function buildIfStale() {
     process.exit(result.status ?? 1);
   }
   // As `npm run build` does: the pre-rendered pages' first paint needs the HTML alone.
-  for (const document of ['index.html', 'changelog/index.html']) {
+  for (const document of PRERENDERED_DOCUMENTS) {
     const path = join(browser, document);
     if (!existsSync(path)) continue;
     const inlined = inlineHomeStyles(readFileSync(path, 'utf8'), (name) =>
@@ -141,34 +183,6 @@ function buildIfStale() {
   }
 }
 
-function serve(port) {
-  const isFile = (relative) => {
-    const file = join(browser, relative);
-    return file.startsWith(browser + sep) && existsSync(file) && statSync(file).isFile();
-  };
-  const server = createServer((request, response) => {
-    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
-    // nginx proxies these to the API; here there is none, and the shell must not stand in for it.
-    if (/^\/(api|health|hubs|openapi)(\/|$)/.test(url.pathname)) {
-      response.writeHead(404, { 'Content-Type': 'application/json', ...SECURITY_HEADERS });
-      response.end('{"title":"No API behind this server"}');
-      return;
-    }
-    const name = documentFor(url.pathname, request.headers.cookie, isFile);
-    const file = join(browser, name);
-    const headers = {
-      'Content-Type': TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream',
-      ...SECURITY_HEADERS,
-    };
-    if (url.pathname === '/') headers['Cache-Control'] = 'no-cache';
-    response.writeHead(200, headers);
-    createReadStream(file).pipe(response);
-  });
-  server.listen(port, '127.0.0.1', () => {
-    console.log(`Serving ${browser} at http://127.0.0.1:${port}/ as nginx.conf would.`);
-  });
-}
-
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const portIndex = args.indexOf('--port');
@@ -178,5 +192,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.error(`No build in ${browser}. Run with --build, or build into ${output} first.`);
     process.exit(1);
   }
-  serve(port);
+  createSiteServer(browser).listen(port, '127.0.0.1', () => {
+    console.log(`Serving ${browser} at http://127.0.0.1:${port}/ as nginx.conf would.`);
+  });
 }

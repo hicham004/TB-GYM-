@@ -785,6 +785,31 @@ render asks for nothing, so the finished HTML holds the form and never the scrip
 (`check-prerender.mjs` checks both). `e2e/support.ts`'s `mockSignedOut` answers the settings
 with neither configured.
 
+R6.2h adds the private pre-launch build, for showing the homepage with stand-in photographs before
+the shoot and never to the public. The stand-ins live in `src/web/placeholders/` (git-ignored but
+for its README; outside the `public/` glob, so no build copies them by accident). The `placeholders`
+configuration in `angular.json`, used as `production,placeholders`, copies that folder's JPEGs and
+swaps `features/home/home-placeholders.ts` (null on the public build) for
+`placeholders/home-placeholders.ts`, which `scripts/private-preview.mjs build` writes from the
+files it finds: an address for each, null for a missing one. `home-placeholder.ts` holds the token
+(`HOME_PLACEHOLDERS`), the stage mapping and the piece that draws one stand-in with its visible
+"Placeholder · file" mark (a grey hatch with a second mark where the file is missing); the hero puts
+it behind the copy under a scrim and drops the coach's window, the week puts one behind Monday
+evening and Sunday (in the pinned panel, crossfading with the stage while the window slot fades; in
+each stage's own scene on phones and under reduced motion), and the gyms story puts one above the
+Team screen. `HomeHeader` adds `<meta name="robots" content="noindex, nofollow">` whenever the
+token holds a set, so both pre-rendered pages of the private build say so themselves. The guard
+is `check-prerender.mjs`: a production output must hold no `placeholders/` folder, no text file
+that names it, no page that draws a stand-in and no noindex tag (its tests plant each);
+`--private` checks the private build the other way round, and `private-preview.mjs` runs it after
+its build. `private-preview.mjs serve` answers the build through `serve-built.mjs`'s server with
+`X-Robots-Tag: noindex, nofollow` on every response, a visitor's answers for the three API calls
+the page makes (or `--api` to proxy a running API), and with `--network` on every interface behind
+an HTTP Basic password for a second screen; `scripts/private-preview.ps1` wraps the two.
+`playwright.private.config.ts` (`npm run e2e:private`) runs `e2e/private/` against that server,
+apart from `npm run e2e`, so the ordinary checks do not pay for a second production build. Nothing
+is deployed; a hosted private address waits for the production stack.
+
 The migrated exercise library keeps every request it made before and adds no new one. Its filters
 stay server-side and are applied on Apply or Enter only; the list asks for the 100 rows the server is
 willing to return (it clamps `take` to 1-100) and says either "N exercises · sorted by name" or

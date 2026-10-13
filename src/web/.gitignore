@@ -40,13 +40,18 @@ testem.log
 __screenshots__/
 # Playwright output (screenshot baselines under e2e/ are tracked)
 /test-results
+/test-results-private
 /playwright-report
 /blob-report
 # The production build the `built` Playwright project serves (scripts/serve-built.mjs)
 /.e2e-dist
-# Stand-in photographs for the private pre-launch build only (UI plan R6.2h); never committed
+# Stand-in photographs for the private pre-launch build only (UI plan R6.2h); never committed.
+# scripts/private-preview.mjs writes the module the placeholders build reads into the same folder.
 /placeholders/*
 !/placeholders/README.md
+# The private pre-launch build (scripts/private-preview.mjs) and the one its Playwright config serves
+/.private
+/.e2e-private
 
 # System files
 .DS_Store

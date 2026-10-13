@@ -37,7 +37,7 @@ const SHELL = `<!doctype html><html>${HEAD}<body><app-root></app-root>
 const BUILD = { 'index.html': HOME, 'changelog/index.html': CHANGELOG, 'index.csr.html': SHELL };
 
 /** Writes the given files as a build output and inspects it; a null file is left missing. */
-function inspect(files) {
+function inspect(files, options = {}) {
   const root = mkdtempSync(join(tmpdir(), 'tb-gym-prerender-check-'));
   try {
     for (const [name, content] of Object.entries(files)) {
@@ -45,11 +45,22 @@ function inspect(files) {
       mkdirSync(dirname(join(root, name)), { recursive: true });
       writeFileSync(join(root, name), content);
     }
-    return checkPrerender(root);
+    return checkPrerender(root, options);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
+
+/** The private pre-launch build's homepage (R6.2h): a stand-in drawn, and the noindex tag. */
+const PRIVATE_HOME = HOME.replace(
+  '<h1 id="home-title">',
+  '<app-home-placeholder data-placeholder="hero"><img src="/placeholders/hero.jpg" alt=""><span class="mark">Placeholder · hero.jpg</span></app-home-placeholder><h1 id="home-title">',
+).replace('</head>', '<meta name="robots" content="noindex, nofollow"></head>');
+
+const PRIVATE_CHANGELOG = CHANGELOG.replace(
+  '</head>',
+  '<meta name="robots" content="noindex, nofollow"></head>',
+);
 
 test('accepts a build whose homepage and changelog are finished HTML and whose shell is plain', () => {
   assert.deepEqual(inspect(BUILD), []);
@@ -154,4 +165,83 @@ test('rejects a page that still links the global stylesheet', () => {
   });
 
   assert.match(findings.join('\n'), /changelog\/index\.html still links the global stylesheet/);
+});
+
+// ---- The private pre-launch build's stand-ins must never reach a production build (R6.2h) ----
+
+test('rejects a planted placeholders folder in the output', () => {
+  const findings = inspect({ ...BUILD, 'placeholders/hero.jpg': 'planted' });
+
+  assert.deepEqual(findings, [
+    'the output holds a placeholders/ folder: the stand-in photographs were copied into it.',
+  ]);
+});
+
+test('rejects a page or a script that names the placeholders folder, and a page that draws a stand-in', () => {
+  assert.deepEqual(
+    inspect({
+      ...BUILD,
+      'index.html': HOME.replace(
+        '<h1 id="home-title">',
+        '<img src="/placeholders/hero.jpg"><h1 id="home-title">',
+      ),
+    }),
+    ['index.html names the placeholders/ folder: a stand-in photograph is referenced.'],
+  );
+  assert.deepEqual(
+    inspect({ ...BUILD, 'chunk-ABC.js': 'const picture = "/placeholders/team.jpg";' }),
+    ['chunk-ABC.js names the placeholders/ folder: a stand-in photograph is referenced.'],
+  );
+  // A fresh clone's private build draws grey stand-ins and names no file; the mark still gives it away.
+  assert.deepEqual(
+    inspect({
+      ...BUILD,
+      'index.html': HOME.replace(
+        '<h1 id="home-title">',
+        '<app-home-placeholder data-placeholder="hero"><div class="missing"></div></app-home-placeholder><h1 id="home-title">',
+      ),
+    }),
+    ['index.html draws a stand-in photograph, which only the private build may.'],
+  );
+});
+
+test('rejects a page that asks not to be indexed, which only the private build may', () => {
+  const findings = inspect({ ...BUILD, 'changelog/index.html': PRIVATE_CHANGELOG });
+
+  assert.deepEqual(findings, [
+    'changelog/index.html carries a robots noindex tag, which only the private build may.',
+  ]);
+});
+
+test('a picture, a font or a source map cannot serve the folder, so only text files are read', () => {
+  const findings = inspect({
+    ...BUILD,
+    'media/photo.jpg': '/placeholders/hero.jpg in a binary',
+    'fonts/x.woff2': 'placeholders/',
+    'chunk-ABC.js.map':
+      '{"sourcesContent":["// the owner puts stand-ins in src/web/placeholders/"]}',
+  });
+
+  assert.deepEqual(findings, []);
+});
+
+test('in private mode the stand-ins and the noindex tag are required, and the folder is allowed', () => {
+  assert.deepEqual(
+    inspect(
+      {
+        ...BUILD,
+        'index.html': PRIVATE_HOME,
+        'changelog/index.html': PRIVATE_CHANGELOG,
+        'placeholders/hero.jpg': 'the owner’s stand-in',
+      },
+      { privatePreview: true },
+    ),
+    [],
+  );
+  const findings = inspect(BUILD, { privatePreview: true });
+  assert.deepEqual(findings, [
+    'index.html carries no robots noindex tag, which the private pre-launch build must.',
+    'index.html draws no stand-in photograph: this is not the private pre-launch build.',
+    'changelog/index.html carries no robots noindex tag, which the private pre-launch build must.',
+  ]);
 });

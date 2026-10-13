@@ -1,4 +1,15 @@
-<section class="hero" aria-labelledby="home-title">
+<section class="hero" [class.hero--photo]="placeholders" aria-labelledby="home-title">
+  @if (placeholders; as set) {
+    <!-- The private pre-launch build only (R6.2h): the shoot's stand-in behind the copy. -->
+    <app-home-placeholder
+      class="hero__photo"
+      [picture]="set.hero"
+      alt="A coach beside a loaded barbell, reading a phone: a stand-in for the shoot"
+      i18n-alt
+      eager
+    />
+    <div class="hero__scrim" aria-hidden="true"></div>
+  }
   <div class="hero__inner">
     <div class="hero__copy">
       <p class="hero__eyebrow">
@@ -24,10 +35,13 @@
     <!--
       The two screens. A phone shows the phone alone, below the copy; a wide screen shows both. The
       pictures are lazy and the wide first pair is preloaded from index.html, so a phone never fetches
-      the coach's window and a wide screen asks for both with the document.
+      the coach's window and a wide screen asks for both with the document. Behind a stand-in
+      photograph the coach's side is the photograph, and the window is not drawn.
     -->
     <figure class="hero__media">
-      <app-home-window class="hero__window" [window]="window" />
+      @if (!placeholders) {
+        <app-home-window class="hero__window" [window]="window" />
+      }
       <app-home-phone
         class="hero__phone"
         screen="client-today"
@@ -35,9 +49,22 @@
       />
       <figcaption class="hero__caption" i18n>Shown with sample data</figcaption>
     </figure>
-    <p class="tb-visually-hidden" i18n>
-      On the coach's screen: her Today, with four clients who need her and three check-ins to
-      review. On the client's phone: her Today, with Lower A scheduled and a note from her coach.
+    <p class="tb-visually-hidden">
+      @if (placeholders) {
+        <ng-container i18n
+          >On the photograph, a stand-in for the shoot: a coach beside a loaded barbell, reading a
+          phone.</ng-container
+        >
+      } @else {
+        <ng-container i18n
+          >On the coach's screen: her Today, with four clients who need her and three check-ins to
+          review.</ng-container
+        >
+      }
+      <ng-container i18n
+        >On the client's phone: her Today, with Lower A scheduled and a note from her
+        coach.</ng-container
+      >
     </p>
   </div>
 </section>

@@ -34,14 +34,26 @@
           ><span>{{ item.numeralLabel }}</span>
         </p>
         <p class="tb-visually-hidden">{{ item.screens }}</p>
-        <!-- Where the panel is not drawn: a phone gets this one asset, a still wide page both. -->
-        <figure class="stage__own" aria-hidden="true">
-          <app-home-phone
-            class="stage__own-phone"
-            [screen]="item.phone"
-            sizes="(min-width: 1100px) 330px, 300px"
-          />
-          <app-home-window class="stage__own-window" [window]="item.window" />
+        <!--
+          Where the panel is not drawn: a phone gets this one asset, a still wide page both. The
+          private pre-launch build (R6.2h) adds the stage's stand-in photograph to the scene.
+        -->
+        <figure class="stage__own" aria-hidden="true" [class.stage__own--photo]="photoOf(item.id)">
+          <div class="stage__own-scene">
+            @if (photoOf(item.id); as picture) {
+              <app-home-placeholder
+                class="stage__own-photo"
+                [attr.data-stage-id]="item.id"
+                [picture]="picture"
+              />
+            }
+            <app-home-phone
+              class="stage__own-phone"
+              [screen]="item.phone"
+              sizes="(min-width: 1100px) 330px, 300px"
+            />
+            <app-home-window class="stage__own-window" [window]="item.window" />
+          </div>
           <figcaption class="stage__caption" i18n>Shown with sample data</figcaption>
         </figure>
       </article>
@@ -51,9 +63,28 @@
   <!--
     The panel: decorative, because every stage says in words what its two screens show. Its
     composition is the data-stage attribute, which the motion writes; its pictures are lazy, so a
-    layout that does not draw the panel never fetches them.
+    layout that does not draw the panel never fetches them. The private pre-launch build (R6.2h)
+    puts a stand-in photograph behind two of the stages, crossfading with them.
   -->
-  <div class="week__panel" aria-hidden="true" #panel data-stage="plan">
+  <div
+    class="week__panel"
+    aria-hidden="true"
+    #panel
+    data-stage="plan"
+    [class.week__panel--photo]="placeholders"
+  >
+    @if (placeholders) {
+      @for (item of stages; track item.id) {
+        @if (photoOf(item.id); as picture) {
+          <app-home-placeholder
+            class="panel__photo"
+            [attr.data-stage-id]="item.id"
+            [picture]="picture"
+          />
+        }
+      }
+      <div class="panel__scrim"></div>
+    }
     <div class="panel__slot panel__slot--window" #slot>
       @for (item of stages; track item.id) {
         <app-home-window

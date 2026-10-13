@@ -39,6 +39,21 @@ test('the homepage is served as finished HTML, with its headline, its week and l
   expect(html).toMatch(/<meta[^>]*name="description"[^>]*content="[^"]+"/);
   // The CSP allows no inline script, so the page must not come with one.
   expect(html).not.toMatch(/<script(?![^>]*type="application\/json")[^>]*>[^<]/);
+  // Nothing of the private pre-launch build (R6.2h): no stand-in, no placeholders folder, no noindex.
+  expect(html).not.toMatch(/\sdata-placeholder="/);
+  expect(html).not.toMatch(/placeholders\//);
+  expect(html).not.toMatch(/<meta name="robots"/);
+  expect(html).toMatch(/<app-home-window[^>]*class="hero__window"/);
+});
+
+test('the placeholders folder is not in the build: a stand-in’s address answers the shell', async ({
+  request,
+}) => {
+  const response = await request.get('/placeholders/hero.jpg');
+
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toContain('text/html');
+  expect(await response.text()).toContain('<app-root></app-root>');
 });
 
 test('what changed is served as finished HTML with its dated releases', async ({ request }) => {

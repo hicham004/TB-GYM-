@@ -100,4 +100,41 @@
     inset-inline-start: 40px;
     position: absolute;
   }
+
+  // The private pre-launch build (R6.2h): a stand-in photograph behind Monday evening and Sunday,
+  // crossfading with the stage; the coach's window gives way to it, the phone stays lifted out.
+  .panel__photo,
+  .panel__scrim {
+    inset: 0;
+    opacity: 0;
+    position: absolute;
+    transition: opacity 600ms var(--home-ease);
+  }
+
+  .panel__photo[data-stage-id='train'] {
+    --placeholder-focus: 45% 50%;
+  }
+
+  .panel__photo[data-stage-id='see'] {
+    --placeholder-focus: 63% 50%;
+  }
+
+  .panel__scrim {
+    background: linear-gradient(180deg, rgb(10 15 13 / 0%) 55%, rgb(10 15 13 / 72%) 100%);
+  }
+
+  .panel__slot--window {
+    transition: opacity 600ms var(--home-ease);
+  }
+
+  @each $stage in train, see {
+    .week__panel[data-stage='#{$stage}'] .panel__photo[data-stage-id='#{$stage}'],
+    .week__panel[data-stage='#{$stage}'] .panel__scrim {
+      opacity: 1;
+    }
+
+    .week__panel--photo[data-stage='#{$stage}'] .panel__slot--window {
+      opacity: 0;
+    }
+  }
 }
