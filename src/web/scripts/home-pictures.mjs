@@ -276,6 +276,17 @@ const WINDOWS = [
   },
   { name: 'thread-narrow', shot: 'coach-messages', left: 611, top: 148, width: 460, height: 612 },
   { name: 'clients-narrow', shot: 'coach-clients', left: 258, top: 230, width: 420, height: 460 },
+  // Who it's for on a phone, where the band draws its screens about 350 px wide (R6.2j): the
+  // builder's first day whole with the second beside it, and the Team page's three people.
+  {
+    name: 'builder-week-narrow',
+    shot: 'coach-builder',
+    left: 330,
+    top: 300,
+    width: 380,
+    height: 560,
+  },
+  { name: 'team-window-narrow', shot: 'owner-team', left: 480, top: 195, width: 380, height: 420 },
 ];
 
 const PHONE_WIDTHS = [1140, 760, 600, 460];

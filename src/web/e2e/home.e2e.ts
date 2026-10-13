@@ -192,6 +192,39 @@ test('below the week on a wide screen, the rows arrive, the closing line rises w
   await expect(page.locator('.finale__glow')).not.toHaveCSS('transform', 'none');
 });
 
+test('on a short laptop window the panel’s caption sits on its own strip, with no screen drawn over it', async ({
+  page,
+}) => {
+  // The owner's laptop: 1536 px wide, about 730 px tall in the browser, where the panel is short
+  // and Sunday's maxes run down to its foot.
+  await page.setViewportSize({ width: 1536, height: 730 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await openHome(page);
+  await page.evaluate(() =>
+    document.querySelector('[data-stage-id="see"]')?.scrollIntoView({ block: 'center' }),
+  );
+  await expect(page.locator('.week__panel')).toHaveAttribute('data-stage', 'see');
+
+  const strip = await page.evaluate(() => {
+    const panel = document.querySelector('.week__panel')!.getBoundingClientRect();
+    const caption = document.querySelector('.panel__caption')!;
+    const box = caption.getBoundingClientRect();
+    // Just past the caption's words, where the maxes window's button used to show through.
+    const range = document.createRange();
+    range.selectNodeContents(caption);
+    const words = range.getBoundingClientRect();
+    const hit = document.elementFromPoint(words.right + 12, words.top + words.height / 2);
+    return {
+      // Inside the panel's 1 px border, the strip spans its whole foot.
+      edges: [box.left - panel.left, panel.right - box.right, panel.bottom - box.bottom].map(
+        (gap) => Math.round(gap),
+      ),
+      onTop: hit === caption,
+    };
+  });
+  expect(strip).toEqual({ edges: [1, 1, 1], onTop: true });
+});
+
 test('every phone picture is clear past the frame’s corners, where the screen’s square corners once showed', async ({
   page,
 }) => {
@@ -352,6 +385,17 @@ test('a phone gets the stacked page: the hero copy owns the first screen, every 
   await expect
     .poll(() => narrow.evaluate((img: HTMLImageElement) => img.currentSrc))
     .toMatch(/programs-narrow/);
+  // So are who it's for's two screens.
+  for (const [half, crop] of [
+    ['coach', /builder-week-narrow/],
+    ['gym', /team-window-narrow/],
+  ] as const) {
+    const screen = page.locator(`.half--${half} .half__window img`);
+    await screen.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => screen.evaluate((img: HTMLImageElement) => img.currentSrc))
+      .toMatch(crop);
+  }
 
   const menu = page.getByRole('button', { name: 'Menu' });
   await menu.click();

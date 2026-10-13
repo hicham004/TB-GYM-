@@ -96,11 +96,22 @@
     inset-block-start: 40px;
   }
 
+  // The caption sits on a fade along the panel's foot. On a short window the panel is short too,
+  // and a screen that runs down to its edge (Sunday's maxes, Monday's builder) fades out under the
+  // caption instead of crossing it.
   .panel__caption {
     @include caption;
-    inset-block-end: 24px;
-    inset-inline-start: 40px;
+    background: linear-gradient(
+      180deg,
+      rgb(10 15 13 / 0%),
+      rgb(10 15 13 / 96%) 52%,
+      rgb(10 15 13 / 100%) 76%
+    );
+    inset-block-end: 0;
+    inset-inline: 0;
+    padding: 44px 40px 24px;
     position: absolute;
+    z-index: 2;
   }
 
   // The private pre-launch build (R6.2h): a stand-in photograph behind Monday evening and Sunday,

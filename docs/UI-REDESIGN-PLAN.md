@@ -123,6 +123,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R6.2i | **Homepage repairs from the owner's review** (website; the owner, 2026-10-13): the phones no longer show their screen's square corners past Apple's round frame (the picture script keeps only the screen inside the frame's outline, and the nine phones are recomposed from the R6.2d captures, nothing else in them changed), and no picture runs past the page's edge: a row with the phone at the left shows the narrow crop of the coach's screen beside it (the owner's pick), a row's window shrinks to its column, and where a phone covers a window (the hero, the rows, Thursday's panel) no sliver of the window shows past the phone's edge | §2, plus the picture script's test and Playwright at 1280 and 1440 px (no picture past the page's edge or beside a phone's edge, every phone clear past the frame's corners) | Done · 2026-10-13 · 3817f5b |
 | R6.2j | **Homepage, who it's for and Talk to us** (website; the owner, 2026-10-13: "built for one coach ready for a whole floor is ugly" and Talk to us "ugly … and not interactive"; he took 3A and 4 from the before/after preview, https://claude.ai/artifact/DWRV8HHrmiBruHwBnscTsg): who it's for becomes a dark band in two halves split by a hairline (coaches 46 %, gyms 54 %), each with its words, its own button and its real screen whole, at 1:1 from about 1440 px (the private build lifts the Team screen onto the gym-floor stand-in); hovering or tabbing into a half lifts its screen and steps the other back. Talk to us becomes the start of the dark ending: no card, fields drawn as lines whose labels rest inside them and float up in use, a lime line under the field in use, warm-orange reasons, and Send running a line while it sends and folding into a check before the thanks takes the form's place (at the form's height on a wide screen); its lead says only "Leave your details and we'll get back to you." (the owner's yes). The finale's closing line at the hero's size under the hero's green light, and a frosted night fill on the header over the dark ending. The form's guards, its fields' words and how it posts are unchanged; no motion yet (R6.2k) | §2, plus Vitest for the band and for the form's lines, notes and check, and Playwright at 390 and 1440 px (1280 for the screens' fit) with axe, the header's tone over the ending, and Send's check with the finale staying put | Done · 2026-10-13 · e6bdd6d |
 | R6.2k | **Homepage motion below the week** (website; the owner's pick from the same preview, 2026-10-13: 5a, 5b, 5d, 5e, 5f and 5g; 5c not taken): the feature rows' screens arrive from both sides with their words following (5a) and the phone drifts a little slower than the screen as the row scrolls past (5b); the facts come in one after another, each dot popping on (5d); who it's for's two screens rise in (5e); the finale's closing line rises word by word, the green light follows the pointer and the lime pill leans toward it (5f); a line under the header's links marks the section in view and turns lime over the dark parts (5g). Wide screens without a request for less motion only, inside the chunk `HomeMotion` already loads; no ScrollSmoother | §2, plus Vitest for each piece's set-up and clean-up, Playwright at 1440 px with and without reduced motion, and Lighthouse on a phone no worse than before | Done · 2026-10-13 · bfdc9ac |
+| R6.2l | **Homepage polish** (website; the owner, 2026-10-13: "do the fixes"): the week panel's caption sits on its own dark strip along the panel's foot, so on a short window (the owner's laptop, 1536 × 730) no screen crosses it, as Sunday's maxes did; and who it's for's two screens get narrow crops for phones and tablets (`builder-week-narrow`, `team-window-narrow`, 380 px), drawn at their own size or the column's | §2, plus Playwright for the caption's strip at 1536 × 730 and the narrow crops at 390 px, and Vitest for the crops' sources | Built, not committed |
 | R6.2c | **Homepage hero video and the shoot swap**: the owner makes the loop in Jitter (MP4 and WebM, with a poster frame) and commissions the shoot (`docs/design/homepage-shoot-brief.md`); then a chat puts the photographs in the hero, the week stages and the audience split, and the loop in the hero, loaded late, with the poster for reduced motion, measured on a phone against the still before it stays | §2, plus Lighthouse on a phone with and without the loop | Optional · for later (owner, 2026-10-12): waits for the owner's video and photographs |
 
 **Design approval:** the owner approved the prototype direction on 2026-09-28. The partner saw
@@ -245,7 +246,8 @@ of the implemented R1.3 screens before production rollout.
   closes up and focus brings the thanks into view). The header's third tone, `night`, is a frosted
   dark fill over everything from the band down, because the page's words scroll under it there;
   over the hero it stays clear. Left as they were: the band's screens on a phone are the wide
-  crops drawn at the column's width (no narrow crops of the builder or the Team page yet).
+  crops drawn at the column's width (no narrow crops of the builder or the Team page yet; closed in
+  R6.2l).
 - **Homepage motion, decisions taken in R6.2k (Claude for the owner, 2026-10-13).** Everything
   below the week rides in its own chunk, `home-motion-below.ts`, imported with GSAP, so a phone
   downloads none of it; it finds its parts in the page by their classes (`findBelow`) rather than
@@ -263,7 +265,18 @@ of the implemented R1.3 screens before production rollout.
 - **The week's Sunday stage prints its caption over the coach's screen (seen 2026-10-13, from
   R6.2f).** In the pinned panel at 1440-1536 px, "Shown with sample data" sits on the maxes
   window's "Review the new weights" button, so the two texts overlap. Not touched in R6.2k (the
-  week is outside it); a small fix moves the caption below that window or out of the panel.
+  week is outside it); closed in R6.2l (the caption's own strip at the panel's foot).
+- **The hero's morning retake (still open, 2026-10-13).** The hero's coach screen says "Good
+  evening" because R6.2d captured it at night. The app picks the greeting from the clock in the
+  workspace's time zone (morning before noon), and faking the browser's clock would break the
+  "Sent 2 hours ago" times on the same screen, so it needs a real morning: before noon Beirut, on a
+  day the sample demo has a session (Maya trains Monday, Tuesday, Thursday and Saturday), build
+  `demo-workspace --cast sample` into a throwaway database, run the API and the web, and run
+  `scripts/home-pictures.ps1 -Only coach-today,client-today` so the hero's two screens show the
+  same day; then check the hero's hidden description (it names the day's session, Lower A today)
+  and render the link-preview image again (it is the hero). Fix first: the coach's Today says
+  "1 were due by today" (`coach-today.ts`, `sessionsContext` has no singular), which the hero's
+  picture shows.
 - **Progress photo demo assets (R2.3).** The protected photo timeline and comparison work with
   granted thumbnails; the Atlas demo still needs two consented, licensed photos of the same pose
   before that section can be photographed with real demo data.

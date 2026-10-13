@@ -31,10 +31,17 @@ describe('HomeWho', () => {
     expect(halves[1].querySelector('.half__shot img')?.getAttribute('src')).toBe(
       '/images/home/team-window-1x.webp',
     );
-    // Each screen is drawn at its own width until its half is narrower.
+    // Each screen is drawn at its own width until its half is narrower, and a phone gets a narrower
+    // crop of the same screen.
     const windows = host.querySelectorAll<HTMLElement>('.half__window');
     expect(windows[0].style.getPropertyValue('--window-width')).toBe('520px');
     expect(windows[1].style.getPropertyValue('--window-width')).toBe('640px');
+    const phoneCrop = (index: number) =>
+      windows[index]
+        .querySelector('source[type="image/webp"][media="(max-width: 1099px)"]')
+        ?.getAttribute('srcset');
+    expect(phoneCrop(0)).toContain('/images/home/builder-week-narrow-1x.webp 1x');
+    expect(phoneCrop(1)).toContain('/images/home/team-window-narrow-1x.webp 1x');
     expect(host.querySelector('.half__photo')).toBeNull();
     // The band is where the dark ending begins; the page reads its top for the header's tone.
     expect(fixture.componentInstance.band()).toBe(query(host, '#for-gyms'));

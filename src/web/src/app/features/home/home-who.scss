@@ -217,8 +217,9 @@
     margin-block-start: 40px;
   }
 
+  // The narrow crops, at their own size or the column's, whichever is less.
   .half__window {
-    inline-size: 100%;
+    inline-size: min(100%, 380px);
   }
 
   .half__shot--photo .half__window {

@@ -64,4 +64,7 @@ export const WINDOWS = {
   clientsNarrow: { name: 'clients-narrow', width: 420, height: 460 },
   /** The Team page: the owner and two coaches, each with their own clients. */
   team: { name: 'team-window', width: 640, height: 420 },
+  /** Who it's for on a phone (R6.2j): the builder's first day, and the Team page's people. */
+  builderNarrow: { name: 'builder-week-narrow', width: 380, height: 560 },
+  teamNarrow: { name: 'team-window-narrow', width: 380, height: 420 },
 } as const satisfies Record<string, WindowPicture>;

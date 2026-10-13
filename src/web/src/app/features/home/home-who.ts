@@ -33,6 +33,8 @@ export class HomeWho {
   protected readonly lastChange = lastChange(inject(LOCALE_ID));
   protected readonly builder = WINDOWS.builder;
   protected readonly team = WINDOWS.team;
+  protected readonly builderNarrow = WINDOWS.builderNarrow;
+  protected readonly teamNarrow = WINDOWS.teamNarrow;
   protected readonly placeholders = inject(HOME_PLACEHOLDERS);
 
   private readonly bandRef = viewChild.required<ElementRef<HTMLElement>>('band');
