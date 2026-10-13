@@ -4,10 +4,36 @@
       <span class="brand__disc" aria-hidden="true" dir="ltr">TB<i>.</i></span>
       <span i18n translate="no">TB Gym</span>
     </a>
-    <nav class="links" aria-label="Homepage" i18n-aria-label>
-      <a routerLink="/" fragment="week" i18n>The week</a>
-      <a routerLink="/" fragment="inside" i18n>What's inside</a>
-      <a routerLink="/" fragment="for-gyms" i18n>For gyms</a>
+    <nav class="links" aria-label="Homepage" i18n-aria-label #links>
+      <a
+        routerLink="/"
+        fragment="week"
+        data-section="week"
+        [class.is-current]="current() === 'week'"
+        #sectionLink
+        i18n
+        >The week</a
+      >
+      <a
+        routerLink="/"
+        fragment="inside"
+        data-section="inside"
+        [class.is-current]="current() === 'inside'"
+        #sectionLink
+        i18n
+        >What's inside</a
+      >
+      <a
+        routerLink="/"
+        fragment="for-gyms"
+        data-section="for-gyms"
+        [class.is-current]="current() === 'for-gyms'"
+        #sectionLink
+        i18n
+        >For gyms</a
+      >
+      <!-- The line under the section in view, slid there from the last one (R6.2k). -->
+      <span class="links__marker" aria-hidden="true" #marker></span>
       <a class="links__sign" routerLink="/auth/sign-in" i18n>Sign in</a>
     </nav>
     <button

@@ -4,7 +4,9 @@ import { lastChange } from './home-last-change';
 
 /**
  * The finale (UI plan R6.2f, R6.2j): the last part of the dark ending, after Talk to us, with the
- * closing line at the hero's size, the one lime pill again, and the page's foot.
+ * closing line at the hero's size, the one lime pill again, and the page's foot. On a wide screen
+ * the closing line rises word by word, and for a mouse the hero's green light drifts toward the
+ * pointer while the lime pill leans toward it (R6.2k, `startBelow`).
  */
 @Component({
   selector: 'app-home-finale',

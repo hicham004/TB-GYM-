@@ -8,7 +8,8 @@ import { HomeWindow } from './home-window';
  * What's inside (UI plan R6.2f): six feature rows in the premium grammar, each pairing the coach's
  * screen and the client's phone for the same moment, with a short outcome, one sentence and one
  * quiet link; then the thin strip for clients. Copy here must stay true to shipped features: no
- * payments inside the app, no branded app store app, no AI claims.
+ * payments inside the app, no branded app store app, no AI claims. On a wide screen each row's
+ * screens arrive as it comes in (R6.2k, `startBelow`).
  */
 @Component({
   selector: 'app-home-rows',

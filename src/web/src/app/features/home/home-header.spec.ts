@@ -55,6 +55,40 @@ describe('HomeHeader', () => {
     expect(query(host, '.header').getAttribute('data-tone')).toBe('night');
   });
 
+  it('marks the section in view with one line under its link, and none over the hero or the finale', async () => {
+    const { fixture, host } = await render('light');
+    const links = Array.from(host.querySelectorAll<HTMLElement>('.links [data-section]'));
+    expect(links.map((link) => link.dataset['section'])).toEqual(['week', 'inside', 'for-gyms']);
+    // jsdom lays nothing out; the links stand where a wide screen would put them.
+    links.forEach((link, index) => {
+      Object.defineProperty(link, 'offsetLeft', { value: 100 * index, configurable: true });
+      Object.defineProperty(link, 'offsetWidth', { value: 80 + index, configurable: true });
+    });
+    const marker = query<HTMLElement>(host, '.links__marker');
+    expect(marker.getAttribute('aria-hidden')).toBe('true');
+    expect(marker.classList).not.toContain('links__marker--on');
+
+    fixture.componentRef.setInput('current', 'inside');
+    await settle(fixture);
+    expect(marker.classList).toContain('links__marker--on');
+    expect(marker.style.getPropertyValue('--marker-x')).toBe('100px');
+    expect(marker.style.getPropertyValue('--marker-width')).toBe('81px');
+    expect(links.map((link) => link.classList.contains('is-current'))).toEqual([
+      false,
+      true,
+      false,
+    ]);
+
+    fixture.componentRef.setInput('current', 'for-gyms');
+    await settle(fixture);
+    expect(marker.style.getPropertyValue('--marker-x')).toBe('200px');
+
+    fixture.componentRef.setInput('current', null);
+    await settle(fixture);
+    expect(marker.classList).not.toContain('links__marker--on');
+    expect(host.querySelectorAll('.is-current')).toHaveLength(0);
+  });
+
   it('opens the menu on a phone, closes it on Escape or a choice, and draws it light either way', async () => {
     const { fixture, host } = await render('dark');
     const button = query<HTMLButtonElement>(host, '.menu-button');

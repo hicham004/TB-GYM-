@@ -786,7 +786,13 @@ render asks for nothing, so the finished HTML holds the form and never the scrip
 with neither configured. Since R6.2j the band, the form and the finale are one dark ending, and the
 form draws its fields as lines with resting labels, wiring each `<label for>`, note, `aria-invalid`
 and `aria-describedby` itself the way the kit's field does (the kit's field is a label above a boxed
-control); the form's requests and guards are unchanged.
+control); the form's requests and guards are unchanged. R6.2k adds the motion below the week,
+in `home-motion-below.ts`, which `HomeMotion` imports together with GSAP on a wide screen only: the
+rows' screens arrive from both sides and the phone's picture drifts, the facts and the band's
+screens come in, and the finale's closing line rises word by word while, for a mouse, its light and
+its lime pill follow the pointer. The header's line under the section in view is the page's own
+(the same scroll handler as its tone), so it needs no GSAP and marks the section with less motion
+too, without sliding.
 
 R6.2h adds the private pre-launch build, for showing the homepage with stand-in photographs before
 the shoot and never to the public. The stand-ins live in `src/web/placeholders/` (git-ignored but

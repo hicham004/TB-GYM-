@@ -134,12 +134,62 @@ test('reduced motion shows a still, complete week: every stage with its own two 
     'src',
     '/images/home/client-progress-760.webp',
   );
+  // Below the week nothing waits for an entrance (R6.2k): a far row, the facts and who it's for's
+  // screens are all there, and the closing line is whole, never split into words.
+  await expect(page.locator('[data-row="progress"] .pair__window')).toHaveCSS('opacity', '1');
+  await expect(page.locator('.half__shot').first()).toHaveCSS('opacity', '1');
+  await expect(page.locator('.finale__title')).not.toHaveAttribute('aria-label');
   const timed = await page.evaluate(
     () =>
       document.getAnimations().filter((animation) => animation.timeline instanceof DocumentTimeline)
         .length,
   );
   expect(timed).toBe(0);
+});
+
+test('below the week on a wide screen, the rows arrive, the closing line rises word by word, the pill leans toward a mouse, and the header marks the part in view', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await openHome(page);
+  await expect(page.locator('#week')).toHaveAttribute('data-motion', 'running');
+  const current = page.locator('.links .is-current');
+  const marker = page.locator('.links__marker');
+  // Over the hero no link is marked.
+  await expect(current).toHaveCount(0);
+  await expect(marker).not.toHaveClass(/links__marker--on/);
+
+  // A row still below the screen holds its screens aside; scrolled to, they arrive and settle with
+  // nothing left inline, so the stylesheet's own layout holds again.
+  const row = page.locator('[data-row="messages"]');
+  const window = row.locator('.pair__window');
+  await expect(window).toHaveCSS('opacity', '0');
+  await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+  await expect(window).toHaveCSS('opacity', '1');
+  await expect(window).toHaveCSS('transform', 'none');
+  await expect(row.locator('.pair__phone')).toHaveCSS('transform', 'none');
+  await expect(current).toHaveText("What's inside");
+  await expect(marker).toHaveClass(/links__marker--on/);
+
+  await page.evaluate(() => document.getElementById('for-gyms')?.scrollIntoView());
+  await expect(current).toHaveText('For gyms');
+  await expect(page.locator('.half__shot').last()).toHaveCSS('opacity', '1');
+
+  // The closing line is split into words for the eye and read whole by a screen reader.
+  const title = page.locator('.finale__title');
+  await title.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+  await expect(title).toHaveAttribute(
+    'aria-label',
+    /^\s*Your next client's week starts here\.\s*$/,
+  );
+  await expect(current).toHaveCount(0);
+  const pill = page.locator('.finale__start');
+  await expect(pill).toHaveCSS('opacity', '1');
+  const box = (await pill.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 30, { steps: 6 });
+  await expect(page.locator('.finale__magnet')).not.toHaveCSS('transform', 'none');
+  await expect(page.locator('.finale__glow')).not.toHaveCSS('transform', 'none');
 });
 
 test('every phone picture is clear past the frame’s corners, where the screen’s square corners once showed', async ({
@@ -204,6 +254,12 @@ for (const width of [1280, 1440]) {
     const pictures = await page.evaluate(() => {
       const contentEdge = (element: Element) =>
         element.getBoundingClientRect().right - parseFloat(getComputedStyle(element).paddingRight);
+      // Where a window rests: a row below the screen holds its window aside until it arrives (R6.2k).
+      const restingRight = (element: Element) => {
+        const shift = getComputedStyle(element).transform;
+        const x = shift === 'none' ? 0 : new DOMMatrixReadOnly(shift).m41;
+        return element.getBoundingClientRect().right - x;
+      };
       // What a visitor points at just inside a phone's right edge is never the window under it.
       // The point has to be on screen, so each picture is scrolled into view first.
       const besidePhone = (phone: Element, window: Element) => {
@@ -220,8 +276,7 @@ for (const width of [1280, 1440]) {
       const rows = [...document.querySelectorAll('.row')].map((row) => ({
         row: (row as HTMLElement).dataset['row'],
         past:
-          row.querySelector('.pair__window')!.getBoundingClientRect().right -
-          contentEdge(row.closest('.rows')!),
+          restingRight(row.querySelector('.pair__window')!) - contentEdge(row.closest('.rows')!),
         besidePhone: row.classList.contains('row--phone-first')
           ? false
           : besidePhone(row.querySelector('.pair__phone')!, row.querySelector('.pair__window')!),

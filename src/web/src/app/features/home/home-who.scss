@@ -21,6 +21,8 @@
 }
 
 .facts__list li {
+  // The dot's scale: the motion (R6.2k) pops each one on as its fact comes in.
+  --dot: 1;
   color: var(--home-muted);
   font-size: 0.92rem;
   line-height: 1.5;
@@ -38,6 +40,7 @@
   inset-block-start: 0.5em;
   inset-inline-start: 0;
   position: absolute;
+  transform: scale(var(--dot));
 }
 
 .facts__list a {

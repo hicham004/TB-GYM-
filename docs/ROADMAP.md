@@ -1126,8 +1126,9 @@ Work follows this order; anything outside it needs the user's approval first.
   the partner meeting, and R6.2i repaired what the owner's review of it found first (each phone's
   screen showing its corners past the frame, pictures running past the page's edge). From a
   before/after preview of the rest of that review, the owner picked a dark ending: R6.2j rebuilt who
-  it's for as a band of two halves and Talk to us as line fields that answer as they are used; the
-  motion below the week (R6.2k) and the founding-coach demo follow.
+  it's for as a band of two halves and Talk to us as line fields that answer as they are used, and
+  R6.2k carried the scroll story below the week (rows that arrive, a closing line that rises, a
+  header that marks where you are); the founding-coach demo follows.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
 

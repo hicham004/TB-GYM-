@@ -69,6 +69,11 @@ export interface HomeMotionTargets {
    * returns (the panel's `data-stage`), because Flip measures the new layout right after.
    */
   readonly onStage: (index: number) => void;
+  /**
+   * Where the parts below the week are (R6.2k): the feature rows, the facts, who it's for and the
+   * finale, found in the page once the motion's own chunk has loaded.
+   */
+  readonly page?: ParentNode;
 }
 
 export type HomeMotionState = 'idle' | 'loading' | 'running' | 'off';
@@ -78,8 +83,9 @@ export type HomeMotionState = 'idle' | 'loading' | 'running' | 'off';
  * ScrollTrigger pins the week's panel while the four stages scroll past and says which stage has
  * reached the line; Flip carries the panel's two slots from one composition to the next; SplitText
  * reveals each headline line by line, after the fonts have loaded so the lines are the real ones.
- * The build-time render, a phone and a reader who prefers reduced motion get the finished page
- * from the stylesheet alone.
+ * Below the week (R6.2k, `startBelow`) the rows' screens arrive, the facts and who it's for come
+ * in, and the finale's closing line rises word by word. The build-time render, a phone and a
+ * reader who prefers reduced motion get the finished page from the stylesheet alone.
  *
  * One instance per page; `stop` reverts everything GSAP touched, which is what the page calls when
  * it is destroyed.
@@ -108,7 +114,11 @@ export class HomeMotion {
       return;
     }
     this.stateSignal.set('loading');
-    const { gsap, ScrollTrigger, Flip, SplitText } = await this.loader();
+    // The motion below the week rides with GSAP, so a phone never downloads it either.
+    const [{ gsap, ScrollTrigger, Flip, SplitText }, below] = await Promise.all([
+      this.loader(),
+      targets.page ? import('./home-motion-below') : null,
+    ]);
     if (this.stopped) return;
     gsap.registerPlugin(ScrollTrigger, Flip, SplitText);
 
@@ -191,6 +201,15 @@ export class HomeMotion {
         }
         ScrollTrigger.refresh();
       });
+      // Below the week: the rows, the facts, who it's for and the finale (R6.2k).
+      const undoBelow =
+        below && targets.page
+          ? below.startBelow(
+              { gsap, ScrollTrigger, Flip, SplitText },
+              below.findBelow(targets.page),
+              fonts,
+            )
+          : null;
       // Pictures load after the layout is measured; a late one must not leave the lines stale.
       const refresh = () => ScrollTrigger.refresh();
       window.addEventListener('load', refresh);
@@ -198,6 +217,7 @@ export class HomeMotion {
       return () => {
         live = false;
         window.removeEventListener('load', refresh);
+        undoBelow?.();
         for (const split of splits) split.revert();
         for (const trigger of triggers) trigger.kill();
         pin.kill();

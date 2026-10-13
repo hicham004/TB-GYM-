@@ -1,10 +1,14 @@
 <section class="finale" aria-labelledby="finale-title">
+  <!-- The hero's green light; for a mouse on a wide screen it drifts toward the pointer (R6.2k). -->
+  <div class="finale__light" aria-hidden="true"><div class="finale__glow"></div></div>
   <div class="finale__inner">
     <div class="finale__body">
       <p class="finale__eyebrow" i18n>Start</p>
       <h2 id="finale-title" class="finale__title" i18n>Your next client's week starts here.</h2>
       <div class="finale__actions">
-        <a class="finale__start" routerLink="/auth/register" i18n>Start your coaching space</a>
+        <span class="finale__magnet">
+          <a class="finale__start" routerLink="/auth/register" i18n>Start your coaching space</a>
+        </span>
         <a class="finale__talk" routerLink="/" fragment="talk">
           <span i18n>Talk to us about your gym</span
           ><span class="quiet__mark" aria-hidden="true">→</span>

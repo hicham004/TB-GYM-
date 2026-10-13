@@ -7,16 +7,40 @@
 // The last part of the dark ending, after Talk to us: the hero's green light again, the closing
 // line at the hero's size, the one lime pill, and the page's foot.
 .finale {
-  background:
-    radial-gradient(1100px 640px at 74% 34%, #16221d 0%, rgb(22 34 29 / 0%) 70%),
-    linear-gradient(180deg, var(--home-page), var(--home-night));
+  background: linear-gradient(180deg, var(--home-page), var(--home-night));
   color: var(--home-cream);
+  overflow: clip;
+  position: relative;
   @include dark-focus;
+}
+
+// The light's room: the whole finale, faded in from its top edge, so the light never draws a seam
+// against Talk to us above it, wherever the pointer takes it.
+.finale__light {
+  inset: 0;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 220px);
+  mask-image: linear-gradient(180deg, transparent, #000 220px);
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+}
+
+// The hero's green light, at rest at 74 % across and 34 % down; for a mouse on a wide screen it
+// drifts toward the pointer (R6.2k), which moves it by transform alone.
+.finale__glow {
+  background: radial-gradient(closest-side, #16221d 0%, rgb(22 34 29 / 0%) 100%);
+  block-size: 896px;
+  inline-size: 1540px;
+  inset-block-start: calc(34% - 448px);
+  inset-inline-start: calc(74% - 770px);
+  pointer-events: none;
+  position: absolute;
 }
 
 .finale__inner {
   @include wrap;
   padding-block-end: 56px;
+  position: relative;
 }
 
 .finale__body {
@@ -41,6 +65,11 @@
   flex-wrap: wrap;
   gap: 22px;
   margin-block-end: clamp(64px, 7vw, 104px);
+}
+
+// Holds the lime pill, so the pill's own hover lift and the lean toward the pointer never meet.
+.finale__magnet {
+  display: inline-flex;
 }
 
 .finale__start {
@@ -95,6 +124,7 @@
     gap: 8px;
   }
 
+  .finale__magnet,
   .finale__start {
     inline-size: 100%;
   }
