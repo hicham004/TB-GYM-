@@ -1131,6 +1131,15 @@ Work follows this order; anything outside it needs the user's approval first.
   header that marks where you are); the founding-coach demo follows.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
+- Suggested follow-up, not scheduled (owner, 2026-10-13): show the client what their coach changed
+  and why. A client can screenshot a program and leave, and no app stops that: a web app cannot
+  block screenshots, and competitors (Everfit, Trainerize, TrueCoach) only limit how far ahead a
+  client sees, which TRN-006 already does by default while TRN-011 keeps a program inside the paid
+  dates. So nothing is built against copying; a client stays for the coaching a screenshot cannot
+  hold. Today the client's "weeks updated" notice (NOT-035) names the weeks, not what changed or
+  why. The idea: one line for each change to a max, a coming week or the next block (later, a meal
+  plan's calorie target), such as "Squat up 5 kg: you beat last week's target". It needs a domain
+  rule and a UI plan row before it is built.
 
 ## Continuous requirements
 
