@@ -25,7 +25,7 @@
         <app-home-window
           class="pair__window"
           [window]="row.window"
-          [narrow]="row.narrow"
+          [narrow]="row.narrow ?? null"
           [alt]="row.windowAlt"
         />
         <app-home-phone

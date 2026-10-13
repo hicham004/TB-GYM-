@@ -80,10 +80,14 @@
     grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
   }
 
-  // The window at 1:1, the phone over its edge; the rows alternate the phone's side.
+  // The window at 1:1, the phone over its edge; the rows alternate the phone's side. The one track
+  // is as wide as the column, so a window wider than the column shrinks to it instead of widening
+  // the track past the page's edge.
   .pair {
     align-items: center;
+    container-type: inline-size;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     min-block-size: 720px;
     position: relative;
   }
@@ -93,6 +97,12 @@
     justify-self: start;
     max-inline-size: 100%;
     order: 0;
+  }
+
+  // The phone covers the window's right side; the window stops under the phone's middle, so no
+  // sliver of it shows past the phone's edge when the column is no wider than the window.
+  .row:not(.row--phone-first) .pair__window {
+    clip-path: inset(0 max(0px, calc(100% + 165px - 100cqi)) 0 0);
   }
 
   .pair__phone {
@@ -105,10 +115,10 @@
     z-index: 1;
   }
 
-  // With the phone at the left, the window starts past it and runs off the page's edge instead.
+  // With the phone at the left, the window (the narrow crop) starts past it.
   .row--phone-first .pair__window {
     margin-inline-start: 350px;
-    max-inline-size: none;
+    max-inline-size: calc(100% - 350px);
   }
 
   .row--phone-first .pair__phone {

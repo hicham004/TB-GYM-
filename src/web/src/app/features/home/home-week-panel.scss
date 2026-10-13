@@ -72,10 +72,12 @@
     inset-inline-start: 40px;
   }
 
-  // Thursday: the review, wide, with the phone lower at the right.
+  // Thursday: the review, wide, with the phone lower at the right. On a narrow panel the review
+  // stops 20 px inside the phone's right edge instead of showing past it.
   .week__panel[data-stage='checkin'] .panel__slot--window {
     inline-size: 620px;
     inset-inline-start: 24px;
+    max-inline-size: calc(100% - 68px);
   }
 
   .week__panel[data-stage='checkin'] .panel__slot--phone {

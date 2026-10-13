@@ -79,12 +79,17 @@
 
 .hero__media {
   block-size: 760px;
+  container-type: inline-size;
   margin: 0;
   position: relative;
 }
 
-// The coach's window at 1:1 runs behind the phone; the lit phone is the one subject.
+// The coach's window at 1:1 runs behind the phone; the lit phone is the one subject. On a laptop
+// the window is wider than the column, so it is cut off under the middle of the phone (175 px in
+// from the column's edge): it never runs past the page, and no sliver of it shows beside the
+// phone's right edge (R6.2i).
 .hero__window {
+  clip-path: inset(0 max(0px, calc(835px - 100cqi)) 0 0);
   inline-size: 660px;
   inset-block-start: 36px;
   inset-inline-start: 0;

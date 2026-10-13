@@ -1122,8 +1122,10 @@ Work follows this order; anything outside it needs the user's approval first.
   file. R6.2g (2026-10-13) added Talk to us for gyms, a form on a new Website module whose request
   the Worker emails to the owner through the existing sender behind a honeypot, a minimum-time stamp
   and nginx rate limiting, with a WhatsApp link and Plausible analytics proxied through this origin,
-  both off until the owner configures them (ADR 0037). The private placeholder build (R6.2h) follows;
-  the owner's product review and the founding-coach demo too.
+  both off until the owner configures them (ADR 0037). R6.2h made the private placeholder build for
+  the partner meeting, and R6.2i repaired what the owner's review of it found first (each phone's
+  screen showing its corners past the frame, pictures running past the page's edge). The rest of
+  that review (the gyms story, Talk to us, motion below the hero) and the founding-coach demo follow.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
 

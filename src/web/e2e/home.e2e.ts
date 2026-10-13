@@ -136,6 +136,117 @@ test('reduced motion shows a still, complete week: every stage with its own two 
   expect(timed).toBe(0);
 });
 
+test('every phone picture is clear past the frame’s corners, where the screen’s square corners once showed', async ({
+  page,
+}) => {
+  await mockSignedOut(page);
+  await page.goto('/');
+  const phones = [
+    'client-today',
+    'client-training',
+    'client-player',
+    'client-checkin',
+    'client-checkins',
+    'client-finish',
+    'client-messages',
+    'client-nutrition',
+    'client-progress',
+  ];
+  const corners = await page.evaluate(async (names) => {
+    const found: Record<string, number[]> = {};
+    for (const name of names) {
+      for (const format of ['avif', 'webp']) {
+        const image = new Image();
+        image.src = `/images/home/${name}-460.${format}`;
+        await image.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const context = canvas.getContext('2d', { willReadFrequently: true })!;
+        context.drawImage(image, 0, 0);
+        const alpha = (x: number, y: number) => context.getImageData(x, y, 1, 1).data[3];
+        // The screen window's corners (Apple's frame at 460 px) lie outside the frame's round ones.
+        found[`${name}.${format}`] = [
+          alpha(26, 25),
+          alpha(433, 25),
+          alpha(26, 914),
+          alpha(433, 914),
+          alpha(230, 470),
+        ];
+      }
+    }
+    return found;
+  }, phones);
+
+  expect(Object.keys(corners)).toHaveLength(18);
+  for (const [picture, [topLeft, topRight, bottomLeft, bottomRight, middle]] of Object.entries(
+    corners,
+  )) {
+    expect([topLeft, topRight, bottomLeft, bottomRight], picture).toEqual([0, 0, 0, 0]);
+    expect(middle, picture).toBe(255);
+  }
+});
+
+for (const width of [1280, 1440]) {
+  test(`no picture runs past the page’s edge or shows beside a phone’s edge at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await openHome(page);
+
+    const pictures = await page.evaluate(() => {
+      const contentEdge = (element: Element) =>
+        element.getBoundingClientRect().right - parseFloat(getComputedStyle(element).paddingRight);
+      // What a visitor points at just inside a phone's right edge is never the window under it.
+      // The point has to be on screen, so each picture is scrolled into view first.
+      const besidePhone = (phone: Element, window: Element) => {
+        phone.scrollIntoView({ block: 'center' });
+        const box = phone.getBoundingClientRect();
+        return document
+          .elementsFromPoint(box.right - 3, box.top + 300)
+          .some((hit) => window.contains(hit));
+      };
+      const hero = besidePhone(
+        document.querySelector('.hero__phone')!,
+        document.querySelector('.hero__window')!,
+      );
+      const rows = [...document.querySelectorAll('.row')].map((row) => ({
+        row: (row as HTMLElement).dataset['row'],
+        past:
+          row.querySelector('.pair__window')!.getBoundingClientRect().right -
+          contentEdge(row.closest('.rows')!),
+        besidePhone: row.classList.contains('row--phone-first')
+          ? false
+          : besidePhone(row.querySelector('.pair__phone')!, row.querySelector('.pair__window')!),
+      }));
+      return { rows, hero };
+    });
+
+    expect(pictures.hero, 'the hero’s window shows beside the phone').toBe(false);
+    for (const { row, past, besidePhone } of pictures.rows) {
+      expect(past, `${row} runs past the page`).toBeLessThanOrEqual(1);
+      expect(besidePhone, `${row} shows beside the phone`).toBe(false);
+    }
+
+    // Thursday's review, the widest window in the week, ends inside the phone's right edge too,
+    // once the panel has moved its two screens into Thursday's places.
+    await page.evaluate(() =>
+      document.querySelector('[data-stage-id="checkin"]')?.scrollIntoView({ block: 'center' }),
+    );
+    await expect(page.locator('.week__panel')).toHaveAttribute('data-stage', 'checkin');
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const slot = document.querySelector('.panel__slot--window')!.getBoundingClientRect();
+          const phone = document.querySelector('.panel__slot--phone')!.getBoundingClientRect();
+          return slot.right - (phone.right - 16);
+        }),
+      )
+      .toBeLessThanOrEqual(0);
+  });
+}
+
 test('a phone gets the stacked page: the hero copy owns the first screen, every stage has one asset, the menu opens the sections', async ({
   page,
 }) => {

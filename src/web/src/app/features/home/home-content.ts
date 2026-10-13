@@ -88,9 +88,13 @@ export interface FeatureRow {
   readonly body: string;
   /** The one quiet link, an invitation the registration page keeps. */
   readonly link: string;
+  /**
+   * The coach's screen. Beside a phone at the left it is the narrow crop, the only one that fits
+   * there at 1:1 inside the page; a wide crop ran off the page's edge (the owner, 2026-10-13).
+   */
   readonly window: WindowPicture;
   /** The same screen cropped narrower, for phones, where the window is drawn about 350 px wide. */
-  readonly narrow: WindowPicture;
+  readonly narrow?: WindowPicture;
   readonly phone: string;
   /** Rows alternate which side the phone sits on. */
   readonly phoneFirst: boolean;
@@ -118,8 +122,7 @@ export const FEATURE_ROWS: readonly FeatureRow[] = [
     title: $localize`Every set, against the plan.`,
     body: $localize`Clients log weight, reps and RPE or RIR with last time beside them; what they lifted never overwrites what you planned.`,
     link: $localize`Log a first workout`,
-    window: WINDOWS.weekDone,
-    narrow: WINDOWS.weekDoneNarrow,
+    window: WINDOWS.weekDoneNarrow,
     phone: 'client-finish',
     phoneFirst: true,
     windowAlt: $localize`The client's week on the coach's screen: 1 of 4 sessions done, trained 3 minutes ago`,
@@ -144,11 +147,10 @@ export const FEATURE_ROWS: readonly FeatureRow[] = [
     title: $localize`Their week, in their words.`,
     body: $localize`Your questions, one at a time on their phone; their answers beside last week's on your screen, every change marked.`,
     link: $localize`Write your check-in`,
-    window: WINDOWS.review,
-    narrow: WINDOWS.reviewNarrow,
+    window: WINDOWS.reviewNarrow,
     phone: 'client-checkins',
     phoneFirst: true,
-    windowAlt: $localize`The check-in review on the coach's screen: this week's answers beside last week's, each change marked`,
+    windowAlt: $localize`The check-in review on the coach's screen: this week's answers, four of them changed since last week`,
     phoneAlt: $localize`Check-ins on the phone: the weekly check-in from the coach, six questions, Start check-in`,
   },
   {
@@ -170,11 +172,10 @@ export const FEATURE_ROWS: readonly FeatureRow[] = [
     title: $localize`The trend, not the noise.`,
     body: $localize`Weigh-ins become a smoothed trend on both screens, measurements and photos sit beside it, and every client's last seven days are on your list.`,
     link: $localize`Follow a client's trend`,
-    window: WINDOWS.clients,
-    narrow: WINDOWS.clientsNarrow,
+    window: WINDOWS.clientsNarrow,
     phone: 'client-progress',
     phoneFirst: true,
-    windowAlt: $localize`The Clients list on the coach's screen: each client's status and last activity`,
+    windowAlt: $localize`The Clients list on the coach's screen: five clients, each with their own goal`,
     phoneAlt: $localize`Progress on the phone: 65 kg, 3.4 kg down since 9 August, with the trend chart`,
   },
 ];

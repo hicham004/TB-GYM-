@@ -5,7 +5,7 @@
     "ng": "ng",
     "start": "ng serve --proxy-config proxy.conf.json",
     "build": "ng build && node scripts/inline-home-styles.mjs && npm run build:check",
-    "build:check": "node --test scripts/check-prerender.test.mjs scripts/inline-home-styles.test.mjs scripts/private-preview.test.mjs && node scripts/check-prerender.mjs",
+    "build:check": "node --test scripts/check-prerender.test.mjs scripts/inline-home-styles.test.mjs scripts/private-preview.test.mjs scripts/home-pictures.test.mjs && node scripts/check-prerender.mjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false",
     "e2e": "playwright test",

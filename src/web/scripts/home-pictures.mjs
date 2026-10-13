@@ -31,7 +31,7 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -245,10 +245,10 @@ const WINDOWS = [
   },
   // The feature rows (UI plan R6.2f): a 560-750 px region of the coach's screen beside the phone,
   // and a narrower region of the same screen for phones, where the window is drawn about 350 px
-  // wide and a wide crop would shrink its text.
+  // wide and a wide crop would shrink its text. A row whose phone sits at the left has only the
+  // narrow one (R6.2i): a wide crop there ran off the page's edge.
   { name: 'programs', shot: 'coach-builder', left: 262, top: 130, width: 745, height: 680 },
   { name: 'programs-narrow', shot: 'coach-builder', left: 262, top: 130, width: 380, height: 680 },
-  { name: 'week-done', shot: 'coach-client-after', left: 265, top: 505, width: 707, height: 310 },
   {
     name: 'week-done-narrow',
     shot: 'coach-client-after',
@@ -266,7 +266,6 @@ const WINDOWS = [
     width: 380,
     height: 520,
   },
-  { name: 'review', shot: 'coach-client-checkin', left: 258, top: 355, width: 700, height: 520 },
   {
     name: 'review-narrow',
     shot: 'coach-client-checkin',
@@ -276,7 +275,6 @@ const WINDOWS = [
     height: 520,
   },
   { name: 'thread-narrow', shot: 'coach-messages', left: 611, top: 148, width: 460, height: 612 },
-  { name: 'clients', shot: 'coach-clients', left: 258, top: 170, width: 760, height: 520 },
   { name: 'clients-narrow', shot: 'coach-clients', left: 258, top: 230, width: 420, height: 460 },
 ];
 
@@ -646,6 +644,10 @@ async function screenWindow(sharp, file) {
   while (top > 0 && at(column, top - 1) === 0) top -= 1;
   let bottom = middle;
   while (bottom < height - 1 && at(column, bottom + 1) === 0) bottom += 1;
+  const inside = phoneOutline(alpha, width, height);
+  if (inside[0] || !inside[middle * width + Math.floor((left + right) / 2)]) {
+    throw new Error(`The frame in ${file} does not close around its screen.`);
+  }
   return {
     file,
     width,
@@ -654,7 +656,67 @@ async function screenWindow(sharp, file) {
     top,
     screenWidth: right - left + 1,
     screenHeight: bottom - top + 1,
+    inside,
   };
+}
+
+/** Alpha from which a pixel of the frame stops the space around the phone. */
+const OPAQUE = 250;
+
+/**
+ * The phone's outline: 1 for each pixel of the frame and of everything it encloses (the screen's
+ * window, the Dynamic Island), 0 for the space around it. The space around is what the picture's
+ * edge reaches without crossing an opaque pixel, so the frame's soft outer edge belongs to it and
+ * its soft inner edge, which the screen has to fill, to the phone.
+ */
+export function phoneOutline(alpha, width, height) {
+  const outside = new Uint8Array(width * height);
+  const queue = new Int32Array(width * height);
+  let head = 0;
+  let tail = 0;
+  const reach = (index) => {
+    if (!outside[index] && alpha[index] < OPAQUE) {
+      outside[index] = 1;
+      queue[tail++] = index;
+    }
+  };
+  for (let x = 0; x < width; x += 1) {
+    reach(x);
+    reach((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y += 1) {
+    reach(y * width);
+    reach(y * width + width - 1);
+  }
+  while (head < tail) {
+    const index = queue[head++];
+    const x = index % width;
+    if (x > 0) reach(index - 1);
+    if (x < width - 1) reach(index + 1);
+    if (index >= width) reach(index - width);
+    if (index < (height - 1) * width) reach(index + width);
+  }
+  return outside.map((isOutside) => 1 - isOutside);
+}
+
+/**
+ * The screen (RGBA, as large as the frame's window) laid into a transparent picture the size of the
+ * frame, kept only inside the phone's outline. Apple's frame rounds its corners more than the
+ * window's rectangle reaches, so a whole screen showed its square corners past the frame (the
+ * owner saw them on 2026-10-13).
+ */
+export function screenInOutline(screen, bezel) {
+  const layer = Buffer.alloc(bezel.width * bezel.height * 4);
+  for (let y = 0; y < bezel.screenHeight; y += 1) {
+    const row = (bezel.top + y) * bezel.width + bezel.left;
+    let start = 0;
+    while (start < bezel.screenWidth && !bezel.inside[row + start]) start += 1;
+    let end = bezel.screenWidth;
+    while (end > start && !bezel.inside[row + end - 1]) end -= 1;
+    const from = y * bezel.screenWidth;
+    screen.copy(layer, (row + start) * 4, (from + start) * 4, (from + end) * 4);
+  }
+  return layer;
 }
 
 async function phonePicture(sharp, source, name, bezel, bars, out) {
@@ -701,22 +763,16 @@ async function phonePicture(sharp, source, name, bezel, bars, out) {
     ])
     .png()
     .toBuffer();
-  // The screen sits under the frame: the frame's rounded corners and the island cover its edges.
+  // The screen sits under the frame, which covers its edges and carries the island; only the part
+  // inside the phone's outline is kept, or its square corners show past the frame's round ones.
   const fitted = await sharp(screen)
     .resize({ width: bezel.screenWidth, height: bezel.screenHeight, fit: 'fill' })
-    .png()
+    .ensureAlpha()
+    .raw()
     .toBuffer();
-  const picture = sharp({
-    create: {
-      width: bezel.width,
-      height: bezel.height,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    },
-  }).composite([
-    { input: fitted, left: bezel.left, top: bezel.top },
-    { input: bezel.file, left: 0, top: 0 },
-  ]);
+  const picture = sharp(screenInOutline(fitted, bezel), {
+    raw: { width: bezel.width, height: bezel.height, channels: 4 },
+  }).composite([{ input: bezel.file, left: 0, top: 0 }]);
   const master = await picture.png().toBuffer();
   await sharp(master)
     .png({ compressionLevel: 9 })
@@ -788,13 +844,15 @@ async function windowPicture(sharp, source, window, out) {
 
 // ---------------------------------------------------------------------------------------------
 
-const [command, ...rest] = process.argv.slice(2);
-const options = parseArgs(rest);
-if (command === 'capture') {
-  await capture(options);
-} else if (command === 'compose') {
-  await compose(options);
-} else {
-  console.error('Usage: node scripts/home-pictures.mjs capture|compose [--option value ...]');
-  process.exit(1);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const [command, ...rest] = process.argv.slice(2);
+  const options = parseArgs(rest);
+  if (command === 'capture') {
+    await capture(options);
+  } else if (command === 'compose') {
+    await compose(options);
+  } else {
+    console.error('Usage: node scripts/home-pictures.mjs capture|compose [--option value ...]');
+    process.exit(1);
+  }
 }

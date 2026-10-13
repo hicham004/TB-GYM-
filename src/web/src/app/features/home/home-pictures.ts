@@ -44,9 +44,8 @@ export const WINDOWS = {
   builderDark: { name: 'builder-week-dark', width: 520, height: 560 },
   /** The activity feed after the workout: finished Lower A in 41 minutes, a back squat record. */
   feedDark: { name: 'feed-after-dark', width: 480, height: 520 },
-  /** The check-in review: this week's answers beside last week's. */
+  /** The check-in review: this week's answers beside last week's; narrow, this week's answers. */
   reviewDark: { name: 'checkin-review-dark', width: 700, height: 460 },
-  review: { name: 'review', width: 700, height: 520 },
   reviewNarrow: { name: 'review-narrow', width: 380, height: 520 },
   /** Training maxes, where logged sets suggest a new deadlift max. */
   maxesDark: { name: 'maxes-dark', width: 360, height: 580 },
@@ -54,7 +53,6 @@ export const WINDOWS = {
   programs: { name: 'programs', width: 745, height: 680 },
   programsNarrow: { name: 'programs-narrow', width: 380, height: 680 },
   /** The client's week on her overview after the workout: 1 of 4 sessions done. */
-  weekDone: { name: 'week-done', width: 707, height: 310 },
   weekDoneNarrow: { name: 'week-done-narrow', width: 380, height: 310 },
   /** Daily targets and the meal plan on the client's Nutrition tab. */
   targets: { name: 'targets', width: 675, height: 520 },
@@ -62,8 +60,7 @@ export const WINDOWS = {
   /** The thread with the client, her plan and last workout beside it. */
   thread: { name: 'messages-thread', width: 620, height: 640 },
   threadNarrow: { name: 'thread-narrow', width: 460, height: 612 },
-  /** The Clients list: status, last activity. */
-  clients: { name: 'clients', width: 760, height: 520 },
+  /** The Clients list: each client with their goal. */
   clientsNarrow: { name: 'clients-narrow', width: 420, height: 460 },
   /** The Team page: the owner and two coaches, each with their own clients. */
   team: { name: 'team-window', width: 640, height: 420 },
