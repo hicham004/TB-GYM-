@@ -40,6 +40,12 @@ x-mail-environment: &mail-environment
   Application__PublicOriginAllowlist__0: https://${TB_GYM_DOMAIN}
   PlatformBilling__WhishNumber: ${TB_GYM_BILLING_WHISH_NUMBER:-}
   DataProtection__KeyPath: /home/app/.aspnet/DataProtection-Keys
+  # The public website (UI plan R6.2g): where a Talk-to-us request is emailed (the support inbox
+  # unless another address is given), the WhatsApp number beside the form, and Plausible's site
+  # script. Each is off while empty.
+  Website__ContactRecipient: ${TB_GYM_CONTACT_EMAIL:-${TB_GYM_EMAIL_REPLY_TO:-}}
+  Website__WhatsAppNumber: ${TB_GYM_WHATSAPP_NUMBER:-}
+  Website__Analytics__Script: ${TB_GYM_ANALYTICS_SCRIPT:-}
 
 services:
   # The HTTPS edge. Caddy gets and renews the certificate itself and routes /api and /hubs to the
@@ -114,8 +120,11 @@ services:
       Database__ApplyMigrationsOnStartup: "false"
       Seed__Enabled: "false"
       # Behind the edge, and only the edge: forwarded client addresses keep rate limits per browser.
+      # The web container is the second proxy, for the one path it rate-limits first (the Talk-to-us
+      # form, UI plan R6.2g); it forwards the address the edge gave it.
       ReverseProxy__Enabled: "true"
       ReverseProxy__TrustedProxies__0: 172.30.0.10
+      ReverseProxy__TrustedProxies__1: 172.30.0.11
       Messaging__Realtime__ScaleOut: SingleProcess
       Messaging__Realtime__ApiReplicaCount: 1
       Messaging__Realtime__AllowedOrigins__0: https://${TB_GYM_DOMAIN}
@@ -174,6 +183,10 @@ services:
       context: .
       dockerfile: src/web/Dockerfile
     restart: unless-stopped
+    # A fixed address, because the API trusts forwarded headers from it (ReverseProxy__TrustedProxies__1).
+    networks:
+      default:
+        ipv4_address: 172.30.0.11
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
       interval: 30s

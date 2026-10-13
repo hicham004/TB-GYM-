@@ -2015,3 +2015,30 @@ submitted date is stored because the workspace time zone can change later. No an
 interpreted — there is no derived score, flag, rating, adherence percentage, streak or trend over
 check-in answers, and no stated or implied relationship between an answer and any training,
 nutrition or bodyweight fact.
+
+## 14. The public website
+
+**WEB-001** A Talk-to-us request (UI plan R6.2g, ADR 0037) is what a gym wrote, as received: a name,
+a gym, one way to reach them (an email address or a WhatsApp number, read from one field; a number is
+kept as its digits with an optional leading plus) and an optional line about the gym, trimmed, with
+whitespace folded and control characters dropped. It belongs to TB Gym and no workspace: the table has
+no tenant column. The facts are frozen (a trigger and the model refuse a change) and a request is
+never deleted; only the owner's email about it has state, which follows the action-mail lifecycle
+(pending, processing, materialized, dead-lettered) with the same attempt budget and schedule as the
+other queues. The email is the only place the person's words travel: no log line, notification row
+or analytics event carries a name, a contact or a message.
+
+**WEB-002** The form is open to anyone and costs its caller something. A submission that fills the
+honeypot is answered exactly as an accepted one and stored nowhere. A submission must carry the stamp
+the page asked for when the form came into view; one sent inside three seconds of the stamp is refused
+as too fast, and a stamp older than a day, missing or forged is refused as invalid, each with a stable
+code the page acts on once. The antiforgery token is required as on every state change. Two allowances
+apply per visitor address: nginx's on the path (six a minute, a short burst) and the API's behind it
+(five an hour). A request is accepted whether or not a recipient is configured; without one it waits
+as pending and keeps its attempts.
+
+**WEB-003** The website's settings a visitor may read are exactly two: a WhatsApp number (shown as a
+`wa.me` link beside the form, none until the owner gives one) and the name of Plausible's site script
+(none until the owner has an account). Analytics loads from this origin alone, through nginx, writes
+no cookie, needs no banner and leaves the CSP as it is; the privacy wording that accompanies it is the
+owner's, never generated. The build-time render of the homepage asks for neither.

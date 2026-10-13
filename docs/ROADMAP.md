@@ -1119,7 +1119,10 @@ Work follows this order; anything outside it needs the user's approval first.
   judged it plain; after two research rounds R6.2d made the device pictures and mockups
   (2026-10-13) and R6.2f built the premium homepage from them: real screens of the sample demo
   "Oakline Strength", four pinned week stages, six feature rows, a changelog page from a markdown
-  file. The Talk-to-us form and analytics (R6.2g) and the private placeholder build (R6.2h) follow;
+  file. R6.2g (2026-10-13) added Talk to us for gyms, a form on a new Website module whose request
+  the Worker emails to the owner through the existing sender behind a honeypot, a minimum-time stamp
+  and nginx rate limiting, with a WhatsApp link and Plausible analytics proxied through this origin,
+  both off until the owner configures them (ADR 0037). The private placeholder build (R6.2h) follows;
   the owner's product review and the founding-coach demo too.
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.

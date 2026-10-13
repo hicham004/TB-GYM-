@@ -340,6 +340,7 @@ public sealed partial class GymDbContext(
         ConfigureSavedReplies(builder);
         ConfigureMessagingRealtime(builder);
         ConfigurePlatformBilling(builder);
+        ConfigureWebsite(builder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -964,6 +965,7 @@ public sealed partial class GymDbContext(
 
     private void ApplyPersistenceRules()
     {
+        RejectContactRequestFactMutations();
         RejectAppendOnlyMutations<PaymentRecord>("Payment records are append-only.");
         RejectAppendOnlyMutations<OfferPriceChange>("Price changes are append-only.");
         RejectAppendOnlyMutations<ClientRelationshipEvent>("Client relationship events are append-only.");

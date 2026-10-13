@@ -113,6 +113,21 @@ export class ApiClient {
     return this.http.get<{ token: string }>('/api/auth/csrf');
   }
 
+  /** The public website's settings (R6.2g): a WhatsApp number and the analytics script, or neither. */
+  getWebsiteSettings(): Observable<Phase3Contracts.WebsiteSettingsView> {
+    return this.http.get<Phase3Contracts.WebsiteSettingsView>('/api/website/settings');
+  }
+
+  /** The stamp the Talk-to-us form carries back, behind the minimum-time rule. */
+  getContactForm(): Observable<Phase3Contracts.ContactFormStampView> {
+    return this.http.get<Phase3Contracts.ContactFormStampView>('/api/website/contact-form');
+  }
+
+  /** Talk to us about your gym: no account, no workspace; 202 and nothing back. */
+  submitContactRequest(request: Phase3Contracts.ContactRequestSubmission): Observable<void> {
+    return this.http.post<void>('/api/website/contact-requests', request);
+  }
+
   registerCoach(request: RegisterCoachRequest): Observable<RegistrationResponse> {
     return this.http.post<RegistrationResponse>('/api/auth/register/coach', request);
   }

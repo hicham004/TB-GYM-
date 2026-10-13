@@ -35,6 +35,7 @@
     <ProjectReference Include="..\Modules\Tenancy\TB.Gym.Modules.Tenancy\TB.Gym.Modules.Tenancy.csproj" />
     <ProjectReference Include="..\Modules\PlatformBilling\TB.Gym.Modules.PlatformBilling\TB.Gym.Modules.PlatformBilling.csproj" />
     <ProjectReference Include="..\Modules\Training\TB.Gym.Modules.Training\TB.Gym.Modules.Training.csproj" />
+    <ProjectReference Include="..\Modules\Website\TB.Gym.Modules.Website\TB.Gym.Modules.Website.csproj" />
   </ItemGroup>
 
 </Project>

@@ -80,6 +80,16 @@ eligible. TB Gym pays for every suggestion, so also set its ceiling per workspac
 AI off). Restart the API; then a workspace owner sets an allowance up to that ceiling in Settings,
 Nutrition, and tests one suggestion through coach review. Leaving AI disabled displays a setup message.
 
+Talk to us, and analytics (UI plan R6.2g). A gym that writes from the homepage is emailed to
+`TB_GYM_CONTACT_EMAIL`, or to the support inbox (`TB_GYM_EMAIL_REPLY_TO`) while that is empty; the
+request is also kept in the database, so nothing is lost if an email bounces. Give
+`TB_GYM_WHATSAPP_NUMBER` in international form (`+961…`) to show a WhatsApp link beside the form.
+For visitor counts without cookies or a banner, open a Plausible account (plausible.io, paid after a
+trial), add the site under its domain, and copy the file name of the site's script from Site
+settings > Site installation (it looks like `pa-AbC123.js`) into `TB_GYM_ANALYTICS_SCRIPT`; the
+script and its events pass through this domain, so nothing third-party loads. Restart the API and the
+web container after changing any of the three. Write the privacy note yourself; the code holds none.
+
 - **Update**: `cd /opt/tbgym && tb exec backup backup.sh && git pull && tb up -d --build`.
 - **Server lost**: new server, point the DNS record at it, and repeat Deploy step 1 **up to
   `nano .env`** (paste `.env` from the password manager). Then start only the database,

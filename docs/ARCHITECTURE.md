@@ -78,6 +78,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Gamification     | Tenant theme, levels, ranks and auditable experience events                                                                                                                              |
 | Integrations     | AI, payment, nutrition-data and other external provider contracts                                                                                                                        |
 | Platform billing | What TB Gym charges workspaces: versioned price plans, monthly invoices, voids, payments, discounts, the `platform-invoice-v1` calculation (ADR 0028)                                     |
+| Website          | The public website: Talk-to-us requests from gyms (no tenant, facts frozen, the owner's email as the fourth action-mail queue) and the settings the homepage reads (ADR 0037)              |
 
 Theme and gamification currently share one boundary because theme-driven labels and rewards
 are one optional presentation capability. Split them only if their lifecycles diverge.
@@ -768,6 +769,22 @@ is asked for only once the page is live, since the numerals sit below the first 
 `check-prerender.mjs` fails a build whose homepage lost its headline, whose changelog lost its
 releases, or whose pages still link the stylesheet.
 
+R6.2g adds Talk to us for gyms and analytics (ADR 0037). `home-talk` is the form (name, gym, one
+field for an email address or a WhatsApp number, a line about the gym, and a hidden honeypot) between
+the audience split and the finale; the hero's and finale's quiet links and the gym story's button
+lead to it. The form asks `GET /api/website/contact-form` for a server-signed stamp when it scrolls
+into view (or on the first touch), refreshes the antiforgery token and posts
+`POST /api/website/contact-requests`; sent back inside three seconds it waits out the rest and tries
+once more, and with a stamp the server no longer takes it fetches a fresh one, once. Both pre-rendered
+pages ask `GET /api/website/settings` once they are live (`WebsiteSettingsStore`, browser only): a
+WhatsApp number becomes a `wa.me` link beside the form, and a named Plausible site script makes
+`WebsiteAnalytics` write Plausible's queue stub from the bundle (the CSP allows no inline script)
+and add one `<script>` from `/stats/`, which nginx proxies to plausible.io together with the events
+endpoint, so the page connects to nothing but its own origin and sets no cookie. The build-time
+render asks for nothing, so the finished HTML holds the form and never the script
+(`check-prerender.mjs` checks both). `e2e/support.ts`'s `mockSignedOut` answers the settings
+with neither configured.
+
 The migrated exercise library keeps every request it made before and adds no new one. Its filters
 stay server-side and are applied on Apply or Enter only; the list asks for the 100 rows the server is
 willing to return (it clamps `take` to 1-100) and says either "N exercises · sorted by name" or
@@ -1089,7 +1106,14 @@ container-local files are never a horizontal-scaling design.
 Linux host; `docs/GO-LIVE.md` is the owner's runbook. Only the Caddy edge publishes ports: it
 obtains the certificate, sets HSTS, answers 404 for `/health` and `/openapi`, and sends `/api` and
 `/hubs` straight to the API, so the API trusts exactly one proxy — the edge's fixed address — and the
-one-hop forward limit holds. A one-shot `migrate` container runs the EF bundle before the API and
+one-hop forward limit holds. The one exception since R6.2g is the Talk-to-us form's path,
+`/api/website/contact-requests`, which the edge sends through the web container first: nginx reads
+the visitor's address from the edge's `X-Forwarded-For` (`set_real_ip_from` the edge's address),
+applies its own allowance (`limit_req`, six a minute with a short burst, 429 beyond it) and passes
+the request on to the API, which therefore trusts the web container's fixed address as a second proxy
+(`ReverseProxy__TrustedProxies__1`). nginx also proxies Plausible's site script and events under
+`/stats/` to plausible.io, resolved at request time through Docker's resolver so the container
+still starts offline; the script is cached for five minutes. Every other path keeps its one hop. A one-shot `migrate` container runs the EF bundle before the API and
 Worker start. In Production both processes refuse development settings no adapter owns
 (`ProductionSettingsGuard`): seeding, migrate-on-startup, a localhost public origin, non-HTTPS hub
 origins and Npgsql error-detail or parameter logging. The `backup` container dumps PostgreSQL nightly,

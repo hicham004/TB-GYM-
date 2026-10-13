@@ -19,6 +19,7 @@ using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Training;
+using TB.Gym.Modules.Website;
 using TB.Gym.Modules.Nutrition;
 using TB.Gym.Modules.Progress;
 using TB.Gym.SharedKernel;
@@ -140,6 +141,7 @@ app.MapMediaModule();
 app.MapMessagingModule();
 app.MapNotificationsModule();
 app.MapPlatformBillingModule();
+app.MapWebsiteModule();
 app.MapTbGymChatHub();
 app.LogRealtimeTopology();
 

@@ -38,6 +38,7 @@
     <ProjectReference Include="..\..\..\src\backend\Modules\Tenancy\TB.Gym.Modules.Tenancy\TB.Gym.Modules.Tenancy.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\PlatformBilling\TB.Gym.Modules.PlatformBilling\TB.Gym.Modules.PlatformBilling.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Modules\Training\TB.Gym.Modules.Training\TB.Gym.Modules.Training.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Modules\Website\TB.Gym.Modules.Website\TB.Gym.Modules.Website.csproj" />
   </ItemGroup>
 
   <ItemGroup>

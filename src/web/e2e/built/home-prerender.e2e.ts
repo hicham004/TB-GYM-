@@ -29,6 +29,10 @@ test('the homepage is served as finished HTML, with its headline, its week and l
   expect(pageText(html)).toMatch(/Built for one coach\. Ready for a whole floor\./);
   expect(html.match(/<article[^>]*data-stage-id="/g)).toHaveLength(4);
   expect(html.match(/<article[^>]*data-row="/g)).toHaveLength(6);
+  // Talk to us (R6.2g) is in the HTML; the analytics script never is, it waits for the settings.
+  expect(html).toMatch(/<section[^>]*\sid="talk"/);
+  expect(html).toMatch(/<form[\s>]/);
+  expect(html).not.toMatch(/\/stats\//);
   expect(html).toMatch(
     /<meta[^>]*property="og:title"[^>]*content="TB Gym: coach both sides of the week"/,
   );

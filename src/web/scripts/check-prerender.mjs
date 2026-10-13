@@ -56,6 +56,13 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT) {
       if (!text.includes(part)) findings.push(`index.html does not hold the headline "${part}".`);
     }
     if (!/<h1[\s>]/.test(home)) findings.push('index.html has no <h1>.');
+    // Talk to us (R6.2g) arrives with the page; analytics never does (it waits for the settings).
+    if (!/<section[^>]*\sid="talk"/.test(home) || !/<form[\s>]/.test(home)) {
+      findings.push('index.html does not hold the Talk-to-us form.');
+    }
+    if (/<script[^>]*src="\/stats\//.test(home)) {
+      findings.push('index.html loads the analytics script at build time.');
+    }
     for (const tag of PREVIEW_TAGS) {
       if (!metaContent(home, tag)) findings.push(`index.html lacks the ${tag} tag or its content.`);
     }

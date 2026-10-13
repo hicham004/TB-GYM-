@@ -16,8 +16,10 @@ const HEAD = `<head><title>TB Gym</title>
 const STATE =
   '<script id="ng-state" type="application/json">{"tb-gym.rendered-signed-out":true,"__nghData__":[]}</script>';
 
+const TALK = '<section id="talk"><form><input name="name"><button>Send</button></form></section>';
+
 const HOME = `<!doctype html><html>${HEAD}<body><app-root ng-version="22.2.1" ngh="3"><app-home>
-<h1 id="home-title">Coach both <br>sides of <br>the week.</h1></app-home></app-root>
+<h1 id="home-title">Coach both <br>sides of <br>the week.</h1>${TALK}</app-home></app-root>
 <script src="main-ABC.js" type="module"></script>
 ${STATE}
 </body></html>`;
@@ -73,6 +75,19 @@ test('rejects a homepage with no session mark for the browser', () => {
   });
   assert.equal(findings.length, 1, findings.join('\n'));
   assert.match(findings[0], /rendered signed out/);
+});
+
+test('rejects a homepage without the Talk-to-us form, or one that loads analytics at build time', () => {
+  assert.deepEqual(inspect({ ...BUILD, 'index.html': HOME.replace(TALK, '') }), [
+    'index.html does not hold the Talk-to-us form.',
+  ]);
+  assert.deepEqual(
+    inspect({
+      ...BUILD,
+      'index.html': HOME.replace('</head>', '<script async src="/stats/pa-x.js"></script></head>'),
+    }),
+    ['index.html loads the analytics script at build time.'],
+  );
 });
 
 test('rejects an inline script, which the content security policy would refuse', () => {

@@ -60,6 +60,9 @@
   <Folder Name="/src/backend/Modules/Training/">
     <Project Path="src/backend/Modules/Training/TB.Gym.Modules.Training/TB.Gym.Modules.Training.csproj" />
   </Folder>
+  <Folder Name="/src/backend/Modules/Website/">
+    <Project Path="src/backend/Modules/Website/TB.Gym.Modules.Website/TB.Gym.Modules.Website.csproj" />
+  </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/backend/">
     <Project Path="tests/backend/TB.Gym.Api.IntegrationTests/TB.Gym.Api.IntegrationTests.csproj" />

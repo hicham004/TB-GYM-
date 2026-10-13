@@ -46,6 +46,12 @@ public static class RateLimitPolicies
     /// signed-in user to partition by and the caller is a fixed set of provider egress addresses.
     /// </summary>
     public const string ProviderWebhook = "ProviderWebhook";
+
+    /// <summary>
+    /// The public website's Talk-to-us form (UI plan R6.2g): the one route anybody may post to
+    /// without an account, partitioned by source address with an allowance sized for a person.
+    /// </summary>
+    public const string PublicContact = "PublicContact";
 }
 
 public static class TenantHeaders

@@ -1,0 +1,139 @@
+<section class="talk" id="talk" aria-labelledby="talk-title" #section>
+  <div class="talk__inner">
+    <div class="talk__copy">
+      <p class="talk__eyebrow" i18n>For gyms and coaching teams</p>
+      <h2 id="talk-title" class="talk__title" i18n>Tell us about your gym.</h2>
+      <p class="talk__lead" i18n>
+        Every coach on your floor with their own clients, one owner's view of the whole space, one
+        bill. We set it up with you: leave your details and we get back to you.
+      </p>
+      @if (whatsAppLink(); as link) {
+        <a class="talk__whatsapp" [href]="link" target="_blank" rel="noopener">
+          <span i18n>Write to us on WhatsApp</span
+          ><span class="quiet__mark" aria-hidden="true">→</span>
+        </a>
+      }
+    </div>
+
+    @if (sent(); as done) {
+      <div class="talk__done" role="status" tabindex="-1" #doneNote>
+        <p class="talk__done-title" i18n>Thanks, {{ done.name }}.</p>
+        <p i18n>We'll get back to you at {{ done.contact }}.</p>
+      </div>
+    } @else {
+      <form class="talk__form" (submit)="submit($event)" (focusin)="wake()" novalidate>
+        <div class="talk__pair">
+          @let nameMessages = nameReasons();
+          <app-field
+            label="Your name"
+            i18n-label
+            [errors]="attempt.shows('name', nameMessages) ? nameMessages : null"
+          >
+            <input
+              appControl
+              type="text"
+              name="name"
+              autocomplete="name"
+              [value]="name()"
+              (input)="write('name', $event)"
+              (blur)="attempt.touch('name')"
+            />
+          </app-field>
+          @let gymMessages = gymNameReasons();
+          <app-field
+            label="Your gym"
+            i18n-label
+            [errors]="attempt.shows('gymName', gymMessages) ? gymMessages : null"
+          >
+            <input
+              appControl
+              type="text"
+              name="gymName"
+              autocomplete="organization"
+              [value]="gymName()"
+              (input)="write('gymName', $event)"
+              (blur)="attempt.touch('gymName')"
+            />
+          </app-field>
+        </div>
+        @let contactMessages = contactReasons();
+        <app-field
+          label="Email or WhatsApp number"
+          i18n-label
+          help="Either works; we reply there."
+          i18n-help
+          [errors]="attempt.shows('contact', contactMessages) ? contactMessages : null"
+        >
+          <input
+            appControl
+            type="text"
+            name="contact"
+            autocomplete="email"
+            autocapitalize="none"
+            spellcheck="false"
+            inputmode="email"
+            [value]="contact()"
+            (input)="write('contact', $event)"
+            (blur)="attempt.touch('contact')"
+          />
+        </app-field>
+        @let messageMessages = messageReasons();
+        <app-field
+          label="About your gym (optional)"
+          i18n-label
+          help="How many coaches, how many clients, what you need."
+          i18n-help
+          [errors]="attempt.shows('message', messageMessages) ? messageMessages : null"
+        >
+          <textarea
+            appControl
+            rows="3"
+            name="message"
+            [value]="message()"
+            (input)="write('message', $event)"
+            (blur)="attempt.touch('message')"
+          ></textarea>
+        </app-field>
+        <!-- The honeypot: a person never sees or reaches it; a script that fills it is kept nowhere. -->
+        <div class="talk__nope" aria-hidden="true">
+          <label for="talk-website">Website</label>
+          <input
+            id="talk-website"
+            type="text"
+            name="website"
+            tabindex="-1"
+            autocomplete="off"
+            [value]="website()"
+            (input)="write('website', $event)"
+          />
+        </div>
+
+        <p id="talk-summary" class="talk__summary" role="alert" tabindex="-1" #summary>
+          @if (attempt.wasTried() && formReasons().length > 0) {
+            <span i18n>Your message can't be sent yet:</span>
+            @for (reason of formReasons(); track reason) {
+              <span>{{ reason }}</span>
+            }
+          } @else if (error()) {
+            <span>{{ error() }}</span>
+          }
+        </p>
+
+        <div class="talk__actions">
+          <button
+            class="talk__send"
+            type="submit"
+            [disabled]="submitting()"
+            aria-describedby="talk-summary"
+          >
+            @if (submitting()) {
+              <ng-container i18n>Sending…</ng-container>
+            } @else {
+              <ng-container i18n>Send</ng-container>
+            }
+          </button>
+        </div>
+      </form>
+    }
+  </div>
+</section>

@@ -1,5 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, expectNoHorizontalOverflow, mockSignedOut, test, waitForFonts } from './support';
+import {
+  expect,
+  expectNoHorizontalOverflow,
+  json,
+  mockSignedOut,
+  test,
+  waitForFonts,
+} from './support';
 
 const HEADLINE = /Coach both/;
 
@@ -29,9 +36,11 @@ for (const width of [1440, 390]) {
       'href',
       '/auth/sign-in',
     );
-    for (const id of ['week', 'inside', 'for-gyms']) {
+    for (const id of ['week', 'inside', 'for-gyms', 'talk']) {
       await expect(page.locator(`#${id}`)).toBeAttached();
     }
+    // Talk to us is the way in for gyms: the hero, the gym story and the finale all lead to it.
+    expect(await page.locator('a[href="/#talk"]').count()).toBeGreaterThanOrEqual(3);
     await expect(page.locator('.stage')).toHaveCount(4);
     await expect(page.locator('.row')).toHaveCount(6);
     // One caption per picture group, and never a quote, a rating or an outcome on a sample person.
@@ -224,4 +233,153 @@ test('homepage mirrors cleanly in right-to-left layout', async ({ page }) => {
   await page.evaluate(() => (document.documentElement.dir = 'rtl'));
   await expectNoHorizontalOverflow(page);
   await expect(page.getByRole('heading', { level: 1, name: HEADLINE })).toBeVisible();
+});
+
+// ---- Talk to us for gyms (UI plan R6.2g) ----
+
+for (const width of [1440, 390]) {
+  test(`a gym writes to us from the homepage at ${width}px: the stamp, the form, the thanks`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const posted: unknown[] = [];
+    let stamps = 0;
+    await mockSignedOut(page, {
+      'GET /api/website/contact-form': (route) => {
+        stamps++;
+        return json(route, 200, { stamp: `stamp-${stamps}` });
+      },
+      'POST /api/website/contact-requests': (route) => {
+        posted.push(route.request().postDataJSON());
+        return route.fulfill({ status: 202, body: '' });
+      },
+    });
+    await page.goto('/');
+    await waitForFonts(page);
+    await expect(page.locator('#week')).toHaveAttribute('data-motion', /running|off/);
+
+    // The hero's quiet link lands on the form; coming into view asks for the stamp.
+    await page.locator('.hero__talk').click();
+    await expect(page.locator('#talk')).toBeInViewport();
+    await expect.poll(() => stamps).toBe(1);
+    await expect(page.locator('.talk__whatsapp')).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('home-talk.png') });
+    const accessibility = await new AxeBuilder({ page }).include('#talk').analyze();
+    expect(accessibility.violations).toEqual([]);
+
+    await page.getByLabel('Your name', { exact: true }).fill('Rami Tabet');
+    await page.getByLabel('Your gym', { exact: true }).fill('Oakline Strength');
+    await page.getByLabel('Email or WhatsApp number', { exact: true }).fill('+961 70 123 456');
+    await page
+      .getByLabel('About your gym (optional)', { exact: true })
+      .fill('Six coaches, about 90 clients.');
+    await page.getByRole('button', { name: 'Send' }).click();
+
+    await expect(page.getByRole('status')).toContainText('Thanks, Rami Tabet.');
+    await expect(page.getByRole('status')).toContainText('+961 70 123 456');
+    expect(posted).toEqual([
+      {
+        name: 'Rami Tabet',
+        gymName: 'Oakline Strength',
+        contact: '+961 70 123 456',
+        message: 'Six coaches, about 90 clients.',
+        website: '',
+        formStamp: 'stamp-1',
+      },
+    ]);
+    await expect(page.locator('#talk form')).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('home-talk-sent.png') });
+    await expectNoHorizontalOverflow(page);
+  });
+}
+
+test('the form refuses an empty send with its reasons and keeps the keyboard inside it', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockSignedOut(page, {
+    'GET /api/website/contact-form': (route) => json(route, 200, { stamp: 'stamp' }),
+  });
+  await page.goto('/');
+  await waitForFonts(page);
+
+  await page.getByLabel('Your name', { exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByLabel('Your gym', { exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByLabel('Email or WhatsApp number', { exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByLabel('About your gym (optional)', { exact: true })).toBeFocused();
+  // The hidden field is skipped: the next stop is Send.
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Send' })).toBeFocused();
+  await page.keyboard.press('Enter');
+
+  const summary = page.locator('#talk-summary');
+  await expect(summary).toBeFocused();
+  await expect(summary).toContainText("Your message can't be sent yet:");
+  await expect(summary).toContainText('Enter your name.');
+  await expect(page.getByLabel('Your name', { exact: true })).toHaveAttribute(
+    'aria-invalid',
+    'true',
+  );
+  const accessibility = await new AxeBuilder({ page }).include('#talk').analyze();
+  expect(accessibility.violations).toEqual([]);
+});
+
+test('with a number configured the WhatsApp link appears beside the form, and nowhere else is loaded', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockSignedOut(page, {
+    'GET /api/website/settings': (route) =>
+      json(route, 200, { whatsAppNumber: '+96170123456', analytics: { script: null } }),
+  });
+  await page.goto('/');
+  await waitForFonts(page);
+
+  const link = page.locator('.talk__whatsapp');
+  await expect(link).toHaveAttribute('href', 'https://wa.me/96170123456');
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noopener');
+  expect(await page.locator('script[data-analytics]').count()).toBe(0);
+});
+
+test('analytics loads from this origin only when the deployment names its script, and never before the settings', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.origin !== 'http://127.0.0.1:4300') requests.push(url.href);
+    if (url.pathname.startsWith('/stats/')) requests.push(url.pathname);
+  });
+  await page.route('**/stats/pa-e2e.js', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/javascript',
+      body: 'window.__plausibleSeen = { endpoint: window.plausible.o.endpoint, queued: window.plausible.q || [] };',
+    }),
+  );
+  await mockSignedOut(page, {
+    'GET /api/website/settings': (route) =>
+      json(route, 200, { whatsAppNumber: null, analytics: { script: 'pa-e2e.js' } }),
+  });
+  await page.goto('/');
+  await waitForFonts(page);
+
+  const script = page.locator('script[data-analytics]');
+  await expect(script).toHaveCount(1);
+  await expect(script).toHaveAttribute('src', '/stats/pa-e2e.js');
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { __plausibleSeen?: { endpoint: string } }).__plausibleSeen,
+      ),
+    )
+    .toEqual({ endpoint: '/stats/event', queued: [] });
+  // Everything the page asked for came from its own origin; the proxied script is the one /stats/ request.
+  expect(requests).toEqual(['/stats/pa-e2e.js']);
 });

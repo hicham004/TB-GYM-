@@ -13,6 +13,7 @@ using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.PlatformBilling;
 using TB.Gym.Modules.Tenancy;
+using TB.Gym.Modules.Website;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure;
@@ -82,7 +83,30 @@ public static class WorkerDependencyInjection
         services.AddNotificationDispatch(configuration);
         services.AddNotificationEmail(configuration, isProduction);
         services.AddActionMail(configuration, isProduction, isDevelopment);
+        services.AddWebsite(configuration);
         services.AddPlatformBilling(configuration);
+        return services;
+    }
+
+    /// <summary>
+    /// The public website (UI plan R6.2g): its validated settings, the Talk-to-us form's stamp and
+    /// intake, and the sweep that emails the owner about each request. Composed in both roots: the
+    /// API receives requests and the Worker emails them, and tests drive the sweep through the API.
+    /// </summary>
+    internal static IServiceCollection AddWebsite(this IServiceCollection services, IConfiguration configuration)
+    {
+        var website = new WebsiteOptions();
+        configuration.GetSection(WebsiteOptions.SectionName).Bind(website);
+        services.AddOptions<WebsiteOptions>()
+            .Bind(configuration.GetSection(WebsiteOptions.SectionName))
+            .Validate(
+                options => options.Validate() is null,
+                website.Validate() ?? $"{WebsiteOptions.SectionName} is not a valid website configuration.")
+            .ValidateOnStart();
+        services.TryAddSingleton<IWebsiteSettingsReader, WebsiteSettingsReader>();
+        services.TryAddSingleton<IContactFormStamps, ContactFormStampService>();
+        services.TryAddScoped<IContactRequestApplicationService, ContactRequestApplicationService>();
+        services.TryAddScoped<IContactRequestMailDispatchService, ContactRequestMailService>();
         return services;
     }
 

@@ -8,6 +8,8 @@ homepage prints the newest date, and `/changelog` prints the whole file, at buil
 
 - The homepage, rebuilt: one week of coaching told from both sides on real screens of a sample
   coaching space, and this page.
+- Talk to us: a gym writes to TB Gym from the homepage, by a short form or on WhatsApp once we
+  publish a number.
 
 ## 2026-10-12
 

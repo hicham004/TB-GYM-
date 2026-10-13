@@ -11473,6 +11473,154 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Website.ContactRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("ClaimExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClaimToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Contact")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ContactKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DeadLetteredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("GymName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTimeOffset?>("MaterializedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTimeOffset>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ProviderAcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProviderIdempotencyKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProviderMessageId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("TransportAdapter")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProviderIdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ContactRequests_ProviderIdempotencyKey");
+
+                    b.HasIndex("ReceivedAtUtc")
+                        .HasDatabaseName("IX_ContactRequests_ReceivedAtUtc");
+
+                    b.HasIndex("Status", "ClaimExpiresAtUtc")
+                        .HasDatabaseName("IX_ContactRequests_Status_ClaimExpiresAtUtc");
+
+                    b.HasIndex("Status", "NextAttemptAtUtc", "Id")
+                        .HasDatabaseName("IX_ContactRequests_Status_NextAttemptAtUtc_Id");
+
+                    b.ToTable("ContactRequests", "website", t =>
+                        {
+                            t.HasCheckConstraint("CK_ContactRequests_Attempted", "(\"ProviderIdempotencyKey\" IS NULL) = (\"AttemptCount\" = 0)");
+
+                            t.HasCheckConstraint("CK_ContactRequests_CapturedHasNoProvider", "\"TransportAdapter\" <> 'captured' OR (\"ProviderMessageId\" IS NULL AND \"ProviderAcceptedAtUtc\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_ContactRequests_Claim", "(\"ClaimToken\" IS NULL) = (\"ClaimExpiresAtUtc\" IS NULL) AND ((\"Status\" = 'Processing') = (\"ClaimToken\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_ContactRequests_Completion", "(\"Status\" IN ('Materialized', 'DeadLettered')) = (\"CompletedAtUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ContactRequests_Counters", "\"AttemptCount\" >= 0 AND \"SchemaVersion\" >= 1");
+
+                            t.HasCheckConstraint("CK_ContactRequests_DeadLettered", "(\"Status\" = 'DeadLettered') = (\"DeadLetteredAtUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ContactRequests_Facts", "length(btrim(\"Name\")) > 0 AND length(btrim(\"GymName\")) > 0 AND length(btrim(\"Contact\")) > 0 AND (\"Message\" IS NULL OR length(btrim(\"Message\")) > 0)");
+
+                            t.HasCheckConstraint("CK_ContactRequests_Failure", "(\"Status\" = 'Materialized' AND \"FailureCode\" IS NULL) OR (\"Status\" = 'DeadLettered' AND \"FailureCode\" IS NOT NULL) OR \"Status\" IN ('Pending', 'Processing')");
+
+                            t.HasCheckConstraint("CK_ContactRequests_Materialized", "(\"Status\" = 'Materialized') = (\"MaterializedAtUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ContactRequests_NextAttempt", "\"NextAttemptAtUtc\" >= \"ReceivedAtUtc\"");
+
+                            t.HasCheckConstraint("CK_ContactRequests_ProviderEvidence", "((\"ProviderMessageId\" IS NULL) = (\"ProviderAcceptedAtUtc\" IS NULL)) AND (\"ProviderMessageId\" IS NULL OR (\"Status\" = 'Materialized' AND \"TransportAdapter\" IN ('resend')))");
+
+                            t.HasCheckConstraint("CK_ContactRequests_Transport", "\"TransportAdapter\" IS NULL OR \"Status\" = 'Materialized'");
+
+                            t.HasCheckConstraint("CK_ContactRequests_Vocabulary", "\"ContactKind\" IN ('Email', 'WhatsApp') AND \"Status\" IN ('Pending', 'Processing', 'Materialized', 'DeadLettered')");
+                        });
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)

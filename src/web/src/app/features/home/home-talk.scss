@@ -1,0 +1,140 @@
+@use 'home-shared' as *;
+
+:host {
+  display: block;
+}
+
+.talk {
+  @include wrap;
+  padding-block: 0 clamp(80px, 9vw, 136px);
+  scroll-margin-block-start: 72px;
+}
+
+// One soft card: the words and the WhatsApp link beside the form.
+.talk__inner {
+  background: var(--home-soft);
+  border-radius: 28px;
+  display: grid;
+  gap: 48px;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  padding: clamp(32px, 4vw, 56px);
+}
+
+.talk__eyebrow {
+  @include eyebrow;
+  color: var(--home-muted);
+}
+
+.talk__title {
+  @include section-display;
+  margin-block-end: 20px;
+  max-inline-size: 14ch;
+}
+
+.talk__lead {
+  @include lead;
+  color: var(--home-muted);
+  margin-block-end: 28px;
+  max-inline-size: 42ch;
+}
+
+.talk__whatsapp {
+  @include quiet;
+  color: var(--home-forest);
+
+  .quiet__mark {
+    color: var(--home-forest);
+  }
+}
+
+.talk__form {
+  display: grid;
+  gap: 18px;
+}
+
+.talk__pair {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 1fr 1fr;
+}
+
+// Off the page, not display: none, so a script that fills every field fills this one too.
+.talk__nope {
+  inset-inline-start: -10000px;
+  position: absolute;
+}
+
+.talk__summary {
+  color: var(--home-ink);
+  display: grid;
+  font-size: 0.95rem;
+  gap: 4px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.talk__summary:empty {
+  display: none;
+}
+
+.talk__summary span:first-child {
+  font-weight: 500;
+}
+
+.talk__actions {
+  display: flex;
+}
+
+.talk__send {
+  @include pill;
+  @include pill-forest;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  min-inline-size: 160px;
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.7;
+    transform: none;
+  }
+}
+
+.talk__done {
+  align-self: center;
+  border-inline-start: 3px solid var(--home-lime);
+  padding-inline-start: 24px;
+}
+
+.talk__done p {
+  color: var(--home-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.talk__done-title {
+  color: var(--home-ink);
+  font-size: clamp(1.5rem, 2vw, 1.875rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin-block-end: 8px;
+}
+
+@media (max-width: #{$wide - 1px}) {
+  .talk__inner {
+    border-radius: 22px;
+    gap: 32px;
+    grid-template-columns: 1fr;
+    padding: 28px 24px;
+  }
+}
+
+@media (max-width: $small) {
+  .talk__pair {
+    grid-template-columns: 1fr;
+  }
+
+  .talk__send {
+    inline-size: 100%;
+  }
+}

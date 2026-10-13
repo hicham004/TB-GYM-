@@ -1,7 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, inject, LOCALE_ID } from '@angular/core';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  LOCALE_ID,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import changelogMarkdown from '../../../content/changelog.md';
 import { AuthStore } from '../../core/auth/auth.store';
+import { WebsiteSettingsStore } from '../../core/website/website-settings';
 import { formatChangeDate, parseChangelog } from '../home/changelog-parser';
 import { HomeHeader } from '../home/home-header';
 
@@ -24,6 +32,12 @@ export class Changelog {
   protected readonly signedIn = computed(() => this.auth.user() !== null);
   protected readonly releases = parseChangelog(changelogMarkdown);
   protected readonly newest = this.releases[0] ? this.date(this.releases[0].date) : null;
+
+  constructor() {
+    // The website's settings (R6.2g): analytics on this page too, once the browser has it.
+    const settings = inject(WebsiteSettingsStore);
+    afterNextRender(() => void settings.load());
+  }
 
   protected date(value: string): string {
     return formatChangeDate(value, this.locale);

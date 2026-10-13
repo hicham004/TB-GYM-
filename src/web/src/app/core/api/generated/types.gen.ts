@@ -1270,6 +1270,19 @@ export type ConfirmEmailRequest = {
   code: string;
 };
 
+export type ContactFormStampView = {
+  stamp: string;
+};
+
+export type ContactRequestSubmission = {
+  name: null | string;
+  gymName: null | string;
+  contact: null | string;
+  message: null | string;
+  website: null | string;
+  formStamp: null | string;
+};
+
 export type ConversationCounterpart = {
   userId: string;
   displayName: string;
@@ -3691,6 +3704,15 @@ export type VoidInvoiceRequest = {
 export type VoidInvoiceResponse = {
   voided: PlatformInvoiceView;
   reissued: null | PlatformInvoiceView;
+};
+
+export type WebsiteAnalyticsView = {
+  script: null | string;
+};
+
+export type WebsiteSettingsView = {
+  whatsAppNumber: null | string;
+  analytics: WebsiteAnalyticsView;
 };
 
 export type WeekProgressionPreviewView = {
@@ -11600,3 +11622,64 @@ export type RevokeWorkspaceDiscountResponses = {
 
 export type RevokeWorkspaceDiscountResponse =
   RevokeWorkspaceDiscountResponses[keyof RevokeWorkspaceDiscountResponses];
+
+export type GetWebsiteSettingsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/website/settings';
+};
+
+export type GetWebsiteSettingsResponses = {
+  /**
+   * OK
+   */
+  200: WebsiteSettingsView;
+};
+
+export type GetWebsiteSettingsResponse =
+  GetWebsiteSettingsResponses[keyof GetWebsiteSettingsResponses];
+
+export type GetContactFormData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/website/contact-form';
+};
+
+export type GetContactFormResponses = {
+  /**
+   * OK
+   */
+  200: ContactFormStampView;
+};
+
+export type GetContactFormResponse = GetContactFormResponses[keyof GetContactFormResponses];
+
+export type SubmitContactRequestData = {
+  body: ContactRequestSubmission;
+  path?: never;
+  query?: never;
+  url: '/api/website/contact-requests';
+};
+
+export type SubmitContactRequestErrors = {
+  /**
+   * Bad Request
+   */
+  400: ProblemDetails;
+  /**
+   * Too Many Requests
+   */
+  429: unknown;
+};
+
+export type SubmitContactRequestError =
+  SubmitContactRequestErrors[keyof SubmitContactRequestErrors];
+
+export type SubmitContactRequestResponses = {
+  /**
+   * Accepted
+   */
+  202: unknown;
+};

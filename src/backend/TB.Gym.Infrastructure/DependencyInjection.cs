@@ -213,6 +213,8 @@ public static class DependencyInjection
             configuration,
             environment.IsProduction(),
             environment.IsDevelopment());
+        // The public website (UI plan R6.2g): the Talk-to-us form and the settings the homepage reads.
+        services.AddWebsite(configuration);
         services.AddOptions<MediaStorageOptions>()
             .Bind(configuration.GetSection(MediaStorageOptions.SectionName))
             .Validate(
@@ -345,6 +347,20 @@ public static class DependencyInjection
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 10,
+                        Window = TimeSpan.FromHours(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
+                    }));
+            // The Talk-to-us form (UI plan R6.2g) is the one route anybody on the internet may post to
+            // without an account, so it partitions by source address like public authentication, with
+            // an allowance sized for a person who tries twice rather than for a script. nginx limits
+            // the same path first (nginx.conf); this is the API's own floor behind it.
+            options.AddPolicy(RateLimitPolicies.PublicContact, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 5,
                         Window = TimeSpan.FromHours(1),
                         QueueLimit = 0,
                         AutoReplenishment = true,

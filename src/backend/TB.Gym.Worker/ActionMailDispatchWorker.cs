@@ -4,11 +4,13 @@ using TB.Gym.Infrastructure.Application;
 using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Tenancy;
+using TB.Gym.Modules.Website;
 
 namespace TB.Gym.Worker;
 
 /// <summary>
-/// Sweeps the three action-mail queues — account, invitation and workspace notice — on a fixed interval.
+/// Sweeps the four action-mail queues — account, invitation, workspace notice and the website's
+/// contact requests — on a fixed interval.
 /// </summary>
 /// <remarks>
 /// One loop, several queues, deliberately. Global account mail and tenant-owned invitation mail have
@@ -143,6 +145,21 @@ public sealed class ActionMailDispatchWorker(
                     string.Create(
                         CultureInfo.InvariantCulture,
                         $"{notice.Materialized} materialized, {notice.Suppressed} suppressed, {notice.Retried} retrying, {notice.DeadLettered} dead-lettered, {notice.Reclaimed} reclaimed"),
+                    null);
+            }
+
+            var contact = await scope.ServiceProvider
+                .GetRequiredService<IContactRequestMailDispatchService>()
+                .DispatchDueAsync(stoppingToken);
+            if (contact.Total > 0)
+            {
+                LogSwept(
+                    logger,
+                    ActionMailScopes.ContactRequest,
+                    contact.Claimed,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{contact.Materialized} materialized, {contact.Retried} retrying, {contact.DeadLettered} dead-lettered, {contact.Reclaimed} reclaimed"),
                     null);
             }
         }

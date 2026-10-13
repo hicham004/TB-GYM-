@@ -118,4 +118,7 @@ public static class ActionMailScopes
 
     /// <summary>Tenant-owned plain notices to a current or former member (ADR 0027).</summary>
     public const string WorkspaceNotice = "workspace-notice";
+
+    /// <summary>The owner's email about a Talk-to-us request from the website (UI plan R6.2g).</summary>
+    public const string ContactRequest = "contact-request";
 }

@@ -63,11 +63,22 @@ const hubHandlers: Record<string, Handler> = {
     }),
 };
 
+/** The website's settings as a deployment with no WhatsApp number and no analytics answers them. */
+export const NO_WEBSITE_SETTINGS = { whatsAppNumber: null, analytics: { script: null } };
+
 /** A visitor with no session: the shell renders its public navigation. */
-export async function mockSignedOut(page: Page): Promise<void> {
+export async function mockSignedOut(
+  page: Page,
+  extra: Record<string, Handler> = {},
+): Promise<void> {
   await mockApi(page, {
     'GET /api/auth/csrf': (route) => json(route, 200, { token: 'e2e-csrf' }),
     'GET /api/auth/me': (route) => json(route, 401, { title: 'Unauthorized' }),
+    // The homepage and what changed ask for these once they are live (R6.2g), and the Talk-to-us
+    // form asks for its stamp when it scrolls into view.
+    'GET /api/website/settings': (route) => json(route, 200, NO_WEBSITE_SETTINGS),
+    'GET /api/website/contact-form': (route) => json(route, 200, { stamp: 'e2e-stamp' }),
+    ...extra,
   });
 }
 

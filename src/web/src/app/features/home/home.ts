@@ -12,18 +12,20 @@ import { HomeHeader } from './home-header';
 import { HomeHero } from './home-hero';
 import { HomeMotion } from './home-motion';
 import { HomeRows } from './home-rows';
+import { HomeTalk } from './home-talk';
 import { HomeWeek } from './home-week';
 import { HomeWho } from './home-who';
 
 /**
  * The public homepage (UI plan R6.2f): the hero, the week in four stages, six feature rows, the
- * strip for clients, the product facts, who it is for, and the finale. It is rendered at build
- * time (R6.2a), so everything here is in the HTML Google and link previews read; only the motion
- * (`HomeMotion`, on a wide screen) and the header's tone wait for the browser.
+ * strip for clients, the product facts, who it is for, Talk to us (R6.2g), and the finale. It is
+ * rendered at build time (R6.2a), so everything here is in the HTML Google and link previews read;
+ * only the motion (`HomeMotion`, on a wide screen), the header's tone and the website's settings
+ * (the WhatsApp link, analytics) wait for the browser.
  */
 @Component({
   selector: 'app-home',
-  imports: [HomeHeader, HomeHero, HomeWeek, HomeRows, HomeWho, HomeFinale],
+  imports: [HomeHeader, HomeHero, HomeWeek, HomeRows, HomeWho, HomeTalk, HomeFinale],
   templateUrl: './home.html',
   styleUrl: './home.scss',
   providers: [HomeMotion],

@@ -29,6 +29,7 @@ public sealed class ModuleDependencyTests
         typeof(TB.Gym.Modules.Subscriptions.SubscriptionsModule).Assembly,
         typeof(TB.Gym.Modules.Tenancy.TenancyModule).Assembly,
         typeof(TB.Gym.Modules.Training.TrainingModule).Assembly,
+        typeof(TB.Gym.Modules.Website.WebsiteModule).Assembly,
     ];
 
     [TestMethod]
