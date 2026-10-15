@@ -45,7 +45,7 @@ for heavy core lifts, 1 to 2 for assistance work; NSCA: 2 to 5 minutes for stren
 - Tests: Vitest for the pre-fill and the main-lift switch.
 - Later, only if coaches ask: a per-coach default in Settings.
 
-**Status:** Built 2026-10-15. The box counts seconds, so the coach sees 90 or 180 there; the client's
+**Status:** Built in 2828085 (2026-10-15). The box counts seconds, so the coach sees 90 or 180 there; the client's
 screen says 1:30 or 3:00.
 
 ## C2 Tempo has no standard form
@@ -102,7 +102,7 @@ preview shows a note the client will not get. Read from the code; not yet clicke
 client's workout (`coach-workout.html`) shows session and exercise notes but no set notes either; give it
 the same line.
 
-**Status:** Built 2026-10-15: the client reads it under the set's target, marked like the coach's
+**Status:** Built in 2828085 (2026-10-15): the client reads it under the set's target, marked like the coach's
 note on the exercise, and the coach's record of the workout says "Set note".
 
 ## C4 Brand preview: say the Light/Dark switch only changes the preview
@@ -126,7 +126,7 @@ preview, to change the light to dark mode move to appearance"):
 - Marked `i18n` like the rest of the page (`workspace-brand.html`, the preview head).
 - Tests: Vitest that the line and its link show on the Brand page.
 
-**Status:** Built 2026-10-15.
+**Status:** Built in 2828085 (2026-10-15).
 
 ## C5 Counting calories: the two choices can't be compared
 
@@ -156,7 +156,7 @@ C7 is fixed, the US-style line adds "alcohol 7".
 **Decided (owner, 2026-10-14):** as recommended; the owner asked only that it rest on research. Sources
 for the facts in the wording: EU Regulation 1169/2011, Annex XIV (energy factors: fibre 2, sugar alcohols
 2.4, alcohol 7 kcal a gram; the UK kept it); US 21 CFR 101.9 (total carbohydrate includes fibre; general
-factors 4, 4 and 9). **Status:** Built 2026-10-15, with C7, so the US-style line says "alcohol 7" and
+factors 4, 4 and 9). **Status:** Built in 2828085 (2026-10-15), with C7, so the US-style line says "alcohol 7" and
 the closing line names only high-fibre foods and sugar-free sweets: both choices now count alcohol the
 same way.
 
@@ -197,7 +197,7 @@ as the settings page promises. Fixed reference tests (the wine example); NUT-008
 
 **Decided (owner, 2026-10-14):** count alcohol at 7. Sources: FAO (2003), Food energy: methods of
 analysis and conversion factors (Atwater's general factors: protein 4, fat 9, carbohydrate 4, alcohol 7
-kcal a gram); EU Regulation 1169/2011, Annex XIV (alcohol 7). **Status:** Built 2026-10-15. A
+kcal a gram); EU Regulation 1169/2011, Annex XIV (alcohol 7). **Status:** Built in 2828085 (2026-10-15). A
 migration moves each Atwater workspace's setting to v2; saved foods keep v1. Checked live: red wine
 (USDA FDC 173190) now counts 84.92 kcal per 100 g against its 85 on the label.
 
@@ -435,7 +435,7 @@ change.
 - Tests: Vitest that a coach's sidebar shows Settings with the coach's link and it is current on the
   account pages, and that the owner's is unchanged.
 
-**Status:** Built 2026-10-15.
+**Status:** Built in 2828085 (2026-10-15).
 
 ## C14 Coach Today's "This week" chart can't be opened and hides what matters
 
