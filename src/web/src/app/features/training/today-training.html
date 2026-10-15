@@ -364,6 +364,10 @@
                             · <span i18n>tempo</span> {{ set.tempo }}
                           }
                         </p>
+                        <!-- The coach's note on this set (C3), marked like their note on the exercise. -->
+                        @if (set.coachNotes) {
+                          <p class="coach-note" dir="auto">{{ set.coachNotes }}</p>
+                        }
                         @if (!readOnly && !collapsed(set)) {
                           <details class="set-note">
                             <summary i18n>More options</summary>

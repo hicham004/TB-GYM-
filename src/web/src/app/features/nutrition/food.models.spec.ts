@@ -182,8 +182,12 @@ describe('the food sheet', () => {
 
   it('adds up the calories as the server will, under either policy', () => {
     const draft = filled({ protein: 10, carbs: 20, fat: 5, fibre: 4, polyols: 2, alcohol: 1 });
-    expect(estimatedCalories(draft, 'Atwater')).toBe(165);
-    expect(estimatedCalories(draft, null)).toBe(165);
+    // US-style (Atwater v2): total carbs at 4, alcohol at 7 (C7).
+    expect(estimatedCalories(draft, 'Atwater')).toBe(172);
+    expect(estimatedCalories(draft, null)).toBe(172);
+    // Red wine, per 100 g as USDA lists it: about 85 kcal, not the 11 its protein and carbs give.
+    const wine = filled({ amount: 100, protein: 0.1, carbs: 2.6, fat: 0, alcohol: 10.6 });
+    expect(estimatedCalories(wine, 'Atwater')).toBeCloseTo(0.4 + 10.4 + 74.2, 6);
     // EU: available carbs 14 g at 4, fibre at 2, sugar alcohols at 2.4, alcohol at 7.
     expect(estimatedCalories(draft, 'Eu1169')).toBeCloseTo(40 + 56 + 45 + 4.8 + 7 + 8, 6);
     expect(estimatedCalories(filled({ fat: null }), 'Atwater')).toBeNull();

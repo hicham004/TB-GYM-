@@ -11,6 +11,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import type { WorkspaceDetails } from '../../core/api/api.models';
@@ -54,7 +55,16 @@ interface DraftLogo {
  */
 @Component({
   selector: 'app-workspace-brand',
-  imports: [BrandPreview, Button, Control, Field, SettingsFrame, SegmentedControl, Skeleton],
+  imports: [
+    BrandPreview,
+    Button,
+    Control,
+    Field,
+    RouterLink,
+    SettingsFrame,
+    SegmentedControl,
+    Skeleton,
+  ],
   templateUrl: './workspace-brand.html',
   styleUrl: './workspace-brand.scss',
   host: {

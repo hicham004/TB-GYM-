@@ -121,11 +121,20 @@ export function emptyExercise(
     modificationPolicy: isMainLift ? 'Locked' : 'CoachApprovedSwap',
     coachNotes: '',
     approvedAlternativeExerciseIds: [],
-    sets: [emptySet()],
+    sets: [emptySet(isMainLift)],
   };
 }
 
-export function emptySet(): DraftSet {
+/**
+ * The rest a set made from scratch starts with (C1): 3:00 between sets of a main lift, 1:30 for any
+ * other exercise, in line with ACSM (2009: 2 to 3 minutes for heavy core lifts, 1 to 2 for assistance
+ * work) and NSCA (2 to 5 minutes for strength). The coach can change or clear it; empty means no rest.
+ */
+export function defaultRestSeconds(isMainLift: boolean): number {
+  return isMainLift ? 180 : 90;
+}
+
+export function emptySet(isMainLift = false): DraftSet {
   return {
     key: key(),
     setType: 'Normal',
@@ -136,11 +145,24 @@ export function emptySet(): DraftSet {
     loadUnit: 'Kilogram',
     exertionDisplayPreference: 'Rpe',
     exertionTarget: null,
-    restSeconds: null,
+    restSeconds: defaultRestSeconds(isMainLift),
     tempo: '',
     coachNotes: '',
     manualLoadOverride: null,
   };
+}
+
+/**
+ * After Main lift is ticked or unticked, moves the exercise's sets still on the other default rest to
+ * its own default. A rest the coach chose stays, the way a week label they wrote does.
+ */
+export function followMainLiftRest(exercise: DraftExercise): void {
+  const previous = defaultRestSeconds(!exercise.isMainLift);
+  for (const set of exercise.sets) {
+    if (set.restSeconds === previous) {
+      set.restSeconds = defaultRestSeconds(exercise.isMainLift);
+    }
+  }
 }
 
 export function withExertionPreference(

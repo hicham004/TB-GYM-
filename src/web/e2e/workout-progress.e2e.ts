@@ -239,6 +239,7 @@ const workoutSet = (position: number, id: string) => ({
   prescribedTargetRir: null,
   restSeconds: 60,
   tempo: null,
+  coachNotes: null,
   actualRepetitions: null,
   actualLoad: null,
   actualLoadUnit: null,

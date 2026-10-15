@@ -86,7 +86,7 @@ describe('the food sheet', () => {
 
     // 10 × 4 + (20 − 4) × 4 + 5 × 9 + 4 × 2
     expect(textOf(host.querySelector('.estimate'))).toBe(
-      'About 157 kcal in 100 g, counted as on EU labels.',
+      'About 157 kcal in 100 g, counted as on EU-style labels.',
     );
   });
 

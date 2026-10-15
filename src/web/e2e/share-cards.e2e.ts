@@ -42,6 +42,7 @@ const set = {
   prescribedTargetRir: null,
   restSeconds: 90,
   tempo: null,
+  coachNotes: null,
   actualRepetitions: 6,
   actualLoad: 62.5,
   actualLoadUnit: 'Kilogram',

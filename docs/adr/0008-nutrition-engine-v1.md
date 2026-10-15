@@ -68,7 +68,10 @@ factors to fibre, polyols, alcohol, salatrims, organic acids, and erythritol sep
 total carbohydrate under EU 1169 would bill fibre at 4 + 2 kcal/g, so components exceeding the
 declared carbohydrate are rejected rather than silently absorbed. Every percentage input, macro
 or body composition, uses one 0-100 scale. Provider and policy-computed calorie values are both retained;
-a configurable tolerance flags discrepancies without silently preferring either value.
+a configurable tolerance flags discrepancies without silently preferring either value. Amended
+2026-10-15 (C7, the owner's decision): `Atwater v2` also charges alcohol at 7 kcal/g, Atwater's general
+factor (FAO 2003) and the EU's, since v1 counted red wine at about 11 kcal per 100 g instead of 85 and
+the label check then blamed a correct label. Each policy has its own version; saved foods keep theirs.
 
 These choices resolve open decisions 2 and 3 for implementation. They do not constitute
 clinical approval. A qualified reviewer must approve validity ranges, sex/formula usage,

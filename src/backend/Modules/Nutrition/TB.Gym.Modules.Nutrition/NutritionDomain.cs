@@ -57,7 +57,7 @@ public sealed class NutritionWorkspaceSettings : TenantEntity
     private NutritionWorkspaceSettings(Guid tenantId) : base(tenantId)
     {
         EnergyPolicyKey = AtwaterEnergyPolicy.Key;
-        EnergyPolicyVersion = EnergyFactorPolicyBase.CurrentVersion;
+        EnergyPolicyVersion = AtwaterEnergyPolicy.CurrentVersion;
         ProviderCalorieTolerance = 25m;
         AiMonthlyRequestLimit = 0;
         AiMonthlyCostLimit = 0m;
@@ -85,7 +85,7 @@ public sealed class NutritionWorkspaceSettings : TenantEntity
         decimal aiMonthlyCostLimit,
         string aiCostCurrency)
     {
-        if (energyPolicyKey is not AtwaterEnergyPolicy.Key and not Eu1169EnergyPolicy.Key)
+        if (!EnergyFactorPolicies.IsSupported(energyPolicyKey))
         {
             throw new ArgumentException("The energy policy must be Atwater or Eu1169.", nameof(energyPolicyKey));
         }
@@ -102,7 +102,7 @@ public sealed class NutritionWorkspaceSettings : TenantEntity
         }
 
         EnergyPolicyKey = energyPolicyKey;
-        EnergyPolicyVersion = EnergyFactorPolicyBase.CurrentVersion;
+        EnergyPolicyVersion = EnergyFactorPolicies.For(energyPolicyKey).Version;
         ProviderCalorieTolerance = providerCalorieTolerance;
         AiMonthlyRequestLimit = aiMonthlyRequestLimit;
         AiMonthlyCostLimit = aiMonthlyCostLimit;
@@ -277,14 +277,8 @@ public sealed class FoodItemVersion : TenantEntity
         UnreportedNutrients = ValidateUnreported(provenance, input.UnreportedNutrients ?? []);
         ReportedCarbohydrateGrams = ValidateReportedCarbohydrate(provenance, input.ReportedCarbohydrateGrams);
 
-        IEnergyFactorPolicy policy = input.EnergyPolicyKey switch
-        {
-            AtwaterEnergyPolicy.Key => new AtwaterEnergyPolicy(),
-            Eu1169EnergyPolicy.Key => new Eu1169EnergyPolicy(),
-            _ => throw new ArgumentException("A supported energy policy is required.", nameof(input)),
-        };
         var comparison = EnergyComparisonCalculator.Compare(
-            policy,
+            EnergyFactorPolicies.For(input.EnergyPolicyKey),
             new EnergyNutrients(ProteinGrams, CarbohydrateGrams, FatGrams, PolyolGrams: PolyolGrams, EthanolGrams: EthanolGrams, FibreGrams: FibreGrams),
             ProviderCalories,
             input.CalorieTolerance);

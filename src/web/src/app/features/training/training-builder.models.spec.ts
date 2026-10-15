@@ -3,6 +3,8 @@ import {
   duplicateWeek,
   emptyExercise,
   emptyProgram,
+  emptySet,
+  followMainLiftRest,
   moveItem,
   toProgramRequest,
   withExertionPreference,
@@ -36,6 +38,35 @@ describe('training builder model', () => {
     expect(set.position).toBe(1);
     expect(set.targetRpe).toBeNull();
     expect(set.targetRir).toBe(3);
+  });
+
+  it('starts a set made from scratch with a rest: 3:00 for a main lift, 1:30 otherwise (C1)', () => {
+    expect(emptySet().restSeconds).toBe(90);
+    expect(emptySet(true).restSeconds).toBe(180);
+    expect(emptyExercise('exercise-1').sets[0].restSeconds).toBe(90);
+    expect(emptyExercise('exercise-1', true).sets[0].restSeconds).toBe(180);
+
+    // The rest reaches the server as seconds, like one the coach typed.
+    const draft = emptyProgram();
+    draft.name = 'Strength base';
+    draft.weeks[0].sessions[0].exercises.push(emptyExercise('exercise-1', true));
+    expect(toProgramRequest(draft).weeks[0].sessions[0].exercises[0].sets[0].restSeconds).toBe(180);
+  });
+
+  it('moves only the rests still on a default when Main lift changes', () => {
+    const exercise = emptyExercise('exercise-1');
+    exercise.sets.push(
+      { ...exercise.sets[0], key: 'typed', restSeconds: 120 },
+      { ...exercise.sets[0], key: 'cleared', restSeconds: null },
+    );
+
+    exercise.isMainLift = true;
+    followMainLiftRest(exercise);
+    expect(exercise.sets.map((set) => set.restSeconds)).toEqual([180, 120, null]);
+
+    exercise.isMainLift = false;
+    followMainLiftRest(exercise);
+    expect(exercise.sets.map((set) => set.restSeconds)).toEqual([90, 120, null]);
   });
 
   it('moves ordered items without mutating the source array', () => {

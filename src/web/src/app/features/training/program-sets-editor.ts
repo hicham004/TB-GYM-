@@ -166,7 +166,7 @@ export class ProgramSetsEditor {
     const exercise = this.exercise();
     if (exercise.sets.length >= 20) return;
     const last = exercise.sets.at(-1);
-    const set = last ? { ...last, key: emptySet().key } : emptySet();
+    const set = last ? { ...last, key: emptySet().key } : emptySet(exercise.isMainLift);
     exercise.sets.push(set);
     this.chosenSet.set(set.key);
     this.changed();

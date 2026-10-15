@@ -34,6 +34,7 @@ function set(overrides: Partial<ClientSetView> = {}): ClientSetView {
     prescribedTargetRir: null,
     restSeconds: 120,
     tempo: null,
+    coachNotes: null,
     actualRepetitions: null,
     actualLoad: null,
     actualLoadUnit: null,
@@ -721,6 +722,33 @@ describe('TodayTraining interactions', () => {
       'performance-1',
       expect.objectContaining({ rpe: 8, rir: null }),
     );
+  });
+
+  it('shows the coach’s note on a set under its target, and nothing for a set without one (C3)', async () => {
+    const today = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              sets: [
+                set({ coachNotes: 'Pause two seconds at the bottom.' }),
+                set({ prescriptionId: 'prescription-2', performanceId: 'performance-2' }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const { host } = await render({}, today);
+
+    const cards = Array.from(host.querySelectorAll('.set-card'));
+    expect(cards).toHaveLength(2);
+    const note = cards[0].querySelector('.coach-note');
+    expect(note?.textContent?.trim()).toBe('Pause two seconds at the bottom.');
+    expect(note?.getAttribute('dir')).toBe('auto');
+    // It comes right after the target line, before the client's own options.
+    expect(note?.previousElementSibling?.classList.contains('prescription')).toBe(true);
+    expect(cards[1].querySelector('.coach-note')).toBeNull();
   });
 
   it('asks for confirmation when finishing with unlogged sets', async () => {

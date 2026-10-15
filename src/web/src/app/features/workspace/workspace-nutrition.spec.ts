@@ -95,6 +95,32 @@ describe('Settings › Nutrition', () => {
     );
   });
 
+  it('names each way of counting after the labels it matches, and says how to choose', async () => {
+    const { host } = await render();
+
+    const choices = Array.from(host.querySelectorAll('.choice'));
+    expect(choices.map((choice) => textOf(choice.querySelector('.choice-title')))).toEqual([
+      'US-style labels',
+      'EU-style labels',
+    ]);
+    expect(textOf(choices[0].querySelector('.choice-text'))).toBe(
+      'Carbs include fibre; protein and carbs count 4 kcal a gram, fat 9, alcohol 7. The usual way in the US and in most apps.',
+    );
+    expect(textOf(choices[1].querySelector('.choice-text'))).toBe(
+      'Fibre is listed apart from the carbs and counts 2 kcal a gram; sugar alcohols 2.4, alcohol 7. Used in the EU and the UK.',
+    );
+    const help = host.querySelector('#counting-help');
+    expect(textOf(help)).toBe(
+      'Choose the kind of food labels your clients read, so the app’s calories match the packet.',
+    );
+    expect(host.querySelector('fieldset.choices')?.getAttribute('aria-describedby')).toBe(
+      'counting-help',
+    );
+    expect(textOf(host.querySelector('#counting-heading')?.parentElement)).toContain(
+      'Most foods come out the same either way; high-fibre foods and sugar-free sweets differ.',
+    );
+  });
+
   it('says AI is not on yet when TB Gym has not allowed any', async () => {
     const { host } = await render(
       nutritionSettings({ aiMaximumMonthlyRequests: 0, aiMaximumMonthlyCost: 0 }),

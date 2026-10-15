@@ -960,6 +960,7 @@ public sealed record ClientSetView(
     decimal? PrescribedTargetRir,
     int? RestSeconds,
     string? Tempo,
+    string? CoachNotes,
     int? ActualRepetitions,
     decimal? ActualLoad,
     TrainingLoadUnit? ActualLoadUnit,

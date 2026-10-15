@@ -55,9 +55,13 @@ export class CoachNav {
     const messaging = this.messages.isAvailable();
     return COACH_NAVIGATION.map((group) => ({
       label: group.label,
-      destinations: group.destinations.filter(
-        (destination) => (!destination.ownerOnly || owner) && (!destination.messaging || messaging),
-      ),
+      destinations: group.destinations
+        .filter((destination) => !destination.messaging || messaging)
+        .map((destination) =>
+          !owner && destination.coachLink
+            ? { ...destination, link: destination.coachLink }
+            : destination,
+        ),
     })).filter((group) => group.destinations.length > 0);
   });
 

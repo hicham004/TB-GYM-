@@ -7,7 +7,12 @@ import { Icon } from '../../ui/icon';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { ProgramSetsEditor } from './program-sets-editor';
 import { DAYS, exerciseSummary, type LibraryExercise } from './program-builder.models';
-import { type DraftExercise, type DraftSession, moveItem } from './training-builder.models';
+import {
+  type DraftExercise,
+  type DraftSession,
+  followMainLiftRest,
+  moveItem,
+} from './training-builder.models';
 
 /**
  * One session of the program in a sheet: its name, day and notes, and each exercise with its sets.
@@ -99,6 +104,7 @@ export class ProgramSessionEditor {
     if (isMainLift) {
       exercise.modificationPolicy = 'Locked';
     }
+    followMainLiftRest(exercise);
     this.changed();
   }
 

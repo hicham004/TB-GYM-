@@ -108,7 +108,7 @@ public sealed class Phase4NutritionDomainTests
     }
 
     [TestMethod]
-    public void AtwaterAndEu1169DifferForFibreAndAlcohol()
+    public void AtwaterAndEu1169DifferForFibreButAgreeOnAlcohol()
     {
         // CarbohydrateGrams is TOTAL carbohydrate, so the 20 g here already contains the 10 g of
         // fibre, exactly as USDA "Carbohydrate, by difference" reports it.
@@ -120,8 +120,61 @@ public sealed class Phase4NutritionDomainTests
         // EU 1169 charges only available carbohydrate at 4 and fibre at 2: 40 + 40 + 45 + 20.
         // Charging the total would bill fibre at 4 + 2 and overstate this food by 20 kcal.
         Assert.AreEqual(145m, new Eu1169EnergyPolicy().Calculate(fibreHeavy).Kilocalories);
-        Assert.AreEqual(165m, new AtwaterEnergyPolicy().Calculate(alcoholContaining).Kilocalories);
+        // Both charge alcohol at 7 since Atwater 2.0 (C7), so 20 g adds 140 kcal to each.
+        Assert.AreEqual(305m, new AtwaterEnergyPolicy().Calculate(alcoholContaining).Kilocalories);
         Assert.AreEqual(285m, new Eu1169EnergyPolicy().Calculate(alcoholContaining).Kilocalories);
+    }
+
+    [TestMethod]
+    public void AtwaterTwoCountsTheAlcoholInRedWine()
+    {
+        // USDA FDC 173190 (alcoholic beverage, wine, table, red, SR Legacy) per 100 g: protein
+        // 0.07 g, carbohydrate by difference 2.61 g, fat 0 g, alcohol 10.6 g; USDA lists 85 kcal.
+        var wine = new EnergyNutrients(0.07m, 2.61m, 0m, EthanolGrams: 10.6m);
+
+        // 0.28 + 10.44 + 74.2. Atwater 1.0 left the alcohol out and counted 10.72 kcal.
+        var atwater = new AtwaterEnergyPolicy().Calculate(wine);
+        Assert.AreEqual(84.92m, atwater.Kilocalories);
+        Assert.AreEqual("Atwater", atwater.PolicyKey);
+        Assert.AreEqual("2.0", atwater.PolicyVersion);
+        // So the label check no longer blames a correct label.
+        Assert.IsFalse(EnergyComparisonCalculator.Compare(new AtwaterEnergyPolicy(), wine, 85m, 25m).HasDiscrepancy);
+
+        // EU 1169 always charged alcohol at 7 and stays at its first version.
+        var eu = new Eu1169EnergyPolicy().Calculate(wine);
+        Assert.AreEqual(84.92m, eu.Kilocalories);
+        Assert.AreEqual("1.0", eu.PolicyVersion);
+    }
+
+    [TestMethod]
+    public void AWorkspaceNamesTheVersionOfThePolicyItCountsWith()
+    {
+        var settings = NutritionWorkspaceSettings.CreateDefault(Guid.NewGuid());
+        Assert.AreEqual(AtwaterEnergyPolicy.Key, settings.EnergyPolicyKey);
+        Assert.AreEqual("2.0", settings.EnergyPolicyVersion);
+
+        settings.Update(Eu1169EnergyPolicy.Key, 25m, 0, 0m, "USD");
+        Assert.AreEqual("1.0", settings.EnergyPolicyVersion);
+
+        settings.Update(AtwaterEnergyPolicy.Key, 25m, 0, 0m, "USD");
+        Assert.AreEqual("2.0", settings.EnergyPolicyVersion);
+
+        Assert.ThrowsExactly<ArgumentException>(() => settings.Update("Atwater v1", 25m, 0, 0m, "USD"));
+    }
+
+    [TestMethod]
+    public void AFoodSavedUnderAtwaterKeepsTheVersionThatCountedIt()
+    {
+        var food = FoodItem.Create(Guid.NewGuid(), "House red", FoodProvenance.CoachAuthored);
+
+        var version = food.AddVersion(new FoodVersionInput(
+            100m, FoodQuantityUnit.Gram, PreparationBasis.AsSold, 0.07m, 2.61m, 0m, 0m, 0m, 10.6m, 85m,
+            AtwaterEnergyPolicy.Key, 25m, "Coach-authored food", "coach-entry-v1", []));
+
+        Assert.AreEqual(84.92m, version.ComputedCalories);
+        Assert.AreEqual(AtwaterEnergyPolicy.Key, version.EnergyPolicyKey);
+        Assert.AreEqual("2.0", version.EnergyPolicyVersion);
+        Assert.IsFalse(version.HasCalorieDiscrepancy);
     }
 
     [TestMethod]

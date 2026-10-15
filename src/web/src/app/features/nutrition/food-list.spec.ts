@@ -235,7 +235,7 @@ describe('the Foods page', () => {
     tick(sheet, 'Milk');
     await settle(fixture);
     expect(textOf(sheet.querySelector('.estimate'))).toBe(
-      'About 130 kcal in 100 g, counted 4/4/9 from the macros.',
+      'About 130 kcal in 100 g, counted as on US-style labels.',
     );
     button(sheet, 'Save food').click();
     await settle(fixture);

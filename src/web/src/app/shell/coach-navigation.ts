@@ -4,8 +4,9 @@ import type { IconName } from '../ui/icon';
  * The locked coach navigation (Figma "Desktop Navigation v1", 118:135): three groups and eight
  * workspace-wide destinations, in this order. Group labels are headings, never controls.
  *
- * Every destination is an existing lazy route behind its existing guard. Hiding a destination is
- * presentation only: `ownerGuard` still protects `/workspace`, and the API authorises every request.
+ * Every destination is an existing lazy route behind its existing guard. Hiding a destination, or
+ * pointing a coach's at another page, is presentation only: `ownerGuard` still protects the owner's
+ * Settings pages, and the API authorises every request.
  */
 export type CoachDestinationKey =
   | 'overview'
@@ -25,8 +26,8 @@ export interface CoachDestination {
   readonly link: string;
   /** Path prefixes the destination stands for. A path inside any of them selects it. */
   readonly section: readonly string[];
-  /** Omitted, not disabled, for every other role. */
-  readonly ownerOnly?: boolean;
+  /** Where the link goes for a coach, when that differs from the owner's page. */
+  readonly coachLink?: string;
   /** Messaging has its own availability and its own unread count. */
   readonly messaging?: boolean;
 }
@@ -99,10 +100,12 @@ export const COACH_NAVIGATION: readonly CoachNavigationGroup[] = [
         key: 'settings',
         label: $localize`Settings`,
         icon: 'settings',
+        // The top of each role's Settings menu (settings-groups.ts): the owner's opens on the
+        // coaching space, a coach's on their own account pages, the only ones they may change (C13).
         link: '/workspace',
-        // Every page of the Settings layout (R5.2a), the owner's account pages included.
+        coachLink: '/notifications/settings',
+        // Every page of the Settings layout (R5.2a), the account pages included.
         section: ['/workspace', '/team', '/billing', '/account', '/notifications/settings'],
-        ownerOnly: true,
       },
     ],
   },

@@ -157,7 +157,7 @@ for (const width of [390, 1440]) {
     await sheet.getByRole('spinbutton', { name: 'Carbs' }).fill('4');
     await sheet.getByRole('spinbutton', { name: 'Fat' }).fill('10');
     await expect(sheet.locator('.estimate')).toHaveText(
-      'About 130 kcal in 100 g, counted 4/4/9 from the macros.',
+      'About 130 kcal in 100 g, counted as on US-style labels.',
     );
     await page.waitForTimeout(300);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -296,7 +296,7 @@ test('a food is archived with Undo, listed apart and restored, at 200% text righ
 test('the owner saves how calories are counted', async ({ page }) => {
   const sent = await open(page, 1440, { owner: true });
   await page.goto('/workspace/nutrition');
-  await page.getByText('As on EU food labels').click();
+  await page.getByText('EU-style labels', { exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Suggestions a month' }).fill('150');
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByText('TB Gym allows up to 100 a month.', { exact: true })).toBeVisible();

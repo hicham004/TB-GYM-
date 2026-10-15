@@ -937,6 +937,7 @@ export type ClientSetView = {
   prescribedTargetRir: null | number | string;
   restSeconds: null | number | string;
   tempo: null | string;
+  coachNotes: null | string;
   actualRepetitions: null | number | string;
   actualLoad: null | number | string;
   actualLoadUnit: null | TrainingLoadUnit;

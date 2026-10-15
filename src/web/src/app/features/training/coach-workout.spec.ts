@@ -64,6 +64,7 @@ describe('CoachWorkout', () => {
                   prescribedTargetRir: null,
                   restSeconds: 120,
                   tempo: '3-1-1',
+                  coachNotes: 'Brace before you unrack.',
                   actualRepetitions: 7,
                   actualLoad: 62.5,
                   actualLoadUnit: 'Kilogram',
@@ -86,6 +87,7 @@ describe('CoachWorkout', () => {
                   prescribedTargetRir: null,
                   restSeconds: 120,
                   tempo: null,
+                  coachNotes: null,
                   actualRepetitions: null,
                   actualLoad: null,
                   actualLoadUnit: null,
@@ -191,7 +193,14 @@ describe('CoachWorkout', () => {
     ]);
     expect(content()).toContain('Logged');
     expect(content()).toContain('Not logged');
-    expect(content()).toContain('Client note Knees felt good.');
+    // The coach's own note on the set, which the client saw too (C3), then the client's answer.
+    const sets = host.querySelectorAll('li.set');
+    expect(
+      Array.from(sets[0].querySelectorAll('.aside')).map((item) =>
+        (item.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      ),
+    ).toEqual(['Set note Brace before you unrack.', 'Client note Knees felt good.']);
+    expect(sets[1].querySelector('.aside')).toBeNull();
     expect(content()).toContain('Felt stable today.');
     // What the client logged is read only; the one field is the coach's own note (P4).
     expect(host.querySelector('input, select')).toBeNull();

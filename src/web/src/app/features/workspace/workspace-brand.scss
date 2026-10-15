@@ -278,3 +278,8 @@ h2 {
   gap: 0.5rem 1rem;
   justify-content: space-between;
 }
+
+// Its own line under the switch, whether the switch sits beside the heading or wraps under it.
+.mode-note {
+  flex-basis: 100%;
+}

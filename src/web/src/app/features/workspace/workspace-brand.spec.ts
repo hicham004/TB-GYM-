@@ -306,6 +306,18 @@ describe('WorkspaceBrand', () => {
     expect(dirty.defaultPrevented).toBe(true);
   });
 
+  it('says the switch only changes the preview, and links to Appearance for the coach’s own mode', async () => {
+    const { host } = await render();
+
+    const note = query<HTMLElement>(host, '.preview-head .mode-note');
+    expect(note.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'This only changes the preview. To switch your own screens between light and dark, go to Appearance.',
+    );
+    const link = query<HTMLAnchorElement>(note, 'a');
+    expect(link.textContent?.trim()).toBe('Appearance');
+    expect(link.getAttribute('href')).toBe('/account/appearance');
+  });
+
   it('offers another try when the brand cannot be read', async () => {
     let calls = 0;
     const { fixture, host } = await render({

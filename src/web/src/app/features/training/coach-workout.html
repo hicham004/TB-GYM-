@@ -51,6 +51,11 @@
                     <dd>{{ actual(set) }}</dd>
                   </div>
                 </dl>
+                @if (set.coachNotes) {
+                  <p class="aside" dir="auto">
+                    <strong i18n>Set note</strong>&ngsp;{{ set.coachNotes }}
+                  </p>
+                }
                 @if (set.clientNote) {
                   <p class="aside" dir="auto">
                     <strong i18n>Client note</strong>&ngsp;{{ set.clientNote }}

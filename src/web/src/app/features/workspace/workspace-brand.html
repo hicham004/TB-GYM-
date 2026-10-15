@@ -220,6 +220,11 @@
               [options]="modeOptions"
               [(selected)]="previewMode"
             />
+            <!-- The switch is easy to take for the app's own mode, which is each person's (C4). -->
+            <p class="quiet mode-note" i18n>
+              This only changes the preview. To switch your own screens between light and dark, go
+              to <a routerLink="/account/appearance">Appearance</a>.
+            </p>
           </div>
           <p class="tb-visually-hidden" i18n>
             A picture of your sidebar and your client’s Today screen in these colours.

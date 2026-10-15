@@ -364,9 +364,9 @@ export function foodProblems(draft: FoodDraft): FoodProblem[] {
 }
 
 /**
- * The calories the server will work out, under the workspace's policy: Atwater 4/4/9 on total carbs,
- * or the EU's factors on available carbs, fibre, sugar alcohols and alcohol. Null until the macros
- * are typed.
+ * The calories the server will work out, under the workspace's policy: Atwater v2, 4/4/9 on total
+ * carbs plus alcohol at 7, or the EU's factors on available carbs, fibre, sugar alcohols and alcohol.
+ * Null until the macros are typed.
  */
 export function estimatedCalories(draft: FoodDraft, policyKey: string | null): number | null {
   if (!filled(draft.protein) || !filled(draft.carbs) || !filled(draft.fat)) return null;
@@ -379,14 +379,14 @@ export function estimatedCalories(draft: FoodDraft, policyKey: string | null): n
       draft.protein * 4 + available * 4 + draft.fat * 9 + polyols * 2.4 + alcohol * 7 + fibre * 2
     );
   }
-  return draft.protein * 4 + draft.carbs * 4 + draft.fat * 9;
+  return draft.protein * 4 + draft.carbs * 4 + draft.fat * 9 + alcohol * 7;
 }
 
-/** How the workspace counts calories, in a coach's words. */
+/** How the workspace counts calories, in the words of Settings › Nutrition (C5). */
 export function policyWords(policyKey: string | null): string {
   return policyKey === 'Eu1169'
-    ? $localize`counted as on EU labels`
-    : $localize`counted 4/4/9 from the macros`;
+    ? $localize`counted as on EU-style labels`
+    : $localize`counted as on US-style labels`;
 }
 
 const COACH_SOURCE = 'Coach-authored food';

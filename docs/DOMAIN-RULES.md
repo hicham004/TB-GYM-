@@ -298,7 +298,10 @@ that have not started, so historical dates and executions are never silently rem
 **TRN-005** A program supports an ordered week/session/exercise/set tree. Each set independently
 supports optional rep range, set type, load strategy/value, canonical RPE or RIR target, rest,
 tempo, notes, and manual load override. The Phase 3 UI accelerates repeated values by copying
-sets; an exercise-level default model is not persisted yet.
+sets; an exercise-level default model is not persisted yet. Since C1 (2026-10-15) the builder fills
+in a rest on a set made from scratch, 3:00 for a main lift and 1:30 otherwise, and ticking Main
+lift moves a set still on one default to the other; that is a starting value the coach edits, not a
+rule. An empty rest stays allowed and means no rest and no timer.
 
 **TRN-006** Client-visible future weeks are calculated from program start, snapshotted workspace
 time zone, and week index. A week must be published and locally unlocked, unless the coach
@@ -317,7 +320,9 @@ workout notes. Workout notes carry author user, Coach/Client role, optional exer
 target, and server time. A client cannot mutate coach notes, and no workout note is overwritten.
 Since P4 the coach writes a workout note from the session sheet of the client's program, and the
 client's finished-workout history carries every note on each workout, so a coach's note reaches the
-client after the workout's day.
+client after the workout's day. Since C3 (2026-10-15) the client's set view carries the coach's note
+on that set (the prescription's before the workout starts, the snapshot after), shown under the
+set's target, and the coach's view of the workout shows it too.
 
 **TRN-010** Prescription modification is explicit: `Locked` or `CoachApprovedSwap`. A main
 lift is always `Locked`. A permitted client swap must use an alternative captured at assignment,
@@ -746,7 +751,8 @@ carbohydrateGrams = carbohydrateCalories / 4
 The command is rejected when percentage is outside its allowed range, grams are negative,
 or protein plus fat exceeds the target. Rounding happens only for display/prescription after
 the unrounded values are retained. If fiber, alcohol, or label-specific energy is supported,
-the simple 4/4/9 policy must be extended explicitly.
+the simple 4/4/9 policy must be extended explicitly. Food energy did so for alcohol in `Atwater v2`
+(C7, below); the macro split here stays protein, fat and carbohydrate.
 
 **NUT-009** If the coach enters no calorie target, calculations use the current approved TDEE
 estimate. Entering a target creates a new calculation snapshot; old diet assignments retain
@@ -768,7 +774,12 @@ alternatives. `OccupationStepsPal v1` combines occupation and average daily step
 policies require qualified clinical review before production launch.
 
 **Phase 4 energy decision (2026-08-22).** Workspaces choose `Atwater v1` (default) or
-`Eu1169 v1`. Provider calories and policy-computed calories are both retained; a configurable
+`Eu1169 v1`. Since C7 (2026-10-15) Atwater is `v2`: 4/4/9 on total carbohydrate plus alcohol at
+7 kcal a gram, Atwater's general factor (FAO 2003), because v1 left alcohol out and counted red wine
+at about 11 kcal per 100 g instead of 85. Foods keep the version that counted them, recipes count
+their lines when saved, and a workspace's setting names the version in force (a migration moved
+Atwater workspaces to v2). In Settings the two are called US-style and EU-style labels (C5).
+Provider calories and policy-computed calories are both retained; a configurable
 tolerance produces a discrepancy flag. Missing provider nutrient facts are never inferred as
 zero during import. Raw-to-cooked conversion requires compatible, sourced `Yield` and
 `Retention` factor records and applies yield before retention.

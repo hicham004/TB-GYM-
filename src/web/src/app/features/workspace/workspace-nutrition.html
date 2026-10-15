@@ -20,7 +20,12 @@
       <form class="settings" novalidate (ngSubmit)="save()">
         <section class="panel" aria-labelledby="counting-heading">
           <h2 id="counting-heading" i18n>Counting calories</h2>
-          <fieldset class="choices">
+          <!-- Named after the labels each matches (C5): EU 1169/2011 Annex XIV, US 21 CFR 101.9. -->
+          <p id="counting-help" class="quiet" i18n>
+            Choose the kind of food labels your clients read, so the app’s calories match the
+            packet.
+          </p>
+          <fieldset class="choices" aria-describedby="counting-help">
             <legend class="tb-visually-hidden" i18n>How calories are counted</legend>
             <label class="choice" [class.selected]="current.policy === 'Atwater'">
               <input
@@ -30,9 +35,9 @@
                 [checked]="current.policy === 'Atwater'"
                 (change)="setPolicy('Atwater')"
               />
-              <span class="choice-title" i18n>4/4/9 from the macros</span>
+              <span class="choice-title" i18n>US-style labels</span>
               <span class="choice-text" i18n
-                >Protein and carbs count 4 kcal a gram and fat 9, with fibre inside the carbs. The
+                >Carbs include fibre; protein and carbs count 4 kcal a gram, fat 9, alcohol 7. The
                 usual way in the US and in most apps.</span
               >
             </label>
@@ -44,13 +49,16 @@
                 [checked]="current.policy === 'Eu1169'"
                 (change)="setPolicy('Eu1169')"
               />
-              <span class="choice-title" i18n>As on EU food labels</span>
+              <span class="choice-title" i18n>EU-style labels</span>
               <span class="choice-text" i18n
-                >Fibre counts 2 kcal a gram, sugar alcohols 2.4 and alcohol 7, as EU law sets for
-                labels.</span
+                >Fibre is listed apart from the carbs and counts 2 kcal a gram; sugar alcohols 2.4,
+                alcohol 7. Used in the EU and the UK.</span
               >
             </label>
           </fieldset>
+          <p class="quiet" i18n>
+            Most foods come out the same either way; high-fibre foods and sugar-free sweets differ.
+          </p>
           <p class="quiet" i18n>
             A change counts the foods and recipes saved from now on. Saved ones keep their calories.
           </p>

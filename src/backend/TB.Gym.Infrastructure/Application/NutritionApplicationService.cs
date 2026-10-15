@@ -1368,7 +1368,7 @@ internal sealed partial class NutritionApplicationService(
         var factorIds = requests.SelectMany(item => new[] { item.YieldFactorId, item.RetentionFactorId }).Where(item => item.HasValue).Select(item => item!.Value).Distinct().ToArray();
         var factors = await dbContext.CookingFactorRecords.AsNoTracking().Where(item => factorIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken);
         var settings = await GetOrCreateSettingsEntityAsync(cancellationToken);
-        IEnergyFactorPolicy energyPolicy = settings.EnergyPolicyKey == Eu1169EnergyPolicy.Key ? new Eu1169EnergyPolicy() : new AtwaterEnergyPolicy();
+        var energyPolicy = EnergyFactorPolicies.For(settings.EnergyPolicyKey);
         var results = new List<RecipeIngredientInput>(requests.Count);
         foreach (var request in requests)
         {

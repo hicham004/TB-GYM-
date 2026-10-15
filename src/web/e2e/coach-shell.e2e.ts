@@ -83,11 +83,12 @@ test('the owner sidebar is the locked navigation, in order', async ({ page }) =>
   await expect(page.locator('.sidebar a[href="/messages"] .count')).toHaveText('1');
 });
 
-test('a coach gets the same shell without Settings', async ({ page }) => {
+test('a coach gets the same shell, with Settings on their own account pages', async ({ page }) => {
   await openShell(page, { memberships: [COACH_MEMBERSHIP] });
 
   await expect(page.locator('.sidebar a[href="/workspace"]')).toHaveCount(0);
-  await expect(sidebarLinks(page)).toHaveCount(7);
+  await expect(sidebarLinks(page)).toHaveCount(8);
+  await expect(sidebarLinks(page).last()).toHaveAttribute('href', '/notifications/settings');
   await expect(page.locator('.sidebar .identity-role')).toHaveText('Coach');
 });
 

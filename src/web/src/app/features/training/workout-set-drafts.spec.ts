@@ -292,6 +292,7 @@ function setView(index: number): ClientSetView {
     prescribedTargetRir: null,
     restSeconds: 120,
     tempo: null,
+    coachNotes: null,
     actualRepetitions: null,
     actualLoad: null,
     actualLoadUnit: 'Kilogram',

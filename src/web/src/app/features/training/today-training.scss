@@ -281,6 +281,11 @@ summary:focus-visible {
 .set-card:has(.set-step) .prescription {
   color: #52645a;
 }
+.set-card .coach-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.8rem;
+}
 .set-note,
 .set-card .player-error {
   grid-column: 1 / -1;

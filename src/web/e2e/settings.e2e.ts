@@ -420,6 +420,10 @@ test('a coach’s Settings are their own account’s pages, and Billing stays th
     'Appearance',
     'Password and security',
   ]);
+  // The sidebar's Settings opens on the coach's own pages and stays selected on each (C13).
+  const sidebarSettings = page.locator('.sidebar a.item[data-destination="settings"]');
+  await expect(sidebarSettings).toHaveAttribute('href', '/notifications/settings');
+  await expect(sidebarSettings).toHaveAttribute('aria-current', 'true');
   await expect(page.getByRole('heading', { name: 'Leave Beirut Barbell' })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out everywhere' }).click();
   await expect(
@@ -434,6 +438,7 @@ test('a coach’s Settings are their own account’s pages, and Billing stays th
   await expect(
     page.getByRole('heading', { name: 'Notification settings', level: 1 }),
   ).toBeVisible();
+  await expect(sidebarSettings).toHaveAttribute('aria-current', 'page');
   await axe(page);
 });
 

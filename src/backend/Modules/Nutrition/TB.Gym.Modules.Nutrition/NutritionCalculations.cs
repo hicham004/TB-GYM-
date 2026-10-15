@@ -383,13 +383,27 @@ public interface IEnergyFactorPolicy
     EnergyPolicyResult Calculate(EnergyNutrients nutrients);
 }
 
+/// <summary>
+/// The energy policies a workspace may choose, by key, each at its current version. Foods keep the
+/// version that counted them, so a new version changes only what is saved from then on.
+/// </summary>
+public static class EnergyFactorPolicies
+{
+    public static bool IsSupported(string? key) => key is AtwaterEnergyPolicy.Key or Eu1169EnergyPolicy.Key;
+
+    public static IEnergyFactorPolicy For(string? key) => key switch
+    {
+        AtwaterEnergyPolicy.Key => new AtwaterEnergyPolicy(),
+        Eu1169EnergyPolicy.Key => new Eu1169EnergyPolicy(),
+        _ => throw new ArgumentException("The energy policy must be Atwater or Eu1169.", nameof(key)),
+    };
+}
+
 public abstract class EnergyFactorPolicyBase : IEnergyFactorPolicy
 {
     public abstract string PolicyKey { get; }
 
-    public const string CurrentVersion = "1.0";
-
-    public string Version => CurrentVersion;
+    public abstract string Version { get; }
 
     public EnergyPolicyResult Calculate(EnergyNutrients nutrients)
     {
@@ -431,22 +445,35 @@ public abstract class EnergyFactorPolicyBase : IEnergyFactorPolicy
 /// General Atwater 4/4/9 applied to total carbohydrate, the conventional US treatment. Fibre is
 /// therefore charged 4 kcal/g, which is the accepted convention for this policy rather than an
 /// oversight; choose <see cref="Eu1169EnergyPolicy"/> when fibre must carry its own factor.
+/// Version 2.0 (C7, 2026-10-15) adds alcohol at 7 kcal/g, Atwater's general factor (FAO 2003, Food
+/// energy: methods of analysis and conversion factors); 1.0 left it out, so wine counted near nothing.
 /// </summary>
 public sealed class AtwaterEnergyPolicy : EnergyFactorPolicyBase
 {
     public const string Key = "Atwater";
 
+    public const string CurrentVersion = "2.0";
+
     public override string PolicyKey => Key;
 
+    public override string Version => CurrentVersion;
+
     protected override decimal CalculateEnergy(EnergyNutrients nutrients) =>
-        nutrients.ProteinGrams * 4m + nutrients.CarbohydrateGrams * 4m + nutrients.FatGrams * 9m;
+        nutrients.ProteinGrams * 4m +
+        nutrients.CarbohydrateGrams * 4m +
+        nutrients.FatGrams * 9m +
+        nutrients.EthanolGrams * 7m;
 }
 
 public sealed class Eu1169EnergyPolicy : EnergyFactorPolicyBase
 {
     public const string Key = "Eu1169";
 
+    public const string CurrentVersion = "1.0";
+
     public override string PolicyKey => Key;
+
+    public override string Version => CurrentVersion;
 
     // Annex XIV charges "carbohydrate (except polyols)" at 4 kcal/g and gives fibre, polyols, and
     // erythritol their own factors. Charging total carbohydrate here would bill fibre at 4 + 2 and

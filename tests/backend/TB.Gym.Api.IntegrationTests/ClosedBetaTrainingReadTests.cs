@@ -167,6 +167,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         var resources = await CreateTrainingResourcesAsync(coach, clientId, 8, 2, TenantToday());
         await AssignAsync(coach, clientId, resources, TenantToday());
         var today = await ReadSliceAsync<ClientTrainingDayResult>(client, "/api/training/me/today");
+        // The coach's set note reaches the client before the workout starts (C3).
+        Assert.AreEqual("Crisp reps", today.Workouts.Single().Exercises.Single().Sets.Single().CoachNotes);
         await RefreshCsrfAsync(client);
         var started = await client.PostAsync($"/api/training/me/sessions/{today.Workouts.Single().SessionId}/start", null);
         await AssertStatusAsync(started, HttpStatusCode.OK);
@@ -198,6 +200,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(resources.Alternative.Id, performed.ActualExerciseId);
         Assert.AreEqual(80m, performed.Sets.Single().ActualLoad);
         Assert.AreEqual("Set note retained", performed.Sets.Single().ClientNote);
+        Assert.AreEqual("Crisp reps", performed.Sets.Single().CoachNotes);
         Assert.AreEqual("Workout note retained", earlier.Workout.Notes.Single().Text);
         await RefreshCsrfAsync(client);
         await AssertStatusAsync(await client.PostAsJsonAsync($"/api/training/me/workouts/{execution.Id}/complete",
@@ -211,6 +214,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.IsNotNull(detail.Detail);
         Assert.AreEqual(WorkoutExecutionStatus.Completed, detail.Detail.Workout.Status);
         Assert.AreEqual("Set note retained", detail.Detail.Workout.Exercises.Single().Sets.Single().ClientNote);
+        Assert.AreEqual("Crisp reps", detail.Detail.Workout.Exercises.Single().Sets.Single().CoachNotes);
         Assert.AreEqual("Workout note retained", detail.Detail.Workout.Notes.Single().Text);
     }
 

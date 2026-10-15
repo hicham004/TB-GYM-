@@ -4,6 +4,7 @@ import { provideRouter, Router } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageUnreadStore } from '../core/messaging/message-unread.store';
 import { TenantStore } from '../core/tenancy/tenant.store';
+import { settingsGroups } from '../features/settings/settings-groups';
 import { settle } from '../../testing/dom';
 import { CoachNav } from './coach-nav';
 import { COACH_NAVIGATION, destinationState, urlPath } from './coach-navigation';
@@ -22,6 +23,8 @@ const ROUTES = [
   'products',
   'workspace',
   'notifications',
+  'notifications/settings',
+  'account/appearance',
 ].map((path) => ({ path, children: [] }));
 
 async function render(options: { owner?: boolean; unread?: number; messaging?: boolean } = {}) {
@@ -102,15 +105,37 @@ describe('coach navigation', () => {
     ]);
   });
 
-  /** Settings is owner-only: for any other role it is omitted rather than shown disabled. */
-  it('omits Settings for a coach and keeps it for an owner', async () => {
+  /** Every coach has Settings; theirs opens on their own account pages, never the owner's (C13). */
+  it('gives a coach Settings on their own account pages, and the owner on the coaching space', async () => {
     const coach = await render({ owner: false });
-    expect(coach.labels()).not.toContain('Settings');
+    expect(coach.labels()).toEqual([
+      'Today',
+      'Clients',
+      'Training',
+      'Nutrition',
+      'Check-ins',
+      'Messages',
+      'Products',
+      'Settings',
+    ]);
+    expect(coach.links().at(-1)?.getAttribute('href')).toBe('/notifications/settings');
     expect(coach.host.querySelector('a[href="/workspace"]')).toBeNull();
     TestBed.resetTestingModule();
 
     const owner = await render({ owner: true });
-    expect(owner.labels()).toContain('Settings');
+    expect(owner.links().at(-1)?.getAttribute('href')).toBe('/workspace');
+  });
+
+  it('keeps a coach’s Settings current on each of their account pages', async () => {
+    const { host, go } = await render({ owner: false });
+    const settings = () => host.querySelector('a[data-destination="settings"]');
+
+    await go('/notifications/settings');
+    expect(settings()?.getAttribute('aria-current')).toBe('page');
+
+    await go('/account/appearance');
+    expect(settings()?.getAttribute('aria-current')).toBe('true');
+    expect(settings()?.classList.contains('selected')).toBe(true);
   });
 
   it('drops Messages when messaging is not available to this member', async () => {
@@ -219,11 +244,14 @@ describe('destination state', () => {
 describe('coach navigation definition', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('has no destination that is both owner-only and message-gated', () => {
-    for (const group of COACH_NAVIGATION) {
-      for (const destination of group.destinations) {
-        expect(destination.ownerOnly && destination.messaging).toBeFalsy();
-      }
-    }
+  it('opens Settings at the top of each role’s Settings menu', () => {
+    const settings = COACH_NAVIGATION.flatMap((group) => group.destinations).find(
+      (destination) => destination.key === 'settings',
+    )!;
+
+    expect(settings.link).toBe(settingsGroups('Owner')[0].items[0].link);
+    expect(settings.coachLink).toBe(settingsGroups('Coach')[0].items[0].link);
+    // The coach's page is inside the section, so it keeps Settings selected for the owner too.
+    expect(destinationState(settings, settings.coachLink!)).toBe('section');
   });
 });
