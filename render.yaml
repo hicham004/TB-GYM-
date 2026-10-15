@@ -1,0 +1,43 @@
+# TB Gym's test copy on Render, for letting a few people try the app before going live. Not the
+# launch setup: that is compose.production.yaml on our own server (docs/GO-LIVE.md).
+#
+# Render > New > Blueprint > this repository creates both pieces below. The web service runs the
+# screens, the API and the Worker in one container (docker/test-copy/Dockerfile), so the copy is one
+# service. It runs on half a CPU ($7 a month, billed by the second): `free` also works, but sleeps
+# after 15 minutes without visitors, takes about two minutes to wake, and serves a page in 4-15
+# seconds rather than about one. The database is free and is deleted 30 days after it was created
+# (with 14 days' grace) unless it is upgraded. docs/GO-LIVE.md, "Before launch: a test copy on
+# Render", says how to load the demo workspace into it.
+services:
+  - type: web
+    name: tb-gym-test
+    runtime: docker
+    plan: 0.5c-512mb
+    region: frankfurt
+    dockerfilePath: ./docker/test-copy/Dockerfile
+    dockerContext: .
+    # A file nginx serves itself. nginx starts only once the API answers, and a check that waited on
+    # a cold API could have Render restart the copy in the middle of someone's first pages.
+    healthCheckPath: /favicon.ico
+    # Deployed by hand (Manual Deploy > Deploy latest commit): every build spends the monthly build
+    # minutes, and not every push to main needs to reach the test copy.
+    autoDeployTrigger: "off"
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tb-gym-test-db
+          property: connectionString
+      # The sign-in key ring is rebuilt from this on every start, so a deploy signs nobody out.
+      - key: TB_GYM_TEST_COPY_KEY
+        generateValue: true
+      # Food search needs a free USDA key (api.data.gov): add TB_GYM_USDA_API_KEY in the dashboard.
+
+databases:
+  - name: tb-gym-test-db
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: "18"
+    databaseName: tbgym
+    user: tbgym

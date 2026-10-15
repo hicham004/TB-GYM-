@@ -99,3 +99,22 @@ web container after changing any of the three. Write the privacy note yourself; 
   lost.
 - **Logs**: `tb logs --tail 200 api` (or `worker`, `backup`). `docs/LAUNCH-CHECKLIST.md` Part 1 is
   the full list to tick.
+
+## Before launch: a test copy on Render
+
+`render.yaml` puts a copy of the app on Render, so a few people can try it from a link. It is not
+the launch and needs none of the steps above. Email, photo uploads, AI and platform invoices are
+off. The app runs on half a CPU for $7 a month, billed by the second; its database is free, and
+Render deletes it 30 days after creating it, with 14 days' grace. Render's free plan for the app
+also works, but it sleeps after 15 minutes without visitors, the next visit waits about two minutes,
+and pages take 4-15 seconds instead of about one.
+
+1. Sign up at render.com with GitHub and add a card under Billing. Then New > Blueprint > this
+   repository > Apply. The link is on the `tb-gym-test` service once its first deploy is live. If
+   that deploy stops at "Port scan timeout", Manual Deploy > Deploy latest commit once more: the
+   database changes it already made are kept.
+2. With Docker running, load the demo workspace:
+   `.\scripts\test-copy-demo.ps1 -DatabaseUrl '<External Database URL>'` (tb-gym-test-db > Connect >
+   External). It replaces whatever the copy held, and prints the sign-in emails and their password.
+3. To update the copy, push to GitHub, then Manual Deploy > Deploy latest commit. To remove it,
+   delete the service and the database in Render.
