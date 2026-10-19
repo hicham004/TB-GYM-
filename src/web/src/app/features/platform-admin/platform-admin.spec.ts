@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
 import { fill, press, settle } from '../../../testing/dom';
 import {
+  gymRequests,
   NOW,
   plan,
   platformSpaces,
@@ -27,6 +28,7 @@ async function render(
     getWorkspaces: vi.fn(() => of(spaces())),
     getWorkspace: vi.fn(),
     getPricePlans: vi.fn(() => of(pricePlans())),
+    getGymRequests: vi.fn(() => of(gymRequests())),
     publishPricePlan: vi.fn(() =>
       of(plan({ id: 'plan-3', versionNumber: 3, seatPrice: 20 }) satisfies PricePlan),
     ),

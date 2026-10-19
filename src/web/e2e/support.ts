@@ -129,6 +129,15 @@ export async function mockSession(
     // The coach shell's billing banner asks on every page (ADR 0028). A paid workspace shows no banner.
     'GET /api/billing/access': (route) =>
       json(route, 200, { isReadOnly: false, hasOverdueInvoice: false, readOnlyFrom: null }),
+    // Screens that would promise an email ask whether this server sends any (audit LOST-1).
+    'GET /api/system/status': (route) =>
+      json(route, 200, {
+        name: 'TB Gym API',
+        architecture: 'Modular Monolith',
+        framework: '.NET 10',
+        utcTime: '2026-10-19T09:00:00Z',
+        emailAvailable: true,
+      }),
     ...hubHandlers,
     ...(options.extra ?? {}),
   });

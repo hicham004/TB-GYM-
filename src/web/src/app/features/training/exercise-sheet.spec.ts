@@ -49,6 +49,21 @@ async function render() {
 
 afterEach(() => TestBed.resetTestingModule());
 
+it('says a video link opens on its own site from the workout, not that it plays there', async () => {
+  const { fixture, sheet } = await render();
+  const shown = () =>
+    ((fixture.nativeElement as HTMLElement).textContent ?? '').replace(/\s+/g, ' ');
+
+  // C18 (audit WEA-2): a link is opened on YouTube or Vimeo; only an upload plays inside TB Gym.
+  expect(shown()).toContain(
+    'Paste a YouTube or Vimeo link. Clients open it on that site from their workout.',
+  );
+  sheet.set({ videoLink: 'https://vimeo.com/76979871' });
+  await settle(fixture);
+  expect(shown()).toContain('Vimeo video found. Clients open it on Vimeo from their workout.');
+  expect(shown()).not.toContain('Clients see it in their workout');
+});
+
 it('does not dispatch the exercise write after an obsolete video-registration reply', async () => {
   const { sheet, api, tenant } = await render();
   const pending = new Subject<MediaAssetView>();

@@ -25,7 +25,8 @@ public static class TenancyEndpoints
                 WorkspaceRegistrationStatus.Created => Results.Accepted(
                     value: new CoachRegistrationResponse(
                         result.Email,
-                        result.DevelopmentConfirmationUrl)),
+                        result.DevelopmentConfirmationUrl,
+                        result.EmailAvailable)),
                 WorkspaceRegistrationStatus.EmailAlreadyRegistered => Results.Conflict(new
                 {
                     code = "email_already_registered",

@@ -98,16 +98,50 @@ describe('ExerciseDemo', () => {
     expect(sheet().querySelectorAll('[role="dialog"]')).toHaveLength(0);
   });
 
-  it('says a demo hosted elsewhere cannot be played here', async () => {
-    const grant = vi.fn((id: string) => of(access(id, { source: 'ExternalEmbed' })));
-    const { fixture, host } = await render(['youtube'], false, grant);
+  it('opens a YouTube or Vimeo demo on its own site, in a new tab, and loads nothing from it', async () => {
+    const grant = vi.fn((id: string) =>
+      of(
+        access(id, {
+          source: 'ExternalEmbed',
+          contentType: null,
+          url: 'https://player.vimeo.com/video/76979871',
+          externalProvider: 'Vimeo',
+          watchUrl: 'https://vimeo.com/76979871',
+        }),
+      ),
+    );
+    const { fixture, host } = await render(['vimeo'], false, grant);
+
+    host.querySelector('button')!.click();
+    await settle(fixture);
+
+    // C18 (audit WEA-2): a link to the video's page, not a player and not an error.
+    const link = sheet().querySelector<HTMLAnchorElement>('[data-watch-external]')!;
+    expect(link.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'Watch on Vimeo (opens in a new tab)',
+    );
+    expect(link.getAttribute('href')).toBe('https://vimeo.com/76979871');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(sheet().textContent).toContain(
+      'This demo is a video on Vimeo. It opens there, in a new tab.',
+    );
+    expect(sheet().querySelector('video, iframe, img')).toBeNull();
+    expect(sheet().querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('opens nothing when a demo link is not a YouTube or Vimeo page', async () => {
+    const grant = vi.fn((id: string) =>
+      of(access(id, { source: 'ExternalEmbed', watchUrl: 'https://example.test/watch' })),
+    );
+    const { fixture, host } = await render(['odd'], false, grant);
 
     host.querySelector('button')!.click();
     await settle(fixture);
 
     expect(sheet().querySelector('[role="alert"]')?.textContent?.trim()).toBe(
-      'This demo is a video hosted elsewhere, which can’t be played here yet.',
+      'This demo can’t be opened.',
     );
-    expect(sheet().querySelector('video')).toBeNull();
+    expect(sheet().querySelector('a')).toBeNull();
   });
 });

@@ -122,7 +122,8 @@ internal sealed class WorkspaceApplicationService(
         return new WorkspaceRegistrationResult(
             WorkspaceRegistrationStatus.Created,
             normalizedEmail,
-            dispatch.DevelopmentActionUrl);
+            dispatch.DevelopmentActionUrl,
+            EmailAvailable: dispatch.EmailAvailable);
     }
 
     public async Task<WorkspaceDetails?> GetCurrentAsync(CancellationToken cancellationToken)

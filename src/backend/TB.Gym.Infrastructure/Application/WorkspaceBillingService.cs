@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TB.Gym.Infrastructure.Persistence;
+using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.PlatformBilling;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
@@ -13,7 +14,9 @@ internal sealed class WorkspaceBillingService(
     IClock clock,
     ICurrentUser currentUser,
     ITenantContext tenantContext,
-    IOptions<PlatformBillingOptions> options)
+    IOptions<PlatformBillingOptions> options,
+    IOptions<NotificationEmailOptions> email,
+    IOptions<WebsiteOptions> website)
     : IWorkspaceBillingService
 {
     public async Task<WorkspaceBillingView> GetForOwnerAsync(CancellationToken cancellationToken)
@@ -31,8 +34,14 @@ internal sealed class WorkspaceBillingService(
             state.UnpaidTotal,
             state.CurrentMonth.Amounts.CurrencyCode,
             state.ReadOnlyFrom,
-            new PaymentInstructionsView(string.IsNullOrWhiteSpace(options.Value.WhishNumber) ? null : options.Value.WhishNumber.Trim()));
+            new PaymentInstructionsView(
+                Configured(options.Value.WhishNumber),
+                // The support inbox replies reach; it is set only beside a real provider.
+                email.Value.UsesProviderAdapter ? Configured(email.Value.Provider.ReplyToAddress) : null,
+                Configured(website.Value.WhatsAppNumber)));
     }
+
+    private static string? Configured(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public async Task<WorkspaceBillingAccessView> GetAccessAsync(CancellationToken cancellationToken)
     {

@@ -31,12 +31,14 @@ import type {
 import { workoutStatusLabel } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { ButtonLink } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { StatusLabel } from '../../ui/status-label';
 import type { ShareFact } from '../share-cards/share-card.models';
 import { ShareTeaser } from '../share-cards/share-teaser';
+import { externalVideo } from './external-video';
 import { RestTimer } from './rest-timer';
 import { nullableNumeric, numeric } from './training-builder.models';
 import {
@@ -67,6 +69,7 @@ const UNIT_OPTIONS: readonly SegmentOption[] = [
 @Component({
   selector: 'app-today-training',
   imports: [
+    ButtonLink,
     FormsModule,
     DatePipe,
     EmptyState,
@@ -78,7 +81,8 @@ const UNIT_OPTIONS: readonly SegmentOption[] = [
     UiMenu,
   ],
   templateUrl: './today-training.html',
-  styleUrl: './today-training.scss',
+  // The demo overlay's link panel has its own sheet: the main one sits near the 8 kB style budget.
+  styleUrls: ['./today-training.scss', './today-training-media.scss'],
   // The player is always drawn on the night colour, so the kit pieces inside it read the dark tokens.
   host: { 'data-mode': 'dark' },
 })
@@ -165,6 +169,7 @@ export class TodayTraining {
   private readonly errorSummary = viewChild<ElementRef<HTMLElement>>('errorSummary');
   protected readonly mediaDialog = viewChild<ElementRef<HTMLElement>>('mediaDialog');
   protected readonly mediaCloseButton = viewChild<ElementRef<HTMLButtonElement>>('mediaClose');
+  protected readonly externalVideo = externalVideo;
   protected readonly accessReasonLabel = trainingReadAccessLabel;
   protected readonly workoutStatusLabel = workoutStatusLabel;
   protected readonly noteTime = workoutNoteTime;
@@ -769,10 +774,7 @@ export class TodayTraining {
         if (!this.ownsContext(generation)) {
           return;
         }
-        if (access.source === 'ExternalEmbed') {
-          this.reportError($localize`External video demos are not enabled for this beta.`, true);
-          return;
-        }
+        // A YouTube or Vimeo demo opens in the same overlay, as a link to the video's own page.
         this.mediaTrigger = trigger;
         this.activeMedia.set(access);
       } catch (error) {

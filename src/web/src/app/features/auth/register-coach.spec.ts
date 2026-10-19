@@ -12,6 +12,7 @@ import { RegisterCoach } from './register-coach';
 const REGISTERED: RegistrationResponse = {
   email: 'coach@example.test',
   developmentConfirmationUrl: null,
+  emailAvailable: true,
 };
 
 async function render(api: Partial<ApiClient> = {}) {
@@ -124,6 +125,27 @@ describe('RegisterCoach', () => {
     expect(host.textContent).toContain('coach@example.test');
     // The form is gone, so the same registration cannot be submitted twice.
     expect(host.querySelector('button[type="submit"]')).toBeNull();
+  });
+
+  it('says plainly that no confirmation email is coming when this server sends no email', async () => {
+    const { fixture, host } = await render({
+      registerCoach: vi.fn(() => of({ ...REGISTERED, emailAvailable: false })),
+    });
+
+    fillRegistration(host);
+    await settle(fixture);
+    press(host, 'Create coach account');
+    await settle(fixture);
+
+    // Audit LOST-1: the account exists, but no link will ever reach the inbox.
+    const notice = query(host, '[role="status"]');
+    expect(notice.textContent).toContain('Email is off on this server');
+    expect(notice.textContent).toContain('Your account for coach@example.test is created');
+    expect(notice.textContent).toContain(
+      'If you were given a sign-in for this server, use that instead.',
+    );
+    expect(notice.textContent).not.toContain('Check your email');
+    expect(notice.textContent).not.toContain('We queued');
   });
 
   it('refuses a registration whose two passwords differ, without calling the server', async () => {

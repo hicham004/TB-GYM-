@@ -2,10 +2,17 @@
   <header class="top">
     <div class="intro">
       <h1 #heading tabindex="-1" i18n>Invitations</h1>
-      <p class="lede" i18n>
-        Invite a client by email. They set up their own account from the link, and you can send it
-        again if it gets lost.
-      </p>
+      @if (emailOff()) {
+        <p class="lede" data-email-off i18n>
+          Email is off on this server, so an invitation reaches nobody yet. You can still make them;
+          once email is on, send each one again.
+        </p>
+      } @else {
+        <p class="lede" i18n>
+          Invite a client by email. They set up their own account from the link, and you can send it
+          again if it gets lost.
+        </p>
+      }
     </div>
     <button appButton type="button" (click)="openInvite()" data-invite i18n>Invite a client</button>
   </header>
@@ -27,9 +34,8 @@
         <app-empty-state
           class="panel"
           heading="No invitations yet"
-          description="Invite your first client. They get an email with a link to set up their profile."
+          [description]="emptyDescription()"
           i18n-heading
-          i18n-description
         >
           <button appButton empty-state-action type="button" (click)="openInvite()" i18n>
             Invite your first client
@@ -132,6 +138,7 @@
   <app-invite-client
     [today]="today"
     [prefill]="prefill()"
+    [emailOff]="emailOff()"
     (dirtyChange)="setDirty($event)"
     (closed)="closeInvite($event, sheet)"
   />

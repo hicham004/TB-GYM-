@@ -10,6 +10,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { UiToast } from '../../ui/toast';
 import { fill, focusedId, press, settle } from '../../../testing/dom';
+import { provideEmailDelivery } from '../../../testing/email-delivery';
 import { Team } from './team';
 import { TeamApi } from './team-api';
 
@@ -56,7 +57,7 @@ function invitation(overrides: Partial<ClientInvitation> = {}): ClientInvitation
   };
 }
 
-async function render(api: Partial<Record<keyof TeamApi, unknown>> = {}) {
+async function render(api: Partial<Record<keyof TeamApi, unknown>> = {}, emailOff = false) {
   const toast = { show: vi.fn() };
   await TestBed.configureTestingModule({
     imports: [Team],
@@ -89,6 +90,7 @@ async function render(api: Partial<Record<keyof TeamApi, unknown>> = {}) {
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: UiToast, useValue: toast },
       { provide: AuthStore, useValue: { user: signal({ id: 'owner-1' }) } },
+      provideEmailDelivery(emailOff),
       {
         provide: TenantStore,
         useValue: {
@@ -220,6 +222,35 @@ describe('Settings › Team', () => {
     expect(toast.show).toHaveBeenCalledWith('Invitation sent to rami@example.test.', {
       tone: 'success',
     });
+  });
+
+  it('says that the invitation reaches nobody while this server sends no email', async () => {
+    const { fixture, host, toast } = await render({}, true);
+
+    press(host, 'Invite a coach');
+    await settle(fixture);
+    // Audit LOST-1: the sheet does not promise an email the server cannot send.
+    expect(textOf(dialog()?.querySelector('[data-email-off]'))).toContain(
+      'Email is off on this server, so they won’t get the link yet; once email is on, send it again.',
+    );
+    expect(textOf(dialog())).not.toContain('They get an email with a link.');
+
+    fill(dialog()!, 'Email', 'rami@example.test');
+    fill(dialog()!, 'First name', 'Rami');
+    fill(dialog()!, 'Last name', 'Saad');
+    await settle(fixture);
+    press(dialog()!, 'Send invitation');
+    await settle(fixture);
+    expect(toast.show).toHaveBeenCalledWith(
+      'Invitation saved. Email is off on this server, so rami@example.test doesn’t get it yet.',
+      { tone: 'success' },
+    );
+
+    await choose(fixture, host, 'More for the invitation to Nora Khoury', 'Send a new link');
+    expect(toast.show).toHaveBeenCalledWith(
+      'A new link was made for nora@example.test, but email is off on this server, so it wasn’t sent. The one sent before no longer works.',
+      { tone: 'success' },
+    );
   });
 
   it('keeps the sheet open with the server’s reason when an invitation is refused', async () => {

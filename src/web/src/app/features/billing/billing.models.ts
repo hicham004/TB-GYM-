@@ -89,6 +89,10 @@ export interface WorkspaceBilling {
   currencyCode: string;
   readOnlyFrom: string | null;
   whishNumber: string | null;
+  /** TB Gym's support inbox, to ask for the payment details while no Whish number is set (BILL-2). */
+  supportEmail: string | null;
+  /** TB Gym's WhatsApp number, for the same. */
+  whatsAppNumber: string | null;
 }
 
 export interface AdminWorkspace {
@@ -220,6 +224,8 @@ export function toWorkspaceBilling(value: WorkspaceBillingView): WorkspaceBillin
     currencyCode: value.currencyCode,
     readOnlyFrom: value.readOnlyFrom,
     whishNumber: value.paymentInstructions.whishNumber,
+    supportEmail: value.paymentInstructions.supportEmail,
+    whatsAppNumber: value.paymentInstructions.whatsAppNumber,
   };
 }
 

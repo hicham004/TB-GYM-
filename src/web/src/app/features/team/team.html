@@ -136,10 +136,18 @@
 
 <ng-template #inviteSheet>
   <form class="invite" novalidate (submit)="$event.preventDefault(); sendInvite()">
-    <p class="quiet" i18n>
-      They get an email with a link. Accepting adds them to your team as a coach with no clients
-      yet; you give them clients from each client’s profile.
-    </p>
+    @if (emailOff()) {
+      <p class="quiet" data-email-off i18n>
+        Email is off on this server, so they won’t get the link yet; once email is on, send it
+        again. Accepting adds them to your team as a coach with no clients yet; you give them
+        clients from each client’s profile.
+      </p>
+    } @else {
+      <p class="quiet" i18n>
+        They get an email with a link. Accepting adds them to your team as a coach with no clients
+        yet; you give them clients from each client’s profile.
+      </p>
+    }
     <app-field label="Email" i18n-label [errors]="shownInviteErrors('email')">
       <input
         appControl

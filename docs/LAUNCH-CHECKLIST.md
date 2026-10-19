@@ -66,6 +66,9 @@ items only moved, and a few gained a status note in italics.
 - [x] Persist and protect ASP.NET Core Data Protection keys across replicas and deployments. *One
   named volume shared by the API and the Worker. The keys sit unencrypted in that volume, readable
   only by root on the server. Losing it only signs everyone out and voids unused email links.*
+- [ ] Set `TB_GYM_BILLING_WHISH_NUMBER`, the number owners pay their TB Gym invoices to, before the
+  first invoice is issued. Without it the Billing page can only point owners at the support inbox
+  and WhatsApp (PBL-008). *Added 2026-10-20, audit A1 (BILL-2); `docs/GO-LIVE.md` Deploy step 4.*
 
 ## Transactional email
 

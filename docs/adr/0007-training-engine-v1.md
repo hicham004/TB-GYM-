@@ -92,7 +92,8 @@ The grant's absolute expiry travels inside its protected payload and is enforced
 viewing session that includes pausing and seeking; because every content request reauthorizes,
 a shorter lifetime would break playback without improving revocation.
 External media is restricted to validated YouTube or Vimeo IDs and privacy-oriented embed
-URLs. Uploads are streamed, rate/concurrency limited, and subject to a configurable workspace
+URLs. Until those embeds ship, a link opens on the provider's own video page in a new tab and
+nothing from the provider loads in the app (C18, audit A1, 2026-10-19; MED-016). Uploads are streamed, rate/concurrency limited, and subject to a configurable workspace
 quota. Referenced deletion becomes a tombstone; physical purge remains a later retention job.
 Docker's local object store and data-protection keys use named volumes; production must use
 managed object storage, shared key protection, scanning, and a CDN/private delivery strategy.

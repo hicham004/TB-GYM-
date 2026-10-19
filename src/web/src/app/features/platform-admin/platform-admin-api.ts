@@ -4,6 +4,8 @@ import { map, Observable } from 'rxjs';
 import type {
   AdminWorkspaceDetail as ContractAdminWorkspaceDetail,
   AdminWorkspaceSummary,
+  ContactKind,
+  ContactRequestAdminView,
   InvoiceRunOutcome,
   PricePlanView,
   PublishPricePlanRequest,
@@ -23,6 +25,20 @@ export interface InvoiceRun {
   issued: number;
   alreadyIssued: number;
   inTrial: number;
+}
+
+/** A Talk-to-us request whose email to the admin has not gone out (audit BEB-1). */
+export interface GymRequest {
+  id: string;
+  name: string;
+  gymName: string;
+  contact: string;
+  contactKind: ContactKind;
+  message: string | null;
+  receivedAtUtc: string;
+  deadLettered: boolean;
+  sending: boolean;
+  attemptCount: number;
 }
 
 export interface PublishPlan {
@@ -56,6 +72,17 @@ export class PlatformAdminApi {
     return this.http
       .get<ContractAdminWorkspaceDetail>(`/api/platform-admin/workspaces/${tenantId}`)
       .pipe(map(toAdminWorkspaceDetail));
+  }
+
+  /** Talk-to-us requests not yet emailed: waiting for email, or given up after their attempts. */
+  getGymRequests(): Observable<GymRequest[]> {
+    return this.http
+      .get<ContactRequestAdminView[]>('/api/platform-admin/contact-requests')
+      .pipe(
+        map((items) =>
+          items.map((item) => ({ ...item, attemptCount: toNumber(item.attemptCount) })),
+        ),
+      );
   }
 
   getPricePlans(): Observable<PricePlan[]> {

@@ -1193,6 +1193,7 @@ export type CoachProgramWeekView = {
 export type CoachRegistrationResponse = {
   email: string;
   developmentConfirmationUrl: null | string;
+  emailAvailable: boolean;
 };
 
 export type CoachRemovalResponse = {
@@ -1273,6 +1274,21 @@ export type ConfirmEmailRequest = {
 
 export type ContactFormStampView = {
   stamp: string;
+};
+
+export type ContactKind = 'Email' | 'WhatsApp';
+
+export type ContactRequestAdminView = {
+  id: string;
+  name: string;
+  gymName: string;
+  contact: string;
+  contactKind: ContactKind;
+  message: null | string;
+  receivedAtUtc: string;
+  deadLettered: boolean;
+  sending: boolean;
+  attemptCount: number | string;
 };
 
 export type ContactRequestSubmission = {
@@ -1676,6 +1692,7 @@ export type EffectiveEnrollmentStatus =
 export type EmailActionResponse = {
   message: string;
   developmentActionUrl: null | string;
+  emailAvailable: boolean;
 };
 
 export type EnrollmentStatus = 'PendingPayment' | 'Active' | 'Paused' | 'Cancelled' | 'Expired';
@@ -2178,6 +2195,8 @@ export type MediaAccessView = {
   expiresAtUtc: string;
   downloadAllowed: boolean;
   thumbnailUrl?: null | string;
+  externalProvider?: null | ExternalMediaProvider;
+  watchUrl?: null | string;
 };
 
 export type MediaAssetPage = {
@@ -2491,6 +2510,8 @@ export type OwnCoachView = {
 
 export type PaymentInstructionsView = {
   whishNumber: null | string;
+  supportEmail: null | string;
+  whatsAppNumber: null | string;
 };
 
 export type PaymentOperation = 'Receipt' | 'Refund' | 'Reversal';
@@ -3390,6 +3411,7 @@ export type SystemStatusResponse = {
   architecture: string;
   framework: string;
   utcTime: string;
+  emailAvailable: boolean;
 };
 
 export type TeamMemberSummary = {
@@ -4321,6 +4343,23 @@ export type GetWorkspaceBillingAccessResponses = {
 
 export type GetWorkspaceBillingAccessResponse =
   GetWorkspaceBillingAccessResponses[keyof GetWorkspaceBillingAccessResponses];
+
+export type ListUnsentContactRequestsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/contact-requests';
+};
+
+export type ListUnsentContactRequestsResponses = {
+  /**
+   * OK
+   */
+  200: Array<ContactRequestAdminView>;
+};
+
+export type ListUnsentContactRequestsResponse =
+  ListUnsentContactRequestsResponses[keyof ListUnsentContactRequestsResponses];
 
 export type GetCsrfTokenData = {
   body?: never;

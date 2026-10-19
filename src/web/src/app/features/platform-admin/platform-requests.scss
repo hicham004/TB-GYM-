@@ -1,0 +1,72 @@
+// Requests from gyms on the platform admin page (audit BEB-1): the page's panel, one row per request.
+@use '../../ui/page';
+
+.requests {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.request {
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding-block: 0.875rem;
+
+  &:first-child {
+    border-block-start: 0;
+    padding-block-start: 0;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+.head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  justify-content: space-between;
+}
+
+.gym {
+  color: var(--tb-ink);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.name,
+.by {
+  color: var(--tb-muted);
+}
+
+.reach {
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.contact {
+  color: var(--tb-accent-ink);
+  display: inline-block;
+  font-weight: 600;
+  min-block-size: 1.5rem;
+  text-underline-offset: 0.2em;
+
+  &:focus-visible {
+    border-radius: 0.25rem;
+    outline: 2px solid var(--tb-focus);
+    outline-offset: 2px;
+  }
+}
+
+.message {
+  color: var(--tb-ink);
+  max-inline-size: 44rem;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}

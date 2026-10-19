@@ -106,6 +106,7 @@ public static class WorkerDependencyInjection
         services.TryAddSingleton<IWebsiteSettingsReader, WebsiteSettingsReader>();
         services.TryAddSingleton<IContactFormStamps, ContactFormStampService>();
         services.TryAddScoped<IContactRequestApplicationService, ContactRequestApplicationService>();
+        services.TryAddScoped<IContactRequestAdminReader, ContactRequestAdminReader>();
         services.TryAddScoped<IContactRequestMailDispatchService, ContactRequestMailService>();
         return services;
     }
@@ -232,6 +233,7 @@ public static class WorkerDependencyInjection
 
         services.TryAddSingleton<PublicActionLinkBuilder>();
         services.TryAddSingleton<ActionMailFingerprintKeyring>();
+        services.TryAddSingleton<IEmailDeliveryStatus, EmailDeliveryStatus>();
 
         if (valid && email.UsesProviderAdapter)
         {

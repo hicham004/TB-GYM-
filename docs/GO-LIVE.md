@@ -59,9 +59,13 @@ Without progress photos a 4 GB server is enough (about half the price; see `.env
    Reply to it and check that the reply reaches the support inbox. Then register your own account at
    `https://app.yourdomain` and confirm it from the email.
 3. **Admin**: `tb exec api dotnet TB.Gym.Api.dll platform-admin grant you@example.com`.
-4. **Before inviting anyone**: `curl -sI https://app.yourdomain` shows `strict-transport-security` and
+4. **Billing**: before the first invoice (the 1st of the month after a coach's free trial), put the
+   Whish number coaches pay TB Gym to in `TB_GYM_BILLING_WHISH_NUMBER` in `.env`, then
+   `tb up -d api`. The Billing page shows it with each invoice's reference; without it, the page
+   can only point an owner at the support inbox and WhatsApp.
+5. **Before inviting anyone**: `curl -sI https://app.yourdomain` shows `strict-transport-security` and
    `content-security-policy`. As a test client, upload a progress photo and see it again.
-5. **Backup and restore drill**: run `tb exec backup backup.sh` (it ends with `done`) and check the
+6. **Backup and restore drill**: run `tb exec backup backup.sh` (it ends with `done`) and check the
    file in the `tbgym-backups` bucket. Paste your key from the password manager into
    `nano /root/key.txt`, then run
    `tb run --rm -v /root/key.txt:/key.txt:ro backup restore.sh latest tbgym_drill /key.txt`.
@@ -104,7 +108,9 @@ web container after changing any of the three. Write the privacy note yourself; 
 
 `render.yaml` puts a copy of the app on Render, so a few people can try it from a link. It is not
 the launch and needs none of the steps above. Email, photo uploads, AI and platform invoices are
-off. The app runs on half a CPU for $7 a month, billed by the second; its database is free, and
+off. The screens say email is off where they would promise one: someone who registers there cannot
+confirm the account, so share the demo sign-ins instead; invitations reach nobody; and a Talk-to-us
+request waits on the platform admin page. The app runs on half a CPU for $7 a month, billed by the second; its database is free, and
 Render deletes it 30 days after creating it, with 14 days' grace. Render's free plan for the app
 also works, but it sleeps after 15 minutes without visitors, the next visit waits about two minutes,
 and pages take 4-15 seconds instead of about one.

@@ -93,4 +93,60 @@ describe('TodayTraining media dialog', () => {
     expect(host.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
+
+  it('opens a YouTube demo on YouTube in a new tab, from the same dialog, and plays nothing here', async () => {
+    const access: MediaAccessView = {
+      assetId: 'asset-yt',
+      kind: 'Video',
+      source: 'ExternalEmbed',
+      contentType: null,
+      url: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+      expiresAtUtc: '2026-08-21T18:00:00Z',
+      downloadAllowed: false,
+      externalProvider: 'YouTube',
+      watchUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    };
+    await TestBed.configureTestingModule({
+      imports: [TodayTraining],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ApiClient,
+          useValue: {
+            createMediaAccess: vi.fn(() => of(access)),
+            getMyTrainingToday: () =>
+              of({ isAllowed: false, workouts: [], accessReason: 'NoEntitlement' }),
+            getMyUpcomingTraining: () =>
+              of({ isAllowed: false, unfinishedWorkouts: [], accessReason: 'NoEntitlement' }),
+          },
+        },
+        { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TodayTraining);
+    fixture.detectChanges();
+    const trigger = document.createElement('button');
+    document.body.append(trigger);
+    await (fixture.componentInstance as unknown as TodayTrainingMediaHarness).showMedia(
+      access.assetId,
+      { currentTarget: trigger } as unknown as Event,
+    );
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // C18 (audit WEA-2): the old 'not enabled for this beta' refusal is gone; the video's page opens.
+    const host = fixture.nativeElement as HTMLElement;
+    const dialog = host.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain(
+      'This demo is a video on YouTube. It opens there, in a new tab.',
+    );
+    const link = dialog.querySelector<HTMLAnchorElement>('[data-watch-external]')!;
+    expect(link.getAttribute('href')).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(dialog.querySelector('video, iframe, img')).toBeNull();
+    expect(host.textContent).not.toContain('not enabled for this beta');
+  });
 });

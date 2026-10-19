@@ -116,8 +116,12 @@ public sealed record CurrentMonthEstimateView(
     int PricePlanVersion,
     BillingAmountsView Amounts);
 
-/// <summary>How to pay: a Whish number from configuration, and each unpaid invoice's own reference code.</summary>
-public sealed record PaymentInstructionsView(string? WhishNumber);
+/// <summary>
+/// How to pay: a Whish number from configuration, and each unpaid invoice's own reference code. While
+/// no Whish number is set, TB Gym's support inbox and WhatsApp number, when configured, are how the
+/// owner asks for the payment details (audit BILL-2). Each is null when not configured.
+/// </summary>
+public sealed record PaymentInstructionsView(string? WhishNumber, string? SupportEmail, string? WhatsAppNumber);
 
 public sealed record WorkspaceBillingView(
     WorkspaceBillingStatus Status,

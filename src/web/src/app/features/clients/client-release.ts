@@ -1,10 +1,20 @@
-import { Component, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { FormerClientsApi } from './former-clients-api';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { CoachClientDetails } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
+import { EmailDelivery } from '../../core/system/email-delivery';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
@@ -35,6 +45,13 @@ export class ClientRelease {
   readonly client = input.required<CoachClientDetails>();
   readonly released = output<CoachClientDetails>();
 
+  /** This server sends no email (audit LOST-1), so the dialog must not promise the goodbye email. */
+  protected readonly emailOff = inject(EmailDelivery).off;
+  protected readonly reasonHelp = computed(() =>
+    this.emailOff()
+      ? $localize`Only your team sees this. Up to 500 characters.`
+      : $localize`Only your team sees this. It is not included in the email. Up to 500 characters.`,
+  );
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly form = this.formBuilder.nonNullable.group({

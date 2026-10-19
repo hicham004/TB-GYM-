@@ -15,10 +15,11 @@ namespace TB.Gym.Infrastructure.Application;
 /// <remarks>
 /// The workspace-notice dispatcher's sequence without a tenant and without suppression: claim under
 /// a lease, count the attempt and commit, send, finalize as materialized, retrying or dead-lettered.
-/// The recipient is this deployment's <c>Website:ContactRecipient</c>; while it is empty the sweep
-/// claims nothing, so requests wait as pending rather than burning their attempts, and go out the day
-/// the address is set. Log lines carry the request id, the attempt number and a code; never the
-/// person's name, contact or words.
+/// The recipient is this deployment's <c>Website:ContactRecipient</c>; while it is empty, or while
+/// email is off and no transport is composed (audit BEB-1), the sweep claims nothing, so requests wait
+/// as pending rather than burning their attempts, and go out the day both are there. The platform
+/// admin reads waiting and dead-lettered requests on the admin page meanwhile. Log lines carry the
+/// request id, the attempt number and a code; never the person's name, contact or words.
 /// </remarks>
 internal sealed class ContactRequestMailService(
     IServiceScopeFactory scopeFactory,
@@ -59,7 +60,15 @@ internal sealed class ContactRequestMailService(
             new EventId(6195, "ContactRequestMailNoRecipient"),
             "Contact requests are waiting but Website:ContactRecipient is not set, so none is emailed.");
 
+    private static readonly Action<ILogger, Exception?> LogEmailOff =
+        LoggerMessage.Define(
+            LogLevel.Warning,
+            new EventId(6196, "ContactRequestMailEmailOff"),
+            "Contact requests are waiting but email is off on this deployment, so none is emailed. They are listed on the platform admin page.");
+
     private static int noRecipientWarned;
+
+    private static int emailOffWarned;
 
     private readonly ActionMailDispatchOptions settings = options.Value;
 
@@ -74,7 +83,16 @@ internal sealed class ContactRequestMailService(
         var now = clock.UtcNow;
         if (recipient.Length == 0)
         {
-            await WarnIfWaitingAsync(now, cancellationToken);
+            await WarnIfWaitingAsync(now, emailOff: false, cancellationToken);
+            return new ContactRequestMailDispatchOutcome();
+        }
+
+        // No transport is not a failed attempt: nothing was tried, and nothing will be until email is
+        // turned on. Claiming here would spend all four attempts in about 36 minutes and dead-letter
+        // every request a gym sent to a deployment with email off.
+        if (transport is null)
+        {
+            await WarnIfWaitingAsync(now, emailOff: true, cancellationToken);
             return new ContactRequestMailDispatchOutcome();
         }
 
@@ -82,15 +100,16 @@ internal sealed class ContactRequestMailService(
         var outcome = claim.Outcome;
         foreach (var work in claim.Work)
         {
-            outcome = outcome.Add(await MaterializeAsync(work, recipient, cancellationToken));
+            outcome = outcome.Add(await MaterializeAsync(work, recipient, transport, cancellationToken));
         }
 
         return outcome;
     }
 
-    private async Task WarnIfWaitingAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    /// <summary>Says once per process why waiting requests are not being emailed.</summary>
+    private async Task WarnIfWaitingAsync(DateTimeOffset now, bool emailOff, CancellationToken cancellationToken)
     {
-        if (Volatile.Read(ref noRecipientWarned) != 0)
+        if (Volatile.Read(ref emailOff ? ref emailOffWarned : ref noRecipientWarned) != 0)
         {
             return;
         }
@@ -100,9 +119,9 @@ internal sealed class ContactRequestMailService(
         var waiting = await context.ContactRequests
             .AsNoTracking()
             .AnyAsync(item => item.Status == ContactRequestMailStatus.Pending && item.NextAttemptAtUtc <= now, cancellationToken);
-        if (waiting && Interlocked.Exchange(ref noRecipientWarned, 1) == 0)
+        if (waiting && Interlocked.Exchange(ref emailOff ? ref emailOffWarned : ref noRecipientWarned, 1) == 0)
         {
-            LogNoRecipient(logger, null);
+            (emailOff ? LogEmailOff : LogNoRecipient)(logger, null);
         }
     }
 
@@ -162,6 +181,7 @@ internal sealed class ContactRequestMailService(
     private async Task<ContactRequestMailDispatchOutcome> MaterializeAsync(
         ClaimedWork work,
         string recipient,
+        IActionEmailTransport sender,
         CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -193,27 +213,18 @@ internal sealed class ContactRequestMailService(
             return new ContactRequestMailDispatchOutcome();
         }
 
-        FinalOutcome final;
-        if (transport is null)
-        {
-            final = FinalOutcome.Retryable(ContactRequestMailCodes.TransportUnavailable);
-        }
-        else
-        {
-            var result = await transport.SendAsync(
-                new ActionEmailMessage(
-                    ActionMailScopes.ContactRequest,
-                    work.RequestId,
-                    started.Attempt,
-                    started.Key,
-                    recipient,
-                    started.Content.Subject,
-                    started.Content.Body),
-                cancellationToken);
-            final = Classify(result);
-        }
+        var result = await sender.SendAsync(
+            new ActionEmailMessage(
+                ActionMailScopes.ContactRequest,
+                work.RequestId,
+                started.Attempt,
+                started.Key,
+                recipient,
+                started.Content.Subject,
+                started.Content.Body),
+            cancellationToken);
 
-        return await FinalizeAsync(context, work, started.Attempt, final, cancellationToken);
+        return await FinalizeAsync(context, work, started.Attempt, Classify(result), sender.AdapterName, cancellationToken);
     }
 
     private static FinalOutcome Classify(ActionEmailTransportResult result) => result.Outcome switch
@@ -236,6 +247,7 @@ internal sealed class ContactRequestMailService(
         ClaimedWork work,
         int attemptNumber,
         FinalOutcome final,
+        string adapterName,
         CancellationToken cancellationToken)
     {
         var kind = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -255,7 +267,7 @@ internal sealed class ContactRequestMailService(
             Final result;
             if (final.IsSuccess)
             {
-                request.MarkMaterialized(work.ClaimToken, now, transport!.AdapterName, final.ProviderMessageId);
+                request.MarkMaterialized(work.ClaimToken, now, adapterName, final.ProviderMessageId);
                 result = Final.Materialized;
             }
             else if (final.IsRetryable &&
@@ -279,7 +291,7 @@ internal sealed class ContactRequestMailService(
         switch (kind)
         {
             case Final.Materialized:
-                LogMaterialized(logger, work.RequestId, attemptNumber, transport!.AdapterName, null);
+                LogMaterialized(logger, work.RequestId, attemptNumber, adapterName, null);
                 return new ContactRequestMailDispatchOutcome(Materialized: 1);
             case Final.Retried:
                 LogRetrying(logger, work.RequestId, attemptNumber, final.FailureCode!, null);

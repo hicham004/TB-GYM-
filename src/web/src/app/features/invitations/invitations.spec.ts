@@ -8,12 +8,13 @@ import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { fill, press, settle, type } from '../../../testing/dom';
+import { provideEmailDelivery } from '../../../testing/email-delivery';
 import { atlasInvitations, invitation, NOW } from '../../../testing/invitation-fixtures';
 import { Invitations } from './invitations';
 
 type Api = Partial<Record<keyof ApiClient, ReturnType<typeof vi.fn>>>;
 
-async function render(overrides: Api = {}) {
+async function render(overrides: Api = {}, options: { emailOff?: boolean } = {}) {
   const api: Api = {
     getInvitations: vi.fn(() => of([])),
     createInvitation: vi.fn(() => of(invitation())),
@@ -30,6 +31,7 @@ async function render(overrides: Api = {}) {
       { provide: ApiClient, useValue: api },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      provideEmailDelivery(options.emailOff),
     ],
   }).compileComponents();
 
@@ -121,6 +123,51 @@ describe('Invitations', () => {
     expect(dialog()).toBeNull();
     expect(toast()).toContain('Invitation created. We will email rana@example.test shortly.');
     expect(api.getInvitations).toHaveBeenCalledTimes(2);
+  });
+
+  it('says that no invitation reaches anyone while this server sends no email', async () => {
+    const { fixture, host } = await render({}, { emailOff: true });
+
+    // Audit LOST-1: nothing on the page promises an email the server cannot send.
+    expect(textOf(host.querySelector('.lede'))).toBe(
+      'Email is off on this server, so an invitation reaches nobody yet. You can still make them; once email is on, send each one again.',
+    );
+    expect(textOf(host.querySelector('app-empty-state p'))).toBe(
+      'Invite your first client. Email is off on this server, so they won’t get the link to set up their profile yet.',
+    );
+    press(host, 'Invite your first client');
+    await settle(fixture);
+    const sheet = dialog()!;
+    expect(textOf(sheet.querySelector('[data-email-off]'))).toBe(
+      'Email is off on this server, so they won’t get the link to set up their account. The invitation is saved; once email is on, send it again.',
+    );
+    expect(sheet.textContent).not.toContain('We email them');
+
+    fill(sheet, 'First name', 'Rana');
+    fill(sheet, 'Last name', 'Haddad');
+    fill(sheet, 'Email', 'rana@example.test');
+    await settle(fixture);
+    press(sheet, 'Send invitation');
+    await settle(fixture);
+
+    expect(toast()).toContain(
+      'Invitation saved. Email is off on this server, so rana@example.test doesn’t get it yet.',
+    );
+    expect(toast()).not.toContain('We will email');
+  });
+
+  it('says a new link was not sent while this server sends no email', async () => {
+    const { fixture, host } = await render(
+      { getInvitations: vi.fn(() => of([invitation()])) },
+      { emailOff: true },
+    );
+
+    press(host, 'Send again to Rana Haddad');
+    await settle(fixture);
+
+    expect(toast()).toContain(
+      'A new link was made for rana@example.test, but email is off on this server, so it wasn’t sent. The earlier link no longer works.',
+    );
   });
 
   it('sends the optional fields as absent rather than as empty strings', async () => {

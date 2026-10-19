@@ -99,7 +99,11 @@ public sealed record MediaAccessView(
     // Null when the asset has no thumbnail rendition, which is every external embed and every
     // asset that is not a progress photo. The same grant covers it, so a viewer that wants a
     // preview never asks for a second one.
-    string? ThumbnailUrl = null);
+    string? ThumbnailUrl = null,
+    // A YouTube or Vimeo link only: the provider, and the video's own page, which the screens open
+    // in a new tab while no outside player is allowed inside TB Gym (C18). Null for an upload.
+    ExternalMediaProvider? ExternalProvider = null,
+    string? WatchUrl = null);
 
 public sealed record MediaContentResult(
     MediaContentStatus Status,

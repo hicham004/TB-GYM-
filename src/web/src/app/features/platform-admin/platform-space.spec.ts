@@ -20,6 +20,7 @@ async function render(
     getWorkspaces: vi.fn(),
     getWorkspace: vi.fn(() => of(detail())),
     getPricePlans: vi.fn(),
+    getGymRequests: vi.fn(),
     publishPricePlan: vi.fn(),
     issueInvoices: vi.fn(),
     recordPayment: vi.fn(() => of({})),

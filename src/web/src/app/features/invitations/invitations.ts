@@ -18,6 +18,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import type { ClientInvitation } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
+import { EmailDelivery } from '../../core/system/email-delivery';
 import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Avatar } from '../../ui/avatar';
@@ -86,6 +87,13 @@ export class Invitations {
   protected readonly sections = computed(() => splitInvitations(this.invitations(), this.locale));
   protected readonly waiting = computed(() => this.sections().waiting);
   protected readonly earlier = computed(() => this.sections().earlier);
+  /** This server sends no email (audit LOST-1): no screen here may promise one. */
+  protected readonly emailOff = inject(EmailDelivery).off;
+  protected readonly emptyDescription = computed(() =>
+    this.emailOff()
+      ? $localize`Invite your first client. Email is off on this server, so they won’t get the link to set up their profile yet.`
+      : $localize`Invite your first client. They get an email with a link to set up their profile.`,
+  );
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.openSheet?.close());
@@ -143,7 +151,9 @@ export class Invitations {
       if (!created) return;
       // An older invitation for the same email is replaced by this one on the server: read the list again.
       this.toast.show(
-        $localize`Invitation created. We will email ${created.email}:email: shortly.`,
+        this.emailOff()
+          ? $localize`Invitation saved. Email is off on this server, so ${created.email}:email: doesn’t get it yet.`
+          : $localize`Invitation created. We will email ${created.email}:email: shortly.`,
         { tone: 'success' },
       );
       void this.load();
@@ -189,7 +199,9 @@ export class Invitations {
         row,
         () =>
           this.api.resendInvitation(row.invitation.id, crypto.randomUUID(), row.invitation.version),
-        $localize`A new link was sent to ${row.email}:email:. The earlier link no longer works.`,
+        this.emailOff()
+          ? $localize`A new link was made for ${row.email}:email:, but email is off on this server, so it wasn’t sent. The earlier link no longer works.`
+          : $localize`A new link was sent to ${row.email}:email:. The earlier link no longer works.`,
       ),
     );
   }

@@ -573,7 +573,7 @@ export class ExerciseSheet implements OnInit {
   protected readonly patternLabel = $localize`Movement pattern`;
   protected readonly equipmentLabel = $localize`Equipment`;
   protected readonly instructionsLabel = $localize`How to do it`;
-  protected readonly instructionsHelp = $localize`Clients read this beside the video in their workout.`;
+  protected readonly instructionsHelp = $localize`Clients read this in their workout, beside the demo.`;
   protected readonly tagsLabel = $localize`Tags`;
   protected readonly tagsHelp = $localize`Separate them with commas, like knee-friendly, home.`;
   protected readonly findLabel = $localize`Find an exercise`;
@@ -610,11 +610,12 @@ export class ExerciseSheet implements OnInit {
 
   protected readonly errors = computed<FieldMessages>(() => exerciseErrors(this.values()));
   protected readonly problemCount = computed(() => Object.keys(this.errors()).length);
+  // A link opens on its own site from the workout (C18); only an upload plays inside TB Gym.
   protected readonly videoHelp = computed(() => {
     const link = parseVideoLink(this.values().videoLink);
     return link
-      ? $localize`${link.provider}:provider: video found. Clients see it in their workout.`
-      : $localize`Paste a YouTube or Vimeo link. Clients see it in their workout.`;
+      ? $localize`${link.provider}:provider: video found. Clients open it on ${link.provider}:provider: from their workout.`
+      : $localize`Paste a YouTube or Vimeo link. Clients open it on that site from their workout.`;
   });
   protected readonly shownOthers = computed(() => {
     const selected = this.values().alternativeIds;

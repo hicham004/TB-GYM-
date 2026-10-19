@@ -6,6 +6,7 @@ import type {
   BillingInvoice,
   PricePlan,
 } from '../app/features/billing/billing.models';
+import type { GymRequest } from '../app/features/platform-admin/platform-admin-api';
 
 /**
  * Platform billing (R5.2b): the coaching spaces the platform admin sees, in every state the screen
@@ -303,5 +304,40 @@ export function pricePlans(): PricePlan[] {
       publishedAtUtc: '2026-09-01T09:00:00Z',
       isCurrent: false,
     }),
+  ];
+}
+
+/**
+ * Talk-to-us requests whose email has not reached the admin (audit BEB-1), newest first as the API
+ * lists them: one waiting while email is off, one given up after its four tries.
+ */
+export function gymRequests(): GymRequest[] {
+  return [
+    {
+      id: 'request-2',
+      name: 'Rami Tabet',
+      gymName: 'Oakline Strength',
+      contact: '+96170123456',
+      contactKind: 'WhatsApp',
+      message: ['Six coaches, about 90 clients.', 'We start in January.'].join(
+        String.fromCharCode(10),
+      ),
+      receivedAtUtc: '2026-10-08T15:30:00Z',
+      deadLettered: false,
+      sending: false,
+      attemptCount: 0,
+    },
+    {
+      id: 'request-1',
+      name: 'Nadine Saliba',
+      gymName: 'Cedar Barbell Club',
+      contact: 'nadine@cedar.example',
+      contactKind: 'Email',
+      message: null,
+      receivedAtUtc: '2026-10-02T08:05:00Z',
+      deadLettered: true,
+      sending: false,
+      attemptCount: 4,
+    },
   ];
 }

@@ -14,6 +14,7 @@ import {
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { whatsAppLink } from '../../core/website/website-settings';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Icon } from '../../ui/icon';
@@ -80,6 +81,18 @@ export class Billing {
   protected readonly shownLines = computed(() => {
     const invoice = this.shown();
     return invoice ? billLines(invoice.amounts, this.locale, invoicePrices(invoice)) : [];
+  });
+  /**
+   * How to ask TB Gym for the payment details while no Whish number is set (audit BILL-2): its
+   * support inbox and WhatsApp number, or null when this server has neither.
+   */
+  protected readonly payContacts = computed(() => {
+    const billing = this.billing();
+    const href = whatsAppLink(billing?.whatsAppNumber ?? null);
+    const email = billing?.supportEmail ?? null;
+    const whatsApp =
+      href && billing?.whatsAppNumber ? { href, number: billing.whatsAppNumber } : null;
+    return email || whatsApp ? { email, whatsApp } : null;
   });
 
   protected readonly statusLabel = billingStatusLabel;

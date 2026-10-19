@@ -78,7 +78,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Gamification     | Tenant theme, levels, ranks and auditable experience events                                                                                                                              |
 | Integrations     | AI, payment, nutrition-data and other external provider contracts                                                                                                                        |
 | Platform billing | What TB Gym charges workspaces: versioned price plans, monthly invoices, voids, payments, discounts, the `platform-invoice-v1` calculation (ADR 0028)                                     |
-| Website          | The public website: Talk-to-us requests from gyms (no tenant, facts frozen, the owner's email as the fourth action-mail queue) and the settings the homepage reads (ADR 0037)              |
+| Website          | The public website: Talk-to-us requests from gyms (no tenant, facts frozen, the owner's email as the fourth action-mail queue, the platform admin's list of requests not yet emailed) and the settings the homepage reads (ADR 0037) |
 
 Theme and gamification currently share one boundary because theme-driven labels and rewards
 are one optional presentation capability. Split them only if their lifecycles diverge.

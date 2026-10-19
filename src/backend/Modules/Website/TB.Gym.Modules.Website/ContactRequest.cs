@@ -294,6 +294,10 @@ public static class ContactRequestMailCodes
 
     public const string ClaimExpired = "contact-request-claim-expired";
 
+    /// <summary>
+    /// No longer written: since audit BEB-1 a deployment with email off claims nothing and the request
+    /// waits. Rows retried before that change may still carry it.
+    /// </summary>
     public const string TransportUnavailable = "contact-request-transport-unavailable";
 
     public const string TransportTransient = "contact-request-transport-transient";

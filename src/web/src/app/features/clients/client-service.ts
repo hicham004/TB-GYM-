@@ -21,6 +21,7 @@ import type {
 import type { ClientProfileOverviewView } from '../../core/api/generated';
 import { GuardedSheets, type Closable, type LeaveQuestion } from '../../core/forms/guarded-sheets';
 import { CsrfService } from '../../core/security/csrf.service';
+import { EmailDelivery } from '../../core/system/email-delivery';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
@@ -78,6 +79,7 @@ import { PlanPayment, PlanStart } from './plan-sheets';
 export class ClientService extends GuardedSheets {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
+  private readonly emailDelivery = inject(EmailDelivery);
   private readonly tenants = inject(TenantStore);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -380,7 +382,9 @@ export class ClientService extends GuardedSheets {
     this.context.setProfile(profile);
     this.context.error.set(null);
     this.context.notice.set(
-      $localize`Coaching with ${profile.firstName}:name: has ended. They no longer have access, and we are emailing them.`,
+      this.emailDelivery.off()
+        ? $localize`Coaching with ${profile.firstName}:name: has ended. They no longer have access. Email is off on this server, so they weren’t emailed.`
+        : $localize`Coaching with ${profile.firstName}:name: has ended. They no longer have access, and we are emailing them.`,
     );
     void this.reread();
   }

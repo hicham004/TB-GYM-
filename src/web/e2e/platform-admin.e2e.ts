@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import {
   atlasDetail,
+  gymRequests,
   NOW,
   plan,
   platformSpaces,
@@ -55,6 +56,7 @@ async function openAdmin(page: Page, path: string, width: number, dark = false) 
       'GET /api/auth/csrf': (route) => json(route, 200, { token: 'e2e-csrf' }),
       'GET /api/platform-admin/workspaces': (route) => json(route, 200, spaces),
       'GET /api/platform-admin/price-plans': (route) => json(route, 200, plans),
+      'GET /api/platform-admin/contact-requests': (route) => json(route, 200, gymRequests()),
       [`GET /api/platform-admin/workspaces/${SPACE_IDS.atlas}`]: (route) =>
         json(route, 200, detail),
       'POST /api/platform-admin/invoices/invoice-sep/payments': (route) => {
@@ -167,6 +169,26 @@ for (const width of [390, 1440]) {
     ]);
     await expect(page.locator('[data-price-plan] .panel-head .quiet')).toHaveText(
       'Version 2 · in force since Sep 20, 2026',
+    );
+
+    // Requests from gyms whose email has not gone out (audit BEB-1), newest first.
+    const requests = page.locator('[data-gym-requests]');
+    await expect(requests.getByRole('heading', { name: 'Requests from gyms' })).toBeVisible();
+    await expect(requests.locator('.request .gym strong')).toHaveText([
+      'Oakline Strength',
+      'Cedar Barbell Club',
+    ]);
+    await expect(requests.locator('.request app-status-pill')).toHaveText([
+      'Waiting for email',
+      'Email failed',
+    ]);
+    await expect(requests.getByRole('link', { name: '+96170123456' })).toHaveAttribute(
+      'href',
+      'https://wa.me/96170123456',
+    );
+    await expect(requests.getByRole('link', { name: 'nadine@cedar.example' })).toHaveAttribute(
+      'href',
+      'mailto:nadine@cedar.example',
     );
     await expectNoHorizontalOverflow(page);
     await axe(page);
@@ -441,11 +463,15 @@ test('an admin without a coaching space of their own gets the plain top bar', as
     extra: {
       'GET /api/platform-admin/workspaces': (route) => json(route, 200, platformSpaces()),
       'GET /api/platform-admin/price-plans': (route) => json(route, 200, pricePlans()),
+      'GET /api/platform-admin/contact-requests': (route) => json(route, 200, []),
     },
   });
   await page.goto('/admin/billing');
   await expect(overviewHeading(page)).toBeVisible();
   await expect(page.locator('.space')).toHaveCount(7);
+  await expect(page.locator('[data-no-requests]')).toHaveText(
+    'None waiting. Every request reached your inbox.',
+  );
   await axe(page);
   await page.screenshot({ path: 'test-results/r52b-overview-no-workspace-1440.png' });
 });

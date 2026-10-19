@@ -273,6 +273,11 @@ list of workspaces also carries the earliest due day and the earliest read-only 
 workspace's unpaid invoices (null when nothing is owed), so it can say what falls due next and when a
 workspace locks.
 
+**PBL-008** The owner pays to the configured Whish number (`PlatformBilling:WhishNumber`, a go-live
+step). Until one is set, How to pay says so and names TB Gym's support inbox (the provider's reply-to
+address) and WhatsApp number when they are configured, or says plainly that neither is; it never
+promises that TB Gym will be in touch (audit BILL-2).
+
 ## 4. Program templates and assigned snapshots
 
 **TRN-001** A training template is coach-owned reusable content. Assigning it creates a deep,
@@ -1456,6 +1461,13 @@ shortcuts may narrow them to currently visible weeks, never widen them to omitte
 without structured targets use the program page, with no wording parsing or historical backfill.
 Unread paging uses an optional own-recipient cursor so read-state changes cannot move its boundary.
 
+**NOT-036** A deployment that composes no action-mail transport (Production with email off, such as the
+Render test copy) says so instead of promising an email (audit A1, LOST-1). The registration and
+password-recovery answers carry `emailAvailable`, which describes the deployment and never the address,
+so NOT-029 still holds; `GET /api/system/status` carries the same fact for the screens that would
+promise one before anyone acts (Invitations, Team, End coaching). No confirmation, reset or invitation
+link is shown to anyone instead, owner or admin included: that security trade-off was not taken.
+
 **MED-001** Object bytes live in object storage; the database owns metadata, tenant, purpose,
 content type, size, checksum, status, and retention. Upload authorization validates type and
 size, uses generated object keys, and includes malware/content scanning before publication.
@@ -1758,6 +1770,13 @@ one demo. It used to answer 500. Another workspace keeps its own asset for the s
 library shows a link as a play tile and never loads the provider's picture: the app's pages allow images
 from TB Gym only.
 
+**MED-016** A YouTube or Vimeo link opens on the provider's own video page, in a new tab, from the
+client's workout player and the coach's demo sheet (C18, decided 2026-10-19, audit A1). Its grant names
+the provider and that page (`watchUrl`, built from the stored id on the provider's fixed host, never
+from the link the coach pasted); nothing from the provider loads inside TB Gym and the CSP stays as it
+is. Only an upload plays inside the app. Playing a link here, through the privacy-oriented players
+ADR 0007 names, is a later step.
+
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and
 cannot leak one coach's private library into another tenant.
@@ -2045,8 +2064,10 @@ the page asked for when the form came into view; one sent inside three seconds o
 as too fast, and a stamp older than a day, missing or forged is refused as invalid, each with a stable
 code the page acts on once. The antiforgery token is required as on every state change. Two allowances
 apply per visitor address: nginx's on the path (six a minute, a short burst) and the API's behind it
-(five an hour). A request is accepted whether or not a recipient is configured; without one it waits
-as pending and keeps its attempts.
+(five an hour). A request is accepted whether or not a recipient is configured; without one, or while
+email is off and no transport is composed (audit BEB-1), it waits as pending and keeps its attempts:
+only a real send counts as an attempt. The platform admin reads every request whose email has not gone
+out, waiting or dead-lettered, newest first, on the admin page (`GET /api/platform-admin/contact-requests`).
 
 **WEB-003** The website's settings a visitor may read are exactly two: a WhatsApp number (shown as a
 `wa.me` link beside the form, none until the owner gives one) and the name of Plausible's site script

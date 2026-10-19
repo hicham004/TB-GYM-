@@ -74,6 +74,8 @@ function billing(overrides: Partial<WorkspaceBilling> = {}): WorkspaceBilling {
     currencyCode: 'USD',
     readOnlyFrom: '2026-08-15',
     whishNumber: '+961 70 123 456',
+    supportEmail: null,
+    whatsAppNumber: null,
     ...overrides,
   };
 }
@@ -145,6 +147,41 @@ describe('Settings › Billing', () => {
         textOf(owing[0].querySelector(part)),
       ),
     ).toEqual(['July 2026', '$44.00', 'TBG-202607-ABC234', 'Due Aug 8, 2026']);
+  });
+
+  it('without a Whish number, names TB Gym’s support inbox and WhatsApp to ask for the details', async () => {
+    const { host } = await render(() =>
+      of(
+        billing({
+          whishNumber: null,
+          supportEmail: 'support@tbgym.example',
+          whatsAppNumber: '+961 70 123 456',
+        }),
+      ),
+    );
+
+    // Audit BILL-2: no promise that TB Gym will be in touch, but a way to reach it.
+    const pay = host.querySelector('[data-how-to-pay]')!;
+    expect(textOf(pay)).toContain(
+      'TB Gym hasn’t set up its Whish number here yet. Ask us for the payment details:',
+    );
+    expect(textOf(pay)).not.toContain('will confirm the payment details');
+    const links = Array.from(pay.querySelectorAll<HTMLAnchorElement>('[data-pay-contacts] a'));
+    expect(links.map((link) => [textOf(link), link.getAttribute('href')])).toEqual([
+      ['support@tbgym.example', 'mailto:support@tbgym.example'],
+      ['WhatsApp +961 70 123 456 (opens in a new tab)', 'https://wa.me/96170123456'],
+    ]);
+    expect(links[1].getAttribute('rel')).toBe('noopener noreferrer');
+    // The references are still there to write in the transfer note.
+    expect(textOf(pay.querySelector('[data-owing] .code'))).toBe('TBG-202607-ABC234');
+  });
+
+  it('says plainly when neither a Whish number nor a contact is set on this server', async () => {
+    const { host } = await render(() => of(billing({ whishNumber: null })));
+
+    expect(textOf(host.querySelector('[data-how-to-pay] [data-pay-contacts]'))).toBe(
+      'TB Gym hasn’t set up a payment number or a way to reach it on this server yet.',
+    );
   });
 
   it('copies the Whish number and a reference, and says so', async () => {

@@ -21,8 +21,9 @@ changes afterwards, and a request is never deleted.
 
 The owner's email about a request rides the action-mail sweep as its fourth queue, with the same
 claim, lease, attempt budget and `action-mail-exponential-v1` schedule as the other three, through the
-same transport. The recipient is `Website:ContactRecipient`; while it is empty the sweep claims
-nothing, so requests wait as pending and go out the day the address is set. No log line carries the
+same transport. The recipient is `Website:ContactRecipient`; while it is empty, or while email is off
+and no transport is composed (audit A1, BEB-1), the sweep claims nothing, so requests wait as pending
+and go out the day both are there. No log line carries the
 person's name, contact or words.
 
 Three cheap filters stand in front of the form, none of them a CAPTCHA: a honeypot field a person
@@ -41,6 +42,7 @@ names the site's script in configuration; the privacy wording that goes with it 
 - `ARCHITECTURE.md` §3 gains the Website module; the API and the Worker both compose it.
 - The production edge sends `/api/website/contact-requests` through the web container, which is
   therefore the API's second trusted proxy at a fixed address.
-- No admin screen lists the requests: the owner reads the email. A list for the platform admin is
-  a later decision.
+- The owner reads the email. Since audit A1 (BEB-1) the platform admin page also lists every request
+  whose email has not gone out, waiting or dead-lettered (`GET /api/platform-admin/contact-requests`,
+  mapped by this module under the admin policy), so a request sent while email is off is still read.
 - Nothing here moves money and no legal wording is written by the code.

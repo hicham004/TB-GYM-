@@ -14,18 +14,20 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import type { MediaAccessView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
+import { ButtonLink } from '../../ui/button';
 import { Icon } from '../../ui/icon';
 import { UiSheet } from '../../ui/sheet';
+import { externalVideo } from './external-video';
 
 /**
  * "Watch demo" for an exercise on a coach's screen (P4): the builder's grid and a client's session
  * sheet. Each opening asks the server for a short-lived grant (MED-003, MED-004), so the coach sees
- * the media only while the server still allows it; a demo hosted elsewhere is not played here, as in
- * the client's workout player.
+ * the media only while the server still allows it. A YouTube or Vimeo demo opens on its own site, in
+ * a new tab, as in the client's workout player (C18).
  */
 @Component({
   selector: 'app-exercise-demo',
-  imports: [Icon],
+  imports: [ButtonLink, Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (assetIds().length > 0) {
@@ -65,7 +67,28 @@ import { UiSheet } from '../../ui/sheet';
         @if (failure(); as message) {
           <p class="failure" role="alert">{{ message }}</p>
         } @else if (media(); as current) {
-          @if (current.kind === 'Image') {
+          @if (current.source === 'ExternalEmbed') {
+            <!-- C18: nothing from YouTube or Vimeo loads inside TB Gym; the demo opens on its site. -->
+            <div class="external">
+              @if (externalVideo(current); as video) {
+                <p i18n>
+                  This demo is a video on {{ video.provider }}. It opens there, in a new tab.
+                </p>
+                <a
+                  appButton
+                  variant="outlined"
+                  [href]="video.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-watch-external
+                  ><ng-container i18n>Watch on {{ video.provider }}</ng-container
+                  ><span class="tb-visually-hidden" i18n> (opens in a new tab)</span></a
+                >
+              } @else {
+                <p class="failure" role="alert" i18n>This demo can’t be opened.</p>
+              }
+            </div>
+          } @else if (current.kind === 'Image') {
             <img class="media" [src]="current.url" [alt]="altText()" />
           } @else {
             <video
@@ -171,6 +194,18 @@ import { UiSheet } from '../../ui/sheet';
       margin: 0;
     }
 
+    .external {
+      align-items: flex-start;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+
+      p {
+        color: var(--tb-ink);
+        margin: 0;
+      }
+    }
+
     .failure {
       background: var(--tb-danger-soft);
       border-radius: var(--tb-radius-card-small);
@@ -194,6 +229,7 @@ export class ExerciseDemo {
   protected readonly opening = signal(false);
   protected readonly shown = signal(0);
   protected readonly media = signal<MediaAccessView | null>(null);
+  protected readonly externalVideo = externalVideo;
   protected readonly failure = signal<string | null>(null);
 
   protected readonly label = computed(
@@ -226,14 +262,7 @@ export class ExerciseDemo {
     }
     try {
       await this.csrf.refresh();
-      const access = await firstValueFrom(this.api.createMediaAccess(id));
-      if (access.source === 'ExternalEmbed') {
-        this.failure.set(
-          $localize`This demo is a video hosted elsewhere, which can’t be played here yet.`,
-        );
-      } else {
-        this.media.set(access);
-      }
+      this.media.set(await firstValueFrom(this.api.createMediaAccess(id)));
     } catch (error) {
       this.failure.set(apiErrorMessage(error, $localize`The demo could not be opened. Try again.`));
     } finally {

@@ -55,9 +55,17 @@ public sealed record WorkspaceRegistrationResult(
     WorkspaceRegistrationStatus Status,
     string Email,
     string? DevelopmentConfirmationUrl = null,
-    IReadOnlyDictionary<string, string[]>? Errors = null);
+    IReadOnlyDictionary<string, string[]>? Errors = null,
+    bool EmailAvailable = true);
 
-public sealed record CoachRegistrationResponse(string Email, string? DevelopmentConfirmationUrl);
+/// <param name="EmailAvailable">
+/// False when this deployment sends no email at all (audit LOST-1): the account exists, but no
+/// confirmation link is coming, so the screen must not say "check your email".
+/// </param>
+public sealed record CoachRegistrationResponse(
+    string Email,
+    string? DevelopmentConfirmationUrl,
+    bool EmailAvailable);
 
 public enum WorkspaceRegistrationStatus
 {

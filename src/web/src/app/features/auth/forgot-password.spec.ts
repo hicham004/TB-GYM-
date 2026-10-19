@@ -12,6 +12,7 @@ import { ForgotPassword } from './forgot-password';
 const SENT: EmailActionResponse = {
   message: 'If that address has an account, a reset link is on its way.',
   developmentActionUrl: null,
+  emailAvailable: true,
 };
 
 async function render(api: Partial<ApiClient> = {}) {
@@ -61,6 +62,31 @@ describe('ForgotPassword', () => {
     expect(host.textContent).toContain('If that address has an account');
     // The wording must not confirm whether the address exists, and the form is not re-offered.
     expect(host.querySelector('button[type="submit"]')).toBeNull();
+  });
+
+  it('says plainly that no reset link can come when this server sends no email', async () => {
+    const { fixture, host } = await render({
+      forgotPassword: vi.fn(() =>
+        of({
+          message: 'Email is off on this server, so no reset instructions can be sent.',
+          developmentActionUrl: null,
+          emailAvailable: false,
+        }),
+      ),
+    });
+
+    fill(host, 'Email', 'coach@example.test');
+    await settle(fixture);
+    press(host, 'Send reset link');
+    await settle(fixture);
+
+    // Audit LOST-1: the same answer for every address, and no promise of an email.
+    const notice = query(host, '[role="status"]');
+    expect(notice.textContent).toContain('Email is off on this server');
+    expect(notice.textContent).toContain(
+      'This server sends no email, so it can’t send you a reset link. Your password hasn’t changed.',
+    );
+    expect(notice.textContent).not.toContain('Check your email');
   });
 
   it('does not send a request for an address that is not an address', async () => {

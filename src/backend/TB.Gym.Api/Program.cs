@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using TB.Gym.Api;
 using TB.Gym.Infrastructure;
+using TB.Gym.Infrastructure.Application;
 using TB.Gym.Infrastructure.Initialization;
 using TB.Gym.Infrastructure.Security;
 using TB.Gym.Modules.CheckIns;
@@ -114,11 +115,12 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
     ResponseWriter = WriteHealthResponseAsync,
 }).AllowAnonymous();
 
-app.MapGet("/api/system/status", (IClock clock) => Results.Ok(new SystemStatusResponse(
+app.MapGet("/api/system/status", (IClock clock, IEmailDeliveryStatus email) => Results.Ok(new SystemStatusResponse(
     "TB Gym API",
     "Modular Monolith",
     ".NET 10",
-    clock.UtcNow)))
+    clock.UtcNow,
+    email.IsAvailable)))
 .AllowAnonymous()
 .WithName("GetSystemStatus")
 .WithTags("System")

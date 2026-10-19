@@ -9,6 +9,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { installDialogSupport } from '../../../testing/dialog';
 import { fill, press, settle, text } from '../../../testing/dom';
+import { provideEmailDelivery } from '../../../testing/email-delivery';
 import { ClientRelease } from './client-release';
 
 let uninstallDialog: () => void = () => undefined;
@@ -40,13 +41,14 @@ class Host {
   readonly done: CoachClientDetails[] = [];
 }
 
-async function render(releaseClient = vi.fn(() => of(released))) {
+async function render(releaseClient = vi.fn(() => of(released)), emailOff = false) {
   await TestBed.configureTestingModule({
     imports: [Host],
     providers: [
       { provide: FormerClientsApi, useValue: { releaseClient } },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      provideEmailDelivery(emailOff),
     ],
   }).compileComponents();
 
@@ -77,6 +79,26 @@ describe('ClientRelease', () => {
     expect(text(fixture)).toContain('with no refund');
     expect(text(fixture)).toContain("You can't undo this");
     expect(releaseClient).not.toHaveBeenCalled();
+  });
+
+  it('promises the goodbye email only where this server sends email', async () => {
+    const on = await render();
+    press(on.host, 'End coaching');
+    await settle(on.fixture);
+    expect(text(on.fixture)).toContain('we email them that their coaching has ended');
+    expect(text(on.fixture)).toContain('It is not included in the email.');
+    TestBed.resetTestingModule();
+
+    // Audit LOST-1: with email off, nobody is told they will be emailed.
+    const off = await render(undefined, true);
+    press(off.host, 'End coaching');
+    await settle(off.fixture);
+    expect(text(off.fixture)).toContain(
+      'Email is off on this server, so nobody emails them that their coaching has ended.',
+    );
+    expect(text(off.fixture)).not.toContain('we email them');
+    expect(text(off.fixture)).toContain('Only your team sees this. Up to 500 characters.');
+    expect(text(off.fixture)).not.toContain('included in the email');
   });
 
   it('requires a reason', async () => {

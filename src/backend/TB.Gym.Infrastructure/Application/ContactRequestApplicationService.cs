@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TB.Gym.Infrastructure.Persistence;
@@ -71,6 +72,33 @@ internal sealed class ContactRequestApplicationService(
         LogReceived(logger, request.Id, null);
         return new ContactRequestSubmissionResult(ContactRequestSubmissionStatus.Accepted, request.Id);
     }
+}
+
+/// <summary>
+/// The platform admin's list of requests whose email has not gone out (audit BEB-1): newest first,
+/// waiting ones and dead-lettered ones alike, so nothing a gym wrote is only in a table nobody reads.
+/// </summary>
+internal sealed class ContactRequestAdminReader(GymDbContext context) : IContactRequestAdminReader
+{
+    public async Task<IReadOnlyList<ContactRequestAdminView>> ListUnsentAsync(CancellationToken cancellationToken) =>
+        await context.ContactRequests
+            .AsNoTracking()
+            .Where(item => item.Status != ContactRequestMailStatus.Materialized)
+            .OrderByDescending(item => item.ReceivedAtUtc)
+            .ThenByDescending(item => item.Id)
+            .Take(ContactRequestAdminLimits.ListSize)
+            .Select(item => new ContactRequestAdminView(
+                item.Id,
+                item.Name,
+                item.GymName,
+                item.Contact,
+                item.ContactKind,
+                item.Message,
+                item.ReceivedAtUtc,
+                item.Status == ContactRequestMailStatus.DeadLettered,
+                item.Status == ContactRequestMailStatus.Processing,
+                item.AttemptCount))
+            .ToListAsync(cancellationToken);
 }
 
 /// <summary>

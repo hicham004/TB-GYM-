@@ -53,6 +53,7 @@ import {
   utcToday,
   type SpaceFilter,
 } from './platform-admin.models';
+import { PlatformRequests } from './platform-requests';
 import { PlatformPlan } from './platform-sheets';
 
 interface SpaceRow {
@@ -74,7 +75,7 @@ interface SpaceRow {
  * Platform billing for the TB Gym platform admin (R5.2b, ADR 0028): every coaching space in the
  * order that needs the admin first, with what is owed, when it falls due and when it locks, and the
  * versioned price plan below. A space opens on its own page; the price plan is published here, in a
- * sheet.
+ * sheet. Last, the Talk-to-us requests whose email has not reached the admin (audit BEB-1).
  *
  * Presentation only. The API authorizes the global role on every request, works out every amount
  * and date, and keeps every record it replaces; nothing here is ever deleted.
@@ -87,6 +88,7 @@ interface SpaceRow {
     EmptyState,
     Icon,
     PlatformPlan,
+    PlatformRequests,
     RouterLink,
     Skeleton,
     StatTile,

@@ -18,6 +18,7 @@ import type { ClientInvitation, TeamMember } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
+import { EmailDelivery } from '../../core/system/email-delivery';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Avatar } from '../../ui/avatar';
@@ -96,6 +97,8 @@ export class Team {
   private loadedTenant: string | null = null;
   private openInvite: DialogRef<unknown, ModalSurface> | null = null;
 
+  /** This server sends no email (audit LOST-1): the invite sheet and its notices must not promise one. */
+  protected readonly emailOff = inject(EmailDelivery).off;
   protected readonly closeLabel = $localize`Close`;
   protected readonly loadingLabel = $localize`Loading your team…`;
   protected readonly invitedLabel = $localize`Invited`;
@@ -235,9 +238,12 @@ export class Team {
         this.devLink.set(invitation.developmentActionUrl);
         this.invite.set(EMPTY_INVITE);
         this.openInvite?.close();
-        this.toast.show($localize`Invitation sent to ${invitation.email}:email:.`, {
-          tone: 'success',
-        });
+        this.toast.show(
+          this.emailOff()
+            ? $localize`Invitation saved. Email is off on this server, so ${invitation.email}:email: doesn’t get it yet.`
+            : $localize`Invitation sent to ${invitation.email}:email:.`,
+          { tone: 'success' },
+        );
       } catch (error) {
         if (!owner.current) return;
         this.inviteError.set(apiErrorMessage(error, $localize`The invitation couldn’t be sent.`));
@@ -312,7 +318,9 @@ export class Team {
     await this.invitationWrite(
       invitation,
       () => this.api.resendCoachInvitation(invitation.id, crypto.randomUUID(), invitation.version),
-      $localize`A new link went to ${invitation.email}:email:. The one sent before no longer works.`,
+      this.emailOff()
+        ? $localize`A new link was made for ${invitation.email}:email:, but email is off on this server, so it wasn’t sent. The one sent before no longer works.`
+        : $localize`A new link went to ${invitation.email}:email:. The one sent before no longer works.`,
     );
   }
 

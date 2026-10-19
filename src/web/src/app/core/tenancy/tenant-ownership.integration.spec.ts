@@ -20,6 +20,7 @@ import { tenantInterceptor } from './tenant.interceptor';
 import { fill, press, settle } from '../../../testing/dom';
 import { clientListView, overviewRow } from '../../../testing/client-list-fixtures';
 import { coachClient } from '../../../testing/coach-today-fixtures';
+import { provideEmailDelivery } from '../../../testing/email-delivery';
 
 /** A client list holding one client, whose first name says which workspace it came from. */
 const directory = (id: string): ClientOverviewView =>
@@ -54,6 +55,7 @@ describe('tenant ownership in migrated screens', () => {
         { provide: CsrfService, useValue: csrf },
         provideHttpClient(withInterceptors([tenantInterceptor])),
         provideHttpClientTesting(),
+        provideEmailDelivery(),
       ],
     });
     await TestBed.inject(TenantStore).load('A');

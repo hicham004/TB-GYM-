@@ -559,7 +559,26 @@
         ×
       </button>
     </div>
-    @if (media.kind === 'Image') {
+    @if (media.source === 'ExternalEmbed') {
+      <!-- C18: nothing from YouTube or Vimeo loads inside TB Gym; the demo opens on its site. -->
+      <div class="media-external">
+        @if (externalVideo(media); as video) {
+          <p i18n>This demo is a video on {{ video.provider }}. It opens there, in a new tab.</p>
+          <a
+            appButton
+            size="touch"
+            [href]="video.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-watch-external
+            ><ng-container i18n>Watch on {{ video.provider }}</ng-container
+            ><span class="tb-visually-hidden" i18n> (opens in a new tab)</span></a
+          >
+        } @else {
+          <p i18n>This demo can’t be opened.</p>
+        }
+      </div>
+    } @else if (media.kind === 'Image') {
       <img [src]="media.url" alt="Exercise demonstration" i18n-alt />
     } @else {
       <video [src]="media.url" controls controlsList="nodownload"></video>

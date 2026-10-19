@@ -66,9 +66,34 @@
                       >
                     </button>
                   </p>
-                } @else {
+                } @else if (payContacts(); as contacts) {
+                  <!-- No Whish number on this server yet: say so, and how to ask (audit BILL-2). -->
                   <p i18n>
-                    Pay the exact amount. TB Gym will confirm the payment details with you.
+                    TB Gym hasn’t set up its Whish number here yet. Ask us for the payment details:
+                  </p>
+                  <p class="contacts" data-pay-contacts>
+                    @if (contacts.email; as email) {
+                      <a class="contact" [href]="'mailto:' + email" dir="ltr" translate="no">{{
+                        email
+                      }}</a>
+                    }
+                    @if (contacts.whatsApp; as whatsApp) {
+                      <a
+                        class="contact"
+                        [href]="whatsApp.href"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        ><ng-container i18n>WhatsApp</ng-container>&ngsp;<span
+                          dir="ltr"
+                          translate="no"
+                          >{{ whatsApp.number }}</span
+                        ><span class="tb-visually-hidden" i18n> (opens in a new tab)</span></a
+                      >
+                    }
+                  </p>
+                } @else {
+                  <p data-pay-contacts i18n>
+                    TB Gym hasn’t set up a payment number or a way to reach it on this server yet.
                   </p>
                 }
               </li>

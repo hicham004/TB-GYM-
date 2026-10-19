@@ -276,16 +276,21 @@ public static class IdentityEndpoints
         var user = email is null ? null : await userManager.FindByEmailAsync(email);
         var isEligible = user is not null && user.EmailConfirmed && !user.IsPlatformBlocked;
 
-        await actionMail.RequestAsync(
+        var dispatch = await actionMail.RequestAsync(
             new AccountActionMailCommand(
                 isEligible ? user!.Id : null,
                 AccountActionKind.ResetPassword,
                 AccountActionMailSources.PublicPasswordRecovery),
             cancellationToken);
 
+        // Whether email is off is a fact about the deployment, the same for every address, so saying
+        // it tells a caller nothing about the account they asked for.
         return Results.Accepted(value: new EmailActionResponse(
-            "If the account is eligible, password reset instructions have been queued.",
-            null));
+            dispatch.EmailAvailable
+                ? "If the account is eligible, password reset instructions have been queued."
+                : "Email is off on this server, so no reset instructions can be sent.",
+            null,
+            dispatch.EmailAvailable));
     }
 
     private static async Task<IResult> ResetPasswordAsync(
@@ -440,7 +445,8 @@ public sealed record ThemeModeRequest(string Mode);
 
 public sealed record WeightUnitRequest(string Unit);
 
-public sealed record EmailActionResponse(string Message, string? DevelopmentActionUrl);
+/// <param name="EmailAvailable">False when this deployment sends no email at all (audit LOST-1).</param>
+public sealed record EmailActionResponse(string Message, string? DevelopmentActionUrl, bool EmailAvailable);
 
 public sealed record CurrentUserResponse(
     Guid Id,

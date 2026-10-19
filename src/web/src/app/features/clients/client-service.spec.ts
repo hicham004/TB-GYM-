@@ -21,7 +21,9 @@ import {
   SERVICE_TODAY,
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
+import { installDialogSupport } from '../../../testing/dialog';
 import { fill, press, settle } from '../../../testing/dom';
+import { provideEmailDelivery } from '../../../testing/email-delivery';
 import { TeamApi } from '../team/team-api';
 import { ClientService } from './client-service';
 import { ClientWorkspaceContext } from './client-workspace.context';
@@ -59,6 +61,9 @@ interface Options {
   renewalSubject?: string;
   url?: string;
   api?: Record<string, unknown>;
+  /** This server sends no email (audit LOST-1). */
+  emailOff?: boolean;
+  releaseClient?: ReturnType<typeof vi.fn>;
 }
 
 async function render(options: Options = {}) {
@@ -94,7 +99,8 @@ async function render(options: Options = {}) {
       { provide: ApiClient, useValue: api },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       { provide: TeamApi, useValue: { getTeamMembers: vi.fn(() => of([])) } },
-      { provide: FormerClientsApi, useValue: { releaseClient: vi.fn() } },
+      { provide: FormerClientsApi, useValue: { releaseClient: options.releaseClient ?? vi.fn() } },
+      provideEmailDelivery(options.emailOff),
       {
         provide: TenantStore,
         useValue: {
@@ -332,6 +338,29 @@ describe('a client’s Service & access', () => {
     expect(coach.host.querySelector('app-client-coach')).toBeNull();
     expect(coach.host.querySelector('app-client-release')).toBeNull();
     expect(all(coach.host, '.setting button').map(textOf)).toEqual(['Block access']);
+  });
+
+  it('ends coaching and says no goodbye email went out when this server sends none', async () => {
+    const uninstall = installDialogSupport();
+    try {
+      const releaseClient = vi.fn(() => of({ ...FORMER, version: 4 }));
+      const { harness, host, context } = await render({ emailOff: true, releaseClient });
+
+      press(host, 'End coaching');
+      await settle(harness.fixture);
+      fill(host, 'Reason', 'Moved away');
+      await settle(harness.fixture);
+      press(host, 'End coaching permanently');
+      await settle(harness.fixture);
+
+      expect(releaseClient).toHaveBeenCalledWith('client-1', 'Moved away', 3);
+      // Audit LOST-1: the notice does not claim an email the server cannot send.
+      expect(context.notice()).toBe(
+        'Coaching with Maya has ended. They no longer have access. Email is off on this server, so they weren’t emailed.',
+      );
+    } finally {
+      uninstall();
+    }
   });
 
   it('blocks access through a dialog and keeps the updated client for every tab', async () => {

@@ -7,8 +7,18 @@
 
   @if (registration(); as result) {
     <div class="auth-stack" role="status">
-      <h2 class="auth-subtitle" i18n>Check your email</h2>
-      <p i18n>We queued a confirmation link for {{ result.email }}.</p>
+      @if (result.emailAvailable) {
+        <h2 class="auth-subtitle" i18n>Check your email</h2>
+        <p i18n>We queued a confirmation link for {{ result.email }}.</p>
+      } @else {
+        <!-- A deployment with email off (audit LOST-1): the account exists, the link never comes. -->
+        <h2 class="auth-subtitle" i18n>Email is off on this server</h2>
+        <p i18n>
+          Your account for {{ result.email }} is created, but this server sends no email, so the
+          confirmation link you need to sign in can’t reach you.
+        </p>
+        <p i18n>If you were given a sign-in for this server, use that instead.</p>
+      }
       @if (result.developmentConfirmationUrl) {
         <a
           appButton

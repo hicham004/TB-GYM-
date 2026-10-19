@@ -119,12 +119,13 @@ internal sealed class AccountActionMailService(
         // the unknown one and would hand a caller a link for an address they only guessed at.
         if (!ShouldDispatchInline(command.ActionKind))
         {
-            return new AccountActionMailEnqueueResult(request.Id);
+            return new AccountActionMailEnqueueResult(request.Id, EmailAvailable: transport is not null);
         }
 
         await DispatchRequestAsync(request.Id, cancellationToken);
         return new AccountActionMailEnqueueResult(
             request.Id,
+            EmailAvailable: true,
             (transport as CapturedActionEmailTransport)?.LatestFor(request.Id)?.ActionUrl);
     }
 

@@ -12,18 +12,22 @@
   <h2 id="release-dialog-title" class="tb-text-section-title" dir="auto" i18n>
     End coaching with {{ client().firstName }} {{ client().lastName }}?
   </h2>
-  <p class="tb-text-compact" i18n>
-    They lose access right away, and we email them that their coaching has ended. Their open plans
-    and programs are closed, with no refund. Nothing is deleted: you keep their record, read-only,
-    under Former clients. You can't undo this, but you can invite them back later as a new client.
-  </p>
+  @if (emailOff()) {
+    <p class="tb-text-compact" data-email-off i18n>
+      They lose access right away. Email is off on this server, so nobody emails them that their
+      coaching has ended. Their open plans and programs are closed, with no refund. Nothing is
+      deleted: you keep their record, read-only, under Former clients. You can't undo this, but you
+      can invite them back later as a new client.
+    </p>
+  } @else {
+    <p class="tb-text-compact" i18n>
+      They lose access right away, and we email them that their coaching has ended. Their open plans
+      and programs are closed, with no refund. Nothing is deleted: you keep their record, read-only,
+      under Former clients. You can't undo this, but you can invite them back later as a new client.
+    </p>
+  }
   <form class="release-form" [formGroup]="form" (ngSubmit)="release()" novalidate>
-    <app-field
-      label="Reason"
-      i18n-label
-      help="Only your team sees this. It is not included in the email. Up to 500 characters."
-      i18n-help
-    >
+    <app-field label="Reason" i18n-label [help]="reasonHelp()">
       <textarea appControl dir="auto" rows="3" formControlName="reason" required></textarea>
     </app-field>
     <p class="release-error tb-text-compact" role="alert">{{ error() }}</p>

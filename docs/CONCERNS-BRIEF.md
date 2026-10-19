@@ -636,6 +636,8 @@ the Render test copy).
 - For the trainer partner's filmed moves, uploads stay the better path: they play inside the app and no
   third party sees who watches. They need the go-live server (scanner and storage).
 
-**Owner decides:** open links outside the app now, embed them later, or keep uploads only. **Status:** Decided,
-not built (2026-10-19): a link opens the video on YouTube or Vimeo in a new tab now, embedding later; built with
-the audit's fix batch A1 (`docs/FULL-AUDIT-2026-10.md`, section 0).
+**Owner decides:** open links outside the app now, embed them later, or keep uploads only. **Status:** Decided
+(2026-10-19): a link opens the video on YouTube or Vimeo in a new tab now, embedding later. The first half is
+built in the audit's fix batch A1 (`docs/FULL-AUDIT-2026-10.md`, section 0; MED-016): "Watch on YouTube" in the
+client's player and the coach's demo sheet, and the exercise sheet no longer says clients see it in their
+workout. Embedding is still open.

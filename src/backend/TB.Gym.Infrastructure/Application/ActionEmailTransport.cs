@@ -40,6 +40,26 @@ internal interface IActionEmailTransport
 }
 
 /// <summary>
+/// Whether this deployment can send email at all (audit LOST-1).
+/// </summary>
+/// <remarks>
+/// True exactly when an action-mail transport is composed: a configured provider, or the development
+/// capture adapter outside Production. A Production deployment with email deliberately off (the Render
+/// test copy) composes none, so every confirmation, reset, invitation and release email would only
+/// wait and then be dead-lettered; screens read this to say so instead of promising one. Resolved per
+/// read, so a host whose transport was removed answers for the deployment it really is.
+/// </remarks>
+public interface IEmailDeliveryStatus
+{
+    bool IsAvailable { get; }
+}
+
+internal sealed class EmailDeliveryStatus(IServiceProvider services) : IEmailDeliveryStatus
+{
+    public bool IsAvailable => services.GetService(typeof(IActionEmailTransport)) is not null;
+}
+
+/// <summary>
 /// One materialized action email, in memory only.
 /// </summary>
 /// <param name="Scope">A stable code naming which queue produced it, for logging and test inspection.</param>

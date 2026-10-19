@@ -74,6 +74,35 @@ public interface IWebsiteSettingsReader
     WebsiteSettingsView Read();
 }
 
+/// <summary>
+/// A Talk-to-us request whose email to the owner has not gone out (audit BEB-1): waiting, because
+/// email is off, no recipient is set or a retry is due, or dead-lettered after its attempts. Only the
+/// platform admin reads it, the same person the email is for.
+/// </summary>
+/// <param name="Sending">True while a sweep holds it; false while it waits or once it is dead-lettered.</param>
+public sealed record ContactRequestAdminView(
+    Guid Id,
+    string Name,
+    string GymName,
+    string Contact,
+    ContactKind ContactKind,
+    string? Message,
+    DateTimeOffset ReceivedAtUtc,
+    bool DeadLettered,
+    bool Sending,
+    int AttemptCount);
+
+public interface IContactRequestAdminReader
+{
+    /// <summary>The newest requests not yet emailed, at most <see cref="ContactRequestAdminLimits.ListSize"/>.</summary>
+    Task<IReadOnlyList<ContactRequestAdminView>> ListUnsentAsync(CancellationToken cancellationToken);
+}
+
+public static class ContactRequestAdminLimits
+{
+    public const int ListSize = 100;
+}
+
 /// <summary>Drains the contact-request queue: the Worker sweeps it; tests call it directly.</summary>
 public interface IContactRequestMailDispatchService
 {

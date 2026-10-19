@@ -9,7 +9,8 @@ namespace TB.Gym.Modules.Website;
 
 /// <summary>
 /// The public website's routes (UI plan R6.2g). None needs a sign-in or a workspace: a gym that
-/// writes to us is nobody's member yet, and the settings are the same for every visitor.
+/// writes to us is nobody's member yet, and the settings are the same for every visitor. The one
+/// exception is the platform admin's list of requests not yet emailed (audit BEB-1).
 /// </summary>
 public static class WebsiteEndpoints
 {
@@ -72,6 +73,18 @@ public static class WebsiteEndpoints
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status429TooManyRequests);
+
+        // The platform admin's view of requests whose email has not gone out (audit BEB-1), so a
+        // request sent while email is off is still read. Beside the other admin routes; the policy
+        // re-reads the global role from the database on every request.
+        endpoints.MapGet("/api/platform-admin/contact-requests", async (
+                IContactRequestAdminReader reader,
+                CancellationToken cancellationToken) =>
+                Results.Ok(await reader.ListUnsentAsync(cancellationToken)))
+            .RequireAuthorization(AuthorizationPolicies.PlatformAdmin)
+            .WithTags(WebsiteModule.Name)
+            .WithName("ListUnsentContactRequests")
+            .Produces<ContactRequestAdminView[]>();
 
         return endpoints;
     }

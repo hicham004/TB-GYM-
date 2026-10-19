@@ -36,9 +36,9 @@ export interface InvitePrefill {
 
 /**
  * The invite form, in a sheet (R5.3a): a name and an email, and optionally a phone number and a birth
- * date. It says what happens (they get an email with a link), keeps a refusal on screen in the
- * server's words, and sends one idempotency key for one entry, so a retry of the same entry is the
- * same invitation. The server decides who may be invited and what an adult is.
+ * date. It says what happens (they get an email with a link, or none while email is off), keeps a
+ * refusal on screen in the server's words, and sends one idempotency key for one entry, so a retry of
+ * the same entry is the same invitation. The server decides who may be invited and what an adult is.
  */
 @Component({
   selector: 'app-invite-client',
@@ -46,10 +46,17 @@ export interface InvitePrefill {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
-      <p class="muted" i18n>
-        We email them a link to set up their account. Send it again if it gets lost; each new link
-        replaces the one before.
-      </p>
+      @if (emailOff()) {
+        <p class="muted" data-email-off i18n>
+          Email is off on this server, so they won’t get the link to set up their account. The
+          invitation is saved; once email is on, send it again.
+        </p>
+      } @else {
+        <p class="muted" i18n>
+          We email them a link to set up their account. Send it again if it gets lost; each new link
+          replaces the one before.
+        </p>
+      }
 
       <app-field [label]="firstLabel" [errors]="shows('firstName') ? errors()['firstName'] : null">
         <input
@@ -199,6 +206,8 @@ export class InviteClient {
   /** Today, for the adult rule; the server checks it against the workspace's own day. */
   readonly today = input.required<IsoDate>();
   readonly prefill = input<InvitePrefill | null>(null);
+  /** This server sends no email (audit LOST-1), so the sheet must not promise one. */
+  readonly emailOff = input(false);
   /** The invitation that was created, or null when the sheet was closed without one. */
   readonly closed = output<ClientInvitation | null>();
   /** Whether something has been typed that closing would lose. */

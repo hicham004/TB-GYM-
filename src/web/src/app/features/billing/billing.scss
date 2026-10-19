@@ -106,6 +106,27 @@
   gap: 0.25rem 0.5rem;
 }
 
+// TB Gym's support inbox and WhatsApp while no Whish number is set (BILL-2): real links, 24 px tall.
+.steps .contacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+}
+
+.contact {
+  color: var(--tb-accent-ink);
+  font-weight: 600;
+  min-block-size: 1.5rem;
+  overflow-wrap: anywhere;
+  text-underline-offset: 0.2em;
+
+  &:focus-visible {
+    border-radius: 0.25rem;
+    outline: 2px solid var(--tb-focus);
+    outline-offset: 2px;
+  }
+}
+
 .code {
   background: var(--tb-surface-2);
   border: 1px solid var(--tb-line);

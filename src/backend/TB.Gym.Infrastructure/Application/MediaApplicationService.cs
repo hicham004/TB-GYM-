@@ -506,7 +506,9 @@ internal sealed class MediaApplicationService(
                 url,
                 expires,
                 DownloadAllowed: false,
-                thumbnailUrl),
+                thumbnailUrl,
+                isUpload ? null : asset.ExternalProvider,
+                isUpload ? null : BuildExternalWatchUrl(asset)),
             grant,
             accessLifetime);
     }
@@ -1528,6 +1530,19 @@ internal sealed class MediaApplicationService(
     {
         ExternalMediaProvider.YouTube => $"https://www.youtube-nocookie.com/embed/{asset.ExternalMediaId}",
         ExternalMediaProvider.Vimeo => $"https://player.vimeo.com/video/{asset.ExternalMediaId}",
+        _ => throw new InvalidOperationException("The external media provider is unsupported."),
+    };
+
+    /// <summary>
+    /// The video's own page, which the player and the demo sheet open in a new tab while nothing from
+    /// the provider loads inside TB Gym (C18, audit WEA-2). Built from the stored id on fixed hosts,
+    /// never from the link the coach pasted.
+    /// </summary>
+    private static string BuildExternalWatchUrl(MediaAsset asset) => asset.ExternalProvider switch
+    {
+        ExternalMediaProvider.YouTube =>
+            $"https://www.youtube.com/watch?v={Uri.EscapeDataString(asset.ExternalMediaId!)}",
+        ExternalMediaProvider.Vimeo => $"https://vimeo.com/{Uri.EscapeDataString(asset.ExternalMediaId!)}",
         _ => throw new InvalidOperationException("The external media provider is unsupported."),
     };
 

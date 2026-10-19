@@ -34,18 +34,26 @@ public sealed record AccountActionMailCommand(
     Guid? RequestedByUserId = null);
 
 /// <summary>
-/// What the caller learns: that a request exists, and — outside a deployment that can send — where the
-/// captured link went.
+/// What the caller learns: that a request exists, whether this deployment can send email at all, and —
+/// outside a deployment that can send — where the captured link went.
 /// </summary>
 /// <remarks>
+/// <see cref="EmailAvailable"/> is false when the deployment composes no mail transport (Production
+/// with email off), so the screen can say no email is coming instead of "check your email" (audit
+/// LOST-1). It describes the deployment, never the address, so it is the same for every caller.
+/// <para>
 /// <see cref="DevelopmentActionUrl"/> is populated only outside Production, only when the development
 /// capture adapter is configured, and only for actions whose requester already knows the address they
 /// asked about. It is deliberately never populated for a password reset: a development response that
 /// carried a link for a known address and no link for an unknown one would be exactly the enumeration
 /// oracle the rest of this design removes, and a property that behaves differently in two environments
 /// is a property nobody tests in the one that matters.
+/// </para>
 /// </remarks>
-public sealed record AccountActionMailEnqueueResult(Guid RequestId, string? DevelopmentActionUrl = null);
+public sealed record AccountActionMailEnqueueResult(
+    Guid RequestId,
+    bool EmailAvailable,
+    string? DevelopmentActionUrl = null);
 
 /// <summary>
 /// Drains due global action-mail requests.
