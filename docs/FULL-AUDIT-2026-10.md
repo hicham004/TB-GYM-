@@ -5,6 +5,36 @@ Beirut. Nothing in the app was fixed; the only code added is the live Playwright
 `src/web/e2e/live/` (section 10). Every finding was reproduced or re-read by a second agent before it went in;
 what did not hold up is gone, and what was corrected is reported in its corrected form.
 
+## 0. Fix status
+
+The batches of section 11 as rows for `.\scripts\start-plan-runner.ps1` (the plan runner's audit plan),
+built on the branch `audit-fixes` one fresh chat per row. A row is built as section 11 describes its batch,
+minus what its third column leaves out; Batch 15 is split into A15 and A16. The owner's decisions of
+2026-10-19 are in the third column; calls marked "the lead's call" were not asked and the owner may change
+them. Waiting for the owner: the personal-record rule (after research), the allergen sentence, and where
+and how often the live suite runs on a schedule; declined: plans running side by side (INV-7). A status
+reads Open, Done · date · commit (plus "left out: …" when an item was left out), Built, not committed,
+or Blocked.
+
+| Step | What | The owner's decisions and what is left out (2026-10-19) | Status |
+| --- | --- | --- | --- |
+| A1 | Batch 1 · Green CI and an honest test copy | Video links (C18): a YouTube or Vimeo link opens the video on that site in a new tab ("Watch on YouTube") from the client's player and the coach's demo sheet; nothing from Google or Vimeo loads inside TB Gym and the CSP stays; the exercise sheet stops promising "Clients see it in their workout" for a link; embedding comes later. Left out: configuring email, the contact recipient and the Whish number on the test copy (the owner's accounts); showing confirmation, reset or invitation links to an owner or admin when email is off (the lead's call: a security trade-off not taken; the screens say plainly that email is off instead). | Open |
+| A2 | Batch 2 · The session | "Keep me signed in" ticked keeps the sign-in for 30 days, renewed while it is used; unticked stays a browser session with today's 8 hours; "Sign out everywhere" and a password change still end it at once (AUTH-3). | Open |
+| A3 | Batch 3 · Training rules that protect the record | Nothing to decide. | Open |
+| A4 | Batch 4 · The workout player | Nothing to decide; the UI plan's big-target rule (its section 2, rule 6) sets the steppers' size. | Open |
+| A5 | Batch 5 · Messaging | Nothing to decide. | Open |
+| A6 | Batch 6 · Nutrition coach tools | EU-style labels (NCM-3) follow the concerns brief's C6 decision of 2026-10-14. Left out: the allergen sentence (NCM-8); the owner decides later. | Open |
+| A7 | Batch 7 · Money and plans | Only a paid renewal counts as coverage: "Ending soon" and the plan's end on Coach Today ignore a renewal still waiting for payment (BEB-7; CLI-018 says so). A new or renamed plan cannot take the name of another active plan in the workspace; existing duplicates stay until renamed (BILL-7). | Open |
+| A8 | Batch 8 · Coach screens and sheets | Coach Today shows a "Joined, start a plan" row for a new client with no plan, and the client list a "Not set up yet" chip for a client who never finished their profile (COACH-9, LOST-12; CLI-018 changes). | Open |
+| A9 | Batch 9 · The client's Today, Training and Progress | A client may start a missed session of a running program late ("Do it now"); the coach sees it done late and it no longer counts as missed (CLIENT-12; TRN-020 changes). | Open |
+| A10 | Batch 10 · Error words and the API contract | Nothing to decide. | Open |
+| A11 | Batch 11 · Sign-up and the signed-out screens | The lead's calls: the signed-out screens stay light like the homepage and only the browser bar's colour follows them (UIQ-9); registration still says an email is taken (the accepted trade-off), while sign-in checks the password before saying an account is unconfirmed and confirm-email answers a bad code alike for every account (BEB-4, SEC-9). | Open |
+| A12 | Batch 12 · Notices and words | Left out: the personal-record rule (CLIENT-8). The owner wants all-time records and decides after research; the current rule (ADR 0031) is already all-time per exact rep count, and a returning client's new profile starts without the old records. | Open |
+| A13 | Batch 13 · Performance and the shell | Nothing to decide. | Open |
+| A14 | Batch 14 · The kit everywhere, and the check-in pages | The check-in pages are redesigned without a preview round, after the other coach pages (a card list, assignment from a sheet on the client's Check-ins tab, empty states that invite); the owner judges the screenshots (AUTH-8). Page titles follow the UI plan (section 3 and the prototype gap it records): bold IBM Plex Sans, with Instrument Serif only for moments (greetings, summaries, empty-state headlines). | Open |
+| A15 | Batch 15 · Tests and tooling | The tests and tooling of Batch 15 and the owners' dead-letter list (INV-4). Left out: where and how often the live suite runs on a schedule; the owner decides later. | Open |
+| A16 | Batch 15 · The owner's extras | The legal consent pages: publishing a document version and an acceptance step at registration and invitation accept, asked only once a document is published, with no wording invented (INV-3). Cooking factors (INV-6); plans you sell measured in days (INV-7, not plans running side by side); the workspace's language on Name and region (INV-8). | Open |
+
 ## 1. The ten things to know
 
 1. **Nothing critical, nothing leaked.** 929 security probes with legitimate accounts across two workspaces,

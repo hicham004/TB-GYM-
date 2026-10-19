@@ -1,13 +1,17 @@
 <#
 .SYNOPSIS
-Runs docs/UI-REDESIGN-PLAN.md unattended: one fresh Claude chat per status-table row.
+Runs a plan's status table unattended: one fresh Claude chat per row.
 
 .DESCRIPTION
+-Plan audit (the default since 2026-10-19) runs the fix batches in section 0 of
+docs/FULL-AUDIT-2026-10.md; -Plan ui runs the section 0 table of docs/UI-REDESIGN-PLAN.md,
+which the owner marked complete on 2026-10-13.
+
 Each step is a new `claude -p` chat at max effort, on Opus unless -RowModels names another
-model for its row (the owner put R6.2 on Fable on 2026-10-11). It gets the owner's usual
-"Read docs/UI-REDESIGN-PLAN.md and do the next step" plus the unattended-run rules in
-$stepPrompt below. The owner decided on 2026-10-11 that such a chat commits its own step
-once every check AGENTS.md asks for is green. It never pushes: a deny rule blocks git push.
+model for its row (the owner put R6.2 on Fable on 2026-10-11). It gets the plan's opening in
+$planPrompts plus the unattended-run rules in $sharedRules below. The owner decided on
+2026-10-11, and again for the audit on 2026-10-19, that such a chat commits its own step once
+every check AGENTS.md asks for is green. It never pushes: a deny rule blocks git push.
 
 A chat that hits a usage limit is resumed where it stopped. A five-hour limit is waited out
 on the same model. A weekly limit (one resetting more than 12 hours away, the account's or one
@@ -18,16 +22,22 @@ the same for a model that is overloaded or unavailable.
 A step starts only when no tracked file is changed, no chat in this folder has written
 for -IdleMinutes, and the next row is Open (not a gate, Optional, Built or Blocked).
 The runner stops after -MaxSteps, at the first step that does not end clean with its
-row Done, or when artifacts\plan-runner\STOP exists. Logs, each chat's report and
-summary.md go to artifacts\plan-runner\ (git-ignored).
+row Done, when artifacts\plan-runner\STOP exists, or, with -NoNewStepAfter, before a step
+that would start after that clock time. Logs, each chat's report and summary.md go to
+artifacts\plan-runner\ (git-ignored).
 
 .EXAMPLE
 .\scripts\plan-runner.ps1 -DryRun       # what would run next; starts nothing
 .\scripts\plan-runner.ps1 -SelfTest     # one tiny chat per model outside the repo: model, effort, deny rule
 .\scripts\plan-runner.ps1 -WaitForIdle  # wait until other chats are finished, then run
+.\scripts\plan-runner.ps1 -WaitForIdle -NoNewStepAfter 08:00   # a night run that leaves the morning free
 #>
 [CmdletBinding()]
 param(
+    [ValidateSet('audit', 'ui')]
+    [string]$Plan = 'audit',
+    # A clock time such as 08:00: no step starts after its next occurrence (empty: no limit).
+    [string]$NoNewStepAfter = '',
     [int]$MaxSteps = 3,
     [double]$StepHours = 8,
     [int]$IdleMinutes = 20,
@@ -47,7 +57,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$planPath = Join-Path $repositoryRoot 'docs\UI-REDESIGN-PLAN.md'
+$planFiles = @{ audit = 'docs\FULL-AUDIT-2026-10.md'; ui = 'docs\UI-REDESIGN-PLAN.md' }
+$planPath = Join-Path $repositoryRoot $planFiles[$Plan]
 $logDir = Join-Path $repositoryRoot 'artifacts\plan-runner'
 $stopFile = Join-Path $logDir 'STOP'
 $lockFile = Join-Path $logDir 'runner.lock'
@@ -60,8 +71,15 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 $gateSign = [char]::ConvertFromUtf32(0x1F6A6)
 [IO.Directory]::CreateDirectory($logDir) | Out-Null
 try { [Console]::OutputEncoding = $utf8 } catch { }
+$stepCutoff = $null
+if ($NoNewStepAfter) {
+    $stepCutoff = [datetime]::Today.Add([timespan]::Parse($NoNewStepAfter))
+    if ($stepCutoff -le (Get-Date)) { $stepCutoff = $stepCutoff.AddDays(1) }
+}
 
-$stepPrompt = @'
+# How each plan's chat starts; $sharedRules continues its list of the owner's decisions.
+$planPrompts = @{
+    ui = @'
 Read docs/UI-REDESIGN-PLAN.md and do the next step.
 
 This chat runs unattended. scripts/plan-runner.ps1 started it, and nobody will see or
@@ -71,20 +89,57 @@ If the rules in section 0 give a different row, change nothing and say why.
 The owner's decisions for unattended runs (2026-10-11):
 - The owner approved building the plan's Open rows, the review's slices included, without
   a preview round.
-- Commit approved. When the step meets its definition of done and every check AGENTS.md
-  asks for has passed (the full backend suite when backend code changed, the web checks
-  when web code changed, git diff --check, and a live pass of every new or changed screen),
-  commit the step on the current branch, then record the hash in its status row in a
-  second small commit, as earlier steps did. Stage only the files this step changed, by
-  explicit path. No co-author or "Generated with" lines. Never push, never create or
-  switch branches, never amend, rebase or reset commits.
-- If a check fails and you cannot fix it inside the step, do not commit. Set the row to
-  "Built, not committed" with one line on what failed, and stop.
 - A business question inside the step: decide it as your memory note on delegated
   business decisions says (research, decide, write down the evidence, name it in the
   report). Money rules, legal wording and work outside the plan's rows are not delegated:
   set the row to "Blocked" with the question and your recommendation, and stop.
 - A gate row or an Optional row needs the owner: stop and say so.
+'@
+    audit = @'
+Read docs/FULL-AUDIT-2026-10.md and do the next step: the first row of its section 0
+status table that is not Done. Build it as section 11 describes that batch; section 6
+gives each finding's cause, files and proof.
+
+This chat runs unattended. scripts/plan-runner.ps1 started it, and nobody will see or
+answer anything until it has finished. The runner expects the next step to be <<ROW>>.
+If section 0 gives a different row, change nothing and say why.
+
+Traps on this laptop (your memory notes have more):
+- A full backend suite started between 00:00 and 01:00 Beirut time fails R34a and R25b
+  on the day boundary: start it after 01:00 or rerun those two alone. The known flakes
+  (the rate-limit test, the Redis-outage SignalR test, the Step3Renewal double tap) pass
+  when rerun alone.
+- Until A1 bumps Microsoft.AspNetCore.SignalR.Common, build with
+  -p:WarningsNotAsErrors=NU1903.
+- The live specs in src/web/e2e/live run against a fresh demo copy as section 10 says,
+  never against the owner's own API (port 5134), web (port 4200) or the tbgym database,
+  which holds the owner's accounts.
+
+The owner's decisions for this run (2026-10-19):
+- The owner approved fixing the audit's batches in section 0's order on the branch
+  audit-fixes, without a preview round: the owner judges the screenshots afterwards.
+  The row's third column is the owner's word; an item it leaves out is not built.
+- A question the row and the docs do not settle: a technical one is yours (AGENTS.md).
+  A business question, a new money rule or legal wording is not delegated: leave that
+  item out, write it with your recommendation into the row's status and your report,
+  and build the rest of the batch.
+- A batch too big to finish well in one chat: split its row into parts (A3a, A3b), each
+  with its scope, build and commit the first, and leave the others Open for the next chat.
+- Where a fix changes a rule, update DOMAIN-RULES, the ADR or ARCHITECTURE in a few
+  lines, as AGENTS.md asks.
+'@
+}
+
+$sharedRules = @'
+- Commit approved. When the step meets its definition of done and every check AGENTS.md
+  asks for has passed (the full backend suite when backend code changed, the web checks
+  when web code changed, git diff --check, and a live pass of every new or changed screen),
+  commit the step on the current branch, then record the hash in its status row in a
+  second small commit, in the form section 0 uses. Stage only the files this step changed,
+  by explicit path. No co-author or "Generated with" lines. Never push, never create or
+  switch branches, never amend, rebase or reset commits.
+- If a check fails and you cannot fix it inside the step, do not commit. Set the row to
+  "Built, not committed" with one line on what failed, and stop.
 
 How an unattended run works:
 - Ask nothing and do not use plan mode. State your plan in a message, then build.
@@ -100,6 +155,7 @@ How an unattended run works:
   RUNNER-RESULT: done <<ROW>> <commit hash>
   RUNNER-RESULT: stopped <one-line reason>
 '@
+$stepPrompt = $planPrompts[$Plan] + "`n" + $sharedRules
 
 $resumePrompt = 'The run stopped ({0}). Carry on with step {1} from where you stopped. The unattended-run rules in the first message still apply.'
 
@@ -574,8 +630,14 @@ function Invoke-SelfTest([string]$TestModel) {
     return $passed
 }
 
+function Get-CutoffText {
+    if ($stepCutoff) { return ('; no step starts after {0:ddd HH:mm}' -f $stepCutoff) }
+    return ''
+}
+
 function Show-DryRun {
     Write-Note ('Claude: {0}' -f (Get-ClaudeExe))
+    Write-Note ('Plan: {0} ({1}){2}.' -f $Plan, $planFiles[$Plan], (Get-CutoffText))
     Write-Note ('Each chat: --effort {0} ({1}), bypassPermissions, git push denied, at most {2} hours.' -f $effort, (Get-RowModelText), $StepHours)
     foreach ($note in @(Get-EnvironmentNotes)) { Write-Note ('Note: ' + $note) }
     foreach ($chat in @(Get-RecentChats)) {
@@ -605,7 +667,7 @@ if ($DryRun) {
 
 Enter-RunnerLock
 try {
-    Write-Note ('Runner started: up to {0} steps, each a new chat at {1} effort ({2}).' -f $MaxSteps, $effort, (Get-RowModelText))
+    Write-Note ('Runner started on the {0} plan: up to {1} steps{2}, each a new chat at {3} effort ({4}).' -f $Plan, $MaxSteps, (Get-CutoffText), $effort, (Get-RowModelText))
     foreach ($note in @(Get-EnvironmentNotes)) { Write-Note ('Note: ' + $note) }
     $steps = 0
     $lastBlocker = ''
@@ -627,6 +689,7 @@ try {
         $problem = Get-RowProblem $row
         if ($problem) { Write-Note ('Stopping: ' + $problem + '.'); break }
         if ($steps -ge $MaxSteps) { Write-Note ('Stopping after {0} steps (-MaxSteps). Next is {1}.' -f $steps, $row.Id); break }
+        if ($stepCutoff -and (Get-Date) -gt $stepCutoff) { Write-Note ('Stopping: it is past {0:HH:mm} (-NoNewStepAfter). Next is {1}.' -f $stepCutoff, $row.Id); break }
         $steps++
         if (-not (Invoke-Step $row)) { Write-Note ('Stopped. Read {0}' -f $summaryPath); break }
     }
