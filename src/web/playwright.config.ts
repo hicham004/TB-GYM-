@@ -20,6 +20,8 @@ import { defineConfig, devices } from '@playwright/test';
 const port = 4300;
 const builtPort = 4301;
 const builtFiles = /[\\/]built[\\/].*\.e2e\.ts$/;
+// The live checks (playwright.live.config.ts) need a running API, so the mocked projects skip them.
+const liveFiles = /[\\/]live[\\/].*\.e2e\.ts$/;
 
 export default defineConfig({
   testDir: './e2e',
@@ -44,7 +46,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      testIgnore: builtFiles,
+      testIgnore: [builtFiles, liveFiles],
       use: { ...devices['Desktop Chrome'], deviceScaleFactor: 1 },
     },
     {
