@@ -5,14 +5,15 @@ Starts scripts/plan-runner.ps1 as the scheduled task "TB Gym plan runner", so it
 .DESCRIPTION
 Registers (or replaces) a scheduled task that runs the plan runner in its own PowerShell window
 under the current user with no time limit, then starts it. The runner builds the plan's Open rows
-(by default the audit's fix batches, -Plan audit) one fresh chat at a time and stops at the first
-gate, Optional row or step that does not end Done, and starts no step after -NoNewStepAfter.
+(by default the audit's fix batches, -Plan audit) one fresh chat at a time until every row is Done,
+and stops early at the first gate, Optional row or step that does not end Done, or, when given
+-NoNewStepAfter, before a step that would start after that clock time.
 Closing VS Code or any chat does not stop the task; the laptop sleeping does (keep it on power with
 the lid open). Windows asks for nothing: the task runs as you, already signed in.
 
 .EXAMPLE
-.\scripts\start-plan-runner.ps1                 # up to 8 steps, after other chats are 20 min quiet, none after 08:00
-.\scripts\start-plan-runner.ps1 -MaxSteps 2 -NoNewStepAfter ''
+.\scripts\start-plan-runner.ps1                 # every Open row (up to 40 steps), after other chats are 20 min quiet
+.\scripts\start-plan-runner.ps1 -MaxSteps 2 -NoNewStepAfter 08:00
 .\scripts\start-plan-runner.ps1 -Status         # task state and the last log lines
 .\scripts\start-plan-runner.ps1 -Stop           # the runner ends after the current step
 #>
@@ -20,9 +21,9 @@ the lid open). Windows asks for nothing: the task runs as you, already signed in
 param(
     [ValidateSet('audit', 'ui')]
     [string]$Plan = 'audit',
-    # No step starts after this clock time (its next occurrence), so a night run leaves the morning free.
-    [string]$NoNewStepAfter = '08:00',
-    [int]$MaxSteps = 8,
+    # A clock time such as 08:00: no step starts after its next occurrence (empty: run on; the owner, 2026-10-19).
+    [string]$NoNewStepAfter = '',
+    [int]$MaxSteps = 40,
     [switch]$Status,
     [switch]$Stop
 )
