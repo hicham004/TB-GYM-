@@ -606,3 +606,34 @@ consent have no wording yet (ADR 0003, ADR 0006).
 
 **Owner decides:** the seven choices in the doc's "Your decisions" table, first the legal shape, when to
 register and the trainer partner's stake. **Status:** Open.
+
+## C18 Exercise videos: a YouTube or Vimeo link is saved but never plays
+
+**Seen:** the owner asked whether a video can be added to a specific exercise (2026-10-15, while setting up
+the Render test copy).
+
+**Today:** yes for an upload, not yet for a link. Read from the code, not clicked through.
+
+- New exercise and Edit in the exercise library (`exercise-sheet.ts`) take an uploaded picture or video (up
+  to 500 MB, scanned before it is kept, MED-006) and a YouTube or Vimeo link. An exercise can hold several,
+  in order (`ExerciseMediaLink`). Clients get "Watch demo 1, 2" on that exercise in their workout
+  (`today-training.html`), the coach gets "Watch demo" in the builder (`exercise-demo.ts`), and an uploaded
+  video plays inside the app.
+- A link is checked and saved (one asset per video per workspace, MED-015) but never plays: the client sees
+  "External video demos are not enabled for this beta" (`today-training.ts`) and the coach "This demo is a
+  video hosted elsewhere, which can't be played here yet". ADR 0007 already names privacy-oriented embeds for
+  these links; the page's Content-Security-Policy (`src/web/nginx.conf`) allows no outside player today.
+- The Render test copy has no storage and no upload scanner, so exercise videos can't be tried there at all.
+  On the laptop's development stack, uploads work.
+
+**Recommend:**
+
+- Now, small: a link opens the video on YouTube or Vimeo ("Watch on YouTube") instead of the error. Nothing
+  from Google or Vimeo loads inside TB Gym, and the policy stays as it is. Vitest for both screens.
+- Later: play links inside the app through the privacy-oriented players ADR 0007 names
+  (youtube-nocookie.com, Vimeo with do-not-track), allowing exactly those two in the page's policy, with a
+  note on what a client's viewing tells Google or Vimeo.
+- For the trainer partner's filmed moves, uploads stay the better path: they play inside the app and no
+  third party sees who watches. They need the go-live server (scanner and storage).
+
+**Owner decides:** open links outside the app now, embed them later, or keep uploads only. **Status:** Open.
